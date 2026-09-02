@@ -1,0 +1,19 @@
+{% extends "layouts/base.njk" %}
+
+{% block title %}Tagged &ldquo;{{ tag }}&rdquo;{% if pagination.pageNumber > 0 %}, page {{ pagination.pageNumber + 1 }}{% endif %} &middot; {{ site.title }}{% endblock %}
+
+{% set tagRoot = "/tags/" + (tag | urlencode) + "/" %}
+{% block alternates %}
+{{ super() }}
+    <link rel="alternate" type="application/atom+xml" title="{{ site.title }}: {{ tag }}" href="{{ (tagRoot + "feed.xml") | url }}">
+    <link rel="alternate" type="application/feed+json" title="{{ site.title }}: {{ tag }}" href="{{ (tagRoot + "feed.json") | url }}">
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Tagged &ldquo;{{ tag }}&rdquo;</h1>
+<p class="tag-count">
+  {{ pagination.total }} {% if pagination.total == 1 %}entry{% else %}entries{% endif %}.
+</p>
+{% include "partials/post-list.njk" %}
+{% include "partials/pagination.njk" %}
+{% endblock %}

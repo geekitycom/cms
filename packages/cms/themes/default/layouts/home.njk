@@ -1,0 +1,9 @@
+{% extends "layouts/base.njk" %}
+
+{% block title %}{% if pagination.pageNumber > 0 %}Page {{ pagination.pageNumber + 1 }} &middot; {% endif %}{{ site.title }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ title }}</h1>
+{% include "partials/post-list.njk" %}
+{% include "partials/pagination.njk" %}
+{% endblock %}

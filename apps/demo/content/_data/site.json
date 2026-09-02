@@ -1,0 +1,8 @@
+{
+  "title": "Geekity Demo",
+  "tagline": "A file-first site, served straight from Markdown",
+  "url": "http://localhost:3000",
+  "author": "Andrew Shell",
+  "postsPerPage": 2,
+  "feedSize": 20
+}

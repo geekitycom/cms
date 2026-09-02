@@ -1,0 +1,327 @@
+/*
+ * The default theme's only stylesheet. Plain CSS, no build step, no
+ * dependencies: a site that wants something else drops its own
+ * `theme/static/style.css` in and this file is never read again.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --measure: 38rem;
+  --gutter: 1.25rem;
+
+  --ink: #17181c;
+  --ink-muted: #5b6070;
+  --paper: #fdfdfc;
+  --paper-sunk: #f2f2ef;
+  --rule: #dcdcd6;
+  --accent: #1c4fd8;
+  --accent-visited: #6b3fb8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8e8ea;
+    --ink-muted: #a0a4b2;
+    --paper: #16171a;
+    --paper-sunk: #1e2024;
+    --rule: #32343a;
+    --accent: #86aaff;
+    --accent-visited: #c3a8f5;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0 var(--gutter);
+  background: var(--paper);
+  color: var(--ink);
+  font:
+    1rem/1.6 system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+a:visited {
+  color: var(--accent-visited);
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+
+.skip-link:focus {
+  position: static;
+  display: inline-block;
+  padding: 0.5rem;
+}
+
+/* Header and footer */
+
+.site-header,
+.site-footer,
+.site-main {
+  max-width: var(--measure);
+  margin-inline: auto;
+}
+
+.site-header {
+  padding: 2.5rem 0 1.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.site-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.site-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.site-tagline {
+  margin: 0.35rem 0 0;
+  color: var(--ink-muted);
+}
+
+.site-main {
+  padding: 2rem 0 3rem;
+}
+
+.site-footer {
+  padding: 1.5rem 0 3rem;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.site-colophon {
+  display: inline-block;
+}
+
+/* Titles */
+
+.page-title,
+.post-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.9rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.post-meta {
+  margin: 0 0 1.75rem;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+/* Listings */
+
+.post-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.post-list-item + .post-list-item {
+  margin-top: 2.25rem;
+  padding-top: 2.25rem;
+  border-top: 1px solid var(--rule);
+}
+
+.post-summary-title {
+  margin: 0 0 0.3rem;
+  font-size: 1.3rem;
+  line-height: 1.3;
+}
+
+.post-summary-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.post-summary-title a:hover,
+.post-summary-title a:focus {
+  text-decoration: underline;
+}
+
+.post-summary .post-meta {
+  margin-bottom: 0.5rem;
+}
+
+.post-summary-description {
+  margin: 0 0 0.5rem;
+}
+
+.empty,
+.tag-count {
+  color: var(--ink-muted);
+}
+
+/* Tags */
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper-sunk);
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.tag:hover,
+.tag:focus {
+  color: var(--ink);
+}
+
+/* Pagination */
+
+.pagination {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.9rem;
+}
+
+.pagination-position {
+  color: var(--ink-muted);
+}
+
+.pagination-previous {
+  margin-inline-end: auto;
+}
+
+.pagination-next {
+  margin-inline-start: auto;
+}
+
+/* Body copy */
+
+.post-body,
+.page-body {
+  overflow-wrap: break-word;
+}
+
+.post-body > :first-child,
+.page-body > :first-child {
+  margin-top: 0;
+}
+
+.post-body h2,
+.page-body h2 {
+  margin-top: 2.25rem;
+  font-size: 1.35rem;
+  line-height: 1.3;
+}
+
+.post-body h3,
+.page-body h3 {
+  margin-top: 1.75rem;
+  font-size: 1.1rem;
+}
+
+.post-body img,
+.page-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+.post-body blockquote,
+.page-body blockquote {
+  margin-inline: 0;
+  padding-inline-start: 1rem;
+  border-inline-start: 3px solid var(--rule);
+  color: var(--ink-muted);
+}
+
+.post-body pre,
+.page-body pre {
+  overflow-x: auto;
+  padding: 0.9rem 1rem;
+  border-radius: 6px;
+  background: var(--paper-sunk);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.post-body code,
+.page-body code {
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  background: var(--paper-sunk);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.post-body pre code,
+.page-body pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.post-body table,
+.page-body table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.post-body th,
+.post-body td,
+.page-body th,
+.page-body td {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--rule);
+  text-align: start;
+}
+
+.footnotes {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.post-footer {
+  margin-top: 2.5rem;
+}
