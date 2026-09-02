@@ -1,0 +1,21 @@
+# Build output and derived state.
+node_modules/
+dist/
+_site/
+data/
+*.tsbuildinfo
+*.tgz
+
+# Written by tools, not by hand.
+pnpm-lock.yaml
+CHANGELOG.md
+
+# Backlog.md owns these files; the CLI writes them and prettier would fight it.
+backlog/
+
+# Content is written by the CMS's own document writer, in a fixed key order and
+# a fixed shape. Reformatting it would make every fixture diff against the
+# bytes the writer produces, which is exactly what the round-trip tests assert.
+packages/cms/test/fixtures/
+apps/demo/content/
+packages/cms/templates/site/content/

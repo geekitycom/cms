@@ -1,0 +1,4 @@
+# The slow gates, once per push. Skippable with --no-verify in an emergency;
+# CI runs them again and is not skippable.
+pnpm typecheck
+pnpm test
