@@ -1,0 +1,42 @@
+{
+  "name": "geekity-cms-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Workspace root for Geekity CMS: the published @geekity/cms package and a demo site that consumes it.",
+  "license": "MIT",
+  "packageManager": "pnpm@10.26.1",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "prepare": "husky && pnpm build",
+    "dev": "pnpm --filter demo dev",
+    "build": "pnpm --filter @geekity/cms build",
+    "start": "pnpm --filter demo start",
+    "test": "pnpm -r --no-bail test",
+    "test:coverage": "pnpm -r --no-bail test:coverage",
+    "test:11ty": "pnpm -r --no-bail test:11ty",
+    "typecheck": "pnpm build && pnpm -r typecheck",
+    "lint": "eslint --no-error-on-unmatched-pattern *.js && pnpm -r lint",
+    "lint:fix": "eslint --fix --no-error-on-unmatched-pattern *.js && pnpm -r lint:fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "clean": "pnpm -r exec rm -rf dist *.tsbuildinfo"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^26.4.1",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.12.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.4.1",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.69.0"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "name": "@geekity/cms",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "A file-first CMS: Markdown content, a SQLite index, a Hono server that is both the editor and the public site.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "geekity": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "themes",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test:11ty": "tsx --test \"test/*.test.ts\"",
+    "test:coverage": "tsx --test --experimental-test-coverage \"src/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "chokidar": "^5.0.0",
+    "gray-matter": "^4.0.3",
+    "hono": "^4.13.5",
+    "js-yaml": "^5.4.1",
+    "markdown-it": "^15.0.1",
+    "markdown-it-footnote": "^4.0.0",
+    "nunjucks": "^3.2.4"
+  },
+  "devDependencies": {
+    "@11ty/eleventy": "^3.1.6",
+    "@types/markdown-it-footnote": "^3.0.4",
+    "@types/node": "^26.4.1",
+    "@types/nunjucks": "^3.2.6",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}

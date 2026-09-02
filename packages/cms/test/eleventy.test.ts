@@ -1,0 +1,208 @@
+/**
+ * The compatibility promise of decision-3, checked against the real thing.
+ *
+ * The fixtures content directory is built by Eleventy 3 with the example
+ * config this package ships, and every URL Eleventy writes is compared with the
+ * permalink the CMS computes for the same file. If the two ever disagree, a
+ * site that leaves Geekity for a static build would find its URLs moved.
+ *
+ * The build is run from `test/fixtures/`, the way a site runs Eleventy from its
+ * own root, so the relative paths in the example config mean here what they
+ * would mean there.
+ */
+import assert from 'node:assert/strict';
+import { cp, readdir, readFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { after, before, describe, it } from 'node:test';
+
+import Eleventy from '@11ty/eleventy';
+
+import { isTrashedPath, parseDocument } from '../src/index.ts';
+import type { Document } from '../src/index.ts';
+
+/** Where a site's Eleventy build would be run from: the fixtures project root. */
+const PROJECT_DIR = fileURLToPath(new URL('./fixtures/', import.meta.url));
+const CONTENT_DIR = path.join(PROJECT_DIR, 'content');
+const CONFIG_PATH = fileURLToPath(new URL('../docs/eleventy.config.example.js', import.meta.url));
+
+/**
+ * Feeds are generated in code by the CMS rather than by a template, so they are
+ * not part of the comparison in either direction.
+ */
+const FEED_PATTERN = /^feed\.[^/]+$/;
+
+/** Every Markdown document in the fixtures, parsed the way the CMS reads it. */
+async function fixtureDocuments(): Promise<Document[]> {
+  const documents: Document[] = [];
+
+  for (const relativePath of await markdownPaths(CONTENT_DIR, '')) {
+    const source = await readFile(path.join(CONTENT_DIR, relativePath), 'utf8');
+    // Trashed files keep the `posts/` or `pages/` directory they were trashed
+    // from, so the path still says which type they are.
+    documents.push(parseDocument(source, { path: relativePath }));
+  }
+
+  return documents;
+}
+
+/** Content-relative paths of every Markdown file under `posts/` or `pages/`. */
+async function markdownPaths(directory: string, prefix: string): Promise<string[]> {
+  const found: string[] = [];
+
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const relativePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      if (entry.name === '_data' || entry.name === '_includes' || entry.name === 'uploads')
+        continue;
+      found.push(...(await markdownPaths(path.join(directory, entry.name), relativePath)));
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith('.md')) found.push(relativePath);
+  }
+
+  return found.sort();
+}
+
+/** Output-relative paths of every file Eleventy wrote, with `/` separators. */
+async function outputPaths(directory: string, prefix = ''): Promise<string[]> {
+  const found: string[] = [];
+
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const relativePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      found.push(...(await outputPaths(path.join(directory, entry.name), relativePath)));
+      continue;
+    }
+    if (entry.isFile()) found.push(relativePath);
+  }
+
+  return found.sort();
+}
+
+/** The file Eleventy should write for a permalink: `/a/b/` becomes `a/b/index.html`. */
+function outputPathFor(permalink: string): string {
+  return `${permalink.replace(/^\//, '')}index.html`;
+}
+
+describe('the fixtures content directory under Eleventy', () => {
+  let buildDir: string;
+  let written: string[];
+  let documents: Document[];
+  const originalCwd = process.cwd();
+
+  before(async () => {
+    documents = await fixtureDocuments();
+
+    // The fixtures are copied somewhere writable and built there: Eleventy
+    // resolves both the config's relative paths and its output directory
+    // against the working directory, so the build has to happen where a site's
+    // own build would, and that must not be the repository.
+    buildDir = await mkdtemp(path.join(tmpdir(), 'geekity-11ty-'));
+    await cp(PROJECT_DIR, buildDir, { recursive: true });
+
+    // The example config honours BUILD_DRAFTS as a local preview escape hatch.
+    // The compatibility check is about the published site, so it never applies.
+    delete process.env['BUILD_DRAFTS'];
+
+    process.chdir(buildDir);
+    try {
+      const eleventy = new Eleventy('content', '_site', {
+        configPath: CONFIG_PATH,
+        quietMode: true,
+      });
+      await eleventy.write();
+    } finally {
+      process.chdir(originalCwd);
+    }
+
+    written = await outputPaths(path.join(buildDir, '_site'));
+  });
+
+  after(async () => {
+    process.chdir(originalCwd);
+    if (buildDir !== undefined) await rm(buildDir, { recursive: true, force: true });
+  });
+
+  it('builds without errors and writes pages', () => {
+    assert.ok(written.length > 0, 'Eleventy wrote nothing');
+    assert.ok(
+      written.some((file) => file.endsWith('index.html')),
+      `no page was written: ${written.join(', ')}`,
+    );
+  });
+
+  it('writes every published document at the permalink the CMS computes', () => {
+    const published = documents.filter(
+      (document) => !document.draft && !isTrashedPath(document.path),
+    );
+    assert.ok(published.length >= 4, 'the fixtures do not exercise enough documents');
+
+    for (const document of published) {
+      assert.ok(
+        written.includes(outputPathFor(document.permalink)),
+        `${document.path} has permalink ${document.permalink}, so Eleventy should have written ` +
+          `${outputPathFor(document.permalink)}; it wrote ${written.join(', ')}`,
+      );
+    }
+  });
+
+  it('writes nothing the CMS would not serve at that URL', () => {
+    const expected = new Set(
+      documents
+        .filter((document) => !document.draft && !isTrashedPath(document.path))
+        .map((document) => outputPathFor(document.permalink)),
+    );
+
+    const unexplained = written.filter(
+      (file) => !expected.has(file) && !FEED_PATTERN.test(file) && !file.startsWith('uploads/'),
+    );
+
+    assert.deepEqual(unexplained, []);
+  });
+
+  it('leaves drafts out of the build', () => {
+    const drafts = documents.filter((document) => document.draft);
+    assert.ok(drafts.length > 0, 'the fixtures have no draft to exclude');
+
+    for (const draft of drafts) {
+      assert.ok(
+        !written.includes(outputPathFor(draft.permalink)),
+        `${draft.path} is a draft but Eleventy wrote ${outputPathFor(draft.permalink)}`,
+      );
+    }
+  });
+
+  it('leaves the trash out of the build', () => {
+    const trashed = documents.filter((document) => isTrashedPath(document.path));
+    assert.ok(trashed.length > 0, 'the fixtures have nothing in the trash');
+
+    for (const document of trashed) {
+      assert.ok(
+        !written.includes(outputPathFor(document.permalink)),
+        `${document.path} is in the trash but Eleventy wrote it`,
+      );
+    }
+  });
+
+  it('copies the uploads directory through untouched', async () => {
+    const uploads = written.filter((file) => file.startsWith('uploads/'));
+    assert.ok(uploads.length > 0, 'no upload was copied');
+
+    // An upload that happens to be Markdown is a file to download. It is
+    // copied like any other upload, and the previous test is what catches it
+    // being rendered as a page as well.
+    assert.ok(
+      uploads.includes('uploads/2026/09/attached-notes.md'),
+      `the Markdown upload was not copied: ${uploads.join(', ')}`,
+    );
+
+    for (const upload of uploads) {
+      assert.equal(
+        await readFile(path.join(buildDir, '_site', upload), 'utf8'),
+        await readFile(path.join(CONTENT_DIR, upload), 'utf8'),
+      );
+    }
+  });
+});

@@ -1,0 +1,2 @@
+# Format and lint what is about to be committed, nothing else.
+pnpm exec lint-staged

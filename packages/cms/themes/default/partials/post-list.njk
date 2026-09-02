@@ -1,0 +1,24 @@
+{# A list of documents, newest first. Expects `posts`. #}
+{% import "partials/tags.njk" as taxonomy %}
+{% if posts.length %}
+<ol class="post-list">
+  {% for post in posts %}
+  <li class="post-list-item">
+    <article class="post-summary">
+      <h2 class="post-summary-title"><a href="{{ post.url | url }}">{{ post.title }}</a></h2>
+      {% if post.date %}
+      <p class="post-meta">
+        <time datetime="{{ post.date | date("html") }}">{{ post.date | date }}</time>
+      </p>
+      {% endif %}
+      {% if post.description %}
+      <p class="post-summary-description">{{ post.description }}</p>
+      {% endif %}
+      {{ taxonomy.list(post.tags) }}
+    </article>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p class="empty">Nothing published yet.</p>
+{% endif %}

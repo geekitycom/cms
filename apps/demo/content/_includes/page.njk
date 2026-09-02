@@ -1,0 +1,19 @@
+{#
+  The layout `content/pages/pages.json` names, for an Eleventy build. See
+  `post.njk` beside it for why these two are as small as they are.
+#}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }} &middot; {{ site.title }}</title>
+    <link rel="stylesheet" href="/theme/style.css">
+  </head>
+  <body>
+    <article class="page">
+      <h1>{{ title }}</h1>
+      {{ content | safe }}
+    </article>
+  </body>
+</html>

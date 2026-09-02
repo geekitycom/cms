@@ -1,0 +1,118 @@
+# Releasing @geekity/cms (decision-7), in two halves.
+#
+# The first half runs on every push to `main` and keeps a release pull request
+# open, its version and CHANGELOG.md derived from the Conventional Commits that
+# have landed since the last release. Nothing is published while that pull
+# request is open.
+#
+# The second half runs when that pull request is merged: release-please tags the
+# commit and creates the GitHub release, and only then does the publish job
+# build, test and push the tarball to npm with provenance.
+#
+# `apps/demo` is private and unversioned, so `release-please-config.json` tracks
+# `packages/cms` and nothing else.
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Releases are not cancellable: a half-run release is worse than a queued one.
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      release_created: ${{ steps.release.outputs.releases_created }}
+      tag_name: ${{ steps.release.outputs['packages/cms--tag_name'] }}
+      version: ${{ steps.release.outputs['packages/cms--version'] }}
+    steps:
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          # The default GITHUB_TOKEN cannot trigger other workflows, so a
+          # release pull request opened with it gets no CI. Add a
+          # `RELEASE_PLEASE_TOKEN` repository secret holding a fine-grained PAT
+          # with contents and pull-requests write to get the checks back; the
+          # release itself works either way.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    name: publish
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # npm provenance and npm trusted publishing both read the OIDC token this
+      # grants. Without it the publish falls back to a plain token and no
+      # provenance attestation is produced.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Publish exactly what was tagged, not whatever `main` has moved on
+          # to while the release job was running.
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      # Node 24 so the bundled npm is a version that speaks OIDC; `pnpm publish`
+      # shells out to `npm publish` for the actual upload.
+      - uses: ./.github/actions/setup-workspace
+        with:
+          node-version: '24'
+
+      - name: Build and test the tagged commit
+        run: |
+          pnpm build
+          pnpm test
+          pnpm test:11ty
+
+      # Trusted publishing needs npm 11.5.1 or newer. The runner's bundled npm
+      # normally qualifies; this makes it certain and costs a few seconds.
+      - name: Ensure npm is new enough for trusted publishing
+        run: |
+          npm install --global npm@latest
+          npm --version
+
+      # Preferred path: configure npm trusted publishing for @geekity/cms and
+      # set no secret at all, so the OIDC token above is the only credential.
+      # The NPM_TOKEN secret is the documented fallback for when that is not set
+      # up yet.
+      - name: Configure the npm token fallback
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
+            echo 'Publishing with the NPM_TOKEN secret.'
+          else
+            echo 'No NPM_TOKEN secret set; publishing through npm trusted publishing (OIDC).'
+          fi
+
+      # `--no-git-checks` because the checkout is a detached tag, which pnpm
+      # would otherwise refuse to publish from.
+      - name: Publish @geekity/cms to npm
+        run: pnpm publish --filter @geekity/cms --provenance --access public --no-git-checks
+
+      - name: Summarise the release
+        run: |
+          {
+            echo "### Published @geekity/cms ${{ needs.release-please.outputs.version }}"
+            echo
+            echo "Tag: \`${{ needs.release-please.outputs.tag_name }}\`"
+            echo
+            echo "<https://www.npmjs.com/package/@geekity/cms>"
+          } >> "$GITHUB_STEP_SUMMARY"

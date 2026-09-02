@@ -1,0 +1,30 @@
+{
+  "name": "demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A private site that consumes @geekity/cms through the workspace. Doubles as the integration bed and the reference for `geekity init`.",
+  "scripts": {
+    "predev": "pnpm --filter @geekity/cms build",
+    "dev": "tsx watch server.ts",
+    "prestart": "pnpm --filter @geekity/cms build",
+    "start": "tsx server.ts",
+    "build:11ty": "eleventy",
+    "pretest": "pnpm --filter @geekity/cms build",
+    "test": "tsx --test \"test/site.test.ts\"",
+    "pretest:11ty": "pnpm --filter @geekity/cms build",
+    "test:11ty": "tsx --test \"test/eleventy.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "dependencies": {
+    "@geekity/cms": "workspace:*"
+  },
+  "devDependencies": {
+    "@11ty/eleventy": "^3.1.6",
+    "@types/node": "^26.4.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}

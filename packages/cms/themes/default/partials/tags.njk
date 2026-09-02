@@ -1,0 +1,12 @@
+{# Macros for taxonomy links. Import as `{% import "partials/tags.njk" as taxonomy %}`. #}
+
+{# A list of tag links. Renders nothing when the list is empty. #}
+{% macro list(tags) %}
+{% if tags and tags.length %}
+<ul class="tag-list">
+  {% for tag in tags %}
+  <li><a class="tag" href="{{ ("/tags/" + (tag | urlencode) + "/") | url }}">{{ tag }}</a></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endmacro %}

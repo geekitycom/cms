@@ -1,0 +1,178 @@
+# The quality gates of decision-8, one job per gate so each can be named as a
+# required status check on `main`: lint, typecheck, test and build.
+#
+# `pnpm install` runs the root `prepare` script, which builds `packages/cms`, so
+# every job already has `dist/` before its own command runs. The `build` job is
+# still here on its own: it is the check a branch protection rule points at, and
+# it is the one that fails loudly when the compiler is the problem.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  # `edited` is in the list so that fixing a pull request title re-runs the
+  # `pr-title` job. The concurrency group below cancels the superseded run, so
+  # the other jobs are not paid for twice.
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+# Nothing here writes to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm lint
+      # Formatting is a check, not a fixup: CI never rewrites files, it fails
+      # and leaves `pnpm format` to the author.
+      - run: pnpm format:check
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm typecheck
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm test
+
+  # The package's floor is Node 22.5 (`node:sqlite`) and sites will run it on
+  # 24, so the fast suite runs on both. This is a separate job rather than a
+  # matrix so the check above keeps the plain name `test`.
+  test-node-24:
+    name: test-node-24
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+        with:
+          node-version: '24'
+      - run: pnpm test
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm build
+
+  # The Eleventy compatibility suite spins up a real Eleventy build, so it is
+  # its own job and the fast suite stays fast (decision-8).
+  test-11ty:
+    name: test-11ty
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm test:11ty
+
+  # The published artefact rather than the workspace link (decision-6). Every
+  # other job reaches `@geekity/cms` through a symlink, which shows the whole
+  # source tree whether or not `files` in package.json would have shipped it;
+  # this one packs a tarball, scaffolds a site with `geekity init`, installs the
+  # tarball into it and asks the booted site for three URLs.
+  #
+  # The steps live in `scripts/pack-install-smoke.sh` rather than in this file,
+  # so the sequence can be run on a laptop before it is trusted here. Node 24
+  # because that is what a new site will be on.
+  pack-install:
+    name: pack-install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+        with:
+          node-version: '24'
+      - name: Pack, install into a scratch site and boot it
+        shell: bash
+        # $RUNNER_TEMP is outside the checkout, so the scratch site's own
+        # install cannot see this repository's workspace.
+        run: bash scripts/pack-install-smoke.sh "$RUNNER_TEMP"
+
+  # Node's own `--experimental-test-coverage`, kept out of the `test` job so a
+  # coverage hiccup never blocks a merge. The summary is uploaded as an
+  # artifact; no third-party coverage service is involved.
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - name: Run the suite with coverage
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm test:coverage 2>&1 | tee coverage-summary.txt
+      - uses: actions/upload-artifact@v7
+        # Upload the summary even when the run failed; that is when it is most
+        # worth reading.
+        if: always()
+        with:
+          name: coverage-summary
+          path: coverage-summary.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Squash merges take the pull request title as the commit message, and
+  # release-please reads that message to work out the next version, so the title
+  # has to parse as a Conventional Commit. The husky `commit-msg` hook covers
+  # individual commits; this covers the one that actually lands on `main`.
+  #
+  # Types and scopes are kept in step with `commitlint.config.js`. A scope is
+  # optional, so `requireScope` stays false and an empty scope passes.
+  pr-title:
+    name: pr-title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          scopes: |
+            cms
+            demo
+            deps
+            ci
+            docs
+            release
+          requireScope: false
+          # Lower case, no trailing full stop — the same subject rules
+          # commitlint applies to a commit message.
+          subjectPattern: ^(?![A-Z])(?!.*\.$).+$
+          subjectPatternError: |
+            The subject "{subject}" of the pull request title "{title}" is
+            invalid: it must start with a lower case letter and must not end
+            with a full stop.

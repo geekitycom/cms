@@ -1,0 +1,56 @@
+{#
+  The page every other layout extends.
+
+  Blocks a site can override without copying the whole file:
+    title       the contents of <title>
+    head        extra tags at the end of <head>
+    alternates  <link rel="alternate"> tags, where the feeds go
+    header      the site header
+    content     the page body
+    footer      the site footer
+    scripts     scripts at the end of <body>
+#}<!doctype html>
+<html lang="{{ site.language | default("en") }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{% if title %}{{ title }} &middot; {% endif %}{{ site.title }}{% endblock %}</title>
+    {% if description %}
+    <meta name="description" content="{{ description }}">
+    {% endif %}
+    <link rel="canonical" href="{{ (page.url or "/") | absoluteUrl }}">
+    <link rel="stylesheet" href="{{ "/theme/style.css" | url }}">
+    {% block alternates %}
+    <link rel="alternate" type="application/atom+xml" title="{{ site.title }}" href="{{ "/feed.xml" | url }}">
+    <link rel="alternate" type="application/feed+json" title="{{ site.title }}" href="{{ "/feed.json" | url }}">
+    {% endblock %}
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    {% block header %}
+    <header class="site-header">
+      <p class="site-title"><a href="{{ "/" | url }}">{{ site.title }}</a></p>
+      {% if site.tagline %}
+      <p class="site-tagline">{{ site.tagline }}</p>
+      {% endif %}
+    </header>
+    {% endblock %}
+
+    <main id="main" class="site-main">
+      {% block content %}{% endblock %}
+    </main>
+
+    {% block footer %}
+    <footer class="site-footer">
+      <p>
+        {% if site.author %}&copy; {{ site.author }}{% endif %}
+        <span class="site-colophon">Published with Geekity.</span>
+      </p>
+    </footer>
+    {% endblock %}
+
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

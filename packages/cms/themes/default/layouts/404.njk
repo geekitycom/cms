@@ -1,0 +1,9 @@
+{% extends "layouts/base.njk" %}
+
+{% block content %}
+<article class="not-found">
+  <h1 class="page-title">Not found</h1>
+  <p>There is nothing at <code>{{ url }}</code>.</p>
+  <p><a href="{{ "/" | url }}">Back to {{ site.title }}</a></p>
+</article>
+{% endblock %}

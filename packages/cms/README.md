@@ -1,0 +1,614 @@
+# @geekity/cms
+
+A file-first CMS. Content is Markdown on disk, laid out so Eleventy can build
+the same directory unchanged. One Node process is both the editor and the public
+website. SQLite holds a derived index plus the data that has no natural file
+form.
+
+This is the guide for someone building a site on the package. The repository's
+own [README](https://github.com/geekitycom/cms#readme) is the contributor guide.
+
+Requires Node 22.5 or newer, which is where `node:sqlite` landed.
+
+## A new site
+
+```sh
+pnpm dlx @geekity/cms init my-site
+cd my-site
+pnpm install
+pnpm dev
+```
+
+That is a running site on <http://localhost:3000> with a post, a page and the
+packaged theme. `geekity init` refuses a directory that already has anything in
+it, so it can never write over a site you already have.
+
+What it writes:
+
+```
+package.json          depends on @geekity/cms; scripts dev, start and sync
+geekity.config.ts     port, directories, base URL
+server.ts             the entry file; where your own routes go
+tsconfig.json         so the site type checks against the package
+content/
+  posts/              Markdown posts, plus posts.json for Eleventy
+  pages/              Markdown pages, plus pages.json
+  _data/site.json     title, tagline, author, page and feed sizes
+.gitignore            node_modules, data and .env
+```
+
+`data/` and `theme/` are not written. The index under `data/` is created on
+first boot and is safe to delete; `theme/` is optional and only exists once you
+override a template.
+
+The generated `package.json` pins `@geekity/cms` to the version of the CLI that
+wrote it, so a site is never scaffolded against a version it has not been tested
+with.
+
+## An existing project
+
+```sh
+pnpm add @geekity/cms
+```
+
+Then write a `geekity.config.ts` and a `content/` directory, and either add an
+entry file or run the bin. Nothing else is required.
+
+## Upgrading
+
+```sh
+pnpm up @geekity/cms
+```
+
+Database migrations ship inside the package and run on boot, so a version bump
+is the whole upgrade. The config schema, `createCms`, the template context, the
+JSON representation and the content format are all covered by semver: a
+breaking change to any of them is a major with a migration note in the
+changelog.
+
+## The `geekity` command
+
+`geekity` is installed as a bin, so `pnpm geekity <command>` runs it inside a
+site (or `npx geekity`, or a `package.json` script, which is how the generated
+`sync` script calls it).
+
+| Command                | What it does                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| `geekity serve`        | Boot from the config file and listen. The default when no command is given.              |
+| `geekity init <dir>`   | Create a new site in `<dir>`. Refuses a directory that is not empty.                     |
+| `geekity sync`         | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed. |
+| `geekity user add`     | Create an admin account. **Not available yet** — admin authentication has not shipped.   |
+| `geekity --help`, `-h` | The same table, on the terminal.                                                         |
+| `geekity --version`    | The installed version.                                                                   |
+
+`serve` and `sync` take `--config <file>`; without it they look for
+`geekity.config.ts`, then `geekity.config.js`, then `geekity.config.mjs` in the
+working directory, and run on defaults if there is none.
+
+`sync` prints what the scan did and forces watching off whatever the config
+says, because a one-shot scan that then sat in a watcher would never exit:
+
+```sh
+$ geekity sync
+Scanned 12: 2 created, 1 updated, 0 removed, 9 unchanged, 0 failed
+```
+
+A file that will not parse is logged, left out of the index and counted in
+`failed`; the command then exits `1` so a deploy step notices. Everything else
+in the directory is still indexed.
+
+### How a TypeScript config is loaded
+
+`geekity serve` and `geekity sync` import `geekity.config.ts` directly. That is
+all it takes on Node 22.18 and newer, which strip types without a flag. On older
+Node — or for a config using syntax stripping cannot erase, such as `enum` — the
+CLI falls back to registering the **tsx installed in your own site**, which is
+what `geekity init` puts in `devDependencies` (it is what runs `server.ts` too).
+A site that wants neither can write `geekity.config.js` instead; it is in the
+lookup list for exactly that reason. Nothing else is searched: the tsx has to be
+the site's, so a copy that happens to be elsewhere on the machine is never used.
+
+## Using the package from an entry file
+
+An entry file exists so a site can add routes and middleware of its own. A site
+that adds nothing can delete `server.ts` and run `geekity serve`.
+
+```ts
+import { createCms } from '@geekity/cms';
+
+import config from './geekity.config.ts';
+
+const cms = createCms(config);
+
+cms.app.get('/hello/', (c) => c.text('a route of my own'));
+
+await cms.serve();
+```
+
+`createCms(config)` returns a `Cms`:
+
+| Member                   | What it is                                                                                                                 |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `app`                    | The Hono app. Add routes and middleware before serving; handlers reach `c.var.store`, `c.var.config` and `c.var.renderer`. |
+| `config`                 | The config after defaults and environment overrides, every path absolute.                                                  |
+| `store`                  | The content index.                                                                                                         |
+| `events`                 | Index changes as they happen.                                                                                              |
+| `onDocumentChange(hook)` | Subscribe to every change; returns the unsubscribe.                                                                        |
+| `onPublish(hook)`        | Subscribe to documents becoming visible; returns the unsubscribe.                                                          |
+| `sync()`                 | One full scan of the content directory.                                                                                    |
+| `serve()`                | Scan, start watching, listen. Resolves with the port actually bound, which matters when the configured port is `0`.        |
+| `close()`                | Stop the watcher, the server and the index. Safe to call twice, and required, because the index holds an open database.    |
+
+Routes a site registers always win over the content index. Documents are
+resolved in the not-found handler, after every registered route has failed to
+match, so a post whose permalink is `/hello/` cannot shadow the `/hello/` route
+above — and neither can it shadow the admin and federation routes of later
+milestones.
+
+## Configuration
+
+Declare config in `geekity.config.ts`; `defineConfig` gives it type checking.
+
+```ts
+import { defineConfig } from '@geekity/cms';
+
+export default defineConfig({
+  port: 3000,
+  contentDir: 'content',
+  dataDir: 'data',
+  themeDir: 'theme',
+  baseUrl: 'http://localhost:3000',
+  watch: true,
+});
+```
+
+Every field is optional. Relative directories resolve against the working
+directory; absolute ones are used as given.
+
+| Field              | Default                   | Environment override        | Meaning                                                                                    |
+| ------------------ | ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
+| `port`             | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on. `0` picks a free one.                                     |
+| `contentDir`       | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                          |
+| `dataDir`          | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state, including the SQLite index.                                                 |
+| `themeDir`         | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme. Need not exist.       |
+| `baseUrl`          | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped. |
+| `watch`            | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                               |
+| `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                               |
+| `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                             |
+
+Precedence is environment variable, then config file, then default, so a host
+can override anything without editing the site. A boolean environment variable
+takes `true`, `1`, `yes` and `on`, or their opposites; anything else is an error
+rather than a silent `false`.
+
+## Keeping the index in step
+
+Booting scans `contentDir`, indexes every Markdown file under `posts/` and
+`pages/`, and drops index rows whose file has gone. After that a watcher keeps
+the two in step, so an edit on disk reaches the live site in about a second
+without a restart.
+
+```ts
+await cms.sync(); // one full scan; what `serve()` runs on boot
+```
+
+Set `watch: false` (or `GEEKITY_WATCH=false`) for a host whose content cannot
+change under the process. `geekity sync` sets it for you.
+
+## Hooks
+
+Two hooks let a site do something of its own when content changes. Both are
+config options, and both are also methods, for a site that would rather
+subscribe from its entry file:
+
+```ts
+export default defineConfig({
+  onPublish: (change) => {
+    console.log(`${change.next?.title ?? ''} went live`);
+  },
+});
+```
+
+```ts
+const stop = cms.onDocumentChange((change) => {
+  console.log(change.type, change.path, change.origin);
+});
+stop(); // the method returns the unsubscribe
+```
+
+`onDocumentChange` runs for every `created`, `updated` and `deleted`.
+`onPublish` runs when a document becomes visible on the public site: created
+already published, a draft published, or a document restored from the trash. A
+hook may be `async`; the CMS never waits for it, and a hook that throws or
+rejects is reported and does not stop the scan or wedge the watcher.
+
+**Mind the origin.** Every change carries `origin`, which is `watch` for a live
+edit and `scan` for a full scan — _including the one on boot_. A cold index
+reports its whole first scan as `created`, and every published document as
+`published`, so a hook that must not re-fire when the index is rebuilt has to
+say so:
+
+```ts
+cms.onPublish((change) => {
+  if (change.origin !== 'watch') return; // not a rebuilt index
+  void deliverToFollowers(change.next);
+});
+```
+
+Deleting `data/geekity.db` is a supported thing to do, so this is not a corner
+case: it is what happens on the next boot.
+
+For anything the two hooks do not cover, subscribe to the events directly.
+
+```ts
+cms.events.on('unpublished', (change) => {
+  console.log(`${change.previous?.title ?? ''} came down`);
+});
+```
+
+| Event         | When                                                                                               |
+| ------------- | -------------------------------------------------------------------------------------------------- |
+| `created`     | A file was indexed for the first time.                                                             |
+| `updated`     | An indexed file's content changed.                                                                 |
+| `deleted`     | An indexed file is gone.                                                                           |
+| `published`   | A document became visible: created live, a draft published, or a document restored from the trash. |
+| `unpublished` | The reverse: published to draft, trashed, or deleted while live.                                   |
+| `change`      | Every `created`, `updated` and `deleted`.                                                          |
+
+Each one carries the document before and after the change (`previous` and
+`next`, either of which may be `undefined`), the content-relative `path`, and
+`origin`. `on()` returns the function that unsubscribes; there is also `once()`
+and `off()`.
+
+## The public site
+
+Booting mounts the public site on the app. The routes are:
+
+| Route                                           | What it serves                                                              |
+| ----------------------------------------------- | --------------------------------------------------------------------------- |
+| `/`                                             | Published posts, newest first.                                              |
+| `/page/2/` and up                               | Later pages of the same archive.                                            |
+| a document's permalink                          | The post or the page, through the theme.                                    |
+| `/tags/{tag}/`                                  | Everything published carrying that tag, paginated at `/tags/{tag}/page/2/`. |
+| `/feed.xml`, `/feed.json`                       | The recent posts as Atom and JSON Feed.                                     |
+| `/tags/{tag}/feed.xml`, `/tags/{tag}/feed.json` | The same, for one tag.                                                      |
+| `/theme/…`                                      | The theme's own files, from its `static/` directory.                        |
+| anything else                                   | The theme's 404.                                                            |
+
+Drafts and documents in the trash are not on the public site: their URLs 404,
+and they are in no listing.
+
+Trailing slashes are canonical. A request that arrives without one redirects
+301 to the URL with it, but only when that URL resolves — a genuinely missing
+address 404s straight away rather than bouncing first. `/page/1/` redirects to
+`/`, because the first page of a listing lives at the listing's own URL.
+
+A document is resolved after every registered route has failed to match, so
+routes a site adds always win over a permalink that happens to collide with
+them.
+
+## Content negotiation
+
+Every public URL is one resource with more than one body. A post or a page has
+three; a listing has two.
+
+| Media type         | Extension | Body                                                     |
+| ------------------ | --------- | -------------------------------------------------------- |
+| `text/html`        | —         | The document through the theme. The default.             |
+| `text/markdown`    | `.md`     | The file exactly as it is stored, front matter included. |
+| `application/json` | `.json`   | The document as data, see below.                         |
+
+Listings — `/`, `/page/N/`, `/tags/{tag}/` and `/tags/{tag}/page/N/` — offer
+HTML and JSON only. There is no Markdown file behind a listing to serve.
+
+The representation is chosen like this:
+
+1. A `.md` or `.json` suffix on the path wins outright and `Accept` is ignored.
+   Both spellings work: `/2026/09/hello/index.md` (what the `Link` header
+   advertises) and the shorter `/2026/09/hello.md`.
+2. Otherwise `Accept` is matched with q-values. The highest q wins; a tie goes
+   to the more specific range; what is still tied goes to HTML.
+3. No `Accept` header, an empty one, or `*/*` means HTML, so a browser and a
+   `curl` with no arguments both get a page.
+4. A request that accepts none of the representations gets `406` with a JSON
+   body listing what it could have asked for.
+
+The feeds are fixed routes and are not negotiated: feed readers do not send
+useful `Accept` headers. See [Feeds](#feeds).
+
+```sh
+curl -H 'Accept: text/markdown' https://example.com/2026/09/hello/
+curl https://example.com/2026/09/hello/index.json
+curl 'https://example.com/index.json?full=1'
+```
+
+### The JSON shape
+
+```json
+{
+  "schema": 1,
+  "url": "https://example.com/2026/09/hello/",
+  "frontMatter": {
+    "title": "Hello, World!",
+    "date": "2026-09-02T09:00:00Z",
+    "permalink": "/2026/09/hello/",
+    "tags": ["introductions"]
+  },
+  "markdown": "A *file-first* CMS.",
+  "html": "<p>A <em>file-first</em> CMS.</p>\n"
+}
+```
+
+`schema` is the version of this shape; keys are only added within a version.
+`url` is absolute, built on the configured `baseUrl`. `frontMatter` is the
+document's front matter exactly as the `.md` representation carries it — the
+same block the writer emits, unknown keys included — so the two cannot drift.
+`markdown` is the body without the front matter, and `html` is that body
+rendered.
+
+A listing's JSON is a plain array of the same objects with `markdown` and
+`html` left out, because an archive page should not carry every post in full.
+`?full=1` puts them back.
+
+```json
+[
+  {
+    "schema": 1,
+    "url": "https://example.com/one/",
+    "frontMatter": { "title": "One", "…": "…" }
+  },
+  {
+    "schema": 1,
+    "url": "https://example.com/two/",
+    "frontMatter": { "title": "Two", "…": "…" }
+  }
+]
+```
+
+A 406 body names the alternates:
+
+```json
+{
+  "error": "not_acceptable",
+  "message": "This URL is not available in any of the media types you accept.",
+  "alternates": [
+    { "type": "text/html", "url": "/2026/09/hello/" },
+    { "type": "text/markdown", "url": "/2026/09/hello/index.md" },
+    { "type": "application/json", "url": "/2026/09/hello/index.json" }
+  ]
+}
+```
+
+### Headers
+
+Every negotiated response carries `Vary: Accept` and a `Link` header pointing
+at the representations it is not:
+
+```
+Link: </2026/09/hello/index.md>; rel="alternate"; type="text/markdown",
+      </2026/09/hello/index.json>; rel="alternate"; type="application/json"
+```
+
+It also carries `ETag` — derived from the document's content hash and the
+representation, so a client holding the JSON is never told its Markdown is
+unchanged — plus `Last-Modified` from the document's `updated`, falling back to
+its `date`, and `Cache-Control: no-cache` so a client revalidates rather than
+guessing how long the page stays fresh. `If-None-Match` and `If-Modified-Since`
+are honoured and answered with `304`.
+
+One exception: while `watch` is on, the HTML representation is served without
+validators. Only the document is hashed, and a template edit changes the page
+without changing the document, so a development server would otherwise answer
+`304` with a page that had already moved on. The `.md` and `.json`
+representations are validated either way.
+
+Adding a representation — an ActivityStreams object, say — means adding it to
+`Representation` in `src/web/negotiate.ts` with its media type and, if it wants
+one, its extension. The selection, the `Link` alternates, the `ETag` and the
+406 body all follow from those two tables. ActivityPub types are claimed by the
+federation middleware before the negotiator sees them.
+
+## Feeds
+
+The recent posts are syndicated in two formats, at fixed URLs:
+
+| URL                     | Format                                  |
+| ----------------------- | --------------------------------------- |
+| `/feed.xml`             | Atom 1.0 (`application/atom+xml`)       |
+| `/feed.json`            | JSON Feed 1.1 (`application/feed+json`) |
+| `/tags/{tag}/feed.xml`  | The same tag archive, as Atom           |
+| `/tags/{tag}/feed.json` | The same tag archive, as JSON Feed      |
+
+A feed holds the newest published posts, newest first. Drafts, documents in the
+trash and pages are never in one, and a tag nothing published carries 404s
+rather than serving an empty feed. `feedSize` in `content/_data/site.json` sets
+how many entries a feed holds; without it a feed holds 20, which is deliberately
+more than an archive page, so a reader that polls once a day does not miss a
+post on a site that publishes several.
+
+```json
+{ "title": "My Site", "tagline": "Notes", "author": "Me", "feedSize": 20 }
+```
+
+An Atom entry carries `id` (the post's absolute URL), `title`, `updated`,
+`published`, `link rel="alternate"`, an `author` when the front matter names
+one, a `category` per tag, a `summary` when the front matter has a
+`description`, and the whole rendered post as `content type="html"`. The feed
+itself carries `id`, `title`, `subtitle` from the site's tagline, `updated`,
+`link rel="self"`, `link rel="alternate"` to the HTML page and a `generator`.
+The XML is written by this package rather than by a library, and everything
+that goes into it is escaped.
+
+A JSON Feed item carries `id`, `url`, `title`, `content_html`, `summary`,
+`date_published`, `date_modified`, `tags` and `authors`; the feed carries
+`version`, `title`, `home_page_url`, `feed_url`, `description` and `authors`.
+Keys with nothing behind them are left out rather than sent empty.
+
+Both feeds carry `ETag`, `Last-Modified` and `Cache-Control: no-cache`, and
+answer `If-None-Match` and `If-Modified-Since` with `304`. The validator covers
+the feed's metadata as well as its entries, and the two formats and the two
+scopes each get their own, so a reader holding the Atom feed is never told the
+JSON one is unchanged. Feeds are validated even while `watch` is on, because a
+feed is not rendered through the theme.
+
+```sh
+curl -i https://example.com/feed.xml
+curl -i https://example.com/tags/releases/feed.json
+```
+
+Every page of the default theme advertises both feeds in its `<head>`, and a
+tag archive advertises that tag's two feeds as well. A theme that does not
+extend `layouts/base.njk` should emit them itself:
+
+```html
+<link
+  rel="alternate"
+  type="application/atom+xml"
+  title="My Site"
+  href="/feed.xml"
+/>
+<link
+  rel="alternate"
+  type="application/feed+json"
+  title="My Site"
+  href="/feed.json"
+/>
+```
+
+The builders are exported, so a site can write a feed of its own — one
+category, one author — without reimplementing either format:
+
+```ts
+import { atomFeed, createRenderer, jsonFeed } from '@geekity/cms';
+
+const site = createRenderer({ config: cms.config }).site();
+
+const source = {
+  site,
+  documents: cms.store.listByTag('releases', { limit: 20 }),
+  title: `${site.title}: releases`,
+  href: '/tags/releases/',
+  feedHref: '/tags/releases/feed.xml',
+  baseUrl: cms.config.baseUrl,
+};
+
+atomFeed(source); // a string
+jsonFeed(source); // a JSON Feed object
+```
+
+## Theme overrides
+
+A template is looked up in the site's `themeDir` first, then in the theme that
+ships inside this package, file by file. Sites override one template at a time
+and keep receiving updates to the rest. Files under `/theme/` resolve the same
+way, so `theme/static/style.css` replaces the packaged stylesheet.
+
+`themeDir` need not exist. A site of nothing but `geekity.config.ts` and
+`content/` serves every page, the 404 and the stylesheet out of the packaged
+theme; creating `theme/` is how you start replacing pieces of it, not a
+condition of running.
+
+A site that ships only
+
+```
+theme/layouts/post.njk
+```
+
+replaces the post layout; the base layout, the archive, the tag pages and the
+404 all still come from the package. Templates are Nunjucks, and an override
+can extend a packaged one by name:
+
+```njk
+{% extends "layouts/base.njk" %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+{{ content | safe }}
+{% endblock %}
+```
+
+The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`,
+`content`, `page.url`, and every front matter key the file carried — plus
+`site`, which is `content/_data/site.json`. It is part of the semver contract.
+The full table of context keys, blocks and filters is in
+[`themes/default/README.md`](./themes/default/README.md).
+
+Rendering is also callable without a request:
+
+```ts
+import { createRenderer, resolveConfig } from '@geekity/cms';
+
+const renderer = createRenderer({
+  config: resolveConfig({ baseUrl: 'https://example.com' }),
+});
+renderer.renderDocument(document); // the HTML the site would serve
+renderer.site(); // content/_data/site.json, defaults filled in
+```
+
+Handlers reach the same renderer as `c.var.renderer`.
+
+## Building the same content with Eleventy
+
+The content directory is an [Eleventy](https://www.11ty.dev) 3 input directory.
+The same files this CMS serves build into a static site at the same URLs, so
+leaving is a build step rather than a migration. That is a promise, and it is
+kept by a test rather than by good intentions.
+
+Copy
+[`docs/eleventy.config.example.js`](https://github.com/geekitycom/cms/blob/main/packages/cms/docs/eleventy.config.example.js)
+into your site as `eleventy.config.js` and run Eleventy:
+
+```sh
+npm install --save-dev @11ty/eleventy
+npx @11ty/eleventy
+```
+
+It is a plain ESM config with no dependency on this package, and it writes out
+the four rules the CMS follows that Eleventy does not know about on its own:
+
+| Rule                                            | How the config does it                                                                                                                                                                                                                                                     |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `draft: true` hides a document                  | An `addPreprocessor` that returns `false` for it. `BUILD_DRAFTS=1` builds drafts anyway, for a local preview.                                                                                                                                                              |
+| A file with no `permalink` gets the CMS default | An `addPreprocessor` that fills in `/{yyyy}/{mm}/{slug}/` for a post and `/{slug}/` for a page, slugifying the title exactly as the CMS does. Front matter always wins; the CMS writes `permalink` into every file it saves, so this only matters for hand-authored files. |
+| `content/uploads/` is served at `/uploads/`     | `addPassthroughCopy({ 'content/uploads': 'uploads' })`, plus an `ignores` entry for the same path. Without the ignore, an upload that happens to be Markdown would be copied _and_ rendered as a page; the CMS only ever indexes `posts/` and `pages/`.                    |
+| `content/_trash/` is not published              | `ignores.add('content/_trash/**')`. Eleventy skips `_includes` and `_data` because they are configured directories, not because of the underscore, so the trash has to be named.                                                                                           |
+
+It also turns the template engine off for Markdown
+(`markdownTemplateEngine: false`), because the CMS renders Markdown with
+markdown-it and nothing else. Leaving Liquid or Nunjucks on would make `{{ … }}`
+in a post mean one thing on the live site and another in the build.
+
+Layouts are yours. The directory data files name them — `posts.json` says
+`"layout": "post"` and `pages.json` says `"layout": "page"` — so Eleventy wants
+`content/_includes/post.njk` and `content/_includes/page.njk`. The context an
+Eleventy layout receives is the one this package's theme mirrors, so a layout
+can often be moved across with only its `{% extends %}` removed.
+
+The feeds are the one thing that does not carry over: `/feed.xml` and
+`/feed.json` are generated in code here, not by a template, so an Eleventy build
+needs its own. Everything else is the same directory.
+
+### The compatibility test
+
+```sh
+pnpm --filter @geekity/cms test:11ty   # or, from the repository root, pnpm test:11ty
+```
+
+`test:11ty` builds `test/fixtures/` with Eleventy 3 and the example config, then
+checks every document against what the CMS computed for the same file: the
+output path equals the permalink plus `index.html`, drafts and the trash are
+absent, and uploads are copied through byte for byte. The fixtures deliberately
+cover a post whose permalink is not the default, a hand-authored post and page
+with no permalink at all, an accented title, a draft and a trashed file.
+
+It is a separate script from `pnpm test` on purpose. The unit suite stays fast
+and free of a build tool; `test:11ty` pulls in Eleventy, writes a temporary
+directory and is the slow one. CI runs both. Neither `docs/` nor `test/` is in
+the published tarball — the example config lives in the repository, which is
+where you copy it from.
+
+The repository's demo site makes the same comparison over content that reads
+like a real site rather than like fixtures, with the two layouts above in
+`apps/demo/content/_includes/`, so `pnpm test:11ty` from the root runs both.
+
+## License

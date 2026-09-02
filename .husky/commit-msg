@@ -1,0 +1,2 @@
+# Conventional Commits (decision-7): release-please reads these messages.
+pnpm exec commitlint --edit "$1"
