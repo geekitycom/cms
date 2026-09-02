@@ -1,0 +1,335 @@
+/*
+ * The Geekity demo's own stylesheet.
+ *
+ * Assets resolve the way templates do: the site's `theme/static/` is searched
+ * before the package's, so this file is what `/theme/style.css` serves and the
+ * packaged stylesheet is never read. That makes a stylesheet an all-or-nothing
+ * override — everything the theme's markup needs has to be here — which is the
+ * trade a site accepts when it wants its own look rather than a few tweaks.
+ *
+ * Plain CSS, no build step, same as the packaged one. The markup it styles is
+ * the packaged theme's, so the class names are that theme's contract.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --measure: 40rem;
+  --gutter: 1.5rem;
+
+  --ink: #241f1a;
+  --ink-muted: #6a5f52;
+  --paper: #fbf7f0;
+  --paper-sunk: #f0e9dd;
+  --rule: #ddd2c0;
+  --accent: #9a3412;
+  --accent-visited: #7c3a5e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #ece4d8;
+    --ink-muted: #a99c8b;
+    --paper: #1b1815;
+    --paper-sunk: #26221d;
+    --rule: #3b352d;
+    --accent: #f0a37a;
+    --accent-visited: #d6a2c4;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0 var(--gutter);
+  background: var(--paper);
+  color: var(--ink);
+  font:
+    1.0625rem/1.7 'Iowan Old Style',
+    Palatino,
+    Georgia,
+    serif;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.15em;
+}
+
+a:visited {
+  color: var(--accent-visited);
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+
+.skip-link:focus {
+  position: static;
+  display: inline-block;
+  padding: 0.5rem;
+}
+
+/* Header and footer */
+
+.site-header,
+.site-footer,
+.site-main {
+  max-width: var(--measure);
+  margin-inline: auto;
+}
+
+.site-header {
+  padding: 3rem 0 1.5rem;
+  border-bottom: 2px solid var(--ink);
+}
+
+.site-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.site-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.site-tagline {
+  margin: 0.4rem 0 0;
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+.site-main {
+  padding: 2.5rem 0 3rem;
+}
+
+.site-footer {
+  padding: 1.5rem 0 3rem;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+/* Titles, byline and meta */
+
+.page-title,
+.post-title {
+  margin: 0 0 0.3rem;
+  font-size: 2rem;
+  line-height: 1.15;
+}
+
+/* The demo's post layout adds this line; the packaged one has no byline. */
+.post-byline {
+  margin: 0;
+  font-size: 1rem;
+  font-style: italic;
+}
+
+.post-meta {
+  margin: 0.2rem 0 2rem;
+  color: var(--ink-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* Listings */
+
+.post-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.post-list-item + .post-list-item {
+  margin-top: 2.5rem;
+  padding-top: 2.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.post-summary-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.4rem;
+  line-height: 1.25;
+}
+
+.post-summary-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.post-summary-title a:hover,
+.post-summary-title a:focus {
+  text-decoration: underline;
+}
+
+.post-summary .post-meta {
+  margin-bottom: 0.5rem;
+}
+
+.post-summary-description {
+  margin: 0 0 0.5rem;
+}
+
+.empty,
+.tag-count {
+  color: var(--ink-muted);
+}
+
+/* Tags */
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag {
+  color: var(--ink-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tag::before {
+  content: '#';
+}
+
+.tag:hover,
+.tag:focus {
+  color: var(--ink);
+}
+
+/* Pagination */
+
+.pagination {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 2px solid var(--ink);
+  font-size: 0.9rem;
+}
+
+.pagination-position {
+  color: var(--ink-muted);
+}
+
+.pagination-previous {
+  margin-inline-end: auto;
+}
+
+.pagination-next {
+  margin-inline-start: auto;
+}
+
+/* Body copy */
+
+.post-body,
+.page-body {
+  overflow-wrap: break-word;
+}
+
+.post-body > :first-child,
+.page-body > :first-child {
+  margin-top: 0;
+}
+
+.post-body h2,
+.page-body h2 {
+  margin-top: 2.5rem;
+  font-size: 1.4rem;
+  line-height: 1.25;
+}
+
+.post-body h3,
+.page-body h3 {
+  margin-top: 1.75rem;
+  font-size: 1.15rem;
+}
+
+.post-body img,
+.page-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+.post-body blockquote,
+.page-body blockquote {
+  margin-inline: 0;
+  padding-inline-start: 1.25rem;
+  border-inline-start: 3px solid var(--accent);
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+.post-body pre,
+.page-body pre {
+  overflow-x: auto;
+  padding: 1rem;
+  border: 1px solid var(--rule);
+  background: var(--paper-sunk);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.post-body code,
+.page-body code {
+  padding: 0.1em 0.25em;
+  background: var(--paper-sunk);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+}
+
+.post-body pre code,
+.page-body pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.post-body table,
+.page-body table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.post-body th,
+.post-body td,
+.page-body th,
+.page-body td {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--rule);
+  text-align: start;
+}
+
+.footnotes {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.post-footer {
+  margin-top: 2.5rem;
+}

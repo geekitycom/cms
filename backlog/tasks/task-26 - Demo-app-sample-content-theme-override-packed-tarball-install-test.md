@@ -1,9 +1,11 @@
 ---
 id: TASK-26
 title: 'Demo app: sample content, theme override, packed-tarball install test'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@andrewshell'
 created_date: '2026-09-02 13:38'
+updated_date: '2026-09-02 22:29'
 labels:
   - infra
 milestone: m-0
@@ -25,8 +27,76 @@ Make apps/demo a realistic consumer of the package: a handful of sample posts an
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 pnpm --filter demo dev serves the sample content with the overridden template visible
-- [ ] #2 The demo content directory also builds with Eleventy using the example config
+- [x] #1 pnpm --filter demo dev serves the sample content with the overridden template visible
+- [x] #2 The demo content directory also builds with Eleventy using the example config
 - [ ] #3 CI installs the packed tarball into a scratch site and GET / returns 200
-- [ ] #4 The demo is excluded from release-please and never published
+- [x] #4 The demo is excluded from release-please and never published
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Content (AC #1): grow apps/demo/content to six posts — five published, one draft — with varied dates and tags, one carrying footnotes and fenced code, one with an explicit permalink that does not match the default pattern, plus three pages (about, colophon, now). Fill content/_data/site.json with title, tagline, url, author, postsPerPage and feedSize so pagination and the feed are both exercised. Every file stays in serializeDocument's canonical front matter order; a throwaway round-trip script proves it byte for byte.
+2. Theme override (AC #1): add apps/demo/theme/layouts/post.njk extending layouts/base.njk with a visible byline and reading-time line, and apps/demo/theme/static/style.css as the site's own stylesheet, which replaces the packaged one at /theme/style.css. Both are resolved file by file, so the home page, the tag archives and the 404 still come from the package.
+3. Eleventy (AC #2): apps/demo/eleventy.config.js re-exports packages/cms/docs/eleventy.config.example.js so the demo and the documented config can never drift; content/_includes/post.njk and page.njk are the two tiny layouts the directory data files name. Add @11ty/eleventy as a demo devDependency, a build:11ty script and a test:11ty script; _site/ is already gitignored and prettier-ignored.
+4. Tests, test-first through the tdd skill: apps/demo/test/site.test.ts boots the demo content with the demo theme dir on port 0 and a temp dataDir and asserts the overridden post layout and the demo stylesheet are what is served, that the draft 404s and that pagination is on; apps/demo/test/eleventy.test.ts copies the demo project to a temp directory, builds it with the example config and compares every written path with the permalink the CMS computes, drafts absent — the assertion shape of packages/cms/test/eleventy.test.ts.
+5. Pack-install (AC #3): scripts/pack-install-smoke.sh performs the whole sequence — pnpm --filter @geekity/cms pack, node packages/cms/dist/cli.js init into a scratch directory, rewrite the generated dependency to file:<tgz>, pnpm install, boot with GEEKITY_PORT, wait on a bounded curl loop, curl / and /2026/01/hello-world/ and /hello/, npx tsc --noEmit, kill the server, clean up. A new top-level ci job pack-install checks out, sets up the workspace on Node 24 and runs that script with RUNNER_TEMP, so CI and a laptop run the same steps.
+6. Docs and release-please (AC #4): add pack-install to the CI job table and to the required status checks in README.md, note the demo's theme/ and eleventy.config.js in the workspace layout, and confirm release-please-config.json tracks only packages/cms while apps/demo stays private.
+7. Verify: pnpm lint, format:check, typecheck, test, test:11ty, build; actionlint and a js-yaml parse of ci.yml; pnpm --filter demo start then curl / and a post and /theme/style.css; pnpm --filter demo build:11ty; scripts/pack-install-smoke.sh locally to exit 0; no tarball, _site/ or stray listener left behind.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+## What was built
+
+**Content** (`apps/demo/content/`). Six posts — five published, one draft — across June to September 2026, and three pages. Two are new: `2026-07-11-six-tables-and-a-migration.md`, which carries two footnotes, two fenced SQL blocks and an `updated` date, and `2026-06-02-reading-the-index.md`, a post whose front matter claims the flat permalink `/reading-the-index/` instead of the dated default, which is the case the Eleventy comparison would miss if every file agreed with the default. `pages/colophon.md` and `pages/now.md` join `about.md`. `_data/site.json` gained `feedSize` and keeps `postsPerPage: 2`, so five published posts make three pages of archive and the pager is exercised rather than merely present. Every post's `author` is now the display name the byline prints.
+
+Every file is in the writer's canonical form: a throwaway script ran `parseDocument` then `serializeDocument` over all nine and compared bytes. All nine round-tripped unchanged, so a round-trip test over this directory would hold and prettier's ignore of `apps/demo/content/` costs nothing.
+
+**Theme override** (`apps/demo/theme/`). Two files. `layouts/post.njk` extends the packaged `layouts/base.njk` and adds a byline and a reading time computed in the template (`content | striptags | wordcount` over 220, rounded up), so the site owns the post layout and none of the head, header or footer. `static/style.css` is the site's own stylesheet — a serif, warm-paper look, distinct from the packaged one at a glance — and it replaces the packaged file at `/theme/style.css`.
+
+A stylesheet is the one all-or-nothing override, and that is worth knowing rather than discovering: assets resolve file by file the way templates do, so `theme/static/style.css` is served *instead of* the packaged one, never after it. Everything the packaged markup needs therefore has to be in it. Overriding `layouts/base.njk` to link a second stylesheet was the alternative and was rejected: it would have made the demo own the whole page shell to add one link tag, which is the opposite of what the override mechanism is for.
+
+**Eleventy** (`apps/demo/eleventy.config.js`, `content/_includes/`). The config re-exports `packages/cms/docs/eleventy.config.example.js` rather than copying it. A site of its own copies the file — that is what the example's header says and what `packages/cms/README.md` tells a site to do — but a copy in this repository could drift from the documented one without anything noticing, and the demo exists to be the place where drift is noticed. `content/_includes/post.njk` and `page.njk` are the two layouts the directory data files name, kept deliberately tiny. `@11ty/eleventy` is a demo devDependency; `build:11ty` writes `_site/`, which was already in both `.gitignore` and `.prettierignore`.
+
+**Tests** (`apps/demo/test/`, written test-first through the tdd skill). `site.test.ts` boots the demo with its own content and theme directories on port 0 and a temporary data directory, then makes assertions over real HTTP: the byline and reading time of the override, the packaged home layout and post list still coming from the package, the demo stylesheet at `/theme/style.css` with the right content type, three pages of archive, the flat permalink, footnotes and the `language-sql` class, the draft 404ing and appearing in no listing, the Markdown and JSON representations, and the feed. `eleventy.test.ts` copies the content somewhere writable, builds it with the demo config and compares every written path with the permalink the CMS computes for the same file, drafts absent — the assertion shape of `packages/cms/test/eleventy.test.ts`. `test/types/eleventy.d.ts` duplicates the package's ambient declaration for `@11ty/eleventy`, which ships none; an ambient module cannot cross two TypeScript projects without being published.
+
+The demo gained `test` and `test:11ty` scripts, so it now takes part in the root `pnpm test` and `pnpm test:11ty`, and `pretest` hooks that build the package first, matching the existing `predev`/`prestart`.
+
+**Pack-install** (`scripts/pack-install-smoke.sh`, ci job `pack-install`). The script builds the package, packs a tarball, runs `node packages/cms/dist/cli.js init` into a scratch directory, rewrites the generated dependency to `file:<tgz>` with a node one-liner, installs, boots the site on `GEEKITY_SMOKE_PORT` (3456), waits on a bounded curl loop, then asks for `/`, `/2026/01/hello-world/` and `/hello/` — checking each body, not only the status — and type checks the scratch site with `npx tsc --noEmit`. `curl -f` under `set -e` is what makes a non-200 fail the run; that was confirmed rather than assumed.
+
+Two details the CI runner forced. The site's output goes to a log file, not to the script's stdout, because a background process holding a step's stdout is how an Actions step hangs after its command has finished. And the cleanup kills the process tree depth-first: there are three processes between the script and the listening socket (`pnpm start`, the tsx CLI, the node it runs the site in) and only the last holds the port, so killing the top would orphan the bottom.
+
+The workflow job is a `uses:` of the existing composite action plus one `run:` of that script, on Node 24, with `$RUNNER_TEMP` as the scratch directory — outside the checkout, so the scratch site's install cannot see this workspace. The steps live in the script rather than in the yaml so the sequence can be run on a laptop before it is trusted in CI, which is exactly what was done here.
+
+**release-please.** Nothing needed changing, and that was verified rather than assumed: `release-please-config.json` and `.release-please-manifest.json` each list only `packages/cms`, `apps/demo/package.json` is `private: true` at version 0.0.0, and the publish step is `pnpm publish --filter @geekity/cms`. Three independent reasons the demo cannot be released.
+
+**Docs.** `README.md` gained `pack-install` in the CI job table and in the required status checks for branch protection, a paragraph on what that job does and how to run its script locally, the demo's `theme/`, `eleventy.config.js` and `test/` in the workspace layout, and a subsection of the theme chapter describing the demo as the worked example. `packages/cms/README.md` notes that the root `test:11ty` now covers the demo content as well as the fixtures.
+
+## Validation
+
+- `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm build`: all pass.
+- `pnpm test`: 279 pass in packages/cms, 10 pass in apps/demo, 0 fail.
+- `pnpm test:11ty`: 6 pass in packages/cms, 5 pass in apps/demo, 0 fail.
+- `pnpm --filter demo dev` and `pnpm --filter demo start`, then curl: `/` 200 with the packaged post list; the post 200 with `<p class="post-byline">by <span class="p-author">Andrew Shell</span>` and `1 minute read`; `/theme/style.css` 200 `text/css; charset=utf-8` and the demo's file, not the packaged one; `/about/`, `/colophon/`, `/now/`, `/page/2/`, `/page/3/`, `/tags/sqlite/`, `/feed.xml`, `/feed.json` all 200; the draft 404.
+- `pnpm --filter demo build:11ty`: wrote 8 files, one per published document, and `_site/` was removed afterwards.
+- `scripts/pack-install-smoke.sh`: exit 0, three URLs served from the installed tarball, `tsc --noEmit` clean in the scratch site, port free and no orphan process afterwards, scratch directory and tarball gone.
+- `actionlint .github/workflows/ci.yml` clean, `shellcheck scripts/pack-install-smoke.sh` clean, and js-yaml parses the workflow to nine jobs with `pack-install` among them.
+
+## What is not verified
+
+AC #3 is left unchecked. The sequence CI runs is proven — the job is one `run:` of a script that passes locally — but the job itself has not run on a GitHub runner, and that is the claim the criterion makes. It joins TASK-24 and TASK-25, which are open for the same reason.
+<!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @andrewshell
+created: 2026-09-02 22:29
+---
+AC #3 is the only one left open. Everything it describes has been run locally: `scripts/pack-install-smoke.sh` — which is the whole body of the new `pack-install` job — packs the tarball, installs it into a `geekity init` site, boots it and gets 200 plus the expected body from `/`, the sample post and the custom route, then type checks the site; actionlint and shellcheck are clean and js-yaml parses the workflow. What is unproven is the job running on a GitHub runner, which is the claim the criterion actually makes.
+
+After pushing, confirm the `pack-install` job goes green on the pull request, then check AC #3 and move the task to Done. Add `pack-install` to the required status checks on `main` at the same time; README.md already lists it.
+---
+<!-- COMMENTS:END -->

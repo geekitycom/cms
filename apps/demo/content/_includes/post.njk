@@ -1,0 +1,27 @@
+{#
+  The layout `content/posts/posts.json` names, for an Eleventy build.
+
+  Deliberately tiny. The CMS renders a post through the Nunjucks theme in
+  `theme/` and `@geekity/cms`; this file exists so the same directory also
+  builds as a static site, which is the escape hatch decision-3 promises. A
+  site that wanted both to look alike would point Eleventy at the theme instead
+  of writing this.
+#}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }} &middot; {{ site.title }}</title>
+    <link rel="stylesheet" href="/theme/style.css">
+  </head>
+  <body>
+    <article class="post">
+      <h1>{{ title }}</h1>
+      {% if date %}
+      <p class="post-meta"><time datetime="{{ page.date.toISOString() }}">{{ page.date.toDateString() }}</time></p>
+      {% endif %}
+      {{ content | safe }}
+    </article>
+  </body>
+</html>
