@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-02 13:38'
-updated_date: '2026-09-02 21:49'
+updated_date: '2026-09-02 22:51'
 labels:
   - infra
 milestone: m-0
@@ -28,8 +28,8 @@ ci.yml runs lint, typecheck, test, and build on push and pull request with pnpm 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A pull request shows lint, typecheck, test, and build as separate required checks
-- [ ] #2 A pull request titled without a Conventional Commit prefix fails the title check
+- [x] #1 A pull request shows lint, typecheck, test, and build as separate required checks
+- [x] #2 A pull request titled without a Conventional Commit prefix fails the title check
 - [ ] #3 Merging a feat commit to main opens or updates a release pull request with a changelog entry and minor bump
 - [ ] #4 Merging the release pull request creates a GitHub release and a git tag, and the publish job runs against npm
 - [x] #5 README lists the NPM_TOKEN or trusted publishing setup and the branch protection rules
@@ -101,4 +101,6 @@ These four can only be proven on GitHub, so they are left unchecked.
 **#3 — a feat commit opens a release pull request with a minor bump.** Squash-merge a pull request whose title starts with `feat` into `main`. The `release-please` workflow runs on the push and should open a pull request titled 'chore(main): release 0.1.0' that bumps `packages/cms/package.json` to 0.1.0, creates `packages/cms/CHANGELOG.md` with the feature under 'Features', and updates `.release-please-manifest.json`. If it opens no pull request, check the run log for a permissions error and confirm the Actions setting above is on.
 
 **#4 — merging the release pull request tags, releases and publishes.** Before merging, set up publishing: either configure npm trusted publishing for `@geekity/cms` (npmjs.com -> package -> Settings -> Trusted publishing -> GitHub Actions, org `geekitycom`, repository `cms`, workflow `release-please.yml`, environment empty), which needs the package to exist so the very first publish has to use a token; or add an `NPM_TOKEN` repository secret holding an npm automation token. The `@geekity` scope must be owned first (decision-6). Then merge the release pull request. release-please runs again on the push, creates the tag `v0.1.0` and the GitHub release; the `publish` job should then run (it is skipped if `releases_created` is false) and end with `+ @geekity/cms@0.1.0`. Confirm on npmjs.com that version 0.1.0 exists and carries a provenance badge; if the badge is missing, `id-token: write` or the OIDC setup is the thing to check.
+
+Verified on PR #1 (run 33692126519): nine separate check runs (lint, typecheck, test, test-node-24, build, test-11ty, coverage, pr-title, pack-install) all green; renaming the PR to 'updated the readme' turned pr-title red and restoring the title turned it green. AC 3 and 4 remain until the PR merges and a release PR is cut.
 <!-- SECTION:NOTES:END -->

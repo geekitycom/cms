@@ -1,11 +1,11 @@
 ---
 id: TASK-26
 title: 'Demo app: sample content, theme override, packed-tarball install test'
-status: In Progress
+status: Done
 assignee:
   - '@andrewshell'
 created_date: '2026-09-02 13:38'
-updated_date: '2026-09-02 22:29'
+updated_date: '2026-09-02 22:51'
 labels:
   - infra
 milestone: m-0
@@ -29,7 +29,7 @@ Make apps/demo a realistic consumer of the package: a handful of sample posts an
 <!-- AC:BEGIN -->
 - [x] #1 pnpm --filter demo dev serves the sample content with the overridden template visible
 - [x] #2 The demo content directory also builds with Eleventy using the example config
-- [ ] #3 CI installs the packed tarball into a scratch site and GET / returns 200
+- [x] #3 CI installs the packed tarball into a scratch site and GET / returns 200
 - [x] #4 The demo is excluded from release-please and never published
 <!-- AC:END -->
 
@@ -87,6 +87,8 @@ The workflow job is a `uses:` of the existing composite action plus one `run:` o
 ## What is not verified
 
 AC #3 is left unchecked. The sequence CI runs is proven — the job is one `run:` of a script that passes locally — but the job itself has not run on a GitHub runner, and that is the claim the criterion makes. It joins TASK-24 and TASK-25, which are open for the same reason.
+
+Verified on PR #1: the pack-install job packed the tarball, ran geekity init in a scratch site, installed it, booted it, and GET / returned 200 on a GitHub runner.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
