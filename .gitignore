@@ -1,0 +1,21 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Eleventy build output, if anyone builds a content directory in place
+_site/
+
+# SQLite index and other derived state
+data/
+apps/*/data/
+
+# Packed tarballs
+*.tgz
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# OS noise
+.DS_Store
