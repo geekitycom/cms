@@ -3,6 +3,7 @@ import type { Environment } from 'nunjucks';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { createSiteDataSource, documentContext, postsPerPage } from './context.ts';
+import { activityStreamsId } from './documents.ts';
 import type { DocumentContext, SiteData, SiteSettingsSource } from './context.ts';
 import type { Pagination } from './pagination.ts';
 import { createTemplateEnvironment } from './templates.ts';
@@ -103,7 +104,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     renderDocument(document) {
       const template = document.type === 'post' ? TEMPLATES.post : TEMPLATES.page;
-      return render(template, documentContext(document));
+      // `activityStreams` is the object id the base layout advertises. It is
+      // added here rather than in `documentContext` because it needs the
+      // site's base URL, which a document on its own does not carry.
+      const objectId = activityStreamsId(document, config.baseUrl);
+      return render(template, {
+        ...documentContext(document),
+        ...(objectId === undefined ? {} : { activityStreams: objectId }),
+      });
     },
 
     renderListing(listing) {

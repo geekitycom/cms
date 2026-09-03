@@ -68,6 +68,73 @@ export function selectRepresentation(
 }
 
 /**
+ * The media types that ask for the ActivityStreams document rather than for
+ * one of the representations this layer serves (doc-3).
+ *
+ * The `ld+json` spelling is listed without its
+ * `profile="https://www.w3.org/ns/activitystreams"` parameter, because that is
+ * how `Accept` matching works: a range's parameters other than `q` do not
+ * narrow what it matches, and nothing else the CMS serves is `ld+json`.
+ */
+export const ACTIVITY_STREAMS_MEDIA_TYPES: readonly string[] = [
+  'application/activity+json',
+  'application/ld+json',
+];
+
+/**
+ * Whether a request would rather have the ActivityStreams object than any
+ * representation of the document.
+ *
+ * It is the same comparison {@link selectRepresentation} makes — highest q
+ * wins, the more specific range wins a tie — with the ActivityStreams types on
+ * one side and the document's own on the other. A tie goes to the document, so
+ * `Accept: application/*` still gets JSON and a browser's
+ * `text/html,…,*\/*;q=0.8` still gets a page.
+ */
+export function prefersActivityStreams(accept: string | undefined): boolean {
+  if (accept === undefined || accept.trim() === '') return false;
+
+  const ranges = parseAccept(accept);
+  if (ranges.length === 0) return false;
+
+  const wanted = bestOf(ranges, ACTIVITY_STREAMS_MEDIA_TYPES);
+  if (wanted === undefined || wanted.quality <= 0) return false;
+
+  const alternative = bestOf(
+    ranges,
+    DOCUMENT_REPRESENTATIONS.map((representation) => MEDIA_TYPES[representation]),
+  );
+  if (alternative === undefined || alternative.quality <= 0) return true;
+
+  return (
+    wanted.quality > alternative.quality ||
+    (wanted.quality === alternative.quality && wanted.specificity > alternative.specificity)
+  );
+}
+
+/** The best match among several media types, or `undefined` when none match. */
+function bestOf(
+  ranges: readonly AcceptRange[],
+  mediaTypes: readonly string[],
+): { quality: number; specificity: number } | undefined {
+  let best: { quality: number; specificity: number } | undefined;
+
+  for (const mediaType of mediaTypes) {
+    const match = bestRange(ranges, mediaType);
+    if (match === undefined) continue;
+    if (
+      best === undefined ||
+      match.quality > best.quality ||
+      (match.quality === best.quality && match.specificity > best.specificity)
+    ) {
+      best = match;
+    }
+  }
+
+  return best;
+}
+
+/**
  * The extension that names a representation in a URL. HTML has none: it is
  * what the canonical URL itself serves.
  */

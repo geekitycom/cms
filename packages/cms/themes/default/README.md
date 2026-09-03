@@ -80,6 +80,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `page.inputPath`                                      | The source file, relative to the content directory.                               |
 | `type`                                                | `post` or `page`.                                                                 |
 | `permalink`, `slug`, `draft`, `description`, `author` | Straight from the front matter.                                                   |
+| `activityStreams`                                     | The post's ActivityPub object id, absolute. Only on a rendered published post.    |
 | everything else                                       | Any front matter key the CMS does not model is on the context under its own name. |
 
 A listing — the home page or a tag archive — adds:
@@ -103,8 +104,24 @@ comes from `feedSize` in the same file, and defaults to 20.
 
 `layouts/base.njk` fills the `alternates` block with the `rel="alternate"`
 links for `/feed.xml` and `/feed.json`, so every page that extends it
-advertises both feeds. `layouts/tag.njk` overrides that block, calls `super()`
-and adds the tag's own two feeds:
+advertises both feeds. On a published post it adds a third, pointing at the
+post's ActivityPub object:
+
+```html
+<link
+  rel="alternate"
+  type="application/activity+json"
+  href="https://example.com/ap/posts/hello"
+/>
+```
+
+That link is what lets a fediverse client find the post from its permalink. It
+comes from `activityStreams`, which is only on the context of a rendered
+published post, so a layout that overrides the block and does not call
+`super()` has to emit it itself.
+
+`layouts/tag.njk` overrides that block, calls `super()` and adds the tag's own
+two feeds:
 
 ```njk
 {% set tagRoot = "/tags/" + (tag | urlencode) + "/" %}

@@ -43,6 +43,7 @@
     "@fedify/hono": "^2.3.6",
     "@fedify/vocab": "^2.3.6",
     "@hono/node-server": "^2.1.1",
+    "@js-temporal/polyfill": "^0.5.1",
     "chokidar": "^5.0.0",
     "gray-matter": "^4.0.3",
     "hono": "^4.13.5",

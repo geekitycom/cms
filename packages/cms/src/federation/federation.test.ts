@@ -9,7 +9,7 @@ import type { SiteSettings } from '../admin/settings.ts';
 import { openAdminStore } from '../admin/store.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
-import { federationOrigin } from './federation.ts';
+import { federationOrigin } from './paths.ts';
 
 /** The origin every request in this file is sent to; Fedify checks it. */
 const BASE_URL = 'https://blog.example';
@@ -184,7 +184,7 @@ describe('the site actor', () => {
     );
   });
 
-  it('serves empty collections until the outbox and the followers land', async () => {
+  it('serves collections with no inline items: the outbox pages, the rest are empty', async () => {
     const instance = await site();
 
     for (const collection of ['outbox', 'followers', 'following']) {

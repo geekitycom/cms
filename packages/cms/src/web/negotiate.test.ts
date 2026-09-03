@@ -6,6 +6,7 @@ import {
   LISTING_REPRESENTATIONS,
   isNotModified,
   parseAccept,
+  prefersActivityStreams,
   representationEtag,
   representationHref,
   selectRepresentation,
@@ -158,5 +159,48 @@ describe('isNotModified', () => {
       isNotModified({ ifModifiedSince: modified.toUTCString() }, undefined, undefined),
       false,
     );
+  });
+});
+
+describe('prefersActivityStreams', () => {
+  it('is true when a peer asks for the ActivityStreams types by name', () => {
+    assert.equal(prefersActivityStreams('application/activity+json'), true);
+    assert.equal(
+      prefersActivityStreams(
+        'application/ld+json; profile="https://www.w3.org/ns/activitystreams"',
+      ),
+      true,
+    );
+    // Mastodon sends both, and adds a wildcard behind them.
+    assert.equal(
+      prefersActivityStreams(
+        'application/activity+json, application/ld+json; profile="https://www.w3.org/ns/activitystreams", text/html;q=0.1',
+      ),
+      true,
+    );
+  });
+
+  it('is false for a browser, a feed reader, and a missing header', () => {
+    assert.equal(
+      prefersActivityStreams('text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'),
+      false,
+    );
+    assert.equal(prefersActivityStreams('text/html'), false);
+    assert.equal(prefersActivityStreams('application/json'), false);
+    assert.equal(prefersActivityStreams('*/*'), false);
+    assert.equal(prefersActivityStreams(undefined), false);
+    assert.equal(prefersActivityStreams('   '), false);
+  });
+
+  it('lets q-values decide when a request would take either', () => {
+    assert.equal(prefersActivityStreams('text/html;q=0.5, application/activity+json'), true);
+    assert.equal(prefersActivityStreams('text/html, application/activity+json;q=0.5'), false);
+    // A tie goes to the document, so `application/*` still gets the JSON
+    // representation rather than the object.
+    assert.equal(prefersActivityStreams('application/*'), false);
+  });
+
+  it('is false when the ActivityStreams types are refused outright', () => {
+    assert.equal(prefersActivityStreams('application/activity+json;q=0'), false);
   });
 });
