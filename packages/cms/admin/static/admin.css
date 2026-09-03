@@ -601,3 +601,11 @@ button[type='submit']:hover,
 .admin-settings-buttons {
   margin: 0;
 }
+
+/* The users screen stacks the table and two panels of the same shape, so they
+   need the gap the settings screen's single panel never did. */
+
+.admin-list + .admin-settings,
+.admin-settings + .admin-settings {
+  margin-top: 1.5rem;
+}

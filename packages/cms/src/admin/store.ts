@@ -117,6 +117,17 @@ export interface AdminStore {
    * there is no such user. The two failures are deliberately indistinguishable.
    */
   verifyPassword(username: string, password: string): User | undefined;
+  /**
+   * Hash a new password and put it on a user, replacing the old one. Returns
+   * `false` when there is no such user. Sessions are left alone; deciding
+   * which of them a password change should end is the caller's business.
+   */
+  setPassword(userId: number, password: string): boolean;
+  /**
+   * Delete a user. Their sessions go with them, because the foreign key
+   * cascades. Returns `false` when there was nothing to delete.
+   */
+  deleteUser(userId: number): boolean;
   /** Start a session and hand back its id and CSRF token. */
   createSession(input: CreateSessionInput): Session;
   /**
@@ -127,6 +138,14 @@ export interface AdminStore {
   getSession(id: string, now?: Date): Session | undefined;
   /** Delete a session. Returns `false` when there was nothing to delete. */
   deleteSession(id: string): boolean;
+  /**
+   * End every session a user has, optionally sparing one. Returns how many
+   * went.
+   *
+   * `except` is what makes a password change sign out every other browser
+   * holding that login without signing out the one doing the changing.
+   */
+  deleteSessionsForUser(userId: number, options?: { except?: string }): number;
   /**
    * How many settings are stored. Zero on a site that has never saved the
    * settings form, which is what decides whether to seed from
@@ -196,6 +215,9 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     insertUser: db.prepare(
       'INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)',
     ),
+    setPassword: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
+    deleteUser: db.prepare('DELETE FROM users WHERE id = ?'),
+    deleteSessionsForUser: db.prepare('DELETE FROM sessions WHERE user_id = ? AND id IS NOT ?'),
     insertSession: db.prepare(`
       INSERT INTO sessions (id, user_id, csrf_token, created_at, expires_at)
       VALUES (?, ?, ?, ?, ?)
@@ -302,6 +324,17 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return { id: user.id, username: user.username, createdAt: user.createdAt };
     },
 
+    setPassword(userId, password) {
+      // Hashed before the update rather than inside it, so a hash that throws
+      // leaves the stored one alone.
+      const hash = hashPassword(password);
+      return statements.setPassword.run(hash, userId).changes > 0;
+    },
+
+    deleteUser(userId) {
+      return statements.deleteUser.run(userId).changes > 0;
+    },
+
     createSession(input) {
       const now = input.now ?? new Date();
       const session: Session = {
@@ -336,6 +369,12 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
 
     deleteSession(id) {
       return statements.deleteSession.run(id).changes > 0;
+    },
+
+    deleteSessionsForUser(userId, options = {}) {
+      // `IS NOT` rather than `<>`, so a missing `except` compares against NULL
+      // and spares nothing instead of matching nothing.
+      return Number(statements.deleteSessionsForUser.run(userId, options.except ?? null).changes);
     },
 
     pruneSessions(now = new Date()) {

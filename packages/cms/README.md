@@ -126,6 +126,10 @@ in shell history.
 A name that is already taken is refused and nothing is written; so are an
 illegal username and a short password. Every refusal prints why and exits `1`.
 
+Once somebody can sign in, the [`/admin/users` screen](#the-admin) is the
+easier door: it adds users, generates passwords, deletes them, and is where an
+admin changes their own password.
+
 ### How a TypeScript config is loaded
 
 `geekity serve` and `geekity sync` import `geekity.config.ts` directly. That is
@@ -298,15 +302,20 @@ that ship inside the package, deliberately outside the theme search path: a
 site's `theme/` may override any public template, and must not be able to
 shadow the login form.
 
-| Route                                                                                  | What it does                                                            |
-| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `/admin`                                                                               | The dashboard: counts, the five most recent posts, a quick draft.       |
-| `/admin/quick-draft`                                                                   | `POST` only. Writes a draft post and redirects to its editor.           |
-| `/admin/posts`, `/admin/pages`, `/admin/settings`, `/admin/users`, `/admin/federation` | The sections the navigation links to. Placeholders until each is built. |
-| `/admin/setup`                                                                         | First run: creates the first admin. Closed once a user exists.          |
-| `/admin/login`                                                                         | Username and password.                                                  |
-| `/admin/logout`                                                                        | `POST` only. Deletes the session row.                                   |
-| `/admin/_static/*`                                                                     | The admin's own stylesheet, cached for an hour.                         |
+| Route                          | What it does                                                         |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `/admin`                       | The dashboard: counts, the five most recent posts, a quick draft.    |
+| `/admin/quick-draft`           | `POST` only. Writes a draft post and redirects to its editor.        |
+| `/admin/posts`, `/admin/pages` | The listings and the editors.                                        |
+| `/admin/settings`              | Site title, tagline, base URL, time zone, posts per page, the actor. |
+| `/admin/users`                 | Who may sign in. `POST` adds one.                                    |
+| `/admin/users/password`        | `POST` only. Changes the signed-in admin's own password.             |
+| `/admin/users/delete`          | `POST` only. Deletes the user the form names.                        |
+| `/admin/federation`            | The one section the navigation links to that is not built yet.       |
+| `/admin/setup`                 | First run: creates the first admin. Closed once a user exists.       |
+| `/admin/login`                 | Username and password.                                               |
+| `/admin/logout`                | `POST` only. Deletes the session row.                                |
+| `/admin/_static/*`             | The admin's own stylesheet, cached for an hour.                      |
 
 The screens behind the login share one layout: a bar across the top with the
 site name and a link to the public site, the sections down the left with the
@@ -334,8 +343,15 @@ first rendered. Logging in throws that session away and starts a new one, so a
 planted session id cannot become a logged-in one.
 
 The first admin comes from `/admin/setup` or from
-[`geekity user add`](#creating-an-admin-from-the-command-line). Creating one
-from your own code, which is what the CLI does:
+[`geekity user add`](#creating-an-admin-from-the-command-line). Every one after
+that comes from `/admin/users`, which lists who may sign in, adds a user with a
+password you supply or one it generates and shows once, deletes another user,
+and changes your own password — which signs out every other browser holding
+that login and leaves the one you are using alone. There is a single role, so a
+row has nothing else to edit. The last remaining user cannot be deleted, and
+nobody may delete their own account.
+
+Creating one from your own code, which is what the CLI does:
 
 ```ts
 import { openAdminStore } from '@geekity/cms';
