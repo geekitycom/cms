@@ -1,11 +1,11 @@
 ---
 id: TASK-24
 title: 'GitHub Actions: CI checks, release-please, npm publish with provenance'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-02 13:38'
-updated_date: '2026-09-03 01:20'
+updated_date: '2026-09-03 01:50'
 labels:
   - infra
 milestone: m-0
@@ -31,7 +31,7 @@ ci.yml runs lint, typecheck, test, and build on push and pull request with pnpm 
 - [x] #1 A pull request shows lint, typecheck, test, and build as separate required checks
 - [x] #2 A pull request titled without a Conventional Commit prefix fails the title check
 - [x] #3 Merging a feat commit to main opens or updates a release pull request with a changelog entry and minor bump
-- [ ] #4 Merging the release pull request creates a GitHub release and a git tag; CI never publishes to npm
+- [x] #4 Merging the release pull request creates a GitHub release and a git tag; CI never publishes to npm
 - [x] #5 README documents the manual npm publish from a tagged checkout and the branch protection rules
 <!-- AC:END -->
 
@@ -105,4 +105,12 @@ These four can only be proven on GitHub, so they are left unchecked.
 Verified on PR #1 (run 33692126519): nine separate check runs (lint, typecheck, test, test-node-24, build, test-11ty, coverage, pr-title, pack-install) all green; renaming the PR to 'updated the readme' turned pr-title red and restoring the title turned it green. AC 3 and 4 remain until the PR merges and a release PR is cut.
 
 Decision on 2026-09-03: CI does not publish to npm; the maintainer runs pnpm publish from the tagged checkout when they choose. The publish job and its NPM_TOKEN / trusted publishing setup were removed from release-please.yml and the README (PR #4). AC 3 verified on PR #2 (changelog plus 0.0.0 to 0.1.0 minor bump after PR #3). Merging PR #2 cut no tag because release-please only matched release PRs whose branch carries the component 'cms' (upstream issue 2214); PR #4 switches to separate-pull-requests and pins the release PR title. v0.1.0 was created by hand at the PR #2 merge commit and PR #2 relabelled autorelease: tagged. AC 4 is verified on the next release-please release.
+
+2026-09-03: verified end to end. Merging PR #7 (fix(cms)) opened release PR #8 on release-please--branches--main--components--cms; merging #8 produced tag v0.1.1 and the GitHub release from release-please's own run (33705228179), and PR #8 was relabelled autorelease: tagged automatically. CI does not publish; see README 'Publishing to npm'.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+ci.yml with nine separate checks (lint, typecheck, test on Node 24, test-node-26, build, test-11ty, coverage, pack-install, pr-title) on a shared composite setup action with pnpm caching; release-please in manifest mode tracking packages/cms with initial-version 0.1.0, separate pull requests and a pinned title so merged release PRs are recognised; Dependabot; README documents branch protection and the manual npm publish. Verified on PRs #1, #7 and #8 and releases v0.1.0 (by hand, after the grouped-PR bug) and v0.1.1 (by release-please).
+<!-- SECTION:FINAL_SUMMARY:END -->
