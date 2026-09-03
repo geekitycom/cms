@@ -1,0 +1,8 @@
+{
+  "title": "Federation Smoke",
+  "tagline": "A site that exists for one test",
+  "url": "https://smoke.example",
+  "author": "andrew",
+  "postsPerPage": 10,
+  "timezone": "UTC"
+}

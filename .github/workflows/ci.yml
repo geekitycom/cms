@@ -84,6 +84,24 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - run: pnpm test:11ty
 
+  # Federation against something other than ourselves. The suite covers the
+  # ActivityPub layer inside one process — `src/federation/delivery.test.ts`
+  # replaces `fetch`, so a follower's inbox is a function call — and this boots
+  # the server on a real port, runs `fedify lookup` from `@fedify/cli` against
+  # the actor and a post object, and delivers a `Create` to two real inboxes.
+  #
+  # A job of its own because it spawns processes and binds ports, and because a
+  # federation failure should be readable as a federation failure rather than
+  # as one line in `test`. It needs no network: everything it talks to is on
+  # loopback, and `@fedify/cli` comes out of the lockfile.
+  fed-smoke:
+    name: fed-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm fed:smoke
+
   # The published artefact rather than the workspace link (decision-6). Every
   # other job reaches `@geekity/cms` through a symlink, which shows the whole
   # source tree whether or not `files` in package.json would have shipped it;

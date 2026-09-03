@@ -281,7 +281,67 @@ followers it reached, is queued for, or failed for. Each of those rows has a
 Redeliver button, which is `cms.delivery.redeliver` behind a form: it sends
 that activity to every follower the site has now and says what came of it.
 
+### Testing federation against a real Mastodon account
+
+Federation is the one part of the CMS that cannot be finished on localhost.
+Mastodon has to be able to reach the site to fetch the actor, verify a
+signature and deliver a `Follow`, and `http://localhost:3000` is not an
+address it can reach. [`fedify tunnel`] gives the local server a public HTTPS
+address for as long as the command runs, which is enough to do the whole round
+trip by hand:
+
+```sh
+pnpm dlx @fedify/cli tunnel 3000
+# The ephemeral public address is up and running:
+# https://quiet-sun-42.serveo.net
+```
+
+Leave that running and boot the site with `baseUrl` set to the address it
+printed, because `baseUrl` is what every ActivityStreams id is minted from — a
+site booted on `http://localhost:3000` serves an actor whose id is
+`http://localhost:3000/ap/actor`, and no remote instance can dereference that:
+
+```sh
+GEEKITY_BASE_URL=https://quiet-sun-42.serveo.net geekity serve
+```
+
+Then, from a Mastodon account:
+
+1. Search for `@blog@quiet-sun-42.serveo.net` — the handle is the
+   `actorHandle` setting (`blog` unless it has been changed) at the tunnel's
+   host. The profile should come back with the site title, tagline and avatar.
+2. Follow it. The `Follow` lands on `/ap/actor/inbox`, the CMS answers
+   `Accept`, and the account appears on `/admin/federation` within a second or
+   two.
+3. Publish a post, from the editor or by writing a file into `content/posts/`.
+   A `Create(Article)` is delivered, and the post shows up in the follower's
+   home timeline; `/admin/federation` records the outcome, with a Redeliver
+   button if it did not land.
+4. Edit the post, then set `draft: true` on it, to see the `Update` and the
+   `Delete` arrive.
+
+Two things to know before relying on what a tunnel run shows you.
+
+The tunnel address changes every time the command starts, and the followers
+gathered under one are throwaway: their instances hold an actor id on a host
+that no longer exists, so they cannot be migrated to the real domain. The
+admin has no button for removing a follower yet, so run tunnel rehearsals
+against a scratch `dataDir` rather than the one the real site will keep.
+
+The actor's key pairs live in the SQLite database under `dataDir`, not in the
+base URL, so they survive across tunnel sessions. That is usually what you
+want; it also means a database copied from one deployment to another brings
+the other's identity with it.
+
+`pnpm fed:smoke`, in this repository, is the automated half of the same idea:
+it boots the CMS on a free port, runs `fedify lookup` against the actor and a
+post object, and delivers a `Create(Article)` to two real inboxes over
+loopback. It needs no tunnel and no network, and it is a job in CI. See
+`packages/cms/scripts/fed-smoke.ts`, whose header explains why the `Follow`
+half is sent by a peer built in the script rather than by `fedify inbox`.
+
 [Fedify]: https://fedify.dev/
+[`fedify tunnel`]: https://fedify.dev/cli
 
 ## Keeping the index in step
 
