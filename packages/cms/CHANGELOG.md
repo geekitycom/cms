@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0](https://github.com/geekitycom/cms/compare/v0.1.1...v0.2.0) (2026-09-03)
+
+
+### Features
+
+* **cms:** add admin auth with users, sessions, login, setup, and csrf ([7d5a6e3](https://github.com/geekitycom/cms/commit/7d5a6e301baa3c45cd036f0775f450e6412c37ad))
+* **cms:** add geekity user add to create an admin from the cli ([4f63116](https://github.com/geekitycom/cms/commit/4f6311616ae08708e9762688c8fc0c4338349e42))
+* **cms:** add the admin shell and dashboard ([c9a3d62](https://github.com/geekitycom/cms/commit/c9a3d620d885f4d8358b03a8362822957d6c92fb))
+* **cms:** add the pages list and editor ([5bc0ca2](https://github.com/geekitycom/cms/commit/5bc0ca21fdb3f21fba9df19c38a1d1b8cd6911de))
+* **cms:** add the posts list and editor with trash and restore ([91453c5](https://github.com/geekitycom/cms/commit/91453c5af0d68912bcda97ff3fb40c99f626949f))
+* **cms:** add the settings screen with a site.json mirror ([dc87d24](https://github.com/geekitycom/cms/commit/dc87d2431783e24a2d75e0dbc056383d09b61f5d))
+* **cms:** add the users screen with add, change password, and delete ([6789aee](https://github.com/geekitycom/cms/commit/6789aee17f18eed5af0728fc067aaf7fffda9cd8))
+* **cms:** enhance the editor with codemirror, preview, and uploads ([de957fc](https://github.com/geekitycom/cms/commit/de957fc6e82fe43f6722d9373148fd5efc3087cd))
+
 ## [0.1.1](https://github.com/geekitycom/cms/compare/v0.1.0...v0.1.1) (2026-09-03)
 
 
