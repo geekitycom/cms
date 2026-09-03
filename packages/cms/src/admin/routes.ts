@@ -2,6 +2,7 @@ import type { Context, Hono, MiddlewareHandler } from 'hono';
 import type { Environment } from 'nunjucks';
 
 import type { GeekityEnv } from '../env.ts';
+import { credentialProblem } from './credentials.ts';
 import {
   ADMIN_PREFIX,
   clearSessionCookie,
@@ -20,12 +21,6 @@ export const LOGIN_PATH = `${ADMIN_PREFIX}/login`;
 export const SETUP_PATH = `${ADMIN_PREFIX}/setup`;
 /** Where the logout form posts. */
 export const LOGOUT_PATH = `${ADMIN_PREFIX}/logout`;
-
-/** The shortest password the setup form accepts. */
-export const MINIMUM_PASSWORD_LENGTH = 8;
-
-/** What a username may be made of: no spaces, no punctuation to escape. */
-const USERNAME_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 
 /**
  * Register the admin on a Hono app.
@@ -264,12 +259,10 @@ function setupProblem(
   password: string,
   confirmation: string,
 ): string | undefined {
-  if (!USERNAME_PATTERN.test(username)) {
-    return 'A username is 1 to 64 letters, digits, dots, dashes or underscores.';
-  }
-  if (password.length < MINIMUM_PASSWORD_LENGTH) {
-    return `A password is at least ${String(MINIMUM_PASSWORD_LENGTH)} characters.`;
-  }
+  // The same rules `geekity user add` enforces, so an account made either way
+  // is an account the other door would have accepted.
+  const problem = credentialProblem(username, password);
+  if (problem !== undefined) return problem;
   if (password !== confirmation) return 'The two passwords do not match.';
   return undefined;
 }

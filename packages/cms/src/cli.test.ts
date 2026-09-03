@@ -5,8 +5,16 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { promisify } from 'node:util';
 import { execFile as execFileCallback } from 'node:child_process';
+import { PassThrough } from 'node:stream';
 
-import { findSiteTsx, loadConfig, parseArgs, registerTypeScriptLoader } from './cli.ts';
+import {
+  findSiteTsx,
+  loadConfig,
+  parseArgs,
+  readPassword,
+  registerTypeScriptLoader,
+} from './cli.ts';
+import { createCms, MINIMUM_PASSWORD_LENGTH, openAdminStore } from './index.ts';
 
 const execFile = promisify(execFileCallback);
 
@@ -26,12 +34,17 @@ interface CliRun {
  */
 const TSX = import.meta.resolve('tsx');
 
-/** Run `geekity` from source, the way a bin shim runs `dist/cli.js`. */
-async function runCli(args: readonly string[], cwd: string): Promise<CliRun> {
+/**
+ * Run `geekity` from source, the way a bin shim runs `dist/cli.js`.
+ *
+ * `stdin`, when given, is written to the child and the pipe is closed, which
+ * is how a password reaches `user add` without a terminal.
+ */
+async function runCli(args: readonly string[], cwd: string, stdin?: string): Promise<CliRun> {
   try {
-    const { stdout, stderr } = await execFile(process.execPath, ['--import', TSX, CLI, ...args], {
-      cwd,
-    });
+    const running = execFile(process.execPath, ['--import', TSX, CLI, ...args], { cwd });
+    if (stdin !== undefined) running.child.stdin?.end(stdin);
+    const { stdout, stderr } = await running;
     return { code: 0, stdout, stderr };
   } catch (error) {
     const failure = error as { code?: number; stdout?: string; stderr?: string };
@@ -70,17 +83,28 @@ async function exists(file: string): Promise<boolean> {
 
 describe('parseArgs', () => {
   it('defaults to serve when no command is given', () => {
-    assert.deepEqual(parseArgs([]), { command: 'serve', configPath: undefined, args: [] });
+    assert.deepEqual(parseArgs([]), {
+      command: 'serve',
+      configPath: undefined,
+      password: undefined,
+      args: [],
+    });
   });
 
   it('reads the serve command', () => {
-    assert.deepEqual(parseArgs(['serve']), { command: 'serve', configPath: undefined, args: [] });
+    assert.deepEqual(parseArgs(['serve']), {
+      command: 'serve',
+      configPath: undefined,
+      password: undefined,
+      args: [],
+    });
   });
 
   it('reads an explicit config path', () => {
     assert.deepEqual(parseArgs(['serve', '--config', 'site.config.ts']), {
       command: 'serve',
       configPath: 'site.config.ts',
+      password: undefined,
       args: [],
     });
   });
@@ -89,6 +113,7 @@ describe('parseArgs', () => {
     assert.deepEqual(parseArgs(['--config=site.config.ts']), {
       command: 'serve',
       configPath: 'site.config.ts',
+      password: undefined,
       args: [],
     });
   });
@@ -112,6 +137,7 @@ describe('parseArgs', () => {
     assert.deepEqual(parseArgs(['init', 'my-site']), {
       command: 'init',
       configPath: undefined,
+      password: undefined,
       args: ['my-site'],
     });
   });
@@ -120,6 +146,7 @@ describe('parseArgs', () => {
     assert.deepEqual(parseArgs(['sync', '--config', 'site.config.ts']), {
       command: 'sync',
       configPath: 'site.config.ts',
+      password: undefined,
       args: [],
     });
   });
@@ -128,12 +155,131 @@ describe('parseArgs', () => {
     assert.deepEqual(parseArgs(['user', 'add', 'ada']), {
       command: 'user',
       configPath: undefined,
+      password: undefined,
       args: ['add', 'ada'],
     });
   });
 
+  it('reads a password given as a flag', () => {
+    assert.deepEqual(parseArgs(['user', 'add', 'ada', '--password', 'hunter22']), {
+      command: 'user',
+      configPath: undefined,
+      password: 'hunter22',
+      args: ['add', 'ada'],
+    });
+  });
+
+  it('accepts --password=value, so a password may start with a dash', () => {
+    assert.equal(parseArgs(['user', 'add', 'ada', '--password=--dash--']).password, '--dash--');
+  });
+
+  it('accepts an empty --password=, so the refusal comes from the rules not the parser', () => {
+    assert.equal(parseArgs(['user', 'add', 'ada', '--password=']).password, '');
+  });
+
+  it('rejects --password with nothing after it', () => {
+    assert.throws(() => parseArgs(['user', 'add', 'ada', '--password']), /--password/);
+  });
+
   it('keeps the flags of the command it is running out of its positional arguments', () => {
     assert.deepEqual(parseArgs(['init', 'my-site', '--config=other.ts']).args, ['my-site']);
+  });
+});
+
+describe('readPassword', () => {
+  /** A stream of `text`, pretending to be a terminal when `isTTY`. */
+  function input(text: string, isTTY = false): PassThrough & { isTTY?: boolean } {
+    const stream: PassThrough & { isTTY?: boolean } = new PassThrough();
+    if (isTTY) stream.isTTY = true;
+    stream.end(text);
+    return stream;
+  }
+
+  /** A writable that keeps everything written to it. */
+  function output(): PassThrough & { text(): string } {
+    const chunks: string[] = [];
+    const stream = new PassThrough();
+    stream.on('data', (chunk: Buffer) => chunks.push(chunk.toString('utf8')));
+    return Object.assign(stream, { text: () => chunks.join('') });
+  }
+
+  it('reads one line from a pipe, so a password can be scripted', async () => {
+    const out = output();
+
+    const password = await readPassword({ input: input('hunter22\n'), output: out });
+
+    assert.equal(password, 'hunter22');
+  });
+
+  it('takes only the first line, whatever else is on the pipe', async () => {
+    const password = await readPassword({ input: input('hunter22\nrubbish\n') });
+
+    assert.equal(password, 'hunter22');
+  });
+
+  it('reads a last line that has no newline after it', async () => {
+    assert.equal(await readPassword({ input: input('hunter22') }), 'hunter22');
+  });
+
+  it('prompts nobody when the input is a pipe, so the password is not in the output', async () => {
+    const out = output();
+
+    await readPassword({ input: input('hunter22\n'), output: out, prompt: 'Password: ' });
+
+    assert.equal(out.text(), '');
+  });
+
+  it('prompts on a terminal but never echoes what is typed', async () => {
+    const out = output();
+
+    const password = await readPassword({
+      input: input('hunter22\n', true),
+      output: out,
+      prompt: 'Password: ',
+    });
+
+    assert.equal(password, 'hunter22');
+    assert.match(out.text(), /^Password: /);
+    assert.doesNotMatch(out.text(), /hunter22/);
+  });
+
+  it('puts a real terminal into raw mode, so the driver does not echo either', async () => {
+    const stream: PassThrough & {
+      isTTY?: boolean;
+      isRaw?: boolean;
+      setRawMode?: (mode: boolean) => void;
+    } = new PassThrough();
+    const modes: boolean[] = [];
+    stream.isTTY = true;
+    stream.isRaw = false;
+    stream.setRawMode = (mode: boolean) => {
+      modes.push(mode);
+      stream.isRaw = mode;
+    };
+    stream.end('hunter22\n');
+
+    await readPassword({ input: stream, output: output() });
+
+    // On: the terminal driver would otherwise print the password itself.
+    // Off again: the shell that gets the terminal back expects it cooked.
+    assert.equal(modes[0], true);
+    assert.equal(modes.at(-1), false);
+    assert.equal(stream.isRaw, false);
+  });
+
+  it('gives up with a clear message when the prompt is interrupted', async () => {
+    const stream: PassThrough & { isTTY?: boolean; setRawMode?: (mode: boolean) => void } =
+      new PassThrough();
+    stream.isTTY = true;
+    stream.setRawMode = () => undefined;
+    // In raw mode Ctrl-C arrives as a byte, which readline turns into SIGINT.
+    stream.end('\u0003');
+
+    await assert.rejects(() => readPassword({ input: stream, output: output() }), /cancelled/i);
+  });
+
+  it('refuses input that ends without a password', async () => {
+    await assert.rejects(() => readPassword({ input: input('') }), /no password/i);
   });
 });
 
@@ -411,13 +557,138 @@ describe('geekity sync', () => {
 });
 
 describe('geekity user add', () => {
-  it('says admin auth has not shipped rather than pretending to make a user', async () => {
-    const directory = await temporaryDir('geekity-user-');
+  /** The usernames in a site's database, straight out of SQLite. */
+  function usernames(directory: string): string[] {
+    const admin = openAdminStore({ dataDir: path.join(directory, 'data') });
+    try {
+      return admin.listUsers().map((user) => user.username);
+    } finally {
+      admin.close();
+    }
+  }
 
-    const run = await runCli(['user', 'add', 'ada'], directory);
+  it('creates an admin and says which one', async () => {
+    const directory = await temporaryDir('geekity-user-add-');
+
+    const run = await runCli(['user', 'add', 'ada', '--password', 'hunter22'], directory);
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(run.stdout, /ada/);
+    assert.deepEqual(usernames(directory), ['ada']);
+  });
+
+  it('creates a user who can then log in through /admin/login', async () => {
+    const directory = await temporaryDir('geekity-user-login-');
+    const run = await runCli(['user', 'add', 'ada', '--password', 'hunter22'], directory);
+    assert.equal(run.code, 0, run.stderr);
+
+    const cms = createCms({
+      contentDir: path.join(directory, 'content'),
+      dataDir: path.join(directory, 'data'),
+      watch: false,
+    });
+    try {
+      // A user exists, so setup is closed and the login form is the way in.
+      const form = await cms.app.request('/admin/login');
+      assert.equal(form.status, 200);
+      const html = await form.text();
+      const token = /name="csrf_token"\s+value="([^"]+)"/.exec(html)?.[1];
+      assert.ok(token, 'expected a CSRF token on the login form');
+      const cookie = (form.headers.getSetCookie()[0] ?? '').split(';')[0] ?? '';
+
+      const response = await cms.app.request('/admin/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', cookie },
+        body: new URLSearchParams({
+          username: 'ada',
+          password: 'hunter22',
+          csrf_token: token,
+        }).toString(),
+      });
+
+      assert.equal(response.status, 303);
+      assert.equal(response.headers.get('location'), '/admin');
+    } finally {
+      await cms.close();
+    }
+  });
+
+  it('reads the password from stdin when the flag is absent', async () => {
+    const directory = await temporaryDir('geekity-user-stdin-');
+
+    const run = await runCli(['user', 'add', 'ada'], directory, 'hunter22\n');
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.deepEqual(usernames(directory), ['ada']);
+    // Nothing is prompted off a terminal, and the password is never echoed.
+    assert.doesNotMatch(run.stdout + run.stderr, /hunter22/);
+  });
+
+  it('refuses a name that is already taken and adds nobody', async () => {
+    const directory = await temporaryDir('geekity-user-dup-');
+    await runCli(['user', 'add', 'ada', '--password', 'hunter22'], directory);
+
+    const run = await runCli(['user', 'add', 'ada', '--password', 'different1'], directory);
 
     assert.equal(run.code, 1);
-    assert.match(run.stderr, /not available until admin authentication ships/);
+    assert.match(run.stderr, /already exists/i);
+    assert.deepEqual(usernames(directory), ['ada']);
+  });
+
+  it('refuses a username the setup form would refuse', async () => {
+    const directory = await temporaryDir('geekity-user-bad-');
+
+    const run = await runCli(['user', 'add', 'ada lovelace', '--password', 'hunter22'], directory);
+
+    assert.equal(run.code, 1);
+    assert.match(run.stderr, /username/i);
+    assert.deepEqual(usernames(directory), []);
+  });
+
+  it('refuses a password shorter than the setup form would accept', async () => {
+    const directory = await temporaryDir('geekity-user-short-');
+
+    const run = await runCli(['user', 'add', 'ada', '--password', 'short'], directory);
+
+    assert.equal(run.code, 1);
+    assert.match(run.stderr, new RegExp(String(MINIMUM_PASSWORD_LENGTH)));
+    assert.deepEqual(usernames(directory), []);
+  });
+
+  it('needs a username', async () => {
+    const directory = await temporaryDir('geekity-user-bare-');
+
+    const run = await runCli(['user', 'add'], directory);
+
+    assert.equal(run.code, 1);
+    assert.match(run.stderr, /geekity user add <username>/);
+  });
+
+  it('names the subcommand it has when given one it does not', async () => {
+    const directory = await temporaryDir('geekity-user-sub-');
+
+    const run = await runCli(['user', 'remove', 'ada'], directory);
+
+    assert.equal(run.code, 1);
+    assert.match(run.stderr, /add/);
+  });
+
+  it('puts the user where the config says the data lives', async () => {
+    const directory = await temporaryDir('geekity-user-config-');
+    await fs.writeFile(
+      path.join(directory, 'site.config.js'),
+      "export default { dataDir: 'elsewhere' };\n",
+      'utf8',
+    );
+
+    const run = await runCli(
+      ['user', 'add', 'ada', '--password', 'hunter22', '--config', 'site.config.js'],
+      directory,
+    );
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.ok(await exists(path.join(directory, 'elsewhere', 'geekity.db')));
+    assert.ok(!(await exists(path.join(directory, 'data'))));
   });
 });
 
