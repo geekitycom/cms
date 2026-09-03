@@ -58,6 +58,16 @@
         <label for="editor-draft">Draft</label>
       </p>
 
+      {% if kind.excludable %}
+        {# doc-2's eleventyExcludeFromCollections: still published and still at
+           its URL, but out of every collection a template lists from. #}
+        <p class="admin-check">
+          <input id="editor-exclude" name="exclude" type="checkbox" value="1"{% if form.exclude %} checked{% endif %} />
+          <label for="editor-exclude">Hide from collections</label>
+        </p>
+        <p class="admin-hint">Keeps the {{ kind.singular }} out of listings that gather content, without unpublishing it.</p>
+      {% endif %}
+
       <p class="admin-editor-buttons">
         {% for button in actions %}
           <button type="submit" name="action" value="{{ button.value }}">{{ button.label }}</button>

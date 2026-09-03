@@ -30,6 +30,7 @@ export {
   documentFilter,
   DOCUMENTS_PER_PAGE,
   editorPath,
+  EXCLUDE_KEY,
   DuplicateUsernameError,
   findAdminAsset,
   findBySlug,
