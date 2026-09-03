@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/geekitycom/cms/compare/v0.2.0...v0.3.0) (2026-09-03)
+
+
+### Features
+
+* **cms:** add a site avatar that serves as the actor icon ([bb65c11](https://github.com/geekitycom/cms/commit/bb65c11e15bfaaf1beb1891886267b4f8f6d27bc))
+* **cms:** add fedify site actor with key pairs, webfinger, and nodeinfo ([f4870d9](https://github.com/geekitycom/cms/commit/f4870d9ece032a6036f96a80ca3c0ae79f48f73f))
+* **cms:** add the admin federation screen with redeliver ([13ee727](https://github.com/geekitycom/cms/commit/13ee72723f963984aac07a19fc33dff51985cbd4))
+* **cms:** deliver create, update, and delete for posts to followers ([83310c0](https://github.com/geekitycom/cms/commit/83310c0f068dbcc5c9d06d8ad0f2123a9f2506d4))
+* **cms:** handle follows in the inbox and serve followers from sqlite ([e7f4808](https://github.com/geekitycom/cms/commit/e7f4808746b4cf8c4f08ae273acbe15e1dca1fc2))
+* **cms:** serve posts as activitystreams articles and page the outbox ([3d0de4b](https://github.com/geekitycom/cms/commit/3d0de4bdef01860fdca2f20a92468781e11b733d))
+
 ## [0.2.0](https://github.com/geekitycom/cms/compare/v0.1.1...v0.2.0) (2026-09-03)
 
 
