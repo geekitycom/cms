@@ -463,8 +463,10 @@ pnpm build
 pnpm --filter @geekity/cms pack
 ```
 
-Versions, tags, changelog and the npm publish are automated by release-please
-(decision-7). `apps/demo` is private and unversioned, so it is not tracked.
+Versions, tags and the changelog are automated by release-please (decision-7).
+Publishing to npm is a manual step a maintainer runs from the tagged checkout;
+CI never publishes. `apps/demo` is private and unversioned, so it is not
+tracked.
 
 ### How a release flows
 
@@ -478,21 +480,8 @@ Versions, tags, changelog and the npm publish are automated by release-please
 3. Merging that release pull request pushes the version bump to `main`.
    release-please runs again, sees its own release commit, and creates the git
    tag and the GitHub release.
-4. The `publish` job then runs, gated on release-please reporting that a release
-   was created. It checks out the tag, installs, runs `pnpm build`, `pnpm test`
-   and `pnpm test:11ty`, and publishes:
-
-   ```sh
-   pnpm publish --filter @geekity/cms --provenance --access public --no-git-checks
-   ```
-
-   `--provenance` attaches a signed npm provenance attestation, which is why the
-   job asks for `id-token: write`.
-
-The `publish` job can also be run by hand for a tag that already exists, for
-a release created outside release-please or a publish that failed after the
-tag was cut: Actions → release-please → "Run workflow" with the tag, or
-`gh workflow run release-please.yml -f tag=v0.1.0`.
+4. Nothing is published. When the maintainer wants the release on npm they
+   follow [Publishing to npm](#publishing-to-npm) below.
 
 The bumps are the pre-1.0 rules of decision-7, configured in
 `release-please-config.json`: `fix` takes a patch, `feat` takes a minor, and
@@ -517,33 +506,34 @@ since the default would use the target branch as the scope.
 package and must agree with `packages/cms/package.json`. release-please writes
 both; do not edit either by hand.
 
+### Publishing to npm
+
+CI does not publish. Publish from the tagged commit so what reaches npm is
+exactly what was released:
+
+```sh
+git fetch --tags
+git checkout v0.1.0
+pnpm install --frozen-lockfile
+pnpm build && pnpm test && pnpm test:11ty
+pnpm publish --filter @geekity/cms --access public --no-git-checks
+git checkout main
+```
+
+`--no-git-checks` is needed because a tag checkout is a detached HEAD and pnpm
+otherwise insists on being on the publish branch. `--access public` matters for
+a scoped package. Log in first with `npm login`; the npm scope `@geekity` must
+be owned by the project (decision-6). The `pack-install` CI job has already
+proven the tarball installs and boots, so the publish itself is the only
+untested step.
+
 ### Repository secrets
 
-| Secret                 | Required? | What it is for                                                                                        |
-| ---------------------- | --------- | ----------------------------------------------------------------------------------------------------- |
-| none                   | preferred | With npm trusted publishing configured, the OIDC token from `id-token: write` is the only credential. |
-| `NPM_TOKEN`            | fallback  | An npm automation token, used only when trusted publishing is not set up.                             |
-| `RELEASE_PLEASE_TOKEN` | optional  | A fine-grained PAT, so CI runs on the release pull request.                                           |
+| Secret                 | Required? | What it is for                                              |
+| ---------------------- | --------- | ----------------------------------------------------------- |
+| `RELEASE_PLEASE_TOKEN` | optional  | A fine-grained PAT, so CI runs on the release pull request. |
 
-**Trusted publishing is the preferred setup, and needs no secret at all.** On
-npmjs.com, open the `@geekity/cms` package → Settings → Trusted publishing, add
-a GitHub Actions publisher, and fill in:
-
-- Organization or user: `geekitycom`
-- Repository: `cms`
-- Workflow filename: `release-please.yml`
-- Environment: leave empty
-
-The package has to exist on npm before it has a settings page, so the very first
-publish is the exception: do it with a token, or run
-`pnpm publish --filter @geekity/cms --access public` once from a logged-in
-machine, then configure trusted publishing and delete the token. The npm scope
-`@geekity` must be owned by the project first (decision-6).
-
-**The token fallback.** Create an npm **automation** token (Access Tokens →
-Generate New Token → Automation, which bypasses 2FA) and add it as a repository
-secret named `NPM_TOKEN`. The publish job writes it to `~/.npmrc` only when the
-secret is non-empty, so leaving it unset is how you choose trusted publishing.
+No npm credential lives in the repository, because CI never publishes.
 
 **`RELEASE_PLEASE_TOKEN` is optional.** GitHub deliberately does not trigger
 workflows from events raised with the default `GITHUB_TOKEN`, so a release pull

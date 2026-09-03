@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-02 13:38'
-updated_date: '2026-09-02 22:51'
+updated_date: '2026-09-03 01:20'
 labels:
   - infra
 milestone: m-0
@@ -30,9 +30,9 @@ ci.yml runs lint, typecheck, test, and build on push and pull request with pnpm 
 <!-- AC:BEGIN -->
 - [x] #1 A pull request shows lint, typecheck, test, and build as separate required checks
 - [x] #2 A pull request titled without a Conventional Commit prefix fails the title check
-- [ ] #3 Merging a feat commit to main opens or updates a release pull request with a changelog entry and minor bump
-- [ ] #4 Merging the release pull request creates a GitHub release and a git tag, and the publish job runs against npm
-- [x] #5 README lists the NPM_TOKEN or trusted publishing setup and the branch protection rules
+- [x] #3 Merging a feat commit to main opens or updates a release pull request with a changelog entry and minor bump
+- [ ] #4 Merging the release pull request creates a GitHub release and a git tag; CI never publishes to npm
+- [x] #5 README documents the manual npm publish from a tagged checkout and the branch protection rules
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -103,4 +103,6 @@ These four can only be proven on GitHub, so they are left unchecked.
 **#4 — merging the release pull request tags, releases and publishes.** Before merging, set up publishing: either configure npm trusted publishing for `@geekity/cms` (npmjs.com -> package -> Settings -> Trusted publishing -> GitHub Actions, org `geekitycom`, repository `cms`, workflow `release-please.yml`, environment empty), which needs the package to exist so the very first publish has to use a token; or add an `NPM_TOKEN` repository secret holding an npm automation token. The `@geekity` scope must be owned first (decision-6). Then merge the release pull request. release-please runs again on the push, creates the tag `v0.1.0` and the GitHub release; the `publish` job should then run (it is skipped if `releases_created` is false) and end with `+ @geekity/cms@0.1.0`. Confirm on npmjs.com that version 0.1.0 exists and carries a provenance badge; if the badge is missing, `id-token: write` or the OIDC setup is the thing to check.
 
 Verified on PR #1 (run 33692126519): nine separate check runs (lint, typecheck, test, test-node-24, build, test-11ty, coverage, pr-title, pack-install) all green; renaming the PR to 'updated the readme' turned pr-title red and restoring the title turned it green. AC 3 and 4 remain until the PR merges and a release PR is cut.
+
+Decision on 2026-09-03: CI does not publish to npm; the maintainer runs pnpm publish from the tagged checkout when they choose. The publish job and its NPM_TOKEN / trusted publishing setup were removed from release-please.yml and the README (PR #4). AC 3 verified on PR #2 (changelog plus 0.0.0 to 0.1.0 minor bump after PR #3). Merging PR #2 cut no tag because release-please only matched release PRs whose branch carries the component 'cms' (upstream issue 2214); PR #4 switches to separate-pull-requests and pins the release PR title. v0.1.0 was created by hand at the PR #2 merge commit and PR #2 relabelled autorelease: tagged. AC 4 is verified on the next release-please release.
 <!-- SECTION:NOTES:END -->
