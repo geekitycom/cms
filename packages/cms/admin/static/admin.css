@@ -609,3 +609,85 @@ button[type='submit']:hover,
 .admin-settings + .admin-settings {
   margin-top: 1.5rem;
 }
+
+/* The federation screen: the site's own actor, its followers, what arrived,
+   and how what went out landed. Four panels down the page rather than the
+   dashboard's grid, because three of them hold tables. */
+
+.admin-panel + .admin-panel {
+  margin-top: 1.5rem;
+}
+
+.admin-actor-handle {
+  margin: 0 0 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.admin-actor-fields {
+  display: grid;
+  margin: 0;
+  gap: 0.4rem 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.admin-actor-fields div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.admin-actor-fields dt {
+  min-width: 5.5rem;
+  color: var(--admin-muted);
+}
+
+.admin-actor-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* An avatar and a name on one line, with a placeholder square holding the
+   space when the actor published no icon: a list of rows that jump between
+   two heights is harder to read down than one that does not. */
+
+.admin-follower {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-avatar {
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.admin-avatar-blank {
+  display: inline-block;
+  background: var(--admin-field);
+}
+
+.admin-inbox {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-inbox li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--admin-field);
+}
+
+.admin-inbox-actor {
+  font-weight: 600;
+}
+
+.admin-inbox-when {
+  color: var(--admin-muted);
+}
+
+.admin-status-failed {
+  color: var(--admin-error);
+}

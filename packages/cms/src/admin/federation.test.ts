@@ -1,0 +1,367 @@
+import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { after, before, describe, it } from 'node:test';
+
+import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import type { Browser } from './__testing__/harness.ts';
+import type { Cms } from '../index.ts';
+
+/** The site under test. Its origin is what an ActivityStreams id is built on. */
+const BASE_URL = 'https://blog.example';
+
+/** The peer whose likes, boosts and replies the screen shows. */
+const REMOTE_ORIGIN = 'https://remote.example';
+const REMOTE_ACTOR = `${REMOTE_ORIGIN}/users/ada`;
+const REMOTE_INBOX = `${REMOTE_ACTOR}/inbox`;
+
+/** Every POST the site made to the make-believe peer while a test ran. */
+const deliveries: { url: string; body: Record<string, unknown> }[] = [];
+
+let restoreFetch: () => void;
+
+before(() => {
+  restoreFetch = routeRemoteHost();
+});
+
+after(() => {
+  restoreFetch();
+});
+
+const box = sandbox();
+after(() => box.cleanup());
+
+/**
+ * Route the peer through memory: a POST to its inbox is recorded rather than
+ * sent, and its actor document is served from here. Every other host reaches
+ * the real `fetch`, which is what a JSON-LD context Fedify has not cached
+ * needs.
+ */
+function routeRemoteHost(): () => void {
+  const original = globalThis.fetch;
+
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = new URL(href);
+    if (url.origin !== REMOTE_ORIGIN) return await original(input, init);
+
+    const request = new Request(input, init);
+    if (request.method === 'POST') {
+      deliveries.push({
+        url: request.url,
+        body: (await request.json()) as Record<string, unknown>,
+      });
+      return new Response('', { status: 202 });
+    }
+    return new Response(
+      JSON.stringify({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: REMOTE_ACTOR,
+        type: 'Person',
+        preferredUsername: 'ada',
+        name: 'Ada Lovelace',
+        inbox: REMOTE_INBOX,
+      }),
+      { headers: { 'content-type': 'application/activity+json' } },
+    );
+  }) as typeof fetch;
+
+  return () => {
+    globalThis.fetch = original;
+  };
+}
+
+/**
+ * A site whose posts have ids a test can write out by hand, with no queue —
+ * so a delivery has already happened by the time `settled()` resolves — and
+ * the private-address guard off, because the peer does not resolve.
+ */
+async function federatedSite(): Promise<Cms> {
+  deliveries.length = 0;
+  return await box.site({
+    baseUrl: BASE_URL,
+    federation: { queue: null, allowPrivateAddress: true },
+  });
+}
+
+/** The federation screen's HTML. */
+async function federationScreen(agent: Browser): Promise<string> {
+  const response = await agent.get('/admin/federation');
+  assert.equal(response.status, 200, 'the federation screen answered');
+  return await response.text();
+}
+
+/** The federation screen's HTML and the CSRF token its forms carry. */
+async function federationForm(agent: Browser): Promise<{ html: string; token: string }> {
+  const html = await federationScreen(agent);
+  const token = csrfField(html);
+  assert.ok(token !== undefined, 'the federation screen carried a CSRF token');
+  return { html, token };
+}
+
+/** Publish a post through the editor, which is what sets a delivery going. */
+async function publishPost(agent: Browser, cms: Cms): Promise<void> {
+  const token = csrfField(await (await agent.get('/admin/posts/new')).text());
+  assert.ok(token !== undefined, 'the editor carried a CSRF token');
+
+  const response = await agent.post('/admin/posts/new', {
+    csrf_token: token,
+    title: 'Hello, world',
+    slug: 'hello-world',
+    permalink: '',
+    date: '2026-03-04T10:00:00.000Z',
+    tags: '',
+    description: '',
+    body: 'The first post.',
+    hash: '',
+    action: 'publish',
+  });
+  assert.equal(response.status, 303, 'the post was published');
+  await cms.delivery.settled();
+}
+
+/** Write one published post into the content directory and index it. */
+async function writePost(cms: Cms, slug: string, title: string): Promise<void> {
+  const file = path.join(cms.config.contentDir, 'posts', `2026-03-04-${slug}.md`);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(
+    file,
+    `---\ntitle: ${title}\ndate: 2026-03-04T10:00:00.000Z\n---\n\nThe first post.\n`,
+    'utf8',
+  );
+  await cms.sync();
+}
+
+/** One follower, with everything the screen has to show about them. */
+function follow(cms: Cms, overrides: Record<string, unknown> = {}): void {
+  cms.admin.putFollower({
+    actorId: 'https://remote.example/users/ada',
+    inboxId: 'https://remote.example/users/ada/inbox',
+    sharedInboxId: 'https://remote.example/inbox',
+    handle: '@ada@remote.example',
+    name: 'Ada Lovelace',
+    iconUrl: 'https://remote.example/avatars/ada.png',
+    url: 'https://remote.example/@ada',
+    followedAt: '2026-03-04T10:00:00.000Z',
+    ...overrides,
+  } as Parameters<Cms['admin']['putFollower']>[0]);
+}
+
+describe('the follower list', () => {
+  it('shows a follower’s name, handle, avatar, profile and follow date (AC #1)', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms);
+
+    const html = await federationScreen(agent);
+
+    assert.match(html, /Ada Lovelace/, 'the display name is there');
+    assert.match(html, /@ada@remote\.example/, 'the handle is there');
+    assert.match(html, /2026/, 'the follow date is there');
+    assert.match(html, /https:\/\/remote\.example\/@ada/, 'the profile is linked');
+    assert.match(html, /avatars\/ada\.png/, 'the avatar is shown');
+  });
+
+  it('falls back to the actor id when the actor published no name or handle', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms, { handle: null, name: null, iconUrl: null, url: null });
+
+    const html = await federationScreen(agent);
+
+    assert.match(html, /https:\/\/remote\.example\/users\/ada/, 'the id stands in for both');
+  });
+
+  it('says so when nobody follows the site yet', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+
+    assert.match(await federationScreen(agent), /Nobody follows/);
+  });
+});
+
+describe('the actor summary', () => {
+  it('shows the handle, the type, the profile fields and the follower count', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms);
+
+    const html = await federationScreen(agent);
+
+    assert.match(html, /@blog@blog\.example/, 'the handle is built from the settings and the host');
+    assert.match(html, /Person/, 'the actor type is shown');
+    assert.match(html, /https:\/\/blog\.example\/ap\/actor/, 'the actor id is shown');
+    assert.match(html, /Followers[\s\S]{0,120}>1</, 'the follower count is shown');
+  });
+});
+
+describe('recent inbox activity', () => {
+  it('lists likes, boosts and replies with links to the remote objects (AC #2)', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    await writePost(cms, 'hello-world', 'Hello, world');
+    logLike(cms);
+    logAnnounce(cms);
+    logReply(cms);
+
+    const html = await federationScreen(agent);
+
+    assert.match(html, /liked/, 'a Like reads as a like');
+    assert.match(html, /boosted/, 'an Announce reads as a boost');
+    assert.match(html, /replied/, 'a Create of a Note reads as a reply');
+
+    assert.match(html, /https:\/\/remote\.example\/likes\/1/, 'the Like links to the activity');
+    assert.match(
+      html,
+      /https:\/\/remote\.example\/users\/ada\/statuses\/8\/activity/,
+      'the Announce links to the activity',
+    );
+    assert.match(html, /https:\/\/remote\.example\/@ada\/9/, 'the reply links to the note itself');
+    assert.match(html, new RegExp(REMOTE_ACTOR.replaceAll('.', '\\.')), 'the actor is linked');
+
+    // Every one of the three was about the same post, so the row says which.
+    const mentions = html.match(/Hello, world/g) ?? [];
+    assert.equal(mentions.length, 3, 'each row names the post it was about');
+    assert.match(html, /\/admin\/posts\/hello-world/, 'and links to its editor');
+  });
+
+  it('leaves out the follow traffic, which the follower list already shows', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    cms.admin.logInboxActivity({
+      activityId: 'https://remote.example/follows/1',
+      activityType: 'Follow',
+      actorId: REMOTE_ACTOR,
+      objectId: 'https://blog.example/ap/actor',
+      json: '{}',
+    });
+
+    const html = await federationScreen(agent);
+
+    assert.doesNotMatch(html, /remote\.example\/follows\/1/, 'a Follow is not an interaction');
+    assert.match(html, /Nothing has arrived/, 'and the list reads as empty');
+  });
+});
+
+describe('per-post delivery status', () => {
+  it('shows the latest activity for a post and how it landed', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
+    await publishPost(agent, cms);
+
+    const html = await federationScreen(agent);
+
+    assert.match(html, /Hello, world/, 'the post is named');
+    assert.match(html, /\/admin\/posts\/hello-world/, 'and links to its editor');
+    assert.match(html, /Create/, 'the latest activity type is shown');
+    assert.match(html, /<button type="submit">Redeliver<\/button>/, 'and it can be sent again');
+  });
+
+  it('says so when nothing has been delivered yet', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+
+    assert.match(await federationScreen(agent), /Nothing has been delivered/);
+  });
+});
+
+describe('redelivering a post', () => {
+  it('sends the latest activity again and says how it went (AC #3)', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
+    await publishPost(agent, cms);
+
+    assert.equal(deliveries.length, 1, 'publishing delivered once');
+    const activityId = cms.admin.listOutboundActivities()[0]?.activityId;
+    assert.ok(activityId !== undefined, 'the activity was recorded');
+
+    const { token } = await federationForm(agent);
+    const response = await agent.post('/admin/federation/redeliver', {
+      csrf_token: token,
+      activity_id: activityId,
+    });
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/federation');
+
+    await cms.delivery.settled();
+    assert.equal(deliveries.length, 2, 'the activity went out a second time');
+    assert.equal(deliveries[1]?.url, REMOTE_INBOX, 'to the follower’s inbox');
+    assert.equal(deliveries[1]?.body['id'], activityId, 'and it was the same activity');
+
+    const after = await federationScreen(agent);
+    assert.match(after, /Redelivered Create to 1 follower: 1 sent, 0 failed/);
+    assert.match(after, /1 sent/, 'and the row now counts the delivery');
+  });
+
+  it('refuses an activity it has never sent, without pretending it did', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    const { token } = await federationForm(agent);
+
+    const response = await agent.post('/admin/federation/redeliver', {
+      csrf_token: token,
+      activity_id: 'https://blog.example/ap/posts/nothing#create',
+    });
+
+    assert.equal(response.status, 303);
+    assert.match(await federationScreen(agent), /no record of that activity/i);
+    assert.equal(deliveries.length, 0, 'and nothing was sent');
+  });
+});
+
+/** A like of `hello-world`, exactly as the inbox would have logged it. */
+function logLike(cms: Cms): void {
+  cms.admin.logInboxActivity({
+    activityId: 'https://remote.example/likes/1',
+    activityType: 'Like',
+    actorId: REMOTE_ACTOR,
+    objectId: `${BASE_URL}/ap/posts/hello-world`,
+    json: JSON.stringify({
+      id: 'https://remote.example/likes/1',
+      type: 'Like',
+      actor: REMOTE_ACTOR,
+      object: `${BASE_URL}/ap/posts/hello-world`,
+    }),
+  });
+}
+
+/** A boost of `hello-world`. */
+function logAnnounce(cms: Cms): void {
+  cms.admin.logInboxActivity({
+    activityId: 'https://remote.example/users/ada/statuses/8/activity',
+    activityType: 'Announce',
+    actorId: REMOTE_ACTOR,
+    objectId: `${BASE_URL}/ap/posts/hello-world`,
+    json: JSON.stringify({
+      id: 'https://remote.example/users/ada/statuses/8/activity',
+      type: 'Announce',
+      actor: REMOTE_ACTOR,
+      object: `${BASE_URL}/ap/posts/hello-world`,
+    }),
+  });
+}
+
+/** A reply to `hello-world`: a `Create` whose object is the Note itself. */
+function logReply(cms: Cms): void {
+  cms.admin.logInboxActivity({
+    activityId: 'https://remote.example/users/ada/statuses/9/activity',
+    activityType: 'Create',
+    actorId: REMOTE_ACTOR,
+    objectId: 'https://remote.example/users/ada/statuses/9',
+    json: JSON.stringify({
+      id: 'https://remote.example/users/ada/statuses/9/activity',
+      type: 'Create',
+      actor: REMOTE_ACTOR,
+      object: {
+        id: 'https://remote.example/users/ada/statuses/9',
+        type: 'Note',
+        url: 'https://remote.example/@ada/9',
+        content: '<p>Lovely post.</p>',
+        inReplyTo: `${BASE_URL}/ap/posts/hello-world`,
+      },
+    }),
+  });
+}

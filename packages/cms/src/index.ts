@@ -34,6 +34,7 @@ export {
   ADMIN_SECTIONS,
   ADMIN_STATIC_DIR,
   ADMIN_TEMPLATES,
+  actorSummary,
   addUserProblems,
   adminAssetResponse,
   ARGON2_PARAMETERS,
@@ -49,6 +50,7 @@ export {
   DEFAULT_SITE_SETTINGS,
   DELETE_USER_PATH,
   deleteUserRefusal,
+  deliveryRows,
   DOCUMENT_FILTERS,
   documentFilter,
   DOCUMENTS_PER_PAGE,
@@ -56,8 +58,12 @@ export {
   effectiveBaseUrl,
   EXCLUDE_KEY,
   DuplicateUsernameError,
+  FEDERATION_FIELDS,
+  FEDERATION_PATH,
+  FEDERATION_RECENT,
   findAdminAsset,
   findBySlug,
+  followerRow,
   formFor,
   formFromSettings,
   flash,
@@ -66,14 +72,18 @@ export {
   generatePassword,
   guard,
   hashPassword,
+  INBOX_INTERACTIONS,
+  inboxRows,
   LOGIN_PATH,
   LOGOUT_PATH,
   listingUrl,
   listOptionsFor,
+  localPosts,
   MAXIMUM_USERNAME_LENGTH,
   MINIMUM_PASSWORD_LENGTH,
   mountAdmin,
   mountDocumentScreens,
+  mountFederationScreen,
   mountPreview,
   mountSettings,
   mountUploads,
@@ -88,6 +98,8 @@ export {
   PREVIEW_PATH,
   QUICK_DRAFT_PATH,
   readSiteSettings,
+  REDELIVER_PATH,
+  redeliveryMessage,
   refuseOversizedUpload,
   returnPath,
   seedSiteSettings,
@@ -120,6 +132,7 @@ export {
 export type {
   ActorKey,
   ActorKeyAlgorithm,
+  ActorSummary,
   AddUserProblems,
   AdminRender,
   AdminSection,
@@ -129,6 +142,8 @@ export type {
   CreateSessionInput,
   CreateUserInput,
   Delivery,
+  DeliveryRow,
+  DeliveryRowsContext,
   DeliveryStatus,
   DocumentFilter,
   DocumentKind,
@@ -137,9 +152,14 @@ export type {
   FlashKind,
   FlashMessage,
   Follower,
+  FollowerRow,
   InboxActivity,
+  InboxRow,
+  InboxRowsContext,
   ListPageOptions,
+  LocalPost,
   MountDocumentScreensOptions,
+  MountFederationScreenOptions,
   MountSettingsOptions,
   MountUsersOptions,
   NewActorKey,
@@ -509,6 +529,15 @@ export function createCms(config: GeekityConfig = {}): Cms {
     config: resolved,
     settings: { read: () => settingsSiteData(readSiteSettings(admin)) },
   });
+  const federation = createSiteFederation({ baseUrl: resolved.baseUrl, ...resolved.federation });
+
+  // Federation listens to the index rather than to the admin, so a post edited
+  // on disk federates exactly as one saved through the editor does (doc-4).
+  // It is built before the app because a handler reads it off the context: the
+  // admin's Redeliver button is a request that sends an activity again.
+  const delivery = createDeliveryService({ federation, admin, store, config: resolved });
+  content.events.on('change', (change) => delivery.handle(change));
+
   const app = new Hono<GeekityEnv>();
 
   app.use('*', async (c, next) => {
@@ -517,6 +546,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('config', resolved);
     c.set('renderer', renderer);
     c.set('announce', (change) => content.announce(change));
+    c.set('delivery', delivery);
     await next();
   });
 
@@ -526,13 +556,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // every other, so putting it in front costs the rest of the app nothing and
   // is the only place it can go: the public site claims every unmatched path
   // in its not-found handler.
-  const federation = createSiteFederation({ baseUrl: resolved.baseUrl, ...resolved.federation });
   mountFederation(app, federation);
-
-  // Federation listens to the index rather than to the admin, so a post edited
-  // on disk federates exactly as one saved through the editor does (doc-4).
-  const delivery = createDeliveryService({ federation, admin, store, config: resolved });
-  content.events.on('change', (change) => delivery.handle(change));
 
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);
