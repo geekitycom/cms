@@ -37,6 +37,12 @@ export interface GeekityConfig {
    */
   watch?: boolean;
   /**
+   * How long an admin login lasts, in seconds. Default 14 days. Overridden by
+   * `GEEKITY_SESSION_LIFETIME`. The clock starts when the session is created,
+   * and an expired session is deleted rather than merely ignored.
+   */
+  sessionLifetime?: number;
+  /**
    * Called for every `created`, `updated` and `deleted` the index records.
    *
    * The boot scan reports a cold index as a directory full of creations, so a
@@ -65,6 +71,7 @@ export interface ResolvedConfig {
   themeDir: string;
   baseUrl: string;
   watch: boolean;
+  sessionLifetime: number;
   onDocumentChange: DocumentChangeHook | undefined;
   onPublish: DocumentChangeHook | undefined;
 }
@@ -81,6 +88,8 @@ export const DEFAULT_PORT = 3000;
 export const DEFAULT_CONTENT_DIR = 'content';
 export const DEFAULT_DATA_DIR = 'data';
 export const DEFAULT_THEME_DIR = 'theme';
+/** How long an admin login lasts by default: fourteen days, in seconds. */
+export const DEFAULT_SESSION_LIFETIME = 14 * 24 * 60 * 60;
 
 /**
  * Identity helper that gives a `geekity.config.ts` file type checking and
@@ -112,6 +121,10 @@ export function resolveConfig(
     themeDir: resolveDir(cwd, env['GEEKITY_THEME_DIR'], config.themeDir, DEFAULT_THEME_DIR),
     baseUrl: resolveBaseUrl(env['GEEKITY_BASE_URL'], config.baseUrl, port),
     watch: resolveWatch(env['GEEKITY_WATCH'], config.watch),
+    sessionLifetime: resolveSessionLifetime(
+      env['GEEKITY_SESSION_LIFETIME'],
+      config.sessionLifetime,
+    ),
     onDocumentChange: config.onDocumentChange,
     onPublish: config.onPublish,
   };
@@ -128,6 +141,34 @@ function resolveWatch(fromEnv: string | undefined, configured: boolean | undefin
     );
   }
   return configured ?? true;
+}
+
+/** Seconds, positive and finite. Fractions are allowed; zero and below are not. */
+function resolveSessionLifetime(
+  fromEnv: string | undefined,
+  configured: number | undefined,
+): number {
+  if (fromEnv !== undefined && fromEnv !== '') {
+    const parsed = Number(fromEnv);
+    if (!isValidLifetime(parsed)) {
+      throw new TypeError(
+        `GEEKITY_SESSION_LIFETIME must be a positive number of seconds, received ${JSON.stringify(fromEnv)}`,
+      );
+    }
+    return parsed;
+  }
+
+  if (configured === undefined) return DEFAULT_SESSION_LIFETIME;
+  if (!isValidLifetime(configured)) {
+    throw new TypeError(
+      `config.sessionLifetime must be a positive number of seconds, received ${JSON.stringify(configured)}`,
+    );
+  }
+  return configured;
+}
+
+function isValidLifetime(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
 }
 
 function resolvePort(

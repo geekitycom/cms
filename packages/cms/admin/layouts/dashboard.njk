@@ -1,0 +1,14 @@
+{% extends "layouts/base.njk" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+  {# A placeholder. TASK-10 replaces it with the real admin shell. #}
+  <h1>Dashboard</h1>
+  <p>Signed in as <strong>{{ user.username }}</strong>.</p>
+
+  <form method="post" action="{{ logoutUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    <button type="submit">Log out</button>
+  </form>
+{% endblock %}
