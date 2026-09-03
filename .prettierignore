@@ -20,3 +20,6 @@ backlog/
 packages/cms/test/fixtures/
 apps/demo/content/
 packages/cms/templates/site/content/
+
+# Claude Code writes this on the machine it runs on; it is not in the repo.
+.claude/settings.local.json
