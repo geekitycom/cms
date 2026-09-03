@@ -25,6 +25,7 @@ export const ADMIN_TEMPLATES = {
   documentEditor: 'layouts/document-editor.njk',
   documentConflict: 'layouts/document-conflict.njk',
   settings: 'layouts/settings.njk',
+  users: 'layouts/users.njk',
 } as const;
 
 /** How to build an {@link createAdminTemplateEnvironment}. */

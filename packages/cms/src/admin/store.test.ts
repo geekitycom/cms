@@ -89,6 +89,32 @@ describe('users', () => {
 
     assert.notEqual(admin.getUser('ada')?.passwordHash, admin.getUser('grace')?.passwordHash);
   });
+
+  it('replaces a password, so the old one stops working and the new one starts', async () => {
+    const admin = await store();
+    const ada = admin.createUser({ username: 'ada', password: 'correct horse battery' });
+
+    assert.equal(admin.setPassword(ada.id, 'a different password'), true);
+
+    assert.equal(admin.verifyPassword('ada', 'correct horse battery'), undefined);
+    assert.equal(admin.verifyPassword('ada', 'a different password')?.id, ada.id);
+  });
+
+  it('says so when there is no user to give a password to', async () => {
+    const admin = await store();
+
+    assert.equal(admin.setPassword(404, 'a password nobody will use'), false);
+  });
+
+  it('deletes a user and says so when there was none to delete', async () => {
+    const admin = await store();
+    const ada = admin.createUser({ username: 'ada', password: 'correct horse battery' });
+
+    assert.equal(admin.deleteUser(ada.id), true);
+    assert.equal(admin.countUsers(), 0);
+    assert.equal(admin.getUser('ada'), undefined);
+    assert.equal(admin.deleteUser(ada.id), false);
+  });
 });
 
 const HOUR = 3600;
@@ -165,6 +191,46 @@ describe('sessions', () => {
 
     assert.equal(session.userId, null);
     assert.equal(admin.getSession(session.id)?.userId, null);
+  });
+
+  it('drops every session a user has but the one that is asking', async () => {
+    const admin = await store();
+    const ada = admin.createUser({ username: 'ada', password: 'correct horse battery' });
+    const grace = admin.createUser({ username: 'grace', password: 'a password of her own' });
+    const keep = admin.createSession({ userId: ada.id, lifetimeSeconds: HOUR });
+    const elsewhere = admin.createSession({ userId: ada.id, lifetimeSeconds: HOUR });
+    const somebodyElse = admin.createSession({ userId: grace.id, lifetimeSeconds: HOUR });
+
+    assert.equal(admin.deleteSessionsForUser(ada.id, { except: keep.id }), 1);
+
+    assert.ok(admin.getSession(keep.id) !== undefined, 'the asking session is still live');
+    assert.equal(admin.getSession(elsewhere.id), undefined);
+    assert.ok(
+      admin.getSession(somebodyElse.id) !== undefined,
+      "another user's session is not touched",
+    );
+  });
+
+  it('drops every session a user has when nothing is spared', async () => {
+    const admin = await store();
+    const ada = admin.createUser({ username: 'ada', password: 'correct horse battery' });
+    const one = admin.createSession({ userId: ada.id, lifetimeSeconds: HOUR });
+    const two = admin.createSession({ userId: ada.id, lifetimeSeconds: HOUR });
+
+    assert.equal(admin.deleteSessionsForUser(ada.id), 2);
+
+    assert.equal(admin.getSession(one.id), undefined);
+    assert.equal(admin.getSession(two.id), undefined);
+  });
+
+  it('takes a deleted user’s sessions with them, because the foreign key cascades', async () => {
+    const admin = await store();
+    const ada = admin.createUser({ username: 'ada', password: 'correct horse battery' });
+    const session = admin.createSession({ userId: ada.id, lifetimeSeconds: HOUR });
+
+    admin.deleteUser(ada.id);
+
+    assert.equal(admin.getSession(session.id), undefined);
   });
 });
 

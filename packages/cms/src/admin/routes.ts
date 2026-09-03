@@ -23,6 +23,7 @@ import { DuplicateUsernameError } from './store.ts';
 import type { Session, User } from './store.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
+import { mountUsers } from './users.ts';
 
 /** Where the login form lives. */
 export const LOGIN_PATH = `${ADMIN_PREFIX}/login`;
@@ -277,7 +278,11 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // the mirror an Eleventy build of the same content reads.
   mountSettings(app, { render });
 
-  const built = new Set([POST_KIND.section, PAGE_KIND.section, 'dashboard', 'settings']);
+  // Who may sign in: the list, the add form, and the change-password form for
+  // whoever is looking at it.
+  mountUsers(app, { render });
+
+  const built = new Set([POST_KIND.section, PAGE_KIND.section, 'dashboard', 'settings', 'users']);
 
   // The sections doc-5 lists but no task has built yet. They are registered so
   // the navigation goes somewhere: a link that 404s reads as a broken admin,

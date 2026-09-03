@@ -428,6 +428,45 @@ The actor handle and type are stored but not yet used; federation reads them in
 milestone 3. `Person` is the default because some clients hide `Service` actors
 from timelines.
 
+## Users
+
+`/admin/users` is who may sign in. There is one role — doc-5 puts anything
+beyond admin out of scope for phase one — so a row has no fields to edit and
+the screen is three things: the list, a form that adds somebody, and a form
+that changes your own password.
+
+Adding a user enforces exactly the rules `/admin/setup` and
+`geekity user add` do: a username of 1 to 64 letters, digits, dots, dashes or
+underscores, and a password of at least 8 characters. Tick **Generate one
+instead** and the server makes the password itself, from `randomInt` over an
+alphabet with no `0`/`O` or `1`/`l`, and shows it once in the flash on the next
+page. The flash lives on the session row, so a generated password is never in a
+URL, a cookie or a browser's history, and it is never stored in the clear —
+leave that page without copying it and the only way back is to delete the user
+and add them again.
+
+Changing your own password asks for the current one first, then ends **every
+other session that login has** and spares the one you are using. That is the
+point of the screen: the reason to change a password is usually that somebody
+else may have it, and a change that left the other browsers signed in would not
+have fixed anything. The flash says how many were signed out. Changing somebody
+else's password is deliberately not offered — a fresh account is the honest way
+to hand a colleague a login, and it keeps the current-password check meaningful.
+
+Deleting a user takes their sessions with them, because `sessions.user_id`
+cascades and the admin connection runs with `PRAGMA foreign_keys = ON`. Two
+deletions are refused, and the table only renders a button for rows that are
+neither:
+
+- **The last remaining user.** A site with no users falls back into first-run
+  setup, and the next person to reach `/admin` becomes its admin.
+- **Your own account.** It would end the session doing the deleting, and there
+  is no undo. Another admin can do it for you.
+
+A form with a problem comes back with a 400, one message under each field, and
+nothing written. The add form keeps the username that was typed; the password
+forms keep nothing, because a password does not belong in rendered HTML.
+
 ## The theme
 
 Templates are Nunjucks (decision-4). The default theme lives in

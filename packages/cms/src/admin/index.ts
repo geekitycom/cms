@@ -80,6 +80,20 @@ export type {
   SiteSettings,
 } from './settings.ts';
 export {
+  addUserProblems,
+  changePasswordProblems,
+  CHANGE_PASSWORD_PATH,
+  deleteUserRefusal,
+  DELETE_USER_PATH,
+  generatePassword,
+  GENERATED_PASSWORD_ALPHABET,
+  GENERATED_PASSWORD_LENGTH,
+  mountUsers,
+  USER_FIELDS,
+  USERS_PATH,
+} from './users.ts';
+export type { AddUserProblems, ChangePasswordProblems, MountUsersOptions } from './users.ts';
+export {
   ADMIN_PREFIX,
   clearSessionCookie,
   CSRF_FIELD,

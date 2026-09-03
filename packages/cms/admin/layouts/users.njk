@@ -1,0 +1,91 @@
+{# /admin/users: who can sign in, how to add one, and how to change your own
+   password. One role, so a row has no fields to edit. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}Users{% endblock %}
+
+{% block content %}
+  <h1>Users</h1>
+
+  <table class="admin-list">
+    <thead>
+      <tr>
+        <th scope="col">Username</th>
+        <th scope="col">Created</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in users %}
+        <tr>
+          <td>{{ entry.username }}{% if entry.you %} <span class="admin-status">(you)</span>{% endif %}</td>
+          <td>{{ entry.createdAt | date('html') }}</td>
+          <td class="admin-actions">
+            {% if entry.deletable %}
+              <form method="post" action="{{ deleteUserUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.userId }}" value="{{ entry.id }}" />
+                <button type="submit">Delete</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <form class="admin-settings" method="post" action="{{ usersUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+    <h2>Add a user</h2>
+
+    {% if addProblems.username or addProblems.password %}
+      <p class="admin-error">Nobody was added. Fix the fields marked below and try again.</p>
+    {% endif %}
+
+    <label for="add-username">Username</label>
+    <input id="add-username" name="{{ fields.username }}" type="text" value="{{ addForm.username }}" required />
+    {% if addProblems.username %}<p class="admin-field-error">{{ addProblems.username }}</p>{% endif %}
+
+    <label for="add-password">Password</label>
+    <input id="add-password" name="{{ fields.password }}" type="password" autocomplete="new-password" />
+    {% if addProblems.password %}<p class="admin-field-error">{{ addProblems.password }}</p>{% endif %}
+
+    <p class="admin-check">
+      <input id="add-generate" name="{{ fields.generate }}" type="checkbox" value="1"{% if addForm.generate %} checked{% endif %} />
+      <label for="add-generate">Generate one instead, and show it to me once</label>
+    </p>
+    <p class="admin-hint">A generated password is shown on the next page and nowhere else. Copy it before you leave.</p>
+
+    <p class="admin-settings-buttons">
+      <button type="submit">Add user</button>
+    </p>
+  </form>
+
+  <form class="admin-settings" method="post" action="{{ changePasswordUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+    <h2>Change your password</h2>
+
+    {% if passwordProblems.currentPassword or passwordProblems.newPassword %}
+      <p class="admin-error">Your password was not changed. Fix the fields marked below and try again.</p>
+    {% endif %}
+
+    <label for="current-password">Current password</label>
+    <input id="current-password" name="{{ fields.currentPassword }}" type="password" autocomplete="current-password" required />
+    {% if passwordProblems.currentPassword %}<p class="admin-field-error">{{ passwordProblems.currentPassword }}</p>{% endif %}
+
+    <label for="new-password">New password</label>
+    <input id="new-password" name="{{ fields.newPassword }}" type="password" autocomplete="new-password" required />
+    {% if passwordProblems.newPassword %}<p class="admin-field-error">{{ passwordProblems.newPassword }}</p>{% endif %}
+
+    <label for="new-password-confirmation">New password again</label>
+    <input id="new-password-confirmation" name="{{ fields.newPasswordConfirmation }}" type="password" autocomplete="new-password" required />
+
+    <p class="admin-hint">Every other browser signed in as you is signed out. This one stays.</p>
+
+    <p class="admin-settings-buttons">
+      <button type="submit">Change password</button>
+    </p>
+  </form>
+{% endblock %}
