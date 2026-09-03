@@ -284,3 +284,83 @@ describe('settings', () => {
     assert.equal(admin.countSettings(), 2);
   });
 });
+
+describe('actor keys', () => {
+  it('starts with no key pair for an actor', async () => {
+    const admin = await store();
+
+    assert.deepEqual(admin.listActorKeys('actor'), []);
+  });
+
+  it('stores a key pair and reads it back whole', async () => {
+    const admin = await store();
+
+    admin.putActorKey({
+      identifier: 'actor',
+      algorithm: 'RSASSA-PKCS1-v1_5',
+      privateJwk: '{"kty":"RSA","d":"private"}',
+      publicJwk: '{"kty":"RSA","n":"public"}',
+    });
+
+    const stored = admin.listActorKeys('actor');
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0]?.algorithm, 'RSASSA-PKCS1-v1_5');
+    assert.equal(stored[0]?.privateJwk, '{"kty":"RSA","d":"private"}');
+    assert.equal(stored[0]?.publicJwk, '{"kty":"RSA","n":"public"}');
+    assert.ok(stored[0]?.createdAt !== undefined, 'the row records when it was made');
+  });
+
+  it('keeps one row per algorithm, and one actor’s keys away from another’s', async () => {
+    const admin = await store();
+
+    admin.putActorKey({
+      identifier: 'actor',
+      algorithm: 'RSASSA-PKCS1-v1_5',
+      privateJwk: '{"rsa":"private"}',
+      publicJwk: '{"rsa":"public"}',
+    });
+    admin.putActorKey({
+      identifier: 'actor',
+      algorithm: 'Ed25519',
+      privateJwk: '{"ed":"private"}',
+      publicJwk: '{"ed":"public"}',
+    });
+    admin.putActorKey({
+      identifier: 'other',
+      algorithm: 'Ed25519',
+      privateJwk: '{"other":"private"}',
+      publicJwk: '{"other":"public"}',
+    });
+
+    assert.deepEqual(
+      admin.listActorKeys('actor').map((key) => key.algorithm),
+      ['RSASSA-PKCS1-v1_5', 'Ed25519'],
+    );
+    assert.deepEqual(
+      admin.listActorKeys('other').map((key) => key.privateJwk),
+      ['{"other":"private"}'],
+    );
+  });
+
+  it('replaces a key pair rather than adding a second of the same algorithm', async () => {
+    const admin = await store();
+
+    admin.putActorKey({
+      identifier: 'actor',
+      algorithm: 'Ed25519',
+      privateJwk: '{"first":"private"}',
+      publicJwk: '{"first":"public"}',
+    });
+    admin.putActorKey({
+      identifier: 'actor',
+      algorithm: 'Ed25519',
+      privateJwk: '{"second":"private"}',
+      publicJwk: '{"second":"public"}',
+    });
+
+    assert.deepEqual(
+      admin.listActorKeys('actor').map((key) => key.privateJwk),
+      ['{"second":"private"}'],
+    );
+  });
+});

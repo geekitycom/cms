@@ -39,6 +39,9 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
+    "@fedify/fedify": "^2.3.6",
+    "@fedify/hono": "^2.3.6",
+    "@fedify/vocab": "^2.3.6",
     "@hono/node-server": "^2.1.1",
     "chokidar": "^5.0.0",
     "gray-matter": "^4.0.3",

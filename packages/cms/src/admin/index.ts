@@ -103,13 +103,21 @@ export {
   setSessionCookie,
   usesSecureCookies,
 } from './session.ts';
-export { DuplicateUsernameError, openAdminStore, SESSION_ID_BYTES } from './store.ts';
+export {
+  ACTOR_KEY_ALGORITHMS,
+  DuplicateUsernameError,
+  openAdminStore,
+  SESSION_ID_BYTES,
+} from './store.ts';
 export type {
+  ActorKey,
+  ActorKeyAlgorithm,
   AdminStore,
   CreateSessionInput,
   CreateUserInput,
   FlashKind,
   FlashMessage,
+  NewActorKey,
   OpenAdminStoreOptions,
   Session,
   StoredUser,

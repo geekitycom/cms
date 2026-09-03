@@ -15,10 +15,13 @@ import type { DocumentChangeHook, GeekityConfig, ResolvedConfig } from './config
 import { createContentSync, openContentStore } from './content/index.ts';
 import type { ContentEvents, ContentEventMap, ContentStore, SyncResult } from './content/index.ts';
 import type { GeekityEnv } from './env.ts';
+import { createSiteFederation, mountFederation } from './federation/index.ts';
+import type { SiteFederation } from './federation/index.ts';
 import { createRenderer, mountPublicSite } from './web/index.ts';
 
 export {
   ACTOR_HANDLE_PATTERN,
+  ACTOR_KEY_ALGORITHMS,
   ACTOR_TYPES,
   ADMIN_ASSET_MAX_AGE,
   ADMIN_ASSET_PREFIX,
@@ -110,6 +113,8 @@ export {
   writeSiteSettings,
 } from './admin/index.ts';
 export type {
+  ActorKey,
+  ActorKeyAlgorithm,
   AddUserProblems,
   AdminRender,
   AdminSection,
@@ -127,6 +132,7 @@ export type {
   MountDocumentScreensOptions,
   MountSettingsOptions,
   MountUsersOptions,
+  NewActorKey,
   OpenAdminStoreOptions,
   Session,
   SettingsForm,
@@ -212,6 +218,33 @@ export type {
 } from './content/index.ts';
 
 export type { GeekityEnv } from './env.ts';
+
+export {
+  ACTOR_CLASSES,
+  ACTOR_PATH,
+  actorClassFor,
+  AVATAR_SETTING,
+  createSiteFederation,
+  FEDERATION_PREFIX,
+  federationOrigin,
+  FOLLOWERS_PATH,
+  FOLLOWING_PATH,
+  INBOX_PATH,
+  loadActorKeyPairs,
+  mountFederation,
+  NODEINFO_PATH,
+  OUTBOX_PATH,
+  SHARED_INBOX_PATH,
+  SITE_ACTOR_IDENTIFIER,
+  siteActor,
+  SOFTWARE_NAME,
+} from './federation/index.ts';
+export type {
+  CreateSiteFederationOptions,
+  FederationContextData,
+  SiteActorOptions,
+  SiteFederation,
+} from './federation/index.ts';
 
 export {
   absoluteUrl,
@@ -330,6 +363,15 @@ export interface Cms {
    */
   readonly admin: AdminStore;
   /**
+   * The site's ActivityPub actor, already mounted on {@link Cms.app}: the
+   * actor document, WebFinger, NodeInfo, the inbox and the collections.
+   *
+   * It is exposed so a site — or a later milestone — may register more
+   * dispatchers and listeners on it, and so `ctx.sendActivity` has something
+   * to be called through when a post is published.
+   */
+  readonly federation: SiteFederation;
+  /**
    * Index changes, as they happen: `created`, `updated`, `deleted`,
    * `published`, `unpublished` and the catch-all `change`. Every listener is
    * handed the document before and after the change.
@@ -416,8 +458,14 @@ export function createCms(config: GeekityConfig = {}): Cms {
 
   app.get('/_geekity/health', (c) => c.json({ status: 'ok' }));
 
-  // The admin goes on before the public site, because the public site claims
-  // every unmatched path in its not-found handler.
+  // Federation goes on first. It answers its own paths and falls through on
+  // every other, so putting it in front costs the rest of the app nothing and
+  // is the only place it can go: the public site claims every unmatched path
+  // in its not-found handler.
+  const federation = createSiteFederation({ baseUrl: resolved.baseUrl });
+  mountFederation(app, federation);
+
+  // The admin goes on before the public site, for the same reason.
   mountAdmin(app);
   mountPublicSite(app);
 
@@ -452,6 +500,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     config: resolved,
     store,
     admin,
+    federation,
     events: content.events,
 
     onDocumentChange(hook) {
