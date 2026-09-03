@@ -39,10 +39,11 @@ backlog/               tasks, docs and decisions (Backlog.md)
 
 ## Requirements
 
-Node 22.5 or newer and pnpm. The floor is `node:sqlite`, which the content
-index is built on: it landed in 22.5, and Node 22 prints one
-`ExperimentalWarning` for it at boot. Node 24 does not. The pnpm version is
-pinned in `packageManager`, so Corepack picks the right one:
+Node 24 or newer and pnpm. Node 24 is the active LTS line, and it is the first
+one where `node:sqlite`, which the content index is built on, boots without an
+`ExperimentalWarning`. CI also runs the suite on the current line so the next
+LTS holds no surprises. The pnpm version is pinned in `packageManager`, so
+Corepack picks the right one:
 
 ```sh
 corepack enable
@@ -377,11 +378,11 @@ Each gate is its own job so it can be named as a required status check:
 | -------------- | ------------------------------------------------------ |
 | `lint`         | `pnpm lint`, then `pnpm format:check`.                 |
 | `typecheck`    | `pnpm typecheck`.                                      |
-| `test`         | `pnpm test` on Node 22.                                |
-| `test-node-24` | The same suite on Node 24.                             |
+| `test`         | `pnpm test` on Node 24.                                |
+| `test-node-26` | The same suite on Node 26, the current line.           |
 | `build`        | `pnpm build`.                                          |
 | `test-11ty`    | `pnpm test:11ty`, the Eleventy compatibility suite.    |
-| `pack-install` | `scripts/pack-install-smoke.sh`, on Node 24.           |
+| `pack-install` | `scripts/pack-install-smoke.sh`.                       |
 | `coverage`     | `pnpm test:coverage`, summary uploaded as an artifact. |
 | `pr-title`     | The pull request title, as a Conventional Commit.      |
 
@@ -436,7 +437,7 @@ On GitHub, under Settings → Rules → Rulesets (or Settings → Branches), pro
 - **Require a pull request before merging.** Direct pushes to `main` are what
   the release flow assumes never happen.
 - **Require status checks to pass**, and select exactly these, spelled as the
-  job names above: `lint`, `typecheck`, `test`, `test-node-24`, `build`,
+  job names above: `lint`, `typecheck`, `test`, `test-node-26`, `build`,
   `test-11ty`, `pack-install`, `coverage`, `pr-title`. Tick "Require branches to be up to date
   before merging".
 - **Require linear history**, and allow only **Squash and merge** in Settings →

@@ -52,17 +52,18 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - run: pnpm test
 
-  # The package's floor is Node 22.5 (`node:sqlite`) and sites will run it on
-  # 24, so the fast suite runs on both. This is a separate job rather than a
-  # matrix so the check above keeps the plain name `test`.
-  test-node-24:
-    name: test-node-24
+  # The package's floor is Node 24, the active LTS, which is what `test` runs
+  # on. This job runs the same suite on the current line so the next LTS holds
+  # no surprises. A separate job rather than a matrix so the check above keeps
+  # the plain name `test`.
+  test-node-26:
+    name: test-node-26
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
         with:
-          node-version: '24'
+          node-version: '26'
       - run: pnpm test
 
   build:
@@ -90,16 +91,13 @@ jobs:
   # tarball into it and asks the booted site for three URLs.
   #
   # The steps live in `scripts/pack-install-smoke.sh` rather than in this file,
-  # so the sequence can be run on a laptop before it is trusted here. Node 24
-  # because that is what a new site will be on.
+  # so the sequence can be run on a laptop before it is trusted here.
   pack-install:
     name: pack-install
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
-        with:
-          node-version: '24'
       - name: Pack, install into a scratch site and boot it
         shell: bash
         # $RUNNER_TEMP is outside the checkout, so the scratch site's own

@@ -3,8 +3,8 @@ packages:
   - 'apps/*'
 
 # esbuild ships a prebuilt binary that its postinstall script unpacks; tsx needs it.
-onlyBuiltDependencies:
-  - esbuild
+allowBuilds:
+  esbuild: true
 
 # nunjucks names chokidar an optional peer, and only reaches for it when a
 # FileSystemLoader is built with `watch: true`. The template loader never is,

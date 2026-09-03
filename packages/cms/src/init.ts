@@ -57,9 +57,10 @@ export class DirectoryNotEmptyError extends Error {
 /**
  * Create a new site.
  *
- * The template is copied as it is; only `package.json` is generated, because a
- * nested manifest inside `templates/` would be picked up as a package by the
- * workspace and by every tool that walks for one.
+ * The template is copied as it is; only `package.json` and
+ * `pnpm-workspace.yaml` are generated, because a nested manifest or workspace
+ * file inside `templates/` would be picked up by the workspace and by every
+ * tool that walks for one.
  */
 export async function initSite(options: InitSiteOptions): Promise<InitSiteResult> {
   const cwd = options.cwd ?? process.cwd();
@@ -83,8 +84,35 @@ export async function initSite(options: InitSiteOptions): Promise<InitSiteResult
     `${JSON.stringify(manifest, undefined, 2)}\n`,
     'utf8',
   );
+  await writeFile(path.join(directory, 'pnpm-workspace.yaml'), pnpmSettings(), 'utf8');
 
   return { directory, files: (await readdir(directory)).sort() };
+}
+
+/**
+ * pnpm settings a new site starts with, as `pnpm-workspace.yaml`.
+ *
+ * pnpm reads its settings from this file even for a single package, and from
+ * version 11 reads nothing else: the `pnpm` field in `package.json` is
+ * ignored. Two things are settled here so a fresh install runs quietly and
+ * unattended. Other package managers ignore the file.
+ */
+export function pnpmSettings(): string {
+  return [
+    '# pnpm settings for this site. Other package managers ignore this file.',
+    '',
+    '# tsx pulls in esbuild, whose install script pnpm blocks until it is',
+    '# allowed by name.',
+    'allowBuilds:',
+    '  esbuild: true',
+    '',
+    '# nunjucks names chokidar an optional peer and only reaches for it when a',
+    "# FileSystemLoader is built with `watch: true`. The CMS's loader never is.",
+    'peerDependencyRules:',
+    '  allowedVersions:',
+    "    nunjucks>chokidar: '5'",
+    '',
+  ].join('\n');
 }
 
 /**
@@ -116,18 +144,6 @@ export function siteManifest(options: { name: string; version: string }): Record
       '@types/node': toolchain['@types/node'] ?? '^24.0.0',
       tsx: toolchain['tsx'] ?? '^4.20.0',
       typescript: toolchain['typescript'] ?? '^5.9.0',
-    },
-    // Two things pnpm 10 would otherwise warn about on a clean install, both
-    // settled here so a new site installs quietly and unattended. Other
-    // package managers ignore the field.
-    pnpm: {
-      // tsx pulls in esbuild, whose install script pnpm blocks until it is named.
-      onlyBuiltDependencies: ['esbuild'],
-      // nunjucks names chokidar an optional peer and only reaches for it when a
-      // FileSystemLoader is built with `watch: true`. The CMS's loader never is.
-      peerDependencyRules: {
-        allowedVersions: { 'nunjucks>chokidar': '5' },
-      },
     },
   };
 }
