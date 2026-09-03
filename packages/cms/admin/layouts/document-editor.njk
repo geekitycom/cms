@@ -1,0 +1,127 @@
+{# The editor behind /admin/posts/{slug} and /admin/pages/{slug}, and behind
+   .../new. One template for both kinds: `kind` decides whether there is a date
+   and a tag field, and the handler decides which buttons the form carries. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1>{{ heading }}</h1>
+
+  {% if error %}
+    <p class="admin-error">{{ error }}</p>
+  {% endif %}
+
+  {% if trashed %}
+    <p class="admin-note">This {{ kind.singular }} is in the trash. The public site is not serving it.</p>
+  {% endif %}
+
+  <form class="admin-editor" method="post" action="{{ saveUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    {# The hash of the file this form was filled in from. A save whose hash no
+       longer matches what is on disk is refused rather than overwriting
+       somebody else's edit (doc-1). #}
+    <input type="hidden" name="hash" value="{{ form.hash }}" />
+
+    <div class="admin-editor-main">
+      <label for="editor-title">Title</label>
+      <input id="editor-title" name="title" type="text" value="{{ form.title }}" required autofocus />
+
+      <label for="editor-body">Body</label>
+      <textarea id="editor-body" name="body" rows="24">{{ form.body }}</textarea>
+    </div>
+
+    <div class="admin-editor-side">
+      <label for="editor-slug">Slug</label>
+      <input id="editor-slug" name="slug" type="text" value="{{ form.slug }}" />
+
+      <label for="editor-permalink">Permalink</label>
+      <input id="editor-permalink" name="permalink" type="text" value="{{ form.permalink }}" />
+      <p class="admin-hint">Leave it empty to let the {{ kind.singular }} take the URL its slug implies.</p>
+
+      {% if kind.dated %}
+        <label for="editor-date">Date</label>
+        <input id="editor-date" name="date" type="text" value="{{ form.date }}" />
+      {% endif %}
+
+      {% if kind.tagged %}
+        <label for="editor-tags">Tags</label>
+        <input id="editor-tags" name="tags" type="text" value="{{ form.tags }}" />
+        <p class="admin-hint">Separated by commas.</p>
+      {% endif %}
+
+      <label for="editor-description">Description</label>
+      <input id="editor-description" name="description" type="text" value="{{ form.description }}" />
+
+      <p class="admin-check">
+        <input id="editor-draft" name="draft" type="checkbox" value="1"{% if form.draft %} checked{% endif %} />
+        <label for="editor-draft">Draft</label>
+      </p>
+
+      <p class="admin-editor-buttons">
+        {% for button in actions %}
+          <button type="submit" name="action" value="{{ button.value }}">{{ button.label }}</button>
+        {% endfor %}
+        {% if viewUrl %}
+          <a class="admin-button admin-button-quiet" href="{{ viewUrl }}">View</a>
+        {% endif %}
+      </p>
+    </div>
+  </form>
+
+  <script>
+    /* The one bit of progressive enhancement doc-5 asks for: the slug follows
+       the title until somebody types a slug of their own, and the permalink
+       follows the slug on the same terms. Without this the form still works —
+       an empty slug is derived from the title on the server. */
+    (function () {
+      var title = document.getElementById('editor-title');
+      var slug = document.getElementById('editor-slug');
+      var permalink = document.getElementById('editor-permalink');
+      if (!title || !slug) return;
+
+      var date = document.getElementById('editor-date');
+      var slugFollows = slug.value === '';
+      var permalinkFollows = !permalink || permalink.value === '';
+
+      function slugify(value) {
+        return value
+          .normalize('NFKD')
+          .toLowerCase()
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+      }
+
+      /* The same shape defaultPermalink() writes on the server: a post lives
+         under the year and month of its date, a page at the top level. */
+      function syncPermalink() {
+        if (!permalink || !permalinkFollows) return;
+        if (slug.value === '') {
+          permalink.value = '';
+          return;
+        }
+        var month = date ? /^(\d{4})-(\d{2})/.exec(date.value) : null;
+        var prefix = month ? '/' + month[1] + '/' + month[2] + '/' : '/';
+        permalink.value = prefix + slug.value + '/';
+      }
+
+      slug.addEventListener('input', function () {
+        slugFollows = false;
+        syncPermalink();
+      });
+
+      if (permalink) {
+        permalink.addEventListener('input', function () {
+          permalinkFollows = false;
+        });
+      }
+
+      title.addEventListener('input', function () {
+        if (!slugFollows) return;
+        slug.value = slugify(title.value);
+        syncPermalink();
+      });
+    })();
+  </script>
+{% endblock %}

@@ -13,6 +13,31 @@ export {
   USERNAME_PATTERN,
   usernameProblem,
 } from './credentials.ts';
+export {
+  blankForm,
+  DOCUMENT_FILTERS,
+  DOCUMENTS_PER_PAGE,
+  documentFilter,
+  editorPath,
+  findBySlug,
+  formFor,
+  listingUrl,
+  listOptionsFor,
+  mountDocumentScreens,
+  newEditorPath,
+  PAGE_KIND,
+  POST_KIND,
+  returnPath,
+  splitTags,
+} from './documents.ts';
+export type {
+  AdminRender,
+  DocumentFilter,
+  DocumentKind,
+  DocumentRow,
+  EditorForm,
+  MountDocumentScreensOptions,
+} from './documents.ts';
 export { flash, takeFlash } from './flash.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from './passwords.ts';
 export {
