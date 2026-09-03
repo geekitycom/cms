@@ -5,7 +5,8 @@
   "bump-patch-for-minor-pre-major": false,
   "initial-version": "0.1.0",
   "include-component-in-tag": false,
-  "separate-pull-requests": false,
+  "separate-pull-requests": true,
+  "pull-request-title-pattern": "chore(release): release ${version}",
   "packages": {
     "packages/cms": {
       "package-name": "@geekity/cms",

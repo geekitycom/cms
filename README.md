@@ -488,6 +488,11 @@ Versions, tags, changelog and the npm publish are automated by release-please
    `--provenance` attaches a signed npm provenance attestation, which is why the
    job asks for `id-token: write`.
 
+The `publish` job can also be run by hand for a tag that already exists, for
+a release created outside release-please or a publish that failed after the
+tag was cut: Actions → release-please → "Run workflow" with the tag, or
+`gh workflow run release-please.yml -f tag=v0.1.0`.
+
 The bumps are the pre-1.0 rules of decision-7, configured in
 `release-please-config.json`: `fix` takes a patch, `feat` takes a minor, and
 `bump-minor-pre-major` keeps a breaking change on a minor until the package
@@ -496,6 +501,16 @@ minor. `initial-version` is `0.1.0`, because release-please otherwise starts a
 package with no prior tag at 1.0.0 whatever the pre-major rules say.
 `include-component-in-tag` is off too, because there is only one package to
 tag, so tags read `v0.2.0` rather than `@geekity/cms-v0.2.0`.
+
+`separate-pull-requests` is on and the release pull request title is pinned to
+`chore(release): release ${version}`. Both matter: with a package under
+`packages/` rather than at the repository root, release-please derives a
+component name (`cms`) from the package name and only recognises a merged
+release pull request whose branch carries that component. Grouped release pull
+requests use a branch without one, so the merge is silently ignored and no
+tag is cut (release-please issue 2214). Separate pull requests put the
+component in the branch. The pinned title keeps the `pr-title` check happy,
+since the default would use the target branch as the scope.
 
 `.release-please-manifest.json` is the current released version of each tracked
 package and must agree with `packages/cms/package.json`. release-please writes
