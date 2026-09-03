@@ -210,11 +210,30 @@ directory; absolute ones are used as given.
 | `sessionLifetime`  | `1209600` (14 days)       | `GEEKITY_SESSION_LIFETIME`  | How long an admin login lasts, in seconds.                                                 |
 | `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                               |
 | `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                             |
+| `federation`       | `{}`                      | —                           | Federation stores and guards. See [Federation](#federation).                               |
 
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site. A boolean environment variable
 takes `true`, `1`, `yes` and `on`, or their opposites; anything else is an error
 rather than a silent `false`.
+
+## Federation
+
+The site is one ActivityPub actor, served by [Fedify]. Its stores have
+defaults that suit a single process, and `federation` is where a site that has
+outgrown them says so:
+
+| Field                 | Default                 | Meaning                                                                                                                                        |
+| --------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kv`                  | `MemoryKvStore`         | Fedify's cache and idempotence store. Nothing that has to survive a restart lives in it.                                                       |
+| `queue`               | `InProcessMessageQueue` | The delivery and inbox queue. `null` means no queue: activities are handled and delivered inside the request that carried them, with no retry. |
+| `allowPrivateAddress` | `false`                 | Whether Fedify may fetch private and loopback addresses. Leave it off: turning it on removes an SSRF guard. It exists for tests.               |
+
+Followers, the actor's key pairs and the inbound activity log are the CMS's
+own and live in SQLite whatever those are set to, so a restart never costs a
+site a follower.
+
+[Fedify]: https://fedify.dev/
 
 ## Keeping the index in step
 

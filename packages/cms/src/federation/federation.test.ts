@@ -7,12 +7,17 @@ import { after, describe, it } from 'node:test';
 import { writeSiteSettings } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
 import { openAdminStore } from '../admin/store.ts';
+import type { NewFollower } from '../admin/store.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { FOLLOWERS_PAGE_SIZE, followersPage } from './followers.ts';
 import { federationOrigin } from './paths.ts';
 
 /** The origin every request in this file is sent to; Fedify checks it. */
 const BASE_URL = 'https://blog.example';
+
+/** The host the make-believe followers in this file live on. */
+const REMOTE_ORIGIN = 'https://remote.example';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -201,6 +206,120 @@ describe('the site actor', () => {
     const response = await get(instance, '/ap/someone-else', 'application/activity+json');
 
     assert.equal(response.status, 404);
+  });
+});
+
+describe('the followers collection', () => {
+  /** A follower row, with the columns the collection and delivery both read. */
+  function follower(index: number): NewFollower {
+    return {
+      actorId: `${REMOTE_ORIGIN}/users/${index}`,
+      inboxId: `${REMOTE_ORIGIN}/users/${index}/inbox`,
+      sharedInboxId: `${REMOTE_ORIGIN}/inbox`,
+      handle: `@user${index}@remote.example`,
+      name: `User ${index}`,
+      iconUrl: null,
+      url: `${REMOTE_ORIGIN}/@user${index}`,
+      followedAt: `2026-09-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+    };
+  }
+
+  it('reports how many followers the site has, and pages rather than inlining them', async () => {
+    const instance = await site();
+    instance.admin.putFollower(follower(0));
+    instance.admin.putFollower(follower(1));
+
+    const response = await get(instance, '/ap/actor/followers', 'application/activity+json');
+
+    assert.equal(response.status, 200);
+    const collection = (await response.json()) as Record<string, unknown>;
+    assert.equal(collection['totalItems'], 2);
+    assert.equal(collection['orderedItems'], undefined, 'the collection itself pages');
+    assert.equal(collection['first'], `${BASE_URL}/ap/actor/followers?cursor=0`);
+    assert.equal(collection['last'], `${BASE_URL}/ap/actor/followers?cursor=0`);
+  });
+
+  it('lists the stored followers on a page, newest follow first', async () => {
+    const instance = await site();
+    instance.admin.putFollower(follower(0));
+    instance.admin.putFollower(follower(1));
+
+    const page = (await (
+      await get(instance, '/ap/actor/followers?cursor=0', 'application/activity+json')
+    ).json()) as Record<string, unknown>;
+
+    assert.deepEqual(page['orderedItems'], [
+      'https://remote.example/users/1',
+      'https://remote.example/users/0',
+    ]);
+    assert.equal(page['next'], undefined, 'one page holds them all');
+  });
+
+  it('walks a follower list longer than one page', async () => {
+    const instance = await site();
+    for (let index = 0; index <= FOLLOWERS_PAGE_SIZE; index += 1) {
+      instance.admin.putFollower(follower(index));
+    }
+
+    const first = (await (
+      await get(instance, '/ap/actor/followers?cursor=0', 'application/activity+json')
+    ).json()) as Record<string, unknown>;
+    const items = first['orderedItems'] as string[];
+
+    assert.equal(items.length, FOLLOWERS_PAGE_SIZE);
+    assert.equal(
+      first['next'],
+      `${BASE_URL}/ap/actor/followers?cursor=${String(FOLLOWERS_PAGE_SIZE)}`,
+    );
+
+    const second = (await (
+      await get(
+        instance,
+        `/ap/actor/followers?cursor=${String(FOLLOWERS_PAGE_SIZE)}`,
+        'application/activity+json',
+      )
+    ).json()) as Record<string, unknown>;
+
+    assert.deepEqual(second['orderedItems'], ['https://remote.example/users/0']);
+    assert.equal(second['prev'], `${BASE_URL}/ap/actor/followers?cursor=0`);
+  });
+
+  it('hands delivery every follower at once, and with the inboxes to reach them', async () => {
+    // A cursor of `null` is how Fedify asks for the whole collection before it
+    // fans an activity out. Answering that with one page would silently strand
+    // every follower past the first twenty.
+    const instance = await site();
+    for (let index = 0; index <= FOLLOWERS_PAGE_SIZE; index += 1) {
+      instance.admin.putFollower(follower(index));
+    }
+    const context = instance.federation.createContext(new URL(BASE_URL), {
+      admin: instance.admin,
+      store: instance.store,
+      config: instance.config,
+    });
+
+    const everybody = followersPage(context, null);
+
+    assert.equal(everybody.items.length, FOLLOWERS_PAGE_SIZE + 1);
+    assert.equal(everybody.nextCursor ?? null, null, 'there is nothing left to page to');
+    const first = everybody.items[0];
+    assert.equal(first?.id?.href, `${REMOTE_ORIGIN}/users/${String(FOLLOWERS_PAGE_SIZE)}`);
+    assert.equal(
+      first?.inboxId?.href,
+      `${REMOTE_ORIGIN}/users/${String(FOLLOWERS_PAGE_SIZE)}/inbox`,
+    );
+    assert.equal(first?.endpoints?.sharedInbox?.href, `${REMOTE_ORIGIN}/inbox`);
+  });
+
+  it('stays empty for the following collection, which the site never fills', async () => {
+    const instance = await site();
+    instance.admin.putFollower(follower(0));
+
+    const following = (await (
+      await get(instance, '/ap/actor/following', 'application/activity+json')
+    ).json()) as Record<string, unknown>;
+
+    assert.equal(following['totalItems'] ?? 0, 0);
   });
 });
 

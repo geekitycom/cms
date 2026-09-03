@@ -129,10 +129,15 @@ export type {
   EditorForm,
   FlashKind,
   FlashMessage,
+  Follower,
+  InboxActivity,
+  ListPageOptions,
   MountDocumentScreensOptions,
   MountSettingsOptions,
   MountUsersOptions,
   NewActorKey,
+  NewFollower,
+  NewInboxActivity,
   OpenAdminStoreOptions,
   Session,
   SettingsForm,
@@ -151,6 +156,7 @@ export {
 } from './config.ts';
 export type {
   DocumentChangeHook,
+  FederationOverrides,
   GeekityConfig,
   ResolvedConfig,
   ResolveConfigContext,
@@ -229,11 +235,21 @@ export {
   federatedPost,
   FEDERATION_PREFIX,
   federationOrigin,
+  followerFrom,
+  followerRecipient,
+  FOLLOWERS_PAGE_SIZE,
   FOLLOWERS_PATH,
+  followersPage,
   FOLLOWING_PATH,
+  handleDelete,
+  handleFollow,
+  handleLoggedActivity,
+  handleUndo,
   INBOX_PATH,
   isFederatedDocument,
+  lastFollowersCursor,
   loadActorKeyPairs,
+  logActivity,
   mountFederation,
   NODEINFO_PATH,
   OUTBOX_PAGE_SIZE,
@@ -255,6 +271,7 @@ export type {
   FederationContextData,
   SiteActorOptions,
   SiteFederation,
+  SiteInboxContext,
 } from './federation/index.ts';
 
 export {
@@ -476,7 +493,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // every other, so putting it in front costs the rest of the app nothing and
   // is the only place it can go: the public site claims every unmatched path
   // in its not-found handler.
-  const federation = createSiteFederation({ baseUrl: resolved.baseUrl });
+  const federation = createSiteFederation({ baseUrl: resolved.baseUrl, ...resolved.federation });
   mountFederation(app, federation);
 
   // The admin goes on before the public site, for the same reason.
