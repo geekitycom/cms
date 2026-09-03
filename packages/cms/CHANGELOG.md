@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/geekitycom/cms/compare/v0.1.0...v0.1.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* **cms:** require node 24, move to pnpm 11, and write pnpm settings for new sites ([1de00b3](https://github.com/geekitycom/cms/commit/1de00b31a24b4ab6851cb3e8d6f115b5f8e94ac2))
+
 ## 0.1.0 (2026-09-03)
 
 
