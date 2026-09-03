@@ -72,16 +72,16 @@ changelog.
 site (or `npx geekity`, or a `package.json` script, which is how the generated
 `sync` script calls it).
 
-| Command                | What it does                                                                             |
-| ---------------------- | ---------------------------------------------------------------------------------------- |
-| `geekity serve`        | Boot from the config file and listen. The default when no command is given.              |
-| `geekity init <dir>`   | Create a new site in `<dir>`. Refuses a directory that is not empty.                     |
-| `geekity sync`         | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed. |
-| `geekity user add`     | Create an admin account. **Not available yet** — admin authentication has not shipped.   |
-| `geekity --help`, `-h` | The same table, on the terminal.                                                         |
-| `geekity --version`    | The installed version.                                                                   |
+| Command                   | What it does                                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `geekity serve`           | Boot from the config file and listen. The default when no command is given.              |
+| `geekity init <dir>`      | Create a new site in `<dir>`. Refuses a directory that is not empty.                     |
+| `geekity sync`            | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed. |
+| `geekity user add <name>` | Create an admin account, so a site can get its first login without the setup screen.     |
+| `geekity --help`, `-h`    | The same table, on the terminal.                                                         |
+| `geekity --version`       | The installed version.                                                                   |
 
-`serve` and `sync` take `--config <file>`; without it they look for
+`serve`, `sync` and `user add` take `--config <file>`; without it they look for
 `geekity.config.ts`, then `geekity.config.js`, then `geekity.config.mjs` in the
 working directory, and run on defaults if there is none.
 
@@ -96,6 +96,35 @@ Scanned 12: 2 created, 1 updated, 0 removed, 9 unchanged, 0 failed
 A file that will not parse is logged, left out of the index and counted in
 `failed`; the command then exits `1` so a deploy step notices. Everything else
 in the directory is still indexed.
+
+### Creating an admin from the command line
+
+`geekity user add <username>` writes a user straight into the site's database,
+which is how a site that cannot reach `/admin/setup` from a browser — a
+headless deploy, a server behind a bastion — gets its first login. It enforces
+exactly the rules the setup form does: a username of 1 to 64 letters, digits,
+dots, dashes or underscores, and a password of at least 8 characters.
+
+```sh
+$ geekity user add ada
+Password for ada:
+Created admin user ada. Sign in at /admin/login.
+```
+
+The prompt does not echo. When standard input is not a terminal the command
+prints no prompt and reads the password as a single line, so a script can pipe
+one in:
+
+```sh
+printf '%s\n' "$ADMIN_PASSWORD" | geekity user add ada
+```
+
+`--password <pw>` passes it inline instead. That is the least private of the
+three: a password on the command line is visible in the process list and lands
+in shell history.
+
+A name that is already taken is refused and nothing is written; so are an
+illegal username and a short password. Every refusal prints why and exits `1`.
 
 ### How a TypeScript config is loaded
 
@@ -294,7 +323,9 @@ which get the token from a short anonymous session created when the form is
 first rendered. Logging in throws that session away and starts a new one, so a
 planted session id cannot become a logged-in one.
 
-Creating a user from your own code, which is what the CLI will do:
+The first admin comes from `/admin/setup` or from
+[`geekity user add`](#creating-an-admin-from-the-command-line). Creating one
+from your own code, which is what the CLI does:
 
 ```ts
 import { openAdminStore } from '@geekity/cms';

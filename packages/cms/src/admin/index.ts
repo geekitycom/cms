@@ -1,12 +1,13 @@
-export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from './passwords.ts';
 export {
-  guard,
-  LOGIN_PATH,
-  LOGOUT_PATH,
+  credentialProblem,
+  MAXIMUM_USERNAME_LENGTH,
   MINIMUM_PASSWORD_LENGTH,
-  mountAdmin,
-  SETUP_PATH,
-} from './routes.ts';
+  passwordProblem,
+  USERNAME_PATTERN,
+  usernameProblem,
+} from './credentials.ts';
+export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from './passwords.ts';
+export { guard, LOGIN_PATH, LOGOUT_PATH, mountAdmin, SETUP_PATH } from './routes.ts';
 export {
   ADMIN_PREFIX,
   clearSessionCookie,
