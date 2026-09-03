@@ -492,8 +492,10 @@ The bumps are the pre-1.0 rules of decision-7, configured in
 `release-please-config.json`: `fix` takes a patch, `feat` takes a minor, and
 `bump-minor-pre-major` keeps a breaking change on a minor until the package
 reaches 1.0. `bump-patch-for-minor-pre-major` is off, so a feature really is a
-minor. `include-component-in-tag` is off too, because there is only one package
-to tag, so tags read `v0.2.0` rather than `@geekity/cms-v0.2.0`.
+minor. `initial-version` is `0.1.0`, because release-please otherwise starts a
+package with no prior tag at 1.0.0 whatever the pre-major rules say.
+`include-component-in-tag` is off too, because there is only one package to
+tag, so tags read `v0.2.0` rather than `@geekity/cms-v0.2.0`.
 
 `.release-please-manifest.json` is the current released version of each tracked
 package and must agree with `packages/cms/package.json`. release-please writes
