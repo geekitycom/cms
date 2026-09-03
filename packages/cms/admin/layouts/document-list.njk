@@ -26,6 +26,8 @@
           {% endif %}
           {% if kind.dated %}
             <th scope="col">Date</th>
+          {% else %}
+            <th scope="col">Updated</th>
           {% endif %}
           <th scope="col">Status</th>
           <th scope="col">Actions</th>
@@ -41,6 +43,8 @@
             {% endif %}
             {% if kind.dated %}
               <td>{{ document.date | date('html') }}</td>
+            {% else %}
+              <td>{{ document.updated | date('html') }}</td>
             {% endif %}
             <td>
               {% if document.trashed %}

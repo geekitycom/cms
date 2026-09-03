@@ -39,7 +39,22 @@ export interface DocumentKind {
   dated: boolean;
   /** Whether a document of this kind carries tags. */
   tagged: boolean;
+  /**
+   * Whether the editor offers the `eleventyExcludeFromCollections` flag. doc-2
+   * mirrors it for pages that should not list; a post is in the archive by
+   * definition and has no use for it.
+   */
+  excludable: boolean;
 }
+
+/**
+ * The Eleventy key that keeps a document out of every collection.
+ *
+ * The CMS does not model it — it is not in `KNOWN_FRONT_MATTER_KEYS` — so the
+ * parser leaves it in {@link Document.extra} and the editor reads and writes it
+ * there, alongside every other key somebody added by hand.
+ */
+export const EXCLUDE_KEY = 'eleventyExcludeFromCollections';
 
 /** The posts screens: dated, tagged, filed under `posts/`. */
 export const POST_KIND: DocumentKind = {
@@ -50,6 +65,7 @@ export const POST_KIND: DocumentKind = {
   plural: 'Posts',
   dated: true,
   tagged: true,
+  excludable: false,
 };
 
 /** The pages screens: standing content, no date prefix and no taxonomy. */
@@ -61,6 +77,7 @@ export const PAGE_KIND: DocumentKind = {
   plural: 'Pages',
   dated: false,
   tagged: false,
+  excludable: true,
 };
 
 /** The URL of the editor for one document. */
@@ -227,6 +244,7 @@ async function saveFromForm(
     tags: text(body['tags']).trim(),
     description: text(body['description']).trim(),
     draft: body['draft'] !== undefined,
+    exclude: body['exclude'] !== undefined,
     body: normalizeBody(text(body['body'])),
     hash: text(body['hash']),
   };
@@ -288,9 +306,7 @@ async function saveFromForm(
     ...(form.description === '' ? {} : { description: form.description }),
     ...optional('author', document?.author ?? currentUsername(c)),
     ...optional('activitypub', document?.activitypub),
-    // Front matter the CMS does not model is carried through untouched, so a
-    // key somebody added by hand survives every admin save (doc-2).
-    extra: document?.extra ?? {},
+    extra: resolveExtra(kind, document, form.exclude),
     body: form.body,
   };
 
@@ -389,6 +405,30 @@ function normalizePermalink(value: string): string | undefined {
   return `${withLeading}/`;
 }
 
+/**
+ * The front matter to write that the CMS does not model.
+ *
+ * What the file already carried comes back out untouched, so a key somebody
+ * added by hand survives every admin save (doc-2). The one such key the editor
+ * has a field for is `eleventyExcludeFromCollections`: ticking the box writes
+ * it, and clearing the box takes the key back out rather than leaving a
+ * `false` behind — unless the file spelled the key out itself, in which case
+ * the `false` is written, because a key somebody wrote by hand is not the
+ * editor's to delete.
+ */
+function resolveExtra(
+  kind: DocumentKind,
+  document: Document | undefined,
+  exclude: boolean,
+): Record<string, unknown> {
+  const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
+  if (!kind.excludable) return extra;
+
+  if (exclude) extra[EXCLUDE_KEY] = true;
+  else if (EXCLUDE_KEY in extra) extra[EXCLUDE_KEY] = false;
+  return extra;
+}
+
 /** A comma-separated tag field as a list, without the blanks and the repeats. */
 export function splitTags(value: string): string[] {
   const tags: string[] = [];
@@ -477,7 +517,7 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     ...(form.description === '' ? {} : { description: form.description }),
     ...optional('author', document.author),
     ...optional('activitypub', document.activitypub),
-    extra: document.extra,
+    extra: resolveExtra(kind, document, form.exclude),
     body: form.body,
   });
 
@@ -601,6 +641,8 @@ export interface EditorForm {
   tags: string;
   description: string;
   draft: boolean;
+  /** Whether `eleventyExcludeFromCollections` is set. Pages only. */
+  exclude: boolean;
   body: string;
   /** The hash of the file the form was filled in from; empty for a new one. */
   hash: string;
@@ -616,6 +658,7 @@ export function blankForm(kind: DocumentKind): EditorForm {
     tags: '',
     description: '',
     draft: false,
+    exclude: false,
     body: '',
     hash: '',
   };
@@ -631,6 +674,7 @@ export function formFor(document: Document): EditorForm {
     tags: document.tags.join(', '),
     description: document.description ?? '',
     draft: document.draft,
+    exclude: document.extra[EXCLUDE_KEY] === true,
     body: document.body,
     hash: document.hash,
   };
@@ -726,6 +770,8 @@ export interface DocumentRow {
   author: string | undefined;
   tags: string;
   date: string | undefined;
+  /** The most recent change to the document, for a kind with no publish date. */
+  updated: string | undefined;
   draft: boolean;
   trashed: boolean;
   /** Where the editor for it lives. */
@@ -742,6 +788,10 @@ function listRow(kind: DocumentKind, document: Document): DocumentRow {
     author: document.author,
     tags: document.tags.join(', '),
     date: document.date,
+    // Both come out of the index, so the listing costs no reads of its own.
+    // A page that has never been saved through the admin has no `updated`, and
+    // its date, when it has one, is the closest thing to one.
+    updated: document.updated ?? document.date,
     draft: document.draft,
     trashed: isTrashedPath(document.path),
     editUrl: editorPath(kind, document.slug),
