@@ -1,0 +1,49 @@
+{# A save that was refused because the file changed after the form loaded.
+   Nothing has been written. Both versions are here in full so the decision is
+   made by somebody who has seen them, not by whoever saved last. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}Conflicting edit{% endblock %}
+
+{% block content %}
+  <h1>This {{ kind.singular }} changed while you were editing it</h1>
+
+  <p class="admin-error">
+    Nothing has been saved. The file on disk is not the one this form was filled in
+    from — somebody else, or something else, has written to it.
+  </p>
+
+  <div class="admin-conflict">
+    <section>
+      <h2>Your version</h2>
+      <textarea readonly rows="20" aria-label="The version you submitted">{{ submitted }}</textarea>
+    </section>
+
+    <section>
+      <h2>The version on disk</h2>
+      <textarea readonly rows="20" aria-label="The version on disk">{{ current }}</textarea>
+    </section>
+  </div>
+
+  <p class="admin-conflict-actions">
+    <a class="admin-button admin-button-quiet" href="{{ editUrl }}">Discard mine and edit the file on disk</a>
+  </p>
+
+  {# Everything the refused form carried, with the hash the file has now. One
+     click is then a deliberate overwrite of a version its author has read. #}
+  <form method="post" action="{{ saveUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    <input type="hidden" name="hash" value="{{ freshHash }}" />
+    <input type="hidden" name="title" value="{{ form.title }}" />
+    <input type="hidden" name="slug" value="{{ form.slug }}" />
+    <input type="hidden" name="permalink" value="{{ form.permalink }}" />
+    <input type="hidden" name="date" value="{{ form.date }}" />
+    <input type="hidden" name="tags" value="{{ form.tags }}" />
+    <input type="hidden" name="description" value="{{ form.description }}" />
+    {% if form.draft %}
+      <input type="hidden" name="draft" value="1" />
+    {% endif %}
+    <textarea class="admin-hidden-field" name="body" aria-hidden="true" tabindex="-1">{{ form.body }}</textarea>
+    <button type="submit" name="action" value="{{ action }}">Keep mine and overwrite the file</button>
+  </form>
+{% endblock %}

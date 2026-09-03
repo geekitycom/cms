@@ -7,6 +7,7 @@ import { normalizeBody } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';
+import { editorPath, mountDocumentScreens, POST_KIND } from './documents.ts';
 import { flash, takeFlash } from './flash.ts';
 import {
   ADMIN_PREFIX,
@@ -59,9 +60,9 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
 /** How many recent posts the dashboard lists. */
 export const DASHBOARD_RECENT_POSTS = 5;
 
-/** Where the editor for a post lives. TASK-11 builds what is behind it. */
+/** Where the editor for a post lives. */
 export function postEditorPath(slug: string): string {
-  return `${ADMIN_PREFIX}/posts/${encodeURIComponent(slug)}`;
+  return editorPath(POST_KIND, slug);
 }
 
 /**
@@ -253,28 +254,27 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return c.redirect(postEditorPath(document.slug), 303);
   });
 
+  // The listing and the editor, for posts. Pages are the same call with
+  // PAGE_KIND once TASK-12 replaces their placeholder.
+  mountDocumentScreens(app, { kind: POST_KIND, render });
+
   // The sections doc-5 lists but no task has built yet. They are registered so
   // the navigation goes somewhere: a link that 404s reads as a broken admin,
   // and the guard already keeps strangers out of all of them.
   for (const item of ADMIN_SECTIONS) {
-    if (item.section === 'dashboard') continue;
+    if (item.section === 'dashboard' || item.section === POST_KIND.section) continue;
     app.get(item.url, (c) =>
       render(c, ADMIN_TEMPLATES.placeholder, { section: item.section, heading: item.label }),
     );
   }
 
-  for (const [section, noun] of [
-    ['posts', 'post'],
-    ['pages', 'page'],
-  ] as const) {
-    app.get(`${ADMIN_PREFIX}/${section}/:slug`, (c) =>
-      render(c, ADMIN_TEMPLATES.placeholder, {
-        section,
-        heading: `Edit ${noun}`,
-        slug: c.req.param('slug'),
-      }),
-    );
-  }
+  app.get(`${ADMIN_PREFIX}/pages/:slug`, (c) =>
+    render(c, ADMIN_TEMPLATES.placeholder, {
+      section: 'pages',
+      heading: 'Edit page',
+      slug: c.req.param('slug'),
+    }),
+  );
 
   // `/admin/` is the same screen as `/admin`, and only one of them is the URL.
   app.get(`${ADMIN_PREFIX}/`, (c) => c.redirect(ADMIN_PREFIX, 301));

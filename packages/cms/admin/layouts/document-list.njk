@@ -1,0 +1,88 @@
+{# The listing behind /admin/posts and /admin/pages. One template for both:
+   `kind` says which, and whether the table has a date column and a tag one. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ kind.plural }}{% endblock %}
+
+{% block content %}
+  <h1>{{ kind.plural }} <a class="admin-button admin-button-small" href="{{ newUrl }}">Add new</a></h1>
+
+  <ul class="admin-filters">
+    {% for entry in filters %}
+      <li>
+        <a href="{{ entry.url }}"{% if entry.current %} aria-current="true"{% endif %}>{{ entry.label }}</a>
+      </li>
+    {% endfor %}
+  </ul>
+
+  {% if documents.length %}
+    <table class="admin-list">
+      <thead>
+        <tr>
+          <th scope="col">Title</th>
+          <th scope="col">Author</th>
+          {% if kind.tagged %}
+            <th scope="col">Tags</th>
+          {% endif %}
+          {% if kind.dated %}
+            <th scope="col">Date</th>
+          {% endif %}
+          <th scope="col">Status</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for document in documents %}
+          <tr>
+            <td><a href="{{ document.editUrl }}">{{ document.title }}</a></td>
+            <td>{{ document.author }}</td>
+            {% if kind.tagged %}
+              <td>{{ document.tags }}</td>
+            {% endif %}
+            {% if kind.dated %}
+              <td>{{ document.date | date('html') }}</td>
+            {% endif %}
+            <td>
+              {% if document.trashed %}
+                <span class="admin-status admin-status-trashed">Trash</span>
+              {% elif document.draft %}
+                <span class="admin-status admin-status-draft">Draft</span>
+              {% else %}
+                <span class="admin-status">Published</span>
+              {% endif %}
+            </td>
+            <td class="admin-actions">
+              <a href="{{ document.editUrl }}">Edit</a>
+              <form method="post" action="{{ document.editUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="return" value="{{ returnUrl }}" />
+                {% if document.trashed %}
+                  <button type="submit" name="action" value="restore">Restore</button>
+                {% else %}
+                  <button type="submit" name="action" value="trash">Move to trash</button>
+                {% endif %}
+              </form>
+              {% if document.viewUrl %}
+                <a href="{{ document.viewUrl }}">View</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if previousUrl or nextUrl %}
+      <nav class="admin-pagination" aria-label="Pages">
+        {% if previousUrl %}
+          <a rel="prev" href="{{ previousUrl }}">Newer</a>
+        {% endif %}
+        <span>Page {{ page }}</span>
+        {% if nextUrl %}
+          <a rel="next" href="{{ nextUrl }}">Older</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  {% else %}
+    <p class="admin-empty">Nothing here.</p>
+  {% endif %}
+{% endblock %}
