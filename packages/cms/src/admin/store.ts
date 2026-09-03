@@ -127,6 +127,23 @@ export interface AdminStore {
   getSession(id: string, now?: Date): Session | undefined;
   /** Delete a session. Returns `false` when there was nothing to delete. */
   deleteSession(id: string): boolean;
+  /**
+   * How many settings are stored. Zero on a site that has never saved the
+   * settings form, which is what decides whether to seed from
+   * `content/_data/site.json`.
+   */
+  countSettings(): number;
+  /**
+   * Every stored setting, by key. The store keeps no opinion about what the
+   * keys mean or what they are worth; `readSiteSettings` in `settings.ts` is
+   * what turns them into a typed shape with defaults.
+   */
+  allSettings(): Record<string, string>;
+  /**
+   * Write settings, in one transaction, leaving keys not named alone. An
+   * existing key is replaced.
+   */
+  setSettings(values: Record<string, string>): void;
   /** Delete every expired session. Returns how many went. */
   pruneSessions(now?: Date): number;
   /**
@@ -188,6 +205,12 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     pruneSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
     readFlash: db.prepare('SELECT flash FROM sessions WHERE id = ?'),
     writeFlash: db.prepare('UPDATE sessions SET flash = ? WHERE id = ?'),
+    countSettings: db.prepare('SELECT COUNT(*) AS count FROM settings'),
+    allSettings: db.prepare('SELECT key, value FROM settings'),
+    putSetting: db.prepare(`
+      INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `),
   };
 
   let open = true;
@@ -319,6 +342,35 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return Number(statements.pruneSessions.run(now.toISOString()).changes);
     },
 
+    countSettings() {
+      const row = statements.countSettings.get() as Record<string, unknown> | undefined;
+      return Number(row?.['count'] ?? 0);
+    },
+
+    allSettings() {
+      const settings: Record<string, string> = {};
+      for (const row of statements.allSettings.all() as Record<string, unknown>[]) {
+        settings[String(row['key'])] = String(row['value']);
+      }
+      return settings;
+    },
+
+    setSettings(values) {
+      const updatedAt = new Date().toISOString();
+      // One transaction, so a save that fails half way through leaves the
+      // stored settings as they were rather than as a mixture of two versions.
+      db.exec('BEGIN');
+      try {
+        for (const [key, value] of Object.entries(values)) {
+          statements.putSetting.run(key, value, updatedAt);
+        }
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
+
     pushFlash(sessionId, entry) {
       const queued = [...readFlash(sessionId), entry];
       statements.writeFlash.run(JSON.stringify(queued), sessionId);
@@ -415,6 +467,20 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
     // and so they go when the session does.
     version: 2,
     sql: `ALTER TABLE sessions ADD COLUMN flash TEXT`,
+  },
+  {
+    // Site settings: doc-1's "data that lives only in SQLite", mirrored to
+    // content/_data/site.json on every save. Key and value rather than one
+    // row per site, so the federation settings M3 adds cost a row rather than
+    // a migration each.
+    version: 3,
+    sql: `
+      CREATE TABLE settings (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `,
   },
 ];
 

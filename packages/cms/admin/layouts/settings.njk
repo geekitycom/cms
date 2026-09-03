@@ -1,0 +1,74 @@
+{# /admin/settings: the values doc-5 lists, stored in SQLite and mirrored to
+   content/_data/site.json on every save. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+  <h1>Settings</h1>
+
+  {% if problems.title or problems.tagline or problems.baseUrl or problems.timezone or problems.postsPerPage or problems.author or problems.actorHandle or problems.actorType %}
+    <p class="admin-error">Nothing was saved. Fix the fields marked below and try again.</p>
+  {% endif %}
+
+  <form class="admin-settings" method="post" action="{{ settingsUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+    <h2>Site</h2>
+
+    <label for="settings-title">Title</label>
+    <input id="settings-title" name="{{ fields.title }}" type="text" value="{{ form.title }}" required autofocus />
+    {% if problems.title %}<p class="admin-field-error">{{ problems.title }}</p>{% endif %}
+
+    <label for="settings-tagline">Tagline</label>
+    <input id="settings-tagline" name="{{ fields.tagline }}" type="text" value="{{ form.tagline }}" />
+    <p class="admin-hint">One line, shown under the title and used as the feed subtitle.</p>
+
+    <label for="settings-author">Author</label>
+    <input id="settings-author" name="{{ fields.author }}" type="text" value="{{ form.author }}" />
+    <p class="admin-hint">The name on the feeds.</p>
+
+    <label for="settings-base-url">Base URL</label>
+    <input
+      id="settings-base-url"
+      name="{{ fields.baseUrl }}"
+      type="text"
+      value="{{ form.baseUrl }}"
+      inputmode="url"
+      {% if baseUrlOverridden %}readonly disabled{% endif %}
+    />
+    {% if problems.baseUrl %}<p class="admin-field-error">{{ problems.baseUrl }}</p>{% endif %}
+    <p class="admin-hint">
+      In effect: <code>{{ baseUrlInEffect }}</code>. {{ baseUrlNote }}
+    </p>
+
+    <label for="settings-timezone">Time zone</label>
+    <input id="settings-timezone" name="{{ fields.timezone }}" type="text" value="{{ form.timezone }}" required />
+    {% if problems.timezone %}<p class="admin-field-error">{{ problems.timezone }}</p>{% endif %}
+    <p class="admin-hint">An IANA name, such as <code>Europe/London</code> or <code>UTC</code>.</p>
+
+    <label for="settings-posts-per-page">Posts per page</label>
+    <input id="settings-posts-per-page" name="{{ fields.postsPerPage }}" type="text" inputmode="numeric" value="{{ form.postsPerPage }}" required />
+    {% if problems.postsPerPage %}<p class="admin-field-error">{{ problems.postsPerPage }}</p>{% endif %}
+
+    <h2>Federation</h2>
+
+    <label for="settings-actor-handle">Actor handle</label>
+    <input id="settings-actor-handle" name="{{ fields.actorHandle }}" type="text" value="{{ form.actorHandle }}" required />
+    {% if problems.actorHandle %}<p class="admin-field-error">{{ problems.actorHandle }}</p>{% endif %}
+    <p class="admin-hint">The local part of the site's handle: <code>@{{ form.actorHandle }}@…</code>.</p>
+
+    <label for="settings-actor-type">Actor type</label>
+    <select id="settings-actor-type" name="{{ fields.actorType }}">
+      {% for type in actorTypes %}
+        <option value="{{ type }}"{% if type == form.actorType %} selected{% endif %}>{{ type }}</option>
+      {% endfor %}
+    </select>
+    {% if problems.actorType %}<p class="admin-field-error">{{ problems.actorType }}</p>{% endif %}
+    <p class="admin-hint">Some clients hide <code>Service</code> actors from timelines; <code>Person</code> is the safer default.</p>
+
+    <p class="admin-settings-buttons">
+      <button type="submit">Save settings</button>
+    </p>
+  </form>
+{% endblock %}

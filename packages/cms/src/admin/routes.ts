@@ -10,6 +10,7 @@ import { credentialProblem } from './credentials.ts';
 import { editorPath, mountDocumentScreens, PAGE_KIND, POST_KIND } from './documents.ts';
 import { flash, takeFlash } from './flash.ts';
 import { mountPreview } from './preview.ts';
+import { mountSettings } from './settings.ts';
 import {
   ADMIN_PREFIX,
   clearSessionCookie,
@@ -272,7 +273,11 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountPreview(app);
   mountUploads(app);
 
-  const built = new Set([POST_KIND.section, PAGE_KIND.section, 'dashboard']);
+  // The site's own settings: SQLite is the source, content/_data/site.json is
+  // the mirror an Eleventy build of the same content reads.
+  mountSettings(app, { render });
+
+  const built = new Set([POST_KIND.section, PAGE_KIND.section, 'dashboard', 'settings']);
 
   // The sections doc-5 lists but no task has built yet. They are registered so
   // the navigation goes somewhere: a link that 404s reads as a broken admin,

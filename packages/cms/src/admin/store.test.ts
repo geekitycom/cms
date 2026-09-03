@@ -199,3 +199,22 @@ describe('flash messages', () => {
     assert.deepEqual(admin.takeFlash('nonexistent'), []);
   });
 });
+
+describe('settings', () => {
+  it('starts empty, which is what puts a boot into seeding', async () => {
+    const admin = await store();
+
+    assert.equal(admin.countSettings(), 0);
+    assert.deepEqual(admin.allSettings(), {});
+  });
+
+  it('writes, replaces and leaves untouched keys alone', async () => {
+    const admin = await store();
+
+    admin.setSettings({ title: 'First', tagline: 'A tagline' });
+    admin.setSettings({ title: 'Second' });
+
+    assert.deepEqual(admin.allSettings(), { title: 'Second', tagline: 'A tagline' });
+    assert.equal(admin.countSettings(), 2);
+  });
+});

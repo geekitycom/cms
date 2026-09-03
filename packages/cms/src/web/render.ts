@@ -3,7 +3,7 @@ import type { Environment } from 'nunjucks';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { createSiteDataSource, documentContext, postsPerPage } from './context.ts';
-import type { DocumentContext, SiteData } from './context.ts';
+import type { DocumentContext, SiteData, SiteSettingsSource } from './context.ts';
 import type { Pagination } from './pagination.ts';
 import { createTemplateEnvironment } from './templates.ts';
 
@@ -61,6 +61,12 @@ export interface Renderer {
 export interface CreateRendererOptions {
   /** Config after defaults, for the theme directory, base URL and content directory. */
   config: ResolvedConfig;
+  /**
+   * The admin's stored settings, which win over `content/_data/site.json` for
+   * the values the settings screen manages. Absent for a renderer built
+   * without an admin store, which then reads the file alone.
+   */
+  settings?: SiteSettingsSource | undefined;
 }
 
 /**
@@ -77,7 +83,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     baseUrl: config.baseUrl,
     noCache: config.watch,
   });
-  const siteData = createSiteDataSource(config);
+  const siteData = createSiteDataSource(config, { settings: options.settings });
 
   function render(template: string, context: Record<string, unknown> = {}): string {
     const site = siteData.read();

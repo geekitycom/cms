@@ -154,6 +154,15 @@ would be a stored cross-site scripting hole in the site's own pages.
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site.
 
+`baseUrl` is the one field the admin's [settings screen](#site-settings) also
+offers. A `GEEKITY_BASE_URL` or a `baseUrl` in the config file wins: a base URL
+is a deployment fact — it decides the absolute URLs in the feeds, the
+ActivityPub ids and whether the session cookie is `Secure` — so a host that
+names one is not overridden from a form. When neither names one, the stored
+setting is used instead of the `http://localhost:<port>` fallback, and the
+settings form is where it is edited. The form always says which value is in
+effect and, when it is not the stored one, why.
+
 ## Using the package
 
 ```ts
@@ -377,6 +386,47 @@ big gets a 413 and one of the wrong type a 415, both as JSON. See
 
 Both endpoints are behind the admin's guard and need the session's CSRF token,
 like every other POST in the admin.
+
+## Site settings
+
+`/admin/settings` holds the values doc-1 keeps only in SQLite: title, tagline,
+base URL, time zone, posts per page, and the ActivityPub actor handle and type.
+They live in a `settings` table of key and value, alongside the users and
+sessions in the same database file, and they are the half of it that is not
+derived from the content directory.
+
+**SQLite is the source; `content/_data/site.json` is the mirror.** On the first
+boot that finds the settings table empty, it is seeded from
+`content/_data/site.json` if that file exists, so a site that predates this
+screen — or one `geekity init` has just written — comes up with the values it
+already had. After that the file is no longer read for those keys: every save
+writes SQLite and then rewrites the public subset of the file, through a
+temporary file and a rename, so an Eleventy build of the same content directory
+renders with the same values and never sees a half-written file. A hand edit of
+the file after that point is overwritten by the next save.
+
+The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage` and
+`timezone`, and every other key it already had is kept — a site may put
+anything in there, `feedSize` included, and reach it from its templates. The
+theme reads the settings on top of the file, so a saved title is on the public
+site and in the feeds on the very next request rather than when the file's
+modification time is next noticed.
+
+Nothing is written until every field is valid, and a form with a problem comes
+back with a 400 and one message under each field that has one:
+
+| Field          | Has to be                                                                          |
+| -------------- | ---------------------------------------------------------------------------------- |
+| Title          | Not empty.                                                                         |
+| Base URL       | An absolute `http://` or `https://` URL. See [Configuration](#configuration).      |
+| Time zone      | An IANA zone name `Intl` knows, such as `Europe/London`.                           |
+| Posts per page | A whole number of one or more. It is what the home page and tag archives page by.  |
+| Actor handle   | 1 to 64 letters, digits, dashes or underscores — the local part of `@handle@host`. |
+| Actor type     | One of `Person`, `Organization`, `Service`, `Group` or `Application`.              |
+
+The actor handle and type are stored but not yet used; federation reads them in
+milestone 3. `Person` is the default because some clients hide `Service` actors
+from timelines.
 
 ## The theme
 
