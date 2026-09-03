@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-02 13:25'
-updated_date: '2026-09-03 22:33'
+updated_date: '2026-09-03 23:17'
 labels:
   - federation
 milestone: m-2
@@ -25,7 +25,7 @@ Script npm run fed:smoke that starts the server on a temporary port with a fixtu
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 npm run fed:smoke passes locally and in CI
+- [x] #1 npm run fed:smoke passes locally and in CI
 - [x] #2 README section describes testing federation with fedify tunnel and a Mastodon account
 <!-- AC:END -->
 
@@ -109,6 +109,8 @@ The CI workflow was checked by loading it with js-yaml: it parses, and `jobs` no
 ## On acceptance criterion 1
 
 Half of it is proved and half of it cannot be, from here. `pnpm fed:smoke` passes locally — run four times, exit 0 each time, output pasted above. The CI half is a `fed-smoke` job added to `.github/workflows/ci.yml`; the workflow parses (checked with js-yaml) and the job runs the same `pnpm fed:smoke` behind the same `setup-workspace` action every other job uses, but no run has happened, so criterion 1 is left unchecked until the pull request goes green. Nothing in the script needs the network or a TTY, which is what would most plausibly differ on a runner.
+
+CI: the fed-smoke job passed on PR #12 (run 33816337099), so AC 1 is now proven locally and in CI.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
