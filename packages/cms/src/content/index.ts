@@ -14,7 +14,12 @@ export { contentFilePath, freeSlug, saveDocument } from './save.ts';
 export type { ContentFilePathInput, FreeSlugOptions, SaveDocumentOptions } from './save.ts';
 export { defaultPermalink, slugify } from './slug.ts';
 export type { DefaultPermalinkInput } from './slug.ts';
-export { documentFrontMatter, normalizeBody, serializeDocument } from './writer.ts';
+export {
+  documentContent,
+  documentFrontMatter,
+  normalizeBody,
+  serializeDocument,
+} from './writer.ts';
 export {
   DATABASE_FILE,
   dateSortKey,

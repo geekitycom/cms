@@ -1,14 +1,25 @@
 export { ACTOR_CLASSES, actorClassFor, AVATAR_SETTING, siteActor } from './actor.ts';
 export type { SiteActorOptions } from './actor.ts';
 export {
+  articleObjectId,
   isFederatedDocument,
   postArticle,
   postCreateActivity,
+  postDeleteActivity,
+  postUpdateActivity,
   SOURCE_MEDIA_TYPE,
   toInstant,
 } from './article.ts';
+export { createDeliveryService, groupByInbox } from './delivery.ts';
+export type {
+  CreateDeliveryServiceOptions,
+  DeliveryLogger,
+  DeliveryReport,
+  DeliveryService,
+} from './delivery.ts';
 export {
   createSiteFederation,
+  federatedObject,
   federatedPost,
   OUTBOX_PAGE_SIZE,
   SOFTWARE_NAME,
@@ -38,6 +49,7 @@ export { mountFederation } from './mount.ts';
 export {
   ACTOR_PATH,
   createActivityId,
+  deleteActivityId,
   FEDERATION_PREFIX,
   federationOrigin,
   FOLLOWERS_PATH,
@@ -49,4 +61,5 @@ export {
   postObjectId,
   postObjectPath,
   SHARED_INBOX_PATH,
+  updateActivityId,
 } from './paths.ts';

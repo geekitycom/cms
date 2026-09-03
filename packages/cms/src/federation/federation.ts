@@ -23,6 +23,7 @@ import {
   NODEINFO_PATH,
   OUTBOX_PATH,
   POST_OBJECT_PATH,
+  postObjectId,
   SHARED_INBOX_PATH,
 } from './paths.ts';
 
@@ -119,7 +120,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
   // dispatcher is the only thing that decides whether an object exists, so it
   // cannot disagree with the outbox about it.
   federation.setObjectDispatcher(Article, POST_OBJECT_PATH, (context, values) => {
-    const document = federatedPost(context.data.store, values.slug);
+    const document = federatedObject(context.data.store, values.slug, context.data.config.baseUrl);
     return document === undefined ? null : postArticle(context, document);
   });
 
@@ -206,6 +207,34 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
 export function federatedPost(store: ContentStore, slug: string): Document | undefined {
   const document = store.getBySlug(slug);
   return document !== undefined && isFederatedDocument(document) ? document : undefined;
+}
+
+/**
+ * The post whose ActivityStreams object is served at `/ap/posts/{slug}`.
+ *
+ * Nearly always the post with that slug. The exception is a post renamed after
+ * it was announced: it keeps the id its old slug minted, written into
+ * `activitypub.id` (doc-4), so the old URL has to keep answering or every
+ * follower's copy points at a 404. That case is found by searching the
+ * archive for the post holding the id, which is a walk rather than an index
+ * lookup — the front matter is the source of truth (decision-1) and the index
+ * has no column for it — but it is only reached when the slug itself does not
+ * answer.
+ */
+export function federatedObject(
+  store: ContentStore,
+  slug: string,
+  baseUrl: string,
+): Document | undefined {
+  const objectId = postObjectId(slug, baseUrl);
+  const direct = federatedPost(store, slug);
+
+  if (direct !== undefined) {
+    const stored = direct.activitypub?.id;
+    if (stored === undefined || stored === objectId) return direct;
+  }
+
+  return store.listPosts().find((post) => post.activitypub?.id === objectId);
 }
 
 /**

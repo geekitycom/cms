@@ -15,14 +15,19 @@ import type { DocumentChangeHook, GeekityConfig, ResolvedConfig } from './config
 import { createContentSync, openContentStore } from './content/index.ts';
 import type { ContentEvents, ContentEventMap, ContentStore, SyncResult } from './content/index.ts';
 import type { GeekityEnv } from './env.ts';
-import { createSiteFederation, mountFederation } from './federation/index.ts';
-import type { SiteFederation } from './federation/index.ts';
+import {
+  createDeliveryService,
+  createSiteFederation,
+  mountFederation,
+} from './federation/index.ts';
+import type { DeliveryService, SiteFederation } from './federation/index.ts';
 import { createRenderer, mountPublicSite } from './web/index.ts';
 
 export {
   ACTOR_HANDLE_PATTERN,
   ACTOR_KEY_ALGORITHMS,
   ACTOR_TYPES,
+  DELIVERY_STATUSES,
   ADMIN_ASSET_MAX_AGE,
   ADMIN_ASSET_PREFIX,
   ADMIN_PREFIX,
@@ -123,6 +128,8 @@ export type {
   CreateAdminTemplateEnvironmentOptions,
   CreateSessionInput,
   CreateUserInput,
+  Delivery,
+  DeliveryStatus,
   DocumentFilter,
   DocumentKind,
   DocumentRow,
@@ -136,9 +143,12 @@ export type {
   MountSettingsOptions,
   MountUsersOptions,
   NewActorKey,
+  NewDelivery,
   NewFollower,
   NewInboxActivity,
+  NewOutboundActivity,
   OpenAdminStoreOptions,
+  OutboundActivity,
   Session,
   SettingsForm,
   SettingsProblems,
@@ -172,6 +182,7 @@ export {
   dateSortKey,
   DEFAULT_DEBOUNCE_MS,
   defaultPermalink,
+  documentContent,
   documentFrontMatter,
   freeSlug,
   DuplicatePermalinkError,
@@ -229,9 +240,13 @@ export {
   ACTOR_CLASSES,
   ACTOR_PATH,
   actorClassFor,
+  articleObjectId,
   AVATAR_SETTING,
   createActivityId,
+  createDeliveryService,
   createSiteFederation,
+  deleteActivityId,
+  federatedObject,
   federatedPost,
   FEDERATION_PREFIX,
   federationOrigin,
@@ -241,6 +256,7 @@ export {
   FOLLOWERS_PATH,
   followersPage,
   FOLLOWING_PATH,
+  groupByInbox,
   handleDelete,
   handleFollow,
   handleLoggedActivity,
@@ -257,17 +273,24 @@ export {
   POST_OBJECT_PATH,
   postArticle,
   postCreateActivity,
+  postDeleteActivity,
   postObjectId,
   postObjectPath,
+  postUpdateActivity,
   SHARED_INBOX_PATH,
   SITE_ACTOR_IDENTIFIER,
   siteActor,
   SOFTWARE_NAME,
   SOURCE_MEDIA_TYPE,
   toInstant,
+  updateActivityId,
 } from './federation/index.ts';
 export type {
+  CreateDeliveryServiceOptions,
   CreateSiteFederationOptions,
+  DeliveryLogger,
+  DeliveryReport,
+  DeliveryService,
   FederationContextData,
   SiteActorOptions,
   SiteFederation,
@@ -403,6 +426,15 @@ export interface Cms {
    */
   readonly federation: SiteFederation;
   /**
+   * Outbound ActivityPub delivery: what sends a post to the followers when it
+   * is published, edited or withdrawn, and what an admin screen calls to send
+   * a recorded activity again.
+   *
+   * It is already subscribed to the index; a site only reaches for it to
+   * redeliver, or to wait for the deliveries in flight.
+   */
+  readonly delivery: DeliveryService;
+  /**
    * Index changes, as they happen: `created`, `updated`, `deleted`,
    * `published`, `unpublished` and the catch-all `change`. Every listener is
    * handed the document before and after the change.
@@ -415,7 +447,7 @@ export interface Cms {
    *
    * The boot scan reports a cold index as a directory full of creations, so a
    * hook that must not re-fire on a rebuilt index should check
-   * `change.origin === 'watch'`.
+   * `change.origin !== 'scan'`.
    */
   onDocumentChange(hook: DocumentChangeHook): () => void;
   /**
@@ -484,6 +516,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('admin', admin);
     c.set('config', resolved);
     c.set('renderer', renderer);
+    c.set('announce', (change) => content.announce(change));
     await next();
   });
 
@@ -495,6 +528,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // in its not-found handler.
   const federation = createSiteFederation({ baseUrl: resolved.baseUrl, ...resolved.federation });
   mountFederation(app, federation);
+
+  // Federation listens to the index rather than to the admin, so a post edited
+  // on disk federates exactly as one saved through the editor does (doc-4).
+  const delivery = createDeliveryService({ federation, admin, store, config: resolved });
+  content.events.on('change', (change) => delivery.handle(change));
 
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);
@@ -532,6 +570,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     store,
     admin,
     federation,
+    delivery,
     events: content.events,
 
     onDocumentChange(hook) {
@@ -566,6 +605,9 @@ export function createCms(config: GeekityConfig = {}): Cms {
       const running = server;
       server = undefined;
       await content.stop();
+      // Anything already on its way out is allowed to finish, so closing never
+      // leaves a delivery half recorded.
+      await delivery.settled();
 
       if (running !== undefined) {
         await new Promise<void>((resolve, reject) => {

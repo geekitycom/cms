@@ -5,7 +5,13 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { DuplicateUsernameError, openAdminStore } from './store.ts';
-import type { AdminStore, NewFollower, NewInboxActivity } from './store.ts';
+import type {
+  AdminStore,
+  NewDelivery,
+  NewFollower,
+  NewInboxActivity,
+  NewOutboundActivity,
+} from './store.ts';
 
 const temporaryDirs: string[] = [];
 const openStores: AdminStore[] = [];
@@ -543,5 +549,115 @@ describe('the inbound activity log', () => {
       admin.listInboxActivities({ limit: 1, offset: 2 }).map((entry) => entry.activityId),
       ['https://remote.example/likes/0'],
     );
+  });
+});
+
+describe('the delivery log', () => {
+  const ACTIVITY_ID = 'https://blog.example/ap/posts/hello#create';
+
+  /** One activity on its way out, with the columns a redelivery needs. */
+  function announcement(overrides: Partial<NewOutboundActivity> = {}): NewOutboundActivity {
+    return {
+      activityId: ACTIVITY_ID,
+      activityType: 'Create',
+      objectId: 'https://blog.example/ap/posts/hello',
+      slug: 'hello',
+      json: '{"type":"Create"}',
+      ...overrides,
+    };
+  }
+
+  /** One follower's outcome for that activity. */
+  function outcome(overrides: Partial<NewDelivery> = {}): NewDelivery {
+    return {
+      activityId: ACTIVITY_ID,
+      actorId: 'https://remote.example/users/ada',
+      inboxId: 'https://remote.example/inbox',
+      status: 'sent',
+      error: null,
+      ...overrides,
+    };
+  }
+
+  it('starts empty', async () => {
+    const admin = await store();
+
+    assert.equal(admin.countOutboundActivities(), 0);
+    assert.deepEqual(admin.listOutboundActivities(), []);
+    assert.equal(admin.getOutboundActivity(ACTIVITY_ID), undefined);
+  });
+
+  it('keeps the activity whole, so it can be sent again', async () => {
+    const admin = await store();
+
+    const recorded = admin.putOutboundActivity(announcement());
+
+    assert.equal(recorded.activityId, ACTIVITY_ID);
+    assert.equal(recorded.activityType, 'Create');
+    assert.equal(recorded.objectId, 'https://blog.example/ap/posts/hello');
+    assert.equal(recorded.slug, 'hello');
+    assert.equal(recorded.json, '{"type":"Create"}');
+    assert.ok(recorded.createdAt !== '', 'the row records when it was built');
+    assert.deepEqual(admin.getOutboundActivity(ACTIVITY_ID), recorded);
+  });
+
+  it('leaves the first time alone when the same activity is recorded again', async () => {
+    const admin = await store();
+    const first = admin.putOutboundActivity(
+      announcement({ createdAt: '2026-03-04T10:00:00.000Z' }),
+    );
+
+    const again = admin.putOutboundActivity(
+      announcement({ createdAt: '2026-05-05T10:00:00.000Z', json: '{"type":"Create","v":2}' }),
+    );
+
+    assert.equal(admin.countOutboundActivities(), 1);
+    assert.equal(again.createdAt, first.createdAt, 'a redelivery is not a new activity');
+    assert.equal(again.json, '{"type":"Create","v":2}');
+  });
+
+  it('records one outcome per follower and counts them by status', async () => {
+    const admin = await store();
+    admin.putOutboundActivity(announcement());
+
+    admin.recordDelivery(outcome());
+    admin.recordDelivery(
+      outcome({
+        actorId: 'https://broken.example/users/nobody',
+        inboxId: 'https://broken.example/users/nobody/inbox',
+        status: 'failed',
+        error: 'Their instance answered 500.',
+      }),
+    );
+
+    const rows = admin.listDeliveries(ACTIVITY_ID);
+    assert.deepEqual(
+      rows.map((row) => [row.actorId, row.status, row.error]),
+      [
+        ['https://broken.example/users/nobody', 'failed', 'Their instance answered 500.'],
+        ['https://remote.example/users/ada', 'sent', null],
+      ],
+    );
+    assert.ok((rows[0]?.attemptedAt ?? '') !== '', 'the attempt was timed');
+    assert.deepEqual(admin.countDeliveriesByStatus(ACTIVITY_ID), {
+      sent: 1,
+      queued: 0,
+      failed: 1,
+    });
+  });
+
+  it('moves a follower’s outcome rather than adding a second one', async () => {
+    const admin = await store();
+    admin.putOutboundActivity(announcement());
+    admin.recordDelivery(outcome({ status: 'failed', error: 'Timed out.' }));
+
+    admin.recordDelivery(outcome({ status: 'sent', error: null }));
+
+    assert.deepEqual(admin.countDeliveriesByStatus(ACTIVITY_ID), {
+      sent: 1,
+      queued: 0,
+      failed: 0,
+    });
+    assert.equal(admin.listDeliveries(ACTIVITY_ID)[0]?.error, null);
   });
 });

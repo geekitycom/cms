@@ -331,6 +331,20 @@ async function saveFromForm(
     await rm(path.join(contentDir, ...renamedFrom.path.split('/')), { force: true });
   }
 
+  // Announced rather than left to the watcher: the index already holds what
+  // was written, so the watcher's re-read is a no-op and nobody would ever
+  // hear that this post was published. Awaited, so a subscriber that writes
+  // back to the file — the federation stamping `activitypub` into a post it
+  // has just announced — has finished before the editor is reloaded with a
+  // hash that would otherwise be one save behind.
+  await c.var.announce({
+    type: document === undefined ? 'created' : 'updated',
+    path: saved.path,
+    previous: document,
+    next: saved,
+    origin: 'admin',
+  });
+
   flash(c, 'notice', savedMessage(kind, document, saved));
   return c.redirect(editorPath(kind, saved.slug), 303);
 }
@@ -589,8 +603,19 @@ async function moveDocument(
     return backTo(c, options, `Could not move ${document.path}. Is the file still there?`);
   }
 
+  const moved = parseDocument(source, { path: target, type: document.type });
   store.remove(document.path);
-  store.upsert(parseDocument(source, { path: target, type: document.type }));
+  store.upsert(moved);
+
+  // Trashing takes a post off the public site and restoring puts it back, so
+  // both are visibility changes a subscriber has to hear about.
+  await c.var.announce({
+    type: 'updated',
+    path: target,
+    previous: document,
+    next: moved,
+    origin: 'admin',
+  });
 
   const message =
     action === 'trash' ? `Moved to the trash: ${document.title}` : `Restored: ${document.title}`;

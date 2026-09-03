@@ -23,6 +23,32 @@ export function serializeDocument(document: DocumentContent): string {
 }
 
 /**
+ * The writable half of a parsed document: what it would be written back from.
+ *
+ * A rewrite that means to change one thing has to carry everything else
+ * through untouched, and an optional field has to come back absent rather than
+ * `undefined`, or the front matter grows keys with no values. This is the one
+ * place that spelling lives, so a caller that only wants to add a key — the
+ * federation stamping `activitypub` into a post it has just announced — cannot
+ * quietly drop another.
+ */
+export function documentContent(document: DocumentContent): DocumentContent {
+  return {
+    title: document.title,
+    ...(document.date === undefined ? {} : { date: document.date }),
+    ...(document.updated === undefined ? {} : { updated: document.updated }),
+    permalink: document.permalink,
+    tags: [...document.tags],
+    draft: document.draft,
+    ...(document.description === undefined ? {} : { description: document.description }),
+    ...(document.author === undefined ? {} : { author: document.author }),
+    ...(document.activitypub === undefined ? {} : { activitypub: { ...document.activitypub } }),
+    extra: { ...document.extra },
+    body: document.body,
+  };
+}
+
+/**
  * Strip the whitespace a Markdown body does not need, so that files differing
  * only in blank lines at the edges are the same document.
  */

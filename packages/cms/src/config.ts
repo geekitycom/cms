@@ -96,7 +96,7 @@ export interface GeekityConfig {
    *
    * The boot scan reports a cold index as a directory full of creations, so a
    * hook that must not re-fire on a rebuilt index should check
-   * `change.origin === 'watch'`.
+   * `change.origin !== 'scan'`.
    */
   onDocumentChange?: DocumentChangeHook;
   /**

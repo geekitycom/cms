@@ -229,9 +229,45 @@ outgrown them says so:
 | `queue`               | `InProcessMessageQueue` | The delivery and inbox queue. `null` means no queue: activities are handled and delivered inside the request that carried them, with no retry. |
 | `allowPrivateAddress` | `false`                 | Whether Fedify may fetch private and loopback addresses. Leave it off: turning it on removes an SSRF guard. It exists for tests.               |
 
-Followers, the actor's key pairs and the inbound activity log are the CMS's
-own and live in SQLite whatever those are set to, so a restart never costs a
-site a follower.
+Followers, the actor's key pairs, the inbound activity log and the delivery
+log are the CMS's own and live in SQLite whatever those are set to, so a
+restart never costs a site a follower.
+
+### Delivery
+
+Publishing federates. The delivery service listens to the index, so a post
+edited on disk reaches the followers exactly as one saved through the editor
+does:
+
+| What happened to the post                                                 | What the followers get    |
+| ------------------------------------------------------------------------- | ------------------------- |
+| became published — written live, or undrafted, or restored from the trash | `Create(Article)`         |
+| edited while published                                                    | `Update(Article)`         |
+| drafted, trashed, or its file deleted                                     | `Delete` of a `Tombstone` |
+
+Nothing is delivered for a full scan, the boot scan included: a rebuilt index
+reports the whole archive as new, and announcing it again is not what deleting
+`data/geekity.db` should mean.
+
+The first activity about a post writes `activitypub.id` and
+`activitypub.published` into its front matter. That id is what every follower
+now holds, so it is the id the post keeps: renaming the slug afterwards sends
+an `Update` rather than a second post, and `/ap/posts/{old-slug}` goes on
+answering. Restoring a trashed post reuses it too.
+
+One POST serves a whole instance — the shared inbox is preferred — but the
+outcome is recorded per follower, so an admin can see which one did not get it
+and send the activity again:
+
+```ts
+const report = await cms.delivery.redeliver(activityId);
+report?.deliveries; // one row per follower: inbox, status, error, time
+```
+
+`cms.admin.listOutboundActivities()` lists what has been sent, newest first,
+and `listDeliveries(activityId)` and `countDeliveriesByStatus(activityId)`
+say how each one landed. A status is `sent` (the inbox took it), `queued`
+(handed to Fedify's queue, which retries out of band) or `failed`.
 
 [Fedify]: https://fedify.dev/
 
@@ -276,23 +312,26 @@ already published, a draft published, or a document restored from the trash. A
 hook may be `async`; the CMS never waits for it, and a hook that throws or
 rejects is reported and does not stop the scan or wedge the watcher.
 
-**Mind the origin.** Every change carries `origin`, which is `watch` for a live
-edit and `scan` for a full scan — _including the one on boot_. A cold index
-reports its whole first scan as `created`, and every published document as
-`published`, so a hook that must not re-fire when the index is rebuilt has to
-say so:
+**Mind the origin.** Every change carries `origin`: `watch` for a live edit,
+`admin` for a write the editor made, and `scan` for a full scan — _including
+the one on boot_. A cold index reports its whole first scan as `created`, and
+every published document as `published`, so a hook that must not re-fire when
+the index is rebuilt has to say so:
 
 ```ts
 cms.onPublish((change) => {
-  if (change.origin !== 'watch') return; // not a rebuilt index
-  void deliverToFollowers(change.next);
+  if (change.origin === 'scan') return; // not a rebuilt index
+  void announce(change.next);
 });
 ```
 
 Deleting `data/geekity.db` is a supported thing to do, so this is not a corner
 case: it is what happens on the next boot.
 
-For anything the two hooks do not cover, subscribe to the events directly.
+For anything the two hooks do not cover, subscribe to the events directly. An
+`async` listener registered this way _is_ waited for, unlike the two hooks, so
+it can finish writing before the change is called done — and can also hold up
+the watcher if it is slow.
 
 ```ts
 cms.events.on('unpublished', (change) => {

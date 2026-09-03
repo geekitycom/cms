@@ -2,6 +2,7 @@ import type { AdminStore } from './admin/store.ts';
 import type { Session } from './admin/store.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { ContentStore } from './content/store.ts';
+import type { DocumentChange } from './content/sync.ts';
 import type { Renderer } from './web/render.ts';
 
 /**
@@ -18,6 +19,17 @@ export interface GeekityEnv {
     config: ResolvedConfig;
     /** The theme, for handlers that answer with HTML. */
     renderer: Renderer;
+    /**
+     * Report a write this request made to the content directory.
+     *
+     * The admin corrects the index as soon as the bytes land rather than
+     * waiting for the watcher (doc-1), which means the watcher's later re-read
+     * of that file finds a matching hash and emits nothing. A handler that
+     * writes therefore has to say so, or no subscriber — a site's
+     * `onPublish` hook, the federation's delivery — ever hears about an admin
+     * save. The promise resolves once every listener has finished.
+     */
+    announce: (change: DocumentChange) => Promise<void>;
     /**
      * The session this request carries, set by the admin guard: a login, the
      * anonymous session that holds a CSRF token before login, or `undefined`

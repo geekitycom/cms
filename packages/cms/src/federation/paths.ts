@@ -68,6 +68,31 @@ export function createActivityId(objectId: URL | string): URL {
 }
 
 /**
+ * The id of the `Update` that announced one revision of an object.
+ *
+ * A `Create` happens once and so needs no revision in its id; an `Update`
+ * happens as often as the post is edited, and an activity id a peer has
+ * already seen is one it is entitled to ignore. The revision is the document's
+ * content hash, which makes the id deterministic — the same edit redelivered
+ * is the same activity rather than a second one — and unique, because the sync
+ * only reports an update when the hash has moved.
+ */
+export function updateActivityId(objectId: URL | string, revision: string): URL {
+  return new URL(`${objectId.toString()}#update/${encodeURIComponent(revision)}`);
+}
+
+/**
+ * The id of the `Delete` that withdrew an object.
+ *
+ * The revision is when the deletion happened, because a post can be
+ * unpublished, published again and unpublished again, and each of those is a
+ * `Delete` a peer should act on rather than recognise and skip.
+ */
+export function deleteActivityId(objectId: URL | string, revision: string): URL {
+  return new URL(`${objectId.toString()}#delete/${encodeURIComponent(revision)}`);
+}
+
+/**
  * The origin a base URL federates under: its host for handles, its scheme and
  * authority for ids.
  *
