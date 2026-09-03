@@ -159,6 +159,7 @@ export default defineConfig({
   themeDir: 'theme',
   baseUrl: 'http://localhost:3000',
   watch: true,
+  sessionLifetime: 60 * 60 * 24 * 14,
 });
 ```
 
@@ -173,6 +174,7 @@ directory; absolute ones are used as given.
 | `themeDir`         | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme. Need not exist.       |
 | `baseUrl`          | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped. |
 | `watch`            | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                               |
+| `sessionLifetime`  | `1209600` (14 days)       | `GEEKITY_SESSION_LIFETIME`  | How long an admin login lasts, in seconds.                                                 |
 | `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                               |
 | `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                             |
 
@@ -259,6 +261,48 @@ Each one carries the document before and after the change (`previous` and
 `next`, either of which may be `undefined`), the content-relative `path`, and
 `origin`. `on()` returns the function that unsubscribes; there is also `once()`
 and `off()`.
+
+## The admin
+
+Booting also mounts the admin at `/admin`. It is server-rendered from templates
+that ship inside the package, deliberately outside the theme search path: a
+site's `theme/` may override any public template, and must not be able to
+shadow the login form.
+
+| Route           | What it does                                                   |
+| --------------- | -------------------------------------------------------------- |
+| `/admin`        | The dashboard. A placeholder until the admin shell lands.      |
+| `/admin/setup`  | First run: creates the first admin. Closed once a user exists. |
+| `/admin/login`  | Username and password.                                         |
+| `/admin/logout` | `POST` only. Deletes the session row.                          |
+
+Users and sessions live in the same SQLite file as the content index, in tables
+of their own. That is the half of the database that is _not_ derived from the
+content directory: deleting the file loses every login, while everything else
+in it is rebuilt on the next boot.
+
+Passwords are hashed with argon2id through `node:crypto`, so there is no native
+module to build. The cost parameters travel with each hash, which means raising
+them later leaves every password already stored verifiable.
+
+A session id is 256 random bits in a `HttpOnly; SameSite=Lax; Path=/admin`
+cookie, with `Secure` added when `baseUrl` is an `https` URL. It lasts
+`sessionLifetime`; an expired session is deleted rather than merely ignored.
+Every mutating admin form carries a per-session CSRF token, and a `POST`
+without a valid one is refused with 403 — including the login and setup forms,
+which get the token from a short anonymous session created when the form is
+first rendered. Logging in throws that session away and starts a new one, so a
+planted session id cannot become a logged-in one.
+
+Creating a user from your own code, which is what the CLI will do:
+
+```ts
+import { openAdminStore } from '@geekity/cms';
+
+const admin = openAdminStore({ dataDir: 'data' });
+admin.createUser({ username: 'ada', password: process.env.PASSWORD ?? '' });
+admin.close();
+```
 
 ## The public site
 

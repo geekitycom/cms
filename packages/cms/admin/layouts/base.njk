@@ -1,0 +1,44 @@
+{# The admin's own base layout. It lives outside the theme search path on
+   purpose: a site's theme/ can override any public template, and must never be
+   able to shadow the login form.
+
+   The styling is inline and deliberately thin. TASK-10 builds the real shell;
+   this is enough to log in with. #}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Admin{% endblock %}{% if site.title %} · {{ site.title }}{% endif %}</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        padding: 2rem 1rem;
+        font: 16px/1.5 system-ui, sans-serif;
+      }
+      .admin { max-width: 32rem; margin: 0 auto; }
+      h1 { font-size: 1.5rem; }
+      label { display: block; margin-block: 1rem 0.25rem; font-weight: 600; }
+      input[type='text'], input[type='password'] {
+        width: 100%;
+        padding: 0.5rem;
+        font: inherit;
+        box-sizing: border-box;
+      }
+      button { margin-top: 1.5rem; padding: 0.5rem 1rem; font: inherit; }
+      .error {
+        margin-top: 1rem;
+        padding: 0.75rem;
+        border-left: 4px solid #b3261e;
+        background: rgb(179 38 30 / 0.08);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="admin">
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

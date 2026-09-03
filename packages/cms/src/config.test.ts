@@ -140,6 +140,39 @@ describe('resolveConfig', () => {
     );
   });
 
+  it('keeps an admin session for a fortnight unless the site says otherwise', () => {
+    assert.equal(
+      resolveConfig({}, { cwd: '/srv/site', env: {} }).sessionLifetime,
+      14 * 24 * 60 * 60,
+    );
+    assert.equal(
+      resolveConfig({ sessionLifetime: 3600 }, { cwd: '/srv/site', env: {} }).sessionLifetime,
+      3600,
+    );
+  });
+
+  it('lets GEEKITY_SESSION_LIFETIME override the session lifetime', () => {
+    assert.equal(
+      resolveConfig(
+        { sessionLifetime: 3600 },
+        { cwd: '/srv/site', env: { GEEKITY_SESSION_LIFETIME: '900' } },
+      ).sessionLifetime,
+      900,
+    );
+  });
+
+  it('rejects a session lifetime that is not a positive number of seconds', () => {
+    assert.throws(
+      () =>
+        resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_SESSION_LIFETIME: 'a fortnight' } }),
+      /GEEKITY_SESSION_LIFETIME/,
+    );
+    assert.throws(
+      () => resolveConfig({ sessionLifetime: 0 }, { cwd: '/srv/site', env: {} }),
+      /sessionLifetime/,
+    );
+  });
+
   it('defaults cwd and env to the running process', () => {
     const config = resolveConfig({ baseUrl: 'https://geekity.example' });
 

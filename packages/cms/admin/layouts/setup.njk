@@ -1,0 +1,27 @@
+{% extends "layouts/base.njk" %}
+
+{% block title %}Set up{% endblock %}
+
+{% block content %}
+  <h1>Create the first admin</h1>
+  <p>Nobody can sign in to this site yet. Pick a username and a password.</p>
+
+  {% if error %}
+    <p class="error">{{ error }}</p>
+  {% endif %}
+
+  <form method="post" action="{{ setupUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" autocomplete="username" value="{{ username }}" required autofocus />
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" required />
+
+    <label for="password_confirmation">Repeat the password</label>
+    <input id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" required />
+
+    <button type="submit">Create admin</button>
+  </form>
+{% endblock %}

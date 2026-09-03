@@ -21,6 +21,7 @@
   },
   "files": [
     "dist",
+    "admin",
     "themes",
     "templates",
     "README.md",

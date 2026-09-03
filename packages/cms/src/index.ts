@@ -1,12 +1,50 @@
 import { serve as serveNode } from '@hono/node-server';
 import { Hono } from 'hono';
 
+import { mountAdmin, openAdminStore } from './admin/index.ts';
+import type { AdminStore } from './admin/index.ts';
 import { resolveConfig } from './config.ts';
 import type { DocumentChangeHook, GeekityConfig, ResolvedConfig } from './config.ts';
 import { createContentSync, openContentStore } from './content/index.ts';
 import type { ContentEvents, ContentEventMap, ContentStore, SyncResult } from './content/index.ts';
 import type { GeekityEnv } from './env.ts';
 import { createRenderer, mountPublicSite } from './web/index.ts';
+
+export {
+  ADMIN_PREFIX,
+  ADMIN_TEMPLATES,
+  ARGON2_PARAMETERS,
+  clearSessionCookie,
+  createAdminTemplateEnvironment,
+  CSRF_FIELD,
+  csrfTokenMatches,
+  DuplicateUsernameError,
+  guard,
+  hashPassword,
+  LOGIN_PATH,
+  LOGOUT_PATH,
+  MINIMUM_PASSWORD_LENGTH,
+  mountAdmin,
+  openAdminStore,
+  PACKAGED_ADMIN_DIR,
+  SESSION_COOKIE,
+  SESSION_ID_BYTES,
+  sessionIdFrom,
+  setSessionCookie,
+  SETUP_PATH,
+  usesSecureCookies,
+  verifyPasswordHash,
+} from './admin/index.ts';
+export type {
+  AdminStore,
+  CreateAdminTemplateEnvironmentOptions,
+  CreateSessionInput,
+  CreateUserInput,
+  OpenAdminStoreOptions,
+  Session,
+  StoredUser,
+  User,
+} from './admin/index.ts';
 
 export { defineConfig, resolveConfig } from './config.ts';
 export type {
@@ -163,6 +201,12 @@ export interface Cms {
   /** The content index, opened against {@link ResolvedConfig.dataDir} on boot. */
   readonly store: ContentStore;
   /**
+   * Users and sessions, in the same database file as the index. This is the
+   * half of it that is not derived from the content directory, so it is the
+   * half a site has to back up.
+   */
+  readonly admin: AdminStore;
+  /**
    * Index changes, as they happen: `created`, `updated`, `deleted`,
    * `published`, `unpublished` and the catch-all `change`. Every listener is
    * handed the document before and after the change.
@@ -214,6 +258,7 @@ export interface Cms {
 export function createCms(config: GeekityConfig = {}): Cms {
   const resolved = resolveConfig(config);
   const store = openContentStore({ dataDir: resolved.dataDir });
+  const admin = openAdminStore({ dataDir: resolved.dataDir });
   const content = createContentSync({
     store,
     contentDir: resolved.contentDir,
@@ -224,6 +269,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
 
   app.use('*', async (c, next) => {
     c.set('store', store);
+    c.set('admin', admin);
     c.set('config', resolved);
     c.set('renderer', renderer);
     await next();
@@ -231,6 +277,9 @@ export function createCms(config: GeekityConfig = {}): Cms {
 
   app.get('/_geekity/health', (c) => c.json({ status: 'ok' }));
 
+  // The admin goes on before the public site, because the public site claims
+  // every unmatched path in its not-found handler.
+  mountAdmin(app);
   mountPublicSite(app);
 
   /**
@@ -263,6 +312,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     app,
     config: resolved,
     store,
+    admin,
     events: content.events,
 
     onDocumentChange(hook) {
@@ -307,6 +357,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
         });
       }
 
+      admin.close();
       store.close();
     },
   };

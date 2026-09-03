@@ -7,4 +7,5 @@ export default defineConfig({
   themeDir: 'theme',
   baseUrl: 'http://localhost:3000',
   watch: true,
+  sessionLifetime: 60 * 60 * 24 * 14,
 });
