@@ -4,6 +4,7 @@ import type { Actor } from '@fedify/vocab';
 
 import { ACTOR_TYPES, DEFAULT_SITE_SETTINGS } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
+import { absoluteUrl } from '../web/negotiate.ts';
 
 /**
  * The vocabulary class behind each of {@link ACTOR_TYPES}.
@@ -19,23 +20,38 @@ export const ACTOR_CLASSES = {
   Application,
 } as const satisfies Record<string, new (values: Record<string, never>) => Actor>;
 
-/**
- * The settings key an avatar URL lives under.
- *
- * There is no avatar field on {@link SiteSettings} yet — no screen uploads one
- * — so federation reads the raw key instead, and the actor simply has no
- * `icon` until something writes it. That keeps the settings form, its
- * validator and its `site.json` mirror out of this task while leaving the
- * actor's `icon` wired up for whichever one adds the upload.
- */
-export const AVATAR_SETTING = 'avatar';
-
 /** What {@link siteActor} needs beyond the Fedify context. */
 export interface SiteActorOptions {
   /** The settings the profile is built from. */
   settings: SiteSettings;
-  /** Absolute URL of the site's avatar, when it has one. */
-  avatarUrl?: string | undefined;
+  /**
+   * The base URL actually in effect, which the settings' own may not be: it is
+   * what the avatar's path is resolved against. Defaults to the setting.
+   */
+  baseUrl?: string | undefined;
+}
+
+/**
+ * The site's avatar as the absolute URL an `icon` carries, or `undefined` when
+ * the site has none.
+ *
+ * The setting holds what the upload endpoint handed back —
+ * `/uploads/2026/09/me.png` — because that is where the site serves the file
+ * and where an Eleventy build of the same content copies it through to. A peer
+ * reading the actor has no site to resolve that against, so it is made
+ * absolute here. An avatar already given as an absolute URL is left alone.
+ */
+export function avatarUrl(avatar: string, baseUrl: string): string | undefined {
+  const value = avatar.trim();
+  if (value === '') return undefined;
+  if (urlOrNull(value) !== null) return value;
+  if (baseUrl === '') return undefined;
+
+  try {
+    return absoluteUrl(value, baseUrl);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -54,6 +70,11 @@ export async function siteActor(
   options: SiteActorOptions,
 ): Promise<Actor> {
   const { settings } = options;
+  // The base URL in effect, which is what the profile's own URL and the
+  // avatar's are built on; the setting is the fallback for a caller that has
+  // no resolved config in hand.
+  const baseUrl = options.baseUrl ?? settings.baseUrl;
+  const icon = avatarUrl(settings.avatar, baseUrl);
   const keys = await context.getActorKeyPairs(identifier);
   const ActorClass = actorClassFor(settings.actorType);
 
@@ -62,11 +83,8 @@ export async function siteActor(
     preferredUsername: settings.actorHandle,
     name: settings.title,
     summary: settings.tagline === '' ? null : settings.tagline,
-    url: absoluteUrl(settings.baseUrl),
-    icon:
-      options.avatarUrl === undefined || options.avatarUrl === ''
-        ? null
-        : new Image({ url: absoluteUrl(options.avatarUrl) }),
+    url: urlOrNull(baseUrl),
+    icon: icon === undefined ? null : new Image({ url: new URL(icon) }),
     inbox: context.getInboxUri(identifier),
     outbox: context.getOutboxUri(identifier),
     followers: context.getFollowersUri(identifier),
@@ -94,7 +112,7 @@ export function actorClassFor(
 }
 
 /** A URL, or `null` when the string is empty or is not one. */
-function absoluteUrl(value: string): URL | null {
+function urlOrNull(value: string): URL | null {
   if (value === '') return null;
   try {
     return new URL(value);

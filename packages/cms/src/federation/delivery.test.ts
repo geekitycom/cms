@@ -168,6 +168,7 @@ async function site(
     author: 'Ada',
     actorHandle: 'blog',
     actorType: 'Person',
+    avatar: '',
   });
   seed.close();
 
@@ -585,3 +586,126 @@ describe('renaming a post that has already been announced', () => {
     assert.equal(fresh.status, 404, 'the new slug is not a second object');
   });
 });
+
+describe('the site’s own profile', () => {
+  /** The CSRF token off the settings screen, which both avatar forms carry. */
+  async function settingsToken(agent: Browser): Promise<string> {
+    const token = csrfField(await (await agent.get('/admin/settings')).text());
+    assert.ok(token !== undefined, 'the settings screen carried a CSRF token');
+    return token;
+  }
+
+  it('delivers an Update of the actor when the avatar is saved (AC #4)', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    const token = await settingsToken(agent);
+
+    const response = await agent.upload(
+      '/admin/settings/avatar',
+      token,
+      { name: 'me.png', type: 'image/png', bytes: png() },
+      'avatar',
+    );
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    const updates = delivered('Update');
+    assert.equal(updates.length, 1, `expected one Update, saw ${JSON.stringify(deliveries)}`);
+    const update = updates[0] as Delivery;
+    assert.equal(update.url, REMOTE_SHARED_INBOX, 'the shared inbox was preferred');
+    assert.equal(update.body['actor'], `${BASE_URL}/ap/actor`);
+
+    const object = update.body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], `${BASE_URL}/ap/actor`, 'the object is the actor itself');
+    assert.equal(object['type'], 'Person');
+    const icon = object['icon'] as { url?: string } | undefined;
+    assert.match(
+      icon?.url ?? '',
+      new RegExp(`^${BASE_URL}/uploads/\\d{4}/\\d{2}/me\\.png$`),
+      'carrying the avatar as an absolute URL',
+    );
+
+    assert.match(
+      await (await agent.get('/admin/settings')).text(),
+      /Avatar saved\. One follower has been told\./,
+      'and the screen says so',
+    );
+
+    // Recorded like every other delivery, so the log says who was told.
+    const recorded = cms.admin.listOutboundActivities()[0];
+    assert.ok(recorded !== undefined);
+    assert.equal(recorded.activityType, 'Update');
+    assert.equal(recorded.objectId, `${BASE_URL}/ap/actor`);
+    assert.equal(recorded.slug, null, 'an actor update is about no post');
+    assert.deepEqual(
+      cms.admin.listDeliveries(recorded.activityId).map((delivery) => delivery.status),
+      ['sent'],
+    );
+  });
+
+  it('delivers another Update when the avatar is removed', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    const token = await settingsToken(agent);
+
+    await agent.upload(
+      '/admin/settings/avatar',
+      token,
+      { name: 'me.png', type: 'image/png', bytes: png() },
+      'avatar',
+    );
+    await cms.delivery.settled();
+    deliveries.length = 0;
+
+    const removed = await agent.post('/admin/settings/avatar', {
+      csrf_token: token,
+      action: 'remove',
+    });
+    assert.equal(removed.status, 303);
+    await cms.delivery.settled();
+
+    const updates = delivered('Update');
+    assert.equal(updates.length, 1, `expected one Update, saw ${JSON.stringify(deliveries)}`);
+    const object = (updates[0] as Delivery).body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], `${BASE_URL}/ap/actor`);
+    assert.equal(object['icon'], undefined, 'the profile no longer carries a picture');
+  });
+
+  it('delivers an Update when a profile field is saved, and nothing when none was', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    const token = await settingsToken(agent);
+
+    const form: Record<string, string> = {
+      csrf_token: token,
+      title: 'Geekity',
+      tagline: 'A file-first CMS',
+      base_url: BASE_URL,
+      timezone: 'UTC',
+      posts_per_page: '10',
+      author: 'Ada',
+      actor_handle: 'blog',
+      actor_type: 'Person',
+    };
+
+    assert.equal(
+      (await agent.post('/admin/settings', { ...form, timezone: 'Europe/London' })).status,
+      303,
+    );
+    await cms.delivery.settled();
+    assert.equal(delivered('Update').length, 0, 'a time zone is nobody else’s business');
+
+    assert.equal((await agent.post('/admin/settings', { ...form, title: 'Renamed' })).status, 303);
+    await cms.delivery.settled();
+
+    const updates = delivered('Update');
+    assert.equal(updates.length, 1, `expected one Update, saw ${JSON.stringify(deliveries)}`);
+    const object = (updates[0] as Delivery).body['object'] as Record<string, unknown>;
+    assert.equal(object['name'], 'Renamed');
+  });
+});
+
+/** The first bytes of a PNG, which is all the signature check reads. */
+function png(): Uint8Array {
+  return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+}

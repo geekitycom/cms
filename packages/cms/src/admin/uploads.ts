@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import type { Hono, MiddlewareHandler } from 'hono';
 
+import type { ResolvedConfig } from '../config.ts';
 import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import type { UploadMediaType } from '../content/media.ts';
 import { slugify } from '../content/slug.ts';
@@ -34,6 +35,119 @@ export interface UploadResult {
   markdown: string;
 }
 
+/** The part of the config the upload rules are read out of. */
+export type UploadConfig = Pick<ResolvedConfig, 'contentDir' | 'uploadTypes' | 'uploadMaxBytes'>;
+
+/** One file that has landed under `content/uploads/`. */
+export interface StoredUpload {
+  /** The public URL of the file, which the site serves straight away. */
+  url: string;
+  /** What the CMS decided the file is; `media.image` says whether it is one. */
+  media: UploadMediaType;
+  /** The submitted name without its extension, for a caption or an alt text. */
+  label: string;
+}
+
+/** Why an upload was refused, and the status that refusal answers with. */
+export interface UploadRefusal {
+  /** 400 for a request carrying no file, 413 for one too big, 415 for one of the wrong sort. */
+  status: 400 | 413 | 415;
+  /** What to tell whoever sent it. */
+  error: string;
+}
+
+/** What a caller may ask of an upload beyond the site's own rules. */
+export interface StoreUploadOptions {
+  /**
+   * Refuse anything that is not an image, whatever else the site's allowlist
+   * accepts. The avatar asks for this: a PDF is a fine upload and a hopeless
+   * profile picture.
+   */
+  imagesOnly?: boolean | undefined;
+}
+
+/** Whether an upload came to a refusal rather than a stored file. */
+export function refusedUpload(outcome: StoredUpload | UploadRefusal): outcome is UploadRefusal {
+  return 'error' in outcome;
+}
+
+/**
+ * Validate one submitted file and write it under
+ * `content/uploads/{yyyy}/{mm}/{slug}{ext}`, or say why it cannot be.
+ *
+ * Three things have to agree before anything is written — the extension is on
+ * the site's allowlist, the media type the browser declared is one that
+ * extension is allowed to have, and the file's first bytes are that format's.
+ * A name is never overwritten; a second `photo.png` becomes `photo-2.png`.
+ *
+ * It is a function rather than part of the endpoint because the editor's
+ * uploads and the settings screen's avatar are the same rules over the same
+ * directory, and two copies of them would be two chances to disagree about
+ * what a site accepts.
+ */
+export async function storeUpload(
+  file: unknown,
+  config: UploadConfig,
+  options: StoreUploadOptions = {},
+): Promise<StoredUpload | UploadRefusal> {
+  if (!(file instanceof File)) {
+    return { status: 400, error: 'That upload carried no file.' };
+  }
+
+  const original = baseName(file.name);
+  const extension = path.extname(original).toLowerCase();
+
+  if (!config.uploadTypes.includes(extension)) {
+    const allowed = config.uploadTypes.join(', ');
+    return {
+      status: 415,
+      error:
+        extension === ''
+          ? `That file has no extension, so there is no telling what it is. This site accepts ${allowed}.`
+          : `Uploads of ${extension} are not allowed here. This site accepts ${allowed}.`,
+    };
+  }
+
+  // Guaranteed by resolveConfig, which refuses an allowlist naming anything
+  // the table has no entry for.
+  const media = UPLOAD_MEDIA_TYPES.get(extension) as UploadMediaType;
+
+  if (options.imagesOnly === true && !media.image) {
+    return { status: 415, error: `A ${extension} is not an image, and this has to be one.` };
+  }
+
+  const declared = declaredType(file.type);
+  if (declared !== '' && !media.declared.includes(declared)) {
+    return {
+      status: 415,
+      error: `That file says it is ${declared}, which is not what a ${extension} is.`,
+    };
+  }
+
+  if (file.size > config.uploadMaxBytes) {
+    return { status: 413, error: tooLargeMessage(config.uploadMaxBytes) };
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (!matchesSignature(media, bytes)) {
+    return { status: 415, error: `That file does not look like a ${extension} inside.` };
+  }
+
+  const now = new Date();
+  const month = `${String(now.getUTCFullYear()).padStart(4, '0')}/${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+  const directory = path.join(config.contentDir, UPLOAD_DIRECTORY, ...month.split('/'));
+  await mkdir(directory, { recursive: true });
+
+  const stem = slugify(original.slice(0, original.length - extension.length)) || 'upload';
+  const name = await writeWithoutOverwriting(directory, stem, extension, bytes);
+
+  return {
+    url: `${UPLOAD_ASSET_PREFIX}${month}/${name}`,
+    media,
+    label: original.slice(0, original.length - extension.length).trim() || name,
+  };
+}
+
 /**
  * Refuse an oversized upload by its headers, before anything reads it.
  *
@@ -51,7 +165,7 @@ export const refuseOversizedUpload: MiddlewareHandler<GeekityEnv> = async (c, ne
   const declared = Number(c.req.header('content-length') ?? '');
   const limit = c.var.config.uploadMaxBytes;
   if (Number.isFinite(declared) && declared > limit + UPLOAD_ENVELOPE_BYTES) {
-    return tooLarge(c, limit);
+    return c.json({ error: tooLargeMessage(limit) }, 413);
   }
 
   await next();
@@ -66,76 +180,23 @@ export const refuseOversizedUpload: MiddlewareHandler<GeekityEnv> = async (c, ne
  * CMS or built as static files. Uploads are not documents: the index never
  * sees them, and `content/uploads` is one of the directories the sync skips.
  *
- * Three things have to agree before anything is written — the extension is on
- * the site's allowlist, the media type the browser declared is one that
- * extension is allowed to have, and the file's first bytes are that format's.
- * A name is never overwritten; a second `photo.png` becomes `photo-2.png`.
+ * What may be uploaded, and what happens to it, is {@link storeUpload}; this
+ * is that answer as the JSON the editor's upload control reads.
  */
 export function mountUploads(app: Hono<GeekityEnv>): void {
   app.post(UPLOADS_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const file = body[UPLOAD_FIELD];
+    const outcome = await storeUpload(body[UPLOAD_FIELD], c.var.config);
 
-    if (!(file instanceof File)) {
-      return c.json({ error: 'That upload carried no file.' }, 400);
+    if (refusedUpload(outcome)) {
+      return c.json({ error: outcome.error }, outcome.status);
     }
-
-    const config = c.var.config;
-    const original = baseName(file.name);
-    const extension = path.extname(original).toLowerCase();
-
-    if (!config.uploadTypes.includes(extension)) {
-      const allowed = config.uploadTypes.join(', ');
-      return c.json(
-        {
-          error:
-            extension === ''
-              ? `That file has no extension, so there is no telling what it is. This site accepts ${allowed}.`
-              : `Uploads of ${extension} are not allowed here. This site accepts ${allowed}.`,
-        },
-        415,
-      );
-    }
-
-    // Guaranteed by resolveConfig, which refuses an allowlist naming anything
-    // the table has no entry for.
-    const media = UPLOAD_MEDIA_TYPES.get(extension) as UploadMediaType;
-
-    const declared = declaredType(file.type);
-    if (declared !== '' && !media.declared.includes(declared)) {
-      return c.json(
-        {
-          error: `That file says it is ${declared}, which is not what a ${extension} is.`,
-        },
-        415,
-      );
-    }
-
-    if (file.size > config.uploadMaxBytes) {
-      return tooLarge(c, config.uploadMaxBytes);
-    }
-
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    if (!matchesSignature(media, bytes)) {
-      return c.json({ error: `That file does not look like a ${extension} inside.` }, 415);
-    }
-
-    const now = new Date();
-    const month = `${String(now.getUTCFullYear()).padStart(4, '0')}/${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-    const directory = path.join(config.contentDir, UPLOAD_DIRECTORY, ...month.split('/'));
-    await mkdir(directory, { recursive: true });
-
-    const stem = slugify(original.slice(0, original.length - extension.length)) || 'upload';
-    const name = await writeWithoutOverwriting(directory, stem, extension, bytes);
-
-    const url = `${UPLOAD_ASSET_PREFIX}${month}/${name}`;
-    const label = original.slice(0, original.length - extension.length).trim() || name;
 
     const result: UploadResult = {
-      url,
-      markdown: media.image
-        ? `![${escapeLabel(label)}](${url})`
-        : `[${escapeLabel(label)}](${url})`,
+      url: outcome.url,
+      markdown: outcome.media.image
+        ? `![${escapeLabel(outcome.label)}](${outcome.url})`
+        : `[${escapeLabel(outcome.label)}](${outcome.url})`,
     };
     return c.json(result, 201);
   });
@@ -166,16 +227,10 @@ async function writeWithoutOverwriting(
   }
 }
 
-/** The 413 an oversized upload gets, and the limit it went over. */
-function tooLarge(c: { json: JsonResponder }, limit: number): Response {
-  return c.json(
-    { error: `That file is too big. This site accepts uploads up to ${String(limit)} bytes.` },
-    413,
-  );
+/** What an upload over the site's limit is told, and the limit it went over. */
+export function tooLargeMessage(limit: number): string {
+  return `That file is too big. This site accepts uploads up to ${String(limit)} bytes.`;
 }
-
-/** Just enough of Hono's context to answer with JSON. */
-type JsonResponder = (body: { error: string }, status: 413) => Response;
 
 /**
  * The last segment of a submitted filename.

@@ -9,7 +9,7 @@ import type { AdminStore } from '../admin/store.ts';
 import type { FederationOverrides, ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
-import { AVATAR_SETTING, siteActor } from './actor.ts';
+import { siteActor } from './actor.ts';
 import { isFederatedDocument, postArticle, postCreateActivity } from './article.ts';
 import { followersPage, lastFollowersCursor } from './followers.ts';
 import { handleDelete, handleFollow, handleLoggedActivity, handleUndo } from './inbox.ts';
@@ -100,7 +100,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
       const settings = readSiteSettings(context.data.admin);
       return await siteActor(context, identifier, {
         settings,
-        avatarUrl: context.data.admin.allSettings()[AVATAR_SETTING],
+        baseUrl: context.data.config.baseUrl,
       });
     })
     // WebFinger asks for a username; this is what turns the handle somebody

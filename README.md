@@ -390,7 +390,8 @@ like every other POST in the admin.
 ## Site settings
 
 `/admin/settings` holds the values doc-1 keeps only in SQLite: title, tagline,
-base URL, time zone, posts per page, and the ActivityPub actor handle and type.
+base URL, time zone, posts per page, the ActivityPub actor handle and type, and
+the site's avatar.
 They live in a `settings` table of key and value, alongside the users and
 sessions in the same database file, and they are the half of it that is not
 derived from the content directory.
@@ -405,8 +406,8 @@ temporary file and a rename, so an Eleventy build of the same content directory
 renders with the same values and never sees a half-written file. A hand edit of
 the file after that point is overwritten by the next save.
 
-The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage` and
-`timezone`, and every other key it already had is kept — a site may put
+The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
+`timezone` and `avatar`, and every other key it already had is kept — a site may put
 anything in there, `feedSize` included, and reach it from its templates. The
 theme reads the settings on top of the file, so a saved title is on the public
 site and in the feeds on the very next request rather than when the file's
@@ -424,9 +425,19 @@ back with a 400 and one message under each field that has one:
 | Actor handle   | 1 to 64 letters, digits, dashes or underscores — the local part of `@handle@host`. |
 | Actor type     | One of `Person`, `Organization`, `Service`, `Group` or `Application`.              |
 
-The actor handle and type are stored but not yet used; federation reads them in
-milestone 3. `Person` is the default because some clients hide `Service` actors
+`Person` is the default actor type because some clients hide `Service` actors
 from timelines.
+
+The avatar is not one of those fields, because it is a file: it has a pair of
+forms of its own on the same screen, posting to `POST /admin/settings/avatar` —
+one multipart form uploads an image, the other takes it down again. The image
+goes through the same rules as an editor upload, with one more on top of them:
+it has to be an image, so a PDF the site is happy to accept as an upload is
+refused as a profile picture. A refusal is a message on the screen and the
+avatar the site already had, untouched. What is stored is the public path the
+upload landed at, which is what `content/_data/site.json` mirrors as `avatar`
+and what the ActivityPub actor carries as its `icon`; saving or removing it
+sends an `Update` of the actor to every follower.
 
 ## Users
 

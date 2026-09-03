@@ -40,10 +40,7 @@ async function temporaryDir(prefix: string): Promise<string> {
  * {@link createCms} seeds an empty settings table from `site.json` and
  * federation reads what it finds there on every request.
  */
-async function site(
-  settings: Partial<SiteSettings> = {},
-  extras: Record<string, string> = {},
-): Promise<Cms> {
+async function site(settings: Partial<SiteSettings> = {}): Promise<Cms> {
   const dataDir = await temporaryDir('geekity-fed-data-');
   const contentDir = await temporaryDir('geekity-fed-content-');
 
@@ -57,9 +54,9 @@ async function site(
     author: 'Ada',
     actorHandle: 'blog',
     actorType: 'Person',
+    avatar: '',
     ...settings,
   });
-  if (Object.keys(extras).length > 0) seed.setSettings(extras);
   seed.close();
 
   const instance = createCms({ dataDir, contentDir, watch: false, baseUrl: BASE_URL });
@@ -171,9 +168,12 @@ describe('the site actor', () => {
     assert.equal(actor['type'], 'Service');
   });
 
-  it('carries no icon until an avatar is set, and the avatar once it is', async () => {
+  it('carries no icon until an avatar is set, and the avatar once it is (AC #3)', async () => {
     const without = await site();
-    const with_ = await site({}, { avatar: `${BASE_URL}/uploads/avatar.png` });
+    // The setting holds the public path the upload endpoint handed back; the
+    // actor has to carry an absolute URL, which is a peer's only way to fetch
+    // it.
+    const with_ = await site({ avatar: '/uploads/2026/09/me.png' });
 
     const bare = (await (
       await get(without, '/ap/actor', 'application/activity+json')
@@ -185,7 +185,20 @@ describe('the site actor', () => {
     assert.equal(bare['icon'], undefined);
     assert.equal(
       (iconed['icon'] as { url?: string } | undefined)?.url,
-      `${BASE_URL}/uploads/avatar.png`,
+      `${BASE_URL}/uploads/2026/09/me.png`,
+    );
+  });
+
+  it('leaves an avatar that is already an absolute URL alone', async () => {
+    const instance = await site({ avatar: 'https://cdn.example/me.png' });
+
+    const actor = (await (
+      await get(instance, '/ap/actor', 'application/activity+json')
+    ).json()) as Record<string, unknown>;
+
+    assert.equal(
+      (actor['icon'] as { url?: string } | undefined)?.url,
+      'https://cdn.example/me.png',
     );
   });
 

@@ -81,10 +81,14 @@ export type { AdminSection } from './routes.ts';
 export {
   ACTOR_HANDLE_PATTERN,
   ACTOR_TYPES,
+  AVATAR_FIELDS,
+  AVATAR_PATH,
+  AVATAR_REMOVE,
   DEFAULT_SITE_SETTINGS,
   effectiveBaseUrl,
   formFromSettings,
   mountSettings,
+  profileChanged,
   readSiteSettings,
   seedSiteSettings,
   SETTINGS_FIELDS,
@@ -99,6 +103,7 @@ export {
 } from './settings.ts';
 export type {
   MountSettingsOptions,
+  SettingsField,
   SettingsForm,
   SettingsProblems,
   SiteSettings,
@@ -167,8 +172,17 @@ export type { CreateAdminTemplateEnvironmentOptions } from './templates.ts';
 export {
   mountUploads,
   refuseOversizedUpload,
+  refusedUpload,
+  storeUpload,
+  tooLargeMessage,
   UPLOAD_ENVELOPE_BYTES,
   UPLOAD_FIELD,
   UPLOADS_PATH,
 } from './uploads.ts';
-export type { UploadResult } from './uploads.ts';
+export type {
+  StoredUpload,
+  StoreUploadOptions,
+  UploadConfig,
+  UploadRefusal,
+  UploadResult,
+} from './uploads.ts';

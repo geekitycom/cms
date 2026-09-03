@@ -94,8 +94,9 @@ export interface Browser {
    * Post one file as `multipart/form-data`, the way the editor's upload
    * control does. The CSRF token is a field of its own because the guard reads
    * it out of the multipart body exactly as it does out of a urlencoded one.
+   * The field name defaults to the editor's; the avatar form uses its own.
    */
-  upload(url: string, csrfToken: string, file: UploadedFile): Promise<Response>;
+  upload(url: string, csrfToken: string, file: UploadedFile, field?: string): Promise<Response>;
   /** The session cookie value currently held, or `undefined`. */
   session(): string | undefined;
   /** Force the held cookie, for the tests about a stale or planted one. */
@@ -129,10 +130,10 @@ export function browser(cms: Cms): Browser {
         }),
       );
     },
-    async upload(url, csrfToken, file) {
+    async upload(url, csrfToken, file, field = 'file') {
       const form = new FormData();
       form.set('csrf_token', csrfToken);
-      form.set('file', new File([file.bytes], file.name, { type: file.type }));
+      form.set(field, new File([file.bytes], file.name, { type: file.type }));
       return remember(
         await cms.app.request(url, { method: 'POST', headers: headers(), body: form }),
       );

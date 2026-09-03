@@ -11,7 +11,7 @@ import { editorPath, mountDocumentScreens, PAGE_KIND, POST_KIND } from './docume
 import { FEDERATION_PATH, mountFederationScreen } from './federation.ts';
 import { flash, takeFlash } from './flash.ts';
 import { mountPreview } from './preview.ts';
-import { mountSettings } from './settings.ts';
+import { AVATAR_PATH, mountSettings } from './settings.ts';
 import {
   ADMIN_PREFIX,
   clearSessionCookie,
@@ -133,8 +133,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   });
 
   // In front of the guard, because the guard parses the form to find the CSRF
-  // token and parsing a multipart form reads the whole file into memory.
+  // token and parsing a multipart form reads the whole file into memory. Both
+  // multipart endpoints need it: the editor's uploads and the avatar's.
   app.use(UPLOADS_PATH, refuseOversizedUpload);
+  app.use(AVATAR_PATH, refuseOversizedUpload);
 
   app.use(ADMIN_PREFIX, guard);
   app.use(`${ADMIN_PREFIX}/*`, guard);

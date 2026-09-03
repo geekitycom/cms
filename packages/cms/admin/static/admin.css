@@ -669,6 +669,39 @@ button[type='submit']:hover,
   background: var(--admin-field);
 }
 
+/* The site's own avatar, which is shown big enough to judge on the settings
+   screen and beside the actor it belongs to on the federation screen. */
+
+.admin-avatar-large {
+  width: 6rem;
+  height: 6rem;
+  border: 1px solid var(--admin-border);
+}
+
+.admin-avatar-current {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-top: 0.75rem;
+}
+
+.admin-avatar-forms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.admin-avatar-forms label {
+  display: block;
+}
+
+.admin-actor-identity {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
 .admin-inbox {
   margin: 0;
   padding: 0;

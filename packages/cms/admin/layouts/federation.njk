@@ -9,7 +9,14 @@
 
   <section class="admin-panel admin-actor">
     <h2>This site’s actor</h2>
-    <p class="admin-actor-handle">{{ actor.handle }}</p>
+    <div class="admin-actor-identity">
+      {% if actor.avatarUrl %}
+        <img class="admin-avatar admin-avatar-large" src="{{ actor.avatarUrl }}" alt="" width="96" height="96" />
+      {% else %}
+        <span class="admin-avatar admin-avatar-large admin-avatar-blank" aria-hidden="true"></span>
+      {% endif %}
+      <p class="admin-actor-handle">{{ actor.handle }}</p>
+    </div>
     <dl class="admin-actor-fields">
       <div>
         <dt>Name</dt>

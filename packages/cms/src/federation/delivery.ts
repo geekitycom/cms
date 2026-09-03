@@ -1,6 +1,7 @@
 import type { Context } from '@fedify/fedify';
-import { Activity, getTypeId } from '@fedify/vocab';
+import { Activity, getTypeId, PUBLIC_COLLECTION, Update } from '@fedify/vocab';
 
+import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore, Delivery, DeliveryStatus, Follower } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
@@ -8,6 +9,7 @@ import { saveDocument } from '../content/save.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { documentContent } from '../content/writer.ts';
+import { siteActor } from './actor.ts';
 import {
   articleObjectId,
   isFederatedDocument,
@@ -18,7 +20,7 @@ import {
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { followerRecipient } from './followers.ts';
 import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
-import { postObjectId } from './paths.ts';
+import { postObjectId, updateActivityId } from './paths.ts';
 
 /** What one activity's delivery came to, follower by follower. */
 export interface DeliveryReport {
@@ -26,7 +28,10 @@ export interface DeliveryReport {
   readonly activityId: string;
   /** `Create`, `Update` or `Delete`. */
   readonly activityType: string;
-  /** The ActivityStreams id of the post it was about. */
+  /**
+   * The ActivityStreams id of what it was about: a post, or the site's own
+   * actor when the profile itself was what moved.
+   */
   readonly objectId: string;
   /** One row per follower, as recorded. Empty when nobody follows the site. */
   readonly deliveries: readonly Delivery[];
@@ -66,6 +71,15 @@ export interface DeliveryService {
    * delivered, which is what {@link DeliveryService.settled} is for.
    */
   handle(change: DocumentChange): Promise<void>;
+  /**
+   * Tell the followers that the site's own profile has moved: an `Update`
+   * whose object is the actor, which is how a peer learns that the name, the
+   * summary or the avatar it cached is out of date.
+   *
+   * `undefined` when nobody follows the site, in which case nothing is built
+   * and nothing is recorded: there is no cached profile anywhere to refresh.
+   */
+  updateActor(): Promise<DeliveryReport | undefined>;
   /**
    * Send a recorded activity again, to every follower the site has now.
    *
@@ -274,6 +288,59 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         queue(() => send(context, postDeleteActivity(context, before, deleted), before));
         queue(() => send(context, postCreateActivity(context, stamped), stamped));
       }
+    },
+
+    async updateActor() {
+      // Building the actor loads — and on a cold database generates — the key
+      // pairs, so a site nobody follows does not pay for an activity that has
+      // nowhere to go.
+      if (admin.countFollowers() === 0) return undefined;
+
+      return await enqueue(async () => {
+        const context = deliveryContext();
+        const actorId = context.getActorUri(SITE_ACTOR_IDENTIFIER);
+        const actor = await siteActor(context, SITE_ACTOR_IDENTIFIER, {
+          settings: readSiteSettings(admin),
+          baseUrl: config.baseUrl,
+        });
+
+        // The revision is the moment rather than a hash of the profile: an
+        // avatar removed and put back is the same profile twice, and both
+        // times the followers have to be told rather than recognise an id
+        // they have already seen and skip it.
+        const activityId = updateActivityId(actorId, new Date().toISOString());
+        const activity = new Update({
+          id: activityId,
+          actor: actorId,
+          object: actor,
+          to: PUBLIC_COLLECTION,
+          cc: context.getFollowersUri(SITE_ACTOR_IDENTIFIER),
+        });
+
+        const about = {
+          activityId: activityId.href,
+          activityType: 'Update',
+          // The object is the actor, not a post, and there is no slug to
+          // record: that is what keeps an actor Update out of the federation
+          // screen's per-post delivery table.
+          objectId: actorId.href,
+        };
+
+        admin.putOutboundActivity({
+          ...about,
+          slug: null,
+          json: JSON.stringify(
+            await activity.toJsonLd({ format: 'compact', contextLoader: context.contextLoader }),
+          ),
+        });
+
+        return await fanOut(context, activity, about);
+      }).catch((thrown: unknown) => {
+        // A profile update is a side effect of saving the settings, and losing
+        // it must not lose the save.
+        logger.warn(`The actor update could not be delivered: ${messageOf(thrown)}`);
+        return undefined;
+      });
     },
 
     async redeliver(activityId) {
