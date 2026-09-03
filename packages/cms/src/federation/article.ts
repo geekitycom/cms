@@ -1,5 +1,14 @@
-import type { RequestContext } from '@fedify/fedify';
-import { Article, Create, Hashtag, PUBLIC_COLLECTION, Source } from '@fedify/vocab';
+import type { Context } from '@fedify/fedify';
+import {
+  Article,
+  Create,
+  Delete,
+  Hashtag,
+  PUBLIC_COLLECTION,
+  Source,
+  Tombstone,
+  Update,
+} from '@fedify/vocab';
 import { Temporal as TemporalPolyfill } from '@js-temporal/polyfill';
 
 import type { Document } from '../content/document.ts';
@@ -8,7 +17,7 @@ import { absoluteUrl } from '../web/negotiate.ts';
 import { tagHref } from '../web/routes.ts';
 import type { FederationContextData } from './federation.ts';
 import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
-import { createActivityId } from './paths.ts';
+import { createActivityId, deleteActivityId, updateActivityId } from './paths.ts';
 
 /** The media type an `Article`'s `source` is labelled with. */
 export const SOURCE_MEDIA_TYPE = 'text/markdown';
@@ -37,14 +46,11 @@ export function isFederatedDocument(document: Document): boolean {
  * `source` carries the Markdown the file holds, so a peer that wants to quote
  * or re-render the post has the text rather than only the rendering of it.
  */
-export function postArticle(
-  context: RequestContext<FederationContextData>,
-  document: Document,
-): Article {
+export function postArticle(context: Context<FederationContextData>, document: Document): Article {
   const { baseUrl } = context.data.config;
 
   return new Article({
-    id: context.getObjectUri(Article, { slug: document.slug }),
+    id: articleObjectId(context, document),
     url: new URL(absoluteUrl(document.permalink, baseUrl)),
     name: document.title,
     content: document.html,
@@ -75,20 +81,108 @@ export function postArticle(
  * article's, so the same post always produces the same activity id.
  */
 export function postCreateActivity(
-  context: RequestContext<FederationContextData>,
+  context: Context<FederationContextData>,
   document: Document,
 ): Create {
   const article = postArticle(context, document);
-  const articleId = article.id ?? context.getObjectUri(Article, { slug: document.slug });
 
   return new Create({
-    id: createActivityId(articleId),
+    id: createActivityId(articleObjectId(context, document)),
     actor: context.getActorUri(SITE_ACTOR_IDENTIFIER),
     object: article,
     published: toInstant(document.date) ?? null,
     to: PUBLIC_COLLECTION,
     cc: context.getFollowersUri(SITE_ACTOR_IDENTIFIER),
   });
+}
+
+/**
+ * The `Update` that announces an edit to a post followers already hold.
+ *
+ * The whole article goes with it rather than a diff, because that is all
+ * ActivityPub offers and all a peer can apply. Its id carries the document's
+ * hash, so two edits are two activities and the same edit delivered twice is
+ * one; see {@link updateActivityId}.
+ */
+export function postUpdateActivity(
+  context: Context<FederationContextData>,
+  document: Document,
+): Update {
+  const article = postArticle(context, document);
+
+  return new Update({
+    id: updateActivityId(articleObjectId(context, document), revisionOf(document)),
+    actor: context.getActorUri(SITE_ACTOR_IDENTIFIER),
+    object: article,
+    published: toInstant(document.updated ?? document.date) ?? null,
+    to: PUBLIC_COLLECTION,
+    cc: context.getFollowersUri(SITE_ACTOR_IDENTIFIER),
+  });
+}
+
+/**
+ * The `Delete` that withdraws a post: a `Tombstone` where the `Article` was.
+ *
+ * doc-4 sends this when a post becomes a draft, is trashed or is deleted, and
+ * all three look the same from outside — the object is gone and the copy every
+ * follower holds should go with it. The `Tombstone` keeps the object's id and
+ * says what it used to be, which is what lets a peer that never held the
+ * article recognise what it is being told about.
+ *
+ * The document is the one as it was before it went, because after a delete
+ * there is no other.
+ */
+export function postDeleteActivity(
+  context: Context<FederationContextData>,
+  document: Document,
+  deleted: string,
+): Delete {
+  const objectId = articleObjectId(context, document);
+
+  return new Delete({
+    id: deleteActivityId(objectId, deleted),
+    actor: context.getActorUri(SITE_ACTOR_IDENTIFIER),
+    object: new Tombstone({
+      id: objectId,
+      formerType: Article,
+      deleted: toInstant(deleted) ?? null,
+    }),
+    to: PUBLIC_COLLECTION,
+    cc: context.getFollowersUri(SITE_ACTOR_IDENTIFIER),
+  });
+}
+
+/**
+ * A post's ActivityStreams object id: the one written into its front matter if
+ * it has been federated, and the one its slug implies if it has not.
+ *
+ * The stored id is what makes a rename invisible to a follower. Ids are minted
+ * from the slug, so a post renamed after it was announced would otherwise
+ * become a second object and be delivered as a `Create` all over again; doc-4
+ * asks the `activitypub.id` key to prevent exactly that. The object dispatcher
+ * resolves a stored id back to its post, so the old URL keeps answering.
+ */
+export function articleObjectId(context: Context<FederationContextData>, document: Document): URL {
+  const stored = document.activitypub?.id;
+  if (stored !== undefined && stored !== '') {
+    try {
+      return new URL(stored);
+    } catch {
+      // A hand-written `activitypub.id` that is not a URL is not an id. Fall
+      // back to the derived one rather than failing the delivery.
+    }
+  }
+  return context.getObjectUri(Article, { slug: document.slug });
+}
+
+/**
+ * Which revision of a document an `Update` is announcing.
+ *
+ * The content hash: it changes with every real edit and with nothing else, so
+ * it names the revision without a clock and without a counter to keep.
+ */
+function revisionOf(document: Document): string {
+  return document.hash.slice(0, 16);
 }
 
 /**

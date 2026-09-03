@@ -200,6 +200,70 @@ export interface InboxActivity {
 export type NewInboxActivity = Omit<InboxActivity, 'id' | 'receivedAt'>;
 
 /**
+ * One activity this site sent, kept whole so it can be sent again.
+ *
+ * decision-5 accepts that an activity queued when the process exits is lost,
+ * on the understanding that the outcome is recorded per follower and that an
+ * admin can re-send. Re-sending needs the activity itself, and rebuilding one
+ * from the content directory is not always possible — a `Delete` is about a
+ * post that is no longer there — so the compacted JSON-LD is stored as it went
+ * out.
+ */
+export interface OutboundActivity {
+  /** The activity's own id, which is what a redelivery is asked for by. */
+  readonly activityId: string;
+  /** `Create`, `Update` or `Delete`. */
+  readonly activityType: string;
+  /** The ActivityStreams id of the post the activity is about. */
+  readonly objectId: string;
+  /** The post's slug when the activity was built, for a human reading the log. */
+  readonly slug: string | null;
+  /** When the activity was first built, as an ISO 8601 instant. */
+  readonly createdAt: string;
+  /** The activity as compacted JSON-LD, exactly as it was delivered. */
+  readonly json: string;
+}
+
+/** An {@link OutboundActivity} before the store has timed it. */
+export type NewOutboundActivity = Omit<OutboundActivity, 'createdAt'> & {
+  createdAt?: string | undefined;
+};
+
+/** How one delivery of one activity to one follower ended. */
+export const DELIVERY_STATUSES = ['sent', 'queued', 'failed'] as const;
+
+/**
+ * One of {@link DELIVERY_STATUSES}.
+ *
+ * `sent` is a POST the follower's server accepted. `queued` is one handed to
+ * Fedify's outbox queue, which is as much as a site running with a queue can
+ * know from the call: the queue retries out of band and does not report back.
+ * `failed` is a delivery that threw, with the reason in the row.
+ */
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
+
+/** How one attempt to deliver one activity to one follower ended. */
+export interface Delivery {
+  /** Which activity was delivered. */
+  readonly activityId: string;
+  /** Which follower it was delivered to. */
+  readonly actorId: string;
+  /** The inbox actually used, which is the shared one when the follower has one. */
+  readonly inboxId: string;
+  /** How it went. */
+  readonly status: DeliveryStatus;
+  /** Why it failed, or `null`. */
+  readonly error: string | null;
+  /** When the attempt was made, as an ISO 8601 instant. */
+  readonly attemptedAt: string;
+}
+
+/** A {@link Delivery} before the store has timed it. */
+export type NewDelivery = Omit<Delivery, 'attemptedAt'> & {
+  attemptedAt?: string | undefined;
+};
+
+/**
  * The auth half of the SQLite database: the data doc-1 says lives only there.
  *
  * It is deliberately not part of the {@link ContentStore}. That store is the
@@ -319,6 +383,27 @@ export interface AdminStore {
    * against.
    */
   logInboxActivity(activity: NewInboxActivity): InboxActivity;
+  /** How many activities this site has sent. */
+  countOutboundActivities(): number;
+  /** Activities this site sent, newest first, optionally one page of them. */
+  listOutboundActivities(options?: ListPageOptions): OutboundActivity[];
+  /** One sent activity by its id, or `undefined`. */
+  getOutboundActivity(activityId: string): OutboundActivity | undefined;
+  /**
+   * Record an activity on its way out, leaving the original `created_at` alone
+   * so a redelivery does not pretend the activity is new.
+   */
+  putOutboundActivity(activity: NewOutboundActivity): OutboundActivity;
+  /**
+   * Record how one delivery to one follower ended, replacing the previous
+   * outcome for that pair: the table answers "where does this activity stand
+   * with each follower", which a redelivery moves rather than adds to.
+   */
+  recordDelivery(delivery: NewDelivery): Delivery;
+  /** Every follower's outcome for one activity, in follower order. */
+  listDeliveries(activityId: string): Delivery[];
+  /** How many followers this activity stands at each status with. */
+  countDeliveriesByStatus(activityId: string): Record<DeliveryStatus, number>;
   /** Delete every expired session. Returns how many went. */
   pruneSessions(now?: Date): number;
   /**
@@ -434,6 +519,39 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         received_at = excluded.received_at,
         json = excluded.json
       RETURNING *
+    `),
+    countOutboundActivities: db.prepare('SELECT COUNT(*) AS count FROM ap_outbound'),
+    listOutboundActivities: db.prepare(`
+      SELECT * FROM ap_outbound
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT ? OFFSET ?
+    `),
+    outboundActivityById: db.prepare('SELECT * FROM ap_outbound WHERE activity_id = ?'),
+    putOutboundActivity: db.prepare(`
+      INSERT INTO ap_outbound (activity_id, activity_type, object_id, slug, created_at, json)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (activity_id) DO UPDATE SET
+        activity_type = excluded.activity_type,
+        object_id = excluded.object_id,
+        slug = excluded.slug,
+        json = excluded.json
+      RETURNING *
+    `),
+    recordDelivery: db.prepare(`
+      INSERT INTO ap_deliveries (activity_id, actor_id, inbox_id, status, error, attempted_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (activity_id, actor_id) DO UPDATE SET
+        inbox_id = excluded.inbox_id,
+        status = excluded.status,
+        error = excluded.error,
+        attempted_at = excluded.attempted_at
+      RETURNING *
+    `),
+    listDeliveries: db.prepare(`
+      SELECT * FROM ap_deliveries WHERE activity_id = ? ORDER BY actor_id
+    `),
+    countDeliveriesByStatus: db.prepare(`
+      SELECT status, COUNT(*) AS count FROM ap_deliveries WHERE activity_id = ? GROUP BY status
     `),
   };
 
@@ -684,6 +802,74 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return toInboxActivity(row);
     },
 
+    countOutboundActivities() {
+      const row = statements.countOutboundActivities.get() as Record<string, unknown> | undefined;
+      return Number(row?.['count'] ?? 0);
+    },
+
+    listOutboundActivities(options = {}) {
+      const rows = statements.listOutboundActivities.all(
+        options.limit ?? NO_LIMIT,
+        options.offset ?? 0,
+      ) as Record<string, unknown>[];
+      return rows.map(toOutboundActivity);
+    },
+
+    getOutboundActivity(activityId) {
+      const row = statements.outboundActivityById.get(activityId) as
+        Record<string, unknown> | undefined;
+      return row === undefined ? undefined : toOutboundActivity(row);
+    },
+
+    putOutboundActivity(activity) {
+      const row = statements.putOutboundActivity.get(
+        activity.activityId,
+        activity.activityType,
+        activity.objectId,
+        activity.slug,
+        activity.createdAt ?? new Date().toISOString(),
+        activity.json,
+      ) as Record<string, unknown> | undefined;
+      if (row === undefined) {
+        throw new Error(`The activity "${activity.activityId}" was not written to the outbox log.`);
+      }
+      return toOutboundActivity(row);
+    },
+
+    recordDelivery(delivery) {
+      const row = statements.recordDelivery.get(
+        delivery.activityId,
+        delivery.actorId,
+        delivery.inboxId,
+        delivery.status,
+        delivery.error,
+        delivery.attemptedAt ?? new Date().toISOString(),
+      ) as Record<string, unknown> | undefined;
+      if (row === undefined) {
+        throw new Error(
+          `The delivery of "${delivery.activityId}" to "${delivery.actorId}" was not recorded.`,
+        );
+      }
+      return toDelivery(row);
+    },
+
+    listDeliveries(activityId) {
+      const rows = statements.listDeliveries.all(activityId) as Record<string, unknown>[];
+      return rows.map(toDelivery);
+    },
+
+    countDeliveriesByStatus(activityId) {
+      const counts: Record<DeliveryStatus, number> = { sent: 0, queued: 0, failed: 0 };
+      for (const row of statements.countDeliveriesByStatus.all(activityId) as Record<
+        string,
+        unknown
+      >[]) {
+        const status = deliveryStatus(row['status']);
+        counts[status] += Number(row['count'] ?? 0);
+      }
+      return counts;
+    },
+
     pruneSessions(now = new Date()) {
       return Number(statements.pruneSessions.run(now.toISOString()).changes);
     },
@@ -795,6 +981,39 @@ function toInboxActivity(row: Record<string, unknown>): InboxActivity {
     receivedAt: String(row['received_at']),
     json: String(row['json']),
   };
+}
+
+function toOutboundActivity(row: Record<string, unknown>): OutboundActivity {
+  return {
+    activityId: String(row['activity_id']),
+    activityType: String(row['activity_type']),
+    objectId: String(row['object_id']),
+    slug: nullableText(row['slug']),
+    createdAt: String(row['created_at']),
+    json: String(row['json']),
+  };
+}
+
+function toDelivery(row: Record<string, unknown>): Delivery {
+  return {
+    activityId: String(row['activity_id']),
+    actorId: String(row['actor_id']),
+    inboxId: String(row['inbox_id']),
+    status: deliveryStatus(row['status']),
+    error: nullableText(row['error']),
+    attemptedAt: String(row['attempted_at']),
+  };
+}
+
+/**
+ * A stored status, or `failed` for one this version does not know.
+ *
+ * An unreadable status is reported as the pessimistic one: an admin screen
+ * showing a delivery as failed when it was not is a nuisance, and showing one
+ * as sent when nobody knows is a lie.
+ */
+function deliveryStatus(value: unknown): DeliveryStatus {
+  return DELIVERY_STATUSES.includes(value as DeliveryStatus) ? (value as DeliveryStatus) : 'failed';
 }
 
 function toSession(row: Record<string, unknown>): Session {
@@ -932,6 +1151,45 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
       CREATE UNIQUE INDEX ap_inbox_activity_id ON ap_inbox (activity_id);
       CREATE INDEX ap_inbox_received_at ON ap_inbox (received_at);
       CREATE INDEX ap_inbox_actor_id ON ap_inbox (actor_id);
+    `,
+  },
+  {
+    // Outbound delivery (doc-4, decision-5). Two tables, because an activity
+    // is one thing and its fate at each follower is another: keeping the
+    // JSON-LD once rather than once per follower is what makes a redelivery to
+    // a thousand followers a single read, and one row per (activity, follower)
+    // is what lets the admin see which follower did not get it.
+    //
+    // The activity's own id is the key. It is derived from the post's object
+    // id — `#create`, `#update/{hash}`, `#delete/{time}` — so re-sending the
+    // same announcement updates the row it belongs to instead of writing a
+    // second one that says the same thing.
+    version: 7,
+    sql: `
+      CREATE TABLE ap_outbound (
+        activity_id   TEXT PRIMARY KEY,
+        activity_type TEXT NOT NULL,
+        object_id     TEXT NOT NULL,
+        slug          TEXT,
+        created_at    TEXT NOT NULL,
+        json          TEXT NOT NULL
+      );
+
+      CREATE INDEX ap_outbound_created_at ON ap_outbound (created_at);
+      CREATE INDEX ap_outbound_object_id ON ap_outbound (object_id);
+
+      CREATE TABLE ap_deliveries (
+        activity_id  TEXT NOT NULL REFERENCES ap_outbound (activity_id) ON DELETE CASCADE,
+        actor_id     TEXT NOT NULL,
+        inbox_id     TEXT NOT NULL,
+        status       TEXT NOT NULL,
+        error        TEXT,
+        attempted_at TEXT NOT NULL,
+        PRIMARY KEY (activity_id, actor_id)
+      );
+
+      CREATE INDEX ap_deliveries_attempted_at ON ap_deliveries (attempted_at);
+      CREATE INDEX ap_deliveries_status ON ap_deliveries (status);
     `,
   },
 ];

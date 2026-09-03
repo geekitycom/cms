@@ -258,6 +258,14 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       },
     });
 
+    await c.var.announce({
+      type: 'created',
+      path: document.path,
+      previous: undefined,
+      next: document,
+      origin: 'admin',
+    });
+
     flash(c, 'notice', `Draft saved: ${document.title}`);
     return c.redirect(postEditorPath(document.slug), 303);
   });

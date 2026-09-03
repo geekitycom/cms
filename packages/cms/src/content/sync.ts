@@ -25,8 +25,16 @@ const DOCUMENT_DIRECTORIES: ReadonlyMap<string, DocumentType> = new Map([
 /** What happened to one document. */
 export type DocumentChangeType = 'created' | 'updated' | 'deleted';
 
-/** Where a change came from: the scan, or the watcher. */
-export type ChangeOrigin = 'scan' | 'watch';
+/**
+ * Where a change came from.
+ *
+ * `scan` is a full walk of the content directory, the boot scan included;
+ * `watch` is a file that changed under the running watcher; `admin` is a write
+ * the CMS made itself and announced, because the admin corrects the index as
+ * soon as the bytes land (doc-1) and the watcher's later re-read of that file
+ * is a hash no-op that would otherwise emit nothing at all.
+ */
+export type ChangeOrigin = 'scan' | 'watch' | 'admin';
 
 /**
  * One change to the index, as the subscriber sees it.
@@ -43,7 +51,7 @@ export interface DocumentChange {
   previous: Document | undefined;
   /** The document after the change, `undefined` when the file is gone. */
   next: Document | undefined;
-  /** `scan` for a full scan (including the one on boot), `watch` for a live edit. */
+  /** Where the change came from; see {@link ChangeOrigin}. */
   origin: ChangeOrigin;
 }
 
@@ -102,14 +110,21 @@ export interface ContentEventMap {
   change: [DocumentChange];
 }
 
-/** A listener for one kind of change. */
-export type ContentEventListener = (change: DocumentChange) => void;
+/**
+ * A listener for one kind of change.
+ *
+ * The return is `unknown` rather than `void` so an `async` listener type
+ * checks: the sync ignores the value but awaits a promise, which is what lets
+ * a subscriber that writes to disk finish before the change is called done.
+ */
+export type ContentEventListener = (change: DocumentChange) => unknown;
 
 /**
  * Subscription to index changes.
  *
- * A listener that throws is reported through the logger and does not stop the
- * sync, so one bad subscriber cannot wedge the watcher.
+ * A listener that throws — or, when it is `async`, whose promise rejects — is
+ * reported through the logger and does not stop the sync, so one bad
+ * subscriber cannot wedge the watcher.
  */
 export interface ContentEvents {
   /** Listen for an event. Returns the function that unsubscribes. */
@@ -124,6 +139,19 @@ export interface ContentEvents {
 export interface ContentSync {
   /** Subscribe to index changes. */
   readonly events: ContentEvents;
+  /**
+   * Report a change the sync did not make, and wait for every listener to
+   * finish with it.
+   *
+   * The admin writes a file and corrects the index in the same request rather
+   * than waiting for the watcher (doc-1), which means the watcher's re-read
+   * finds a hash that already matches and emits nothing. Without this, no
+   * subscriber would ever hear about an admin save. The promise settles once
+   * every listener has, so a caller that has to know the change was seen — the
+   * federation stamping `activitypub` into the file it just wrote — can wait
+   * for it.
+   */
+  announce(change: DocumentChange): Promise<void>;
   /** Walk the content directory once, reconciling every file and dropping rows whose file is gone. */
   sync(): Promise<SyncResult>;
   /**
@@ -172,7 +200,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
       const stale = store.getByPath(conflicting);
       store.remove(conflicting);
       if (stale !== undefined) {
-        emitChange(events, {
+        await emitChange(events, {
           type: 'deleted',
           path: conflicting,
           previous: stale,
@@ -191,7 +219,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     if (source === undefined) {
       if (previous === undefined) return false;
       store.remove(relativePath);
-      emitChange(events, {
+      await emitChange(events, {
         type: 'deleted',
         path: relativePath,
         previous,
@@ -221,7 +249,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
       throw new SkippedFile();
     }
 
-    emitChange(events, {
+    await emitChange(events, {
       type: previous === undefined ? 'created' : 'updated',
       path: relativePath,
       previous,
@@ -327,6 +355,10 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
   return {
     events,
 
+    announce(change) {
+      return emitChange(events, change);
+    },
+
     sync() {
       return scan();
     },
@@ -383,15 +415,21 @@ class SkippedFile extends Error {
   override readonly name = 'SkippedFile';
 }
 
-/** Emit the primary change, then the visibility change it implies. */
-function emitChange(events: Emitter, change: DocumentChange): void {
-  events.emit(change.type, change);
-  events.emit('change', change);
+/**
+ * Emit the primary change, then the visibility change it implies, and resolve
+ * once every listener has finished with all of them.
+ *
+ * The events go out in order rather than at once, so a subscriber that listens
+ * for both `created` and `published` sees them the way the names read.
+ */
+async function emitChange(events: Emitter, change: DocumentChange): Promise<void> {
+  await events.emit(change.type, change);
+  await events.emit('change', change);
 
   const wasPublic = isPublic(change.previous);
   const isNowPublic = isPublic(change.next);
-  if (isNowPublic && !wasPublic) events.emit('published', change);
-  else if (wasPublic && !isNowPublic) events.emit('unpublished', change);
+  if (isNowPublic && !wasPublic) await events.emit('published', change);
+  else if (wasPublic && !isNowPublic) await events.emit('unpublished', change);
 }
 
 /** A document is public when it exists, is not a draft and is not in the trash. */
@@ -488,7 +526,8 @@ function isDocumentPath(relativePath: string): boolean {
 
 /** The minimum event emitter this needs, typed to {@link ContentEventMap}. */
 interface Emitter extends ContentEvents {
-  emit<K extends keyof ContentEventMap>(event: K, change: DocumentChange): void;
+  /** Deliver one event, resolving once every listener has finished with it. */
+  emit<K extends keyof ContentEventMap>(event: K, change: DocumentChange): Promise<void>;
 }
 
 function createEmitter(logger: SyncLogger): Emitter {
@@ -525,12 +564,16 @@ function createEmitter(logger: SyncLogger): Emitter {
       listeners.get(event)?.delete(listener);
     },
 
-    emit(event, change) {
+    async emit(event, change) {
       const registered = listeners.get(event);
       if (registered === undefined) return;
       for (const listener of [...registered]) {
         try {
-          listener(change);
+          // A listener's return is ignored, but an `async` one hands back a
+          // promise: awaiting it is what lets a subscriber that writes to disk
+          // finish before the caller carries on, and what keeps a rejection
+          // from escaping as an unhandled one.
+          await listener(change);
         } catch (error) {
           logger.warn(`A ${event} listener threw: ${messageOf(error)}`);
         }
