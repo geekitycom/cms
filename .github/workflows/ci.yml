@@ -27,7 +27,7 @@ concurrency:
 jobs:
   lint:
     name: lint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -38,7 +38,7 @@ jobs:
 
   typecheck:
     name: typecheck
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -46,7 +46,7 @@ jobs:
 
   test:
     name: test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -58,7 +58,7 @@ jobs:
   # the plain name `test`.
   test-node-26:
     name: test-node-26
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -68,7 +68,7 @@ jobs:
 
   build:
     name: build
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -78,7 +78,7 @@ jobs:
   # its own job and the fast suite stays fast (decision-8).
   test-11ty:
     name: test-11ty
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -96,7 +96,7 @@ jobs:
   # loopback, and `@fedify/cli` comes out of the lockfile.
   fed-smoke:
     name: fed-smoke
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -112,7 +112,7 @@ jobs:
   # so the sequence can be run on a laptop before it is trusted here.
   pack-install:
     name: pack-install
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -127,7 +127,7 @@ jobs:
   # artifact; no third-party coverage service is involved.
   coverage:
     name: coverage
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -156,7 +156,7 @@ jobs:
   pr-title:
     name: pr-title
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     permissions:
       contents: read
       pull-requests: read
