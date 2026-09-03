@@ -5,6 +5,7 @@ _site/
 data/
 *.tsbuildinfo
 *.tgz
+packages/cms/admin/static/editor.js
 
 # Written by tools, not by hand.
 pnpm-lock.yaml

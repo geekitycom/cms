@@ -460,3 +460,96 @@ button[type='submit']:hover,
   overflow: hidden;
   clip-path: inset(50%);
 }
+
+/* The editor's enhancement: the Write/Preview tabs, the CodeMirror surface,
+   the preview frame and the upload control. Every rule here is inert until
+   editor.js has run — with JavaScript off, `.admin-editor-tools` holds one
+   Preview button and nothing else. */
+
+.admin-editor-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.admin-editor-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-right: auto;
+}
+
+.admin-editor-tab {
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--admin-border);
+  border-radius: 3px;
+  background: var(--admin-field);
+  color: var(--admin-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-editor-tab[aria-selected='true'] {
+  background: var(--admin-surface);
+  border-color: var(--admin-link);
+  color: var(--admin-link);
+  font-weight: 600;
+}
+
+/* The stylesheet gives `button[type='submit']` its shape, and this one is a
+   `type="button"`, so it has to be given the same shape by hand. */
+
+.admin-editor-upload button {
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--admin-border);
+  border-radius: 3px;
+  background: var(--admin-surface);
+  color: var(--admin-link);
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-editor-upload button:hover {
+  background: var(--admin-field);
+}
+
+.admin-editor-status {
+  flex: 1 0 100%;
+  margin: 0;
+  min-height: 1.2em;
+  color: var(--admin-muted);
+  font-size: 0.9em;
+}
+
+/* CodeMirror sits where the textarea was, and is the same height it was. */
+
+.admin-editor-surface .cm-editor {
+  height: 28rem;
+  border: 1px solid var(--admin-border);
+  border-radius: 3px;
+  font-size: 0.95rem;
+}
+
+.admin-editor-surface .cm-editor.cm-focused {
+  outline: 2px solid var(--admin-link);
+  outline-offset: -1px;
+}
+
+.admin-editor-surface .cm-scroller {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1.5;
+}
+
+/* The preview is the site's own page, so it is framed rather than inlined:
+   the theme's stylesheet has no business in the admin's. */
+
+.admin-editor-preview {
+  width: 100%;
+  height: 28rem;
+  border: 1px solid var(--admin-border);
+  border-radius: 3px;
+  background: #fff;
+}

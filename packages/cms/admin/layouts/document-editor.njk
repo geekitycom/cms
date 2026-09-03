@@ -22,6 +22,8 @@
        longer matches what is on disk is refused rather than overwriting
        somebody else's edit (doc-1). #}
     <input type="hidden" name="hash" value="{{ form.hash }}" />
+    {# Which layout the preview renders through. The save handler ignores it. #}
+    <input type="hidden" name="type" value="{{ kind.type }}" />
 
     <div class="admin-editor-main">
       <label for="editor-title">Title</label>
@@ -29,6 +31,28 @@
 
       <label for="editor-body">Body</label>
       <textarea id="editor-body" name="body" rows="24">{{ form.body }}</textarea>
+
+      {# Everything the editor's own script needs, on the element it hangs off.
+         With JavaScript off this is one button that posts the form to the
+         preview in a new tab, which is a preview. With it on, editor.js takes
+         the button over, puts CodeMirror on the textarea above and adds the
+         tabs and the upload control beside it. #}
+      <div
+        class="admin-editor-tools"
+        id="editor-enhance"
+        data-preview-url="{{ previewUrl }}"
+        data-upload-url="{{ uploadUrl }}"
+        data-kind="{{ kind.type }}"
+      >
+        <button
+          type="submit"
+          id="editor-preview-fallback"
+          class="admin-button-quiet"
+          formaction="{{ previewUrl }}"
+          formtarget="_blank"
+          formnovalidate
+        >Preview</button>
+      </div>
     </div>
 
     <div class="admin-editor-side">
@@ -78,6 +102,12 @@
       </p>
     </div>
   </form>
+
+  {# CodeMirror, the preview tab and the upload control. A module script is
+     deferred by definition, so it runs after the form is in the document.
+     Nothing above depends on it: with the bundle missing or JavaScript off the
+     textarea and the Preview button are the whole editor. #}
+  <script type="module" src="{{ assetPrefix }}editor.js"></script>
 
   <script>
     /* The one bit of progressive enhancement doc-5 asks for: the slug follows

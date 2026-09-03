@@ -4,12 +4,17 @@ import type { Document } from '../content/document.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import {
+  assetNotModified,
+  assetResponse,
   findThemeAsset,
+  findUpload,
   matchesEtag,
   themeAssetNotModified,
   themeAssetResponse,
   themeSearchPath,
   THEME_ASSET_PREFIX,
+  UPLOAD_ASSET_MAX_AGE,
+  UPLOAD_ASSET_PREFIX,
 } from './assets.ts';
 import { isPublicDocument, publicDocumentAt } from './documents.ts';
 import { feedResponse, feedSize, FEED_FILES } from './feeds.ts';
@@ -47,6 +52,7 @@ export const TAG_SEGMENT = 'tags';
  */
 export function mountPublicSite(app: Hono<GeekityEnv>): void {
   app.get(`${THEME_ASSET_PREFIX}*`, themeAsset);
+  app.get(`${UPLOAD_ASSET_PREFIX}*`, upload);
 
   app.get('/', (c) => listing(c, { tag: undefined, pageNumber: 0 }));
 
@@ -395,6 +401,27 @@ function themeAsset(c: Context<GeekityEnv>): Response {
     return themeAssetNotModified(asset);
   }
   return themeAssetResponse(asset);
+}
+
+/**
+ * A file from `content/uploads/`, at the URL Eleventy's passthrough copy puts
+ * it at.
+ *
+ * Uploads are not documents — the index never sees them — so they are served
+ * as files, with the same validators and the same traversal check the theme's
+ * assets get. The cache lifetime is longer than a theme asset's because an
+ * upload's URL names one set of bytes: the upload endpoint never overwrites,
+ * it suffixes.
+ */
+function upload(c: Context<GeekityEnv>): Response {
+  const relative = requestPath(c).slice(UPLOAD_ASSET_PREFIX.length);
+  const asset = findUpload(relative, c.var.config.contentDir);
+  if (asset === undefined) return notFound(c);
+
+  const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
+  return matchesEtag(c.req.header('if-none-match'), asset.etag)
+    ? assetNotModified(asset, options)
+    : assetResponse(asset, options);
 }
 
 /** The URL of a page of the home listing, by zero-based index. */

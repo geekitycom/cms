@@ -40,6 +40,7 @@ export type {
   MountDocumentScreensOptions,
 } from './documents.ts';
 export { flash, takeFlash } from './flash.ts';
+export { mountPreview, PREVIEW_PATH } from './preview.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from './passwords.ts';
 export {
   ADMIN_SECTIONS,
@@ -81,3 +82,11 @@ export {
   PACKAGED_ADMIN_DIR,
 } from './templates.ts';
 export type { CreateAdminTemplateEnvironmentOptions } from './templates.ts';
+export {
+  mountUploads,
+  refuseOversizedUpload,
+  UPLOAD_ENVELOPE_BYTES,
+  UPLOAD_FIELD,
+  UPLOADS_PATH,
+} from './uploads.ts';
+export type { UploadResult } from './uploads.ts';

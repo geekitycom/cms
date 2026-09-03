@@ -5,6 +5,9 @@ dist/
 # Eleventy build output, if anyone builds a content directory in place
 _site/
 
+# The admin editor's bundle, written by `pnpm build` from packages/cms/editor/
+packages/cms/admin/static/editor.js
+
 # SQLite index and other derived state
 data/
 apps/*/data/

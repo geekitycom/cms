@@ -173,6 +173,73 @@ describe('resolveConfig', () => {
     );
   });
 
+  it('caps an upload at ten mebibytes unless the site says otherwise', () => {
+    assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).uploadMaxBytes, 10 * 1024 * 1024);
+    assert.equal(
+      resolveConfig({ uploadMaxBytes: 2048 }, { cwd: '/srv/site', env: {} }).uploadMaxBytes,
+      2048,
+    );
+    assert.equal(
+      resolveConfig(
+        { uploadMaxBytes: 2048 },
+        { cwd: '/srv/site', env: { GEEKITY_UPLOAD_MAX_BYTES: '512' } },
+      ).uploadMaxBytes,
+      512,
+    );
+  });
+
+  it('rejects an upload limit that is not a positive whole number of bytes', () => {
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_UPLOAD_MAX_BYTES: 'lots' } }),
+      /GEEKITY_UPLOAD_MAX_BYTES/,
+    );
+    assert.throws(
+      () => resolveConfig({ uploadMaxBytes: 0 }, { cwd: '/srv/site', env: {} }),
+      /uploadMaxBytes/,
+    );
+  });
+
+  it('allows images, PDFs and plain text uploads by default, and no SVG', () => {
+    const { uploadTypes } = resolveConfig({}, { cwd: '/srv/site', env: {} });
+
+    assert.deepEqual(uploadTypes, [
+      '.avif',
+      '.gif',
+      '.jpeg',
+      '.jpg',
+      '.md',
+      '.pdf',
+      '.png',
+      '.txt',
+      '.webp',
+    ]);
+  });
+
+  it('takes an upload allowlist from the config or the environment, normalised', () => {
+    assert.deepEqual(
+      resolveConfig({ uploadTypes: ['PNG', '.Webp'] }, { cwd: '/srv/site', env: {} }).uploadTypes,
+      ['.png', '.webp'],
+    );
+    assert.deepEqual(
+      resolveConfig(
+        { uploadTypes: ['.png'] },
+        { cwd: '/srv/site', env: { GEEKITY_UPLOAD_TYPES: 'gif, .pdf' } },
+      ).uploadTypes,
+      ['.gif', '.pdf'],
+    );
+  });
+
+  it('rejects an upload allowlist naming a type the CMS has no media type for', () => {
+    assert.throws(
+      () => resolveConfig({ uploadTypes: ['.exe'] }, { cwd: '/srv/site', env: {} }),
+      /uploadTypes/,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_UPLOAD_TYPES: '.exe' } }),
+      /GEEKITY_UPLOAD_TYPES/,
+    );
+  });
+
   it('defaults cwd and env to the running process', () => {
     const config = resolveConfig({ baseUrl: 'https://geekity.example' });
 

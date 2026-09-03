@@ -27,6 +27,9 @@ export default tseslint.config(
       '**/dist/**',
       '**/_site/**',
       '**/data/**',
+      // A build product: esbuild's output, written by `pnpm build` from
+      // packages/cms/editor/, which is linted as source instead.
+      'packages/cms/admin/static/editor.js',
       'backlog/**',
       // Content, not code: fixtures are stored exactly as the document writer
       // emits them, so nothing may rewrite them.
@@ -97,6 +100,18 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+
+  {
+    // The admin editor's browser code. It has a tsconfig of its own — the DOM
+    // lib and no node types — because it is bundled by esbuild rather than
+    // compiled with the server, and `globals.node` above would let a `process`
+    // or a `Buffer` through the linter into a page.
+    name: 'geekity/editor-client',
+    files: ['packages/cms/editor/**/*.ts'],
+    languageOptions: {
+      globals: globals.browser,
     },
   },
 
