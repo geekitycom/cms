@@ -2,10 +2,11 @@ import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
+import type { DeliveryReport } from '../federation/delivery.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
 import type { SiteData } from '../web/context.ts';
 import type { AdminRender } from './documents.ts';
@@ -13,9 +14,19 @@ import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import type { AdminStore } from './store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
+import { refusedUpload, storeUpload } from './uploads.ts';
 
 /** Where the settings screen lives. */
 export const SETTINGS_PATH = `${ADMIN_PREFIX}/settings`;
+
+/** Where the avatar's upload form and its Remove button post. */
+export const AVATAR_PATH = `${SETTINGS_PATH}/avatar`;
+
+/** The fields those two forms submit. */
+export const AVATAR_FIELDS = { file: 'avatar', action: 'action' } as const;
+
+/** The {@link AVATAR_FIELDS.action} that takes the avatar down again. */
+export const AVATAR_REMOVE = 'remove';
 
 /**
  * The ActivityPub actor types doc-4 allows a site to be.
@@ -65,7 +76,25 @@ export interface SiteSettings {
   actorHandle: string;
   /** Which ActivityPub actor type the site is, one of {@link ACTOR_TYPES}. */
   actorType: string;
+  /**
+   * The site's avatar, as the public path the upload endpoint handed back —
+   * `/uploads/2026/09/me.png` — or an absolute URL for one hosted elsewhere.
+   * Empty when the site has none.
+   *
+   * It is not a field of the settings form: an image is uploaded and removed
+   * through {@link AVATAR_PATH}, because a file cannot travel in a urlencoded
+   * body and because a save of the other fields must not silently drop it.
+   */
+  avatar: string;
 }
+
+/**
+ * The settings the form on the settings screen carries.
+ *
+ * Every setting but the avatar, which is a file rather than a field; see
+ * {@link SiteSettings.avatar}.
+ */
+export type SettingsField = Exclude<keyof SiteSettings, 'avatar'>;
 
 /**
  * What a site is worth before anybody has said otherwise.
@@ -82,6 +111,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   author: '',
   actorHandle: 'blog',
   actorType: 'Person',
+  avatar: '',
 };
 
 /** The form field each setting is submitted under. */
@@ -94,13 +124,13 @@ export const SETTINGS_FIELDS = {
   author: 'author',
   actorHandle: 'actor_handle',
   actorType: 'actor_type',
-} as const satisfies Record<keyof SiteSettings, string>;
+} as const satisfies Record<SettingsField, string>;
 
 /** A submitted settings form, before it is known to be valid. */
-export type SettingsForm = Record<keyof SiteSettings, string>;
+export type SettingsForm = Record<SettingsField, string>;
 
 /** One message per field that is wrong. An empty object is a valid form. */
-export type SettingsProblems = Partial<Record<keyof SiteSettings, string>>;
+export type SettingsProblems = Partial<Record<SettingsField, string>>;
 
 /** The stored settings, with every default filled in. */
 export function readSiteSettings(store: AdminStore): SiteSettings {
@@ -121,6 +151,7 @@ export function readSiteSettings(store: AdminStore): SiteSettings {
     actorType: ACTOR_TYPES.includes(stored['actorType'] ?? '')
       ? (stored['actorType'] as string)
       : DEFAULT_SITE_SETTINGS.actorType,
+    avatar: stored['avatar'] ?? DEFAULT_SITE_SETTINGS.avatar,
   };
 }
 
@@ -135,6 +166,7 @@ export function writeSiteSettings(store: AdminStore, settings: SiteSettings): vo
     author: settings.author,
     actorHandle: settings.actorHandle,
     actorType: settings.actorType,
+    avatar: settings.avatar,
   });
 }
 
@@ -152,6 +184,7 @@ export function settingsSiteData(settings: SiteSettings): Partial<SiteData> {
     ...(settings.baseUrl === '' ? {} : { url: settings.baseUrl }),
     ...(settings.author === '' ? {} : { author: settings.author }),
     ...(settings.timezone === '' ? {} : { timezone: settings.timezone }),
+    ...(settings.avatar === '' ? {} : { avatar: settings.avatar }),
     postsPerPage: settings.postsPerPage,
   };
 }
@@ -177,6 +210,7 @@ export function siteJsonFor(
     author: settings.author,
     postsPerPage: settings.postsPerPage,
     timezone: settings.timezone,
+    avatar: settings.avatar,
   };
 }
 
@@ -244,6 +278,7 @@ export function seedSiteSettings(options: {
     ...(typeof file['timezone'] === 'string' && file['timezone'] !== ''
       ? { timezone: file['timezone'] }
       : {}),
+    ...(typeof file['avatar'] === 'string' ? { avatar: file['avatar'] } : {}),
     ...(Number.isInteger(postsPerPage) && postsPerPage > 0 ? { postsPerPage } : {}),
     // The file's `url` only becomes the setting when the deployment has not
     // named one; otherwise the setting records what is actually in effect.
@@ -309,9 +344,17 @@ export function settingsProblems(form: SettingsForm): SettingsProblems {
 /**
  * A validated form as settings. Only call it on a form
  * {@link settingsProblems} found nothing wrong with.
+ *
+ * The avatar is carried in rather than read off the form, because it is not on
+ * it: the image is uploaded and removed through {@link AVATAR_PATH}, and a
+ * save of the other fields keeps whatever is stored.
  */
-export function settingsFromForm(form: SettingsForm): SiteSettings {
+export function settingsFromForm(
+  form: SettingsForm,
+  avatar: string = DEFAULT_SITE_SETTINGS.avatar,
+): SiteSettings {
   return {
+    avatar,
     title: form.title.trim(),
     tagline: form.tagline.trim(),
     baseUrl: normalizeBaseUrl(form.baseUrl) ?? '',
@@ -388,13 +431,102 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       });
     }
 
-    const settings = settingsFromForm(submitted);
-    writeSiteSettings(c.var.admin, settings);
-    await writeSiteJson({ contentDir: c.var.config.contentDir, settings });
+    const settings = settingsFromForm(submitted, stored.avatar);
+    await store(c, settings);
 
-    flash(c, 'notice', 'Settings saved.');
+    // The name, the summary and the handle are the actor's profile as much as
+    // the avatar is, and a follower's copy of it is only as fresh as the last
+    // thing it was told.
+    const report = profileChanged(stored, settings)
+      ? await c.var.delivery.updateActor()
+      : undefined;
+
+    flash(c, 'notice', `Settings saved.${toldFollowers(report)}`);
     return c.redirect(SETTINGS_PATH, 303);
   });
+
+  /**
+   * The avatar's own endpoint: one multipart form uploads an image, and a
+   * second, plain one takes it down again.
+   *
+   * It is separate from the settings form because a file cannot travel in a
+   * urlencoded body, and because the two should not share a fate: a rejected
+   * image must not lose an edit to the title, and a rejected title must not
+   * lose the avatar. A refusal is a flash and a redirect, so what is stored is
+   * exactly what it was and the screen says why.
+   */
+  app.post(AVATAR_PATH, async (c) => {
+    const body = await c.req.parseBody();
+    const stored = readSiteSettings(c.var.admin);
+
+    if (field(body[AVATAR_FIELDS.action]) === AVATAR_REMOVE) {
+      if (stored.avatar === '') {
+        flash(c, 'notice', 'The site has no avatar.');
+        return c.redirect(SETTINGS_PATH, 303);
+      }
+
+      await store(c, { ...stored, avatar: '' });
+      const removal = await c.var.delivery.updateActor();
+      flash(c, 'notice', `Avatar removed.${toldFollowers(removal)}`);
+      return c.redirect(SETTINGS_PATH, 303);
+    }
+
+    const outcome = await storeUpload(body[AVATAR_FIELDS.file], c.var.config, {
+      imagesOnly: true,
+    });
+    if (refusedUpload(outcome)) {
+      flash(c, 'error', `${outcome.error} The avatar is unchanged.`);
+      return c.redirect(SETTINGS_PATH, 303);
+    }
+
+    await store(c, { ...stored, avatar: outcome.url });
+    const report = await c.var.delivery.updateActor();
+    flash(c, 'notice', `Avatar saved.${toldFollowers(report)}`);
+    return c.redirect(SETTINGS_PATH, 303);
+  });
+
+  /**
+   * Write settings to SQLite and then to `content/_data/site.json`, in that
+   * order, so the store — which is what the theme reads — is never behind the
+   * file.
+   */
+  async function store(c: Context<GeekityEnv>, settings: SiteSettings): Promise<void> {
+    writeSiteSettings(c.var.admin, settings);
+    await writeSiteJson({ contentDir: c.var.config.contentDir, settings });
+  }
+}
+
+/**
+ * Whether a save moved something the ActivityPub actor carries, which is what
+ * decides whether the followers are told (doc-4: the profile fields come from
+ * the settings). The rest — the time zone, the page size — is the site's own
+ * business and nobody else's.
+ *
+ * The base URL is not here either, though the profile is built on it: it is
+ * settled at boot ({@link effectiveBaseUrl}), so an actor built the moment it
+ * is saved would carry the old one and say nothing new.
+ */
+export function profileChanged(before: SiteSettings, after: SiteSettings): boolean {
+  return (
+    before.title !== after.title ||
+    before.tagline !== after.tagline ||
+    before.actorHandle !== after.actorHandle ||
+    before.actorType !== after.actorType ||
+    before.avatar !== after.avatar
+  );
+}
+
+/**
+ * The sentence a flash adds about the followers, when there were any: a save
+ * of the profile is also an announcement, and it should say so rather than
+ * leave the admin wondering.
+ */
+function toldFollowers(report: DeliveryReport | undefined): string {
+  const total = report?.deliveries.length ?? 0;
+  if (total === 0) return '';
+  return total === 1
+    ? ' One follower has been told.'
+    : ` ${String(total)} followers have been told.`;
 }
 
 /** Everything the settings template renders, for a given set of settings. */
@@ -409,6 +541,10 @@ function screen(
     settingsUrl: SETTINGS_PATH,
     fields: SETTINGS_FIELDS,
     actorTypes: ACTOR_TYPES,
+    avatar: settings.avatar,
+    avatarUrl: AVATAR_PATH,
+    avatarFields: AVATAR_FIELDS,
+    avatarRemove: AVATAR_REMOVE,
     form: formFromSettings(settings),
     problems: {},
     baseUrlInEffect: effectiveBaseUrl(config, settings),

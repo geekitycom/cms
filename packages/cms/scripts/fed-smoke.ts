@@ -133,6 +133,7 @@ async function main(): Promise<void> {
       author: 'andrew',
       actorHandle: ACTOR_HANDLE,
       actorType: 'Person',
+      avatar: '',
     });
     seed.close();
 

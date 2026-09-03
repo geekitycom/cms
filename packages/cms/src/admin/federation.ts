@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 
 import type { ContentStore } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
+import { avatarUrl } from '../federation/actor.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
 import { SITE_ACTOR_IDENTIFIER } from '../federation/keys.ts';
 import { ACTOR_PATH, federationOrigin, FEDERATION_PREFIX } from '../federation/paths.ts';
@@ -220,6 +221,11 @@ export interface ActorSummary {
   readonly actorId: string;
   /** The profile a human would open, which is the site itself. */
   readonly url: string;
+  /**
+   * The avatar the actor's `icon` carries, absolute, or `null` when the site
+   * has none — which is what the screen draws a placeholder for.
+   */
+  readonly avatarUrl: string | null;
   /** How many actors follow it. */
   readonly followers: number;
 }
@@ -244,6 +250,7 @@ export function actorSummary(
 
   return {
     handle: `@${settings.actorHandle}@${origin.handleHost}`,
+    avatarUrl: avatarUrl(settings.avatar, baseUrl) ?? null,
     type: settings.actorType,
     name: settings.title,
     summary: settings.tagline,

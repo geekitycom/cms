@@ -1,4 +1,4 @@
-export { ACTOR_CLASSES, actorClassFor, AVATAR_SETTING, siteActor } from './actor.ts';
+export { ACTOR_CLASSES, actorClassFor, avatarUrl, siteActor } from './actor.ts';
 export type { SiteActorOptions } from './actor.ts';
 export {
   articleObjectId,

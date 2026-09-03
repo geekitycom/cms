@@ -26,6 +26,11 @@ export interface SiteData {
   url: string;
   /** Site author. */
   author?: string | undefined;
+  /**
+   * The site's avatar, as the public path it is served at. Empty until one has
+   * been uploaded on the settings screen; the ActivityPub actor's `icon`.
+   */
+  avatar?: string | undefined;
   /** How many posts a listing page holds. */
   postsPerPage?: number | undefined;
   [key: string]: unknown;

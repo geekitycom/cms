@@ -153,6 +153,7 @@ async function site(): Promise<Cms> {
     author: 'Ada',
     actorHandle: 'blog',
     actorType: 'Person',
+    avatar: '',
   });
   seed.close();
 

@@ -67,6 +67,7 @@ async function site(
     author: 'Ada',
     actorHandle: 'blog',
     actorType: 'Person',
+    avatar: '',
     ...settings,
   });
   seed.close();
@@ -489,6 +490,7 @@ describe('a site in a subdirectory', () => {
       author: 'Ada',
       actorHandle: 'blog',
       actorType: 'Person',
+      avatar: '',
     });
     seed.close();
 

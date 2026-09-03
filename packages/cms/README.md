@@ -269,11 +269,34 @@ and `listDeliveries(activityId)` and `countDeliveriesByStatus(activityId)`
 say how each one landed. A status is `sent` (the inbox took it), `queued`
 (handed to Fedify's queue, which retries out of band) or `failed`.
 
+### The site's avatar
+
+The actor's `icon` is an image uploaded on `/admin/settings`. It is stored with
+the site's other uploads, under `content/uploads/{yyyy}/{mm}/`, and the public
+path it is served at — `/uploads/2026/09/me.png` — is the `avatar` setting,
+mirrored into `content/_data/site.json` like the rest of them. The actor
+carries it as an absolute URL, resolved against the base URL in effect, because
+a peer has no site to resolve a path against; an `avatar` that is already an
+absolute URL is left alone, which is how a site puts its avatar on a CDN.
+
+Saving or removing it delivers an `Update` of the actor to every follower, so
+the profile a peer cached is refreshed rather than left showing last year's
+picture. The same goes for the title, the tagline, the base URL and the actor's
+handle and type: those are the fields the profile is built from, and a save
+that moves one of them tells the followers. A save that only moves the time
+zone or the page size tells nobody, and neither does anything at all on a site
+that has no followers yet.
+
+The `Update` is recorded in the delivery log like every other activity, with
+the actor's id as its object and no slug, and `cms.delivery.updateActor()`
+sends one from code. Because it is about no post, it is not a row in the
+federation screen's per-post delivery table.
+
 ### The federation screen
 
 `/admin/federation` is all of that with a page in front of it. It shows the
-site's own actor — the handle, the type, the name and summary the profile
-carries, and how many actors follow it — the follower list with avatars and
+site's own actor — its avatar, handle and type, the name and summary the
+profile carries, and how many actors follow it — the follower list with avatars and
 follow dates, the recent likes, boosts and replies out of the inbox log, each
 linked to the remote object and to the post it was about, and one row per post
 that has been federated: its latest activity, when it went, and how many
@@ -438,6 +461,7 @@ shadow the login form.
 | `/admin/quick-draft`           | `POST` only. Writes a draft post and redirects to its editor.         |
 | `/admin/posts`, `/admin/pages` | The listings and the editors.                                         |
 | `/admin/settings`              | Site title, tagline, base URL, time zone, posts per page, the actor.  |
+| `/admin/settings/avatar`       | `POST` only. Uploads the site's avatar, or removes it.                |
 | `/admin/users`                 | Who may sign in. `POST` adds one.                                     |
 | `/admin/users/password`        | `POST` only. Changes the signed-in admin's own password.              |
 | `/admin/users/delete`          | `POST` only. Deletes the user the form names.                         |

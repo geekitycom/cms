@@ -6,6 +6,7 @@ import { after, before, describe, it } from 'node:test';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import type { Cms } from '../index.ts';
+import { readSiteSettings } from './settings.ts';
 
 /** The site under test. Its origin is what an ActivityStreams id is built on. */
 const BASE_URL = 'https://blog.example';
@@ -193,6 +194,58 @@ describe('the actor summary', () => {
     assert.match(html, /https:\/\/blog\.example\/ap\/actor/, 'the actor id is shown');
     assert.match(html, /Followers[\s\S]{0,120}>1</, 'the follower count is shown');
   });
+
+  it('shows the site’s avatar beside it, and a placeholder without one (AC #5)', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+
+    assert.match(
+      await federationScreen(agent),
+      /admin-avatar-blank/,
+      'a site with no avatar gets the placeholder',
+    );
+
+    const token = csrfField(await (await agent.get('/admin/settings')).text());
+    assert.ok(token !== undefined);
+    await agent.upload(
+      '/admin/settings/avatar',
+      token,
+      { name: 'me.png', type: 'image/png', bytes: png() },
+      'avatar',
+    );
+
+    const avatar = readSiteSettings(cms.admin).avatar;
+    assert.match(
+      await federationScreen(agent),
+      new RegExp(`<img class="admin-avatar[^"]*" src="${BASE_URL}${avatar}"`),
+      'and the avatar itself once there is one',
+    );
+  });
+});
+
+describe('an actor update in the delivery log', () => {
+  it('is not shown as a post, because it is not about one', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
+
+    const token = csrfField(await (await agent.get('/admin/settings')).text());
+    assert.ok(token !== undefined);
+    await agent.upload(
+      '/admin/settings/avatar',
+      token,
+      { name: 'me.png', type: 'image/png', bytes: png() },
+      'avatar',
+    );
+    await cms.delivery.settled();
+
+    const recorded = cms.admin.listOutboundActivities()[0];
+    assert.equal(recorded?.activityType, 'Update', 'the actor update was recorded');
+
+    const html = await federationScreen(agent);
+    assert.match(html, /Nothing has been delivered/, 'the delivery table is still about posts');
+    assert.doesNotMatch(html, /ap\/actor#update/, 'and the actor update is not a row in it');
+  });
 });
 
 describe('recent inbox activity', () => {
@@ -364,4 +417,9 @@ function logReply(cms: Cms): void {
       },
     }),
   });
+}
+
+/** The first bytes of a PNG, which is all the signature check reads. */
+function png(): Uint8Array {
+  return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 }
