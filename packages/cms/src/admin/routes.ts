@@ -8,6 +8,7 @@ import type { GeekityEnv } from '../env.ts';
 import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';
 import { editorPath, mountDocumentScreens, PAGE_KIND, POST_KIND } from './documents.ts';
+import { FEDERATION_PATH, mountFederationScreen } from './federation.ts';
 import { flash, takeFlash } from './flash.ts';
 import { mountPreview } from './preview.ts';
 import { mountSettings } from './settings.ts';
@@ -213,6 +214,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
         editUrl: postEditorPath(document.slug),
       })),
       quickDraftUrl: QUICK_DRAFT_PATH,
+      // The one number on the dashboard that is not about the content
+      // directory: it is what says whether publishing is reaching anybody.
+      followers: c.var.admin.countFollowers(),
+      federationUrl: FEDERATION_PATH,
     });
   });
 
@@ -290,7 +295,18 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // whoever is looking at it.
   mountUsers(app, { render });
 
-  const built = new Set([POST_KIND.section, PAGE_KIND.section, 'dashboard', 'settings', 'users']);
+  // The fediverse side: the actor, the followers, the inbox log, and what the
+  // site sent to whom.
+  mountFederationScreen(app, { render });
+
+  const built = new Set([
+    POST_KIND.section,
+    PAGE_KIND.section,
+    'dashboard',
+    'settings',
+    'users',
+    'federation',
+  ]);
 
   // The sections doc-5 lists but no task has built yet. They are registered so
   // the navigation goes somewhere: a link that 404s reads as a broken admin,

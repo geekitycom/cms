@@ -39,6 +39,30 @@ export type {
   EditorForm,
   MountDocumentScreensOptions,
 } from './documents.ts';
+export {
+  actorSummary,
+  deliveryRows,
+  FEDERATION_FIELDS,
+  FEDERATION_PATH,
+  FEDERATION_RECENT,
+  followerRow,
+  INBOX_INTERACTIONS,
+  inboxRows,
+  localPosts,
+  mountFederationScreen,
+  REDELIVER_PATH,
+  redeliveryMessage,
+} from './federation.ts';
+export type {
+  ActorSummary,
+  DeliveryRow,
+  DeliveryRowsContext,
+  FollowerRow,
+  InboxRow,
+  InboxRowsContext,
+  LocalPost,
+  MountFederationScreenOptions,
+} from './federation.ts';
 export { flash, takeFlash } from './flash.ts';
 export { mountPreview, PREVIEW_PATH } from './preview.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from './passwords.ts';

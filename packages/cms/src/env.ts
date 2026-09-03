@@ -3,6 +3,7 @@ import type { Session } from './admin/store.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { ContentStore } from './content/store.ts';
 import type { DocumentChange } from './content/sync.ts';
+import type { DeliveryService } from './federation/delivery.ts';
 import type { Renderer } from './web/render.ts';
 
 /**
@@ -30,6 +31,13 @@ export interface GeekityEnv {
      * save. The promise resolves once every listener has finished.
      */
     announce: (change: DocumentChange) => Promise<void>;
+    /**
+     * Outbound ActivityPub delivery, so a handler can send a recorded activity
+     * again. The federation screen's Redeliver button is the whole reason it is
+     * here: everything else about delivery happens off the index, away from any
+     * request.
+     */
+    delivery: DeliveryService;
     /**
      * The session this request carries, set by the admin guard: a login, the
      * anonymous session that holds a CSRF token before login, or `undefined`

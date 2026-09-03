@@ -269,6 +269,18 @@ and `listDeliveries(activityId)` and `countDeliveriesByStatus(activityId)`
 say how each one landed. A status is `sent` (the inbox took it), `queued`
 (handed to Fedify's queue, which retries out of band) or `failed`.
 
+### The federation screen
+
+`/admin/federation` is all of that with a page in front of it. It shows the
+site's own actor — the handle, the type, the name and summary the profile
+carries, and how many actors follow it — the follower list with avatars and
+follow dates, the recent likes, boosts and replies out of the inbox log, each
+linked to the remote object and to the post it was about, and one row per post
+that has been federated: its latest activity, when it went, and how many
+followers it reached, is queued for, or failed for. Each of those rows has a
+Redeliver button, which is `cms.delivery.redeliver` behind a form: it sends
+that activity to every follower the site has now and says what came of it.
+
 [Fedify]: https://fedify.dev/
 
 ## Keeping the index in step
@@ -360,20 +372,21 @@ that ship inside the package, deliberately outside the theme search path: a
 site's `theme/` may override any public template, and must not be able to
 shadow the login form.
 
-| Route                          | What it does                                                         |
-| ------------------------------ | -------------------------------------------------------------------- |
-| `/admin`                       | The dashboard: counts, the five most recent posts, a quick draft.    |
-| `/admin/quick-draft`           | `POST` only. Writes a draft post and redirects to its editor.        |
-| `/admin/posts`, `/admin/pages` | The listings and the editors.                                        |
-| `/admin/settings`              | Site title, tagline, base URL, time zone, posts per page, the actor. |
-| `/admin/users`                 | Who may sign in. `POST` adds one.                                    |
-| `/admin/users/password`        | `POST` only. Changes the signed-in admin's own password.             |
-| `/admin/users/delete`          | `POST` only. Deletes the user the form names.                        |
-| `/admin/federation`            | The one section the navigation links to that is not built yet.       |
-| `/admin/setup`                 | First run: creates the first admin. Closed once a user exists.       |
-| `/admin/login`                 | Username and password.                                               |
-| `/admin/logout`                | `POST` only. Deletes the session row.                                |
-| `/admin/_static/*`             | The admin's own stylesheet, cached for an hour.                      |
+| Route                          | What it does                                                          |
+| ------------------------------ | --------------------------------------------------------------------- |
+| `/admin`                       | The dashboard: counts, the five most recent posts, a quick draft.     |
+| `/admin/quick-draft`           | `POST` only. Writes a draft post and redirects to its editor.         |
+| `/admin/posts`, `/admin/pages` | The listings and the editors.                                         |
+| `/admin/settings`              | Site title, tagline, base URL, time zone, posts per page, the actor.  |
+| `/admin/users`                 | Who may sign in. `POST` adds one.                                     |
+| `/admin/users/password`        | `POST` only. Changes the signed-in admin's own password.              |
+| `/admin/users/delete`          | `POST` only. Deletes the user the form names.                         |
+| `/admin/federation`            | The actor, the followers, the inbox log, and per-post delivery.       |
+| `/admin/federation/redeliver`  | `POST` only. Sends one post's latest activity to the followers again. |
+| `/admin/setup`                 | First run: creates the first admin. Closed once a user exists.        |
+| `/admin/login`                 | Username and password.                                                |
+| `/admin/logout`                | `POST` only. Deletes the session row.                                 |
+| `/admin/_static/*`             | The admin's own stylesheet, cached for an hour.                       |
 
 The screens behind the login share one layout: a bar across the top with the
 site name and a link to the public site, the sections down the left with the

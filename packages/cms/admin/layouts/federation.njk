@@ -1,0 +1,138 @@
+{# /admin/federation: who the site is to the fediverse, who follows it, what
+   arrived in the inbox, and how what went out landed. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}Federation{% endblock %}
+
+{% block content %}
+  <h1>Federation</h1>
+
+  <section class="admin-panel admin-actor">
+    <h2>This site’s actor</h2>
+    <p class="admin-actor-handle">{{ actor.handle }}</p>
+    <dl class="admin-actor-fields">
+      <div>
+        <dt>Name</dt>
+        <dd>{{ actor.name }}</dd>
+      </div>
+      <div>
+        <dt>Summary</dt>
+        <dd>{% if actor.summary %}{{ actor.summary }}{% else %}<span class="admin-empty">None set.</span>{% endif %}</dd>
+      </div>
+      <div>
+        <dt>Type</dt>
+        <dd>{{ actor.type }}</dd>
+      </div>
+      <div>
+        <dt>Actor</dt>
+        <dd><a href="{{ actor.actorId }}">{{ actor.actorId }}</a></dd>
+      </div>
+      <div>
+        <dt>Profile</dt>
+        <dd><a href="{{ actor.url }}">{{ actor.url }}</a></dd>
+      </div>
+      <div>
+        <dt>Followers</dt>
+        <dd>{{ actor.followers }}</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="admin-panel">
+    <h2>Followers</h2>
+    {% if followers.length %}
+      <table class="admin-list">
+        <thead>
+          <tr>
+            <th scope="col">Follower</th>
+            <th scope="col">Handle</th>
+            <th scope="col">Followed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for follower in followers %}
+            <tr>
+              <td class="admin-follower">
+                {% if follower.iconUrl %}
+                  <img class="admin-avatar" src="{{ follower.iconUrl }}" alt="" width="32" height="32" loading="lazy" />
+                {% else %}
+                  <span class="admin-avatar admin-avatar-blank" aria-hidden="true"></span>
+                {% endif %}
+                <a href="{{ follower.url }}">{{ follower.name }}</a>
+              </td>
+              <td>{{ follower.handle }}</td>
+              <td>{{ follower.followedAt | date('html') }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="admin-empty">Nobody follows the site yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="admin-panel">
+    <h2>Recent activity</h2>
+    {% if inbox.length %}
+      <ul class="admin-inbox">
+        {% for entry in inbox %}
+          <li>
+            <span class="admin-inbox-actor"><a href="{{ entry.actorId }}">{{ entry.actorLabel }}</a></span>
+            {% if entry.remoteUrl %}
+              <a href="{{ entry.remoteUrl }}">{{ entry.action }}</a>
+            {% else %}
+              {{ entry.action }}
+            {% endif %}
+            {% if entry.post %}
+              <a href="{{ entry.post.editUrl }}">{{ entry.post.title }}</a>
+            {% else %}
+              <span class="admin-empty">something of ours</span>
+            {% endif %}
+            <span class="admin-inbox-when">{{ entry.receivedAt | date('html') }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="admin-empty">Nothing has arrived yet: no likes, boosts or replies.</p>
+    {% endif %}
+  </section>
+
+  <section class="admin-panel">
+    <h2>Delivery</h2>
+    {% if posts.length %}
+      <table class="admin-list">
+        <thead>
+          <tr>
+            <th scope="col">Post</th>
+            <th scope="col">Latest activity</th>
+            <th scope="col">Sent</th>
+            <th scope="col">Queued</th>
+            <th scope="col">Failed</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in posts %}
+            <tr>
+              <td><a href="{{ row.post.editUrl }}">{{ row.post.title }}</a></td>
+              <td>{{ row.activityType }} <span class="admin-inbox-when">{{ row.createdAt | date('html') }}</span></td>
+              <td>{{ row.counts.sent }}</td>
+              <td>{{ row.counts.queued }}</td>
+              <td>{% if row.counts.failed %}<span class="admin-status admin-status-failed">{{ row.counts.failed }}</span>{% else %}0{% endif %}</td>
+              <td class="admin-actions">
+                <form method="post" action="{{ redeliverUrl }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                  <input type="hidden" name="{{ fields.activityId }}" value="{{ row.activityId }}" />
+                  <button type="submit">Redeliver</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="admin-hint">Redelivering sends that activity to every follower the site has now.</p>
+    {% else %}
+      <p class="admin-empty">Nothing has been delivered yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}
