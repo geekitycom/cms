@@ -5,7 +5,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { DuplicateUsernameError, openAdminStore } from './store.ts';
-import type { AdminStore } from './store.ts';
+import type { AdminStore, NewFollower, NewInboxActivity } from './store.ts';
 
 const temporaryDirs: string[] = [];
 const openStores: AdminStore[] = [];
@@ -361,6 +361,187 @@ describe('actor keys', () => {
     assert.deepEqual(
       admin.listActorKeys('actor').map((key) => key.privateJwk),
       ['{"second":"private"}'],
+    );
+  });
+});
+
+describe('followers', () => {
+  /** A follower with every optional column filled, so nothing is left untested. */
+  function ada(overrides: Partial<NewFollower> = {}): NewFollower {
+    return {
+      actorId: 'https://remote.example/users/ada',
+      inboxId: 'https://remote.example/users/ada/inbox',
+      sharedInboxId: 'https://remote.example/inbox',
+      handle: '@ada@remote.example',
+      name: 'Ada Lovelace',
+      iconUrl: 'https://remote.example/avatars/ada.png',
+      url: 'https://remote.example/@ada',
+      ...overrides,
+    };
+  }
+
+  it('starts empty, which is what a site that has never federated looks like', async () => {
+    const admin = await store();
+
+    assert.equal(admin.countFollowers(), 0);
+    assert.deepEqual(admin.listFollowers(), []);
+  });
+
+  it('stores a follower and reads it back whole', async () => {
+    const admin = await store();
+
+    const stored = admin.putFollower(ada());
+
+    assert.equal(stored.actorId, 'https://remote.example/users/ada');
+    assert.equal(stored.inboxId, 'https://remote.example/users/ada/inbox');
+    assert.equal(stored.sharedInboxId, 'https://remote.example/inbox');
+    assert.equal(stored.handle, '@ada@remote.example');
+    assert.equal(stored.name, 'Ada Lovelace');
+    assert.equal(stored.iconUrl, 'https://remote.example/avatars/ada.png');
+    assert.equal(stored.url, 'https://remote.example/@ada');
+    assert.ok(stored.followedAt !== '', 'the row records when the follow arrived');
+    assert.deepEqual(admin.getFollower('https://remote.example/users/ada'), stored);
+    assert.equal(admin.countFollowers(), 1);
+  });
+
+  it('keeps the columns a bare actor has nothing for', async () => {
+    const admin = await store();
+
+    const stored = admin.putFollower({
+      actorId: 'https://remote.example/users/bare',
+      inboxId: 'https://remote.example/users/bare/inbox',
+      sharedInboxId: null,
+      handle: null,
+      name: null,
+      iconUrl: null,
+      url: null,
+    });
+
+    assert.equal(stored.sharedInboxId, null);
+    assert.equal(stored.name, null);
+  });
+
+  it('is idempotent: a second Follow updates the row rather than adding one', async () => {
+    const admin = await store();
+    const first = admin.putFollower(ada());
+
+    const second = admin.putFollower(ada({ name: 'Ada, renamed' }));
+
+    assert.equal(admin.countFollowers(), 1);
+    assert.equal(second.name, 'Ada, renamed');
+    // The follow began when it began; a repeat delivery is not a new follow.
+    assert.equal(second.followedAt, first.followedAt);
+  });
+
+  it('lists followers newest first, and pages with a limit and an offset', async () => {
+    const admin = await store();
+    for (const index of [0, 1, 2]) {
+      admin.putFollower(
+        ada({
+          actorId: `https://remote.example/users/${index}`,
+          inboxId: `https://remote.example/users/${index}/inbox`,
+          followedAt: `2026-09-0${index + 1}T00:00:00.000Z`,
+        }),
+      );
+    }
+
+    assert.equal(admin.countFollowers(), 3);
+    assert.deepEqual(
+      admin.listFollowers().map((follower) => follower.actorId),
+      [
+        'https://remote.example/users/2',
+        'https://remote.example/users/1',
+        'https://remote.example/users/0',
+      ],
+    );
+    assert.deepEqual(
+      admin.listFollowers({ limit: 2, offset: 1 }).map((follower) => follower.actorId),
+      ['https://remote.example/users/1', 'https://remote.example/users/0'],
+    );
+  });
+
+  it('deletes a follower, and says so when there was none to delete', async () => {
+    const admin = await store();
+    admin.putFollower(ada());
+
+    assert.equal(admin.deleteFollower('https://remote.example/users/ada'), true);
+    assert.equal(admin.deleteFollower('https://remote.example/users/ada'), false);
+    assert.equal(admin.countFollowers(), 0);
+    assert.equal(admin.getFollower('https://remote.example/users/ada'), undefined);
+  });
+});
+
+describe('the inbound activity log', () => {
+  /** One logged activity, with the columns doc-4 asks the log to keep. */
+  function like(overrides: Partial<NewInboxActivity> = {}): NewInboxActivity {
+    return {
+      activityId: 'https://remote.example/likes/1',
+      activityType: 'Like',
+      actorId: 'https://remote.example/users/ada',
+      objectId: 'https://blog.example/ap/posts/hello',
+      json: '{"type":"Like"}',
+      ...overrides,
+    };
+  }
+
+  it('starts empty', async () => {
+    const admin = await store();
+
+    assert.equal(admin.countInboxActivities(), 0);
+    assert.deepEqual(admin.listInboxActivities(), []);
+  });
+
+  it('logs an activity with its actor, type, object and arrival time', async () => {
+    const admin = await store();
+
+    const logged = admin.logInboxActivity(like());
+
+    assert.ok(logged.id > 0, 'the row got an id');
+    assert.equal(logged.activityId, 'https://remote.example/likes/1');
+    assert.equal(logged.activityType, 'Like');
+    assert.equal(logged.actorId, 'https://remote.example/users/ada');
+    assert.equal(logged.objectId, 'https://blog.example/ap/posts/hello');
+    assert.equal(logged.json, '{"type":"Like"}');
+    assert.ok(logged.receivedAt !== '', 'the row records when it arrived');
+    assert.deepEqual(admin.listInboxActivities(), [logged]);
+  });
+
+  it('keeps one row per activity id, so a redelivery is not a second like', async () => {
+    const admin = await store();
+    admin.logInboxActivity(like());
+
+    admin.logInboxActivity(like({ json: '{"type":"Like","again":true}' }));
+
+    assert.equal(admin.countInboxActivities(), 1);
+    assert.equal(admin.listInboxActivities()[0]?.json, '{"type":"Like","again":true}');
+  });
+
+  it('keeps every anonymous activity, because an id is what makes two the same', async () => {
+    const admin = await store();
+
+    admin.logInboxActivity(like({ activityId: null }));
+    admin.logInboxActivity(like({ activityId: null }));
+
+    assert.equal(admin.countInboxActivities(), 2);
+  });
+
+  it('lists newest first, and pages with a limit and an offset', async () => {
+    const admin = await store();
+    for (const index of [0, 1, 2]) {
+      admin.logInboxActivity(like({ activityId: `https://remote.example/likes/${index}` }));
+    }
+
+    assert.deepEqual(
+      admin.listInboxActivities().map((entry) => entry.activityId),
+      [
+        'https://remote.example/likes/2',
+        'https://remote.example/likes/1',
+        'https://remote.example/likes/0',
+      ],
+    );
+    assert.deepEqual(
+      admin.listInboxActivities({ limit: 1, offset: 2 }).map((entry) => entry.activityId),
+      ['https://remote.example/likes/0'],
     );
   });
 });

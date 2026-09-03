@@ -18,6 +18,21 @@ export type {
   FederationContextData,
   SiteFederation,
 } from './federation.ts';
+export {
+  followerRecipient,
+  followersPage,
+  FOLLOWERS_PAGE_SIZE,
+  lastFollowersCursor,
+} from './followers.ts';
+export {
+  followerFrom,
+  handleDelete,
+  handleFollow,
+  handleLoggedActivity,
+  handleUndo,
+  logActivity,
+} from './inbox.ts';
+export type { SiteInboxContext } from './inbox.ts';
 export { loadActorKeyPairs, SITE_ACTOR_IDENTIFIER } from './keys.ts';
 export { mountFederation } from './mount.ts';
 export {

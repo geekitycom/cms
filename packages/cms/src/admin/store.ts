@@ -120,6 +120,86 @@ export interface ActorKey {
 export type NewActorKey = Omit<ActorKey, 'createdAt'>;
 
 /**
+ * A remote actor that follows this site.
+ *
+ * doc-4 keeps the followers in SQLite rather than in Fedify's KV store,
+ * because they are the one thing an ActivityPub site cannot regenerate: an
+ * actor that followed and was forgotten never hears from the site again and
+ * has no way of noticing. The display columns are a copy of what the actor
+ * said about itself when it followed, so the admin can list its followers
+ * without dereferencing every one of them.
+ */
+export interface Follower {
+  /** The follower's ActivityStreams id, which is what identifies it. */
+  readonly actorId: string;
+  /** Where an activity addressed to this follower is delivered. */
+  readonly inboxId: string;
+  /**
+   * The follower's instance-wide inbox, when it published one. Delivering one
+   * activity to a shared inbox reaches every follower on that instance, so it
+   * is what keeps a popular post from becoming a thousand POSTs.
+   */
+  readonly sharedInboxId: string | null;
+  /** `@name@host`, as the follower's own instance spells it, or `null`. */
+  readonly handle: string | null;
+  /** The display name the actor published, or `null`. */
+  readonly name: string | null;
+  /** The actor's avatar, or `null`. */
+  readonly iconUrl: string | null;
+  /** The actor's profile page, for a human following the link, or `null`. */
+  readonly url: string | null;
+  /** When the follow arrived, as an ISO 8601 instant. */
+  readonly followedAt: string;
+}
+
+/**
+ * A {@link Follower} on its way in.
+ *
+ * `followedAt` is optional and defaults to now; naming one is what makes an
+ * import — or a test — able to say when a follow really happened.
+ */
+export type NewFollower = Omit<Follower, 'followedAt'> & {
+  followedAt?: string | undefined;
+};
+
+/** How {@link AdminStore.listFollowers} and its inbox-log sibling page. */
+export interface ListPageOptions {
+  /** Largest number of rows to return. Everything, when it is not given. */
+  limit?: number | undefined;
+  /** How many rows to skip first. Zero when it is not given. */
+  offset?: number | undefined;
+}
+
+/**
+ * One activity that arrived in the inbox and was recorded rather than acted
+ * on: doc-4's `Like`, `Announce` and `Create(Note)` reply, and the follow
+ * traffic alongside them.
+ *
+ * The raw JSON-LD is kept whole because a later phase surfaces likes, boosts
+ * and comments, and what that phase needs out of an activity is not knowable
+ * from here.
+ */
+export interface InboxActivity {
+  /** Row id, and the order activities arrived in. */
+  readonly id: number;
+  /** The activity's own id, or `null` for one that arrived without one. */
+  readonly activityId: string | null;
+  /** The compacted ActivityStreams type name, such as `Like` or `Announce`. */
+  readonly activityType: string;
+  /** Who sent it. */
+  readonly actorId: string;
+  /** What it was about — the post that was liked, the note replied to — or `null`. */
+  readonly objectId: string | null;
+  /** When it arrived, as an ISO 8601 instant. */
+  readonly receivedAt: string;
+  /** The activity as compacted JSON-LD, exactly as it was received. */
+  readonly json: string;
+}
+
+/** An {@link InboxActivity} before the store has given it a row and a time. */
+export type NewInboxActivity = Omit<InboxActivity, 'id' | 'receivedAt'>;
+
+/**
  * The auth half of the SQLite database: the data doc-1 says lives only there.
  *
  * It is deliberately not part of the {@link ContentStore}. That store is the
@@ -207,6 +287,38 @@ export interface AdminStore {
    * algorithm. Rotating a key is therefore a write rather than a migration.
    */
   putActorKey(key: NewActorKey): ActorKey;
+  /** How many actors follow the site. What the followers collection counts. */
+  countFollowers(): number;
+  /**
+   * Followers, newest follow first, optionally one page of them.
+   *
+   * Newest first matches the outbox, and means the collection's first page is
+   * the followers a human is most likely to be looking for. A follow that
+   * arrives while somebody is walking the collection shifts the pages under
+   * them by one, which is the same trade the outbox makes.
+   */
+  listFollowers(options?: ListPageOptions): Follower[];
+  /** One follower by actor id, or `undefined`. */
+  getFollower(actorId: string): Follower | undefined;
+  /**
+   * Store a follower, replacing whatever was known about that actor. The
+   * original `followedAt` is kept, because a repeat `Follow` from an actor
+   * that already follows is a redelivery rather than a new follow.
+   */
+  putFollower(follower: NewFollower): Follower;
+  /** Forget a follower. Returns `false` when there was nothing to forget. */
+  deleteFollower(actorId: string): boolean;
+  /** How many activities the inbound log holds. */
+  countInboxActivities(): number;
+  /** Logged activities, newest first, optionally one page of them. */
+  listInboxActivities(options?: ListPageOptions): InboxActivity[];
+  /**
+   * Record an inbound activity, replacing an earlier row with the same
+   * activity id so a redelivered `Like` stays one like. An activity that
+   * arrived without an id is always a new row: there is nothing to match it
+   * against.
+   */
+  logInboxActivity(activity: NewInboxActivity): InboxActivity;
   /** Delete every expired session. Returns how many went. */
   pruneSessions(now?: Date): number;
   /**
@@ -285,6 +397,43 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         private_jwk = excluded.private_jwk,
         public_jwk = excluded.public_jwk,
         created_at = excluded.created_at
+    `),
+    countFollowers: db.prepare('SELECT COUNT(*) AS count FROM followers'),
+    listFollowers: db.prepare(`
+      SELECT * FROM followers
+      ORDER BY followed_at DESC, actor_id DESC
+      LIMIT ? OFFSET ?
+    `),
+    followerById: db.prepare('SELECT * FROM followers WHERE actor_id = ?'),
+    putFollower: db.prepare(`
+      INSERT INTO followers (
+        actor_id, inbox_id, shared_inbox_id, handle, name, icon_url, url, followed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (actor_id) DO UPDATE SET
+        inbox_id = excluded.inbox_id,
+        shared_inbox_id = excluded.shared_inbox_id,
+        handle = excluded.handle,
+        name = excluded.name,
+        icon_url = excluded.icon_url,
+        url = excluded.url
+    `),
+    deleteFollower: db.prepare('DELETE FROM followers WHERE actor_id = ?'),
+    countInboxActivities: db.prepare('SELECT COUNT(*) AS count FROM ap_inbox'),
+    listInboxActivities: db.prepare(`
+      SELECT * FROM ap_inbox
+      ORDER BY received_at DESC, id DESC
+      LIMIT ? OFFSET ?
+    `),
+    logInboxActivity: db.prepare(`
+      INSERT INTO ap_inbox (activity_id, activity_type, actor_id, object_id, received_at, json)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (activity_id) DO UPDATE SET
+        activity_type = excluded.activity_type,
+        actor_id = excluded.actor_id,
+        object_id = excluded.object_id,
+        received_at = excluded.received_at,
+        json = excluded.json
+      RETURNING *
     `),
   };
 
@@ -463,6 +612,78 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return stored;
     },
 
+    countFollowers() {
+      const row = statements.countFollowers.get() as Record<string, unknown> | undefined;
+      return Number(row?.['count'] ?? 0);
+    },
+
+    listFollowers(options = {}) {
+      const rows = statements.listFollowers.all(
+        options.limit ?? NO_LIMIT,
+        options.offset ?? 0,
+      ) as Record<string, unknown>[];
+      return rows.map(toFollower);
+    },
+
+    getFollower(actorId) {
+      const row = statements.followerById.get(actorId) as Record<string, unknown> | undefined;
+      return row === undefined ? undefined : toFollower(row);
+    },
+
+    putFollower(follower) {
+      statements.putFollower.run(
+        follower.actorId,
+        follower.inboxId,
+        follower.sharedInboxId,
+        follower.handle,
+        follower.name,
+        follower.iconUrl,
+        follower.url,
+        follower.followedAt ?? new Date().toISOString(),
+      );
+      // Read back rather than returning what was written: the upsert leaves an
+      // existing `followed_at` alone, so the row is the only thing that knows
+      // when the follow really began.
+      const row = statements.followerById.get(follower.actorId) as
+        Record<string, unknown> | undefined;
+      if (row === undefined) {
+        throw new Error(`The follower "${follower.actorId}" vanished between insert and read.`);
+      }
+      return toFollower(row);
+    },
+
+    deleteFollower(actorId) {
+      return statements.deleteFollower.run(actorId).changes > 0;
+    },
+
+    countInboxActivities() {
+      const row = statements.countInboxActivities.get() as Record<string, unknown> | undefined;
+      return Number(row?.['count'] ?? 0);
+    },
+
+    listInboxActivities(options = {}) {
+      const rows = statements.listInboxActivities.all(
+        options.limit ?? NO_LIMIT,
+        options.offset ?? 0,
+      ) as Record<string, unknown>[];
+      return rows.map(toInboxActivity);
+    },
+
+    logInboxActivity(activity) {
+      const row = statements.logInboxActivity.get(
+        activity.activityId,
+        activity.activityType,
+        activity.actorId,
+        activity.objectId,
+        new Date().toISOString(),
+        activity.json,
+      ) as Record<string, unknown> | undefined;
+      if (row === undefined) {
+        throw new Error(`The activity "${activity.activityType}" was not written to the log.`);
+      }
+      return toInboxActivity(row);
+    },
+
     pruneSessions(now = new Date()) {
       return Number(statements.pruneSessions.run(now.toISOString()).changes);
     },
@@ -532,6 +753,48 @@ function isFlashMessage(value: unknown): value is FlashMessage {
     (entry['kind'] === 'notice' || entry['kind'] === 'error') &&
     typeof entry['message'] === 'string'
   );
+}
+
+/**
+ * What a `LIMIT` means when the caller named none. SQLite reads a negative
+ * limit as "every row", which is what an unpaged list asks for.
+ */
+const NO_LIMIT = -1;
+
+/**
+ * A `TEXT` column that may be `NULL`, as a string or `null`.
+ *
+ * Anything that is not text is read as `null` rather than stringified: every
+ * column this is used on is declared `TEXT`, so a value of another shape is a
+ * row somebody else wrote, and `[object Object]` is a worse answer than none.
+ */
+function nullableText(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function toFollower(row: Record<string, unknown>): Follower {
+  return {
+    actorId: String(row['actor_id']),
+    inboxId: String(row['inbox_id']),
+    sharedInboxId: nullableText(row['shared_inbox_id']),
+    handle: nullableText(row['handle']),
+    name: nullableText(row['name']),
+    iconUrl: nullableText(row['icon_url']),
+    url: nullableText(row['url']),
+    followedAt: String(row['followed_at']),
+  };
+}
+
+function toInboxActivity(row: Record<string, unknown>): InboxActivity {
+  return {
+    id: Number(row['id']),
+    activityId: nullableText(row['activity_id']),
+    activityType: String(row['activity_type']),
+    actorId: String(row['actor_id']),
+    objectId: nullableText(row['object_id']),
+    receivedAt: String(row['received_at']),
+    json: String(row['json']),
+  };
 }
 
 function toSession(row: Record<string, unknown>): Session {
@@ -623,6 +886,52 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
         created_at  TEXT NOT NULL,
         PRIMARY KEY (identifier, algorithm)
       );
+    `,
+  },
+  {
+    // The site's followers (doc-4). Fedify's KV store is a cache and may be
+    // thrown away; a follower may not, because an actor that followed and was
+    // forgotten simply stops hearing from the site. Keyed by actor id, which
+    // is what a `Follow`, an `Undo(Follow)` and an actor's own `Delete` all
+    // name, so all three find the same row.
+    version: 5,
+    sql: `
+      CREATE TABLE followers (
+        actor_id        TEXT PRIMARY KEY,
+        inbox_id        TEXT NOT NULL,
+        shared_inbox_id TEXT,
+        handle          TEXT,
+        name            TEXT,
+        icon_url        TEXT,
+        url             TEXT,
+        followed_at     TEXT NOT NULL
+      );
+
+      CREATE INDEX followers_followed_at ON followers (followed_at);
+    `,
+  },
+  {
+    // Inbound activities that are recorded rather than acted on: likes,
+    // boosts and replies, which a later phase surfaces. The raw JSON-LD is
+    // kept because what that phase wants out of an activity is not knowable
+    // yet. The unique index on the activity id is what makes a redelivery an
+    // update rather than a second like; SQLite counts NULLs as distinct, so
+    // an activity that arrived without an id is always its own row.
+    version: 6,
+    sql: `
+      CREATE TABLE ap_inbox (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        activity_id   TEXT,
+        activity_type TEXT NOT NULL,
+        actor_id      TEXT NOT NULL,
+        object_id     TEXT,
+        received_at   TEXT NOT NULL,
+        json          TEXT NOT NULL
+      );
+
+      CREATE UNIQUE INDEX ap_inbox_activity_id ON ap_inbox (activity_id);
+      CREATE INDEX ap_inbox_received_at ON ap_inbox (received_at);
+      CREATE INDEX ap_inbox_actor_id ON ap_inbox (actor_id);
     `,
   },
 ];

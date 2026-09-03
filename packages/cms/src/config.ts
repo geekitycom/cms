@@ -1,5 +1,7 @@
 import path from 'node:path';
 
+import type { KvStore, MessageQueue } from '@fedify/fedify';
+
 import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './content/media.ts';
 import type { DocumentChange } from './content/sync.ts';
 
@@ -15,6 +17,39 @@ import type { DocumentChange } from './content/sync.ts';
  * nor wedge the watcher.
  */
 export type DocumentChangeHook = (change: DocumentChange) => unknown;
+
+/**
+ * The federation stores and guards a site may swap, which decision-5 promised
+ * would be configuration rather than a redesign.
+ *
+ * Everything here has a default that is right for a single-process personal
+ * blog; a site only names one when it has outgrown that, and a test names one
+ * when it needs the federation to behave predictably.
+ */
+export interface FederationOverrides {
+  /**
+   * Fedify's cache and idempotence store. Defaults to an in-memory one, per
+   * decision-5: nothing that has to survive a restart lives in it.
+   */
+  kv?: KvStore | undefined;
+  /**
+   * The delivery and inbox queue. Defaults to Fedify's in-process one.
+   *
+   * `null` means no queue at all: an inbound activity is handled, and an
+   * outbound one delivered, before the request that carried it is answered.
+   * That is slower under load and has no retry, which is why it is not the
+   * default, but it is the only way to know from outside when the work is
+   * done — so it is what a test asks for.
+   */
+  queue?: MessageQueue | null | undefined;
+  /**
+   * Whether Fedify's document loader may fetch private and loopback
+   * addresses. Off, as it must be in production: turning it on removes the
+   * guard that stops a hostile actor id from making the server fetch its own
+   * network. Tests that federate two make-believe hosts turn it on.
+   */
+  allowPrivateAddress?: boolean | undefined;
+}
 
 /**
  * What a site writes in `geekity.config.ts`. Every field is optional; see
@@ -70,6 +105,11 @@ export interface GeekityConfig {
    * same `origin` caveat as {@link GeekityConfig.onDocumentChange}.
    */
   onPublish?: DocumentChangeHook;
+  /**
+   * Federation stores and guards. Every field has a default; see
+   * {@link FederationOverrides}.
+   */
+  federation?: FederationOverrides;
 }
 
 /**
@@ -100,6 +140,8 @@ export interface ResolvedConfig {
   uploadTypes: string[];
   onDocumentChange: DocumentChangeHook | undefined;
   onPublish: DocumentChangeHook | undefined;
+  /** Federation stores and guards, empty when the site named none. */
+  federation: FederationOverrides;
 }
 
 /** Ambient inputs {@link resolveConfig} reads, injectable so the resolution is testable. */
@@ -165,6 +207,7 @@ export function resolveConfig(
     uploadTypes: resolveUploadTypes(env['GEEKITY_UPLOAD_TYPES'], config.uploadTypes),
     onDocumentChange: config.onDocumentChange,
     onPublish: config.onPublish,
+    federation: config.federation ?? {},
   };
 }
 

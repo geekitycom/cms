@@ -1,24 +1,18 @@
 import { createRequire } from 'node:module';
 
 import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/fedify';
-import type {
-  Federation,
-  FederationOptions,
-  KvStore,
-  MessageQueue,
-  PageItems,
-  RequestContext,
-} from '@fedify/fedify';
-import { Article } from '@fedify/vocab';
-import type { Create } from '@fedify/vocab';
+import type { Federation, FederationOptions, PageItems, RequestContext } from '@fedify/fedify';
+import { Announce, Article, Create, Delete, Follow, Like, Undo } from '@fedify/vocab';
 
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore } from '../admin/store.ts';
-import type { ResolvedConfig } from '../config.ts';
+import type { FederationOverrides, ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import { AVATAR_SETTING, siteActor } from './actor.ts';
 import { isFederatedDocument, postArticle, postCreateActivity } from './article.ts';
+import { followersPage, lastFollowersCursor } from './followers.ts';
+import { handleDelete, handleFollow, handleLoggedActivity, handleUndo } from './inbox.ts';
 import { loadActorKeyPairs, SITE_ACTOR_IDENTIFIER } from './keys.ts';
 import {
   ACTOR_PATH,
@@ -57,8 +51,11 @@ export interface FederationContextData {
 /** A CMS federation object, with the context data its dispatchers expect. */
 export type SiteFederation = Federation<FederationContextData>;
 
-/** What {@link createSiteFederation} takes. */
-export interface CreateSiteFederationOptions {
+/**
+ * What {@link createSiteFederation} takes: the site's base URL, and the
+ * {@link FederationOverrides} a site may swap the defaults for.
+ */
+export interface CreateSiteFederationOptions extends FederationOverrides {
   /**
    * The site's base URL. Fedify otherwise mints ids from `request.url`, which
    * behind a proxy is the internal address rather than the one peers
@@ -67,25 +64,6 @@ export interface CreateSiteFederationOptions {
    * Only its origin is used; see {@link federationOrigin}.
    */
   baseUrl: string;
-  /**
-   * Fedify's cache and idempotence store. Defaults to an in-memory one, which
-   * is what decision-5 chose for phase one: nothing that has to survive a
-   * restart lives in it. Swap it for `@fedify/sqlite` or `@fedify/redis`
-   * without touching anything else here.
-   */
-  kv?: KvStore | undefined;
-  /**
-   * The delivery and inbox queue. Defaults to Fedify's in-process one, again
-   * per decision-5: a queued delivery is lost if the process exits before it
-   * drains, which is the trade phase one accepts.
-   */
-  queue?: MessageQueue | undefined;
-  /**
-   * Whether the document loader may fetch private and loopback addresses. Off,
-   * as it must be in production; tests that federate two local servers turn it
-   * on.
-   */
-  allowPrivateAddress?: boolean | undefined;
   /** Anything else Fedify takes, for a site that needs to reach past this factory. */
   federationOptions?: Partial<FederationOptions<FederationContextData>> | undefined;
 }
@@ -97,14 +75,18 @@ export interface CreateSiteFederationOptions {
  * It is a factory rather than a module-level singleton so the KV store and the
  * queue are arguments (decision-5), so a test can build one per data directory,
  * and so a site that outgrows the in-memory pair changes a call rather than
- * this file. The follow collections are registered but empty; TASK-18 fills
- * the followers.
+ * this file. The followers come out of SQLite; the following collection is
+ * empty, and doc-4 says it always will be.
  */
 export function createSiteFederation(options: CreateSiteFederationOptions): SiteFederation {
   const federation = createFederation<FederationContextData>({
     kv: options.kv ?? new MemoryKvStore(),
-    queue: options.queue ?? new InProcessMessageQueue(),
     origin: federationOrigin(options.baseUrl),
+    // `null` is not the same as absent: it asks for no queue at all, so an
+    // activity is handled and delivered inside the request that carried it.
+    // Leaving the key off entirely is how Fedify is told that, which is why
+    // this is a spread rather than a value.
+    ...(options.queue === null ? {} : { queue: options.queue ?? new InProcessMessageQueue() }),
     ...(options.allowPrivateAddress === undefined
       ? {}
       : { allowPrivateAddress: options.allowPrivateAddress }),
@@ -160,21 +142,41 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
       );
     });
 
-  // Registered so the actor may advertise them and so a peer that dereferences
-  // one gets an empty collection rather than a 404. The contents arrive with
-  // the follower store (TASK-18).
-  federation.setFollowersDispatcher(FOLLOWERS_PATH, (_context, identifier) =>
-    identifier === SITE_ACTOR_IDENTIFIER ? { items: [] } : null,
-  );
+  // The followers, straight out of SQLite and paged like the outbox. Fedify
+  // renders each one as its actor id, and hands the same rows — inbox and
+  // shared inbox included — to `ctx.sendActivity(…, 'followers', …)`, so this
+  // one dispatcher is both what a peer reads and where delivery fans out to.
+  federation
+    .setFollowersDispatcher(FOLLOWERS_PATH, (context, identifier, cursor) =>
+      identifier === SITE_ACTOR_IDENTIFIER ? followersPage(context, cursor) : null,
+    )
+    .setCounter((context, identifier) =>
+      identifier === SITE_ACTOR_IDENTIFIER ? context.data.admin.countFollowers() : null,
+    )
+    .setFirstCursor((_context, identifier) => (identifier === SITE_ACTOR_IDENTIFIER ? '0' : null))
+    .setLastCursor((context, identifier) =>
+      identifier === SITE_ACTOR_IDENTIFIER
+        ? lastFollowersCursor(context.data.admin.countFollowers())
+        : null,
+    );
   // Always empty, and always will be: doc-4 says the site follows nobody.
   federation.setFollowingDispatcher(FOLLOWING_PATH, (_context, identifier) =>
     identifier === SITE_ACTOR_IDENTIFIER ? { items: [] } : null,
   );
 
-  // No listeners yet, so an activity is accepted and logged rather than acted
-  // on. Registering the endpoint now is what lets the actor publish an inbox
-  // at all; TASK-18 adds the `Follow` and `Undo` handlers.
-  federation.setInboxListeners(INBOX_PATH, SHARED_INBOX_PATH);
+  // The inbox, personal and shared. Fedify has already verified the signature
+  // by the time a listener runs — an unsigned or badly signed delivery never
+  // reaches one — so a handler may trust that the activity's actor really sent
+  // it. An activity of a type not listed here is answered 202 and dropped,
+  // which is what doc-4 asks for everything past these five.
+  federation
+    .setInboxListeners(INBOX_PATH, SHARED_INBOX_PATH)
+    .on(Follow, handleFollow)
+    .on(Undo, handleUndo)
+    .on(Delete, handleDelete)
+    .on(Like, handleLoggedActivity)
+    .on(Announce, handleLoggedActivity)
+    .on(Create, handleLoggedActivity);
 
   federation.setNodeInfoDispatcher(NODEINFO_PATH, (context) => {
     const counts = context.data.store.counts();
