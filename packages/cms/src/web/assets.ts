@@ -14,8 +14,8 @@ export const THEME_STATIC_DIR = 'static';
 /** How long a browser may keep a theme asset. One hour. */
 export const THEME_ASSET_MAX_AGE = 3600;
 
-/** A theme file, located and described. */
-export interface ThemeAsset {
+/** A file on disk, located and described, ready to be served. */
+export interface StaticAsset {
   /** Absolute path on disk. */
   file: string;
   /** Size and modification time, for the validators. */
@@ -26,24 +26,26 @@ export interface ThemeAsset {
   etag: string;
 }
 
+/** A theme file. The theme's assets are ordinary {@link StaticAsset}s. */
+export type ThemeAsset = StaticAsset;
+
 /**
- * Find one asset, site theme first and packaged theme second, the same order
- * templates resolve in.
+ * Find one file under a list of roots, first root that has it winning.
  *
- * Returns `undefined` when the request escapes the theme directory, names a
- * directory, or matches nothing. Traversal is checked after resolution rather
- * than by inspecting the request, so an encoded `..` cannot slip past.
+ * Returns `undefined` when the request escapes its root, names a directory, or
+ * matches nothing. Traversal is checked after resolution rather than by
+ * inspecting the request, so an encoded `..` cannot slip past.
  */
-export function findThemeAsset(relative: string, themeDirs: string[]): ThemeAsset | undefined {
+export function findAsset(relative: string, roots: string[]): StaticAsset | undefined {
   const normalized = normalizeAssetPath(relative);
   if (normalized === undefined) return undefined;
 
-  for (const themeDir of themeDirs) {
-    const root = path.resolve(themeDir, THEME_STATIC_DIR);
+  for (const directory of roots) {
+    const root = path.resolve(directory);
     const file = path.resolve(root, normalized);
 
     // `path.resolve` has already collapsed every `..`; anything that landed
-    // outside the theme's static directory was trying to get out.
+    // outside the root was trying to get out.
     if (file !== root && !file.startsWith(root + path.sep)) continue;
 
     let stats: Stats;
@@ -65,23 +67,50 @@ export function findThemeAsset(relative: string, themeDirs: string[]): ThemeAsse
   return undefined;
 }
 
+/**
+ * Find one asset, site theme first and packaged theme second, the same order
+ * templates resolve in.
+ */
+export function findThemeAsset(relative: string, themeDirs: string[]): ThemeAsset | undefined {
+  return findAsset(
+    relative,
+    themeDirs.map((themeDir) => path.join(themeDir, THEME_STATIC_DIR)),
+  );
+}
+
 /** The theme directories to search, in order: the site's, then the package's. */
 export function themeSearchPath(siteThemeDir: string): string[] {
   return [siteThemeDir, PACKAGED_THEME_DIR];
 }
 
+/** How long a browser may keep an asset, when the caller does not say. */
+export interface AssetResponseOptions {
+  /** Seconds. Defaults to {@link THEME_ASSET_MAX_AGE}. */
+  maxAge?: number | undefined;
+}
+
 /** The response body and headers for an asset. */
-export function themeAssetResponse(asset: ThemeAsset): Response {
+export function assetResponse(asset: StaticAsset, options: AssetResponseOptions = {}): Response {
   const body = Readable.toWeb(createReadStream(asset.file)) as ReadableStream;
-  return new Response(body, { headers: themeAssetHeaders(asset) });
+  return new Response(body, { headers: assetHeaders(asset, options) });
 }
 
 /** The 304 an unchanged asset gets, which carries the validators and no body. */
-export function themeAssetNotModified(asset: ThemeAsset): Response {
-  const headers = themeAssetHeaders(asset);
+export function assetNotModified(asset: StaticAsset, options: AssetResponseOptions = {}): Response {
+  const headers = assetHeaders(asset, options);
   headers.delete('content-length');
   headers.delete('content-type');
   return new Response(null, { status: 304, headers });
+}
+
+/** {@link assetResponse} at the theme's cache lifetime. */
+export function themeAssetResponse(asset: ThemeAsset): Response {
+  return assetResponse(asset);
+}
+
+/** {@link assetNotModified} at the theme's cache lifetime. */
+export function themeAssetNotModified(asset: ThemeAsset): Response {
+  return assetNotModified(asset);
 }
 
 /** Whether a request's `If-None-Match` covers this asset. */
@@ -94,19 +123,20 @@ export function matchesEtag(ifNoneMatch: string | undefined, etag: string): bool
     .includes(etag);
 }
 
-function themeAssetHeaders(asset: ThemeAsset): Headers {
+function assetHeaders(asset: StaticAsset, options: AssetResponseOptions): Headers {
+  const maxAge = options.maxAge ?? THEME_ASSET_MAX_AGE;
   return new Headers({
     'content-type': asset.contentType,
     'content-length': String(asset.stats.size),
-    'cache-control': `public, max-age=${String(THEME_ASSET_MAX_AGE)}`,
+    'cache-control': `public, max-age=${String(maxAge)}`,
     'last-modified': new Date(asset.stats.mtimeMs).toUTCString(),
     etag: asset.etag,
   });
 }
 
 /**
- * A request path under `/theme/` as a path relative to a theme's `static/`
- * directory, or `undefined` when it is not one worth looking up.
+ * A request path under an asset prefix as a path relative to the directory it
+ * is served from, or `undefined` when it is not one worth looking up.
  */
 function normalizeAssetPath(relative: string): string | undefined {
   if (relative === '' || relative.endsWith('/')) return undefined;

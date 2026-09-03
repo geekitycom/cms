@@ -298,12 +298,22 @@ that ship inside the package, deliberately outside the theme search path: a
 site's `theme/` may override any public template, and must not be able to
 shadow the login form.
 
-| Route           | What it does                                                   |
-| --------------- | -------------------------------------------------------------- |
-| `/admin`        | The dashboard. A placeholder until the admin shell lands.      |
-| `/admin/setup`  | First run: creates the first admin. Closed once a user exists. |
-| `/admin/login`  | Username and password.                                         |
-| `/admin/logout` | `POST` only. Deletes the session row.                          |
+| Route                                                                                  | What it does                                                            |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `/admin`                                                                               | The dashboard: counts, the five most recent posts, a quick draft.       |
+| `/admin/quick-draft`                                                                   | `POST` only. Writes a draft post and redirects to its editor.           |
+| `/admin/posts`, `/admin/pages`, `/admin/settings`, `/admin/users`, `/admin/federation` | The sections the navigation links to. Placeholders until each is built. |
+| `/admin/setup`                                                                         | First run: creates the first admin. Closed once a user exists.          |
+| `/admin/login`                                                                         | Username and password.                                                  |
+| `/admin/logout`                                                                        | `POST` only. Deletes the session row.                                   |
+| `/admin/_static/*`                                                                     | The admin's own stylesheet, cached for an hour.                         |
+
+The screens behind the login share one layout: a bar across the top with the
+site name and a link to the public site, the sections down the left with the
+current one marked, and a place for flash messages. A message queued with
+`flash(c, 'notice', '…')` is kept on the session row, shown on the next page the
+browser asks for, and cleared as it is read, so it survives exactly one
+redirect.
 
 Users and sessions live in the same SQLite file as the content index, in tables
 of their own. That is the half of the database that is _not_ derived from the

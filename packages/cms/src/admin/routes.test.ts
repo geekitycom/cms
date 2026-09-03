@@ -1,124 +1,21 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
-import { createCms } from '../index.ts';
-import type { Cms, GeekityConfig } from '../index.ts';
+import {
+  browser,
+  cookieValue,
+  csrfField,
+  sandbox,
+  setCookie,
+  setUpFirstAdmin,
+} from './__testing__/harness.ts';
 
-const started: Cms[] = [];
-const temporaryDirs: string[] = [];
-
-after(async () => {
-  for (const instance of started) await instance.close();
-  await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
-});
-
-async function temporaryDir(prefix: string): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), prefix));
-  temporaryDirs.push(dir);
-  return dir;
-}
+const box = sandbox();
+after(() => box.cleanup());
 
 /** A CMS over an empty content directory, closed when the file finishes. */
-async function site(config: GeekityConfig = {}): Promise<Cms> {
-  const contentDir = await temporaryDir('geekity-admin-content-');
-  const dataDir = await temporaryDir('geekity-admin-data-');
-  const instance = createCms({ contentDir, dataDir, watch: false, ...config });
-  started.push(instance);
-  await instance.sync();
-  return instance;
-}
-
-/** The value of a `Set-Cookie` for `name`, or `undefined`. */
-function cookieValue(response: Response, name: string): string | undefined {
-  for (const header of response.headers.getSetCookie()) {
-    const [pair] = header.split(';');
-    const [key, ...rest] = (pair ?? '').split('=');
-    if (key === name) return rest.join('=');
-  }
-  return undefined;
-}
-
-/** The whole `Set-Cookie` line for `name`, attributes included. */
-function setCookie(response: Response, name: string): string | undefined {
-  return response.headers.getSetCookie().find((header) => header.startsWith(`${name}=`));
-}
-
-/** The value of the hidden CSRF field in a rendered form. */
-function csrfField(html: string): string | undefined {
-  const match = /name="csrf_token"\s+value="([^"]+)"/.exec(html);
-  return match?.[1];
-}
-
-/**
- * A thing that keeps a session cookie between requests, the way a browser
- * does. Every admin flow needs one, and hand-threading the cookie through each
- * assertion would bury what is being tested.
- */
-interface Browser {
-  get(url: string): Promise<Response>;
-  post(url: string, fields: Record<string, string>): Promise<Response>;
-  /** The session cookie value currently held, or `undefined`. */
-  session(): string | undefined;
-  /** Force the held cookie, for the tests about a stale or planted one. */
-  setSession(value: string | undefined): void;
-}
-
-function browser(cms: Cms): Browser {
-  let cookie: string | undefined;
-
-  function remember(response: Response): Response {
-    const value = cookieValue(response, 'geekity_session');
-    if (value !== undefined) cookie = value === '' ? undefined : value;
-    return response;
-  }
-
-  function headers(extra: Record<string, string> = {}): Record<string, string> {
-    return cookie === undefined ? extra : { ...extra, cookie: `geekity_session=${cookie}` };
-  }
-
-  return {
-    async get(url) {
-      return remember(await cms.app.request(url, { headers: headers() }));
-    },
-    async post(url, fields) {
-      const body = new URLSearchParams(fields).toString();
-      return remember(
-        await cms.app.request(url, {
-          method: 'POST',
-          headers: headers({ 'content-type': 'application/x-www-form-urlencoded' }),
-          body,
-        }),
-      );
-    },
-    session() {
-      return cookie;
-    },
-    setSession(value) {
-      cookie = value;
-    },
-  };
-}
-
-/** Walk the setup form and create the first admin. Returns the redirect. */
-async function setUpFirstAdmin(
-  agent: Browser,
-  credentials = { username: 'ada', password: 'correct horse battery' },
-): Promise<Response> {
-  const form = await agent.get('/admin/setup');
-  const token = csrfField(await form.text());
-  assert.ok(token !== undefined, 'the setup form carried a CSRF token');
-
-  return agent.post('/admin/setup', {
-    csrf_token: token,
-    username: credentials.username,
-    password: credentials.password,
-    password_confirmation: credentials.password,
-  });
-}
+const site = box.site.bind(box);
 
 describe('first run', () => {
   it('sends every admin route to the setup form while no users exist', async () => {

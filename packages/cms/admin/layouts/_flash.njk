@@ -1,0 +1,5 @@
+{# Messages queued by the request that redirected here. They were cleared as
+   they were read, so this is the only page that shows them. #}
+{% for entry in flash %}
+  <p class="admin-flash admin-flash-{{ entry.kind }}" role="status">{{ entry.message }}</p>
+{% endfor %}

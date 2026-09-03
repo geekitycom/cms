@@ -167,3 +167,35 @@ describe('sessions', () => {
     assert.equal(admin.getSession(session.id)?.userId, null);
   });
 });
+
+describe('flash messages', () => {
+  it('hands a queued message back once and then forgets it', async () => {
+    const admin = await store();
+    const session = admin.createSession({ userId: null, lifetimeSeconds: HOUR });
+
+    admin.pushFlash(session.id, { kind: 'notice', message: 'Draft saved.' });
+
+    assert.deepEqual(admin.takeFlash(session.id), [{ kind: 'notice', message: 'Draft saved.' }]);
+    assert.deepEqual(admin.takeFlash(session.id), [], 'reading a flash clears it');
+  });
+
+  it('keeps queued messages in the order they were added', async () => {
+    const admin = await store();
+    const session = admin.createSession({ userId: null, lifetimeSeconds: HOUR });
+
+    admin.pushFlash(session.id, { kind: 'notice', message: 'first' });
+    admin.pushFlash(session.id, { kind: 'error', message: 'second' });
+
+    assert.deepEqual(admin.takeFlash(session.id), [
+      { kind: 'notice', message: 'first' },
+      { kind: 'error', message: 'second' },
+    ]);
+  });
+
+  it('says nothing about a session that does not exist', async () => {
+    const admin = await store();
+
+    admin.pushFlash('nonexistent', { kind: 'notice', message: 'lost' });
+    assert.deepEqual(admin.takeFlash('nonexistent'), []);
+  });
+});

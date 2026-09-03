@@ -1,0 +1,292 @@
+/*
+ * The admin's stylesheet. Plain CSS, no build step, no CDN: the admin is
+ * server-rendered HTML and this is the only thing it loads.
+ *
+ * The shape is WordPress classic — a dark bar across the top, a dark column of
+ * navigation down the left, content on a grey field — because that is the
+ * layout the people this CMS is for already know how to read.
+ */
+
+:root {
+  --admin-bar: #1d2327;
+  --admin-nav: #2c3338;
+  --admin-nav-text: #f0f0f1;
+  --admin-nav-current: #2271b1;
+  --admin-field: #f0f0f1;
+  --admin-surface: #fff;
+  --admin-border: #c3c4c7;
+  --admin-text: #1d2327;
+  --admin-muted: #646970;
+  --admin-link: #2271b1;
+  --admin-notice: #00a32a;
+  --admin-error: #d63638;
+  --admin-nav-width: 11rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--admin-field);
+  color: var(--admin-text);
+  font:
+    14px/1.6 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+a {
+  color: var(--admin-link);
+}
+
+/* The top bar: site name on the left, who you are on the right. */
+
+.admin-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 1rem;
+  min-height: 2.5rem;
+  background: var(--admin-bar);
+  color: var(--admin-nav-text);
+}
+
+.admin-bar a {
+  color: var(--admin-nav-text);
+  text-decoration: none;
+}
+
+.admin-bar a:hover,
+.admin-bar a:focus {
+  color: #72aee6;
+}
+
+.admin-bar-site {
+  font-weight: 600;
+}
+
+.admin-bar-spacer {
+  flex: 1;
+}
+
+.admin-bar-user {
+  color: #c3c4c7;
+}
+
+.admin-bar form {
+  display: inline;
+}
+
+.admin-bar button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--admin-nav-text);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* The shell: navigation column beside the screen itself. */
+
+.admin-shell {
+  display: flex;
+  align-items: stretch;
+  min-height: calc(100vh - 2.5rem);
+}
+
+.admin-nav {
+  flex: 0 0 var(--admin-nav-width);
+  background: var(--admin-nav);
+}
+
+.admin-nav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-nav a {
+  display: block;
+  padding: 0.6rem 0.9rem;
+  color: var(--admin-nav-text);
+  text-decoration: none;
+}
+
+.admin-nav a:hover,
+.admin-nav a:focus {
+  background: var(--admin-bar);
+  color: #72aee6;
+}
+
+.admin-nav a[aria-current='page'] {
+  background: var(--admin-nav-current);
+  color: #fff;
+  font-weight: 600;
+}
+
+.admin-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.25rem 1.5rem 3rem;
+}
+
+/* Login and setup: no navigation, one card in the middle of the page. */
+
+.admin-plain {
+  max-width: 22rem;
+  margin: 3rem auto;
+  padding: 1.5rem;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 1.5rem;
+  font-weight: 400;
+}
+
+h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+}
+
+/* Flash messages. One page each, then gone. */
+
+.admin-flash {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-left: 4px solid var(--admin-notice);
+}
+
+.admin-flash-error {
+  border-left-color: var(--admin-error);
+}
+
+/* Panels, the box every group of things on the dashboard sits in. */
+
+.admin-panels {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  align-items: start;
+}
+
+.admin-panel {
+  padding: 0.9rem 1.1rem 1.1rem;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+}
+
+.admin-counts {
+  display: flex;
+  margin: 0;
+  gap: 1.5rem;
+}
+
+.admin-counts div {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.admin-counts dt {
+  color: var(--admin-muted);
+}
+
+.admin-counts dd {
+  margin: 0;
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+/* Listings. */
+
+.admin-list {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-list th {
+  text-align: left;
+  color: var(--admin-muted);
+  font-weight: 600;
+}
+
+.admin-list th,
+.admin-list td {
+  padding: 0.35rem 0.5rem 0.35rem 0;
+  border-bottom: 1px solid var(--admin-field);
+  vertical-align: top;
+}
+
+.admin-status {
+  color: var(--admin-muted);
+}
+
+.admin-status-draft {
+  color: var(--admin-error);
+}
+
+.admin-empty {
+  color: var(--admin-muted);
+}
+
+/* Forms. */
+
+label {
+  display: block;
+  margin: 0.75rem 0 0.25rem;
+  font-weight: 600;
+}
+
+input[type='text'],
+input[type='password'],
+textarea {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #8c8f94;
+  background: var(--admin-surface);
+  color: inherit;
+  font: inherit;
+}
+
+textarea {
+  min-height: 8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+}
+
+button[type='submit'],
+.admin-button {
+  margin-top: 1rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--admin-link);
+  border-radius: 3px;
+  background: var(--admin-link);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+button[type='submit']:hover,
+.admin-button:hover {
+  background: #135e96;
+}
+
+.admin-error {
+  margin: 1rem 0 0;
+  padding: 0.6rem 0.9rem;
+  background: var(--admin-surface);
+  border-left: 4px solid var(--admin-error);
+}
+
+.admin-note {
+  color: var(--admin-muted);
+}

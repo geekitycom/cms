@@ -1,8 +1,13 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 import type { Environment } from 'nunjucks';
 
+import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
+import { defaultPermalink, slugify } from '../content/slug.ts';
+import { normalizeBody } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
+import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';
+import { flash, takeFlash } from './flash.ts';
 import {
   ADMIN_PREFIX,
   clearSessionCookie,
@@ -21,6 +26,43 @@ export const LOGIN_PATH = `${ADMIN_PREFIX}/login`;
 export const SETUP_PATH = `${ADMIN_PREFIX}/setup`;
 /** Where the logout form posts. */
 export const LOGOUT_PATH = `${ADMIN_PREFIX}/logout`;
+/** Where the dashboard's quick draft form posts. */
+export const QUICK_DRAFT_PATH = `${ADMIN_PREFIX}/quick-draft`;
+
+/** One entry in the admin's left-hand navigation. */
+export interface AdminSection {
+  /** The name a screen passes as `section` to mark itself current. */
+  section: string;
+  /** What the link says. */
+  label: string;
+  /** Where it goes. */
+  url: string;
+}
+
+/**
+ * The sections of the admin, in the order doc-5 lists them.
+ *
+ * Every screen renders the same list and marks one of them, so a screen added
+ * later only has to name its section. The screens behind most of these links
+ * are still placeholders; the navigation is the shape of the whole admin, not
+ * of the part that is built.
+ */
+export const ADMIN_SECTIONS: readonly AdminSection[] = [
+  { section: 'dashboard', label: 'Dashboard', url: ADMIN_PREFIX },
+  { section: 'posts', label: 'Posts', url: `${ADMIN_PREFIX}/posts` },
+  { section: 'pages', label: 'Pages', url: `${ADMIN_PREFIX}/pages` },
+  { section: 'settings', label: 'Settings', url: `${ADMIN_PREFIX}/settings` },
+  { section: 'users', label: 'Users', url: `${ADMIN_PREFIX}/users` },
+  { section: 'federation', label: 'Federation', url: `${ADMIN_PREFIX}/federation` },
+];
+
+/** How many recent posts the dashboard lists. */
+export const DASHBOARD_RECENT_POSTS = 5;
+
+/** Where the editor for a post lives. TASK-11 builds what is behind it. */
+export function postEditorPath(slug: string): string {
+  return `${ADMIN_PREFIX}/posts/${encodeURIComponent(slug)}`;
+}
 
 /**
  * Register the admin on a Hono app.
@@ -45,25 +87,51 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return environment;
   }
 
+  /**
+   * Render one admin template.
+   *
+   * Everything the chrome needs — who is signed in, the navigation, the CSRF
+   * token, the queued flash messages — is put in the context here rather than
+   * by each handler, so a new screen is a template and a `section` name.
+   * Reading the flash is what clears it, so it shows on exactly this page.
+   */
   function render(
     c: Context<GeekityEnv>,
     template: string,
-    context: Record<string, unknown>,
+    context: Record<string, unknown> = {},
   ): Response {
-    const html = templates(c).render(template, { site: c.var.renderer.site(), ...context });
+    const session = c.var.session;
+    const userId = session?.userId ?? null;
+
+    const html = templates(c).render(template, {
+      site: c.var.renderer.site(),
+      adminUrl: ADMIN_PREFIX,
+      siteUrl: '/',
+      assetPrefix: ADMIN_ASSET_PREFIX,
+      navigation: ADMIN_SECTIONS,
+      logoutUrl: LOGOUT_PATH,
+      csrfToken: session?.csrfToken ?? '',
+      user: userId === null ? undefined : c.var.admin.getUserById(userId),
+      flash: takeFlash(c),
+      ...context,
+    });
     return c.html(html);
   }
+
+  // Registered before the guard, so the login page can load its stylesheet
+  // while nobody is logged in. Nothing under it is secret.
+  app.get(`${ADMIN_ASSET_PREFIX}*`, (c) => {
+    const pathname = new URL(c.req.url).pathname.slice(ADMIN_ASSET_PREFIX.length);
+    const response = adminAssetResponse(decodePath(pathname), c.req.header('if-none-match'));
+    return response ?? c.notFound();
+  });
 
   app.use(ADMIN_PREFIX, guard);
   app.use(`${ADMIN_PREFIX}/*`, guard);
 
   app.get(SETUP_PATH, (c) => {
-    const session = anonymousSession(c);
-    return render(c, ADMIN_TEMPLATES.setup, {
-      csrfToken: session.csrfToken,
-      setupUrl: SETUP_PATH,
-      username: '',
-    });
+    anonymousSession(c);
+    return render(c, ADMIN_TEMPLATES.setup, { setupUrl: SETUP_PATH, username: '' });
   });
 
   app.post(SETUP_PATH, async (c) => {
@@ -91,12 +159,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   });
 
   app.get(LOGIN_PATH, (c) => {
-    const session = anonymousSession(c);
-    return render(c, ADMIN_TEMPLATES.login, {
-      csrfToken: session.csrfToken,
-      loginUrl: LOGIN_PATH,
-      username: '',
-    });
+    anonymousSession(c);
+    return render(c, ADMIN_TEMPLATES.login, { loginUrl: LOGIN_PATH, username: '' });
   });
 
   app.post(LOGIN_PATH, async (c) => {
@@ -108,10 +172,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     if (user === undefined) {
       // One message for both failures, so the form cannot be used to find out
       // which usernames exist.
-      const session = anonymousSession(c);
+      anonymousSession(c);
       c.status(401);
       return render(c, ADMIN_TEMPLATES.login, {
-        csrfToken: session.csrfToken,
         loginUrl: LOGIN_PATH,
         username,
         error: 'That username and password do not match.',
@@ -129,15 +192,89 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   });
 
   app.get(ADMIN_PREFIX, (c) => {
-    const session = c.var.session;
-    const user =
-      session?.userId === null ? undefined : c.var.admin.getUserById(session?.userId ?? 0);
+    const store = c.var.store;
     return render(c, ADMIN_TEMPLATES.dashboard, {
-      csrfToken: session?.csrfToken ?? '',
-      logoutUrl: LOGOUT_PATH,
-      user,
+      section: 'dashboard',
+      counts: store.counts(),
+      recent: store.listAll({ type: 'post', limit: DASHBOARD_RECENT_POSTS }).map((document) => ({
+        title: document.title,
+        slug: document.slug,
+        date: document.date,
+        draft: document.draft,
+        editUrl: postEditorPath(document.slug),
+      })),
+      quickDraftUrl: QUICK_DRAFT_PATH,
     });
   });
+
+  /**
+   * The dashboard's quick draft: a title and a body, straight to a draft file.
+   *
+   * It writes a draft rather than a published post because the point of the box
+   * is to catch an idea before it goes, and because the editor TASK-11 builds is
+   * where the decision to publish belongs.
+   */
+  app.post(QUICK_DRAFT_PATH, async (c) => {
+    const body = await c.req.parseBody();
+    const title = text(body['title']).trim();
+
+    if (title === '') {
+      flash(c, 'error', 'A draft needs a title.');
+      return c.redirect(ADMIN_PREFIX, 303);
+    }
+
+    const contentDir = c.var.config.contentDir;
+    const store = c.var.store;
+    const date = new Date().toISOString();
+    const slug = await freeSlug({
+      contentDir,
+      store,
+      type: 'post',
+      slug: slugify(title) || 'untitled',
+      date,
+    });
+
+    const document = await saveDocument({
+      contentDir,
+      store,
+      path: contentFilePath({ type: 'post', slug, date }),
+      content: {
+        title,
+        date,
+        permalink: defaultPermalink({ type: 'post', slug, date }),
+        tags: [],
+        draft: true,
+        extra: {},
+        body: normalizeBody(text(body['body'])),
+      },
+    });
+
+    flash(c, 'notice', `Draft saved: ${document.title}`);
+    return c.redirect(postEditorPath(document.slug), 303);
+  });
+
+  // The sections doc-5 lists but no task has built yet. They are registered so
+  // the navigation goes somewhere: a link that 404s reads as a broken admin,
+  // and the guard already keeps strangers out of all of them.
+  for (const item of ADMIN_SECTIONS) {
+    if (item.section === 'dashboard') continue;
+    app.get(item.url, (c) =>
+      render(c, ADMIN_TEMPLATES.placeholder, { section: item.section, heading: item.label }),
+    );
+  }
+
+  for (const [section, noun] of [
+    ['posts', 'post'],
+    ['pages', 'page'],
+  ] as const) {
+    app.get(`${ADMIN_PREFIX}/${section}/:slug`, (c) =>
+      render(c, ADMIN_TEMPLATES.placeholder, {
+        section,
+        heading: `Edit ${noun}`,
+        slug: c.req.param('slug'),
+      }),
+    );
+  }
 
   // `/admin/` is the same screen as `/admin`, and only one of them is the URL.
   app.get(`${ADMIN_PREFIX}/`, (c) => c.redirect(ADMIN_PREFIX, 301));
@@ -158,14 +295,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
   /** Re-render the setup form with a message, and the status a bad form gets. */
   function refuseSetup(c: Context<GeekityEnv>, username: string, error: string): Response {
-    const session = anonymousSession(c);
+    anonymousSession(c);
     c.status(400);
-    return render(c, ADMIN_TEMPLATES.setup, {
-      csrfToken: session.csrfToken,
-      setupUrl: SETUP_PATH,
-      username,
-      error,
-    });
+    return render(c, ADMIN_TEMPLATES.setup, { setupUrl: SETUP_PATH, username, error });
   }
 
   /**
@@ -246,6 +378,18 @@ async function submittedToken(c: Context<GeekityEnv>): Promise<unknown> {
   // Hono caches the parsed form, so the handler behind this parses nothing twice.
   const body = await c.req.parseBody();
   return body[CSRF_FIELD];
+}
+
+/**
+ * A percent-decoded request path. A path that will not decode is handed on as
+ * it arrived, where it will match no file and become a 404.
+ */
+function decodePath(pathname: string): string {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
 }
 
 /** A form field as a string. A file upload, or a missing field, is the empty one. */

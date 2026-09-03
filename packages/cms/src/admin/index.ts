@@ -1,4 +1,11 @@
 export {
+  ADMIN_ASSET_MAX_AGE,
+  ADMIN_ASSET_PREFIX,
+  ADMIN_STATIC_DIR,
+  adminAssetResponse,
+  findAdminAsset,
+} from './assets.ts';
+export {
   credentialProblem,
   MAXIMUM_USERNAME_LENGTH,
   MINIMUM_PASSWORD_LENGTH,
@@ -6,8 +13,20 @@ export {
   USERNAME_PATTERN,
   usernameProblem,
 } from './credentials.ts';
+export { flash, takeFlash } from './flash.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from './passwords.ts';
-export { guard, LOGIN_PATH, LOGOUT_PATH, mountAdmin, SETUP_PATH } from './routes.ts';
+export {
+  ADMIN_SECTIONS,
+  DASHBOARD_RECENT_POSTS,
+  guard,
+  LOGIN_PATH,
+  LOGOUT_PATH,
+  mountAdmin,
+  postEditorPath,
+  QUICK_DRAFT_PATH,
+  SETUP_PATH,
+} from './routes.ts';
+export type { AdminSection } from './routes.ts';
 export {
   ADMIN_PREFIX,
   clearSessionCookie,
@@ -23,6 +42,8 @@ export type {
   AdminStore,
   CreateSessionInput,
   CreateUserInput,
+  FlashKind,
+  FlashMessage,
   OpenAdminStoreOptions,
   Session,
   StoredUser,
