@@ -414,6 +414,56 @@ describe('theme assets', () => {
   });
 });
 
+describe('uploads', () => {
+  it('serves a file from content/uploads at the URL Eleventy copies it to', async () => {
+    const { cms } = await site({ 'uploads/2026/09/notes.txt': 'Attached.\n' });
+
+    const response = await cms.app.request('/uploads/2026/09/notes.txt');
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /text\/plain/);
+    assert.match(response.headers.get('cache-control') ?? '', /max-age=\d+/);
+    assert.ok(response.headers.get('etag') !== null, 'an ETag is set');
+    assert.equal(await response.text(), 'Attached.\n');
+  });
+
+  it('answers 304 when the ETag still matches', async () => {
+    const { cms } = await site({ 'uploads/2026/09/notes.txt': 'Attached.\n' });
+    const first = await cms.app.request('/uploads/2026/09/notes.txt');
+
+    const second = await cms.app.request('/uploads/2026/09/notes.txt', {
+      headers: { 'if-none-match': first.headers.get('etag') ?? '' },
+    });
+
+    assert.equal(second.status, 304);
+    assert.equal(await second.text(), '');
+  });
+
+  it('refuses to walk out of the uploads directory', async () => {
+    const { cms } = await site({
+      'posts/secret.md': post('Secret', { date: '2026-09-03', permalink: '/secret/' }),
+    });
+
+    for (const attempt of [
+      '/uploads/../posts/secret.md',
+      '/uploads/%2e%2e%2fposts%2fsecret.md',
+      '/uploads/..%2Fposts%2Fsecret.md',
+    ]) {
+      const response = await cms.app.request(attempt);
+      assert.ok(
+        !(await response.text()).includes('title: Secret'),
+        `${attempt} escaped the uploads directory`,
+      );
+    }
+  });
+
+  it('404s an upload that is not there', async () => {
+    const { cms } = await site({});
+
+    assert.equal((await cms.app.request('/uploads/2026/09/nope.png')).status, 404);
+  });
+});
+
 describe('overriding one template', () => {
   const files = {
     'posts/notes.md': post('Notes', {

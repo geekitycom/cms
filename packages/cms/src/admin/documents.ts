@@ -13,8 +13,10 @@ import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { isPublicDocument } from '../web/documents.ts';
 import { flash } from './flash.ts';
+import { PREVIEW_PATH } from './preview.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
+import { UPLOADS_PATH } from './uploads.ts';
 
 /**
  * Everything that differs between the posts screens and the pages screens.
@@ -733,6 +735,8 @@ function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Res
       document === undefined ? `Add ${kind.singular}` : `Edit ${kind.singular}: ${document.title}`,
     saveUrl: document === undefined ? newEditorPath(kind) : editorPath(kind, document.slug),
     listUrl: kind.basePath,
+    previewUrl: PREVIEW_PATH,
+    uploadUrl: UPLOADS_PATH,
     viewUrl: document !== undefined && isPublicDocument(document) ? document.permalink : undefined,
     ...(options.error === undefined ? {} : { error: options.error }),
   });

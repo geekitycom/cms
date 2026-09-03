@@ -1,6 +1,13 @@
 export { KNOWN_FRONT_MATTER_KEYS } from './document.ts';
 export type { ActivityPubMetadata, Document, DocumentContent, DocumentType } from './document.ts';
 export { renderMarkdown } from './markdown.ts';
+export {
+  KNOWN_UPLOAD_TYPES,
+  matchesSignature,
+  normalizeUploadType,
+  UPLOAD_MEDIA_TYPES,
+} from './media.ts';
+export type { UploadMediaType, UploadSignature } from './media.ts';
 export { hashDocument, parseDocument, typeForPath } from './parser.ts';
 export type { ParseDocumentOptions } from './parser.ts';
 export { contentFilePath, freeSlug, saveDocument } from './save.ts';

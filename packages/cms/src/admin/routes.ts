@@ -9,6 +9,7 @@ import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';
 import { editorPath, mountDocumentScreens, PAGE_KIND, POST_KIND } from './documents.ts';
 import { flash, takeFlash } from './flash.ts';
+import { mountPreview } from './preview.ts';
 import {
   ADMIN_PREFIX,
   clearSessionCookie,
@@ -20,6 +21,7 @@ import {
 import { DuplicateUsernameError } from './store.ts';
 import type { Session, User } from './store.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
+import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 
 /** Where the login form lives. */
 export const LOGIN_PATH = `${ADMIN_PREFIX}/login`;
@@ -126,6 +128,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const response = adminAssetResponse(decodePath(pathname), c.req.header('if-none-match'));
     return response ?? c.notFound();
   });
+
+  // In front of the guard, because the guard parses the form to find the CSRF
+  // token and parsing a multipart form reads the whole file into memory.
+  app.use(UPLOADS_PATH, refuseOversizedUpload);
 
   app.use(ADMIN_PREFIX, guard);
   app.use(`${ADMIN_PREFIX}/*`, guard);
@@ -259,6 +265,12 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // form has.
   mountDocumentScreens(app, { kind: POST_KIND, render });
   mountDocumentScreens(app, { kind: PAGE_KIND, render });
+
+  // The two endpoints the editor talks to rather than navigates to. Both are
+  // inside the guard, so both need the session's CSRF token like every other
+  // POST in the admin.
+  mountPreview(app);
+  mountUploads(app);
 
   const built = new Set([POST_KIND.section, PAGE_KIND.section, 'dashboard']);
 

@@ -22,6 +22,8 @@ packages/cms/          published as @geekity/cms
     config.ts          config schema, defaults, environment overrides
     cli.ts             the `geekity` bin
     *.test.ts          node:test suites, run through tsx, excluded from the build
+  editor/              the admin editor's browser code, bundled by esbuild
+  admin/               admin templates and static files, editor.js among them
   themes/default/      default theme, shipped inside the package
   templates/site/      files `geekity init` copies into a new site
   dist/                tsc output (JS + .d.ts), gitignored
@@ -59,7 +61,7 @@ Run from the repository root.
 | `pnpm install`       | Installs both workspace packages and links `apps/demo` to `packages/cms`. |
 | `pnpm dev`           | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`).         |
 | `pnpm start`         | Starts the demo site once, without watching.                              |
-| `pnpm build`         | Compiles `packages/cms` to `dist/` with type declarations.                |
+| `pnpm build`         | Compiles `packages/cms` to `dist/` and bundles the admin editor.          |
 | `pnpm test`          | Runs the `node:test` suites in every package through `tsx`.               |
 | `pnpm test:coverage` | The same suites with `--experimental-test-coverage`.                      |
 | `pnpm test:11ty`     | Builds the fixtures and the demo content with Eleventy, comparing URLs.   |
@@ -131,6 +133,23 @@ directory; absolute ones are used as given.
 | `themeDir`   | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme.                       |
 | `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped. |
 | `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                               |
+
+The admin adds two more:
+
+| Field            | Default             | Environment override       | Meaning                                                        |
+| ---------------- | ------------------- | -------------------------- | -------------------------------------------------------------- |
+| `uploadMaxBytes` | `10485760` (10 MiB) | `GEEKITY_UPLOAD_MAX_BYTES` | Largest file the editor's upload endpoint accepts.             |
+| `uploadTypes`    | every type below    | `GEEKITY_UPLOAD_TYPES`     | Extensions it accepts, as a list (comma-separated in the env). |
+
+`uploadTypes` defaults to `.avif`, `.gif`, `.jpeg`, `.jpg`, `.md`, `.pdf`,
+`.png`, `.txt` and `.webp` — every type the CMS knows a media type for. The
+dot and the case are optional: `PNG` and `.png` are the same entry. A name the
+CMS has no media type for is refused at boot rather than ignored, so a typo in
+an allowlist is heard about immediately.
+
+SVG is not in that list and cannot be added: an SVG is markup that may carry
+script, and an upload is served from the site's own origin, so accepting one
+would be a stored cross-site scripting hole in the site's own pages.
 
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site.
@@ -305,6 +324,7 @@ Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
 | a document's permalink | The post or the page, through the theme.                                      |
 | `/tags/{tag}/`         | Everything published carrying that tag, paginated at `/tags/{tag}/page/2/`.   |
 | `/theme/…`             | The theme's own files, from its `static/` directory, cacheable and validated. |
+| `/uploads/…`           | Files under `content/uploads/`, at the URLs an Eleventy build copies them to. |
 | anything else          | The theme's 404.                                                              |
 
 Drafts and documents in the trash 404 and appear in no listing. Trailing
@@ -319,6 +339,44 @@ always win over a permalink that would collide with them.
 How many posts a listing page holds comes from `postsPerPage` in
 `content/_data/site.json`, and defaults to 10. The same file is the `site`
 global in every template.
+
+## The admin editor
+
+The editor at `/admin/posts/{slug}` is a plain form. The body is a
+`<textarea>`, the Preview button submits that form to `/admin/preview` in a new
+tab, and both work with JavaScript switched off — which is the shape everything
+below has to preserve.
+
+`packages/cms/admin/static/editor.js` upgrades it when it loads. CodeMirror 6
+in Markdown mode takes over the textarea's _view_ while the textarea itself
+stays in the form as the value that is submitted; the Preview button becomes a
+Write/Preview tab that posts the current body and shows the answer in a
+sandboxed frame; and an "Add file…" button, or a file dropped on the editor,
+posts to `/admin/uploads` and pastes the Markdown it gets back at the cursor.
+
+That file is a build product, not source. The source is
+`packages/cms/editor/main.ts`, which has a `tsconfig.json` of its own — the DOM
+lib, no node types — and is bundled by esbuild in `scripts/build-editor.js`.
+`pnpm build` runs the bundler after `tsc`, so an install (through the root
+`prepare` script), a CI job and a publish all produce it; `admin/` is already in
+the package's `files`, so it ships. It is gitignored, and CodeMirror is a
+devDependency: nothing is fetched from a CDN, and the admin works offline.
+
+`POST /admin/preview` renders through the same `renderMarkdown` and the same
+theme layout the public site uses, so what the preview shows is what publishing
+would put on the site, theme overrides included. It writes nothing.
+
+`POST /admin/uploads` stores one file at
+`content/uploads/{yyyy}/{mm}/{slug}{ext}` and answers with `{ url, markdown }`.
+A name is never overwritten: a second `photo.png` becomes `photo-2.png`. Three
+things have to agree before anything is written — the extension is on the
+site's allowlist, the media type the browser declared is one that extension may
+have, and the file's first bytes are that format's — and a file that is too
+big gets a 413 and one of the wrong type a 415, both as JSON. See
+[`uploadMaxBytes` and `uploadTypes`](#configuration).
+
+Both endpoints are behind the admin's guard and need the session's CSRF token,
+like every other POST in the admin.
 
 ## The theme
 

@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './content/media.ts';
 import type { DocumentChange } from './content/sync.ts';
 
 /**
@@ -43,6 +44,19 @@ export interface GeekityConfig {
    */
   sessionLifetime?: number;
   /**
+   * Largest file the editor's upload endpoint accepts, in bytes. Default 10
+   * MiB. Overridden by `GEEKITY_UPLOAD_MAX_BYTES`.
+   */
+  uploadMaxBytes?: number;
+  /**
+   * File extensions the upload endpoint accepts, with or without the leading
+   * dot and in any case. Default: PNG, JPEG, GIF, WebP, AVIF, PDF, plain text
+   * and Markdown. Overridden by `GEEKITY_UPLOAD_TYPES`, a comma-separated
+   * list. Every entry has to be one the CMS knows a media type for; see
+   * `KNOWN_UPLOAD_TYPES`.
+   */
+  uploadTypes?: string[];
+  /**
    * Called for every `created`, `updated` and `deleted` the index records.
    *
    * The boot scan reports a cold index as a directory full of creations, so a
@@ -72,6 +86,9 @@ export interface ResolvedConfig {
   baseUrl: string;
   watch: boolean;
   sessionLifetime: number;
+  uploadMaxBytes: number;
+  /** Normalised: lower case, each with its leading dot. */
+  uploadTypes: string[];
   onDocumentChange: DocumentChangeHook | undefined;
   onPublish: DocumentChangeHook | undefined;
 }
@@ -90,6 +107,15 @@ export const DEFAULT_DATA_DIR = 'data';
 export const DEFAULT_THEME_DIR = 'theme';
 /** How long an admin login lasts by default: fourteen days, in seconds. */
 export const DEFAULT_SESSION_LIFETIME = 14 * 24 * 60 * 60;
+/** Largest upload a site accepts by default: ten mebibytes. */
+export const DEFAULT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+/**
+ * What the editor may upload by default: the raster image formats a browser
+ * displays, PDFs, and the two text formats. Everything the CMS knows about
+ * except SVG, which is script-bearing markup served from the site's own origin
+ * and so is opt-in.
+ */
+export const DEFAULT_UPLOAD_TYPES: readonly string[] = KNOWN_UPLOAD_TYPES;
 
 /**
  * Identity helper that gives a `geekity.config.ts` file type checking and
@@ -125,9 +151,72 @@ export function resolveConfig(
       env['GEEKITY_SESSION_LIFETIME'],
       config.sessionLifetime,
     ),
+    uploadMaxBytes: resolveUploadMaxBytes(env['GEEKITY_UPLOAD_MAX_BYTES'], config.uploadMaxBytes),
+    uploadTypes: resolveUploadTypes(env['GEEKITY_UPLOAD_TYPES'], config.uploadTypes),
     onDocumentChange: config.onDocumentChange,
     onPublish: config.onPublish,
   };
+}
+
+/** Bytes, a positive whole number of them. */
+function resolveUploadMaxBytes(
+  fromEnv: string | undefined,
+  configured: number | undefined,
+): number {
+  if (fromEnv !== undefined && fromEnv !== '') {
+    const parsed = Number(fromEnv);
+    if (!isValidByteCount(parsed)) {
+      throw new TypeError(
+        `GEEKITY_UPLOAD_MAX_BYTES must be a positive whole number of bytes, received ${JSON.stringify(fromEnv)}`,
+      );
+    }
+    return parsed;
+  }
+
+  if (configured === undefined) return DEFAULT_UPLOAD_MAX_BYTES;
+  if (!isValidByteCount(configured)) {
+    throw new TypeError(
+      `config.uploadMaxBytes must be a positive whole number of bytes, received ${JSON.stringify(configured)}`,
+    );
+  }
+  return configured;
+}
+
+function isValidByteCount(value: number): boolean {
+  return Number.isInteger(value) && value > 0;
+}
+
+/**
+ * An upload allowlist, normalised and checked.
+ *
+ * A name the CMS has no media type for is refused rather than ignored: a
+ * config that says `.svg` and silently gets nothing would be a config that
+ * lies, and a typo in an allowlist is worth hearing about at boot.
+ */
+function resolveUploadTypes(
+  fromEnv: string | undefined,
+  configured: string[] | undefined,
+): string[] {
+  if (fromEnv !== undefined && fromEnv !== '') {
+    return checkedUploadTypes(fromEnv.split(','), 'GEEKITY_UPLOAD_TYPES');
+  }
+  if (configured === undefined) return [...DEFAULT_UPLOAD_TYPES];
+  return checkedUploadTypes(configured, 'config.uploadTypes');
+}
+
+function checkedUploadTypes(values: string[], source: string): string[] {
+  const types: string[] = [];
+  for (const value of values) {
+    const normalized = normalizeUploadType(value);
+    if (normalized === '') continue;
+    if (!KNOWN_UPLOAD_TYPES.includes(normalized)) {
+      throw new TypeError(
+        `${source} names ${JSON.stringify(normalized)}, which the CMS has no media type for. It knows ${KNOWN_UPLOAD_TYPES.join(', ')}.`,
+      );
+    }
+    if (!types.includes(normalized)) types.push(normalized);
+  }
+  return types;
 }
 
 /** `true`, `1`, `yes` and `on` mean yes; `false`, `0`, `no` and `off` mean no. */

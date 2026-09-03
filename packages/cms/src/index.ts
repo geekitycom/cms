@@ -46,6 +46,8 @@ export {
   MINIMUM_PASSWORD_LENGTH,
   mountAdmin,
   mountDocumentScreens,
+  mountPreview,
+  mountUploads,
   newEditorPath,
   openAdminStore,
   PAGE_KIND,
@@ -53,7 +55,9 @@ export {
   passwordProblem,
   postEditorPath,
   POST_KIND,
+  PREVIEW_PATH,
   QUICK_DRAFT_PATH,
+  refuseOversizedUpload,
   returnPath,
   SESSION_COOKIE,
   SESSION_ID_BYTES,
@@ -62,6 +66,9 @@ export {
   SETUP_PATH,
   splitTags,
   takeFlash,
+  UPLOAD_ENVELOPE_BYTES,
+  UPLOAD_FIELD,
+  UPLOADS_PATH,
   USERNAME_PATTERN,
   usernameProblem,
   usesSecureCookies,
@@ -84,10 +91,16 @@ export type {
   OpenAdminStoreOptions,
   Session,
   StoredUser,
+  UploadResult,
   User,
 } from './admin/index.ts';
 
-export { defineConfig, resolveConfig } from './config.ts';
+export {
+  DEFAULT_UPLOAD_MAX_BYTES,
+  DEFAULT_UPLOAD_TYPES,
+  defineConfig,
+  resolveConfig,
+} from './config.ts';
 export type {
   DocumentChangeHook,
   GeekityConfig,
@@ -111,7 +124,10 @@ export {
   hashDocument,
   isTrashedPath,
   KNOWN_FRONT_MATTER_KEYS,
+  KNOWN_UPLOAD_TYPES,
+  matchesSignature,
   normalizeBody,
+  normalizeUploadType,
   openContentStore,
   parseDocument,
   renderMarkdown,
@@ -120,6 +136,7 @@ export {
   slugify,
   TRASH_DIRECTORY,
   typeForPath,
+  UPLOAD_MEDIA_TYPES,
 } from './content/index.ts';
 export type {
   ActivityPubMetadata,
@@ -148,6 +165,8 @@ export type {
   SyncLogger,
   SyncResult,
   TagCount,
+  UploadMediaType,
+  UploadSignature,
 } from './content/index.ts';
 
 export type { GeekityEnv } from './env.ts';
@@ -177,6 +196,7 @@ export {
   feedSize,
   findAsset,
   findThemeAsset,
+  findUpload,
   formatDate,
   homeHref,
   isNotModified,
@@ -214,6 +234,9 @@ export {
   THEME_ASSET_PREFIX,
   THEME_STATIC_DIR,
   themeSearchPath,
+  UPLOAD_ASSET_MAX_AGE,
+  UPLOAD_ASSET_PREFIX,
+  UPLOAD_DIRECTORY,
 } from './web/index.ts';
 export type {
   AcceptRange,

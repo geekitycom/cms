@@ -3,6 +3,7 @@ export {
   assetResponse,
   findAsset,
   findThemeAsset,
+  findUpload,
   matchesEtag,
   themeAssetNotModified,
   themeAssetResponse,
@@ -10,6 +11,9 @@ export {
   THEME_ASSET_MAX_AGE,
   THEME_ASSET_PREFIX,
   THEME_STATIC_DIR,
+  UPLOAD_ASSET_MAX_AGE,
+  UPLOAD_ASSET_PREFIX,
+  UPLOAD_DIRECTORY,
 } from './assets.ts';
 export type { AssetResponseOptions, StaticAsset, ThemeAsset } from './assets.ts';
 export {
