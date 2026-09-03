@@ -1,11 +1,17 @@
 export {
+  assetNotModified,
+  assetResponse,
+  findAsset,
   findThemeAsset,
+  matchesEtag,
+  themeAssetNotModified,
+  themeAssetResponse,
   themeSearchPath,
   THEME_ASSET_MAX_AGE,
   THEME_ASSET_PREFIX,
   THEME_STATIC_DIR,
 } from './assets.ts';
-export type { ThemeAsset } from './assets.ts';
+export type { AssetResponseOptions, StaticAsset, ThemeAsset } from './assets.ts';
 export {
   createSiteDataSource,
   DEFAULT_POSTS_PER_PAGE,

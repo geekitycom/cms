@@ -3,6 +3,8 @@ export type { ActivityPubMetadata, Document, DocumentContent, DocumentType } fro
 export { renderMarkdown } from './markdown.ts';
 export { hashDocument, parseDocument, typeForPath } from './parser.ts';
 export type { ParseDocumentOptions } from './parser.ts';
+export { contentFilePath, freeSlug, saveDocument } from './save.ts';
+export type { ContentFilePathInput, FreeSlugOptions, SaveDocumentOptions } from './save.ts';
 export { defaultPermalink, slugify } from './slug.ts';
 export type { DefaultPermalinkInput } from './slug.ts';
 export { documentFrontMatter, normalizeBody, serializeDocument } from './writer.ts';

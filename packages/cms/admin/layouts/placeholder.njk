@@ -1,0 +1,10 @@
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  {# A screen a later task builds. It exists so the navigation goes somewhere
+     and the guard covers it from the start. #}
+  <h1>{{ heading }}{% if slug %}: {{ slug }}{% endif %}</h1>
+  <p class="admin-note">This screen is not built yet.</p>
+{% endblock %}

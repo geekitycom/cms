@@ -56,6 +56,23 @@ export interface Session {
   readonly expiresAt: string;
 }
 
+/** How loudly a flash message reads. */
+export type FlashKind = 'notice' | 'error';
+
+/**
+ * One message queued for the next page a session asks for.
+ *
+ * Flashes live on the session row rather than in a cookie so they cannot be
+ * replayed, forged or grown past a cookie's size, and so they disappear with
+ * the session.
+ */
+export interface FlashMessage {
+  /** Which style the message renders in. */
+  kind: FlashKind;
+  /** The message itself, in plain text. Templates escape it. */
+  message: string;
+}
+
 /** What {@link AdminStore.createSession} is given. */
 export interface CreateSessionInput {
   /** The user logging in, or `null` for the pre-login CSRF session. */
@@ -112,6 +129,16 @@ export interface AdminStore {
   deleteSession(id: string): boolean;
   /** Delete every expired session. Returns how many went. */
   pruneSessions(now?: Date): number;
+  /**
+   * Queue a message for the next page this session asks for. Does nothing when
+   * there is no such session, which is what a logout followed by a flash is.
+   */
+  pushFlash(sessionId: string, entry: FlashMessage): void;
+  /**
+   * Every queued message for a session, in order, removed as it is read, so a
+   * flash survives exactly one page and no more.
+   */
+  takeFlash(sessionId: string): FlashMessage[];
   /** Close the database. Safe to call twice. */
   close(): void;
 }
@@ -159,9 +186,29 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     sessionById: db.prepare('SELECT * FROM sessions WHERE id = ?'),
     deleteSession: db.prepare('DELETE FROM sessions WHERE id = ?'),
     pruneSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
+    readFlash: db.prepare('SELECT flash FROM sessions WHERE id = ?'),
+    writeFlash: db.prepare('UPDATE sessions SET flash = ? WHERE id = ?'),
   };
 
   let open = true;
+
+  /**
+   * The messages queued on a session. A column that will not parse is treated
+   * as empty: a flash is a convenience, and losing one is better than a 500 on
+   * every admin page until the row is cleaned up by hand.
+   */
+  function readFlash(sessionId: string): FlashMessage[] {
+    const row = statements.readFlash.get(sessionId) as Record<string, unknown> | undefined;
+    const raw = row?.['flash'];
+    if (typeof raw !== 'string' || raw === '') return [];
+
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter(isFlashMessage) : [];
+    } catch {
+      return [];
+    }
+  }
 
   function storedUser(username: string): StoredUser | undefined {
     const row = statements.userByName.get(username) as Record<string, unknown> | undefined;
@@ -272,6 +319,19 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return Number(statements.pruneSessions.run(now.toISOString()).changes);
     },
 
+    pushFlash(sessionId, entry) {
+      const queued = [...readFlash(sessionId), entry];
+      statements.writeFlash.run(JSON.stringify(queued), sessionId);
+    },
+
+    takeFlash(sessionId) {
+      const queued = readFlash(sessionId);
+      // The clear runs whether or not anything was queued; a row whose column
+      // is already null costs one write and stays simple.
+      statements.writeFlash.run(null, sessionId);
+      return queued;
+    },
+
     close() {
       if (!open) return;
       open = false;
@@ -287,6 +347,15 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
 const DUMMY_HASH = hashPassword(
   'a password no user has, hashed once so that verification is constant time',
 );
+
+function isFlashMessage(value: unknown): value is FlashMessage {
+  if (typeof value !== 'object' || value === null) return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    (entry['kind'] === 'notice' || entry['kind'] === 'error') &&
+    typeof entry['message'] === 'string'
+  );
+}
 
 function toSession(row: Record<string, unknown>): Session {
   const userId = row['user_id'];
@@ -338,6 +407,14 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
       CREATE INDEX sessions_expires_at ON sessions (expires_at);
       CREATE INDEX sessions_user_id ON sessions (user_id);
     `,
+  },
+  {
+    // Flash messages: a JSON array of {kind, message}, queued by the request
+    // that redirects and cleared by the one that renders them. They hang off
+    // the session rather than a cookie so they cannot be forged or replayed,
+    // and so they go when the session does.
+    version: 2,
+    sql: `ALTER TABLE sessions ADD COLUMN flash TEXT`,
   },
 ];
 

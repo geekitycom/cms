@@ -1,14 +1,74 @@
-{% extends "layouts/base.njk" %}
+{% extends "layouts/shell.njk" %}
 
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-  {# A placeholder. TASK-10 replaces it with the real admin shell. #}
   <h1>Dashboard</h1>
-  <p>Signed in as <strong>{{ user.username }}</strong>.</p>
 
-  <form method="post" action="{{ logoutUrl }}">
-    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-    <button type="submit">Log out</button>
-  </form>
+  <div class="admin-panels">
+    <section class="admin-panel">
+      <h2>At a glance</h2>
+      <dl class="admin-counts">
+        <div>
+          <dt>Published posts</dt>
+          <dd>{{ counts.posts }}</dd>
+        </div>
+        <div>
+          <dt>Drafts</dt>
+          <dd>{{ counts.drafts }}</dd>
+        </div>
+        <div>
+          <dt>Pages</dt>
+          <dd>{{ counts.pages }}</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="admin-panel">
+      <h2>Recent posts</h2>
+      {% if recent.length %}
+        <table class="admin-list">
+          <thead>
+            <tr>
+              <th scope="col">Title</th>
+              <th scope="col">Date</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for post in recent %}
+              <tr>
+                <td><a href="{{ post.editUrl }}">{{ post.title }}</a></td>
+                <td>{{ post.date | date('html') }}</td>
+                <td>
+                  {% if post.draft %}
+                    <span class="admin-status admin-status-draft">Draft</span>
+                  {% else %}
+                    <span class="admin-status">Published</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="admin-empty">Nothing written yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="admin-panel">
+      <h2>Quick draft</h2>
+      <form method="post" action="{{ quickDraftUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+        <label for="quick-draft-title">Title</label>
+        <input id="quick-draft-title" name="title" type="text" required />
+
+        <label for="quick-draft-body">Body</label>
+        <textarea id="quick-draft-body" name="body" rows="6"></textarea>
+
+        <button type="submit">Save draft</button>
+      </form>
+    </section>
+  </div>
 {% endblock %}

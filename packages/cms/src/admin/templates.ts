@@ -2,6 +2,8 @@ import { fileURLToPath } from 'node:url';
 
 import { Environment, FileSystemLoader } from 'nunjucks';
 
+import { formatDate } from '../web/templates.ts';
+
 /**
  * The admin's templates, resolved from this module rather than the working
  * directory so they are found whether the CMS runs from `src/` under tsx or
@@ -18,6 +20,7 @@ export const ADMIN_TEMPLATES = {
   login: 'layouts/login.njk',
   setup: 'layouts/setup.njk',
   dashboard: 'layouts/dashboard.njk',
+  placeholder: 'layouts/placeholder.njk',
 } as const;
 
 /** How to build an {@link createAdminTemplateEnvironment}. */
@@ -38,10 +41,18 @@ export function createAdminTemplateEnvironment(
     noCache: options.noCache === true,
   });
 
-  return new Environment(loader, {
+  const environment = new Environment(loader, {
     autoescape: true,
     throwOnUndefined: false,
     trimBlocks: true,
     lstripBlocks: true,
   });
+
+  // The same `date` filter the theme has, and formatted the same way, so a
+  // date reads identically on the public site and in the admin listing.
+  environment.addFilter('date', (value: unknown, format: unknown = 'readable') =>
+    formatDate(value, typeof format === 'string' ? format : 'readable'),
+  );
+
+  return environment;
 }
