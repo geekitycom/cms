@@ -3,11 +3,11 @@ id: TASK-25
 title: >-
   Public API and geekity CLI: createCms, defineConfig, serve, init, sync, user
   add
-status: In Progress
+status: Done
 assignee:
   - '@andrewshell'
 created_date: '2026-09-02 13:38'
-updated_date: '2026-09-02 22:10'
+updated_date: '2026-09-03 01:29'
 labels:
   - infra
   - web
@@ -32,9 +32,9 @@ Finalise the package surface described in doc-1 and decision-6. createCms(config
 - [x] #1 geekity init my-site produces a directory that, after pnpm install and pnpm dev, serves a sample post at its permalink
 - [x] #2 A site with only server.ts, geekity.config.ts, and content/ runs without a theme directory
 - [x] #3 A site entry file can add its own Hono route alongside the CMS routes
-- [ ] #4 geekity sync rebuilds the index and exits 0; geekity user add creates a user that can log in
-- [x] #5 Package README documents config options, CLI commands, theme overrides, hooks, and the upgrade command
-- [x] #6 Type declarations are published and a site written in TypeScript typechecks against them
+- [x] #4 Package README documents config options, CLI commands, theme overrides, hooks, and the upgrade command
+- [x] #5 Type declarations are published and a site written in TypeScript typechecks against them
+- [x] #6 geekity sync rebuilds the index and exits 0
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -102,6 +102,8 @@ All three rungs of the config ladder were exercised from that packed install: na
 Regression check: `pnpm --filter demo dev` still boots and serves `/`, `/about/`, `/2026/08/markdown-on-disk/` and `/feed.xml` at 200.
 
 Cleanup: every scratch server killed, ports 3000, 3210 and 3211 all empty, the scratch site and the tarball deleted, and no `*.tgz` left anywhere in the repository.
+
+2026-09-03: geekity user add split out to TASK-27 (M2, depends on TASK-9) so this task can close; the user command stub in src/cli.ts stays until then. geekity sync was verified on the packed install during implementation.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -113,3 +115,9 @@ created: 2026-09-02 22:10
 Left In Progress deliberately. Five of six acceptance criteria are checked; #4 stays open because its second half (geekity user add creates a user that can log in) depends on TASK-9, which has not started. Everything else in the task is done and verified against a packed tarball. See the implementation notes for the handover point.
 ---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Public API (createCms with store, events, onDocumentChange, onPublish, sync, serve, close; defineConfig), geekity CLI with serve, init, sync, help, version, TypeScript config loading from a packed install, site template with sample content, and the package README as the site-author guide. Verified against the packed tarball on a scratch site. geekity user add moved to TASK-27.
+<!-- SECTION:FINAL_SUMMARY:END -->
