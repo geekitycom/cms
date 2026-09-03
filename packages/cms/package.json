@@ -5,7 +5,7 @@
   "description": "A file-first CMS: Markdown content, a SQLite index, a Hono server that is both the editor and the public site.",
   "license": "MIT",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=24"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -49,7 +49,7 @@
   "devDependencies": {
     "@11ty/eleventy": "^3.1.6",
     "@types/markdown-it-footnote": "^3.0.4",
-    "@types/node": "^26.4.1",
+    "@types/node": "^24.13.3",
     "@types/nunjucks": "^3.2.6",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"

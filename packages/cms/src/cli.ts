@@ -110,9 +110,9 @@ const TYPESCRIPT_EXTENSIONS = new Set(['.ts', '.mts', '.cts']);
  * Load a config module, returning `{}` when the site has no config file.
  *
  * A TypeScript config is imported directly first. That is all it takes on Node
- * 22.18 and newer, which strip types without a flag, and inside this
- * repository, where the CLI already runs under tsx. Older Node — and any file
- * carrying TypeScript syntax that stripping cannot erase — falls back to
+ * 24, which strips types without a flag, and inside this repository, where
+ * the CLI already runs under tsx. A Node started with stripping disabled — and
+ * any file carrying TypeScript syntax that stripping cannot erase — falls back to
  * registering tsx from the *site's* own dependencies, which is where a site
  * scaffolded by `geekity init` has it. A site with neither writes
  * `geekity.config.js` instead; it is in the candidate list for exactly that.

@@ -12,9 +12,9 @@ description: Installs the pinned pnpm and the requested Node, then runs a frozen
 
 inputs:
   node-version:
-    description: Node version to install. `22` resolves to the latest 22.x.
+    description: Node version to install. `24` resolves to the latest 24.x.
     required: false
-    default: '22'
+    default: '24'
 
 runs:
   using: composite

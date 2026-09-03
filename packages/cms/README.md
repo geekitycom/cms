@@ -8,7 +8,7 @@ form.
 This is the guide for someone building a site on the package. The repository's
 own [README](https://github.com/geekitycom/cms#readme) is the contributor guide.
 
-Requires Node 22.5 or newer, which is where `node:sqlite` landed.
+Requires Node 24 or newer, the active LTS line.
 
 ## A new site
 
@@ -100,8 +100,8 @@ in the directory is still indexed.
 ### How a TypeScript config is loaded
 
 `geekity serve` and `geekity sync` import `geekity.config.ts` directly. That is
-all it takes on Node 22.18 and newer, which strip types without a flag. On older
-Node — or for a config using syntax stripping cannot erase, such as `enum` — the
+all it takes on Node 24, which strips types without a flag. For a config using
+syntax stripping cannot erase, such as `enum`, the
 CLI falls back to registering the **tsx installed in your own site**, which is
 what `geekity init` puts in `devDependencies` (it is what runs `server.ts` too).
 A site that wants neither can write `geekity.config.js` instead; it is in the

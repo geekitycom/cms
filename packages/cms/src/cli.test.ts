@@ -151,6 +151,7 @@ describe('geekity init', () => {
       'content',
       'geekity.config.ts',
       'package.json',
+      'pnpm-workspace.yaml',
       'server.ts',
       'tsconfig.json',
     ]);
@@ -177,16 +178,16 @@ describe('geekity init', () => {
     const parent = await temporaryDir('geekity-init-pnpm-');
     await runCli(['init', 'my-site'], parent);
 
+    // pnpm 11 reads settings only from pnpm-workspace.yaml; the `pnpm` field in
+    // package.json is ignored, so nothing may live there.
     const manifest = await readJson(path.join(parent, 'my-site', 'package.json'));
-    const pnpm = manifest['pnpm'] as {
-      onlyBuiltDependencies?: string[];
-      peerDependencyRules?: { allowedVersions?: Record<string, string> };
-    };
+    assert.equal(manifest['pnpm'], undefined);
 
-    // esbuild's install script, which pnpm 10 blocks by default; tsx needs it.
-    assert.deepEqual(pnpm.onlyBuiltDependencies, ['esbuild']);
+    const settings = await fs.readFile(path.join(parent, 'my-site', 'pnpm-workspace.yaml'), 'utf8');
+    // esbuild's install script, which pnpm blocks by default; tsx needs it.
+    assert.match(settings, /^allowBuilds:\n {2}esbuild: true$/m);
     // nunjucks names chokidar an optional peer at a major the CMS is past.
-    assert.equal(pnpm.peerDependencyRules?.allowedVersions?.['nunjucks>chokidar'], '5');
+    assert.match(settings, /^ {4}nunjucks>chokidar: '5'$/m);
   });
 
   it('gives the site the TypeScript toolchain its scripts and its config need', async () => {
