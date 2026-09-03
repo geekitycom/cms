@@ -81,6 +81,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.5)
+      '@js-temporal/polyfill':
+        specifier: ^0.5.1
+        version: 0.5.1
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0

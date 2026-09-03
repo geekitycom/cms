@@ -31,7 +31,7 @@ export type {
   SiteDataSource,
   SiteSettingsSource,
 } from './context.ts';
-export { isPublicDocument, publicDocumentAt } from './documents.ts';
+export { activityStreamsId, isPublicDocument, publicDocumentAt } from './documents.ts';
 export {
   atomFeed,
   DEFAULT_FEED_SIZE,
@@ -55,6 +55,7 @@ export type {
 } from './feeds.ts';
 export {
   absoluteUrl,
+  ACTIVITY_STREAMS_MEDIA_TYPES,
   alternateLinks,
   contentEtag,
   DOCUMENT_REPRESENTATIONS,
@@ -67,6 +68,7 @@ export {
   MEDIA_TYPES,
   notAcceptableResponse,
   parseAccept,
+  prefersActivityStreams,
   representationEtag,
   representationHref,
   REPRESENTATION_EXTENSIONS,

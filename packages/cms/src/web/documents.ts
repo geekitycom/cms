@@ -1,6 +1,7 @@
 import type { Document } from '../content/document.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
+import { postObjectId } from '../federation/paths.ts';
 
 /**
  * Whether the public site may show a document.
@@ -24,4 +25,17 @@ export function publicDocumentAt(store: ContentStore, permalink: string): Docume
   const document = store.getByPermalink(permalink);
   if (document === undefined || !isPublicDocument(document)) return undefined;
   return document;
+}
+
+/**
+ * The ActivityStreams id of a document, or `undefined` when it has none.
+ *
+ * Only a published post federates (doc-4), so only a published post has an id
+ * to advertise. This is what the theme's `<link rel="alternate">` points at,
+ * and it is deliberately the same string the object dispatcher answers under:
+ * the page and the object agree about the post's name in the fediverse.
+ */
+export function activityStreamsId(document: Document, baseUrl: string): string | undefined {
+  if (document.type !== 'post' || !isPublicDocument(document)) return undefined;
+  return postObjectId(document.slug, baseUrl);
 }
