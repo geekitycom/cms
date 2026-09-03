@@ -84,6 +84,15 @@ export interface ResolvedConfig {
   dataDir: string;
   themeDir: string;
   baseUrl: string;
+  /**
+   * Where {@link ResolvedConfig.baseUrl} came from.
+   *
+   * `default` means nobody named one and it is the `http://localhost:<port>`
+   * fallback, which is what lets the admin's settings screen offer a base URL
+   * of its own: an `environment` or `config` value is a deployment fact and
+   * wins over anything stored in SQLite.
+   */
+  baseUrlSource: 'environment' | 'config' | 'default';
   watch: boolean;
   sessionLifetime: number;
   uploadMaxBytes: number;
@@ -146,6 +155,7 @@ export function resolveConfig(
     dataDir: resolveDir(cwd, env['GEEKITY_DATA_DIR'], config.dataDir, DEFAULT_DATA_DIR),
     themeDir: resolveDir(cwd, env['GEEKITY_THEME_DIR'], config.themeDir, DEFAULT_THEME_DIR),
     baseUrl: resolveBaseUrl(env['GEEKITY_BASE_URL'], config.baseUrl, port),
+    baseUrlSource: baseUrlSource(env['GEEKITY_BASE_URL'], config.baseUrl),
     watch: resolveWatch(env['GEEKITY_WATCH'], config.watch),
     sessionLifetime: resolveSessionLifetime(
       env['GEEKITY_SESSION_LIFETIME'],
@@ -296,6 +306,16 @@ function resolveDir(
 ): string {
   const chosen = firstNonEmpty(fromEnv, configured) ?? fallback;
   return path.resolve(cwd, chosen);
+}
+
+/** Which of the two doors named the base URL, if either did. */
+function baseUrlSource(
+  fromEnv: string | undefined,
+  configured: string | undefined,
+): 'environment' | 'config' | 'default' {
+  if (fromEnv !== undefined && fromEnv !== '') return 'environment';
+  if (configured !== undefined && configured !== '') return 'config';
+  return 'default';
 }
 
 function resolveBaseUrl(

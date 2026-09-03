@@ -23,7 +23,14 @@ export {
   postsPerPage,
   SITE_DATA_FILE,
 } from './context.ts';
-export type { DocumentContext, PageContext, SiteData, SiteDataSource } from './context.ts';
+export type {
+  CreateSiteDataSourceOptions,
+  DocumentContext,
+  PageContext,
+  SiteData,
+  SiteDataSource,
+  SiteSettingsSource,
+} from './context.ts';
 export { isPublicDocument, publicDocumentAt } from './documents.ts';
 export {
   atomFeed,

@@ -55,6 +55,31 @@ export {
 } from './routes.ts';
 export type { AdminSection } from './routes.ts';
 export {
+  ACTOR_HANDLE_PATTERN,
+  ACTOR_TYPES,
+  DEFAULT_SITE_SETTINGS,
+  effectiveBaseUrl,
+  formFromSettings,
+  mountSettings,
+  readSiteSettings,
+  seedSiteSettings,
+  SETTINGS_FIELDS,
+  SETTINGS_PATH,
+  settingsFromForm,
+  settingsProblems,
+  settingsSiteData,
+  siteDataPath,
+  siteJsonFor,
+  writeSiteJson,
+  writeSiteSettings,
+} from './settings.ts';
+export type {
+  MountSettingsOptions,
+  SettingsForm,
+  SettingsProblems,
+  SiteSettings,
+} from './settings.ts';
+export {
   ADMIN_PREFIX,
   clearSessionCookie,
   CSRF_FIELD,

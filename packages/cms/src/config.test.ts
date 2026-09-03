@@ -246,3 +246,27 @@ describe('resolveConfig', () => {
     assert.equal(config.contentDir, path.join(process.cwd(), 'content'));
   });
 });
+
+describe('baseUrlSource', () => {
+  it('says where the base URL came from, so the settings screen knows if it may offer one', () => {
+    assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).baseUrlSource, 'default');
+    assert.equal(
+      resolveConfig({ baseUrl: 'https://from-config.example' }, { cwd: '/srv/site', env: {} })
+        .baseUrlSource,
+      'config',
+    );
+    assert.equal(
+      resolveConfig(
+        { baseUrl: 'https://from-config.example' },
+        { cwd: '/srv/site', env: { GEEKITY_BASE_URL: 'https://from-env.example' } },
+      ).baseUrlSource,
+      'environment',
+    );
+    assert.equal(
+      resolveConfig({ baseUrl: '' }, { cwd: '/srv/site', env: { GEEKITY_BASE_URL: '' } })
+        .baseUrlSource,
+      'default',
+      'an empty value is not a value',
+    );
+  });
+});

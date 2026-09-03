@@ -553,3 +553,51 @@ button[type='submit']:hover,
   border-radius: 3px;
   background: #fff;
 }
+
+/* The settings screen: one column of fields, narrow enough to read across. */
+
+.admin-settings {
+  max-width: 42rem;
+  padding: 0.9rem 1.1rem 1.1rem;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+}
+
+.admin-settings h2 {
+  margin: 1.75rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--admin-border);
+  font-size: 1.05rem;
+}
+
+.admin-settings h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.admin-settings select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #8c8f94;
+  background: var(--admin-surface);
+  color: inherit;
+  font: inherit;
+}
+
+.admin-settings input:disabled {
+  background: var(--admin-field);
+  color: var(--admin-muted);
+}
+
+/* One message under the field it is about, so it reads with the field
+   rather than as a list of complaints at the top of the form. */
+
+.admin-field-error {
+  margin: 0.25rem 0 0;
+  color: var(--admin-error);
+  font-size: 0.9em;
+}
+
+.admin-settings-buttons {
+  margin: 0;
+}

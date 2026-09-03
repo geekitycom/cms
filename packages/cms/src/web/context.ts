@@ -116,36 +116,73 @@ export interface SiteDataSource {
 }
 
 /**
- * A source over one site's data file.
+ * The settings the admin stores, as site data.
+ *
+ * The admin's settings screen is the source of truth for the values it
+ * manages, and `content/_data/site.json` is the mirror it writes for an
+ * Eleventy build. Handing the source a reader for the settings is what makes a
+ * saved title show on the very next request rather than on the next time the
+ * file's modification time is noticed.
+ */
+export interface SiteSettingsSource {
+  /** The stored settings as site data. Empty when nothing is stored. */
+  read(): Partial<SiteData>;
+}
+
+/** What {@link createSiteDataSource} reads from besides the config. */
+export interface CreateSiteDataSourceOptions {
+  /** The admin's settings, when the CMS has an admin store to read them from. */
+  settings?: SiteSettingsSource | undefined;
+}
+
+/**
+ * A source over one site's data.
  *
  * The file is read once and then only again when its modification time moves,
  * so a render costs one `stat` rather than one parse. A file that is missing
  * or will not parse falls back to the defaults instead of failing the request:
  * a typo in `site.json` should not take the site down.
+ *
+ * The stored settings, when there are any, go on top of the file. They are the
+ * same values the file was last written from, so the two normally agree; the
+ * overlay is what keeps them agreeing in the moment between a save and the
+ * file's `mtime` being noticed, and the file underneath is what carries the
+ * keys the settings form does not manage.
  */
-export function createSiteDataSource(config: ResolvedConfig): SiteDataSource {
+export function createSiteDataSource(
+  config: ResolvedConfig,
+  options: CreateSiteDataSourceOptions = {},
+): SiteDataSource {
   const file = path.join(config.contentDir, ...SITE_DATA_FILE.split('/'));
-  const defaults: SiteData = { title: 'Geekity', url: config.baseUrl };
+  const settings = options.settings;
 
-  let cached: SiteData = defaults;
+  let cached: Record<string, unknown> = {};
   let cachedAt: number | undefined;
+
+  function fromFile(): Record<string, unknown> {
+    let modifiedAt: number | undefined;
+    try {
+      modifiedAt = statSync(file).mtimeMs;
+    } catch {
+      cachedAt = undefined;
+      cached = {};
+      return cached;
+    }
+
+    if (modifiedAt === cachedAt) return cached;
+
+    cachedAt = modifiedAt;
+    cached = readSiteFile(file);
+    return cached;
+  }
 
   return {
     read() {
-      let modifiedAt: number | undefined;
-      try {
-        modifiedAt = statSync(file).mtimeMs;
-      } catch {
-        cachedAt = undefined;
-        cached = defaults;
-        return cached;
-      }
-
-      if (modifiedAt === cachedAt) return cached;
-
-      cachedAt = modifiedAt;
-      cached = { ...defaults, ...readSiteFile(file) };
-      return cached;
+      // The defaults are rebuilt per read rather than captured, because
+      // `config.baseUrl` may have been settled from the settings after this
+      // source was made.
+      const defaults: SiteData = { title: 'Geekity', url: config.baseUrl };
+      return { ...defaults, ...fromFile(), ...settings?.read() };
     },
   };
 }

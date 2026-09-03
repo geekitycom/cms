@@ -1,7 +1,14 @@
 import { serve as serveNode } from '@hono/node-server';
 import { Hono } from 'hono';
 
-import { mountAdmin, openAdminStore } from './admin/index.ts';
+import {
+  effectiveBaseUrl,
+  mountAdmin,
+  openAdminStore,
+  readSiteSettings,
+  seedSiteSettings,
+  settingsSiteData,
+} from './admin/index.ts';
 import type { AdminStore } from './admin/index.ts';
 import { resolveConfig } from './config.ts';
 import type { DocumentChangeHook, GeekityConfig, ResolvedConfig } from './config.ts';
@@ -11,6 +18,8 @@ import type { GeekityEnv } from './env.ts';
 import { createRenderer, mountPublicSite } from './web/index.ts';
 
 export {
+  ACTOR_HANDLE_PATTERN,
+  ACTOR_TYPES,
   ADMIN_ASSET_MAX_AGE,
   ADMIN_ASSET_PREFIX,
   ADMIN_PREFIX,
@@ -26,15 +35,18 @@ export {
   CSRF_FIELD,
   csrfTokenMatches,
   DASHBOARD_RECENT_POSTS,
+  DEFAULT_SITE_SETTINGS,
   DOCUMENT_FILTERS,
   documentFilter,
   DOCUMENTS_PER_PAGE,
   editorPath,
+  effectiveBaseUrl,
   EXCLUDE_KEY,
   DuplicateUsernameError,
   findAdminAsset,
   findBySlug,
   formFor,
+  formFromSettings,
   flash,
   guard,
   hashPassword,
@@ -47,6 +59,7 @@ export {
   mountAdmin,
   mountDocumentScreens,
   mountPreview,
+  mountSettings,
   mountUploads,
   newEditorPath,
   openAdminStore,
@@ -57,13 +70,22 @@ export {
   POST_KIND,
   PREVIEW_PATH,
   QUICK_DRAFT_PATH,
+  readSiteSettings,
   refuseOversizedUpload,
   returnPath,
+  seedSiteSettings,
   SESSION_COOKIE,
   SESSION_ID_BYTES,
   sessionIdFrom,
   setSessionCookie,
+  SETTINGS_FIELDS,
+  SETTINGS_PATH,
+  settingsFromForm,
+  settingsProblems,
+  settingsSiteData,
   SETUP_PATH,
+  siteDataPath,
+  siteJsonFor,
   splitTags,
   takeFlash,
   UPLOAD_ENVELOPE_BYTES,
@@ -73,6 +95,8 @@ export {
   usernameProblem,
   usesSecureCookies,
   verifyPasswordHash,
+  writeSiteJson,
+  writeSiteSettings,
 } from './admin/index.ts';
 export type {
   AdminRender,
@@ -88,8 +112,12 @@ export type {
   FlashKind,
   FlashMessage,
   MountDocumentScreensOptions,
+  MountSettingsOptions,
   OpenAdminStoreOptions,
   Session,
+  SettingsForm,
+  SettingsProblems,
+  SiteSettings,
   StoredUser,
   UploadResult,
   User,
@@ -243,6 +271,7 @@ export type {
   AssetResponseOptions,
   ConditionalHeaders,
   CreateRendererOptions,
+  CreateSiteDataSourceOptions,
   CreateTemplateEnvironmentOptions,
   DateFormat,
   DocumentContext,
@@ -264,6 +293,7 @@ export type {
   RepresentationResponseOptions,
   SiteData,
   SiteDataSource,
+  SiteSettingsSource,
   StaticAsset,
   ThemeAsset,
 } from './web/index.ts';
@@ -338,12 +368,28 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const resolved = resolveConfig(config);
   const store = openContentStore({ dataDir: resolved.dataDir });
   const admin = openAdminStore({ dataDir: resolved.dataDir });
+
+  // An empty settings table is filled from content/_data/site.json, so a site
+  // that predates the settings screen — or one `geekity init` just wrote —
+  // comes up with the values it already had. After this, SQLite is the source
+  // and the file is the mirror.
+  const seeded = seedSiteSettings({ store: admin, config: resolved });
+
+  // The one thing the settings decide before a request arrives. It is settled
+  // here, at boot, rather than on every save: `baseUrl` also decides whether
+  // the session cookie is `Secure`, and flipping that under a signed-in admin
+  // would log them out of the form they just submitted.
+  resolved.baseUrl = effectiveBaseUrl(resolved, seeded);
+
   const content = createContentSync({
     store,
     contentDir: resolved.contentDir,
     watch: resolved.watch,
   });
-  const renderer = createRenderer({ config: resolved });
+  const renderer = createRenderer({
+    config: resolved,
+    settings: { read: () => settingsSiteData(readSiteSettings(admin)) },
+  });
   const app = new Hono<GeekityEnv>();
 
   app.use('*', async (c, next) => {
