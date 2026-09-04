@@ -529,21 +529,21 @@ that ship inside the package, deliberately outside the theme search path: a
 site's `theme/` may override any public template, and must not be able to
 shadow the login form.
 
-| Route                          | What it does                                                            |
-| ------------------------------ | ----------------------------------------------------------------------- |
-| `/admin`                       | The dashboard: counts, the five most recent posts, the follower count.  |
-| `/admin/posts`, `/admin/pages` | The listings and the editors.                                           |
-| `/admin/settings`              | Site title, tagline, base URL, time zone, paging, archive bases, actor. |
-| `/admin/settings/avatar`       | `POST` only. Uploads the site's avatar, or removes it.                  |
-| `/admin/users`                 | Who may sign in. `POST` adds one.                                       |
-| `/admin/users/password`        | `POST` only. Changes the signed-in admin's own password.                |
-| `/admin/users/delete`          | `POST` only. Deletes the user the form names.                           |
-| `/admin/federation`            | The actor, the followers, the inbox log, and per-post delivery.         |
-| `/admin/federation/redeliver`  | `POST` only. Sends one post's latest activity to the followers again.   |
-| `/admin/setup`                 | First run: creates the first admin. Closed once a user exists.          |
-| `/admin/login`                 | Username and password.                                                  |
-| `/admin/logout`                | `POST` only. Deletes the session row.                                   |
-| `/admin/_static/*`             | The admin's own stylesheet, cached for an hour.                         |
+| Route                          | What it does                                                                  |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `/admin`                       | The dashboard: counts, the five most recent posts, the follower count.        |
+| `/admin/posts`, `/admin/pages` | The listings and the editors.                                                 |
+| `/admin/settings`              | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor. |
+| `/admin/settings/avatar`       | `POST` only. Uploads the site's avatar, or removes it.                        |
+| `/admin/users`                 | Who may sign in. `POST` adds one.                                             |
+| `/admin/users/password`        | `POST` only. Changes the signed-in admin's own password.                      |
+| `/admin/users/delete`          | `POST` only. Deletes the user the form names.                                 |
+| `/admin/federation`            | The actor, the followers, the inbox log, and per-post delivery.               |
+| `/admin/federation/redeliver`  | `POST` only. Sends one post's latest activity to the followers again.         |
+| `/admin/setup`                 | First run: creates the first admin. Closed once a user exists.                |
+| `/admin/login`                 | Username and password.                                                        |
+| `/admin/logout`                | `POST` only. Deletes the session row.                                         |
+| `/admin/_static/*`             | The admin's own stylesheet, cached for an hour.                               |
 
 The screens behind the login share one layout: a bar across the top with the
 site name and a link to the public site, the sections down the left with the
@@ -636,6 +636,39 @@ answers on (`page`, `feed`, `comments`, `admin`, `ap`, `theme`, `uploads`,
 the two may not be the same word. Both are mirrored into
 `content/_data/site.json` as `tagBase` and `categoryBase`, so an Eleventy build
 of the same content directory can put its archives at the same URLs.
+
+### Navigation
+
+Every page carries the site menu, which the theme renders in the header. It is
+two things joined:
+
+1. The `navigation` setting, edited on `/admin/settings` as one `Label | URL`
+   per line — `About | /about/`, `Mastodon | https://example.social/@me` — in
+   the order it is typed. The URL is a site-root path or an absolute
+   `http(s)` URL; anything else is refused with the offending line quoted.
+2. Every published page whose front matter says `navigation: true`, ordered by
+   `navigationOrder` and then by title. A page that names no order sorts after
+   every page that does, and the flagged pages always come after the items the
+   setting names.
+
+The editor writes both keys: **Show in navigation** on a page's editor writes
+`navigation: true`, **Menu order** writes `navigationOrder`, and clearing the
+box takes both back out of the file. Posts have neither field — a post is in
+the archive and in the feeds, which is where a post belongs.
+
+Templates read it as `menu`, a list of `{ label, url, current }`, with
+`current` true for the item whose path is the one being rendered. It is `menu`
+rather than `navigation` because `navigation` is the front-matter key a page
+opts in with, and a document's own front matter goes on top of the globals as
+Eleventy's data cascade does. The scheduled, drafted and trashed pages are not
+in it, for the same reason they are not on the site.
+
+The setting is mirrored to `content/_data/site.json` as `navigation`, a list of
+`{ label, url }`, so an Eleventy build renders the same menu; the example
+config assembles it as `collections.menu`. A `navigation` in a hand-edited
+`site.json` that is not a list of items yields an empty menu rather than an
+error, exactly as a bad archive base falls back rather than taking the site
+down.
 
 ## Content negotiation
 
@@ -1170,7 +1203,7 @@ npx @11ty/eleventy
 ```
 
 It is a plain ESM config with no dependency on this package, and it writes out
-the five rules the CMS follows that Eleventy does not know about on its own:
+the rules the CMS follows that Eleventy does not know about on its own:
 
 | Rule                                            | How the config does it                                                                                                                                                                                                                                                                                                                                                                                  |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1179,6 +1212,15 @@ the five rules the CMS follows that Eleventy does not know about on its own:
 | `content/uploads/` is served at `/uploads/`     | `addPassthroughCopy({ 'content/uploads': 'uploads' })`, plus an `ignores` entry for the same path. Without the ignore, an upload that happens to be Markdown would be copied _and_ rendered as a page; the CMS only ever indexes `posts/` and `pages/`.                                                                                                                                                 |
 | `content/_trash/` is not published              | `ignores.add('content/_trash/**')`. Eleventy skips `_includes` and `_data` because they are configured directories, not because of the underscore, so the trash has to be named.                                                                                                                                                                                                                        |
 | A future `date` holds a post back               | An `addPreprocessor` that returns `false` for it. This is the one rule that cannot be exactly the same in both places: a build has no clock, only a moment. A scheduled post is left out of the build that runs before its date and is in the next build after it, so a scheduled site needs a build on a schedule; the CMS publishes it on the date by itself. `BUILD_SCHEDULED=1` builds them anyway. |
+
+It also builds two collections Eleventy has no notion of. `collections.categories`
+is the second taxonomy, one entry of `{ name, posts }` per category in use, for
+paginating into archives at `/{{ site.categoryBase }}/{name}/`.
+`collections.menu` is the site menu — the `navigation` array of `site.json`
+followed by the pages whose front matter says `navigation: true` — as
+`{ label, url }` entries in the order the header should render them; a layout
+marks the current one itself by comparing `item.url` with `page.url`, because a
+collection is built once for the whole site.
 
 It also turns the template engine off for Markdown
 (`markdownTemplateEngine: false`), because the CMS renders Markdown with

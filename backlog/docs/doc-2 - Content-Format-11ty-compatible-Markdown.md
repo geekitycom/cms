@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 02:02'
+updated_date: '2026-09-04 05:44'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -42,6 +42,7 @@ Keys the CMS reads and writes. Eleventy semantics are preserved.
 | `description` | no | data | meta description and excerpt fallback |
 | `layout` | no | template | not written per file; comes from directory data |
 | `eleventyExcludeFromCollections` | no | hides from collections | mirrored for pages that should not list |
+| `navigation` | no | data | `true` puts a page in the site menu, after the items the settings screen names |
 
 Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 
@@ -51,6 +52,7 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | `author` | user login; resolved to display name at render |
 | `activitypub.id` | the ActivityStreams object id once federated, so Update/Delete reference the same object |
 | `activitypub.published` | timestamp of first delivery |
+| `navigationOrder` | where a page in the menu sorts; the lower numbers first, and a page with none after every page with one |
 
 Unknown keys are preserved on round trip. The writer emits YAML with a stable key order so diffs stay small.
 

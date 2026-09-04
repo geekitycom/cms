@@ -6,6 +6,7 @@ import { createSiteDataSource, documentContext, postsPerPage, taxonomyBases } fr
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, SiteData, SiteSettingsSource } from './context.ts';
+import { navigationMenu } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
 import type { TaxonomyBases } from './taxonomy.ts';
 import { createTemplateEnvironment } from './templates.ts';
@@ -79,6 +80,16 @@ export interface CreateRendererOptions {
    * without an admin store, which then reads the file alone.
    */
   settings?: SiteSettingsSource | undefined;
+  /**
+   * The public pages, for the ones that put themselves in the site menu. Read
+   * per render rather than at boot, because a page saved in the editor should
+   * be in the menu on the very next request.
+   *
+   * A renderer built without it has a menu of exactly what the setting names,
+   * which is what the tests over one template want and what a site with no
+   * index would get anyway.
+   */
+  pages?: (() => readonly Document[]) | undefined;
 }
 
 /**
@@ -96,10 +107,19 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     noCache: config.watch,
   });
   const siteData = createSiteDataSource(config, { settings: options.settings });
+  const pages = options.pages ?? ((): readonly Document[] => []);
 
   function render(template: string, context: Record<string, unknown> = {}): string {
     const site = siteData.read();
-    return environment.render(template, { site, ...context });
+    // The menu is built here rather than by each caller because every page of
+    // the site carries it: a listing, a document, the 404 and the editor's
+    // preview all go through here, and a header that appeared on some of them
+    // and not others would be a worse contract than one that is simply always
+    // there. It is `menu` rather than `navigation` because `navigation` is the
+    // front-matter key a page opts in with, and a document's own front matter
+    // goes on top of the globals exactly as Eleventy's data cascade does.
+    const menu = navigationMenu({ site, pages: pages(), url: currentUrl(context) });
+    return environment.render(template, { site, menu, ...context });
   }
 
   return {
@@ -164,4 +184,21 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     render,
   };
+}
+
+/**
+ * The path a render is of, for marking the current menu item.
+ *
+ * Read off `page.url` and then `url`, the two names every caller here already
+ * sets, so nothing has to pass the path a third time. A template rendered with
+ * neither — a site calling `render` for a fragment of its own — is treated as
+ * the home page's, which marks nothing that a page of the site would not.
+ */
+function currentUrl(context: Record<string, unknown>): string {
+  const page = context['page'];
+  if (typeof page === 'object' && page !== null) {
+    const url = (page as Record<string, unknown>)['url'];
+    if (typeof url === 'string') return url;
+  }
+  return typeof context['url'] === 'string' ? context['url'] : '/';
 }

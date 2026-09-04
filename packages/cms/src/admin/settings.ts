@@ -11,6 +11,8 @@ import type { RelaySyncReport } from '../federation/relays.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
 import type { SiteData } from '../web/context.ts';
+import { navigationItemsOf } from '../web/navigation.ts';
+import type { NavigationItem } from '../web/navigation.ts';
 import { DEFAULT_TAXONOMY_BASES, taxonomyBaseProblems } from '../web/taxonomy.ts';
 import type { TaxonomyBases } from '../web/taxonomy.ts';
 import type { AdminRender } from './documents.ts';
@@ -127,6 +129,15 @@ export interface SiteSettings {
    */
   relays: readonly string[];
   /**
+   * The site menu: an ordered list of `{ label, url }` the theme renders in
+   * the header, and the mirror of it in `site.json` an Eleventy build reads.
+   *
+   * The list is edited one `Label | URL` per line. A page may put itself on
+   * the menu as well, with `navigation: true` in its front matter; those come
+   * after these, so the menu a site typed out stays as it was typed.
+   */
+  navigation: readonly NavigationItem[];
+  /**
    * The site's avatar, as the public path the upload endpoint handed back —
    * `/uploads/2026/09/me.png` — or an absolute URL for one hosted elsewhere.
    * Empty when the site has none.
@@ -167,6 +178,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
   notifyServer: DEFAULT_NOTIFY_SERVER,
   relays: [],
+  navigation: [],
 };
 
 /** The form field each setting is submitted under. */
@@ -184,6 +196,7 @@ export const SETTINGS_FIELDS = {
   categoryBase: 'category_base',
   notifyServer: 'notify_server',
   relays: 'relays',
+  navigation: 'navigation',
 } as const satisfies Record<SettingsField, string>;
 
 /** A submitted settings form, before it is known to be valid. */
@@ -217,6 +230,7 @@ export function readSiteSettings(store: AdminStore): SiteSettings {
     categoryBase: stored['categoryBase'] ?? DEFAULT_SITE_SETTINGS.categoryBase,
     notifyServer: stored['notifyServer'] ?? DEFAULT_SITE_SETTINGS.notifyServer,
     relays: relayList(stored['relays'] ?? ''),
+    navigation: navigationList(stored['navigation'] ?? ''),
   };
 }
 
@@ -245,6 +259,11 @@ export function writeSiteSettings(store: AdminStore, settings: SiteSettings): vo
     // list reads in: the settings table holds strings, and a delimiter that
     // cannot appear inside a URL costs nothing to parse back.
     relays: settings.relays.join('\n'),
+    // The same `Label | URL` lines the textarea submits, for the same reason
+    // the relays are stored as their own lines: the settings table holds
+    // strings, and a value that reads back through the parser the form went
+    // through cannot mean something different in the two places.
+    navigation: navigationText(settings.navigation),
   });
 }
 
@@ -272,6 +291,7 @@ export function settingsSiteData(settings: SiteSettings): Partial<SiteData> {
     // value rather than as an absence a default would fill back in.
     notifyServer: settings.notifyServer,
     relays: [...settings.relays],
+    navigation: settings.navigation.map((item) => ({ ...item })),
   };
 }
 
@@ -302,6 +322,7 @@ export function siteJsonFor(
     categoryBase: settings.categoryBase,
     notifyServer: settings.notifyServer,
     relays: [...settings.relays],
+    navigation: settings.navigation.map((item) => ({ ...item })),
   };
 }
 
@@ -390,6 +411,12 @@ export function seedSiteSettings(options: {
           relays: relayList(file['relays'].filter((entry) => typeof entry === 'string').join('\n')),
         }
       : {}),
+    // The menu a site already had, read the same tolerant way a render reads
+    // it, so a hand-written entry that is not an item is dropped here rather
+    // than stored and mirrored back out.
+    ...(Array.isArray(file['navigation'])
+      ? { navigation: navigationItemsOf(file['navigation']) }
+      : {}),
     ...(Number.isInteger(postsPerPage) && postsPerPage > 0 ? { postsPerPage } : {}),
     // The file's `url` only becomes the setting when the deployment has not
     // named one; otherwise the setting records what is actually in effect.
@@ -471,6 +498,18 @@ export function settingsProblems(form: SettingsForm): SettingsProblems {
       `"${badRelay}" is not one.`;
   }
 
+  // A menu is checked line by line like the relays, and for the same reason:
+  // one message on a textarea is more use pointing at the line to fix than
+  // counting how many are wrong.
+  const badItem = navigationLines(form.navigation).find(
+    (line) => navigationItem(line) === undefined,
+  );
+  if (badItem !== undefined) {
+    problems.navigation =
+      `A menu item is "Label | URL", one per line, where the URL is a path ` +
+      `like /about/ or an absolute http:// or https:// URL. "${badItem}" is not one.`;
+  }
+
   // The two archive bases are checked as a pair: two of the rules — that they
   // differ, and that neither takes a path the site already answers on — are
   // about the pair rather than either one.
@@ -508,6 +547,7 @@ export function settingsFromForm(
     categoryBase: form.categoryBase.trim(),
     notifyServer: normalizeBaseUrl(form.notifyServer) ?? '',
     relays: relayList(form.relays),
+    navigation: navigationList(form.navigation),
   };
 }
 
@@ -527,6 +567,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     categoryBase: settings.categoryBase,
     notifyServer: settings.notifyServer,
     relays: settings.relays.join('\n'),
+    navigation: navigationText(settings.navigation),
   };
 }
 
@@ -574,6 +615,7 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       categoryBase: field(body[SETTINGS_FIELDS.categoryBase]),
       notifyServer: field(body[SETTINGS_FIELDS.notifyServer]),
       relays: field(body[SETTINGS_FIELDS.relays]),
+      navigation: field(body[SETTINGS_FIELDS.navigation]),
     };
 
     const problems = settingsProblems(submitted);
@@ -851,4 +893,59 @@ function parseSiteJson(source: string): Record<string, unknown> {
   return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
     ? (parsed as Record<string, unknown>)
     : {};
+}
+
+/**
+ * The non-empty lines of the navigation textarea, trimmed.
+ *
+ * Blank lines are not an error, exactly as they are not in the relay list: a
+ * pasted menu leaves them, and a blank line asks for nothing.
+ */
+function navigationLines(value: string): string[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+}
+
+/**
+ * One `Label | URL` line as a menu item, or `undefined` when it is not one.
+ *
+ * The split is at the first bar, so a URL holding one — a query string, say —
+ * survives and a label cannot hold one. The URL is either a site-root path or
+ * an absolute http(s) URL: a bare `about/` would be resolved against whatever
+ * page it was printed on, which is never what a menu means.
+ */
+function navigationItem(line: string): NavigationItem | undefined {
+  const bar = line.indexOf('|');
+  if (bar === -1) return undefined;
+
+  const label = line.slice(0, bar).trim();
+  const url = line.slice(bar + 1).trim();
+  if (label === '' || url === '') return undefined;
+  if (url.startsWith('/')) return { label, url };
+
+  return normalizeRelayInbox(url) === undefined ? undefined : { label, url };
+}
+
+/**
+ * A navigation textarea as the ordered items it names.
+ *
+ * Exported nowhere: the same parsing turns the stored setting and the
+ * submitted form into one list, and `site.json` is read by
+ * {@link navigationItemsOf} instead, because the file holds objects rather
+ * than lines.
+ */
+function navigationList(value: string): NavigationItem[] {
+  const items: NavigationItem[] = [];
+  for (const line of navigationLines(value)) {
+    const item = navigationItem(line);
+    if (item !== undefined) items.push(item);
+  }
+  return items;
+}
+
+/** The items as the textarea shows them, and as the settings table holds them. */
+function navigationText(items: readonly NavigationItem[]): string {
+  return items.map((item) => `${item.label} | ${item.url}`).join('\n');
 }

@@ -86,6 +86,8 @@ async function submit(
     description: field(html, 'description') ?? '',
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
     ...(checked(html, 'exclude') ? { exclude: '1' } : {}),
+    ...(checked(html, 'navigation') ? { navigation: '1' } : {}),
+    navigation_order: field(html, 'navigation_order') ?? '',
     action: 'update',
     ...changes,
   };
@@ -93,6 +95,7 @@ async function submit(
   // A browser leaves an unticked checkbox out of the body altogether, so a
   // test that clears one says so with an empty value and it goes the same way.
   if (fields['exclude'] === '') delete fields['exclude'];
+  if (fields['navigation'] === '') delete fields['navigation'];
 
   const saveUrl = /<form class="admin-editor" method="post" action="([^"]+)"/.exec(html)?.[1];
   assert.ok(saveUrl !== undefined, 'the editor knew where to post');
@@ -395,5 +398,102 @@ describe('the page trash', () => {
     assert.deepEqual(await titles('?status=published'), ['About this site']);
     assert.deepEqual(await titles('?status=draft'), ['Still writing it']);
     assert.deepEqual(await titles('?status=trash'), ['Thrown away']);
+  });
+});
+
+describe('a page in the site menu', () => {
+  it('writes navigation when the box is ticked, and brings it back ticked (AC #2)', async () => {
+    const contentDir = await seeded([]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/pages/new', { title: 'Hidden', action: 'publish' });
+    const hidden = await readFile(path.join(contentDir, 'pages', 'hidden.md'), 'utf8');
+    assert.ok(!/navigation/.test(hidden), 'an untouched box leaves the key out of the file');
+
+    await submit(agent, '/admin/pages/new', {
+      title: 'About',
+      navigation: '1',
+      navigation_order: '2',
+      action: 'publish',
+    });
+
+    const written = await readFile(path.join(contentDir, 'pages', 'about.md'), 'utf8');
+    assert.match(written, /^navigation: true$/m);
+    assert.match(written, /^navigationOrder: 2$/m);
+    assert.equal(cms.store.getBySlug('about')?.extra['navigation'], true);
+    assert.equal(cms.store.getBySlug('about')?.extra['navigationOrder'], 2);
+
+    const back = await (await agent.get('/admin/pages/about')).text();
+    assert.ok(checked(back, 'navigation'), 'the editor comes back with the box ticked');
+    assert.equal(field(back, 'navigation_order'), '2');
+
+    const home = await (await cms.app.request('/')).text();
+    assert.match(home, /<nav class="site-nav"[\s\S]*?>About</, 'and the page is on the menu');
+  });
+
+  it('takes the keys back out when the box is cleared', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'pages/about.md',
+        title: 'About',
+        permalink: '/about/',
+        extra: ['navigation: true', 'navigationOrder: 3', 'hero: /uploads/hero.jpg'],
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/pages/about')).text();
+    assert.ok(checked(html, 'navigation'), 'the file said so, so the box is ticked');
+    assert.equal(field(html, 'navigation_order'), '3');
+
+    await submit(agent, '/admin/pages/about', { navigation: '', action: 'update' });
+
+    const written = await readFile(path.join(contentDir, 'pages', 'about.md'), 'utf8');
+    assert.ok(!/^navigation:/m.test(written), 'a page off the menu carries no navigation key');
+    assert.ok(!/^navigationOrder:/m.test(written), 'nor an order it no longer uses');
+    assert.match(written, /^hero: \/uploads\/hero\.jpg$/m, 'other hand-added keys survive');
+
+    const home = await (await cms.app.request('/')).text();
+    assert.ok(!/site-nav/.test(home), 'and the menu is empty again');
+  });
+
+  it('never writes the keys onto a post', async () => {
+    const contentDir = await seeded([]);
+    await mkdir(path.join(contentDir, 'posts'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, 'posts', '2026-01-02-published.md'),
+      '---\ntitle: Out in the world\ndate: 2026-01-02\npermalink: /2026/01/published/\n---\n\nBody.\n',
+      'utf8',
+    );
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/posts/published')).text();
+    assert.ok(!/name="navigation"/.test(html), 'a post editor has no such checkbox');
+
+    const token = csrfField(html);
+    assert.ok(token !== undefined);
+    await agent.post('/admin/posts/published', {
+      csrf_token: token,
+      hash: field(html, 'hash') ?? '',
+      title: 'Out in the world',
+      slug: 'published',
+      permalink: '/2026/01/published/',
+      date: '2026-01-02',
+      tags: '',
+      description: '',
+      body: 'Body.',
+      navigation: '1',
+      navigation_order: '1',
+      action: 'update',
+    });
+
+    const written = await readFile(
+      path.join(contentDir, 'posts', '2026-01-02-published.md'),
+      'utf8',
+    );
+    assert.ok(!/navigation/.test(written));
   });
 });

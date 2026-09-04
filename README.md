@@ -415,8 +415,9 @@ like every other POST in the admin.
 
 `/admin/settings` holds the values doc-1 keeps only in SQLite: title, tagline,
 base URL, time zone, language, posts per page, the tag and category archive
-bases, the ActivityPub actor handle and type, the relays the site subscribes
-to, the notify server the feeds advertise, and the site's avatar.
+bases, the site menu, the ActivityPub actor handle and type, the relays the
+site subscribes to, the notify server the feeds advertise, and the site's
+avatar.
 They live in a `settings` table of key and value, alongside the users and
 sessions in the same database file, and they are the half of it that is not
 derived from the content directory.
@@ -432,8 +433,8 @@ renders with the same values and never sees a half-written file. A hand edit of
 the file after that point is overwritten by the next save.
 
 The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
-`timezone`, `language`, `avatar`, `tagBase`, `categoryBase`, `notifyServer` and
-`relays`, and every other key it
+`timezone`, `language`, `avatar`, `tagBase`, `categoryBase`, `notifyServer`,
+`relays` and `navigation`, and every other key it
 already had is kept — a site may put
 anything in there, `feedSize` included, and reach it from its templates. The
 theme reads the settings on top of the file, so a saved title is on the public
@@ -450,6 +451,7 @@ back with a 400 and one message under each field that has one:
 | Time zone      | An IANA zone name `Intl` knows, such as `Europe/London`.                           |
 | Language       | A BCP 47 tag, such as `en` or `en-GB`. It is the page's `lang` and the feeds'.     |
 | Posts per page | A whole number of one or more. It is what the home page and tag archives page by.  |
+| Menu           | One `Label \| URL` per line, the URL a path or an absolute URL. See below.         |
 | Tag base       | One URL-safe path segment. See below.                                              |
 | Category base  | The same, and not the same word as the tag base.                                   |
 | Actor handle   | 1 to 64 letters, digits, dashes or underscores — the local part of `@handle@host`. |
@@ -480,6 +482,20 @@ one still waiting. Removing a line unfollows it. See
 [rsscloud]: https://rpc.rsscloud.io/docs
 [websub]: https://www.w3.org/TR/websub/
 [notify]: packages/cms/README.md#real-time-notification
+
+The menu is the site navigation, one `Label | URL` per line — `About | /about/`,
+`Mastodon | https://example.social/@me` — rendered in the site header in that
+order, with the item whose path is the one being read marked `aria-current`. A
+page can put itself on the end of it by ticking **Show in navigation** in the
+editor, which writes `navigation: true` into its front matter; **Menu order**
+writes `navigationOrder`, and the flagged pages sort by it and then by title
+after every item the setting names. The setting is mirrored to `navigation` in
+`content/_data/site.json` as a list of `{ label, url }`, so an Eleventy build
+renders the same menu — `docs/eleventy.config.example.js` assembles it as
+`collections.menu`. A theme reads it as `menu`; see
+[Navigation][navigation] in the theme README.
+
+[navigation]: packages/cms/themes/default/README.md#navigation
 
 The two archive bases decide where the taxonomy archives live: `/{tagBase}/{tag}/`
 and `/{categoryBase}/{name}/`. They default to WordPress's `tag` and `category`,

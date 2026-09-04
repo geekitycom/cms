@@ -280,4 +280,25 @@ describe('the fixtures content directory under Eleventy', () => {
       );
     }
   });
+
+  it('renders the same site menu the CMS renders, from site.json and the flagged pages', async () => {
+    const html = await readFile(path.join(buildDir, '_site', 'about/index.html'), 'utf8');
+    const nav = /<nav class="site-nav">[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
+
+    const links = [...nav.matchAll(/<a href="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((match) => [
+      match[2],
+      match[1],
+    ]);
+
+    // The two items `content/_data/site.json` names, in its order, and then the
+    // pages whose front matter opted in: About carries navigationOrder 1 and
+    // Colophon carries none, so About comes first.
+    assert.deepEqual(links, [
+      ['Home', '/'],
+      ['Elsewhere', 'https://elsewhere.example/'],
+      ['About', '/about/'],
+      ['Colophon', '/colophon/'],
+    ]);
+    assert.match(nav, /<a href="\/about\/" aria-current="page">About<\/a>/);
+  });
 });

@@ -850,3 +850,94 @@ describe('overriding one template', () => {
     assert.ok(html.includes('<p>Body <strong>text</strong>.</p>'), 'content is the rendered body');
   });
 });
+
+describe('the site menu', () => {
+  /** The menu links one page carries, as `label -> href`, in menu order. */
+  function menu(html: string): Array<[string, string]> {
+    const nav = /<nav class="site-nav"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
+    return [...nav.matchAll(/<a href="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((match) => [
+      match[2] ?? '',
+      match[1] ?? '',
+    ]);
+  }
+
+  /** The label of the item marked as the page being read, if there is one. */
+  function current(html: string): string | undefined {
+    const nav = /<nav class="site-nav"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
+    return /aria-current="page"[^>]*>([^<]*)</.exec(nav)?.[1];
+  }
+
+  it('renders the setting in order on every kind of page, marking the current one (AC #1)', async () => {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({
+        title: 'Menu Site',
+        navigation: [
+          { label: 'Home', url: '/' },
+          { label: 'About', url: '/about/' },
+          { label: 'Elsewhere', url: 'https://example.org/' },
+        ],
+      }),
+      'posts/2026-09-02-hello.md': post('Hello', {
+        date: '2026-09-02T10:00:00Z',
+        permalink: '/2026/09/hello/',
+        tags: ['notes'],
+      }),
+      'pages/about.md': page('About', '/about/'),
+    });
+
+    const expected: Array<[string, string]> = [
+      ['Home', '/'],
+      ['About', '/about/'],
+      ['Elsewhere', 'https://example.org/'],
+    ];
+
+    const home = await (await cms.app.request('/')).text();
+    assert.deepEqual(menu(home), expected, 'the home page');
+    assert.equal(current(home), 'Home');
+
+    const article = await (await cms.app.request('/2026/09/hello/')).text();
+    assert.deepEqual(menu(article), expected, 'a post');
+    assert.equal(current(article), undefined, 'a post is on no menu item');
+
+    const about = await (await cms.app.request('/about/')).text();
+    assert.deepEqual(menu(about), expected, 'a page');
+    assert.equal(current(about), 'About');
+
+    const archive = await (await cms.app.request('/tag/notes/')).text();
+    assert.deepEqual(menu(archive), expected, 'a tag archive');
+    assert.equal(current(archive), undefined);
+  });
+
+  it('shows no menu at all for a site.json that names none (AC #3)', async () => {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({ title: 'Old Site', tagline: 'from before the setting' }),
+      'pages/about.md': page('About', '/about/'),
+    });
+
+    const home = await (await cms.app.request('/')).text();
+    assert.deepEqual(menu(home), []);
+    assert.ok(!home.includes('site-nav'), 'and no empty <nav> either');
+  });
+
+  it('puts a page that opted in on the menu, after the items (AC #2)', async () => {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({
+        title: 'Menu Site',
+        navigation: [{ label: 'Home', url: '/' }],
+      }),
+      'pages/about.md': `---\ntitle: About\npermalink: /about/\nnavigation: true\n---\n\nBody.\n`,
+      'pages/now.md': `---\ntitle: Now\npermalink: /now/\nnavigation: true\nnavigationOrder: 1\n---\n\nBody.\n`,
+      'pages/colophon.md': page('Colophon', '/colophon/'),
+    });
+
+    const home = await (await cms.app.request('/')).text();
+    assert.deepEqual(menu(home), [
+      ['Home', '/'],
+      ['Now', '/now/'],
+      ['About', '/about/'],
+    ]);
+
+    const now = await (await cms.app.request('/now/')).text();
+    assert.equal(current(now), 'Now');
+  });
+});

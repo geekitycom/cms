@@ -103,6 +103,19 @@
         <p class="admin-hint">Keeps the {{ kind.singular }} out of listings that gather content, without unpublishing it.</p>
       {% endif %}
 
+      {% if kind.navigable %}
+        {# The page puts itself in the site menu, after the items the settings
+           screen names. #}
+        <p class="admin-check">
+          <input id="editor-navigation" name="navigation" type="checkbox" value="1"{% if form.navigation %} checked{% endif %} />
+          <label for="editor-navigation">Show in navigation</label>
+        </p>
+
+        <label for="editor-navigation-order">Menu order</label>
+        <input id="editor-navigation-order" name="navigation_order" type="text" inputmode="numeric" value="{{ form.navigationOrder }}" />
+        <p class="admin-hint">Puts this {{ kind.singular }} in the site header, after the items on the settings screen. A lower order comes first; leave it empty and it sorts by title after the ordered ones.</p>
+      {% endif %}
+
       <p class="admin-editor-buttons">
         {% for button in actions %}
           <button type="submit" name="action" value="{{ button.value }}">{{ button.label }}</button>

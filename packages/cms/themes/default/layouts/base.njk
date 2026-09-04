@@ -41,6 +41,15 @@
       {% if site.tagline %}
       <p class="site-tagline">{{ site.tagline }}</p>
       {% endif %}
+      {% if menu.length %}
+      <nav class="site-nav" aria-label="Site">
+        <ul>
+          {% for item in menu %}
+          <li><a href="{{ item.url | url }}"{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </nav>
+      {% endif %}
     </header>
     {% endblock %}
 
