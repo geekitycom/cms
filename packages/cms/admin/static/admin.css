@@ -570,7 +570,7 @@ button[type='submit']:hover,
   font-size: 1.05rem;
 }
 
-.admin-settings h2:first-child {
+.admin-settings h2:first-of-type {
   margin-top: 0;
   padding-top: 0;
   border-top: 0;
