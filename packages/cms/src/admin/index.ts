@@ -6,6 +6,22 @@ export {
   findAdminAsset,
 } from './assets.ts';
 export {
+  countUsers,
+  createUser,
+  deleteUser,
+  DuplicateUsernameError,
+  findUser,
+  findUserById,
+  listUsers,
+  migrateUsersToFile,
+  setUserPassword,
+  USERS_FILE,
+  USERS_FILE_MODE,
+  usersFile,
+  verifyUserPassword,
+} from './accounts.ts';
+export type { CreateUserInput, StoredUser, User } from './accounts.ts';
+export {
   credentialProblem,
   MAXIMUM_USERNAME_LENGTH,
   MINIMUM_PASSWORD_LENGTH,
@@ -197,17 +213,10 @@ export {
   setSessionCookie,
   usesSecureCookies,
 } from './session.ts';
-export {
-  DELIVERY_STATUSES,
-  DuplicateUsernameError,
-  openAdminStore,
-  RELAY_STATES,
-  SESSION_ID_BYTES,
-} from './store.ts';
+export { DELIVERY_STATUSES, openAdminStore, RELAY_STATES, SESSION_ID_BYTES } from './store.ts';
 export type {
   AdminStore,
   CreateSessionInput,
-  CreateUserInput,
   Delivery,
   DeliveryStatus,
   FlashKind,
@@ -216,6 +225,7 @@ export type {
   InboxActivity,
   LegacyActorKey,
   LegacySetting,
+  LegacyUser,
   ListPageOptions,
   NewDelivery,
   NewFollower,
@@ -227,8 +237,6 @@ export type {
   Relay,
   RelayState,
   Session,
-  StoredUser,
-  User,
 } from './store.ts';
 export {
   ADMIN_TEMPLATES,

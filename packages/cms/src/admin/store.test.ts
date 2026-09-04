@@ -5,7 +5,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
-import { DuplicateUsernameError, openAdminStore } from './store.ts';
+import { openAdminStore } from './store.ts';
 import type {
   AdminStore,
   NewDelivery,
@@ -38,125 +38,40 @@ async function store(): Promise<AdminStore> {
   return opened;
 }
 
-describe('users', () => {
-  it('starts empty, which is what the first-run setup asks', async () => {
-    const admin = await store();
-
-    assert.equal(admin.countUsers(), 0);
-    assert.deepEqual(admin.listUsers(), []);
-  });
-
-  it('creates a user and lists it without its password hash', async () => {
-    const admin = await store();
-
-    const created = admin.createUser({ username: 'ada', password: 'correct horse battery' });
-
-    assert.equal(created.username, 'ada');
-    assert.ok(created.id > 0, 'the user got a row id');
-    assert.equal(admin.countUsers(), 1);
-    assert.deepEqual(
-      admin.listUsers().map((user) => user.username),
-      ['ada'],
-    );
-    assert.ok(
-      !Object.keys(created).includes('passwordHash'),
-      'a listed user never carries the hash',
-    );
-  });
-
-  it('refuses a second user with the same name', async () => {
-    const admin = await store();
-    admin.createUser({ username: 'ada', password: 'correct horse battery' });
-
-    assert.throws(
-      () => admin.createUser({ username: 'ada', password: 'another one entirely' }),
-      DuplicateUsernameError,
-    );
-    assert.equal(admin.countUsers(), 1);
-  });
-
-  it('accepts the right password and refuses a wrong one', async () => {
-    const admin = await store();
-    admin.createUser({ username: 'ada', password: 'correct horse battery' });
-
-    const ok = admin.verifyPassword('ada', 'correct horse battery');
-    assert.equal(ok?.username, 'ada');
-
-    assert.equal(admin.verifyPassword('ada', 'Correct horse battery'), undefined);
-    assert.equal(admin.verifyPassword('nobody', 'correct horse battery'), undefined);
-  });
-
-  it('stores the password as an argon2id hash rather than the password', async () => {
-    const admin = await store();
-    admin.createUser({ username: 'ada', password: 'correct horse battery' });
-
-    const stored = admin.getUser('ada');
-    assert.ok(stored !== undefined, 'the user is there');
-    assert.ok(stored.passwordHash.startsWith('$argon2id$'), stored.passwordHash);
-    assert.ok(!stored.passwordHash.includes('correct horse battery'));
-  });
-
-  it('gives two users with the same password different hashes', async () => {
-    const admin = await store();
-    admin.createUser({ username: 'ada', password: 'a shared password' });
-    admin.createUser({ username: 'grace', password: 'a shared password' });
-
-    assert.notEqual(admin.getUser('ada')?.passwordHash, admin.getUser('grace')?.passwordHash);
-  });
-
-  it('replaces a password, so the old one stops working and the new one starts', async () => {
-    const admin = await store();
-    const ada = admin.createUser({ username: 'ada', password: 'correct horse battery' });
-
-    assert.equal(admin.setPassword(ada.id, 'a different password'), true);
-
-    assert.equal(admin.verifyPassword('ada', 'correct horse battery'), undefined);
-    assert.equal(admin.verifyPassword('ada', 'a different password')?.id, ada.id);
-  });
-
-  it('says so when there is no user to give a password to', async () => {
-    const admin = await store();
-
-    assert.equal(admin.setPassword(404, 'a password nobody will use'), false);
-  });
-
-  it('deletes a user and says so when there was none to delete', async () => {
-    const admin = await store();
-    const ada = admin.createUser({ username: 'ada', password: 'correct horse battery' });
-
-    assert.equal(admin.deleteUser(ada.id), true);
-    assert.equal(admin.countUsers(), 0);
-    assert.equal(admin.getUser('ada'), undefined);
-    assert.equal(admin.deleteUser(ada.id), false);
-  });
-});
-
 const HOUR = 3600;
+
+/**
+ * The user ids the session tests use. They are bare numbers because there is
+ * no users table for them to point into any more: the accounts are in
+ * `data/users.json` (decision-9), and the sessions are a cache that names one
+ * by id. Whether a session's user still exists is the admin guard's question,
+ * not the store's.
+ */
+const ADA = 1;
+const GRACE = 2;
 
 describe('sessions', () => {
   it('hands back an unguessable id and a CSRF token of its own', async () => {
     const admin = await store();
-    const user = admin.createUser({ username: 'ada', password: 'correct horse battery' });
 
-    const session = admin.createSession({ userId: user.id, lifetimeSeconds: HOUR });
+    const session = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR });
 
     // 256 bits, hex encoded.
     assert.match(session.id, /^[0-9a-f]{64}$/);
     assert.match(session.csrfToken, /^[0-9a-f]{64}$/);
     assert.notEqual(session.id, session.csrfToken);
-    assert.equal(session.userId, user.id);
+    assert.equal(session.userId, ADA);
 
-    const second = admin.createSession({ userId: user.id, lifetimeSeconds: HOUR });
+    const second = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR });
     assert.notEqual(second.id, session.id, 'two sessions never share an id');
   });
 
   it('reads a live session back and drops one that is gone', async () => {
     const admin = await store();
-    const user = admin.createUser({ username: 'ada', password: 'correct horse battery' });
-    const session = admin.createSession({ userId: user.id, lifetimeSeconds: HOUR });
+    const session = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR });
 
     const read = admin.getSession(session.id);
-    assert.equal(read?.userId, user.id);
+    assert.equal(read?.userId, ADA);
     assert.equal(read?.csrfToken, session.csrfToken);
 
     assert.equal(admin.deleteSession(session.id), true, 'the row was there to delete');
@@ -166,10 +81,9 @@ describe('sessions', () => {
 
   it('treats an expired session as absent and prunes the row', async () => {
     const admin = await store();
-    const user = admin.createUser({ username: 'ada', password: 'correct horse battery' });
 
     const now = new Date('2026-09-02T12:00:00Z');
-    const session = admin.createSession({ userId: user.id, lifetimeSeconds: HOUR, now });
+    const session = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR, now });
     assert.equal(session.expiresAt, '2026-09-02T13:00:00.000Z');
 
     const stillGood = new Date('2026-09-02T12:59:59Z');
@@ -186,11 +100,10 @@ describe('sessions', () => {
 
   it('sweeps every expired session at once', async () => {
     const admin = await store();
-    const user = admin.createUser({ username: 'ada', password: 'correct horse battery' });
     const now = new Date('2026-09-02T12:00:00Z');
 
-    const short = admin.createSession({ userId: user.id, lifetimeSeconds: 60, now });
-    const long = admin.createSession({ userId: user.id, lifetimeSeconds: HOUR, now });
+    const short = admin.createSession({ userId: ADA, lifetimeSeconds: 60, now });
+    const long = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR, now });
 
     const later = new Date('2026-09-02T12:30:00Z');
     assert.equal(admin.pruneSessions(later), 1);
@@ -209,13 +122,11 @@ describe('sessions', () => {
 
   it('drops every session a user has but the one that is asking', async () => {
     const admin = await store();
-    const ada = admin.createUser({ username: 'ada', password: 'correct horse battery' });
-    const grace = admin.createUser({ username: 'grace', password: 'a password of her own' });
-    const keep = admin.createSession({ userId: ada.id, lifetimeSeconds: HOUR });
-    const elsewhere = admin.createSession({ userId: ada.id, lifetimeSeconds: HOUR });
-    const somebodyElse = admin.createSession({ userId: grace.id, lifetimeSeconds: HOUR });
+    const keep = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR });
+    const elsewhere = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR });
+    const somebodyElse = admin.createSession({ userId: GRACE, lifetimeSeconds: HOUR });
 
-    assert.equal(admin.deleteSessionsForUser(ada.id, { except: keep.id }), 1);
+    assert.equal(admin.deleteSessionsForUser(ADA, { except: keep.id }), 1);
 
     assert.ok(admin.getSession(keep.id) !== undefined, 'the asking session is still live');
     assert.equal(admin.getSession(elsewhere.id), undefined);
@@ -227,24 +138,24 @@ describe('sessions', () => {
 
   it('drops every session a user has when nothing is spared', async () => {
     const admin = await store();
-    const ada = admin.createUser({ username: 'ada', password: 'correct horse battery' });
-    const one = admin.createSession({ userId: ada.id, lifetimeSeconds: HOUR });
-    const two = admin.createSession({ userId: ada.id, lifetimeSeconds: HOUR });
+    const one = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR });
+    const two = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR });
 
-    assert.equal(admin.deleteSessionsForUser(ada.id), 2);
+    assert.equal(admin.deleteSessionsForUser(ADA), 2);
 
     assert.equal(admin.getSession(one.id), undefined);
     assert.equal(admin.getSession(two.id), undefined);
   });
 
-  it('takes a deleted user’s sessions with them, because the foreign key cascades', async () => {
+  it('is kept for a user the database knows nothing about, since it is only a cache', async () => {
     const admin = await store();
-    const ada = admin.createUser({ username: 'ada', password: 'correct horse battery' });
-    const session = admin.createSession({ userId: ada.id, lifetimeSeconds: HOUR });
 
-    admin.deleteUser(ada.id);
+    // There is no users table to reference, so this must not fail the way an
+    // insert against the old foreign key would have. A session whose user is
+    // not in `data/users.json` is refused by the admin guard instead.
+    const session = admin.createSession({ userId: 12345, lifetimeSeconds: HOUR });
 
-    assert.equal(admin.getSession(session.id), undefined);
+    assert.equal(admin.getSession(session.id)?.userId, 12345);
   });
 });
 
@@ -368,6 +279,75 @@ describe('the actor key table an older version wrote', () => {
 
     admin.dropLegacyTable('actor_keys');
     assert.equal(admin.legacyActorKeys(), undefined);
+  });
+});
+
+describe('the users table an older version wrote', () => {
+  it('reads its rows out, ids and hashes and all, and then goes for good', async () => {
+    const dataDir = await temporaryDir();
+    const database = new DatabaseSync(path.join(dataDir, 'geekity.db'));
+
+    // Exactly migration 1, with the ledger row that stops the migrations this
+    // version ships from running, so the store under test opens the schema a
+    // site upgrading from TASK-9 actually has.
+    database.exec(`
+      CREATE TABLE admin_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+      INSERT INTO admin_migrations (version, applied_at) VALUES (1, '2026-09-01T00:00:00.000Z');
+      CREATE TABLE users (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        username      TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at    TEXT NOT NULL
+      );
+      CREATE TABLE sessions (
+        id         TEXT PRIMARY KEY,
+        user_id    INTEGER REFERENCES users (id) ON DELETE CASCADE,
+        csrf_token TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+      INSERT INTO users (id, username, password_hash, created_at)
+      VALUES (7, 'ada', '$argon2id$v=19$m=1,t=1,p=1$c2FsdA$aGFzaA', '2026-09-01T00:00:00.000Z');
+    `);
+    database.close();
+
+    const admin = openAdminStore({ dataDir });
+    assert.deepEqual(admin.legacyUsers(), [
+      {
+        id: 7,
+        username: 'ada',
+        passwordHash: '$argon2id$v=19$m=1,t=1,p=1$c2FsdA$aGFzaA',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
+    ]);
+
+    admin.dropLegacyTable('users');
+    assert.equal(admin.legacyUsers(), undefined, 'the table is gone');
+    admin.dropLegacyTable('users');
+    admin.close();
+
+    const reopened = openAdminStore({ dataDir });
+    assert.equal(reopened.legacyUsers(), undefined, 'and stays gone across a boot');
+    reopened.close();
+  });
+
+  it('is dropped on a database this version created, where it was never used', async () => {
+    const admin = await store();
+    assert.deepEqual(admin.legacyUsers(), [], 'migration 1 still creates it, empty');
+
+    admin.dropLegacyTable('users');
+    assert.equal(admin.legacyUsers(), undefined);
+  });
+
+  it('does not take the sessions with it, because they no longer reference it', async () => {
+    const admin = await store();
+    const session = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR });
+
+    admin.dropLegacyTable('users');
+
+    assert.equal(admin.getSession(session.id)?.userId, ADA, 'the login survived the drop');
+    const after = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR });
+    assert.equal(admin.getSession(after.id)?.userId, ADA, 'and another can still be made');
   });
 });
 

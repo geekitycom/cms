@@ -3,6 +3,14 @@ import type { Environment } from 'nunjucks';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
+import {
+  countUsers,
+  createUser,
+  DuplicateUsernameError,
+  findUserById,
+  verifyUserPassword,
+} from './accounts.ts';
+import type { User } from './accounts.ts';
 import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';
 import { editorPath, mountDocumentScreens, PAGE_KIND, POST_KIND } from './documents.ts';
@@ -20,8 +28,7 @@ import {
   sessionIdFrom,
   setSessionCookie,
 } from './session.ts';
-import { DuplicateUsernameError } from './store.ts';
-import type { Session, User } from './store.ts';
+import type { AdminStore, Session } from './store.ts';
 import { CATEGORY_KIND, mountTaxonomyScreens, TAG_KIND, TAXONOMY_KINDS } from './taxonomy.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
 import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './throttle.ts';
@@ -137,7 +144,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       logoutUrl: LOGOUT_PATH,
       csrfToken: session?.csrfToken ?? '',
       cspNonce: c.var.cspNonce ?? '',
-      user: userId === null ? undefined : c.var.admin.getUserById(userId),
+      user: userId === null ? undefined : findUserById(c.var.config.dataDir, userId),
       flash: takeFlash(c),
       ...context,
     });
@@ -186,7 +193,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
     let user: User;
     try {
-      user = c.var.admin.createUser({ username, password });
+      user = await createUser({ dataDir: c.var.config.dataDir, username, password });
     } catch (error) {
       if (error instanceof DuplicateUsernameError) {
         return refuseSetup(c, username, error.message);
@@ -234,7 +241,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       });
     }
 
-    const user = c.var.admin.verifyPassword(username, password);
+    const user = verifyUserPassword(c.var.config.dataDir, username, password);
     if (user === undefined) {
       throttle.fail(keys);
       console.warn(
@@ -394,18 +401,23 @@ const PASSWORD_FIELD = 'password';
  */
 export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   const admin = c.var.admin;
+  const dataDir = c.var.config.dataDir;
   const pathname = new URL(c.req.url).pathname;
 
   // Reading a session prunes it when it has expired, so an expired session is
   // gone from here on, not merely ignored.
   const sessionId = sessionIdFrom(c);
-  const session = sessionId === undefined ? undefined : admin.getSession(sessionId);
+  const session = liveSession(
+    admin,
+    dataDir,
+    sessionId === undefined ? undefined : admin.getSession(sessionId),
+  );
   c.set('session', session);
 
   const isSetup = pathname === SETUP_PATH;
   const isLogin = pathname === LOGIN_PATH;
 
-  if (admin.countUsers() === 0) {
+  if (countUsers(dataDir) === 0) {
     // Nobody can log in yet, so there is exactly one thing to do here.
     if (!isSetup) return c.redirect(SETUP_PATH, 302);
   } else {
@@ -424,6 +436,30 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
 
   await next();
 };
+
+/**
+ * The session a request really has: one whose user is still in `users.json`.
+ *
+ * `sessions.user_id` used to be a foreign key into the users table, so a user
+ * who was deleted took their logins with them and a session could never name
+ * somebody who was not there. The accounts are a file now and the sessions are
+ * a cache in a database that may be deleted, restored or rebuilt on its own,
+ * so the join is made here instead: a session naming a user the file does not
+ * hold is deleted, and the request is anonymous. That is exactly what makes a
+ * login survive a rebuilt database only as far as the file still holds the
+ * person it was made for.
+ */
+function liveSession(
+  admin: AdminStore,
+  dataDir: string,
+  session: Session | undefined,
+): Session | undefined {
+  if (session === undefined || session.userId === null) return session;
+  if (findUserById(dataDir, session.userId) !== undefined) return session;
+
+  admin.deleteSession(session.id);
+  return undefined;
+}
 
 /** The CSRF token in the request body, if the body is a form at all. */
 async function submittedToken(c: Context<GeekityEnv>): Promise<unknown> {

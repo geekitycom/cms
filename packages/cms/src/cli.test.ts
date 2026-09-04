@@ -14,7 +14,7 @@ import {
   readPassword,
   registerTypeScriptLoader,
 } from './cli.ts';
-import { createCms, MINIMUM_PASSWORD_LENGTH, openAdminStore } from './index.ts';
+import { createCms, listUsers, MINIMUM_PASSWORD_LENGTH } from './index.ts';
 
 const execFile = promisify(execFileCallback);
 
@@ -557,14 +557,9 @@ describe('geekity sync', () => {
 });
 
 describe('geekity user add', () => {
-  /** The usernames in a site's database, straight out of SQLite. */
+  /** The usernames in a site's `data/users.json`, read as the CMS reads it. */
   function usernames(directory: string): string[] {
-    const admin = openAdminStore({ dataDir: path.join(directory, 'data') });
-    try {
-      return admin.listUsers().map((user) => user.username);
-    } finally {
-      admin.close();
-    }
+    return listUsers(path.join(directory, 'data')).map((user) => user.username);
   }
 
   it('creates an admin and says which one', async () => {

@@ -6,8 +6,9 @@ import { createInterface } from 'node:readline';
 import { Writable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 
+import { createUser, DuplicateUsernameError, migrateUsersToFile } from './admin/accounts.ts';
 import { credentialProblem } from './admin/credentials.ts';
-import { DuplicateUsernameError, openAdminStore } from './admin/store.ts';
+import { openAdminStore } from './admin/store.ts';
 import { resolveConfig } from './config.ts';
 import { createCms } from './index.ts';
 import type { GeekityConfig } from './config.ts';
@@ -347,11 +348,17 @@ async function serveCommand(configPath: string | undefined): Promise<number> {
 /**
  * `geekity user add <username>`: create an admin without the setup screen.
  *
- * The other door into the users table is the first-run setup form, and this
+ * The other door into `data/users.json` is the first-run setup form, and this
  * one has to leave the same thing behind it, so both go through
  * {@link credentialProblem} rather than each carrying its own idea of a legal
- * username. The store is opened against the config's `dataDir`, which is the
- * same file the server will read, and it is closed whatever happens.
+ * username. The file is written under the config's `dataDir`, which is the
+ * same one the server will read.
+ *
+ * The database is opened for one reason only: this is the one door that can
+ * reach the users file before a server ever has, and a site upgrading from the
+ * version that kept its accounts in SQLite would otherwise end up with a file
+ * holding nobody but the user added here — which, the file winning, is what
+ * the next boot would keep. So the same boot migration runs first.
  */
 async function userCommand(
   args: readonly string[],
@@ -381,9 +388,10 @@ async function userCommand(
 
   const config = resolveConfig(await loadConfig(process.cwd(), configPath));
   const admin = openAdminStore({ dataDir: config.dataDir });
+  migrateUsersToFile({ admin, dataDir: config.dataDir });
 
   try {
-    const user = admin.createUser({ username, password });
+    const user = await createUser({ dataDir: config.dataDir, username, password });
     process.stdout.write(`Created admin user ${user.username}. Sign in at ${LOGIN_URL}.\n`);
     return 0;
   } catch (error) {

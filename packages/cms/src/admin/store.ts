@@ -5,7 +5,6 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { DATABASE_FILE } from '../content/store.ts';
 import { REPLY_ACTIVITY_TYPE, replyTargetOf } from '../federation/replies.ts';
-import { hashPassword, verifyPasswordHash } from './passwords.ts';
 
 /**
  * Which rows of the inbox log are replies: a `Create` that named something it
@@ -18,29 +17,6 @@ const IS_REPLY = `activity_type = '${REPLY_ACTIVITY_TYPE}' AND in_reply_to IS NO
 export interface OpenAdminStoreOptions {
   /** Directory the database lives in. Created if it is missing. */
   dataDir: string;
-}
-
-/** An admin user. There is one role, so there is no role column. */
-export interface User {
-  /** Row id, stable for the life of the user. */
-  readonly id: number;
-  /** Login name, unique and compared case sensitively. */
-  readonly username: string;
-  /** When the user was created, as an ISO 8601 instant. */
-  readonly createdAt: string;
-}
-
-/** A user with the column no screen may render: its password hash. */
-export interface StoredUser extends User {
-  /** The PHC-encoded argon2id hash. */
-  readonly passwordHash: string;
-}
-
-/** What {@link AdminStore.createUser} is given. */
-export interface CreateUserInput {
-  username: string;
-  /** The plain password. It is hashed on the way in and never stored. */
-  password: string;
 }
 
 /**
@@ -307,36 +283,6 @@ export type NewRelay = Omit<Relay, 'createdAt' | 'updatedAt'> & {
 export interface AdminStore {
   /** Absolute path of the SQLite file, the same one the content index uses. */
   readonly file: string;
-  /** How many users exist. Zero is what puts the admin into first-run setup. */
-  countUsers(): number;
-  /** Every user, by name, without password hashes. */
-  listUsers(): User[];
-  /** One user with its password hash, or `undefined`. For auth, not for screens. */
-  getUser(username: string): StoredUser | undefined;
-  /** The user behind a session's `userId`, or `undefined`. */
-  getUserById(id: number): User | undefined;
-  /**
-   * Hash the password and insert the user.
-   *
-   * Throws {@link DuplicateUsernameError} when the name is taken.
-   */
-  createUser(input: CreateUserInput): User;
-  /**
-   * The user, when the password is theirs; `undefined` when it is not, or when
-   * there is no such user. The two failures are deliberately indistinguishable.
-   */
-  verifyPassword(username: string, password: string): User | undefined;
-  /**
-   * Hash a new password and put it on a user, replacing the old one. Returns
-   * `false` when there is no such user. Sessions are left alone; deciding
-   * which of them a password change should end is the caller's business.
-   */
-  setPassword(userId: number, password: string): boolean;
-  /**
-   * Delete a user. Their sessions go with them, because the foreign key
-   * cascades. Returns `false` when there was nothing to delete.
-   */
-  deleteUser(userId: number): boolean;
   /** Start a session and hand back its id and CSRF token. */
   createSession(input: CreateSessionInput): Session;
   /**
@@ -378,6 +324,17 @@ export interface AdminStore {
    * out before the table is dropped.
    */
   legacyActorKeys(): LegacyActorKey[] | undefined;
+  /**
+   * The rows of the users table an older version of this CMS wrote, or
+   * `undefined` when the table is gone — which it is on every site that has
+   * booted this version once.
+   *
+   * Accounts live in `data/users.json` now (decision-9). This is the one read
+   * left of the table they used to live in, so the first boot after the
+   * upgrade can write them out; `migrateUsersToFile` in `accounts.ts` is what
+   * does it, ids and all, so a session that names a user still finds them.
+   */
+  legacyUsers(): LegacyUser[] | undefined;
   /**
    * Drop a table whose contents this version keeps in files instead.
    *
@@ -506,18 +463,6 @@ export interface AdminStore {
   close(): void;
 }
 
-/** Thrown when a username is already taken. Usernames are the login key. */
-export class DuplicateUsernameError extends Error {
-  override readonly name = 'DuplicateUsernameError';
-  /** The name that was already in use. */
-  readonly username: string;
-
-  constructor(username: string) {
-    super(`A user named "${username}" already exists.`);
-    this.username = username;
-  }
-}
-
 /**
  * Open (and if needed create) the admin tables in `dataDir`, applying every
  * migration the package ships. Applying them is idempotent.
@@ -535,15 +480,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
   migrate(db);
 
   const statements = {
-    countUsers: db.prepare('SELECT COUNT(*) AS count FROM users'),
-    listUsers: db.prepare('SELECT id, username, created_at FROM users ORDER BY username'),
-    userByName: db.prepare('SELECT * FROM users WHERE username = ?'),
-    userById: db.prepare('SELECT id, username, created_at FROM users WHERE id = ?'),
-    insertUser: db.prepare(
-      'INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)',
-    ),
-    setPassword: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
-    deleteUser: db.prepare('DELETE FROM users WHERE id = ?'),
     deleteSessionsForUser: db.prepare('DELETE FROM sessions WHERE user_id = ? AND id IS NOT ?'),
     insertSession: db.prepare(`
       INSERT INTO sessions (id, user_id, csrf_token, created_at, expires_at)
@@ -688,85 +624,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     }
   }
 
-  function storedUser(username: string): StoredUser | undefined {
-    const row = statements.userByName.get(username) as Record<string, unknown> | undefined;
-    if (row === undefined) return undefined;
-    return {
-      id: Number(row['id']),
-      username: String(row['username']),
-      passwordHash: String(row['password_hash']),
-      createdAt: String(row['created_at']),
-    };
-  }
-
   return {
     file,
-
-    countUsers() {
-      const row = statements.countUsers.get() as Record<string, unknown> | undefined;
-      return Number(row?.['count'] ?? 0);
-    },
-
-    listUsers() {
-      return (statements.listUsers.all() as Record<string, unknown>[]).map((row) => ({
-        id: Number(row['id']),
-        username: String(row['username']),
-        createdAt: String(row['created_at']),
-      }));
-    },
-
-    getUser(username) {
-      return storedUser(username);
-    },
-
-    getUserById(id) {
-      const row = statements.userById.get(id) as Record<string, unknown> | undefined;
-      if (row === undefined) return undefined;
-      return {
-        id: Number(row['id']),
-        username: String(row['username']),
-        createdAt: String(row['created_at']),
-      };
-    },
-
-    createUser(input) {
-      const createdAt = new Date().toISOString();
-      const hash = hashPassword(input.password);
-      try {
-        statements.insertUser.run(input.username, hash, createdAt);
-      } catch (error) {
-        if (isUniqueViolation(error)) throw new DuplicateUsernameError(input.username);
-        throw error;
-      }
-      const created = storedUser(input.username);
-      if (created === undefined) {
-        throw new Error(`The user "${input.username}" vanished between insert and read.`);
-      }
-      return { id: created.id, username: created.username, createdAt: created.createdAt };
-    },
-
-    verifyPassword(username, password) {
-      const user = storedUser(username);
-      if (user === undefined) {
-        // Hash anyway, so a missing user and a wrong password take the same
-        // time and the login form does not become a user enumerator.
-        verifyPasswordHash(DUMMY_HASH, password);
-        return undefined;
-      }
-      if (!verifyPasswordHash(user.passwordHash, password)) return undefined;
-      return { id: user.id, username: user.username, createdAt: user.createdAt };
-    },
-
-    setPassword(userId, password) {
-      // Hashed before the update rather than inside it, so a hash that throws
-      // leaves the stored one alone.
-      const hash = hashPassword(password);
-      return statements.setPassword.run(hash, userId).changes > 0;
-    },
-
-    deleteUser(userId) {
-      return statements.deleteUser.run(userId).changes > 0;
-    },
 
     createSession(input) {
       const now = input.now ?? new Date();
@@ -1058,6 +917,24 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       }));
     },
 
+    legacyUsers() {
+      // Prepared here for the same reason `legacySettings` is: the table is
+      // one that will not be there, and a statement over a missing table
+      // throws when it is prepared rather than when it is run.
+      if (!hasTable(db, 'users')) return undefined;
+
+      return (
+        db
+          .prepare('SELECT id, username, password_hash, created_at FROM users ORDER BY id')
+          .all() as Record<string, unknown>[]
+      ).map((row) => ({
+        id: Number(row['id']),
+        username: String(row['username']),
+        passwordHash: String(row['password_hash']),
+        createdAt: String(row['created_at']),
+      }));
+    },
+
     dropLegacyTable(name) {
       // The name is never a caller's to invent: it is one of this file's own
       // shipped table names, so quoting it is enough.
@@ -1093,14 +970,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     },
   };
 }
-
-/**
- * A well-formed hash of a password nobody has, verified against when the
- * username is unknown so that both failures cost the same.
- */
-const DUMMY_HASH = hashPassword(
-  'a password no user has, hashed once so that verification is constant time',
-);
 
 function isFlashMessage(value: unknown): value is FlashMessage {
   if (typeof value !== 'object' || value === null) return false;
@@ -1234,10 +1103,6 @@ function hasTable(db: DatabaseSync, name: string): boolean {
   );
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Error && /UNIQUE constraint failed/i.test(error.message);
-}
-
 /**
  * One row of the settings table TASK-14 wrote, for the one boot that reads it.
  *
@@ -1277,6 +1142,25 @@ export interface LegacyActorKey {
   privateJwk: string;
 }
 
+/**
+ * One row of the users table TASK-9 wrote, for the one boot that reads it.
+ *
+ * Accounts live in `data/users.json` now (decision-9), so this shape exists
+ * only so `migrateUsersToFile` can write the rows out before the table goes.
+ * The id comes with them: a session in the same database names its user by it,
+ * and a migration that renumbered everybody would sign the whole site out.
+ */
+export interface LegacyUser {
+  /** The row id, which the file keeps. */
+  id: number;
+  /** The login name. */
+  username: string;
+  /** The PHC-encoded argon2id hash, moved into the file as it stands. */
+  passwordHash: string;
+  /** When the user was created, as an ISO instant. */
+  createdAt: string;
+}
+
 /** One schema version: the statements it runs, and any backfill they need. */
 interface Migration {
   /** Its place in the order, and its entry in the ledger. */
@@ -1302,6 +1186,13 @@ interface Migration {
  */
 const MIGRATIONS: readonly Migration[] = [
   {
+    // Users and sessions, when SQLite still held both. decision-9 moved the
+    // accounts into `data/users.json`, so nothing reads the users table any
+    // more: `migrateUsersToFile` writes its rows out on the first boot of that
+    // version and drops it. The migration stays exactly as it shipped, because
+    // a shipped migration is never edited — which does mean a brand new
+    // database creates the table here and drops it a moment later. Migration
+    // 11 is where sessions lose the foreign key into it.
     version: 1,
     sql: `
       CREATE TABLE users (
@@ -1510,6 +1401,40 @@ const MIGRATIONS: readonly Migration[] = [
         value      TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+    `,
+  },
+  {
+    // Sessions without the foreign key into `users`, because there is no users
+    // table any more: decision-9 moved the accounts into `data/users.json` and
+    // `migrateUsersToFile` drops the table on the boot after this migration
+    // runs. The constraint could not survive that either way — with
+    // `foreign_keys` on, dropping the parent cascades every login away, and an
+    // insert afterwards fails with "no such table: main.users" — and SQLite
+    // cannot drop a constraint in place, so the table is rebuilt. Every row is
+    // copied across, so a site upgrading keeps the logins it had. What the key
+    // was doing is done in the admin guard instead: a session naming a user
+    // the file no longer holds is not a session.
+    version: 11,
+    sql: `
+      CREATE TABLE sessions_without_users (
+        id         TEXT PRIMARY KEY,
+        user_id    INTEGER,
+        csrf_token TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        flash      TEXT
+      );
+
+      INSERT INTO sessions_without_users (
+        id, user_id, csrf_token, created_at, expires_at, flash
+      )
+      SELECT id, user_id, csrf_token, created_at, expires_at, flash FROM sessions;
+
+      DROP TABLE sessions;
+      ALTER TABLE sessions_without_users RENAME TO sessions;
+
+      CREATE INDEX sessions_expires_at ON sessions (expires_at);
+      CREATE INDEX sessions_user_id ON sessions (user_id);
     `,
   },
 ];

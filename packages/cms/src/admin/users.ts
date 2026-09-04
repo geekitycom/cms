@@ -3,12 +3,21 @@ import { randomInt } from 'node:crypto';
 import type { Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
+import {
+  countUsers,
+  createUser,
+  deleteUser,
+  DuplicateUsernameError,
+  findUserById,
+  listUsers,
+  setUserPassword,
+  verifyUserPassword,
+} from './accounts.ts';
+import type { User } from './accounts.ts';
 import { passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
-import { DuplicateUsernameError } from './store.ts';
-import type { User } from './store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** Where the users screen lives. The add form posts here too. */
@@ -63,7 +72,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
 
     if (Object.keys(problems).length === 0) {
       try {
-        c.var.admin.createUser({ username, password });
+        await createUser({ dataDir: c.var.config.dataDir, username, password });
       } catch (error) {
         if (!(error instanceof DuplicateUsernameError)) throw error;
         problems.username = error.message;
@@ -99,7 +108,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     const user =
       session?.userId === null || session === undefined
         ? undefined
-        : c.var.admin.getUserById(session.userId);
+        : findUserById(c.var.config.dataDir, session.userId);
     if (session === undefined || user === undefined) return c.redirect(USERS_PATH, 303);
 
     const body = await c.req.parseBody();
@@ -108,7 +117,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     const confirmation = field(body[USER_FIELDS.newPasswordConfirmation]);
 
     const problems = changePasswordProblems({
-      correct: c.var.admin.verifyPassword(user.username, current) !== undefined,
+      correct: verifyUserPassword(c.var.config.dataDir, user.username, current) !== undefined,
       next,
       confirmation,
     });
@@ -120,7 +129,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       return render(c, ADMIN_TEMPLATES.users, screen(c, { passwordProblems: problems }));
     }
 
-    c.var.admin.setPassword(user.id, next);
+    await setUserPassword({ dataDir: c.var.config.dataDir, userId: user.id, password: next });
     // Every browser that was signed in as this user is signed out, because the
     // usual reason to change a password is that somebody else may have it. The
     // one doing the changing is spared, so the admin is not thrown out of the
@@ -138,15 +147,15 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
   });
 
   app.post(DELETE_USER_PATH, async (c) => {
-    const admin = c.var.admin;
+    const dataDir = c.var.config.dataDir;
     const body = await c.req.parseBody();
     const id = Number(field(body[USER_FIELDS.userId]));
-    const target = Number.isInteger(id) ? admin.getUserById(id) : undefined;
+    const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
 
     const refusal = deleteUserRefusal({
       target,
       signedInAs: c.var.session?.userId ?? null,
-      total: admin.countUsers(),
+      total: countUsers(dataDir),
     });
 
     if (refusal !== undefined) {
@@ -154,9 +163,12 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       return c.redirect(USERS_PATH, 303);
     }
 
-    // Their sessions go with them: the foreign key cascades, and the
-    // connection runs with `PRAGMA foreign_keys = ON`.
-    admin.deleteUser((target as User).id);
+    await deleteUser({ dataDir, userId: (target as User).id });
+    // Their sessions go with them. The foreign key that used to do this went
+    // with the users table (decision-9), so it is done here — and a session
+    // that outlives this one, in a database restored from a backup, is not a
+    // login either: the guard refuses one whose user the file does not hold.
+    c.var.admin.deleteSessionsForUser((target as User).id);
     flash(c, 'notice', `Deleted ${(target as User).username}.`);
     return c.redirect(USERS_PATH, 303);
   });
@@ -277,7 +289,7 @@ function screen(
   extra: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const signedInAs = c.var.session?.userId ?? null;
-  const users = c.var.admin.listUsers();
+  const users = listUsers(c.var.config.dataDir);
 
   return {
     section: 'users',

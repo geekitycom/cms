@@ -14,6 +14,7 @@ import {
   Undo,
 } from '@fedify/vocab';
 
+import { countUsers } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore } from '../admin/store.ts';
 import type { FederationOverrides, ResolvedConfig } from '../config.ts';
@@ -210,7 +211,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
       // A CMS is not a signup service; the admin makes accounts by hand.
       openRegistrations: false,
       usage: {
-        users: { total: context.data.admin.countUsers() },
+        users: { total: countUsers(context.data.config.dataDir) },
         localPosts: counts.posts,
         localComments: 0,
       },

@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 06:36'
+updated_date: '2026-09-04 16:43'
 ---
 # Admin UI
 
@@ -32,7 +32,7 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 
 ## Auth
 
-- Passwords hashed with argon2id.
+- Accounts live in `data/users.json` (decision-9): id, username, argon2id hash, created time, written atomically with 0600 permissions. Passwords hashed with argon2id.
 - Session id in an `HttpOnly; Secure; SameSite=Lax` cookie, stored in SQLite with expiry.
 - CSRF token per session on every mutating form.
 - First run: if no users exist, `/admin` shows a setup form that creates the first admin and writes initial settings.

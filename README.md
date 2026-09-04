@@ -125,14 +125,14 @@ export default defineConfig({
 Every field is optional. Relative directories resolve against the working
 directory; absolute ones are used as given.
 
-| Field        | Default                   | Environment override        | Meaning                                                                                                                                        |
-| ------------ | ------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `port`       | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on.                                                                                                               |
-| `contentDir` | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                              |
-| `dataDir`    | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and, under `keys/`, the actor's key pairs, which are not derived and must be backed up. |
-| `themeDir`   | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme.                                                                           |
-| `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                     |
-| `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                   |
+| Field        | Default                   | Environment override        | Meaning                                                                                                                                                                             |
+| ------------ | ------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port`       | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on.                                                                                                                                                    |
+| `contentDir` | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                   |
+| `dataDir`    | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, the actor's key pairs. |
+| `themeDir`   | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme.                                                                                                                |
+| `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                          |
+| `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                        |
 
 The admin adds eight more:
 
@@ -571,14 +571,12 @@ offered.
 
 ## Site settings
 
-`/admin/settings` holds the values doc-1 keeps only in SQLite: title, tagline,
-base URL, time zone, language, posts per page, the tag and category archive
-bases, the site menu, the ActivityPub actor handle and type, the relays the
-site subscribes to, the notify server the feeds advertise, and the site's
-avatar.
-They live in a `settings` table of key and value, alongside the users and
-sessions in the same database file, and they are the half of it that is not
-derived from the content directory.
+`/admin/settings` holds the values that are a site's own rather than a post's:
+title, tagline, base URL, time zone, language, posts per page, the tag and
+category archive bases, the site menu, the ActivityPub actor handle and type,
+the relays the site subscribes to, the notify server the feeds advertise, and
+the site's avatar. They live in `content/_data/site.json`, which is published
+with the site and in git.
 
 The time zone is the one setting that changes what a page says rather than what
 it holds. Every date the CMS writes into a file is a UTC instant ending in `Z`;
@@ -711,9 +709,24 @@ the detail.
 ## Users
 
 `/admin/users` is who may sign in. There is one role — doc-5 puts anything
-beyond admin out of scope for phase one — so a row has no fields to edit and
-the screen is three things: the list, a form that adds somebody, and a form
+beyond admin out of scope for phase one — so an account has no fields to edit
+and the screen is three things: the list, a form that adds somebody, and a form
 that changes your own password.
+
+**`data/users.json` is the source.** One entry per user — id, username, argon2
+hash, created time — written the way every file this CMS owns is written: to a
+temporary file beside it, renamed over the old one, with the read and the write
+as one step nothing else writing that file can get between, and with `0600`
+permissions, so nobody but the account the site runs as can read it. It is in
+`data/` rather than `content/` because `content/` is published and in git, and
+back it up: `data/geekity.db` may be deleted at any moment and rebuilt, but
+this file cannot be rebuilt from anything.
+
+Sessions stay in the database, which is what makes them cheap to throw away.
+They name a user by id, and a session naming somebody `users.json` no longer
+holds is not a login — so deleting the database signs everybody out and costs a
+site nothing else, and restoring an old one cannot bring a deleted account back
+or resurrect a password that has been changed.
 
 Adding a user enforces exactly the rules `/admin/setup` and
 `geekity user add` do: a username of 1 to 64 letters, digits, dots, dashes or
@@ -733,10 +746,10 @@ have fixed anything. The flash says how many were signed out. Changing somebody
 else's password is deliberately not offered — a fresh account is the honest way
 to hand a colleague a login, and it keeps the current-password check meaningful.
 
-Deleting a user takes their sessions with them, because `sessions.user_id`
-cascades and the admin connection runs with `PRAGMA foreign_keys = ON`. Two
-deletions are refused, and the table only renders a button for rows that are
-neither:
+Deleting a user takes their sessions with them, and any that outlive the
+deletion — in a database restored from a backup, say — are refused on sight,
+because the file no longer holds the person they name. Two deletions are
+refused, and the table only renders a button for rows that are neither:
 
 - **The last remaining user.** A site with no users falls back into first-run
   setup, and the next person to reach `/admin` becomes its admin.
