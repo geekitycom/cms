@@ -536,6 +536,81 @@ describe('listAll', () => {
   });
 });
 
+describe('listFederated', () => {
+  /** The same corpus, with an `activitypub.id` on the documents named here. */
+  async function announced(...paths: string[]): Promise<ContentStore> {
+    const index = await store();
+    index.upsertAll(
+      corpus().map((document) =>
+        paths.includes(document.path)
+          ? {
+              ...document,
+              activitypub: { id: `https://blog.example/ap/posts/${document.slug}` },
+            }
+          : document,
+      ),
+    );
+    return index;
+  }
+
+  it('lists the posts carrying an activitypub id, newest first', async () => {
+    const index = await announced(
+      'posts/2026-09-01-newest.md',
+      'posts/2026-01-01-oldest.md',
+      'posts/2026-06-01-middle.md',
+    );
+
+    assert.deepEqual(titles(index.listFederated()), ['Newest', 'Middle', 'Oldest']);
+  });
+
+  it('leaves out a post the site has never announced', async () => {
+    const index = await announced('posts/2026-09-01-newest.md');
+
+    assert.deepEqual(titles(index.listFederated()), ['Newest']);
+  });
+
+  it('keeps drafts and the trash, which are what a Delete is sent for', async () => {
+    const index = await announced(
+      '_trash/posts/2026-09-03-thrown-away.md',
+      'posts/2026-09-02-a-draft.md',
+    );
+
+    assert.deepEqual(titles(index.listFederated()), ['Thrown Away', 'A Draft']);
+  });
+
+  it('leaves out a page and an activitypub block with no id in it', async () => {
+    const index = await store();
+    index.upsertAll([
+      ...corpus().map((document) =>
+        document.path === 'pages/about.md'
+          ? { ...document, activitypub: { id: 'https://blog.example/ap/posts/about' } }
+          : document,
+      ),
+      post({
+        path: 'posts/2026-09-04-stamped-later.md',
+        slug: 'stamped-later',
+        permalink: '/2026/09/stamped-later/',
+        title: 'Not Announced Yet',
+        date: '2026-09-04T09:00:00Z',
+        activitypub: { published: '2026-09-04T09:00:00Z' },
+      }),
+    ]);
+
+    assert.deepEqual(index.listFederated(), []);
+  });
+
+  it('paginates, so the federation screen can ask for one page of them', async () => {
+    const index = await announced(
+      'posts/2026-09-01-newest.md',
+      'posts/2026-06-01-middle.md',
+      'posts/2026-01-01-oldest.md',
+    );
+
+    assert.deepEqual(titles(index.listFederated({ limit: 2 })), ['Newest', 'Middle']);
+    assert.deepEqual(titles(index.listFederated({ limit: 2, offset: 2 })), ['Oldest']);
+  });
+});
+
 describe('scheduled documents', () => {
   /** A store whose clock this test moves, and the handle that moves it. */
   async function scheduledCorpus(): Promise<{ index: ContentStore; set: (now: string) => void }> {

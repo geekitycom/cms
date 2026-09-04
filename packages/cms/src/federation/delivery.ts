@@ -88,14 +88,24 @@ export interface DeliveryService {
    */
   updateActor(): Promise<DeliveryReport | undefined>;
   /**
-   * Send a recorded activity again, to every follower and every accepted relay
-   * the site has now.
+   * Send one post as it now reads to every follower and every accepted relay
+   * the site has.
    *
-   * decision-5 accepts that an activity queued when the process exits is lost
-   * and promises this as the way back. `undefined` means no such activity was
-   * ever sent.
+   * Not "send that activity again": the activity is built from the file at the
+   * moment this is called (decision-9), so a follower whose server was down
+   * ends up holding the post as it stands rather than the revision that failed
+   * to reach it. Which activity that is follows the same rule a save does — a
+   * published post no follower has been told about is a `Create` and is
+   * stamped, a published post they have is an `Update`, a draft or a trashed
+   * one is a `Delete` of a `Tombstone` — so a resend and an ordinary publish
+   * produce the same shapes.
+   *
+   * `undefined` when there is nothing to send: no post answers to that slug,
+   * or the post is one nobody outside the site has ever been told about and is
+   * not published now, so there is neither a copy to withdraw nor anything to
+   * announce.
    */
-  redeliver(activityId: string): Promise<DeliveryReport | undefined>;
+  resend(slug: string): Promise<DeliveryReport | undefined>;
   /** Resolve once every queued delivery has finished, however it finished. */
   settled(): Promise<void>;
 }
@@ -171,10 +181,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   }
 
   /**
-   * Record an activity and fan it out to the followers.
+   * Fan one activity about one post out to the followers.
    *
-   * The activity is stored before it is sent, not after, so an activity whose
-   * delivery is interrupted is still one an admin can re-send.
+   * What the activity was — its type, the object it named, the post's slug —
+   * is written onto every outcome row rather than into a table of its own,
+   * because the activity itself is not kept: it is rebuilt from the file
+   * whenever it is wanted again (decision-9).
    */
   async function send(
     context: Context<FederationContextData>,
@@ -186,22 +198,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       throw new TypeError('An activity cannot be delivered without an id.');
     }
 
-    const objectId = articleObjectId(context, about).href;
-    const activityType = typeNameOf(activity);
-    const json = await activity.toJsonLd({
-      format: 'compact',
-      contextLoader: context.contextLoader,
-    });
-
-    admin.putOutboundActivity({
+    return await fanOut(context, activity, {
       activityId,
-      activityType,
-      objectId,
+      activityType: typeNameOf(activity),
+      objectId: articleObjectId(context, about).href,
       slug: about.slug,
-      json: JSON.stringify(json),
     });
-
-    return await fanOut(context, activity, { activityId, activityType, objectId });
   }
 
   /**
@@ -219,7 +221,13 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   async function fanOut(
     context: Context<FederationContextData>,
     activity: Activity,
-    about: { activityId: string; activityType: string; objectId: string },
+    about: {
+      activityId: string;
+      activityType: string;
+      objectId: string;
+      /** The post it was about, or `null` for an activity about the actor. */
+      slug: string | null;
+    },
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
 
@@ -246,7 +254,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       for (const actorId of target.actorIds) {
         deliveries.push(
           admin.recordDelivery({
-            activityId: about.activityId,
+            ...about,
             actorId,
             inboxId: target.inboxId,
             status,
@@ -256,7 +264,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       }
     }
 
-    return { ...about, deliveries };
+    return {
+      activityId: about.activityId,
+      activityType: about.activityType,
+      objectId: about.objectId,
+      deliveries,
+    };
   }
 
   return {
@@ -331,24 +344,16 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
           cc: context.getFollowersUri(SITE_ACTOR_IDENTIFIER),
         });
 
-        const about = {
+        return await fanOut(context, activity, {
           activityId: activityId.href,
           activityType: 'Update',
           // The object is the actor, not a post, and there is no slug to
           // record: that is what keeps an actor Update out of the federation
-          // screen's per-post delivery table.
+          // screen's per-post delivery table, which is built from the posts
+          // the content index holds.
           objectId: actorId.href,
-        };
-
-        admin.putOutboundActivity({
-          ...about,
           slug: null,
-          json: JSON.stringify(
-            await activity.toJsonLd({ format: 'compact', contextLoader: context.contextLoader }),
-          ),
         });
-
-        return await fanOut(context, activity, about);
       }).catch((thrown: unknown) => {
         // A profile update is a side effect of saving the settings, and losing
         // it must not lose the save.
@@ -357,21 +362,43 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       });
     },
 
-    async redeliver(activityId) {
-      const stored = admin.getOutboundActivity(activityId);
-      if (stored === undefined) return undefined;
+    async resend(slug) {
+      const document = postBySlug(store, slug);
+      if (document === undefined) return undefined;
+
+      // Read before the queue rather than inside it, so a post with nothing to
+      // send answers `undefined` rather than joining a queue to find that out.
+      const published = isFederatedDocument(document, store.now());
+      if (!published && (document.activitypub?.id ?? '') === '') return undefined;
 
       return await enqueue(async () => {
         const context = deliveryContext();
-        const activity = await Activity.fromJsonLd(JSON.parse(stored.json), {
-          contextLoader: context.contextLoader,
-          documentLoader: context.documentLoader,
-        });
-        return await fanOut(context, activity, {
-          activityId: stored.activityId,
-          activityType: stored.activityType,
-          objectId: stored.objectId,
-        });
+
+        if (!published) {
+          // A draft, a trashed post, or one re-dated into the future: every
+          // one of them is gone as far as a follower is concerned, and the
+          // file still carries the id their copy is filed under.
+          return await send(
+            context,
+            postDeleteActivity(context, document, new Date().toISOString()),
+            document,
+          );
+        }
+
+        const stamped = await stamp(document);
+        if ((document.activitypub?.id ?? '') === '') {
+          return await send(context, postCreateActivity(context, stamped), stamped);
+        }
+
+        // The moment rather than the content hash, which is what a save uses:
+        // the point of a resend is that the followers hear about a revision
+        // they have already been sent and ignored, or never received at all,
+        // and an activity id a peer has seen is one it is entitled to drop.
+        return await send(
+          context,
+          postUpdateActivity(context, stamped, new Date().toISOString()),
+          stamped,
+        );
       });
     },
 
@@ -460,6 +487,21 @@ export function groupByInbox(followers: readonly Follower[]): Map<string, Follow
   }
 
   return groups;
+}
+
+/**
+ * The post a slug names, the trash included, or `undefined`.
+ *
+ * The index's slug lookup answers across both kinds and both states and takes
+ * the newest, which is the post nine times out of ten. The federated list is
+ * the fallback for the tenth — a page, or a live post of the same name,
+ * standing in front of a trashed one — and it is the right fallback because a
+ * post with no `activitypub.id` is not one a resend has anything to say about.
+ */
+function postBySlug(store: ContentStore, slug: string): Document | undefined {
+  const direct = store.getBySlug(slug);
+  if (direct?.type === 'post') return direct;
+  return store.listFederated().find((document) => document.slug === slug);
 }
 
 /** The document, when it is one this site federates, and `undefined` otherwise. */

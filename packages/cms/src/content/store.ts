@@ -98,6 +98,18 @@ export interface ContentStore {
   listByCategory(category: string, options?: ListByTagOptions): Document[];
   /** Everything the admin may see, trash and drafts included unless filtered. */
   listAll(options?: ListAllOptions): Document[];
+  /**
+   * Posts the site has announced to the fediverse: the ones whose front matter
+   * carries an `activitypub.id`, newest first, drafts, scheduled posts and the
+   * trash included.
+   *
+   * The federation screen's row source, and the reason the filter is a query
+   * rather than a walk of {@link ContentStore.listAll}: a draft and a trashed
+   * post belong on that screen — they are what a `Delete` is sent for — so the
+   * only thing that decides the list is whether an id was ever written into
+   * the file, which is the same thing as whether a follower holds a copy.
+   */
+  listFederated(options?: ListOptions): Document[];
   /** Every indexed path, sorted. What a sync compares the content tree against. */
   listPaths(): string[];
   /** How many documents there are of each kind. */
@@ -268,6 +280,17 @@ const DUE_CLAUSE = '(date_sort IS NULL OR date_sort <= ?)';
 
 /** The reverse: a document whose date is still ahead of the clock. */
 const SCHEDULED_CLAUSE = '(date_sort IS NOT NULL AND date_sort > ?)';
+
+/**
+ * The clause that picks out a document some follower holds a copy of: one
+ * whose `activitypub` block names an id.
+ *
+ * The block is stored as JSON rather than shredded into columns, so the id is
+ * read back out of it here. An empty id is no id: the front matter is a file
+ * somebody may have typed, and `activitypub: {id: ""}` is what a half-finished
+ * hand edit looks like.
+ */
+const FEDERATED_CLAUSE = `COALESCE(json_extract(activitypub, '$.id'), '') <> ''`;
 
 /**
  * Open (and if needed create) the index in `dataDir`, applying every migration
@@ -569,6 +592,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       }
 
       return select(where, params, options);
+    },
+
+    listFederated(options = {}) {
+      return select([`type = 'post'`, FEDERATED_CLAUSE], [], options);
     },
 
     listPaths() {

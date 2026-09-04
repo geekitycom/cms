@@ -490,14 +490,15 @@ describe('delivering to a relay', () => {
     const { cms, agent } = await subscribed();
     await publishNewPost(agent);
     await cms.delivery.settled();
-    const activityId = String(ofType('Create')[0]?.body['id']);
     sent.length = 0;
 
-    const report = await cms.delivery.redeliver(activityId);
+    // A resend of a post the relay already has is an `Update`: the activity is
+    // rebuilt from the file rather than replayed (decision-9).
+    const report = await cms.delivery.resend('hello-world');
     await cms.delivery.settled();
 
-    assert.equal(ofType('Create').length, 1);
-    assert.equal(ofType('Create')[0]?.url, RELAY_INBOX);
+    assert.equal(ofType('Update').length, 1);
+    assert.equal(ofType('Update')[0]?.url, RELAY_INBOX);
     assert.equal(report?.deliveries.length, 1, 'and the resend reports the relay as a recipient');
   });
 });

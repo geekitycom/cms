@@ -63,7 +63,16 @@ import { fileURLToPath } from 'node:url';
 
 import { serve } from '@hono/node-server';
 import { createFederation, generateCryptoKeyPair, MemoryKvStore } from '@fedify/fedify';
-import { Accept, Application, Create, Endpoints, Follow, isActor, Like } from '@fedify/vocab';
+import {
+  Accept,
+  Application,
+  Create,
+  Endpoints,
+  Follow,
+  isActor,
+  Like,
+  Update,
+} from '@fedify/vocab';
 
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../src/admin/settings.ts';
 import { addFollower, readFollowers, readInboxLog } from '../src/federation/records.ts';
@@ -289,9 +298,15 @@ async function main(): Promise<void> {
       path.join(contentDir, 'posts', PENDING_POST),
     );
 
+    // No activity is stored anywhere any more (decision-9), so what proves a
+    // Create was built is the outcome recorded against the post's object id.
+    const publishedObject = `${baseUrl}/ap/posts/hot-off-the-press`;
     const activity = await waitFor({
       what: 'the watcher to see the new post and the delivery service to build a Create',
-      poll: () => cms.admin.listOutboundActivities().find((sent) => sent.activityType === 'Create'),
+      poll: () => {
+        const last = cms.admin.lastDeliveryToObject(publishedObject);
+        return last?.activityType === 'Create' ? last : undefined;
+      },
     });
     ok(`built ${activity.activityId}`);
 
@@ -346,6 +361,36 @@ async function main(): Promise<void> {
       timeoutMs: 5000,
     });
     ok(`the ephemeral inbox displayed Create(Article) at ${cliInbox}`);
+
+    // ------------------------------------------------------------- the resend
+    // What the federation screen's Resend button does: the activity is built
+    // from the post's file at this moment rather than replayed, so a post the
+    // followers already hold goes out as an `Update` under an id none of them
+    // has seen (decision-9).
+    log(`resending hot-off-the-press to ${String(cms.admin.countFollowers())} follower(s)`);
+    const resent = await cms.delivery.resend('hot-off-the-press');
+    assert.ok(resent !== undefined, 'the post was found and sent again');
+    assert.equal(resent.activityType, 'Update', 'a post the followers hold is resent as an Update');
+    assert.equal(resent.objectId, publishedObject, 'about the object they were given');
+    assert.notEqual(
+      resent.activityId,
+      activity.activityId,
+      'under an activity id no follower has seen',
+    );
+    await cms.delivery.settled();
+
+    const update = await waitFor({
+      what: 'the peer to receive the Update',
+      poll: () => peer.received().find((entry) => entry.type === 'Update'),
+      timeoutMs: 5000,
+    });
+    assert.equal(update.objectType, 'Article', 'the peer received an Update of an Article');
+    assert.equal(update.objectId, publishedObject, 'of the post it already held');
+    ok(`the peer accepted Update(Article) of ${update.objectId}`);
+
+    const afterResend = cms.admin.lastDeliveryToObject(publishedObject);
+    assert.equal(afterResend?.activityType, 'Update', 'and the outcome cache says so');
+    assert.equal(afterResend?.slug, 'hot-off-the-press', 'against the post it was about');
 
     log('federation smoke passed');
   } finally {
@@ -607,6 +652,16 @@ async function startPeer(port: number): Promise<Peer> {
       const object = await create.getObject();
       received.push({
         type: 'Create',
+        ...(object === null ? {} : { objectType: object.constructor.name }),
+        ...(object?.id == null ? {} : { objectId: object.id.href }),
+      });
+    })
+    // What a resend of a post the peer already holds arrives as: an `Update`
+    // carrying the whole article again (decision-9).
+    .on(Update, async (_context, update) => {
+      const object = await update.getObject();
+      received.push({
+        type: 'Update',
         ...(object === null ? {} : { objectType: object.constructor.name }),
         ...(object?.id == null ? {} : { objectId: object.id.href }),
       });

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { readSiteSettings } from './settings.ts';
@@ -239,11 +239,12 @@ describe('an actor update in the delivery log', () => {
     );
     await cms.delivery.settled();
 
-    const recorded = cms.admin.listOutboundActivities()[0];
+    const recorded = cms.admin.lastDeliveryToObject(`${BASE_URL}/ap/actor`);
     assert.equal(recorded?.activityType, 'Update', 'the actor update was recorded');
+    assert.equal(recorded?.slug, null, 'against no post');
 
     const html = await federationScreen(agent);
-    assert.match(html, /Nothing has been delivered/, 'the delivery table is still about posts');
+    assert.match(html, /No post has been announced/, 'the delivery table is still about posts');
     assert.doesNotMatch(html, /ap\/actor#update/, 'and the actor update is not a row in it');
   });
 });
@@ -297,7 +298,7 @@ describe('recent inbox activity', () => {
 });
 
 describe('per-post delivery status', () => {
-  it('shows the latest activity for a post and how it landed', async () => {
+  it('shows the last activity for a post and how it landed', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);
     follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
@@ -307,60 +308,122 @@ describe('per-post delivery status', () => {
 
     assert.match(html, /Hello, world/, 'the post is named');
     assert.match(html, /\/admin\/posts\/hello-world/, 'and links to its editor');
-    assert.match(html, /Create/, 'the latest activity type is shown');
-    assert.match(html, /<button type="submit">Redeliver<\/button>/, 'and it can be sent again');
+    assert.match(html, /Create/, 'the last activity type is shown');
+    assert.match(html, /<button type="submit">Resend<\/button>/, 'and it can be sent again');
   });
 
-  it('says so when nothing has been delivered yet', async () => {
+  it('lists a post in the trash, which is a copy the followers still hold', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
+    await publishPost(agent, cms);
+
+    const token = csrfField(await (await agent.get('/admin/posts/hello-world')).text());
+    assert.ok(token !== undefined);
+    await agent.post('/admin/posts/hello-world', {
+      csrf_token: token,
+      action: 'trash',
+      return: '',
+    });
+    await cms.delivery.settled();
+
+    const html = await federationScreen(agent);
+    assert.match(html, /Hello, world/, 'the post is still a row');
+    assert.match(html, /In the trash/, 'and the row says where it is');
+    assert.match(html, /Delete/, 'with the withdrawal it last sent');
+  });
+
+  it('says so when no post has been announced yet', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);
 
-    assert.match(await federationScreen(agent), /Nothing has been delivered/);
+    assert.match(await federationScreen(agent), /No post has been announced/);
+  });
+
+  it('leaves out a post that has never been announced', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    await writePost(cms, 'never-announced', 'Never announced');
+
+    const html = await federationScreen(agent);
+    assert.doesNotMatch(html, /Never announced/, 'no follower holds a copy of it');
+    assert.match(html, /No post has been announced/);
+  });
+
+  it('lists the posts with no outcomes when the database has been deleted (AC #4)', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
+    await publishPost(agent, cms);
+    assert.match(
+      await federationScreen(agent),
+      /Create <span class="admin-inbox-when">/,
+      'the outcome was recorded first',
+    );
+
+    const { contentDir, dataDir } = cms.config;
+    await cms.close();
+    for (const suffix of ['', '-wal', '-shm']) {
+      await rm(path.join(dataDir, `geekity.db${suffix}`), { force: true });
+    }
+
+    const rebooted = await box.open({
+      contentDir,
+      dataDir,
+      baseUrl: BASE_URL,
+      federation: { queue: null, allowPrivateAddress: true },
+    });
+    const rebootedAgent = await signIn(rebooted);
+
+    const html = await federationScreen(rebootedAgent);
+    assert.match(html, /Hello, world/, 'the post is listed, because its file says it was sent');
+    assert.match(html, /Nothing recorded/, 'with no outcome, because the cache is gone');
+    assert.match(html, /<button type="submit">Resend<\/button>/, 'and it can be sent again');
   });
 });
 
-describe('redelivering a post', () => {
-  it('sends the latest activity again and says how it went (AC #3)', async () => {
+describe('resending a post', () => {
+  it('sends the post as it now reads and says how it went (AC #3)', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);
     follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
     await publishPost(agent, cms);
 
     assert.equal(deliveries.length, 1, 'publishing delivered once');
-    const activityId = cms.admin.listOutboundActivities()[0]?.activityId;
-    assert.ok(activityId !== undefined, 'the activity was recorded');
+    const announced = deliveries[0]?.body['id'];
 
     const { token } = await federationForm(agent);
-    const response = await agent.post('/admin/federation/redeliver', {
+    const response = await agent.post('/admin/federation/resend', {
       csrf_token: token,
-      activity_id: activityId,
+      slug: 'hello-world',
     });
 
     assert.equal(response.status, 303);
     assert.equal(response.headers.get('location'), '/admin/federation');
 
     await cms.delivery.settled();
-    assert.equal(deliveries.length, 2, 'the activity went out a second time');
+    assert.equal(deliveries.length, 2, 'the post went out a second time');
     assert.equal(deliveries[1]?.url, REMOTE_INBOX, 'to the follower’s inbox');
-    assert.equal(deliveries[1]?.body['id'], activityId, 'and it was the same activity');
+    assert.equal(deliveries[1]?.body['type'], 'Update', 'as an update of what they hold');
+    assert.notEqual(deliveries[1]?.body['id'], announced, 'under an id they have not seen');
 
     const after = await federationScreen(agent);
-    assert.match(after, /Redelivered Create to 1 recipient: 1 sent, 0 failed/);
+    assert.match(after, /Sent Update to 1 recipient: 1 sent, 0 failed/);
     assert.match(after, /1 sent/, 'and the row now counts the delivery');
   });
 
-  it('refuses an activity it has never sent, without pretending it did', async () => {
+  it('refuses a name no post answers to, without pretending it sent anything', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);
     const { token } = await federationForm(agent);
 
-    const response = await agent.post('/admin/federation/redeliver', {
+    const response = await agent.post('/admin/federation/resend', {
       csrf_token: token,
-      activity_id: 'https://blog.example/ap/posts/nothing#create',
+      slug: 'nothing-of-the-sort',
     });
 
     assert.equal(response.status, 303);
-    assert.match(await federationScreen(agent), /no record of that activity/i);
+    assert.match(await federationScreen(agent), /no post to send under that name/i);
     assert.equal(deliveries.length, 0, 'and nothing was sent');
   });
 });
@@ -448,15 +511,11 @@ describe('the relays panel', () => {
       reason: null,
       followId: `${BASE_URL}/ap/actor#relay-follow/1`,
     });
-    cms.admin.putOutboundActivity({
+    cms.admin.recordDelivery({
       activityId: `${BASE_URL}/ap/posts/hello#create`,
       activityType: 'Create',
       objectId: `${BASE_URL}/ap/posts/hello`,
       slug: 'hello',
-      json: '{"type":"Create"}',
-    });
-    cms.admin.recordDelivery({
-      activityId: `${BASE_URL}/ap/posts/hello#create`,
       actorId: RELAY_ACTOR,
       inboxId: RELAY_INBOX,
       status: 'sent',

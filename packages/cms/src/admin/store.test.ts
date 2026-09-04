@@ -6,14 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { openAdminStore } from './store.ts';
-import type {
-  AdminStore,
-  NewDelivery,
-  NewFollower,
-  NewInboxActivity,
-  NewOutboundActivity,
-  NewRelay,
-} from './store.ts';
+import type { AdminStore, NewDelivery, NewFollower, NewInboxActivity, NewRelay } from './store.ts';
 
 const temporaryDirs: string[] = [];
 const openStores: AdminStore[] = [];
@@ -758,25 +751,17 @@ describe('replacing an index from the files it is derived from', () => {
   });
 });
 
-describe('the delivery log', () => {
-  const ACTIVITY_ID = 'https://blog.example/ap/posts/hello#create';
+describe('the delivery outcome cache', () => {
+  const OBJECT_ID = 'https://blog.example/ap/posts/hello';
+  const ACTIVITY_ID = `${OBJECT_ID}#create`;
 
-  /** One activity on its way out, with the columns a redelivery needs. */
-  function announcement(overrides: Partial<NewOutboundActivity> = {}): NewOutboundActivity {
-    return {
-      activityId: ACTIVITY_ID,
-      activityType: 'Create',
-      objectId: 'https://blog.example/ap/posts/hello',
-      slug: 'hello',
-      json: '{"type":"Create"}',
-      ...overrides,
-    };
-  }
-
-  /** One follower's outcome for that activity. */
+  /** One follower's outcome for one activity about `hello`. */
   function outcome(overrides: Partial<NewDelivery> = {}): NewDelivery {
     return {
       activityId: ACTIVITY_ID,
+      activityType: 'Create',
+      objectId: OBJECT_ID,
+      slug: 'hello',
       actorId: 'https://remote.example/users/ada',
       inboxId: 'https://remote.example/inbox',
       status: 'sent',
@@ -788,43 +773,52 @@ describe('the delivery log', () => {
   it('starts empty', async () => {
     const admin = await store();
 
-    assert.equal(admin.countOutboundActivities(), 0);
-    assert.deepEqual(admin.listOutboundActivities(), []);
-    assert.equal(admin.getOutboundActivity(ACTIVITY_ID), undefined);
+    assert.deepEqual(admin.listDeliveries(ACTIVITY_ID), []);
+    assert.equal(admin.lastDeliveryToObject(OBJECT_ID), undefined);
+    assert.deepEqual(admin.countDeliveriesByStatus(ACTIVITY_ID), {
+      sent: 0,
+      queued: 0,
+      failed: 0,
+    });
   });
 
-  it('keeps the activity whole, so it can be sent again', async () => {
+  it('records what the activity was as well as how it went, since nothing else holds it', async () => {
     const admin = await store();
 
-    const recorded = admin.putOutboundActivity(announcement());
+    const recorded = admin.recordDelivery(outcome());
 
     assert.equal(recorded.activityId, ACTIVITY_ID);
     assert.equal(recorded.activityType, 'Create');
-    assert.equal(recorded.objectId, 'https://blog.example/ap/posts/hello');
+    assert.equal(recorded.objectId, OBJECT_ID);
     assert.equal(recorded.slug, 'hello');
-    assert.equal(recorded.json, '{"type":"Create"}');
-    assert.ok(recorded.createdAt !== '', 'the row records when it was built');
-    assert.deepEqual(admin.getOutboundActivity(ACTIVITY_ID), recorded);
+    assert.equal(recorded.actorId, 'https://remote.example/users/ada');
+    assert.equal(recorded.inboxId, 'https://remote.example/inbox');
+    assert.equal(recorded.status, 'sent');
+    assert.equal(recorded.error, null);
+    assert.ok(recorded.attemptedAt !== '', 'the attempt was timed');
   });
 
-  it('leaves the first time alone when the same activity is recorded again', async () => {
+  it('records an activity about no post at all, which an actor update is', async () => {
     const admin = await store();
-    const first = admin.putOutboundActivity(
-      announcement({ createdAt: '2026-03-04T10:00:00.000Z' }),
+
+    const recorded = admin.recordDelivery(
+      outcome({
+        activityId: 'https://blog.example/ap/actor#update/2026-03-04T10:00:00.000Z',
+        activityType: 'Update',
+        objectId: 'https://blog.example/ap/actor',
+        slug: null,
+      }),
     );
 
-    const again = admin.putOutboundActivity(
-      announcement({ createdAt: '2026-05-05T10:00:00.000Z', json: '{"type":"Create","v":2}' }),
+    assert.equal(recorded.slug, null);
+    assert.equal(
+      admin.lastDeliveryToObject('https://blog.example/ap/actor')?.activityType,
+      'Update',
     );
-
-    assert.equal(admin.countOutboundActivities(), 1);
-    assert.equal(again.createdAt, first.createdAt, 'a redelivery is not a new activity');
-    assert.equal(again.json, '{"type":"Create","v":2}');
   });
 
   it('records one outcome per follower and counts them by status', async () => {
     const admin = await store();
-    admin.putOutboundActivity(announcement());
 
     admin.recordDelivery(outcome());
     admin.recordDelivery(
@@ -844,7 +838,6 @@ describe('the delivery log', () => {
         ['https://remote.example/users/ada', 'sent', null],
       ],
     );
-    assert.ok((rows[0]?.attemptedAt ?? '') !== '', 'the attempt was timed');
     assert.deepEqual(admin.countDeliveriesByStatus(ACTIVITY_ID), {
       sent: 1,
       queued: 0,
@@ -854,7 +847,6 @@ describe('the delivery log', () => {
 
   it('moves a follower’s outcome rather than adding a second one', async () => {
     const admin = await store();
-    admin.putOutboundActivity(announcement());
     admin.recordDelivery(outcome({ status: 'failed', error: 'Timed out.' }));
 
     admin.recordDelivery(outcome({ status: 'sent', error: null }));
@@ -865,6 +857,98 @@ describe('the delivery log', () => {
       failed: 0,
     });
     assert.equal(admin.listDeliveries(ACTIVITY_ID)[0]?.error, null);
+  });
+
+  it('answers with the newest attempt about one post, whichever activity carried it', async () => {
+    const admin = await store();
+    admin.recordDelivery(outcome({ attemptedAt: '2026-03-04T10:00:00.000Z' }));
+    admin.recordDelivery(
+      outcome({
+        activityId: `${OBJECT_ID}#update/2026-05-05T10:00:00.000Z`,
+        activityType: 'Update',
+        attemptedAt: '2026-05-05T10:00:00.000Z',
+      }),
+    );
+
+    const last = admin.lastDeliveryToObject(OBJECT_ID);
+    assert.equal(last?.activityType, 'Update');
+    assert.equal(last?.attemptedAt, '2026-05-05T10:00:00.000Z');
+    assert.equal(
+      admin.lastDeliveryToObject('https://blog.example/ap/posts/elsewhere'),
+      undefined,
+      'and nothing about a post it was never asked about',
+    );
+  });
+});
+
+describe('the outbound activity table an older version wrote', () => {
+  it('is rebuilt into the outcome cache and then goes, payloads and all', async () => {
+    const dataDir = await temporaryDir();
+    const database = new DatabaseSync(path.join(dataDir, 'geekity.db'));
+
+    // Exactly migration 7, with the ledger row that stops it running again, so
+    // the store under test opens the two tables a site upgrading from TASK-19
+    // actually has: `ap_outbound` holding the JSON-LD decision-9 does away
+    // with, and `ap_deliveries` pointing into it. Every other migration is
+    // left to run, which is what puts the rest of the schema there.
+    database.exec(`
+      CREATE TABLE admin_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+      INSERT INTO admin_migrations (version, applied_at)
+      VALUES (7, '2026-09-01T00:00:00.000Z');
+
+      CREATE TABLE ap_outbound (
+        activity_id   TEXT PRIMARY KEY,
+        activity_type TEXT NOT NULL,
+        object_id     TEXT NOT NULL,
+        slug          TEXT,
+        created_at    TEXT NOT NULL,
+        json          TEXT NOT NULL
+      );
+
+      CREATE TABLE ap_deliveries (
+        activity_id  TEXT NOT NULL REFERENCES ap_outbound (activity_id) ON DELETE CASCADE,
+        actor_id     TEXT NOT NULL,
+        inbox_id     TEXT NOT NULL,
+        status       TEXT NOT NULL,
+        error        TEXT,
+        attempted_at TEXT NOT NULL,
+        PRIMARY KEY (activity_id, actor_id)
+      );
+
+      INSERT INTO ap_outbound VALUES (
+        'https://blog.example/ap/posts/hello#create', 'Create',
+        'https://blog.example/ap/posts/hello', 'hello',
+        '2026-09-01T10:00:00.000Z', '{"type":"Create"}'
+      );
+      INSERT INTO ap_deliveries VALUES (
+        'https://blog.example/ap/posts/hello#create',
+        'https://remote.example/users/ada', 'https://remote.example/inbox',
+        'sent', NULL, '2026-09-01T10:00:01.000Z'
+      );
+    `);
+    database.close();
+
+    const admin = openAdminStore({ dataDir });
+    openStores.push(admin);
+
+    const last = admin.lastDeliveryToObject('https://blog.example/ap/posts/hello');
+    assert.equal(last?.activityType, 'Create', 'the type moved onto the outcome row');
+    assert.equal(last?.slug, 'hello', 'and so did the slug');
+    assert.equal(last?.status, 'sent');
+    assert.equal(last?.attemptedAt, '2026-09-01T10:00:01.000Z', 'with the time it was made');
+
+    const opened = new DatabaseSync(path.join(dataDir, 'geekity.db'), { readOnly: true });
+    try {
+      assert.deepEqual(
+        opened
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ap_outbound'")
+          .all(),
+        [],
+        'no activity payload is stored anywhere any more',
+      );
+    } finally {
+      opened.close();
+    }
   });
 });
 
@@ -937,18 +1021,14 @@ describe('relay subscriptions', () => {
 
   it('answers with the last thing delivered to an inbox, whoever it belonged to', async () => {
     const admin = await store();
-    admin.putOutboundActivity({
-      activityId: 'https://blog.example/ap/posts/hello#create',
-      activityType: 'Create',
-      objectId: 'https://blog.example/ap/posts/hello',
-      slug: 'hello',
-      json: '{"type":"Create"}',
-    });
 
     assert.equal(admin.lastDeliveryToInbox(RELAY_INBOX), undefined);
 
     admin.recordDelivery({
       activityId: 'https://blog.example/ap/posts/hello#create',
+      activityType: 'Create',
+      objectId: 'https://blog.example/ap/posts/hello',
+      slug: 'hello',
       actorId: 'https://relay.example/user/_____relay_____',
       inboxId: RELAY_INBOX,
       status: 'sent',

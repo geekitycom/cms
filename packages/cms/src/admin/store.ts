@@ -170,36 +170,6 @@ export type NewInboxActivity = Omit<InboxActivity, 'id' | 'receivedAt' | 'inRepl
   receivedAt?: string | undefined;
 };
 
-/**
- * One activity this site sent, kept whole so it can be sent again.
- *
- * decision-5 accepts that an activity queued when the process exits is lost,
- * on the understanding that the outcome is recorded per follower and that an
- * admin can re-send. Re-sending needs the activity itself, and rebuilding one
- * from the content directory is not always possible — a `Delete` is about a
- * post that is no longer there — so the compacted JSON-LD is stored as it went
- * out.
- */
-export interface OutboundActivity {
-  /** The activity's own id, which is what a redelivery is asked for by. */
-  readonly activityId: string;
-  /** `Create`, `Update` or `Delete`. */
-  readonly activityType: string;
-  /** The ActivityStreams id of the post the activity is about. */
-  readonly objectId: string;
-  /** The post's slug when the activity was built, for a human reading the log. */
-  readonly slug: string | null;
-  /** When the activity was first built, as an ISO 8601 instant. */
-  readonly createdAt: string;
-  /** The activity as compacted JSON-LD, exactly as it was delivered. */
-  readonly json: string;
-}
-
-/** An {@link OutboundActivity} before the store has timed it. */
-export type NewOutboundActivity = Omit<OutboundActivity, 'createdAt'> & {
-  createdAt?: string | undefined;
-};
-
 /** How one delivery of one activity to one follower ended. */
 export const DELIVERY_STATUSES = ['sent', 'queued', 'failed'] as const;
 
@@ -213,11 +183,37 @@ export const DELIVERY_STATUSES = ['sent', 'queued', 'failed'] as const;
  */
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
-/** How one attempt to deliver one activity to one follower ended. */
+/**
+ * How one attempt to deliver one activity to one recipient ended, and what the
+ * activity was.
+ *
+ * The whole of what SQLite keeps about anything the site has sent (decision-9).
+ * No payload goes with it: an activity is rebuilt from the post's file at the
+ * moment somebody asks for it to go again, so storing the bytes that went out
+ * last time would only be a second, staler answer to the same question. What
+ * is left is a cache of outcomes, and a site that deletes its database loses
+ * nothing but the record of how yesterday's delivery went.
+ *
+ * The activity's own columns are here rather than in a table of their own
+ * because there is no longer anything else to put in one: they are what the
+ * federation screen reads to say what went out and when.
+ */
 export interface Delivery {
-  /** Which activity was delivered. */
+  /** The id of the activity that was delivered. */
   readonly activityId: string;
-  /** Which follower it was delivered to. */
+  /** `Create`, `Update` or `Delete`. */
+  readonly activityType: string;
+  /**
+   * The ActivityStreams id of what it was about: a post, or the site's own
+   * actor when the profile itself was what moved.
+   */
+  readonly objectId: string;
+  /**
+   * The post's slug when the activity went out, or `null` for an activity
+   * about no post — which is what an actor `Update` is.
+   */
+  readonly slug: string | null;
+  /** Which follower or relay it was delivered to. */
   readonly actorId: string;
   /** The inbox actually used, which is the shared one when the follower has one. */
   readonly inboxId: string;
@@ -424,21 +420,10 @@ export interface AdminStore {
   countRepliesTo(objectId: string): number;
   /** One object's replies, newest first, optionally one page of them. */
   listRepliesTo(objectId: string, options?: ListPageOptions): InboxActivity[];
-  /** How many activities this site has sent. */
-  countOutboundActivities(): number;
-  /** Activities this site sent, newest first, optionally one page of them. */
-  listOutboundActivities(options?: ListPageOptions): OutboundActivity[];
-  /** One sent activity by its id, or `undefined`. */
-  getOutboundActivity(activityId: string): OutboundActivity | undefined;
-  /**
-   * Record an activity on its way out, leaving the original `created_at` alone
-   * so a redelivery does not pretend the activity is new.
-   */
-  putOutboundActivity(activity: NewOutboundActivity): OutboundActivity;
   /**
    * Record how one delivery to one follower ended, replacing the previous
    * outcome for that pair: the table answers "where does this activity stand
-   * with each follower", which a redelivery moves rather than adds to.
+   * with each follower", which a resend moves rather than adds to.
    */
   recordDelivery(delivery: NewDelivery): Delivery;
   /** Every follower's outcome for one activity, in follower order. */
@@ -454,6 +439,17 @@ export interface AdminStore {
    * outcomes up by, and the inbox is the thing the site was told to deliver to.
    */
   lastDeliveryToInbox(inboxId: string): Delivery | undefined;
+  /**
+   * The most recent delivery about one object — a post's ActivityStreams id,
+   * or the site actor's — or `undefined` when nothing about it has ever gone
+   * out.
+   *
+   * What the federation screen's per-post row is filled in from. Keyed by the
+   * object rather than by the activity because a post is a series of
+   * activities and the row is about the post: the newest outcome is the one
+   * that says where the post currently stands with the fediverse.
+   */
+  lastDeliveryToObject(objectId: string): Delivery | undefined;
   /** Every relay subscription, oldest first, however it stands. */
   listRelays(): Relay[];
   /** One relay subscription by the inbox it was made to, or `undefined`. */
@@ -578,27 +574,16 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       ORDER BY received_at DESC, id DESC
       LIMIT ? OFFSET ?
     `),
-    countOutboundActivities: db.prepare('SELECT COUNT(*) AS count FROM ap_outbound'),
-    listOutboundActivities: db.prepare(`
-      SELECT * FROM ap_outbound
-      ORDER BY created_at DESC, rowid DESC
-      LIMIT ? OFFSET ?
-    `),
-    outboundActivityById: db.prepare('SELECT * FROM ap_outbound WHERE activity_id = ?'),
-    putOutboundActivity: db.prepare(`
-      INSERT INTO ap_outbound (activity_id, activity_type, object_id, slug, created_at, json)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT (activity_id) DO UPDATE SET
+    recordDelivery: db.prepare(`
+      INSERT INTO ap_deliveries (
+        activity_id, activity_type, object_id, slug,
+        actor_id, inbox_id, status, error, attempted_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (activity_id, actor_id) DO UPDATE SET
         activity_type = excluded.activity_type,
         object_id = excluded.object_id,
         slug = excluded.slug,
-        json = excluded.json
-      RETURNING *
-    `),
-    recordDelivery: db.prepare(`
-      INSERT INTO ap_deliveries (activity_id, actor_id, inbox_id, status, error, attempted_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT (activity_id, actor_id) DO UPDATE SET
         inbox_id = excluded.inbox_id,
         status = excluded.status,
         error = excluded.error,
@@ -613,6 +598,11 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     `),
     lastDeliveryToInbox: db.prepare(`
       SELECT * FROM ap_deliveries WHERE inbox_id = ?
+      ORDER BY attempted_at DESC, rowid DESC
+      LIMIT 1
+    `),
+    lastDeliveryToObject: db.prepare(`
+      SELECT * FROM ap_deliveries WHERE object_id = ?
       ORDER BY attempted_at DESC, rowid DESC
       LIMIT 1
     `),
@@ -857,43 +847,12 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return rows.map(toInboxActivity);
     },
 
-    countOutboundActivities() {
-      const row = statements.countOutboundActivities.get() as Record<string, unknown> | undefined;
-      return Number(row?.['count'] ?? 0);
-    },
-
-    listOutboundActivities(options = {}) {
-      const rows = statements.listOutboundActivities.all(
-        options.limit ?? NO_LIMIT,
-        options.offset ?? 0,
-      ) as Record<string, unknown>[];
-      return rows.map(toOutboundActivity);
-    },
-
-    getOutboundActivity(activityId) {
-      const row = statements.outboundActivityById.get(activityId) as
-        Record<string, unknown> | undefined;
-      return row === undefined ? undefined : toOutboundActivity(row);
-    },
-
-    putOutboundActivity(activity) {
-      const row = statements.putOutboundActivity.get(
-        activity.activityId,
-        activity.activityType,
-        activity.objectId,
-        activity.slug,
-        activity.createdAt ?? new Date().toISOString(),
-        activity.json,
-      ) as Record<string, unknown> | undefined;
-      if (row === undefined) {
-        throw new Error(`The activity "${activity.activityId}" was not written to the outbox log.`);
-      }
-      return toOutboundActivity(row);
-    },
-
     recordDelivery(delivery) {
       const row = statements.recordDelivery.get(
         delivery.activityId,
+        delivery.activityType,
+        delivery.objectId,
+        delivery.slug,
         delivery.actorId,
         delivery.inboxId,
         delivery.status,
@@ -927,6 +886,12 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
 
     lastDeliveryToInbox(inboxId) {
       const row = statements.lastDeliveryToInbox.get(inboxId) as
+        Record<string, unknown> | undefined;
+      return row === undefined ? undefined : toDelivery(row);
+    },
+
+    lastDeliveryToObject(objectId) {
+      const row = statements.lastDeliveryToObject.get(objectId) as
         Record<string, unknown> | undefined;
       return row === undefined ? undefined : toDelivery(row);
     },
@@ -1109,20 +1074,12 @@ function toInboxActivity(row: Record<string, unknown>): InboxActivity {
   };
 }
 
-function toOutboundActivity(row: Record<string, unknown>): OutboundActivity {
+function toDelivery(row: Record<string, unknown>): Delivery {
   return {
     activityId: String(row['activity_id']),
     activityType: String(row['activity_type']),
     objectId: String(row['object_id']),
     slug: nullableText(row['slug']),
-    createdAt: String(row['created_at']),
-    json: String(row['json']),
-  };
-}
-
-function toDelivery(row: Record<string, unknown>): Delivery {
-  return {
-    activityId: String(row['activity_id']),
     actorId: String(row['actor_id']),
     inboxId: String(row['inbox_id']),
     status: deliveryStatus(row['status']),
@@ -1521,6 +1478,64 @@ const MIGRATIONS: readonly Migration[] = [
 
       CREATE INDEX sessions_expires_at ON sessions (expires_at);
       CREATE INDEX sessions_user_id ON sessions (user_id);
+    `,
+  },
+  {
+    // The outcomes without the payloads. decision-9 replaces "send this stored
+    // activity again" with "send this post as it now reads", so nothing needs
+    // the JSON-LD any more and `ap_outbound` goes: an activity rebuilt from
+    // the file is the current answer, and a copy of what went out last time
+    // could only ever be a staler one.
+    //
+    // What that table held about an activity that an outcome cannot do
+    // without — its type, the object it was about and the slug — moves onto
+    // the outcome row, which is now the whole of what SQLite remembers about
+    // anything the site has sent. The foreign key has to go with the parent,
+    // and SQLite cannot drop a constraint in place, so `ap_deliveries` is
+    // rebuilt the way migration 11 rebuilt `sessions`. Every row that has an
+    // activity to name is carried across as a courtesy: this table is a cache
+    // and is allowed to be empty, so a row whose activity is somehow missing
+    // is dropped rather than invented a type for.
+    version: 12,
+    sql: `
+      CREATE TABLE ap_deliveries_standalone (
+        activity_id   TEXT NOT NULL,
+        activity_type TEXT NOT NULL,
+        object_id     TEXT NOT NULL,
+        slug          TEXT,
+        actor_id      TEXT NOT NULL,
+        inbox_id      TEXT NOT NULL,
+        status        TEXT NOT NULL,
+        error         TEXT,
+        attempted_at  TEXT NOT NULL,
+        PRIMARY KEY (activity_id, actor_id)
+      );
+
+      INSERT INTO ap_deliveries_standalone (
+        activity_id, activity_type, object_id, slug,
+        actor_id, inbox_id, status, error, attempted_at
+      )
+      SELECT
+        ap_deliveries.activity_id,
+        ap_outbound.activity_type,
+        ap_outbound.object_id,
+        ap_outbound.slug,
+        ap_deliveries.actor_id,
+        ap_deliveries.inbox_id,
+        ap_deliveries.status,
+        ap_deliveries.error,
+        ap_deliveries.attempted_at
+      FROM ap_deliveries
+      JOIN ap_outbound ON ap_outbound.activity_id = ap_deliveries.activity_id;
+
+      DROP TABLE ap_deliveries;
+      ALTER TABLE ap_deliveries_standalone RENAME TO ap_deliveries;
+
+      CREATE INDEX ap_deliveries_attempted_at ON ap_deliveries (attempted_at);
+      CREATE INDEX ap_deliveries_status ON ap_deliveries (status);
+      CREATE INDEX ap_deliveries_object_id ON ap_deliveries (object_id, attempted_at);
+
+      DROP TABLE ap_outbound;
     `,
   },
 ];

@@ -33,10 +33,10 @@ export interface GeekityEnv {
      */
     announce: (change: DocumentChange) => Promise<void>;
     /**
-     * Outbound ActivityPub delivery, so a handler can send a recorded activity
-     * again. The federation screen's Redeliver button is the whole reason it is
-     * here: everything else about delivery happens off the index, away from any
-     * request.
+     * Outbound ActivityPub delivery, so a handler can send one post out again
+     * as it now reads. The federation screen's Resend button is the whole
+     * reason it is here: everything else about delivery happens off the index,
+     * away from any request.
      */
     delivery: DeliveryService;
     /**

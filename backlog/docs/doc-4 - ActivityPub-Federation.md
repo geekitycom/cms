@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 17:11'
+updated_date: '2026-09-04 17:40'
 ---
 # ActivityPub Federation
 
@@ -42,6 +42,8 @@ Pages are not federated.
 
 The sync layer emits these events from index diffs, so editing a file on disk federates the same way an admin save does. Deliveries go through Fedify's outbox queue to every follower's inbox (shared inbox when available) and to every accepted relay's inbox. The `activitypub.id` front-matter key records that a post has been announced so a rename or restore does not create a duplicate object.
 
+No activity is stored (decision-9). What SQLite keeps about anything the site has sent is one outcome row per recipient — the activity's id, type, object id and slug, the follower or relay, the inbox used, how it went, why not, and when — which is a cache and is allowed to be empty. That is what the federation screen reads to say how a post last landed.
+
 ## Relays
 
 A Mastodon-style relay (FEP-ae0c) boosts every public activity it is sent on to the instances subscribed to it, which is how a small site reaches people who follow nobody on it. Fedify ships the relay *server* half only, so the client half is ours.
@@ -79,9 +81,21 @@ Logged but not acted on: `Like`, `Announce`, `Create(Note)` replies. Every handl
 
 ## Storage
 
-Fedify needs a KV store and a message queue. Phase one uses `MemoryKvStore` and `InProcessMessageQueue` (see decision-5). Followers, keys, and the inbox log are ours and live in files (decision-9): `content/_data/federation/followers.json` holds one object per follower — actor id, inbox, shared inbox, handle, name, icon, profile URL and follow time — oldest follow first, and `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` holds the inbound activities. Both are published with the site and reach an Eleventy build as `federation.followers` and `federation.inbox` (the monthly logs need a one-line `addDataExtension('jsonl', …)`, which the example config ships); the key pairs are JWK files under `data/keys/`. Every write takes a lock on the file it changes and updates the index before it lets go, so the two cannot disagree, and the whole file is replaced by rename so a reader never sees half of one. SQLite indexes the followers and the inbox log for paging and holds the delivery outcomes, and both indexes are emptied and rebuilt from the files on every boot — `rebuildFederationIndexes({ admin, contentDir })` is the function, and `geekity rebuild` will call the same one. A file that will not parse stops the boot, naming it: Fedify swallows what a dispatcher throws, so a bad file noticed at request time would be noticed by nobody.
+Fedify needs a KV store and a message queue. Phase one uses `MemoryKvStore` and `InProcessMessageQueue` (see decision-5). Followers, keys, and the inbox log are ours and live in files (decision-9): `content/_data/federation/followers.json` holds one object per follower — actor id, inbox, shared inbox, handle, name, icon, profile URL and follow time — oldest follow first, and `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` holds the inbound activities. Both are published with the site and reach an Eleventy build as `federation.followers` and `federation.inbox` (the monthly logs need a one-line `addDataExtension('jsonl', …)`, which the example config ships); the key pairs are JWK files under `data/keys/`. Every write takes a lock on the file it changes and updates the index before it lets go, so the two cannot disagree, and the whole file is replaced by rename so a reader never sees half of one. SQLite indexes the followers and the inbox log for paging and caches the delivery outcomes — the outcomes only, since no activity is kept — and both indexes are emptied and rebuilt from the files on every boot — `rebuildFederationIndexes({ admin, contentDir })` is the function, and `geekity rebuild` will call the same one. A file that will not parse stops the boot, naming it: Fedify swallows what a dispatcher throws, so a bad file noticed at request time would be noticed by nobody.
 
-Redeliver means "resend the current state of the post": the activity is rebuilt from the file when the button is pressed, so a follower whose server was down ends up with the post as it is now rather than with the activity that failed.
+Resend means "send the current state of the post": `cms.delivery.resend(slug)` reads the post from the index and builds the activity from the file at that moment, so a follower whose server was down ends up with the post as it is now rather than with the revision that failed to reach it. Which activity that is follows the delivery table above, applied to the state the file is in:
+
+| The post now | What a resend sends |
+| --- | --- |
+| published, with no `activitypub.id` | `Create(Article)`, stamping the id into the file |
+| published, with one | `Update(Article)` under a fresh, timestamped activity id |
+| a draft, in the trash, or dated into the future | `Delete` of a `Tombstone` for that id |
+
+The `Update`'s id carries the moment rather than the content hash a save uses, because a resend is asking for a revision the followers have already been offered to be offered again, and an activity id a peer has seen is one it is entitled to drop.
+
+The federation screen lists one row per post carrying an `activitypub.id`, the trash included, read from the content index and joined to the newest cached outcome for that object. The posts come from the files and the outcomes from the cache, in that order: a site that has just deleted its database sees every federated post listed with nothing recorded against it, and can press Resend on any of them.
+
+The one capability given up is tombstoning a post whose file is gone entirely rather than in the trash: there is no file left to build the `Tombstone` from.
 
 ## Testing
 
