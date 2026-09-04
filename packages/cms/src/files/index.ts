@@ -1,6 +1,7 @@
 export {
   readFileIfPresentSync,
   updateFileAtomically,
+  withFileLock,
   writeFileAtomically,
   writeFileAtomicallySync,
 } from './atomic.ts';

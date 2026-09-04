@@ -57,6 +57,24 @@ export {
   SITE_ACTOR_IDENTIFIER,
 } from './keys.ts';
 export type { ActorKeyAlgorithm } from './keys.ts';
+export {
+  addFollower,
+  appendInboxActivity,
+  FEDERATION_DATA_DIRECTORY,
+  followersFile,
+  FOLLOWERS_FILE,
+  inboxDirectory,
+  inboxFile,
+  inboxMonth,
+  INBOX_DIRECTORY,
+  inboxRowFrom,
+  migrateFederationToFiles,
+  readFollowers,
+  readInboxLog,
+  rebuildFederationIndexes,
+  removeFollower,
+} from './records.ts';
+export type { FederationIndexReport, FederationRecords, InboxLine } from './records.ts';
 export { mountFederation } from './mount.ts';
 export {
   ACTOR_PATH,

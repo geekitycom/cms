@@ -16,6 +16,7 @@
  * 6. `categories`, the CMS's second taxonomy, becomes `collections.categories`.
  * 7. The site menu becomes `collections.menu`.
  * 8. A `date` filter that reads a UTC instant through `site.timezone`.
+ * 9. `content/_data/federation/` — the followers and the inbox log — is data.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
  * says `"layout": "post"`, `pages.json` says `"layout": "page"` — so
@@ -184,6 +185,28 @@ export default function (eleventyConfig) {
     if (format === 'year') return year;
     return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
   });
+
+  // The CMS publishes its ActivityPub followers and the log of what its inbox
+  // was told under `content/_data/federation/` (decision-9), so a build of the
+  // same directory can show them. Eleventy reads `followers.json` by itself —
+  // it is a data file in a namespaced `_data` subdirectory, so it arrives as
+  // `federation.followers` — but the inbox log is JSON Lines, one activity per
+  // line, which Eleventy has no reader for. This is that reader: each month
+  // file becomes an entry of `federation.inbox`, keyed by its `{yyyy}-{mm}`
+  // name and holding an array of compact JSON-LD activities, each with the
+  // `receivedAt` the log stamped it with.
+  //
+  //     {% for follower in federation.followers %}{{ follower.handle }}{% endfor %}
+  //     {% for month, activities in federation.inbox %}…{% endfor %}
+  //
+  // A blank line is skipped; a line that will not parse fails the build, which
+  // is the same thing the CMS does with it.
+  eleventyConfig.addDataExtension('jsonl', (contents) =>
+    contents
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line)),
+  );
 
   // `draft: true` is the CMS's only status flag. Set BUILD_DRAFTS=1 to preview
   // them locally.

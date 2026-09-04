@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { InboxContext } from '@fedify/fedify';
-import { Accept, Follow, getTypeId } from '@fedify/vocab';
+import { Accept, Follow } from '@fedify/vocab';
 import type {
   Activity,
   Actor,
@@ -17,6 +17,8 @@ import type {
 import type { NewFollower } from '../admin/store.ts';
 import type { FederationContextData } from './federation.ts';
 import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
+import { addFollower, appendInboxActivity, removeFollower } from './records.ts';
+import type { FederationRecords } from './records.ts';
 import { acceptRelay, rejectRelay } from './relays.ts';
 
 /** What an inbox handler is handed: a Fedify context over the CMS's stores. */
@@ -50,7 +52,7 @@ export async function handleFollow(context: SiteInboxContext, follow: Follow): P
   const follower = await followerFrom(context, actor);
   if (follower === undefined) return;
 
-  context.data.admin.putFollower(follower);
+  await addFollower(recordsOf(context), follower);
 
   await context.sendActivity(
     { identifier: SITE_ACTOR_IDENTIFIER },
@@ -83,7 +85,7 @@ export async function handleUndo(context: SiteInboxContext, undo: Undo): Promise
   const follower = object.actorId;
   if (undoer === null || follower === null || undoer.href !== follower.href) return;
 
-  context.data.admin.deleteFollower(follower.href);
+  await removeFollower(recordsOf(context), follower.href);
 }
 
 /**
@@ -101,7 +103,7 @@ export async function handleDelete(context: SiteInboxContext, activity: Delete):
   const object = activity.objectId;
   if (actor === null || object === null || actor.href !== object.href) return;
 
-  context.data.admin.deleteFollower(object.href);
+  await removeFollower(recordsOf(context), object.href);
 }
 
 /**
@@ -159,13 +161,12 @@ export async function logActivity(context: SiteInboxContext, activity: Activity)
     contextLoader: context.contextLoader,
   });
 
-  context.data.admin.logInboxActivity({
-    activityId: activity.id?.href ?? null,
-    activityType: activityTypeName(activity),
-    actorId: actorId.href,
-    objectId: activity.objectId?.href ?? null,
-    json: JSON.stringify(json),
-  });
+  await appendInboxActivity(recordsOf(context), JSON.stringify(json));
+}
+
+/** The files this inbox writes, and the index over them. */
+function recordsOf(context: SiteInboxContext): FederationRecords {
+  return { admin: context.data.admin, contentDir: context.data.config.contentDir };
 }
 
 /**
@@ -213,19 +214,6 @@ function actorHandle(actor: Actor): string | null {
 function linkHref(value: URL | Link | null): string | null {
   if (value === null) return null;
   return value instanceof URL ? value.href : (value.href?.href ?? null);
-}
-
-/**
- * The short ActivityStreams type name — `Follow`, `Like`, `Announce` — that the
- * log stores.
- *
- * Taken from the type IRI rather than from the class name, which a bundler is
- * free to rename, or from the JSON, which spells a type outside the core
- * vocabulary as a full IRI.
- */
-function activityTypeName(activity: Activity): string {
-  const typeId = getTypeId(activity);
-  return typeId.hash === '' ? typeId.href : typeId.hash.slice(1);
 }
 
 /** The loaders a vocabulary getter needs to follow a link off this context. */

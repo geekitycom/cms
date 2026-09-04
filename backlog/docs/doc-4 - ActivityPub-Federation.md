@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 16:21'
+updated_date: '2026-09-04 17:11'
 ---
 # ActivityPub Federation
 
@@ -63,12 +63,12 @@ Handled in phase one:
 - `Delete` of an actor: remove follower.
 - `Accept` and `Reject`: the answer to a relay subscription, which is the only thing this site follows.
 
-Logged but not acted on: `Like`, `Announce`, `Create(Note)` replies. These are stored in an `ap_inbox` table so a later phase can surface likes, boosts, and comments. A `Create` that named an `inReplyTo` is also indexed by it, in an `in_reply_to` column derived from the stored activity rather than supplied — that index is what the comments feeds (doc-3) read, and deriving it is what keeps it correct when the database is rebuilt from the log files.
+Logged but not acted on: `Like`, `Announce`, `Create(Note)` replies. Every handled activity, the follow traffic included, is appended to `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` — one compact JSON-LD activity per line, prefixed with the `receivedAt` the log stamped it with, which is the one thing the activity cannot say for itself. The whole activity is kept so a later phase can surface likes, boosts, and comments without knowing in advance what it will want. The `ap_inbox` table is an index of that file, rebuilt from it on every boot: its columns — the activity id, type, actor, object, arrival time and the `in_reply_to` a `Create` named — are all derived from the line by one function that the live append and the rebuild both call, so a rebuilt row cannot say something the live one did not. That `in_reply_to` index is what the comments feeds (doc-3) read.
 
 ## Collections
 
 - Outbox: pages over non-draft posts, newest first, as `Create` activities.
-- Followers and following: from SQLite. Following is always empty: the relays the site follows are a subscription rather than a relationship anybody reads that collection to learn about.
+- Followers and following: from the `followers` index, which is rebuilt from `content/_data/federation/followers.json` on every boot. Following is always empty: the relays the site follows are a subscription rather than a relationship anybody reads that collection to learn about.
 - Featured, liked: not provided.
 
 ## Discovery
@@ -79,7 +79,7 @@ Logged but not acted on: `Like`, `Announce`, `Create(Note)` replies. These are s
 
 ## Storage
 
-Fedify needs a KV store and a message queue. Phase one uses `MemoryKvStore` and `InProcessMessageQueue` (see decision-5). Followers, keys, and the inbox log are ours and live in files (decision-9): `content/_data/federation/followers.json` and `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` are published with the site and exposed to Eleventy as data; the key pairs are JWK files under `data/keys/`. SQLite indexes the followers and the inbox log for paging and holds the delivery outcomes, and all of it is rebuilt from the files on boot.
+Fedify needs a KV store and a message queue. Phase one uses `MemoryKvStore` and `InProcessMessageQueue` (see decision-5). Followers, keys, and the inbox log are ours and live in files (decision-9): `content/_data/federation/followers.json` holds one object per follower — actor id, inbox, shared inbox, handle, name, icon, profile URL and follow time — oldest follow first, and `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` holds the inbound activities. Both are published with the site and reach an Eleventy build as `federation.followers` and `federation.inbox` (the monthly logs need a one-line `addDataExtension('jsonl', …)`, which the example config ships); the key pairs are JWK files under `data/keys/`. Every write takes a lock on the file it changes and updates the index before it lets go, so the two cannot disagree, and the whole file is replaced by rename so a reader never sees half of one. SQLite indexes the followers and the inbox log for paging and holds the delivery outcomes, and both indexes are emptied and rebuilt from the files on every boot — `rebuildFederationIndexes({ admin, contentDir })` is the function, and `geekity rebuild` will call the same one. A file that will not parse stops the boot, naming it: Fedify swallows what a dispatcher throws, so a bad file noticed at request time would be noticed by nobody.
 
 Redeliver means "resend the current state of the post": the activity is rebuilt from the file when the button is pressed, so a follower whose server was down ends up with the post as it is now rather than with the activity that failed.
 

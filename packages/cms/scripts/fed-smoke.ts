@@ -63,9 +63,10 @@ import { fileURLToPath } from 'node:url';
 
 import { serve } from '@hono/node-server';
 import { createFederation, generateCryptoKeyPair, MemoryKvStore } from '@fedify/fedify';
-import { Accept, Application, Create, Endpoints, Follow, isActor } from '@fedify/vocab';
+import { Accept, Application, Create, Endpoints, Follow, isActor, Like } from '@fedify/vocab';
 
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../src/admin/settings.ts';
+import { addFollower, readFollowers, readInboxLog } from '../src/federation/records.ts';
 import { createCms } from '../src/index.ts';
 import type { Cms } from '../src/index.ts';
 
@@ -200,17 +201,22 @@ async function main(): Promise<void> {
       poll: () => /Actor inbox:[^\n]*?(http:\/\/[^\s\u2502|]+)/.exec(cli.output())?.[1],
     });
     // Registered rather than followed: see the note at the top of the file
-    // about `fedify inbox --follow` and loopback. These are the columns an
-    // accepted `Follow` from that actor would have written.
-    cms.admin.putFollower({
-      actorId: cliActor,
-      inboxId: cliInbox,
-      sharedInboxId: null,
-      handle: null,
-      name: 'Fedify Ephemeral Inbox',
-      iconUrl: null,
-      url: null,
-    });
+    // about `fedify inbox --follow` and loopback. This is what an accepted
+    // `Follow` from that actor would have written — through the same
+    // `addFollower` the inbox handler calls, so the followers file is the one
+    // thing that decides who is delivered to here as well.
+    await addFollower(
+      { admin: cms.admin, contentDir },
+      {
+        actorId: cliActor,
+        inboxId: cliInbox,
+        sharedInboxId: null,
+        handle: null,
+        name: 'Fedify Ephemeral Inbox',
+        iconUrl: null,
+        url: null,
+      },
+    );
     ok(`the ephemeral inbox is ${cliActor}, delivering to ${cliInbox}`);
 
     // ------------------------------------------------------ a real Follow
@@ -232,6 +238,45 @@ async function main(): Promise<void> {
       poll: () => peer.received().find((activity) => activity.type === 'Accept'),
     });
     ok(`accepted a Follow from ${peer.actorId} and the peer got the Accept`);
+
+    // ------------------------------------------------- the followers file
+    // The follow that just crossed a socket has to be in the file the site
+    // publishes, not only in the index: decision-9 makes the file the source
+    // and the table a cache of it.
+    const followers = readFollowers(contentDir);
+    assert.deepEqual(
+      followers.map((entry) => entry.actorId).sort(),
+      [cliActor, peer.actorId].sort(),
+      'content/_data/federation/followers.json names both followers',
+    );
+    assert.equal(
+      followers.find((entry) => entry.actorId === peer.actorId)?.inboxId,
+      peer.inboxId,
+      'the file names the peer’s inbox',
+    );
+    ok('content/_data/federation/followers.json holds both followers');
+
+    // ----------------------------------------------------------- a Like
+    log('liking a published post from the peer');
+    await peer.like(actorUrl, objectUrl);
+    const liked = await waitFor({
+      what: 'the Like to reach the inbox log file',
+      poll: () =>
+        readInboxLog(contentDir).find((line) =>
+          (JSON.parse(line.json) as { type?: string }).type === 'Like' ? true : false,
+        ),
+    });
+    assert.equal(
+      (JSON.parse(liked.json) as { object?: string }).object,
+      objectUrl,
+      'the logged Like names the post it was about',
+    );
+    assert.equal(
+      cms.admin.listInboxActivities().find((entry) => entry.activityType === 'Like')?.objectId,
+      objectUrl,
+      'and the index says the same thing',
+    );
+    ok(`the Like is a line of content/_data/federation/inbox and a row of the index`);
 
     // ----------------------------------------------------------- the delivery
     log(`publishing ${PENDING_POST} into the watched content directory`);
@@ -494,6 +539,8 @@ interface Peer {
   sharedInboxId: string;
   /** Send a signed `Follow` to the actor at this URL. */
   follow(actorUrl: string): Promise<void>;
+  /** Send a signed `Like` of one object to the actor at this URL. */
+  like(actorUrl: string, objectUrl: string): Promise<void>;
   /** Everything its inbox has accepted, in arrival order. */
   received(): ReceivedActivity[];
   /** Stop listening. */
@@ -590,6 +637,22 @@ async function startPeer(port: number): Promise<Peer> {
           ),
           actor: context.getActorUri(PEER_IDENTIFIER),
           object: new URL(actorUrl),
+        }),
+      );
+    },
+    like: async (actorUrl: string, objectUrl: string) => {
+      const target = await context.lookupObject(actorUrl);
+      if (!isActor(target)) throw new Error(`the peer could not resolve ${actorUrl} as an actor`);
+      await context.sendActivity(
+        { identifier: PEER_IDENTIFIER },
+        target,
+        new Like({
+          id: new URL(
+            `#likes/${encodeURIComponent(objectUrl)}`,
+            context.getActorUri(PEER_IDENTIFIER),
+          ),
+          actor: context.getActorUri(PEER_IDENTIFIER),
+          object: new URL(objectUrl),
         }),
       );
     },

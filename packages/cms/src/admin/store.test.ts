@@ -639,6 +639,14 @@ describe('the reply index', () => {
     assert.equal(admin.countRepliesTo(POST), 2);
   });
 
+  it('keeps the arrival time it is given, so a rebuild puts the log’s own times back', async () => {
+    const admin = await store();
+
+    const logged = admin.logInboxActivity(reply({ receivedAt: '2026-09-03T10:00:00.000Z' }));
+
+    assert.equal(logged.receivedAt, '2026-09-03T10:00:00.000Z');
+  });
+
   it('backfills the index for activities logged before the column existed', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'geekity-admin-'));
     temporaryDirs.push(dir);
@@ -660,6 +668,93 @@ describe('the reply index', () => {
     openStores.push(after);
     assert.equal(after.listInboxActivities()[0]?.inReplyTo, POST);
     assert.equal(after.countRepliesTo(POST), 1);
+  });
+});
+
+describe('replacing an index from the files it is derived from', () => {
+  const REPLY_TARGET = 'https://blog.example/ap/posts/hello';
+
+  it('makes the followers exactly what it is handed, and nothing that was there before', async () => {
+    const admin = await store();
+    admin.putFollower({
+      actorId: 'https://remote.example/users/ghost',
+      inboxId: 'https://remote.example/users/ghost/inbox',
+      sharedInboxId: null,
+      handle: null,
+      name: null,
+      iconUrl: null,
+      url: null,
+    });
+
+    admin.replaceFollowers([
+      {
+        actorId: 'https://remote.example/users/ada',
+        inboxId: 'https://remote.example/users/ada/inbox',
+        sharedInboxId: null,
+        handle: '@ada@remote.example',
+        name: 'Ada Lovelace',
+        iconUrl: null,
+        url: null,
+        followedAt: '2026-09-01T10:00:00.000Z',
+      },
+    ]);
+
+    assert.deepEqual(
+      admin.listFollowers().map((follower) => follower.actorId),
+      ['https://remote.example/users/ada'],
+    );
+    assert.equal(admin.countFollowers(), 1);
+  });
+
+  it('makes the inbox log exactly what it is handed, with the ids starting again at one', async () => {
+    const admin = await store();
+    for (const index of [0, 1, 2]) {
+      admin.logInboxActivity({
+        activityId: `https://remote.example/likes/old-${String(index)}`,
+        activityType: 'Like',
+        actorId: 'https://remote.example/users/ada',
+        objectId: 'https://blog.example/ap/posts/hello',
+        json: '{"type":"Like"}',
+      });
+    }
+
+    admin.replaceInboxActivities([
+      {
+        activityId: 'https://remote.example/likes/1',
+        activityType: 'Like',
+        actorId: 'https://remote.example/users/ada',
+        objectId: 'https://blog.example/ap/posts/hello',
+        receivedAt: '2026-09-03T10:00:00.000Z',
+        json: '{"type":"Like"}',
+      },
+    ]);
+
+    const held = admin.listInboxActivities();
+    assert.equal(held.length, 1);
+    assert.equal(held[0]?.id, 1, 'the row ids are a function of the file, not of history');
+    assert.equal(held[0]?.activityId, 'https://remote.example/likes/1');
+    assert.equal(held[0]?.receivedAt, '2026-09-03T10:00:00.000Z');
+  });
+
+  it('derives what a rebuilt reply answers, exactly as the live write does', async () => {
+    const admin = await store();
+
+    admin.replaceInboxActivities([
+      {
+        activityId: 'https://remote.example/creates/1',
+        activityType: 'Create',
+        actorId: 'https://remote.example/users/ada',
+        objectId: 'https://remote.example/notes/1',
+        receivedAt: '2026-09-04T10:00:00.000Z',
+        json: JSON.stringify({
+          type: 'Create',
+          object: { id: 'https://remote.example/notes/1', inReplyTo: REPLY_TARGET },
+        }),
+      },
+    ]);
+
+    assert.equal(admin.listInboxActivities()[0]?.inReplyTo, REPLY_TARGET);
+    assert.equal(admin.countRepliesTo(REPLY_TARGET), 1);
   });
 });
 

@@ -158,10 +158,17 @@ export interface InboxActivity {
 }
 
 /**
- * An {@link InboxActivity} before the store has given it a row, a time and the
- * reply target it derives.
+ * An {@link InboxActivity} before the store has given it a row and the reply
+ * target it derives.
+ *
+ * `receivedAt` is optional and defaults to now, exactly as a follower's
+ * `followedAt` is: naming one is what lets the boot rebuild put the log's own
+ * arrival times back rather than stamping every activity with the moment the
+ * index was rebuilt.
  */
-export type NewInboxActivity = Omit<InboxActivity, 'id' | 'receivedAt' | 'inReplyTo'>;
+export type NewInboxActivity = Omit<InboxActivity, 'id' | 'receivedAt' | 'inReplyTo'> & {
+  receivedAt?: string | undefined;
+};
 
 /**
  * One activity this site sent, kept whole so it can be sent again.
@@ -378,6 +385,15 @@ export interface AdminStore {
   putFollower(follower: NewFollower): Follower;
   /** Forget a follower. Returns `false` when there was nothing to forget. */
   deleteFollower(actorId: string): boolean;
+  /**
+   * Make the followers index say exactly this, in one transaction.
+   *
+   * What a rebuild from `content/_data/federation/followers.json` calls
+   * (decision-9): the file is the source, so a row it does not carry is a row
+   * that should not be delivered to, and replacing the lot is the only way to
+   * say that. Nothing outside a rebuild should reach for it.
+   */
+  replaceFollowers(followers: readonly NewFollower[]): void;
   /** How many activities the inbound log holds. */
   countInboxActivities(): number;
   /** Logged activities, newest first, optionally one page of them. */
@@ -389,6 +405,17 @@ export interface AdminStore {
    * against.
    */
   logInboxActivity(activity: NewInboxActivity): InboxActivity;
+  /**
+   * Make the inbound log index say exactly this, in one transaction, with the
+   * row ids starting again from one.
+   *
+   * The counterpart of {@link AdminStore.replaceFollowers} over
+   * `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`. The ids restart
+   * because a row id is the order things arrived in and nothing else: letting
+   * them climb on every boot would give the same log different ids on two
+   * machines holding the same files.
+   */
+  replaceInboxActivities(activities: readonly NewInboxActivity[]): void;
   /** How many logged activities are replies to anything at all. */
   countReplies(): number;
   /** Every logged reply, newest first, optionally one page of them. */
@@ -515,6 +542,9 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         url = excluded.url
     `),
     deleteFollower: db.prepare('DELETE FROM followers WHERE actor_id = ?'),
+    clearFollowers: db.prepare('DELETE FROM followers'),
+    clearInboxActivities: db.prepare('DELETE FROM ap_inbox'),
+    resetInboxSequence: db.prepare("DELETE FROM sqlite_sequence WHERE name = 'ap_inbox'"),
     countInboxActivities: db.prepare('SELECT COUNT(*) AS count FROM ap_inbox'),
     listInboxActivities: db.prepare(`
       SELECT * FROM ap_inbox
@@ -605,6 +635,24 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
   };
 
   let open = true;
+
+  /**
+   * Run a body with every write in it committed together, or none of them.
+   *
+   * The rebuilds are what need it: emptying an index and filling it again is
+   * one step to everything reading it, and a half-emptied `followers` is a
+   * site that has quietly stopped delivering to half its followers.
+   */
+  function inTransaction(body: () => void): void {
+    db.exec('BEGIN');
+    try {
+      body();
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
 
   /**
    * The messages queued on a session. A column that will not parse is treated
@@ -713,6 +761,24 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return statements.deleteFollower.run(actorId).changes > 0;
     },
 
+    replaceFollowers(followers) {
+      inTransaction(() => {
+        statements.clearFollowers.run();
+        for (const follower of followers) {
+          statements.putFollower.run(
+            follower.actorId,
+            follower.inboxId,
+            follower.sharedInboxId,
+            follower.handle,
+            follower.name,
+            follower.iconUrl,
+            follower.url,
+            follower.followedAt ?? new Date().toISOString(),
+          );
+        }
+      });
+    },
+
     countInboxActivities() {
       const row = statements.countInboxActivities.get() as Record<string, unknown> | undefined;
       return Number(row?.['count'] ?? 0);
@@ -735,13 +801,33 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         // Derived here rather than passed in, so the column cannot say
         // something the stored activity does not.
         replyTargetOf(activity.json),
-        new Date().toISOString(),
+        activity.receivedAt ?? new Date().toISOString(),
         activity.json,
       ) as Record<string, unknown> | undefined;
       if (row === undefined) {
         throw new Error(`The activity "${activity.activityType}" was not written to the log.`);
       }
       return toInboxActivity(row);
+    },
+
+    replaceInboxActivities(activities) {
+      inTransaction(() => {
+        statements.clearInboxActivities.run();
+        // The AUTOINCREMENT high-water mark goes with the rows, so the same
+        // log always produces the same ids however many times it is rebuilt.
+        statements.resetInboxSequence.run();
+        for (const activity of activities) {
+          statements.logInboxActivity.run(
+            activity.activityId,
+            activity.activityType,
+            activity.actorId,
+            activity.objectId,
+            replyTargetOf(activity.json),
+            activity.receivedAt ?? new Date().toISOString(),
+            activity.json,
+          );
+        }
+      });
     },
 
     countReplies() {

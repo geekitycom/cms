@@ -232,7 +232,11 @@ live in `packages/cms/test/fixtures/content/`.
 ## The content index
 
 Markdown files are the source of truth; SQLite is a derived index over them, so
-deleting `data/geekity.db` is safe and the next boot rebuilds it.
+deleting `data/geekity.db` is safe and the next boot rebuilds it. The same is
+true of the two federation indexes: `content/_data/federation/followers.json`
+and `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` are the source, and the
+`followers` and `ap_inbox` tables are emptied and read back from them on every
+boot.
 `createCms` opens it against `dataDir` (creating the directory) and applies the
 migrations the package ships. Migrations are versioned and recorded, so
 applying them again does nothing.
@@ -295,7 +299,9 @@ debounced 100 ms so a burst of writes costs one re-parse.
 - **Underscore directories.** Eleventy ignores them and so does the scan, with
   one exception: `_trash/` still holds documents, which stay indexed as trashed
   and out of every public listing so the admin can restore them. `_data/` is
-  never indexed.
+  never indexed, however deep it goes — `_data/site.json` is the settings and
+  `_data/federation/` is the followers and the inbox log, and all three are
+  data a theme and an Eleventy build read rather than documents.
 - **No-op writes.** A file rewritten with the same content hashes the same, so
   nothing is written to the index and no event is emitted. That is what makes
   an admin save — which writes the file and updates the index itself — cost

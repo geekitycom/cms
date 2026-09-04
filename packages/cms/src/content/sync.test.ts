@@ -283,6 +283,11 @@ describe('a full scan', () => {
     const dir = await contentDir({
       'pages/about.md': markdown({ title: 'About', permalink: '/about/' }),
       '_data/site.json': '{"title":"Geekity"}',
+      // The federation files decision-9 publishes with the site. They live
+      // under `_data/` so a theme and an Eleventy build can read them, and the
+      // index must go on ignoring them however deep they nest.
+      '_data/federation/followers.json': '[]',
+      '_data/federation/inbox/2026-09.jsonl': '{"receivedAt":"2026-09-03T10:00:00Z"}\n',
       '_drafts/pages/secret.md': markdown({ title: 'Secret', permalink: '/secret/' }),
       '_includes/posts/partial.md': markdown({ title: 'Partial', permalink: '/partial/' }),
     });
