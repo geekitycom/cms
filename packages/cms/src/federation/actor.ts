@@ -9,8 +9,9 @@ import { absoluteUrl } from '../web/negotiate.ts';
 /**
  * The vocabulary class behind each of {@link ACTOR_TYPES}.
  *
- * The setting is a string, because it is a form field and a SQLite row; this
- * is where it becomes the class the actor document is built from.
+ * The setting is a string, because it is a form field and a key in
+ * `site.json`; this is where it becomes the class the actor document is built
+ * from.
  */
 export const ACTOR_CLASSES = {
   Person,

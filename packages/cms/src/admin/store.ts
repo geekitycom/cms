@@ -1,9 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { DATABASE_FILE } from '../content/store.ts';
+import { databaseFile, openDatabase } from '../cache.ts';
+import type { Migration } from '../cache.ts';
 import { REPLY_ACTIVITY_TYPE, replyTargetOf } from '../federation/replies.ts';
 
 /**
@@ -73,12 +72,13 @@ export const SESSION_ID_BYTES = 32;
 /**
  * A remote actor that follows this site.
  *
- * doc-4 keeps the followers in SQLite rather than in Fedify's KV store,
- * because they are the one thing an ActivityPub site cannot regenerate: an
- * actor that followed and was forgotten never hears from the site again and
- * has no way of noticing. The display columns are a copy of what the actor
- * said about itself when it followed, so the admin can list its followers
- * without dereferencing every one of them.
+ * The followers are irreplaceable — an actor that followed and was forgotten
+ * never hears from the site again and has no way of noticing — so
+ * `content/_data/federation/followers.json` is where they are kept
+ * (decision-9), and this row is the index of that file, emptied and read back
+ * on every boot. The display columns are a copy of what the actor said about
+ * itself when it followed, so the admin can list its followers without
+ * dereferencing every one of them.
  */
 export interface Follower {
   /** The follower's ActivityStreams id, which is what identifies it. */
@@ -275,13 +275,15 @@ export type NewRelay = Omit<Relay, 'createdAt' | 'updatedAt'> & {
 };
 
 /**
- * The auth half of the SQLite database: the data doc-1 says lives only there.
+ * Everything the database holds that is not the content index: the sessions,
+ * the followers and inbox indexes, the delivery outcomes, the relay handshake
+ * and the scheduler's watermark.
  *
- * It is deliberately not part of the {@link ContentStore}. That store is the
- * derived index over the Markdown files and can be deleted and rebuilt at any
- * time; users and sessions are the one thing in the database that cannot. They
- * share the file (one database per site, one set of migrations on boot) and
- * nothing else.
+ * All of it is a cache (decision-9). The followers and the inbox rows are read
+ * back from `content/_data/federation/` on every boot; the rest a site is free
+ * to lose, and the README says what losing it costs. It is deliberately not
+ * part of the {@link ContentStore}: the two share the file, one database per
+ * site with a migration ledger each, and nothing else.
  */
 export interface AdminStore {
   /** Absolute path of the SQLite file, the same one the content index uses. */
@@ -494,13 +496,8 @@ export interface AdminStore {
  * index holding a second one on the same file.
  */
 export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
-  const file = path.join(options.dataDir, DATABASE_FILE);
-  mkdirSync(options.dataDir, { recursive: true });
-
-  const db = new DatabaseSync(file);
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  migrate(db);
+  const file = databaseFile(options.dataDir);
+  const db = openDatabase({ dataDir: options.dataDir, ledger: LEDGER, migrations: MIGRATIONS });
 
   const statements = {
     deleteSessionsForUser: db.prepare('DELETE FROM sessions WHERE user_id = ? AND id IS NOT ?'),
@@ -1204,22 +1201,8 @@ export interface LegacyUser {
   createdAt: string;
 }
 
-/** One schema version: the statements it runs, and any backfill they need. */
-interface Migration {
-  /** Its place in the order, and its entry in the ledger. */
-  version: number;
-  /** The schema change itself. */
-  sql: string;
-  /**
-   * A backfill, run in the same transaction once {@link Migration.sql} has.
-   *
-   * For a column derived from something already stored: SQL can add the column
-   * and JavaScript can then fill it with exactly what the writer will put
-   * there, rather than with a second, subtly different expression of the same
-   * rule.
-   */
-  run?: (db: DatabaseSync) => void;
-}
+/** The table this store's applied versions are recorded in. */
+const LEDGER = 'admin_migrations';
 
 /**
  * Schema versions for the admin tables, applied in order. They keep their own
@@ -1539,36 +1522,3 @@ const MIGRATIONS: readonly Migration[] = [
     `,
   },
 ];
-
-function migrate(db: DatabaseSync): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS admin_migrations (
-      version    INTEGER PRIMARY KEY,
-      applied_at TEXT NOT NULL
-    )
-  `);
-
-  const applied = new Set(
-    db
-      .prepare('SELECT version FROM admin_migrations')
-      .all()
-      .map((row) => Number(row['version'])),
-  );
-
-  const record = db.prepare('INSERT INTO admin_migrations (version, applied_at) VALUES (?, ?)');
-
-  for (const migration of MIGRATIONS) {
-    if (applied.has(migration.version)) continue;
-
-    db.exec('BEGIN');
-    try {
-      db.exec(migration.sql);
-      migration.run?.(db);
-      record.run(migration.version, new Date().toISOString());
-      db.exec('COMMIT');
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
-  }
-}

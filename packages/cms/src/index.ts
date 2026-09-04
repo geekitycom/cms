@@ -11,6 +11,7 @@ import {
   readSiteSettings,
 } from './admin/index.ts';
 import type { AdminStore } from './admin/index.ts';
+import { withRebuiltDatabase } from './cache.ts';
 import { resolveConfig } from './config.ts';
 import type { DocumentChangeHook, GeekityConfig, ResolvedConfig } from './config.ts';
 import { createContentSync, createScheduler, openContentStore } from './content/index.ts';
@@ -281,6 +282,19 @@ export type {
   UploadResult,
   User,
 } from './admin/index.ts';
+
+// The database as a file a site may act on: where it is, how to throw it away,
+// and the two refusals a boot can raise over one. The migration machinery
+// behind them stays inside the package, because a site has no business running
+// somebody else's ledger.
+export {
+  databaseFile,
+  databaseFiles,
+  DATABASE_SUFFIXES,
+  discardDatabase,
+  OutdatedDatabaseError,
+  UnusableDatabaseError,
+} from './cache.ts';
 
 export {
   DEFAULT_IMAGE_FORMATS,
@@ -720,9 +734,12 @@ export interface Cms {
   /** The content index, opened against {@link ResolvedConfig.dataDir} on boot. */
   readonly store: ContentStore;
   /**
-   * Users and sessions, in the same database file as the index. This is the
-   * half of it that is not derived from the content directory, so it is the
-   * half a site has to back up.
+   * Everything in the database that is not the content index: the sessions,
+   * the followers and inbox indexes, the delivery outcomes, the relay
+   * handshake and the scheduler's watermark. In the same file as the index.
+   *
+   * All of it is derived or disposable (decision-9); the accounts and the
+   * actor's keys, which are not, are files under `dataDir`.
    */
   readonly admin: AdminStore;
   /**
@@ -820,17 +837,49 @@ export interface Cms {
 }
 
 /**
+ * The two connections a boot takes on the one database, opened together so
+ * that either both of them survive it or neither does.
+ *
+ * The database is a cache (decision-9), so a version of it this package cannot
+ * carry forward is thrown away and read back from the files rather than being
+ * a thing anybody has to do something about. That is what
+ * {@link withRebuiltDatabase} does with an {@link OutdatedDatabaseError} — and
+ * why the content store is closed before the admin store's failure is allowed
+ * to leave here: the file cannot be deleted while a connection holds it.
+ *
+ * The failure it does not recover from is a database written by a newer
+ * `@geekity/cms`, or one damaged past opening. Both refuse the boot naming the
+ * file, because a downgrade is usually a mistake and because a database from
+ * before decision-9 still carries the settings, key and account rows the
+ * migrations below write out as files — deleting one of those to get past an
+ * error would destroy an actor's private keys. `geekity rebuild` is the door
+ * for a person who has looked and decided.
+ */
+function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: AdminStore } {
+  return withRebuiltDatabase(resolved.dataDir, () => {
+    const store = openContentStore({ dataDir: resolved.dataDir, now: resolved.now });
+    try {
+      return { store, admin: openAdminStore({ dataDir: resolved.dataDir }) };
+    } catch (error) {
+      store.close();
+      throw error;
+    }
+  });
+}
+
+/**
  * Build a CMS around a site's config.
  *
  * The returned app is a plain Hono app: the public site, the admin UI and the
  * federation endpoints are all mounted on it as later milestones land. Booting
- * opens the SQLite index under `dataDir` (creating the directory) and applies
- * any migrations, so `close()` has to be called to release it.
+ * opens the SQLite cache under `dataDir` (creating the directory) and applies
+ * any migrations, so `close()` has to be called to release it. A missing
+ * database is built and read back out of the files; see {@link openCache} for
+ * what happens to one this version cannot use.
  */
 export function createCms(config: GeekityConfig = {}): Cms {
   const resolved = resolveConfig(config);
-  const store = openContentStore({ dataDir: resolved.dataDir, now: resolved.now });
-  const admin = openAdminStore({ dataDir: resolved.dataDir });
+  const { store, admin } = openCache(resolved);
 
   // A site upgrading from the version that kept its settings in SQLite has
   // rows nothing would read again: they become content/_data/site.json here,

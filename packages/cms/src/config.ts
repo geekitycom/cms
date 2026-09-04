@@ -195,7 +195,7 @@ export interface ResolvedConfig {
    * `default` means nobody named one and it is the `http://localhost:<port>`
    * fallback, which is what lets the admin's settings screen offer a base URL
    * of its own: an `environment` or `config` value is a deployment fact and
-   * wins over anything stored in SQLite.
+   * wins over the `url` in `content/_data/site.json`.
    */
   baseUrlSource: 'environment' | 'config' | 'default';
   watch: boolean;

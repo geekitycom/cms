@@ -1,12 +1,10 @@
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import type { StatementSync } from 'node:sqlite';
 
+import { databaseFile, openDatabase } from '../cache.ts';
+import type { Migration } from '../cache.ts';
 import type { ActivityPubMetadata, Document, DocumentType } from './document.ts';
 
-/** File name of the derived index inside a site's data directory. */
-export const DATABASE_FILE = 'geekity.db';
+export { DATABASE_FILE } from '../cache.ts';
 
 /** Directory name that marks a document as thrown away but not yet deleted. */
 export const TRASH_DIRECTORY = '_trash';
@@ -298,19 +296,15 @@ const FEDERATED_CLAUSE = `COALESCE(json_extract(activitypub, '$.id'), '') <> ''`
  * database does nothing.
  */
 export function openContentStore(options: OpenContentStoreOptions): ContentStore {
-  const file = path.join(options.dataDir, DATABASE_FILE);
   const clock = options.now ?? systemClock;
-  mkdirSync(options.dataDir, { recursive: true });
 
   /** The clock as the index sorts dates, so the two compare as strings. */
   function nowKey(): string {
     return clock().toISOString();
   }
 
-  const db = new DatabaseSync(file);
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  migrate(db);
+  const file = databaseFile(options.dataDir);
+  const db = openDatabase({ dataDir: options.dataDir, ledger: LEDGER, migrations: MIGRATIONS });
 
   const statements = {
     insert: db.prepare(`
@@ -773,12 +767,15 @@ function isUniqueViolation(error: unknown, column: string): boolean {
   return error.message.includes('UNIQUE constraint failed') && error.message.includes(column);
 }
 
+/** The table this store's applied versions are recorded in. */
+const LEDGER = 'migrations';
+
 /**
  * Schema versions, applied in order. Never edit a migration that has shipped;
  * append a new one, so a site that upgrades lands on the same schema as a site
  * that starts fresh.
  */
-const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
+const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
     sql: `
@@ -837,35 +834,3 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
     `,
   },
 ];
-
-function migrate(db: DatabaseSync): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS migrations (
-      version    INTEGER PRIMARY KEY,
-      applied_at TEXT NOT NULL
-    )
-  `);
-
-  const applied = new Set(
-    db
-      .prepare('SELECT version FROM migrations')
-      .all()
-      .map((row) => Number(row['version'])),
-  );
-
-  const record = db.prepare('INSERT INTO migrations (version, applied_at) VALUES (?, ?)');
-
-  for (const migration of MIGRATIONS) {
-    if (applied.has(migration.version)) continue;
-
-    db.exec('BEGIN');
-    try {
-      db.exec(migration.sql);
-      record.run(migration.version, new Date().toISOString());
-      db.exec('COMMIT');
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
-  }
-}
