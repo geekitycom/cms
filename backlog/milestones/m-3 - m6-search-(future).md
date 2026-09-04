@@ -1,6 +1,6 @@
 ---
 id: m-3
-title: "M5 Search (future)"
+title: "M6 Search (future)"
 ---
 
 ## Description
