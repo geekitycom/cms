@@ -9,6 +9,8 @@ import type { GeekityEnv } from '../env.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
 import type { SiteData } from '../web/context.ts';
+import { DEFAULT_TAXONOMY_BASES, taxonomyBaseProblems } from '../web/taxonomy.ts';
+import type { TaxonomyBases } from '../web/taxonomy.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
@@ -77,6 +79,14 @@ export interface SiteSettings {
   /** Which ActivityPub actor type the site is, one of {@link ACTOR_TYPES}. */
   actorType: string;
   /**
+   * The first URL segment the tag archives live under, `tag` by default: one
+   * URL-safe path segment, no slashes. WordPress's own base, so a site
+   * imported from it keeps every archive URL it published.
+   */
+  tagBase: string;
+  /** The same for the category archives, `category` by default. */
+  categoryBase: string;
+  /**
    * The site's avatar, as the public path the upload endpoint handed back —
    * `/uploads/2026/09/me.png` — or an absolute URL for one hosted elsewhere.
    * Empty when the site has none.
@@ -112,6 +122,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   actorHandle: 'blog',
   actorType: 'Person',
   avatar: '',
+  tagBase: DEFAULT_TAXONOMY_BASES.tag,
+  categoryBase: DEFAULT_TAXONOMY_BASES.category,
 };
 
 /** The form field each setting is submitted under. */
@@ -124,6 +136,8 @@ export const SETTINGS_FIELDS = {
   author: 'author',
   actorHandle: 'actor_handle',
   actorType: 'actor_type',
+  tagBase: 'tag_base',
+  categoryBase: 'category_base',
 } as const satisfies Record<SettingsField, string>;
 
 /** A submitted settings form, before it is known to be valid. */
@@ -152,7 +166,14 @@ export function readSiteSettings(store: AdminStore): SiteSettings {
       ? (stored['actorType'] as string)
       : DEFAULT_SITE_SETTINGS.actorType,
     avatar: stored['avatar'] ?? DEFAULT_SITE_SETTINGS.avatar,
+    tagBase: stored['tagBase'] ?? DEFAULT_SITE_SETTINGS.tagBase,
+    categoryBase: stored['categoryBase'] ?? DEFAULT_SITE_SETTINGS.categoryBase,
   };
+}
+
+/** The two archive bases the settings hold, as the URL builders want them. */
+export function taxonomyBasesFromSettings(settings: SiteSettings): TaxonomyBases {
+  return { tag: settings.tagBase, category: settings.categoryBase };
 }
 
 /** Write a whole settings object back to the store. */
@@ -167,6 +188,8 @@ export function writeSiteSettings(store: AdminStore, settings: SiteSettings): vo
     actorHandle: settings.actorHandle,
     actorType: settings.actorType,
     avatar: settings.avatar,
+    tagBase: settings.tagBase,
+    categoryBase: settings.categoryBase,
   });
 }
 
@@ -186,6 +209,8 @@ export function settingsSiteData(settings: SiteSettings): Partial<SiteData> {
     ...(settings.timezone === '' ? {} : { timezone: settings.timezone }),
     ...(settings.avatar === '' ? {} : { avatar: settings.avatar }),
     postsPerPage: settings.postsPerPage,
+    tagBase: settings.tagBase,
+    categoryBase: settings.categoryBase,
   };
 }
 
@@ -211,6 +236,8 @@ export function siteJsonFor(
     postsPerPage: settings.postsPerPage,
     timezone: settings.timezone,
     avatar: settings.avatar,
+    tagBase: settings.tagBase,
+    categoryBase: settings.categoryBase,
   };
 }
 
@@ -279,6 +306,12 @@ export function seedSiteSettings(options: {
       ? { timezone: file['timezone'] }
       : {}),
     ...(typeof file['avatar'] === 'string' ? { avatar: file['avatar'] } : {}),
+    ...(typeof file['tagBase'] === 'string' && file['tagBase'] !== ''
+      ? { tagBase: file['tagBase'] }
+      : {}),
+    ...(typeof file['categoryBase'] === 'string' && file['categoryBase'] !== ''
+      ? { categoryBase: file['categoryBase'] }
+      : {}),
     ...(Number.isInteger(postsPerPage) && postsPerPage > 0 ? { postsPerPage } : {}),
     // The file's `url` only becomes the setting when the deployment has not
     // named one; otherwise the setting records what is actually in effect.
@@ -338,6 +371,13 @@ export function settingsProblems(form: SettingsForm): SettingsProblems {
     problems.actorType = `An actor type is one of ${ACTOR_TYPES.join(', ')}.`;
   }
 
+  // The two archive bases are checked as a pair: two of the rules — that they
+  // differ, and that neither takes a path the site already answers on — are
+  // about the pair rather than either one.
+  const bases = taxonomyBaseProblems({ tag: form.tagBase, category: form.categoryBase });
+  if (bases.tag !== undefined) problems.tagBase = bases.tag;
+  if (bases.category !== undefined) problems.categoryBase = bases.category;
+
   return problems;
 }
 
@@ -363,6 +403,8 @@ export function settingsFromForm(
     author: form.author.trim(),
     actorHandle: form.actorHandle.trim(),
     actorType: form.actorType,
+    tagBase: form.tagBase.trim(),
+    categoryBase: form.categoryBase.trim(),
   };
 }
 
@@ -377,6 +419,8 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     author: settings.author,
     actorHandle: settings.actorHandle,
     actorType: settings.actorType,
+    tagBase: settings.tagBase,
+    categoryBase: settings.categoryBase,
   };
 }
 
@@ -419,6 +463,8 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       author: field(body[SETTINGS_FIELDS.author]),
       actorHandle: field(body[SETTINGS_FIELDS.actorHandle]),
       actorType: field(body[SETTINGS_FIELDS.actorType]),
+      tagBase: field(body[SETTINGS_FIELDS.tagBase]),
+      categoryBase: field(body[SETTINGS_FIELDS.categoryBase]),
     };
 
     const problems = settingsProblems(submitted);

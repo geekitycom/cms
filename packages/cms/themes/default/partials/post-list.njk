@@ -1,5 +1,5 @@
 {# A list of documents, newest first. Expects `posts`. #}
-{% import "partials/tags.njk" as taxonomy %}
+{% import "partials/tags.njk" as taxonomy with context %}
 {% if posts.length %}
 <ol class="post-list">
   {% for post in posts %}

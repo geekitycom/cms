@@ -2,7 +2,7 @@
 
 {% block title %}Tagged &ldquo;{{ tag }}&rdquo;{% if pagination.pageNumber > 0 %}, page {{ pagination.pageNumber + 1 }}{% endif %} &middot; {{ site.title }}{% endblock %}
 
-{% set tagRoot = "/tags/" + (tag | urlencode) + "/" %}
+{% set tagRoot = "/" + (site.tagBase or "tag") + "/" + (tag | urlencode) + "/" %}
 {% block alternates %}
 {{ super() }}
     <link rel="alternate" type="application/atom+xml" title="{{ site.title }}: {{ tag }}" href="{{ (tagRoot + "feed.xml") | url }}">

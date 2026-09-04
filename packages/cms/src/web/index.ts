@@ -22,6 +22,7 @@ export {
   documentContext,
   postsPerPage,
   SITE_DATA_FILE,
+  taxonomyBases,
 } from './context.ts';
 export type {
   CreateSiteDataSourceOptions,
@@ -89,17 +90,21 @@ export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
 export { createRenderer, TEMPLATES } from './render.ts';
 export type { CreateRendererOptions, Listing, Renderer } from './render.ts';
+export { feedHref, homeHref, mountPublicSite } from './routes.ts';
 export {
   categoryHref,
-  CATEGORY_SEGMENT,
-  feedHref,
-  homeHref,
-  mountPublicSite,
+  DEFAULT_TAXONOMY_BASES,
   PAGE_SEGMENT,
+  RESERVED_TOP_LEVEL_PATHS,
   tagHref,
-  TAG_SEGMENT,
+  TAXONOMIES,
+  TAXONOMY_BASE_PATTERN,
+  TAXONOMY_LABELS,
+  taxonomyBaseProblems,
+  taxonomyBasesOrDefault,
+  taxonomyForSegment,
   termHref,
-} from './routes.ts';
-export type { Taxonomy, TaxonomyTerm } from './routes.ts';
+} from './taxonomy.ts';
+export type { Taxonomy, TaxonomyBaseProblems, TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 export { createTemplateEnvironment, formatDate, PACKAGED_THEME_DIR } from './templates.ts';
 export type { CreateTemplateEnvironmentOptions, DateFormat } from './templates.ts';

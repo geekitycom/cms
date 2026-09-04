@@ -11,10 +11,11 @@ import {
 } from '@fedify/vocab';
 import { Temporal as TemporalPolyfill } from '@js-temporal/polyfill';
 
+import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import { isPublicDocument } from '../web/documents.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
-import { categoryHref, tagHref } from '../web/routes.ts';
+import { categoryHref, tagHref } from '../web/taxonomy.ts';
 import type { FederationContextData } from './federation.ts';
 import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
 import { createActivityId, deleteActivityId, updateActivityId } from './paths.ts';
@@ -48,6 +49,9 @@ export function isFederatedDocument(document: Document): boolean {
  */
 export function postArticle(context: Context<FederationContextData>, document: Document): Article {
   const { baseUrl } = context.data.config;
+  // The archives an activity points at are wherever the site currently serves
+  // them, which is a setting rather than a constant (TASK-36).
+  const bases = taxonomyBasesFromSettings(readSiteSettings(context.data.admin));
 
   return new Article({
     id: articleObjectId(context, document),
@@ -66,9 +70,9 @@ export function postArticle(context: Context<FederationContextData>, document: D
     // hashtag has no reason to care which of the two a term came from, and
     // each one points at the archive the site serves for it.
     tags: [
-      ...document.tags.map((tag) => hashtag(tag, tagHref(tag, 0), baseUrl)),
+      ...document.tags.map((tag) => hashtag(tag, tagHref(tag, 0, bases), baseUrl)),
       ...document.categories.map((category) =>
-        hashtag(category, categoryHref(category, 0), baseUrl),
+        hashtag(category, categoryHref(category, 0, bases), baseUrl),
       ),
     ],
   });

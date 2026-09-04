@@ -127,7 +127,7 @@ published post, so a layout that overrides the block and does not call
 two feeds:
 
 ```njk
-{% set tagRoot = "/tags/" + (tag | urlencode) + "/" %}
+{% set tagRoot = "/" + (site.tagBase or "tag") + "/" + (tag | urlencode) + "/" %}
 {% block alternates %}
 {{ super() }}
 <link rel="alternate" type="application/atom+xml" href="{{ (tagRoot + "feed.xml") | url }}">
@@ -146,13 +146,17 @@ Category archives have no feeds of their own yet.
 to the archives, and nothing at all for an empty list:
 
 ```njk
-{% import "partials/tags.njk" as taxonomy %}
+{% import "partials/tags.njk" as taxonomy with context %}
 {{ taxonomy.categories(categories) }}
 {{ taxonomy.list(tags) }}
 ```
 
-`list` links to `/tags/{tag}/` and `categories` to `/category/{category}/`,
-which is where the CMS serves each archive.
+`list` links to `/{{ site.tagBase }}/{tag}/` and `categories` to
+`/{{ site.categoryBase }}/{category}/`, which is where the CMS serves each
+archive. Both bases are settings — `tag` and `category` until the settings
+screen says otherwise — and they reach a template through `site`, which is why
+the import above carries `with context`: a macro imported without it cannot see
+`site` and would fall back to the defaults.
 
 ## Filters
 

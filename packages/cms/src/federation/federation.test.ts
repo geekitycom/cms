@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { writeSiteSettings } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteSettings } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
 import { openAdminStore } from '../admin/store.ts';
 import type { NewFollower } from '../admin/store.ts';
@@ -46,6 +46,7 @@ async function site(settings: Partial<SiteSettings> = {}): Promise<Cms> {
 
   const seed = openAdminStore({ dataDir });
   writeSiteSettings(seed, {
+    ...DEFAULT_SITE_SETTINGS,
     title: 'Geekity',
     tagline: 'A file-first CMS',
     baseUrl: BASE_URL,

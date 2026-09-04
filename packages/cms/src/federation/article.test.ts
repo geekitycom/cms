@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { writeSiteSettings } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteSettings } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
 import { openAdminStore } from '../admin/store.ts';
 import { renderMarkdown } from '../content/markdown.ts';
@@ -59,6 +59,7 @@ async function site(
 
   const seed = openAdminStore({ dataDir });
   writeSiteSettings(seed, {
+    ...DEFAULT_SITE_SETTINGS,
     title: 'Geekity',
     tagline: 'A file-first CMS',
     baseUrl: BASE_URL,
@@ -184,10 +185,34 @@ describe('the post object', () => {
     assert.deepEqual(
       list.map((tag) => [tag.type, tag.name, tag.href]),
       [
-        ['Hashtag', '#notes', `${BASE_URL}/tags/notes/`],
-        ['Hashtag', '#meta', `${BASE_URL}/tags/meta/`],
+        ['Hashtag', '#notes', `${BASE_URL}/tag/notes/`],
+        ['Hashtag', '#meta', `${BASE_URL}/tag/meta/`],
         ['Hashtag', '#general', `${BASE_URL}/category/general/`],
       ],
+    );
+  });
+
+  it('points its hashtags at the bases the site is configured with (AC #5)', async () => {
+    const instance = await site(HELLO, { tagBase: 'topics', categoryBase: 'filed' });
+
+    const article = (await (
+      await get(instance, '/ap/posts/hello', ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+
+    const tags = article['tag'];
+    const list = (Array.isArray(tags) ? tags : [tags]) as { href?: string }[];
+    assert.deepEqual(
+      list.map((tag) => tag.href),
+      [`${BASE_URL}/topics/notes/`, `${BASE_URL}/topics/meta/`, `${BASE_URL}/filed/general/`],
+    );
+
+    const outbox = (await (
+      await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+    const page = await fetchLink(instance, outbox['first']);
+    assert.ok(
+      JSON.stringify(page).includes(`${BASE_URL}/topics/notes/`),
+      'the outbox carries the same archive URLs',
     );
   });
 
@@ -440,7 +465,7 @@ describe('the HTML post page', () => {
       }),
     });
 
-    for (const pathname of ['/about/', '/', '/tags/notes/']) {
+    for (const pathname of ['/about/', '/', '/tag/notes/']) {
       const html = await (await get(instance, pathname, 'text/html')).text();
       assert.ok(
         !html.includes('application/activity+json'),
@@ -488,6 +513,7 @@ describe('a site in a subdirectory', () => {
 
     const seed = openAdminStore({ dataDir });
     writeSiteSettings(seed, {
+      ...DEFAULT_SITE_SETTINGS,
       title: 'Geekity',
       tagline: '',
       baseUrl: 'https://example.com/blog',

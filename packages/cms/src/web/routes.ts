@@ -36,32 +36,8 @@ import type { ConditionalHeaders, Representation } from './negotiate.ts';
 import { offsetForPage, paginate } from './pagination.ts';
 import type { Pagination } from './pagination.ts';
 import { TEMPLATES } from './render.ts';
-
-/** Where a paginated listing's later pages live, under any listing root. */
-export const PAGE_SEGMENT = 'page';
-
-/** Root of the tag archives. */
-export const TAG_SEGMENT = 'tags';
-
-/** Root of the category archives. */
-export const CATEGORY_SEGMENT = 'category';
-
-/** Which taxonomy an archive is over. */
-export type Taxonomy = 'tag' | 'category';
-
-/** One archive: a taxonomy and the term whose documents it lists. */
-export interface TaxonomyTerm {
-  /** `tag` or `category`. */
-  taxonomy: Taxonomy;
-  /** The term itself, as the file spells it. */
-  term: string;
-}
-
-/** The URL segment each taxonomy's archives live under. */
-const TAXONOMY_SEGMENTS: Readonly<Record<Taxonomy, string>> = {
-  tag: TAG_SEGMENT,
-  category: CATEGORY_SEGMENT,
-};
+import { PAGE_SEGMENT, tagHref, taxonomyForSegment, termHref } from './taxonomy.ts';
+import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
 /**
  * Register the public site on a Hono app.
@@ -91,40 +67,36 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   app.get(`/${FEED_FILES.atom}`, (c) => feed(c, 'atom', undefined));
   app.get(`/${FEED_FILES.json}`, (c) => feed(c, 'json', undefined));
 
-  app.get(`/${TAG_SEGMENT}/:tag/${FEED_FILES.atom}`, (c) => feed(c, 'atom', c.req.param('tag')));
-  app.get(`/${TAG_SEGMENT}/:tag/${FEED_FILES.json}`, (c) => feed(c, 'json', c.req.param('tag')));
-
-  // The two taxonomies are the same archive over two tables, so they are
-  // registered from one loop and can never drift apart.
-  for (const taxonomy of ['tag', 'category'] as const) {
-    const segment = TAXONOMY_SEGMENTS[taxonomy];
-
-    app.get(`/${segment}/:term/`, (c) =>
-      listing(c, { term: { taxonomy, term: c.req.param('term') }, pageNumber: 0 }),
-    );
-
-    app.get(`/${segment}/:term/${PAGE_SEGMENT}/:page{[0-9]+}/`, (c) => {
-      const term: TaxonomyTerm = { taxonomy, term: c.req.param('term') };
-      const requested = Number(c.req.param('page'));
-      if (requested <= 1) return c.redirect(termHref(term, 0), 301);
-      return listing(c, { term, pageNumber: requested - 1 });
-    });
-  }
-
-  app.notFound(resolveDocument);
+  // The taxonomy archives are deliberately not routes. A route table is fixed
+  // when the app is built and the bases are a setting, so an archive is
+  // resolved per request in the not-found handler, from the base the site
+  // holds at that moment (TASK-36).
+  app.notFound(resolveRequest);
 }
 
 /**
- * The last stop for a request: the document at this URL, the same document in
- * the representation a `.md` or `.json` suffix asked for, the canonical URL it
- * should have asked for, or the theme's 404.
+ * The last stop for a request: a taxonomy archive or one of its feeds, the
+ * document at this URL, the same document in the representation a `.md` or
+ * `.json` suffix asked for, the canonical URL it should have asked for, or the
+ * theme's 404.
  *
- * The suffix is stripped and the *same* {@link publicDocumentAt} lookup runs
- * again, so no representation can resolve to a document the others cannot see.
+ * The archives come first, so an archive URL means the archive however a
+ * document is permalinked; they are here rather than in the route table
+ * because their bases are a setting, and a route table is fixed when the app
+ * is built. The suffix is stripped and the *same* {@link publicDocumentAt}
+ * lookup runs again, so no representation can resolve to a document the others
+ * cannot see.
  */
-function resolveDocument(c: Context<GeekityEnv>): Response {
-  const { store } = c.var;
+function resolveRequest(c: Context<GeekityEnv>): Response {
+  const { store, renderer } = c.var;
   const pathname = requestPath(c);
+  const bases = renderer.taxonomyBases();
+
+  const taxonomyFeed = parseTaxonomyFeedPath(pathname, bases);
+  if (taxonomyFeed !== undefined) return feed(c, taxonomyFeed.format, taxonomyFeed.term.term);
+
+  const archive = taxonomyArchive(c, pathname, bases);
+  if (archive !== undefined) return archive;
 
   const document = publicDocumentAt(store, pathname);
   if (document !== undefined) {
@@ -138,21 +110,79 @@ function resolveDocument(c: Context<GeekityEnv>): Response {
       if (found !== undefined) return negotiateDocument(c, found, extension.representation);
     }
 
-    // `/index.json`, `/page/2/index.json`, `/tags/x/index.json`,
+    // `/index.json`, `/page/2/index.json`, `/tag/x/index.json`,
     // `/category/x/index.json`: the same escape hatch over a listing, for the
     // representations a listing has.
     if (LISTING_REPRESENTATIONS.includes(extension.representation)) {
       for (const candidate of extension.paths) {
-        const request = parseListingPath(candidate);
+        const request = parseListingPath(candidate, bases);
         if (request !== undefined) return listing(c, request, extension.representation);
       }
     }
   }
 
-  const canonical = canonicalPath(c, pathname);
+  const canonical = canonicalPath(c, pathname, bases);
   if (canonical !== undefined) return c.redirect(canonical, 301);
 
   return notFound(c);
+}
+
+/**
+ * One taxonomy archive, the redirect that puts it at its canonical URL, or
+ * `undefined` when the path is not one.
+ *
+ * `/{base}/x/page/1/` collapses onto the archive root the way `/page/1/`
+ * collapses onto the home page, and an archive nothing carries 404s rather
+ * than redirecting first: a URL that leads nowhere should cost one 404, not a
+ * redirect and then a 404.
+ */
+function taxonomyArchive(
+  c: Context<GeekityEnv>,
+  pathname: string,
+  bases: TaxonomyBases,
+): Response | undefined {
+  if (!pathname.endsWith('/')) return undefined;
+
+  const request = parseListingPath(pathname, bases);
+  if (request?.term === undefined) return undefined;
+
+  const canonical = termHref(request.term, request.pageNumber, bases);
+  if (canonical !== encodePath(pathname)) {
+    return countListing(c.var.store, request.term) === 0 ? notFound(c) : c.redirect(canonical, 301);
+  }
+
+  return listing(c, request);
+}
+
+/** One taxonomy archive's feed, from the URL it is served at. */
+interface TaxonomyFeedRequest {
+  /** Whose archive the feed syndicates. */
+  term: TaxonomyTerm;
+  /** Which format the URL asked for. */
+  format: FeedFormat;
+}
+
+/**
+ * `/{tagBase}/x/feed.xml` and its JSON twin, as a feed to serve.
+ *
+ * Only the tag archives have feeds; the category archives get theirs with the
+ * rest of the WordPress feed URLs (TASK-37).
+ */
+function parseTaxonomyFeedPath(
+  pathname: string,
+  bases: TaxonomyBases,
+): TaxonomyFeedRequest | undefined {
+  for (const [format, file] of Object.entries(FEED_FILES) as [FeedFormat, string][]) {
+    if (!pathname.endsWith(`/${file}`)) continue;
+
+    const root = parseListingPath(pathname.slice(0, -file.length), bases);
+    if (root === undefined || root.term === undefined || root.pageNumber !== 0) continue;
+    if (root.term.taxonomy !== 'tag') continue;
+
+    return { term: root.term, format };
+  }
+
+  return undefined;
 }
 
 /** The representation an `Accept` header asked for, or `undefined` for a 406. */
@@ -217,17 +247,25 @@ function conditionalHeaders(c: Context<GeekityEnv>): ConditionalHeaders {
  * itself rather than the path with a slash bolted on, so `/page/1` lands on
  * `/` in one hop instead of two.
  */
-function canonicalPath(c: Context<GeekityEnv>, pathname: string): string | undefined {
+function canonicalPath(
+  c: Context<GeekityEnv>,
+  pathname: string,
+  bases: TaxonomyBases,
+): string | undefined {
   if (pathname === '' || pathname.endsWith('/')) return undefined;
 
-  const target = canonicalTarget(c, `${pathname}/`);
+  const target = canonicalTarget(c, `${pathname}/`, bases);
   if (target === undefined) return undefined;
 
   return `${target}${new URL(c.req.url).search}`;
 }
 
 /** Where a path with a trailing slash canonically lives, if anywhere. */
-function canonicalTarget(c: Context<GeekityEnv>, pathname: string): string | undefined {
+function canonicalTarget(
+  c: Context<GeekityEnv>,
+  pathname: string,
+  bases: TaxonomyBases,
+): string | undefined {
   const { store, renderer } = c.var;
 
   const document = store.getByPermalink(pathname);
@@ -235,7 +273,7 @@ function canonicalTarget(c: Context<GeekityEnv>, pathname: string): string | und
     return isPublicDocument(document) ? encodePath(pathname) : undefined;
   }
 
-  const listing = parseListingPath(pathname);
+  const listing = parseListingPath(pathname, bases);
   if (listing === undefined) return undefined;
 
   // The home listing exists even with nothing on it; a taxonomy archive does not.
@@ -245,7 +283,7 @@ function canonicalTarget(c: Context<GeekityEnv>, pathname: string): string | und
   const totalPages = Math.max(1, Math.ceil(total / renderer.pageSize()));
   if (listing.pageNumber >= totalPages) return undefined;
 
-  return listingHref(listing.term, listing.pageNumber);
+  return listingHref(listing.term, listing.pageNumber, bases);
 }
 
 /** Which page of which listing a request is for. */
@@ -260,7 +298,7 @@ interface ListingRequest {
  * `/`, `/page/N/`, and either taxonomy's `/{base}/x/` and `/{base}/x/page/N/`,
  * as a listing to check.
  */
-function parseListingPath(pathname: string): ListingRequest | undefined {
+function parseListingPath(pathname: string, bases: TaxonomyBases): ListingRequest | undefined {
   const segments = pathname.split('/').filter((segment) => segment !== '');
 
   if (segments.length === 0) return { term: undefined, pageNumber: 0 };
@@ -270,7 +308,7 @@ function parseListingPath(pathname: string): ListingRequest | undefined {
     return page === undefined ? undefined : { term: undefined, pageNumber: page };
   }
 
-  const taxonomy = taxonomyForSegment(segments[0]);
+  const taxonomy = taxonomyForSegment(segments[0], bases);
   if (taxonomy === undefined || segments[1] === undefined) return undefined;
   const term: TaxonomyTerm = { taxonomy, term: segments[1] };
 
@@ -278,14 +316,6 @@ function parseListingPath(pathname: string): ListingRequest | undefined {
   if (segments.length === 4 && segments[2] === PAGE_SEGMENT) {
     const page = pageIndex(segments[3]);
     return page === undefined ? undefined : { term, pageNumber: page };
-  }
-  return undefined;
-}
-
-/** The taxonomy a first URL segment names, or `undefined` when it names none. */
-function taxonomyForSegment(segment: string | undefined): Taxonomy | undefined {
-  for (const taxonomy of ['tag', 'category'] as const) {
-    if (TAXONOMY_SEGMENTS[taxonomy] === segment) return taxonomy;
   }
   return undefined;
 }
@@ -309,8 +339,8 @@ function listListing(
 }
 
 /** The URL of a page of a listing: the home archive's, or a taxonomy's. */
-function listingHref(term: TaxonomyTerm | undefined, index: number): string {
-  return term === undefined ? homeHref(index) : termHref(term, index);
+function listingHref(term: TaxonomyTerm | undefined, index: number, bases: TaxonomyBases): string {
+  return term === undefined ? homeHref(index) : termHref(term, index, bases);
 }
 
 /**
@@ -332,18 +362,19 @@ function listing(
   const { store, renderer } = c.var;
   const { term } = request;
   const size = renderer.pageSize();
+  const bases = renderer.taxonomyBases();
 
   // A taxonomy archive only exists while something carries the term; the home
   // listing exists even with nothing on it.
   const total = countListing(store, term);
   if (term !== undefined && total === 0) return notFound(c);
 
-  const href = listingHref(term, request.pageNumber);
+  const href = listingHref(term, request.pageNumber, bases);
   const pagination = paginate({
     total,
     size,
     pageNumber: request.pageNumber,
-    hrefForPage: (index) => listingHref(term, index),
+    hrefForPage: (index) => listingHref(term, index, bases),
   });
 
   if (request.pageNumber >= pagination.totalPages) return notFound(c);
@@ -428,6 +459,7 @@ function listingFingerprint(
 function feed(c: Context<GeekityEnv>, format: FeedFormat, tag: string | undefined): Response {
   const { store, renderer, config } = c.var;
   const site = renderer.site();
+  const bases = renderer.taxonomyBases();
 
   if (tag !== undefined && store.countByTag(tag) === 0) return notFound(c);
 
@@ -436,13 +468,13 @@ function feed(c: Context<GeekityEnv>, format: FeedFormat, tag: string | undefine
       ? store.listPosts({ limit: feedSize(site) })
       : store.listByTag(tag, { limit: feedSize(site) });
 
-  const href = tag === undefined ? homeHref(0) : tagHref(tag, 0);
+  const href = tag === undefined ? homeHref(0) : tagHref(tag, 0, bases);
   const source: FeedSource = {
     site,
     documents,
     title: tag === undefined ? site.title : `${site.title}: ${tag}`,
     href,
-    feedHref: feedHref(tag, format),
+    feedHref: feedHref(tag, format, bases),
     baseUrl: config.baseUrl,
   };
 
@@ -492,28 +524,6 @@ export function homeHref(index: number): string {
   return index === 0 ? '/' : `/${PAGE_SEGMENT}/${String(index + 1)}/`;
 }
 
-/** The URL of a page of a tag archive, by zero-based index. */
-export function tagHref(tag: string, index: number): string {
-  return termHref({ taxonomy: 'tag', term: tag }, index);
-}
-
-/** The URL of a page of a category archive, by zero-based index. */
-export function categoryHref(category: string, index: number): string {
-  return termHref({ taxonomy: 'category', term: category }, index);
-}
-
-/**
- * The URL of a page of either taxonomy's archive, by zero-based index.
- *
- * This is the one place a taxonomy archive URL is spelled, so the routes, the
- * pager, the canonical redirect, the theme links and the ActivityStreams
- * hashtags cannot disagree about where an archive lives.
- */
-export function termHref(term: TaxonomyTerm, index: number): string {
-  const root = `/${TAXONOMY_SEGMENTS[term.taxonomy]}/${encodeURIComponent(term.term)}/`;
-  return index === 0 ? root : `${root}${PAGE_SEGMENT}/${String(index + 1)}/`;
-}
-
 /**
  * What the theme is told about a taxonomy archive: the term under the name of
  * its taxonomy, and the layout that taxonomy uses.
@@ -529,8 +539,14 @@ function taxonomyContext(term: TaxonomyTerm): {
 }
 
 /** The URL of a feed: the whole archive's, or one tag's. */
-export function feedHref(tag: string | undefined, format: FeedFormat): string {
-  return tag === undefined ? `/${FEED_FILES[format]}` : `${tagHref(tag, 0)}${FEED_FILES[format]}`;
+export function feedHref(
+  tag: string | undefined,
+  format: FeedFormat,
+  bases: TaxonomyBases,
+): string {
+  return tag === undefined
+    ? `/${FEED_FILES[format]}`
+    : `${tagHref(tag, 0, bases)}${FEED_FILES[format]}`;
 }
 
 /** The theme's 404 page. */

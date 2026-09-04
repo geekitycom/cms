@@ -171,8 +171,8 @@ describe('a single document', () => {
     assert.match(response.headers.get('content-type') ?? '', /text\/html/);
     assert.ok(html.includes('Hello, World!'), 'the title is on the page');
     assert.ok(html.includes('2026-09-02'), 'the date is on the page');
-    assert.ok(html.includes('/tags/introductions/'), 'the first tag links to its archive');
-    assert.ok(html.includes('/tags/eleventy/'), 'the second tag links to its archive');
+    assert.ok(html.includes('/tag/introductions/'), 'the first tag links to its archive');
+    assert.ok(html.includes('/tag/eleventy/'), 'the second tag links to its archive');
     assert.ok(
       html.includes('<h2 id="what-it-does">What it does</h2>'),
       'the body HTML is rendered rather than escaped',
@@ -254,7 +254,7 @@ describe('a tag archive', () => {
   it('lists the posts carrying that tag and nothing else', async () => {
     const { cms } = await site(tagged);
 
-    const response = await cms.app.request('/tags/eleventy/');
+    const response = await cms.app.request('/tag/eleventy/');
     const html = await response.text();
 
     assert.equal(response.status, 200);
@@ -275,21 +275,21 @@ describe('a tag archive', () => {
       }),
     });
 
-    const html = await (await cms.app.request('/tags/eleventy/')).text();
+    const html = await (await cms.app.request('/tag/eleventy/')).text();
 
     assert.ok(!html.includes('href="/hidden/"'), 'the draft is not listed');
   });
 
-  it('paginates, at /tags/{tag}/page/N/', async () => {
+  it('paginates, at /tag/{tag}/page/N/', async () => {
     const { cms } = await site({
       ...tagged,
       '_data/site.json': JSON.stringify({ title: 'Paged', postsPerPage: 1 }),
     });
 
-    const first = await (await cms.app.request('/tags/eleventy/')).text();
-    assert.ok(first.includes('href="/tags/eleventy/page/2/"'), 'page one links to page two');
+    const first = await (await cms.app.request('/tag/eleventy/')).text();
+    assert.ok(first.includes('href="/tag/eleventy/page/2/"'), 'page one links to page two');
 
-    const second = await cms.app.request('/tags/eleventy/page/2/');
+    const second = await cms.app.request('/tag/eleventy/page/2/');
     assert.equal(second.status, 200);
     assert.ok(
       (await second.text()).includes('href="/more-notes/"'),
@@ -300,7 +300,96 @@ describe('a tag archive', () => {
   it('404s a tag nothing carries', async () => {
     const { cms } = await site(tagged);
 
-    assert.equal((await cms.app.request('/tags/nobody-uses-this/')).status, 404);
+    assert.equal((await cms.app.request('/tag/nobody-uses-this/')).status, 404);
+  });
+
+  it('is not at the old /tags/ base', async () => {
+    const { cms } = await site(tagged);
+
+    assert.equal((await cms.app.request('/tags/eleventy/')).status, 404);
+  });
+});
+
+describe('the taxonomy bases', () => {
+  const filed = {
+    'posts/notes.md': post('Notes', {
+      date: '2026-09-03T09:00:00Z',
+      permalink: '/notes/',
+      tags: ['eleventy'],
+      categories: ['general'],
+    }),
+    'posts/more.md': post('More notes', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/more-notes/',
+      tags: ['eleventy'],
+      categories: ['general'],
+    }),
+  };
+
+  /** The same content with the bases named in `content/_data/site.json`. */
+  async function based(bases: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+    return await site({
+      ...filed,
+      '_data/site.json': JSON.stringify({ title: 'Based', ...bases, ...extra }),
+    });
+  }
+
+  it('moves both archives when the site names its own', async () => {
+    const { cms } = await based({ tagBase: 'topics', categoryBase: 'filed-under' });
+
+    assert.equal((await cms.app.request('/topics/eleventy/')).status, 200);
+    assert.equal((await cms.app.request('/filed-under/general/')).status, 200);
+    assert.equal((await cms.app.request('/tag/eleventy/')).status, 404);
+    assert.equal((await cms.app.request('/category/general/')).status, 404);
+  });
+
+  it('moves the paging, the canonical redirect and the JSON listing with them', async () => {
+    const { cms } = await based(
+      { tagBase: 'topics', categoryBase: 'filed-under' },
+      {
+        postsPerPage: 1,
+      },
+    );
+
+    const first = await (await cms.app.request('/topics/eleventy/')).text();
+    assert.ok(first.includes('href="/topics/eleventy/page/2/"'), 'page one links to page two');
+    assert.equal((await cms.app.request('/topics/eleventy/page/2/')).status, 200);
+
+    const redirect = await cms.app.request('/topics/eleventy');
+    assert.equal(redirect.status, 301);
+    assert.equal(redirect.headers.get('location'), '/topics/eleventy/');
+
+    const collapsed = await cms.app.request('/topics/eleventy/page/1/');
+    assert.equal(collapsed.status, 301);
+    assert.equal(collapsed.headers.get('location'), '/topics/eleventy/');
+
+    const json = await cms.app.request('/topics/eleventy/index.json');
+    assert.equal(json.status, 200);
+  });
+
+  it('moves the tag feeds and the links the theme renders', async () => {
+    const { cms } = await based({ tagBase: 'topics', categoryBase: 'filed-under' });
+
+    assert.equal((await cms.app.request('/topics/eleventy/feed.xml')).status, 200);
+    assert.equal((await cms.app.request('/topics/eleventy/feed.json')).status, 200);
+    assert.equal((await cms.app.request('/tag/eleventy/feed.xml')).status, 404);
+
+    const archive = await (await cms.app.request('/topics/eleventy/')).text();
+    assert.ok(
+      archive.includes('href="/topics/eleventy/feed.xml"'),
+      'the archive advertises its feed',
+    );
+
+    const article = await (await cms.app.request('/notes/')).text();
+    assert.ok(article.includes('href="/topics/eleventy/"'), 'the tag link follows the base');
+    assert.ok(article.includes('href="/filed-under/general/"'), 'the category link follows too');
+  });
+
+  it('ignores a base that could not work and serves the default instead', async () => {
+    const { cms } = await based({ tagBase: 'admin', categoryBase: 'a/b' });
+
+    assert.equal((await cms.app.request('/tag/eleventy/')).status, 200);
+    assert.equal((await cms.app.request('/category/general/')).status, 200);
   });
 });
 
@@ -340,7 +429,7 @@ describe('a category archive', () => {
   it('is a different archive from the tag of the same name', async () => {
     const { cms } = await site(filed);
 
-    assert.equal((await cms.app.request('/tags/general/')).status, 404);
+    assert.equal((await cms.app.request('/tag/general/')).status, 404);
     assert.equal((await cms.app.request('/category/eleventy/')).status, 404);
   });
 
@@ -449,7 +538,7 @@ describe('canonical URLs', () => {
     const { cms } = await site(files);
 
     for (const [requested, canonical] of [
-      ['/tags/eleventy', '/tags/eleventy/'],
+      ['/tag/eleventy', '/tag/eleventy/'],
       ['/page/1', '/'],
     ] as const) {
       const response = await cms.app.request(requested);
@@ -619,7 +708,7 @@ describe('overriding one template', () => {
     for (const [url, marker] of [
       ['/', 'site-header'],
       ['/about/', 'page-body'],
-      ['/tags/eleventy/', 'Tagged'],
+      ['/tag/eleventy/', 'Tagged'],
       ['/nothing-here/', 'Not found'],
     ] as const) {
       const response = await cms.app.request(url);

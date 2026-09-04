@@ -107,7 +107,7 @@ describe('the demo content', () => {
   it('keeps the draft off the site', async () => {
     assert.equal((await get('/2026/09/a-draft-nobody-can-see/')).status, 404);
     assert.doesNotMatch(await text('/'), /A draft nobody can see/);
-    assert.doesNotMatch(await text('/tags/theme/'), /A draft nobody can see/);
+    assert.doesNotMatch(await text('/tag/theme/'), /A draft nobody can see/);
     assert.doesNotMatch(await text('/category/general/'), /A draft nobody can see/);
   });
 

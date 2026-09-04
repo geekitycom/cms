@@ -9,7 +9,7 @@ import { CryptographicKey, Endpoints, Image, Person } from '@fedify/vocab';
 
 import { csrfField, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { writeSiteSettings } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteSettings } from '../admin/settings.ts';
 import { openAdminStore } from '../admin/store.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
@@ -160,6 +160,7 @@ async function site(
 
   const seed = openAdminStore({ dataDir });
   writeSiteSettings(seed, {
+    ...DEFAULT_SITE_SETTINGS,
     title: 'Geekity',
     tagline: 'A file-first CMS',
     baseUrl: BASE_URL,
@@ -686,6 +687,8 @@ describe('the site’s own profile', () => {
       author: 'Ada',
       actor_handle: 'blog',
       actor_type: 'Person',
+      tag_base: 'tag',
+      category_base: 'category',
     };
 
     assert.equal(

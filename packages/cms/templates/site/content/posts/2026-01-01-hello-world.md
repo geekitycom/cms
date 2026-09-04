@@ -23,7 +23,7 @@ deleting it is safe and the next boot rebuilds it.
 
 ## Two things to try
 
-Add a tag to the front matter above and reload `/tags/introductions/`. Then ask
+Add a tag to the front matter above and reload `/tag/introductions/`. Then ask
 this page for its other representations:
 
 ```sh
