@@ -409,7 +409,10 @@ things have to agree before anything is written — the extension is on the
 site's allowlist, the media type the browser declared is one that extension may
 have, and the file's first bytes are that format's — and a file that is too
 big gets a 413 and one of the wrong type a 415, both as JSON. See
-[`uploadMaxBytes` and `uploadTypes`](#configuration).
+[`uploadMaxBytes` and `uploadTypes`](#configuration). The same rules run behind
+[the media library](#the-media-library), which is a form rather than a `fetch`,
+so a body over the limit posted from a browser gets that 413 as plain text
+instead.
 
 Both endpoints are behind the admin's guard and need the session's CSRF token,
 like every other POST in the admin.
@@ -441,6 +444,37 @@ frames its own preview. There is no inline script in the admin, so `script-src`
 is a bare `'self'`. The public site gets none of that, so a theme is free to
 reference whatever it likes. The package README has
 [the whole table and the reasoning](packages/cms/README.md#security-headers).
+
+## The media library
+
+`/admin/media` is everything under `content/uploads`, newest first: a thumbnail
+for a picture and its extension for anything else, the size, the date, the
+public URL, the ready-made Markdown, and the documents that point at the file.
+The list is the directory itself, walked on every request rather than read out
+of a table — the filesystem is the truth (decision-1, decision-9) — so a file
+copied in over ssh, pulled in by git or written by an Eleventy build is on the
+screen without a restart, and one deleted the same way is off it.
+
+The upload form on the screen goes through the same `storeUpload` the editor's
+"Add file…" and the avatar do, so what a site accepts is one answer given in
+one place: the same allowlist, the same signature check, the same
+`{yyyy}/{mm}/{slug}{ext}`, and the same refusals.
+
+The URL and the Markdown are readonly text fields, which select and copy like
+any other text. `packages/cms/admin/static/copy.js` adds a Copy button beside
+each of them and does nothing else; the buttons are rendered hidden and the
+script reveals them, so a browser with JavaScript switched off — or an insecure
+origin, where there is no clipboard API — is never shown a button that would
+not work.
+
+Delete is two steps when it needs to be. A file nothing references goes
+straight away. A file a document still points at brings back a page naming
+every document that does, each linked to its editor and marked when it is in
+the trash, and only a confirmed form deletes it — deleting the bytes does not
+change the documents, and a trashed post can be restored tomorrow. Whatever was
+derived from the file goes with it, which is the hook the image variants hang
+on. The paths the form carries are resolved against `content/uploads` and
+refused if they land outside it.
 
 ## Site settings
 
