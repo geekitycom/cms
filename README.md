@@ -328,16 +328,18 @@ Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
 
 `createCms` mounts the public site on the app:
 
-| Route                  | What it serves                                                                |
-| ---------------------- | ----------------------------------------------------------------------------- |
-| `/`                    | Published posts, newest first.                                                |
-| `/page/2/` and up      | Later pages of the same archive.                                              |
-| a document's permalink | The post or the page, through the theme.                                      |
-| `/tag/{tag}/`          | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`.    |
-| `/category/{name}/`    | The second taxonomy, paginated the same way at `/category/{name}/page/2/`.    |
-| `/theme/…`             | The theme's own files, from its `static/` directory, cacheable and validated. |
-| `/uploads/…`           | Files under `content/uploads/`, at the URLs an Eleventy build copies them to. |
-| anything else          | The theme's 404.                                                              |
+| Route                  | What it serves                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `/`                    | Published posts, newest first.                                                 |
+| `/page/2/` and up      | Later pages of the same archive.                                               |
+| a document's permalink | The post or the page, through the theme.                                       |
+| `/tag/{tag}/`          | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`.     |
+| `/category/{name}/`    | The second taxonomy, paginated the same way at `/category/{name}/page/2/`.     |
+| `/feed/`               | The recent posts as RSS 2.0; `/feed/atom/` and `/feed/json/` are its siblings. |
+| an archive's `feed/`   | The same three over one tag or category, e.g. `/tag/{tag}/feed/atom/`.         |
+| `/theme/…`             | The theme's own files, from its `static/` directory, cacheable and validated.  |
+| `/uploads/…`           | Files under `content/uploads/`, at the URLs an Eleventy build copies them to.  |
+| anything else          | The theme's 404.                                                               |
 
 Drafts and documents in the trash 404 and appear in no listing. Trailing
 slashes are canonical, and a request that arrives without one redirects 301 —
@@ -397,8 +399,8 @@ like every other POST in the admin.
 ## Site settings
 
 `/admin/settings` holds the values doc-1 keeps only in SQLite: title, tagline,
-base URL, time zone, posts per page, the tag and category archive bases, the
-ActivityPub actor handle and type, and the site's avatar.
+base URL, time zone, language, posts per page, the tag and category archive
+bases, the ActivityPub actor handle and type, and the site's avatar.
 They live in a `settings` table of key and value, alongside the users and
 sessions in the same database file, and they are the half of it that is not
 derived from the content directory.
@@ -414,7 +416,7 @@ renders with the same values and never sees a half-written file. A hand edit of
 the file after that point is overwritten by the next save.
 
 The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
-`timezone`, `avatar`, `tagBase` and `categoryBase`, and every other key it
+`timezone`, `language`, `avatar`, `tagBase` and `categoryBase`, and every other key it
 already had is kept — a site may put
 anything in there, `feedSize` included, and reach it from its templates. The
 theme reads the settings on top of the file, so a saved title is on the public
@@ -429,6 +431,7 @@ back with a 400 and one message under each field that has one:
 | Title          | Not empty.                                                                         |
 | Base URL       | An absolute `http://` or `https://` URL. See [Configuration](#configuration).      |
 | Time zone      | An IANA zone name `Intl` knows, such as `Europe/London`.                           |
+| Language       | A BCP 47 tag, such as `en` or `en-GB`. It is the page's `lang` and the feeds'.     |
 | Posts per page | A whole number of one or more. It is what the home page and tag archives page by.  |
 | Tag base       | One URL-safe path segment. See below.                                              |
 | Category base  | The same, and not the same word as the tag base.                                   |
@@ -445,7 +448,7 @@ one path segment — up to 64 letters, digits, dashes or underscores, starting
 with a letter or a digit — the two may not be the same word, and neither may
 take a path the site already answers on: `page`, `feed`, `admin`, `ap`,
 `theme`, `uploads` or `nodeinfo`. Saving one moves the archive, its paging, its
-tag feeds, every link the theme renders and the `Hashtag` hrefs on the
+feeds, every link the theme renders and the `Hashtag` hrefs on the
 ActivityStreams `Article` on the next request; the old base 404s.
 
 The avatar is not one of those fields, because it is a file: it has a pair of

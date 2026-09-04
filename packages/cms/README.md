@@ -519,17 +519,17 @@ admin.close();
 
 Booting mounts the public site on the app. The routes are:
 
-| Route                                         | What it serves                                                             |
-| --------------------------------------------- | -------------------------------------------------------------------------- |
-| `/`                                           | Published posts, newest first.                                             |
-| `/page/2/` and up                             | Later pages of the same archive.                                           |
-| a document's permalink                        | The post or the page, through the theme.                                   |
-| `/tag/{tag}/`                                 | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`. |
-| `/category/{name}/`                           | The second taxonomy, paginated the same way.                               |
-| `/feed.xml`, `/feed.json`                     | The recent posts as Atom and JSON Feed.                                    |
-| `/tag/{tag}/feed.xml`, `/tag/{tag}/feed.json` | The same, for one tag.                                                     |
-| `/theme/…`                                    | The theme's own files, from its `static/` directory.                       |
-| anything else                                 | The theme's 404.                                                           |
+| Route                                   | What it serves                                                             |
+| --------------------------------------- | -------------------------------------------------------------------------- |
+| `/`                                     | Published posts, newest first.                                             |
+| `/page/2/` and up                       | Later pages of the same archive.                                           |
+| a document's permalink                  | The post or the page, through the theme.                                   |
+| `/tag/{tag}/`                           | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`. |
+| `/category/{name}/`                     | The second taxonomy, paginated the same way.                               |
+| `/feed/`, `/feed/atom/`, `/feed/json/`  | The recent posts as RSS 2.0, Atom and JSON Feed.                           |
+| `/tag/{tag}/feed/` and its two siblings | The same, for one tag; `/category/{name}/feed/` likewise.                  |
+| `/theme/…`                              | The theme's own files, from its `static/` directory.                       |
+| anything else                           | The theme's 404.                                                           |
 
 Drafts and documents in the trash are not on the public site: their URLs 404,
 and they are in no listing.
@@ -680,17 +680,28 @@ federation middleware before the negotiator sees them.
 
 ## Feeds
 
-The recent posts are syndicated in two formats, at fixed URLs:
+The recent posts are syndicated in three formats, at the URLs WordPress uses,
+so a site moving off it keeps every subscriber it had:
 
-| URL                    | Format                                  |
-| ---------------------- | --------------------------------------- |
-| `/feed.xml`            | Atom 1.0 (`application/atom+xml`)       |
-| `/feed.json`           | JSON Feed 1.1 (`application/feed+json`) |
-| `/tag/{tag}/feed.xml`  | The same tag archive, as Atom           |
-| `/tag/{tag}/feed.json` | The same tag archive, as JSON Feed      |
+| URL                      | Format                                           |
+| ------------------------ | ------------------------------------------------ |
+| `/feed/`                 | RSS 2.0 (`application/rss+xml`)                  |
+| `/feed/atom/`            | Atom 1.0 (`application/atom+xml`)                |
+| `/feed/json/`            | JSON Feed 1.1 (`application/feed+json`)          |
+| `/tag/{tag}/feed/`       | One tag archive, in RSS; `atom/` and `json/` too |
+| `/category/{name}/feed/` | One category archive, the same three             |
+
+`/feed/` is RSS because that is the format nearly every existing subscriber
+holds. The two archive bases are settings (`tagBase`, `categoryBase`), so the
+per-archive feeds follow wherever the archives live.
+
+WordPress's older spellings redirect `301` rather than 404: `/feed/rss/` to
+`/feed/`, and the query forms `?feed=rss2`, `?feed=rss`, `?feed=atom` and
+`?feed=json` on any listing to that listing's feed. A feed URL that arrives
+without its trailing slash redirects to the canonical one in a single hop.
 
 A feed holds the newest published posts, newest first. Drafts, documents in the
-trash and pages are never in one, and a tag nothing published carries 404s
+trash and pages are never in one, and a term nothing published carries 404s
 rather than serving an empty feed. `feedSize` in `content/_data/site.json` sets
 how many entries a feed holds; without it a feed holds 20, which is deliberately
 more than an archive page, so a reader that polls once a day does not miss a
@@ -700,56 +711,97 @@ post on a site that publishes several.
 { "title": "My Site", "tagline": "Notes", "author": "Me", "feedSize": 20 }
 ```
 
+### RSS 2.0
+
+The channel carries `title`, `link`, `description` (the tagline), `language`
+(the `language` setting, `en` by default), `lastBuildDate`, `generator`, an
+`atom:link rel="self"`, and an `image` built from the avatar when the site has
+one.
+
+An item carries `title`, `link`, `guid isPermaLink="false"`, `pubDate` in
+RFC 822, `dc:creator` from the post's author or the site's, one `category` per
+category and per tag, `description` holding an excerpt, `content:encoded`
+holding the whole rendered post, and `source:markdown` holding the Markdown the
+post was written from.
+
+The `guid` is the post's ActivityStreams object id rather than its permalink.
+That id is minted from the slug and written into the front matter on the first
+delivery, so it survives the post being moved and a reader that has already
+shown the item will not show it again.
+
+The excerpt is the `description` front matter when the post has one, and
+otherwise the first paragraph of the rendered body, stripped to plain text and
+cut at 55 words — WordPress's own excerpt length.
+
+`source:markdown` is Dave Winer's [source namespace][source-ns]: a reader that
+understands Markdown should render from it rather than from `content:encoded`.
+It is the same text the ActivityStreams `Article` carries as its `source`.
+
+[source-ns]: https://source.scripting.com/
+
+### Atom and JSON Feed
+
 An Atom entry carries `id` (the post's absolute URL), `title`, `updated`,
 `published`, `link rel="alternate"`, an `author` when the front matter names
 one, a `category` per tag, a `summary` when the front matter has a
 `description`, and the whole rendered post as `content type="html"`. The feed
 itself carries `id`, `title`, `subtitle` from the site's tagline, `updated`,
-`link rel="self"`, `link rel="alternate"` to the HTML page and a `generator`.
-The XML is written by this package rather than by a library, and everything
-that goes into it is escaped.
+`link rel="self"`, `link rel="alternate"` to the HTML page, a `generator` and an
+`xml:lang` from the `language` setting.
 
 A JSON Feed item carries `id`, `url`, `title`, `content_html`, `summary`,
 `date_published`, `date_modified`, `tags` and `authors`; the feed carries
 `version`, `title`, `home_page_url`, `feed_url`, `description` and `authors`.
 Keys with nothing behind them are left out rather than sent empty.
 
-Both feeds carry `ETag`, `Last-Modified` and `Cache-Control: no-cache`, and
-answer `If-None-Match` and `If-Modified-Since` with `304`. The validator covers
-the feed's metadata as well as its entries, and the two formats and the two
-scopes each get their own, so a reader holding the Atom feed is never told the
-JSON one is unchanged. Feeds are validated even while `watch` is on, because a
-feed is not rendered through the theme.
+The XML is written by this package rather than by a library. Text is escaped;
+`content:encoded` and `source:markdown` are CDATA sections, with any `]]>` in
+the text split across two sections so it cannot end one early.
+
+### Caching and discovery
+
+Every feed carries `ETag`, `Last-Modified` and `Cache-Control: no-cache`, and
+answers `If-None-Match` and `If-Modified-Since` with `304`. The validator covers
+the feed's metadata as well as its entries, and each format and each scope gets
+its own, so a reader holding the RSS feed is never told the Atom one is
+unchanged. Feeds are validated even while `watch` is on, because a feed is not
+rendered through the theme.
 
 ```sh
-curl -i https://example.com/feed.xml
-curl -i https://example.com/tag/releases/feed.json
+curl -i https://example.com/feed/
+curl -i https://example.com/tag/releases/feed/json/
 ```
 
-Every page of the default theme advertises both feeds in its `<head>`, and a
-tag archive advertises that tag's two feeds as well. A theme that does not
-extend `layouts/base.njk` should emit them itself:
+Every page of the default theme advertises all three feeds in its `<head>`, RSS
+first, and an archive advertises that archive's three as well. A theme that does
+not extend `layouts/base.njk` should emit them itself:
 
 ```html
 <link
   rel="alternate"
+  type="application/rss+xml"
+  title="My Site"
+  href="/feed/"
+/>
+<link
+  rel="alternate"
   type="application/atom+xml"
   title="My Site"
-  href="/feed.xml"
+  href="/feed/atom/"
 />
 <link
   rel="alternate"
   type="application/feed+json"
   title="My Site"
-  href="/feed.json"
+  href="/feed/json/"
 />
 ```
 
 The builders are exported, so a site can write a feed of its own — one
-category, one author — without reimplementing either format:
+category, one author — without reimplementing any of the three formats:
 
 ```ts
-import { atomFeed, createRenderer, jsonFeed } from '@geekity/cms';
+import { atomFeed, createRenderer, jsonFeed, rssFeed } from '@geekity/cms';
 
 const site = createRenderer({ config: cms.config }).site();
 
@@ -758,10 +810,11 @@ const source = {
   documents: cms.store.listByTag('releases', { limit: 20 }),
   title: `${site.title}: releases`,
   href: '/tag/releases/',
-  feedHref: '/tag/releases/feed.xml',
+  feedHref: '/tag/releases/feed/',
   baseUrl: cms.config.baseUrl,
 };
 
+rssFeed(source); // a string
 atomFeed(source); // a string
 jsonFeed(source); // a JSON Feed object
 ```
@@ -854,9 +907,9 @@ Layouts are yours. The directory data files name them — `posts.json` says
 Eleventy layout receives is the one this package's theme mirrors, so a layout
 can often be moved across with only its `{% extends %}` removed.
 
-The feeds are the one thing that does not carry over: `/feed.xml` and
-`/feed.json` are generated in code here, not by a template, so an Eleventy build
-needs its own. Everything else is the same directory.
+The feeds are the one thing that does not carry over: `/feed/`, `/feed/atom/`
+and `/feed/json/` are generated in code here, not by a template, so an Eleventy
+build needs its own. Everything else is the same directory.
 
 ### The compatibility test
 

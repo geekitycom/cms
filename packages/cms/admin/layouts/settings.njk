@@ -47,6 +47,11 @@
     {% if problems.timezone %}<p class="admin-field-error">{{ problems.timezone }}</p>{% endif %}
     <p class="admin-hint">An IANA name, such as <code>Europe/London</code> or <code>UTC</code>.</p>
 
+    <label for="settings-language">Language</label>
+    <input id="settings-language" name="{{ fields.language }}" type="text" value="{{ form.language }}" required />
+    {% if problems.language %}<p class="admin-field-error">{{ problems.language }}</p>{% endif %}
+    <p class="admin-hint">A BCP 47 tag, such as <code>en</code> or <code>en-GB</code>. It is the page's <code>lang</code> and the feeds' language.</p>
+
     <label for="settings-posts-per-page">Posts per page</label>
     <input id="settings-posts-per-page" name="{{ fields.postsPerPage }}" type="text" inputmode="numeric" value="{{ form.postsPerPage }}" required />
     {% if problems.postsPerPage %}<p class="admin-field-error">{{ problems.postsPerPage }}</p>{% endif %}

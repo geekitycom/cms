@@ -9,7 +9,7 @@
     content     the page body
     footer      the site footer
     scripts     scripts at the end of <body>
-#}<!doctype html>
+#}{% import "partials/feeds.njk" as feeds %}<!doctype html>
 <html lang="{{ site.language | default("en") }}">
   <head>
     <meta charset="utf-8">
@@ -21,8 +21,7 @@
     <link rel="canonical" href="{{ (page.url or "/") | absoluteUrl }}">
     <link rel="stylesheet" href="{{ "/theme/style.css" | url }}">
     {% block alternates %}
-    <link rel="alternate" type="application/atom+xml" title="{{ site.title }}" href="{{ "/feed.xml" | url }}">
-    <link rel="alternate" type="application/feed+json" title="{{ site.title }}" href="{{ "/feed.json" | url }}">
+    {{ feeds.feedLinks("/", site.title) }}
     {% if activityStreams %}
     <link rel="alternate" type="application/activity+json" href="{{ activityStreams }}">
     {% endif %}

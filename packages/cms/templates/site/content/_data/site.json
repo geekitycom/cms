@@ -3,6 +3,7 @@
   "tagline": "Markdown on disk, served straight",
   "url": "http://localhost:3000",
   "author": "You",
+  "language": "en",
   "postsPerPage": 10,
   "feedSize": 20
 }

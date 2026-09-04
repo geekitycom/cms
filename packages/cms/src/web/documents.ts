@@ -31,11 +31,28 @@ export function publicDocumentAt(store: ContentStore, permalink: string): Docume
  * The ActivityStreams id of a document, or `undefined` when it has none.
  *
  * Only a published post federates (doc-4), so only a published post has an id
- * to advertise. This is what the theme's `<link rel="alternate">` points at,
- * and it is deliberately the same string the object dispatcher answers under:
- * the page and the object agree about the post's name in the fediverse.
+ * to advertise. This is what the theme's `<link rel="alternate">` points at
+ * and what the RSS feed's `<guid isPermaLink="false">` names, and it is
+ * deliberately the same string the object dispatcher answers under: the page,
+ * the feed item and the object all agree about the post's name in the
+ * fediverse.
+ *
+ * The id written into the front matter on the first delivery wins over the one
+ * the slug implies, exactly as federation's `articleObjectId` prefers it: that
+ * is what makes the name survive a rename, which is the whole reason a `guid`
+ * is not the permalink. A hand-written `activitypub.id` that is not a URL is
+ * not an id, and the derived one is used instead.
  */
 export function activityStreamsId(document: Document, baseUrl: string): string | undefined {
   if (document.type !== 'post' || !isPublicDocument(document)) return undefined;
+
+  const stored = document.activitypub?.id;
+  if (stored !== undefined && stored !== '') {
+    try {
+      return new URL(stored).href;
+    } catch {
+      // Not a URL, so not an id. Fall through to the derived one.
+    }
+  }
   return postObjectId(document.slug, baseUrl);
 }

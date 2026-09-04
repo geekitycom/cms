@@ -18,7 +18,14 @@ import {
   UPLOAD_ASSET_PREFIX,
 } from './assets.ts';
 import { isPublicDocument, publicDocumentAt } from './documents.ts';
-import { feedResponse, feedSize, FEED_FILES } from './feeds.ts';
+import {
+  feedPathUnder,
+  feedResponse,
+  feedSize,
+  splitFeedPath,
+  FEED_FORMATS,
+  FEED_SEGMENTS,
+} from './feeds.ts';
 import type { FeedFormat, FeedSource } from './feeds.ts';
 import {
   DOCUMENT_REPRESENTATIONS,
@@ -36,7 +43,7 @@ import type { ConditionalHeaders, Representation } from './negotiate.ts';
 import { offsetForPage, paginate } from './pagination.ts';
 import type { Pagination } from './pagination.ts';
 import { TEMPLATES } from './render.ts';
-import { PAGE_SEGMENT, tagHref, taxonomyForSegment, termHref } from './taxonomy.ts';
+import { PAGE_SEGMENT, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
 /**
@@ -60,12 +67,14 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
     return listing(c, { term: undefined, pageNumber: requested - 1 });
   });
 
-  // Feeds are routes rather than representations, so a reader's careless
-  // `Accept` header cannot land it on the HTML (doc-3). They are registered
-  // before the tag archive so the shape of the URL, not the negotiator,
-  // decides what comes back.
-  app.get(`/${FEED_FILES.atom}`, (c) => feed(c, 'atom', undefined));
-  app.get(`/${FEED_FILES.json}`, (c) => feed(c, 'json', undefined));
+  // The site's own feeds are routes rather than representations, so a reader's
+  // careless `Accept` header cannot land it on the HTML (doc-3), and so a
+  // document permalinked at `/feed/` cannot take the subscribers' URL. Their
+  // paths are fixed — only the taxonomy feeds hang off a configurable base —
+  // so the route table can hold them.
+  for (const format of FEED_FORMATS) {
+    app.get(feedPathUnder('/', format), (c) => feed(c, format, undefined));
+  }
 
   // The taxonomy archives are deliberately not routes. A route table is fixed
   // when the app is built and the bases are a setting, so an archive is
@@ -92,8 +101,13 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   const pathname = requestPath(c);
   const bases = renderer.taxonomyBases();
 
-  const taxonomyFeed = parseTaxonomyFeedPath(pathname, bases);
-  if (taxonomyFeed !== undefined) return feed(c, taxonomyFeed.format, taxonomyFeed.term.term);
+  const feedRequest = parseFeedPath(pathname, bases);
+  if (feedRequest !== undefined) {
+    if (!feedRequest.canonical) {
+      return c.redirect(feedHref(feedRequest.term, feedRequest.format, bases), 301);
+    }
+    return feed(c, feedRequest.format, feedRequest.term);
+  }
 
   const archive = taxonomyArchive(c, pathname, bases);
   if (archive !== undefined) return archive;
@@ -154,35 +168,48 @@ function taxonomyArchive(
   return listing(c, request);
 }
 
-/** One taxonomy archive's feed, from the URL it is served at. */
-interface TaxonomyFeedRequest {
-  /** Whose archive the feed syndicates. */
-  term: TaxonomyTerm;
+/** One feed, from the URL it was asked for at. */
+interface FeedRequest {
+  /** Whose archive the feed syndicates, or `undefined` for the whole site. */
+  term: TaxonomyTerm | undefined;
   /** Which format the URL asked for. */
   format: FeedFormat;
+  /** Whether the URL is the canonical spelling; a WordPress alias is not. */
+  canonical: boolean;
 }
 
 /**
- * `/{tagBase}/x/feed.xml` and its JSON twin, as a feed to serve.
+ * A path as the feed it names: `/feed/`, `/feed/atom/`, `/{base}/x/feed/json/`
+ * and the `/feed/rss/` spelling WordPress also answered.
  *
- * Only the tag archives have feeds; the category archives get theirs with the
- * rest of the WordPress feed URLs (TASK-37).
+ * The site's own canonical feeds are real routes and never reach here; what
+ * does reach here is every taxonomy feed — their bases are a setting, so they
+ * cannot be in the route table — and every alias.
  */
-function parseTaxonomyFeedPath(
-  pathname: string,
-  bases: TaxonomyBases,
-): TaxonomyFeedRequest | undefined {
-  for (const [format, file] of Object.entries(FEED_FILES) as [FeedFormat, string][]) {
-    if (!pathname.endsWith(`/${file}`)) continue;
+function parseFeedPath(pathname: string, bases: TaxonomyBases): FeedRequest | undefined {
+  const split = splitFeedPath(pathname);
+  if (split === undefined) return undefined;
 
-    const root = parseListingPath(pathname.slice(0, -file.length), bases);
-    if (root === undefined || root.term === undefined || root.pageNumber !== 0) continue;
-    if (root.term.taxonomy !== 'tag') continue;
+  const root = parseListingPath(split.root, bases);
+  // Only a listing root has a feed, and only its first page: a feed is not
+  // paginated, so `/{base}/x/page/2/feed/` names nothing.
+  if (root === undefined || root.pageNumber !== 0) return undefined;
 
-    return { term: root.term, format };
-  }
+  return { term: root.term, format: split.format, canonical: split.canonical };
+}
 
-  return undefined;
+/**
+ * The format `?feed=` asked for, WordPress's pre-permalink spelling, or
+ * `undefined` when the request did not ask for a feed at all.
+ *
+ * `rss2` is what WordPress calls RSS 2.0 and `rss` its RSS 0.92, which this
+ * site does not serve and answers with the RSS 2.0 feed rather than a 404.
+ */
+function queryFeedFormat(c: Context<GeekityEnv>): FeedFormat | undefined {
+  const asked = c.req.query('feed');
+  if (asked === undefined) return undefined;
+  if (asked === 'rss2' || asked === 'rss') return 'rss';
+  return FEED_FORMATS.find((format) => FEED_SEGMENTS[format] === asked);
 }
 
 /** The representation an `Accept` header asked for, or `undefined` for a 406. */
@@ -267,6 +294,17 @@ function canonicalTarget(
   bases: TaxonomyBases,
 ): string | undefined {
   const { store, renderer } = c.var;
+
+  // A feed first: `/feed`, `/feed/atom` and `/{base}/x/feed` all lead
+  // somewhere real, and `/feed/rss` leads to `/feed/` in the same one hop
+  // rather than to a second redirect.
+  const feedRequest = parseFeedPath(pathname, bases);
+  if (feedRequest !== undefined) {
+    if (feedRequest.term !== undefined && countListing(store, feedRequest.term) === 0) {
+      return undefined;
+    }
+    return feedHref(feedRequest.term, feedRequest.format, bases);
+  }
 
   const document = store.getByPermalink(pathname);
   if (document !== undefined) {
@@ -364,6 +402,12 @@ function listing(
   const size = renderer.pageSize();
   const bases = renderer.taxonomyBases();
 
+  // WordPress served every feed as a query on the listing before it served one
+  // at a path, and the links are still out there. `/?feed=rss2` and
+  // `/{base}/x/?feed=atom` land on the feed the listing now has.
+  const asked = queryFeedFormat(c);
+  if (asked !== undefined) return c.redirect(feedHref(term, asked, bases), 301);
+
   // A taxonomy archive only exists while something carries the term; the home
   // listing exists even with nothing on it.
   const total = countListing(store, term);
@@ -450,31 +494,32 @@ function listingFingerprint(
 }
 
 /**
- * The site's feed, or one tag's, in one format.
+ * The site's feed, or one archive's, in one format.
  *
- * A tag with nothing published under it 404s exactly as its archive does: a
+ * A term with nothing published under it 404s exactly as its archive does: a
  * feed reader should be told the URL is wrong rather than handed an empty feed
  * it will poll forever.
  */
-function feed(c: Context<GeekityEnv>, format: FeedFormat, tag: string | undefined): Response {
+function feed(
+  c: Context<GeekityEnv>,
+  format: FeedFormat,
+  term: TaxonomyTerm | undefined,
+): Response {
   const { store, renderer, config } = c.var;
   const site = renderer.site();
   const bases = renderer.taxonomyBases();
 
-  if (tag !== undefined && store.countByTag(tag) === 0) return notFound(c);
+  if (term !== undefined && countListing(store, term) === 0) return notFound(c);
 
-  const documents =
-    tag === undefined
-      ? store.listPosts({ limit: feedSize(site) })
-      : store.listByTag(tag, { limit: feedSize(site) });
+  const documents = listListing(store, term, { limit: feedSize(site) });
+  const href = listingHref(term, 0, bases);
 
-  const href = tag === undefined ? homeHref(0) : tagHref(tag, 0, bases);
   const source: FeedSource = {
     site,
     documents,
-    title: tag === undefined ? site.title : `${site.title}: ${tag}`,
+    title: term === undefined ? site.title : `${site.title}: ${term.term}`,
     href,
-    feedHref: feedHref(tag, format, bases),
+    feedHref: feedHref(term, format, bases),
     baseUrl: config.baseUrl,
   };
 
@@ -538,15 +583,19 @@ function taxonomyContext(term: TaxonomyTerm): {
     : { category: term.term, template: TEMPLATES.category };
 }
 
-/** The URL of a feed: the whole archive's, or one tag's. */
+/**
+ * The URL of a feed: the whole site's, or one taxonomy archive's.
+ *
+ * WordPress's layout, so a subscriber of a migrated site keeps polling the URL
+ * they already hold: `/feed/` is RSS 2.0, `/feed/atom/` and `/feed/json/` are
+ * its siblings, and an archive's feeds hang off the archive.
+ */
 export function feedHref(
-  tag: string | undefined,
+  term: TaxonomyTerm | undefined,
   format: FeedFormat,
   bases: TaxonomyBases,
 ): string {
-  return tag === undefined
-    ? `/${FEED_FILES[format]}`
-    : `${tagHref(tag, 0, bases)}${FEED_FILES[format]}`;
+  return feedPathUnder(listingHref(term, 0, bases), format);
 }
 
 /** The theme's 404 page. */

@@ -22,6 +22,7 @@ const DEFAULT_FORM: Record<string, string> = {
   tagline: 'A tagline',
   base_url: 'http://localhost:3000',
   timezone: 'UTC',
+  language: 'en',
   posts_per_page: '10',
   author: 'Somebody',
   actor_handle: 'blog',
@@ -54,6 +55,7 @@ describe('the settings screen', () => {
         url: 'https://seeded.example',
         author: 'Ada',
         postsPerPage: 4,
+        language: 'fr',
       }),
       'utf8',
     );
@@ -68,6 +70,7 @@ describe('the settings screen', () => {
     assert.equal(field(html, 'base_url'), 'https://seeded.example');
     assert.equal(field(html, 'author'), 'Ada');
     assert.equal(field(html, 'posts_per_page'), '4');
+    assert.equal(field(html, 'language'), 'fr');
     assert.ok(csrfField(html) !== undefined, 'the form carries a CSRF token');
   });
 });
@@ -89,11 +92,11 @@ describe('saving settings', () => {
     assert.doesNotMatch(after, /Geekity<\/a>/, 'and not the old one');
 
     assert.match(
-      await (await cms.app.request('/feed.xml')).text(),
+      await (await cms.app.request('/feed/atom/')).text(),
       /<title>A Renamed Site<\/title>/,
       'and so does the Atom feed',
     );
-    const json = (await (await cms.app.request('/feed.json')).json()) as Record<string, unknown>;
+    const json = (await (await cms.app.request('/feed/json/')).json()) as Record<string, unknown>;
     assert.equal(json['title'], 'A Renamed Site');
   });
 });
@@ -122,6 +125,7 @@ describe('content/_data/site.json', () => {
       author: 'Grace',
       postsPerPage: 7,
       timezone: 'Europe/London',
+      language: 'en',
       avatar: '',
       tagBase: 'tag',
       categoryBase: 'category',
@@ -241,6 +245,46 @@ describe('a form the validator refuses', () => {
     assert.match(await response.text(), /IANA time zone name/);
 
     assert.equal((await saveSettings(agent, { timezone: 'Europe/London' })).status, 303);
+  });
+
+  it('carries the language into the page, both feeds and the site.json mirror', async () => {
+    const contentDir = await box.dir('geekity-settings-language-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    assert.equal((await saveSettings(agent, { language: 'pt-BR' })).status, 303);
+
+    assert.match(await (await cms.app.request('/')).text(), /<html lang="pt-BR">/);
+    assert.match(
+      await (await cms.app.request('/feed/')).text(),
+      /<language>pt-BR<\/language>/,
+      'the RSS channel declares it',
+    );
+    assert.match(
+      await (await cms.app.request('/feed/atom/')).text(),
+      /xml:lang="pt-BR"/,
+      'and the Atom feed does too',
+    );
+
+    const file = path.join(contentDir, '_data', 'site.json');
+    const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.equal(written['language'], 'pt-BR');
+  });
+
+  it('refuses a language that is not a well-formed tag, and keeps the stored one', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    assert.equal((await saveSettings(agent, { language: 'en-GB' })).status, 303);
+
+    for (const bad of ['', 'english language', 'e', 'en_GB', 'en-']) {
+      const response = await saveSettings(agent, { language: bad });
+      assert.equal(response.status, 400, JSON.stringify(bad));
+      assert.match(await response.text(), /not a language tag/, JSON.stringify(bad));
+    }
+
+    const html = await (await agent.get('/admin/settings')).text();
+    assert.equal(field(html, 'language'), 'en-GB', 'the refused saves changed nothing');
   });
 
   it('refuses an actor handle that is not username-like, and an unknown actor type', async () => {
@@ -465,7 +509,7 @@ describe('the base URL', () => {
     const second = await box.site({ contentDir, dataDir });
     assert.equal(second.config.baseUrl, 'https://stored.example');
     assert.match(
-      await (await second.app.request('/feed.xml')).text(),
+      await (await second.app.request('/feed/atom/')).text(),
       /https:\/\/stored\.example/,
       'the feed is built on it',
     );

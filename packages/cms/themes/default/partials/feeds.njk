@@ -1,0 +1,15 @@
+{#
+  The `rel="alternate"` links for one listing's three feeds.
+
+  `root` is any listing URL ending in `/` — `/`, a tag archive, a category
+  archive — and `title` is what a reader should call the feed. RSS comes first
+  because it is what most subscribers hold.
+
+  Import it with `{% import "partials/feeds.njk" as feeds %}`; the arguments
+  carry everything, so it needs no context.
+#}
+{% macro feedLinks(root, title) %}
+    <link rel="alternate" type="application/rss+xml" title="{{ title }}" href="{{ (root + "feed/") | url }}">
+    <link rel="alternate" type="application/atom+xml" title="{{ title }}" href="{{ (root + "feed/atom/") | url }}">
+    <link rel="alternate" type="application/feed+json" title="{{ title }}" href="{{ (root + "feed/json/") | url }}">
+{%- endmacro %}

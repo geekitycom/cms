@@ -101,14 +101,28 @@ A listing — the home page, a tag archive or a category archive — adds:
 
 How many posts a listing page holds comes from `postsPerPage` in
 `content/_data/site.json`, and defaults to 10. How many entries a feed holds
-comes from `feedSize` in the same file, and defaults to 20.
+comes from `feedSize` in the same file, and defaults to 20. The `<html lang>`
+comes from `language`, and defaults to `en`.
 
 ## Feeds
 
-`layouts/base.njk` fills the `alternates` block with the `rel="alternate"`
-links for `/feed.xml` and `/feed.json`, so every page that extends it
-advertises both feeds. On a published post it adds a third, pointing at the
-post's ActivityPub object:
+`partials/feeds.njk` holds one macro, `feedLinks(root, title)`, which writes the
+three `rel="alternate"` links for a listing's RSS, Atom and JSON feeds — RSS
+first, because it is what most subscribers hold:
+
+```njk
+{% import "partials/feeds.njk" as feeds %}
+{{ feeds.feedLinks("/", site.title) }}
+```
+
+`root` is any listing URL ending in `/`; the macro appends `feed/`, `feed/atom/`
+and `feed/json/` and puts each through the `url` filter, so the links carry the
+base path of a site served from a subdirectory. The arguments carry everything
+the macro needs, so it can be imported without `with context`.
+
+`layouts/base.njk` fills the `alternates` block with that macro over `/`, so
+every page that extends it advertises the site's three feeds. On a published
+post it adds a fourth link, pointing at the post's ActivityPub object:
 
 ```html
 <link
@@ -123,14 +137,15 @@ comes from `activityStreams`, which is only on the context of a rendered
 published post, so a layout that overrides the block and does not call
 `super()` has to emit it itself.
 
-`layouts/tag.njk` overrides that block, calls `super()` and adds the tag's own
-two feeds:
+`layouts/tag.njk` and `layouts/category.njk` override that block, call `super()`
+and add the archive's own three feeds:
 
 ```njk
+{% import "partials/feeds.njk" as feeds %}
 {% set tagRoot = "/" + (site.tagBase or "tag") + "/" + (tag | urlencode) + "/" %}
 {% block alternates %}
 {{ super() }}
-<link rel="alternate" type="application/atom+xml" href="{{ (tagRoot + "feed.xml") | url }}">
+{{ feeds.feedLinks(tagRoot, site.title + ": " + tag) }}
 {% endblock %}
 ```
 
