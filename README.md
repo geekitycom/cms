@@ -125,14 +125,14 @@ export default defineConfig({
 Every field is optional. Relative directories resolve against the working
 directory; absolute ones are used as given.
 
-| Field        | Default                   | Environment override        | Meaning                                                                                    |
-| ------------ | ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
-| `port`       | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on.                                                           |
-| `contentDir` | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                          |
-| `dataDir`    | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state, including the SQLite index.                                                 |
-| `themeDir`   | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme.                       |
-| `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped. |
-| `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                               |
+| Field        | Default                   | Environment override        | Meaning                                                                                                                                        |
+| ------------ | ------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port`       | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on.                                                                                                               |
+| `contentDir` | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                              |
+| `dataDir`    | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and, under `keys/`, the actor's key pairs, which are not derived and must be backed up. |
+| `themeDir`   | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme.                                                                           |
+| `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                     |
+| `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                   |
 
 The admin adds eight more:
 

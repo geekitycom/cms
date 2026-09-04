@@ -202,21 +202,21 @@ export default defineConfig({
 Every field is optional. Relative directories resolve against the working
 directory; absolute ones are used as given.
 
-| Field              | Default                   | Environment override        | Meaning                                                                                    |
-| ------------------ | ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
-| `port`             | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on. `0` picks a free one.                                     |
-| `contentDir`       | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                          |
-| `dataDir`          | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state, including the SQLite index.                                                 |
-| `themeDir`         | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme. Need not exist.       |
-| `baseUrl`          | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped. |
-| `watch`            | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                               |
-| `sessionLifetime`  | `1209600` (14 days)       | `GEEKITY_SESSION_LIFETIME`  | How long an admin login lasts, in seconds.                                                 |
-| `loginAttempts`    | `5`                       | `GEEKITY_LOGIN_ATTEMPTS`    | Failed sign-ins a username or an address may make before it is locked out.                 |
-| `loginLockout`     | `900` (15 minutes)        | `GEEKITY_LOGIN_LOCKOUT`     | How long the first lockout lasts, in seconds. See [Login hardening](#login-hardening).     |
-| `trustProxy`       | `false`                   | `GEEKITY_TRUST_PROXY`       | Believe `X-Forwarded-For` when deciding which address a sign-in came from.                 |
-| `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                               |
-| `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                             |
-| `federation`       | `{}`                      | —                           | Federation stores and guards. See [Federation](#federation).                               |
+| Field              | Default                   | Environment override        | Meaning                                                                                                                                        |
+| ------------------ | ------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port`             | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on. `0` picks a free one.                                                                                         |
+| `contentDir`       | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                              |
+| `dataDir`          | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and, under `keys/`, the actor's key pairs, which are not derived and must be backed up. |
+| `themeDir`         | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme. Need not exist.                                                           |
+| `baseUrl`          | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                     |
+| `watch`            | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                   |
+| `sessionLifetime`  | `1209600` (14 days)       | `GEEKITY_SESSION_LIFETIME`  | How long an admin login lasts, in seconds.                                                                                                     |
+| `loginAttempts`    | `5`                       | `GEEKITY_LOGIN_ATTEMPTS`    | Failed sign-ins a username or an address may make before it is locked out.                                                                     |
+| `loginLockout`     | `900` (15 minutes)        | `GEEKITY_LOGIN_LOCKOUT`     | How long the first lockout lasts, in seconds. See [Login hardening](#login-hardening).                                                         |
+| `trustProxy`       | `false`                   | `GEEKITY_TRUST_PROXY`       | Believe `X-Forwarded-For` when deciding which address a sign-in came from.                                                                     |
+| `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                                                                                   |
+| `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                 |
+| `federation`       | `{}`                      | —                           | Federation stores and guards. See [Federation](#federation).                                                                                   |
 
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site. A boolean environment variable
@@ -235,9 +235,23 @@ outgrown them says so:
 | `queue`               | `InProcessMessageQueue` | The delivery and inbox queue. `null` means no queue: activities are handled and delivered inside the request that carried them, with no retry. |
 | `allowPrivateAddress` | `false`                 | Whether Fedify may fetch private and loopback addresses. Leave it off: turning it on removes an SSRF guard. It exists for tests.               |
 
-Followers, the actor's key pairs, the inbound activity log and the delivery
-log are the CMS's own and live in SQLite whatever those are set to, so a
-restart never costs a site a follower.
+Followers, the inbound activity log and the delivery log are the CMS's own and
+live in SQLite whatever those are set to, so a restart never costs a site a
+follower. The actor's key pairs are the CMS's own too, but they are the one
+thing a site can never regenerate, so they live in files: one JWK per algorithm
+under `dataDir/keys` (`actor.rsassa-pkcs1-v1_5.jwk` and `actor.ed25519.jwk`),
+written `0600` in a `0700` directory, each holding the private key alone
+because the public half is derived from it. They are generated on the first
+request that needs them and read back on every one after that. The file names
+come from the actor's internal identifier rather than its handle, so renaming
+`@blog@example.com` keeps the keys.
+
+A key file that is there and will not import stops the boot, with a message
+naming it. That is deliberate: replacing it would give the site a new identity
+and every follower's cached public key would stop verifying, and Fedify's own
+answer — an actor document with no `publicKey` at all — is worse still, because
+peers cache it. Restore the file from a backup, or delete it to ask for a new
+key on purpose.
 
 ### Delivery
 
@@ -400,10 +414,10 @@ that no longer exists, so they cannot be migrated to the real domain. The
 admin has no button for removing a follower yet, so run tunnel rehearsals
 against a scratch `dataDir` rather than the one the real site will keep.
 
-The actor's key pairs live in the SQLite database under `dataDir`, not in the
-base URL, so they survive across tunnel sessions. That is usually what you
-want; it also means a database copied from one deployment to another brings
-the other's identity with it.
+The actor's key pairs live in `dataDir/keys`, not in the base URL, so they
+survive across tunnel sessions. That is usually what you want; it also means a
+`data` directory copied from one deployment to another brings the other's
+identity with it.
 
 `pnpm fed:smoke`, in this repository, is the automated half of the same idea:
 it boots the CMS on a free port, runs `fedify lookup` against the actor and a

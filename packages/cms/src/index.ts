@@ -22,10 +22,13 @@ import type {
 } from './content/index.ts';
 import type { GeekityEnv } from './env.ts';
 import {
+  assertActorKeysUsable,
   createDeliveryService,
   createRelayService,
   createSiteFederation,
+  migrateActorKeysToFiles,
   mountFederation,
+  SITE_ACTOR_IDENTIFIER,
 } from './federation/index.ts';
 import type { DeliveryService, RelayService, SiteFederation } from './federation/index.ts';
 import { createFeedNotifier } from './notify.ts';
@@ -44,7 +47,6 @@ export type {
 export {
   ACTOR_HANDLE_PATTERN,
   LANGUAGE_TAG_PATTERN,
-  ACTOR_KEY_ALGORITHMS,
   ACTOR_TYPES,
   DELIVERY_STATUSES,
   RELAY_STATES,
@@ -199,8 +201,6 @@ export {
   writeSiteJson,
 } from './admin/index.ts';
 export type {
-  ActorKey,
-  ActorKeyAlgorithm,
   ActorSummary,
   AddUserProblems,
   AdminRender,
@@ -224,6 +224,7 @@ export type {
   InboxActivity,
   InboxRow,
   InboxRowsContext,
+  LegacyActorKey,
   LegacySetting,
   ListPageOptions,
   LocalPost,
@@ -240,7 +241,6 @@ export type {
   MountSettingsOptions,
   MountTaxonomyScreensOptions,
   MountUsersOptions,
-  NewActorKey,
   NewDelivery,
   NewFollower,
   NewInboxActivity,
@@ -400,8 +400,12 @@ export {
   acceptedRelays,
   acceptRelay,
   ACTOR_CLASSES,
+  ACTOR_KEY_ALGORITHMS,
   ACTOR_PATH,
   actorClassFor,
+  assertActorKeysUsable,
+  actorKeyFile,
+  actorKeysDir,
   articleObjectId,
   avatarUrl,
   createActivityId,
@@ -433,6 +437,7 @@ export {
   lastFollowersCursor,
   loadActorKeyPairs,
   logActivity,
+  migrateActorKeysToFiles,
   mountFederation,
   NODEINFO_PATH,
   OUTBOX_PAGE_SIZE,
@@ -459,6 +464,7 @@ export {
   updateActivityId,
 } from './federation/index.ts';
 export type {
+  ActorKeyAlgorithm,
   CreateDeliveryServiceOptions,
   CreateRelayServiceOptions,
   CreateSiteFederationOptions,
@@ -799,6 +805,20 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // once, and the table goes (decision-9). A site that has already been
   // through it does nothing but check.
   migrateSettingsToFile({ admin, contentDir: resolved.contentDir });
+
+  // And the same for its actor's key pairs, which become JWK files under
+  // data/keys. This is the migration that must not fail: an actor whose
+  // private key is lost is one every follower stops being able to verify, so
+  // the rows are written out before the table is dropped, and a file that is
+  // already there always wins.
+  migrateActorKeysToFiles({ admin, dataDir: resolved.dataDir });
+
+  // And, once the files are the whole story, that they are readable. This is
+  // the one thing here that can stop a boot: an actor that publishes no key
+  // is one no follower can verify, and Fedify would serve exactly that rather
+  // than complain. A minute of downtime with the file named is the better
+  // failure.
+  assertActorKeysUsable(resolved.dataDir, SITE_ACTOR_IDENTIFIER);
 
   // The one thing the settings decide before a request arrives. It is settled
   // here, at boot, rather than per request: `baseUrl` also decides whether the

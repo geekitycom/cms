@@ -9,7 +9,9 @@ _site/
 packages/cms/admin/static/editor.js
 
 # SQLite index and other derived state, including data/images/ — the image
-# variants sharp derives from the originals under content/uploads/
+# variants sharp derives from the originals under content/uploads/. data/keys/
+# is the exception: the actor's private key pairs are not derived and are not
+# a site's to publish either, which is the other reason this line is here.
 data/
 apps/*/data/
 
