@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 05:44'
+updated_date: '2026-09-04 12:43'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -34,7 +34,7 @@ Keys the CMS reads and writes. Eleventy semantics are preserved.
 | Key | Required | Eleventy meaning | CMS use |
 | --- | --- | --- | --- |
 | `title` | yes | data | display title |
-| `date` | posts | sets page date | publish date, ISO 8601 with offset |
+| `date` | posts | sets page date | publish date, a UTC ISO 8601 instant ending in `Z` |
 | `permalink` | yes | output URL | canonical URL path; always written explicitly so 11ty and the CMS agree |
 | `tags` | no | collections | taxonomy; `post` tag comes from `posts.json`, not from the file |
 | `categories` | no | data | the second taxonomy, archived at `/category/{name}/`; Eleventy reads it as an ordinary data key |
@@ -48,13 +48,25 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 
 | Key | Use |
 | --- | --- |
-| `updated` | last modified date, written on every admin save |
+| `updated` | last modified date, a UTC instant, written on every admin save |
 | `author` | user login; resolved to display name at render |
 | `activitypub.id` | the ActivityStreams object id once federated, so Update/Delete reference the same object |
-| `activitypub.published` | timestamp of first delivery |
+| `activitypub.published` | timestamp of first delivery, a UTC instant |
 | `navigationOrder` | where a page in the menu sorts; the lower numbers first, and a page with none after every page with one |
 
 Unknown keys are preserved on round trip. The writer emits YAML with a stable key order so diffs stay small.
+
+## Dates
+
+Every date the CMS writes — `date`, `updated` and `activitypub.published` — is a UTC ISO 8601 instant ending in `Z`. The instant is the truth; the site's `timezone` setting is the lens it is read through (decision-11).
+
+- The editor shows a stored instant as wall-clock time in the site's zone, names the zone under the field, and reads offset-less input as that zone. `2026-09-04 09:00` in a site set to `America/Chicago` is written as `2026-09-04T14:00:00Z`.
+- The theme's `date` filter renders `readable`, `html` and `year` in the site's zone; `iso` stays the instant. Changing the setting changes what every page shows without a file changing.
+- A new post's filename day and the `/{yyyy}/{mm}/` of its default permalink come from the calendar day the site's zone was on at that instant, taken once when the post is saved. The permalink is then written explicitly into the file, so changing the setting later never moves a URL.
+
+A file written by hand is still read as it is. A `date` carrying an offset, or one YAML parses into a timestamp of its own, names an instant and is sorted, scheduled and rendered by it; the CMS rewrites it as UTC the next time it saves that file, never on a mere scan. A hand-written file with no `permalink` resolves to the URL Eleventy gives it, which is cut from the date exactly as the file spells it.
+
+Feeds, the sitemap and the ActivityStreams objects emit instants and are not affected by the setting.
 
 ## Permalink rules
 

@@ -453,6 +453,16 @@ They live in a `settings` table of key and value, alongside the users and
 sessions in the same database file, and they are the half of it that is not
 derived from the content directory.
 
+The time zone is the one setting that changes what a page says rather than what
+it holds. Every date the CMS writes into a file is a UTC instant ending in `Z`;
+the setting is the lens it is read through — the editor shows and accepts
+wall-clock time in that zone, the theme's `date` filter renders `readable`,
+`html` and `year` in it, and a new post's filename day and `/{yyyy}/{mm}/`
+permalink come from the calendar day that zone was on when it was saved.
+Changing it moves what every page shows on the next request and moves nothing
+on disk, and it cannot move a URL that already exists. The package README has
+[the whole rule](packages/cms/README.md#dates-and-the-timezone-setting).
+
 **SQLite is the source; `content/_data/site.json` is the mirror.** On the first
 boot that finds the settings table empty, it is seeded from
 `content/_data/site.json` if that file exists, so a site that predates this

@@ -156,12 +156,15 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   async function stamp(document: Document): Promise<Document> {
     const existing = document.activitypub;
     const id = existing?.id ?? postObjectId(document.slug, config.baseUrl);
-    const published = existing?.published ?? document.date ?? new Date().toISOString();
+    const published = existing?.published ?? document.date ?? store.now().toISOString();
     if (existing?.id === id && existing.published === published) return document;
 
+    // The zone only matters for a date somebody wrote by hand with no offset;
+    // `saveDocument` is what turns every date in the file into an instant.
     return await saveDocument({
       contentDir: config.contentDir,
       store,
+      timezone: readSiteSettings(admin).timezone,
       path: document.path,
       content: { ...documentContent(document), activitypub: { id, published } },
     });

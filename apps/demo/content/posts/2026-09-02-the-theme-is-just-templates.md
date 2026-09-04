@@ -1,6 +1,6 @@
 ---
 title: The theme is just templates
-date: '2026-09-02T10:05:00-05:00'
+date: '2026-09-02T15:05:00Z'
 permalink: /2026/09/the-theme-is-just-templates/
 tags:
   - web

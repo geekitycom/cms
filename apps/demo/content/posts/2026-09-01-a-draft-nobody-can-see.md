@@ -1,6 +1,6 @@
 ---
 title: A draft nobody can see
-date: '2026-09-01T08:00:00-05:00'
+date: '2026-09-01T13:00:00Z'
 permalink: /2026/09/a-draft-nobody-can-see/
 tags:
   - theme

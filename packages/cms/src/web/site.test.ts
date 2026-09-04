@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { readSiteSettings, writeSiteSettings } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 
@@ -939,5 +940,44 @@ describe('the site menu', () => {
 
     const now = await (await cms.app.request('/now/')).text();
     assert.equal(current(now), 'Now');
+  });
+});
+
+describe('the timezone setting as a lens on the dates', () => {
+  /** One post, published at two in the morning UTC on 2 September. */
+  const files = {
+    'posts/2026-09-02-just-after-midnight.md': [
+      '---',
+      'title: Just after midnight',
+      "date: '2026-09-02T02:00:00Z'",
+      'permalink: /2026/09/just-after-midnight/',
+      '---',
+      '',
+      'Body.',
+      '',
+    ].join('\n'),
+  };
+
+  it('changes what a page shows without changing a file', async () => {
+    const { cms, contentDir } = await site(files);
+    const file = path.join(contentDir, 'posts', '2026-09-02-just-after-midnight.md');
+    const before = await readFile(file, 'utf8');
+
+    writeSiteSettings(cms.admin, { ...readSiteSettings(cms.admin), timezone: 'UTC' });
+    const inUtc = await (await cms.app.request('/2026/09/just-after-midnight/')).text();
+    assert.match(inUtc, /2 September 2026/);
+    assert.match(inUtc, /datetime="2026-09-02T02:00:00\.000Z"/, 'iso stays the instant');
+
+    writeSiteSettings(cms.admin, { ...readSiteSettings(cms.admin), timezone: 'America/Chicago' });
+    const inChicago = await (await cms.app.request('/2026/09/just-after-midnight/')).text();
+    assert.match(inChicago, /1 September 2026/, 'the evening before, where the site lives');
+    assert.match(inChicago, /datetime="2026-09-02T02:00:00\.000Z"/, 'and iso has not moved');
+
+    assert.equal(await readFile(file, 'utf8'), before, 'and nothing on disk changed');
+    assert.equal(
+      cms.store.getByPermalink('/2026/09/just-after-midnight/')?.permalink,
+      '/2026/09/just-after-midnight/',
+      'nor did the URL',
+    );
   });
 });

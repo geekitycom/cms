@@ -1,7 +1,7 @@
 ---
 title: Six tables and a migration
-date: '2026-07-11T16:20:00-05:00'
-updated: '2026-07-19T09:00:00-05:00'
+date: '2026-07-11T21:20:00Z'
+updated: '2026-07-19T14:00:00Z'
 permalink: /2026/07/six-tables-and-a-migration/
 tags:
   - sqlite

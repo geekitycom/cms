@@ -10,6 +10,13 @@ import { scheduledFor } from '../content/schedule.ts';
 import { defaultPermalink, slugify } from '../content/slug.ts';
 import { DuplicatePermalinkError, isTrashedPath, TRASH_DIRECTORY } from '../content/store.ts';
 import type { ContentStore, ListAllOptions } from '../content/store.ts';
+import {
+  calendarDayIn,
+  DEFAULT_TIMEZONE,
+  toUtcInstant,
+  wallClockIn,
+  zoneLabel,
+} from '../content/time.ts';
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { isPublicDocument } from '../web/documents.ts';
@@ -213,7 +220,7 @@ export function mountDocumentScreens(
       kind,
       render,
       document: undefined,
-      form: blankForm(kind),
+      form: blankForm(kind, siteTimezone(c), c.var.store.now()),
     }),
   );
 
@@ -224,7 +231,7 @@ export function mountDocumentScreens(
   app.get(`${kind.basePath}/:slug`, (c) => {
     const document = findBySlug(c.var.store, kind, c.req.param('slug'));
     if (document === undefined) return c.notFound();
-    return renderEditor(c, { kind, render, document, form: formFor(document) });
+    return renderEditor(c, { kind, render, document, form: formFor(document, siteTimezone(c)) });
   });
 
   app.post(`${kind.basePath}/:slug`, async (c) => {
@@ -305,23 +312,42 @@ async function saveFromForm(
     return refuse('A menu order is a number, and pulls the lower numbers to the front.');
   }
 
-  const date = kind.dated ? (form.date === '' ? new Date().toISOString() : form.date) : undefined;
-  if (date !== undefined && !/^\d{4}-\d{2}-\d{2}/.test(date)) {
+  const timezone = siteTimezone(c);
+
+  // decision-11: what the file gets is a UTC instant, and an offset-less field
+  // is the site's own wall clock rather than the server's.
+  const typed = kind.dated ? (form.date === '' ? store.now().toISOString() : form.date) : undefined;
+  if (typed !== undefined && !/^\d{4}-\d{2}-\d{2}/.test(typed)) {
     return refuse('A date has to start with a year, a month and a day, like 2026-03-04.');
+  }
+  const date = typed === undefined ? undefined : toUtcInstant(typed, timezone);
+  if (typed !== undefined && date === undefined) {
+    return refuse('That date is not one anybody can read. Try 2026-03-04 09:00.');
   }
 
   const slug = slugify(form.slug) || slugify(form.title) || (document?.slug ?? '') || 'untitled';
   const trashed = document !== undefined && isTrashedPath(document.path);
+  // The calendar day the document is filed under: the site zone's day at its
+  // date for a new one, and the day already in the filename for one whose date
+  // has not moved, so a zone changed later never moves a URL that exists.
+  const filed = filedDay({ date, document, timezone });
 
   // A new document gets out of the way of anything that already holds its
   // name; an existing one keeps the slug it was given.
   const finalSlug =
     document === undefined
-      ? await freeSlug({ contentDir, store, type: kind.type, slug, date })
+      ? await freeSlug({ contentDir, store, type: kind.type, slug, date: filed })
       : slug;
 
-  const permalink = resolvePermalink({ kind, form, slug: finalSlug, date, document });
-  const target = documentPath({ kind, slug: finalSlug, date, trashed });
+  const permalink = resolvePermalink({
+    kind,
+    form,
+    slug: finalSlug,
+    date: filed,
+    document,
+    timezone,
+  });
+  const target = documentPath({ kind, slug: finalSlug, date: filed, trashed });
 
   if (document !== undefined) {
     const conflict = await conflictWith(contentDir, document, form.hash);
@@ -337,7 +363,7 @@ async function saveFromForm(
   const content: DocumentContent = {
     title: form.title,
     ...(date === undefined ? {} : { date }),
-    updated: new Date().toISOString(),
+    updated: store.now().toISOString(),
     permalink,
     tags: kind.tagged ? splitTags(form.tags) : [],
     categories: kind.categorised ? splitTags(form.categories) : [],
@@ -356,7 +382,7 @@ async function saveFromForm(
 
   let saved: Document;
   try {
-    saved = await saveDocument({ contentDir, store, path: target, content });
+    saved = await saveDocument({ contentDir, store, path: target, content, timezone });
   } catch (error) {
     // Nothing was written, so the row that was taken out of the way goes back.
     if (renamedFrom !== undefined) store.upsert(renamedFrom);
@@ -426,8 +452,11 @@ function resolvePermalink(input: {
   kind: DocumentKind;
   form: EditorForm;
   slug: string;
+  /** The calendar day the document is filed under, per {@link filedDay}. */
   date: string | undefined;
   document: Document | undefined;
+  /** The site's zone, for reading the day an existing document was filed under. */
+  timezone: string;
 }): string {
   const fallback = defaultPermalink({
     type: input.kind.type,
@@ -439,19 +468,72 @@ function resolvePermalink(input: {
   if (submitted === undefined) return fallback;
 
   const document = input.document;
-  if (document !== undefined && submitted === previousDefaultPermalink(input.kind, document)) {
+  if (
+    document !== undefined &&
+    submitted === previousDefaultPermalink(input.kind, document, input.timezone)
+  ) {
     return fallback;
   }
   return submitted;
 }
 
-/** The permalink a document would have had if it had never been customised. */
-function previousDefaultPermalink(kind: DocumentKind, document: Document): string | undefined {
+/**
+ * The permalink a document would have had if it had never been customised:
+ * its own slug over the day it is filed under, which is the day in its
+ * filename rather than one re-derived from a setting that may have moved.
+ */
+function previousDefaultPermalink(
+  kind: DocumentKind,
+  document: Document,
+  timezone: string,
+): string | undefined {
   try {
-    return defaultPermalink({ type: kind.type, slug: document.slug, date: document.date });
+    return defaultPermalink({
+      type: kind.type,
+      slug: document.slug,
+      date: filedDay({ date: document.date, document, timezone }),
+    });
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The calendar day a document is filed under, which is what its filename and
+ * its `/{yyyy}/{mm}/` permalink are cut from.
+ *
+ * For a new document it is the day the site's own zone was on at its date, so
+ * a post published at half past midnight on 1 October in Berlin is filed under
+ * October rather than the September UTC was still on.
+ *
+ * For a document whose date has not moved it is the day already in its
+ * filename. That is the whole of decision-11's promise that changing the
+ * timezone setting cannot move an existing URL: the instant is the same, the
+ * zone is a lens, and the day this post was filed under was decided once, when
+ * it was written, and is on disk where no setting can reach it.
+ */
+function filedDay(input: {
+  date: string | undefined;
+  document: Document | undefined;
+  timezone: string;
+}): string | undefined {
+  const { document } = input;
+  const date = input.date === undefined ? undefined : toUtcInstant(input.date, input.timezone);
+  if (date === undefined) return undefined;
+
+  const was =
+    document?.date === undefined ? undefined : toUtcInstant(document.date, input.timezone);
+  if (was === date) {
+    const existing = /(?:^|\/)(\d{4}-\d{2}-\d{2})-/.exec(document?.path ?? '')?.[1];
+    if (existing !== undefined) return existing;
+  }
+
+  return calendarDayIn(date, input.timezone) ?? date;
+}
+
+/** The site's time zone, which is what every offset-less date in the admin means. */
+function siteTimezone(c: Context<GeekityEnv>): string {
+  return readSiteSettings(c.var.admin).timezone;
 }
 
 /** A submitted permalink as a URL path, or `undefined` when the field is empty. */
@@ -749,13 +831,23 @@ export interface EditorForm {
   hash: string;
 }
 
-/** The editor for a document that does not exist yet. */
-export function blankForm(kind: DocumentKind): EditorForm {
+/**
+ * The editor for a document that does not exist yet.
+ *
+ * The date field is filled in with the clock as the site's own zone reads it,
+ * not with an instant: what a form offers is what a form takes back, and per
+ * decision-11 an offset-less date in this field means the site's zone.
+ */
+export function blankForm(
+  kind: DocumentKind,
+  timezone: string = DEFAULT_TIMEZONE,
+  now: Date = new Date(),
+): EditorForm {
   return {
     title: '',
     slug: '',
     permalink: '',
-    date: kind.dated ? new Date().toISOString() : '',
+    date: kind.dated ? wallClockIn(now, timezone) : '',
     tags: '',
     categories: '',
     description: '',
@@ -768,13 +860,20 @@ export function blankForm(kind: DocumentKind): EditorForm {
   };
 }
 
-/** The editor for a document that does. */
-export function formFor(document: Document): EditorForm {
+/**
+ * The editor for a document that does.
+ *
+ * The stored instant is shown as the clock in the site's zone reads it, and
+ * {@link wallClockIn} keeps whatever precision the instant has, so a form
+ * submitted with the field untouched writes back the very instant it was
+ * filled in from.
+ */
+export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE): EditorForm {
   return {
     title: document.title,
     slug: document.slug,
     permalink: document.permalink,
-    date: document.date ?? '',
+    date: document.date === undefined ? '' : wallClockIn(document.date, timezone),
     tags: document.tags.join(', '),
     categories: document.categories.join(', '),
     description: document.description ?? '',
@@ -818,6 +917,7 @@ function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Res
   const { kind, document, form } = options;
   const trashed = document !== undefined && isTrashedPath(document.path);
   const now = c.var.store.now();
+  const timezone = siteTimezone(c);
   // Printed in the site's own time zone rather than in UTC: an author who
   // scheduled a post for nine in the morning meant their own morning.
   const scheduledAt =
@@ -849,9 +949,10 @@ function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Res
     uploadUrl: UPLOADS_PATH,
     viewUrl:
       document !== undefined && isPublicDocument(document, now) ? document.permalink : undefined,
-    ...(scheduledAt === undefined
-      ? {}
-      : { scheduledFor: formatInTimezone(scheduledAt, readSiteSettings(c.var.admin).timezone) }),
+    // Named beside the date field, because a wall clock with no zone on it is
+    // exactly the ambiguity decision-11 exists to remove.
+    ...(kind.dated ? { dateZone: zoneLabel(form.date === '' ? now : form.date, timezone) } : {}),
+    ...(scheduledAt === undefined ? {} : { scheduledFor: formatInTimezone(scheduledAt, timezone) }),
     ...(options.error === undefined ? {} : { error: options.error }),
   });
 }

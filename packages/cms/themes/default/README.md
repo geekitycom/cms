@@ -68,23 +68,23 @@ Every template gets:
 
 A document — one post, one page, or one entry of a listing — adds:
 
-| Key                                                   | What it holds                                                                     |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `title`                                               | Display title.                                                                    |
-| `date`                                                | Publish date, a JavaScript `Date`. Absent when the document has none.             |
-| `updated`                                             | Last modified date, a `Date`, when the front matter has one.                      |
-| `tags`                                                | The document's tags, in file order.                                               |
-| `categories`                                          | The document's categories, in file order.                                         |
-| `content`                                             | The Markdown body rendered to HTML. Print it with `\| safe`.                      |
-| `url`                                                 | The document's URL path, the same value as `page.url`.                            |
-| `page.url`                                            | The document's URL path. Always ends in `/`.                                      |
-| `page.date`                                           | The same `Date` as `date`.                                                        |
-| `page.fileSlug`                                       | The permalink's last segment.                                                     |
-| `page.inputPath`                                      | The source file, relative to the content directory.                               |
-| `type`                                                | `post` or `page`.                                                                 |
-| `permalink`, `slug`, `draft`, `description`, `author` | Straight from the front matter.                                                   |
-| `activityStreams`                                     | The post's ActivityPub object id, absolute. Only on a rendered published post.    |
-| everything else                                       | Any front matter key the CMS does not model is on the context under its own name. |
+| Key                                                   | What it holds                                                                                           |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `title`                                               | Display title.                                                                                          |
+| `date`                                                | Publish date, a JavaScript `Date` at the UTC instant the file holds. Absent when the document has none. |
+| `updated`                                             | Last modified date, a `Date`, when the front matter has one.                                            |
+| `tags`                                                | The document's tags, in file order.                                                                     |
+| `categories`                                          | The document's categories, in file order.                                                               |
+| `content`                                             | The Markdown body rendered to HTML. Print it with `\| safe`.                                            |
+| `url`                                                 | The document's URL path, the same value as `page.url`.                                                  |
+| `page.url`                                            | The document's URL path. Always ends in `/`.                                                            |
+| `page.date`                                           | The same `Date` as `date`.                                                                              |
+| `page.fileSlug`                                       | The permalink's last segment.                                                                           |
+| `page.inputPath`                                      | The source file, relative to the content directory.                                                     |
+| `type`                                                | `post` or `page`.                                                                                       |
+| `permalink`, `slug`, `draft`, `description`, `author` | Straight from the front matter.                                                                         |
+| `activityStreams`                                     | The post's ActivityPub object id, absolute. Only on a rendered published post.                          |
+| everything else                                       | Any front matter key the CMS does not model is on the context under its own name.                       |
 
 A listing — the home page, a tag archive or a category archive — adds:
 
@@ -227,11 +227,11 @@ the import above carries `with context`: a macro imported without it cannot see
 
 ## Filters
 
-| Filter         | What it does                                                                                                                                                                                                                                                                       |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `date(format)` | Formats a `Date` or a date string. `readable` (the default) gives `2 September 2026`, `html` gives `2026-09-02` for a `<time datetime>`, `year` gives `2026`, `iso` gives the full ISO 8601 instant. Formatting is in UTC. A value that is not a date renders as the empty string. |
-| `url`          | Prefixes a root-relative path with the base URL's path, so a site served from a subdirectory links correctly. Eleventy's filter of the same name.                                                                                                                                  |
-| `absoluteUrl`  | The same path as a fully qualified URL against the site's `baseUrl`.                                                                                                                                                                                                               |
+| Filter               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `date(format, zone)` | Formats a `Date` or a date string. `readable` (the default) gives `2 September 2026`, `html` gives `2026-09-02` for a `<time datetime>`, `year` gives `2026`, `iso` gives the full ISO 8601 instant. A date in a file is a UTC instant; `readable`, `html` and `year` are rendered in the site's `timezone` setting, and `iso` stays the instant. Pass `zone` — an IANA name — to override the setting for one call. A value that is not a date renders as the empty string. |
+| `url`                | Prefixes a root-relative path with the base URL's path, so a site served from a subdirectory links correctly. Eleventy's filter of the same name.                                                                                                                                                                                                                                                                                                                            |
+| `absoluteUrl`        | The same path as a fully qualified URL against the site's `baseUrl`.                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 Nunjucks' own filters — `default`, `join`, `urlencode`, `safe` and the rest —
 are all available. Autoescaping is on, so rendered Markdown is the one thing

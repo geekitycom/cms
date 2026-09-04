@@ -354,11 +354,11 @@ describe('publishing a post from the admin', () => {
     );
     assert.match(source, /^activitypub:$/m);
     assert.match(source, new RegExp(`^ {2}id: ${BASE_URL}/ap/posts/hello-world$`, 'm'));
-    assert.match(source, /^ {2}published: '2026-03-04T10:00:00\.000Z'$/m);
+    assert.match(source, /^ {2}published: '2026-03-04T10:00:00Z'$/m);
 
     const indexed = cms.store.getBySlug('hello-world');
     assert.equal(indexed?.activitypub?.id, `${BASE_URL}/ap/posts/hello-world`);
-    assert.equal(indexed?.activitypub?.published, '2026-03-04T10:00:00.000Z');
+    assert.equal(indexed?.activitypub?.published, '2026-03-04T10:00:00Z');
   });
 });
 

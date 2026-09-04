@@ -55,6 +55,7 @@ export type {
   OpenContentStoreOptions,
   TagCount,
 } from './store.ts';
+export { calendarDayIn, DEFAULT_TIMEZONE, toUtcInstant, wallClockIn, zoneLabel } from './time.ts';
 export { createContentSync, DEFAULT_DEBOUNCE_MS } from './sync.ts';
 export type {
   ChangeOrigin,

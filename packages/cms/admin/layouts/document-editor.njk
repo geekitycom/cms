@@ -71,6 +71,9 @@
       {% if kind.dated %}
         <label for="editor-date">Date</label>
         <input id="editor-date" name="date" type="text" value="{{ form.date }}" />
+        {# The file holds a UTC instant; this field is that instant as the
+           site's own clock reads it, so the zone has to be on the screen. #}
+        <p class="admin-hint">Wall-clock time in {{ dateZone }}. Stored as UTC.</p>
       {% endif %}
 
       {% if kind.tagged %}

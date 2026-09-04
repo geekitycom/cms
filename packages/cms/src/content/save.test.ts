@@ -126,6 +126,86 @@ describe('saveDocument', () => {
   });
 });
 
+describe('saveDocument, dates', () => {
+  it('rewrites a hand-written offset as the UTC instant it names', async () => {
+    const { contentDir, store } = await scratch();
+
+    const document = await saveDocument({
+      contentDir,
+      store,
+      path: 'posts/2026-06-02-reading-the-index.md',
+      content: draft({
+        date: '2026-06-02T07:30:00-05:00',
+        updated: '2026-06-03T09:00:00-05:00',
+        activitypub: {
+          id: 'https://example.com/ap/posts/x',
+          published: '2026-06-02T07:30:00-05:00',
+        },
+        permalink: '/2026/06/reading-the-index/',
+      }),
+    });
+
+    const written = await readFile(
+      path.join(contentDir, 'posts/2026-06-02-reading-the-index.md'),
+      'utf8',
+    );
+    assert.match(written, /^date: '2026-06-02T12:30:00Z'$/m);
+    assert.match(written, /^updated: '2026-06-03T14:00:00Z'$/m);
+    assert.match(written, /^ {2}published: '2026-06-02T12:30:00Z'$/m);
+    assert.equal(document.date, '2026-06-02T12:30:00Z');
+    assert.equal(
+      document.hash,
+      store.getByPath('posts/2026-06-02-reading-the-index.md')?.hash,
+      'the hash the index holds is the hash of the bytes on disk',
+    );
+  });
+
+  it('reads an offset-less date as the wall clock in the timezone it is given', async () => {
+    const { contentDir, store } = await scratch();
+
+    const document = await saveDocument({
+      contentDir,
+      store,
+      timezone: 'America/Chicago',
+      path: 'posts/2026-09-04-hello-world.md',
+      content: draft({ date: '2026-09-04 09:00', permalink: '/2026/09/hello-world/' }),
+    });
+
+    assert.equal(document.date, '2026-09-04T14:00:00Z');
+  });
+
+  it('leaves the permalink and the path exactly where they were', async () => {
+    const { contentDir, store } = await scratch();
+
+    const document = await saveDocument({
+      contentDir,
+      store,
+      timezone: 'America/Chicago',
+      path: 'posts/2026-06-02-reading-the-index.md',
+      // A flat URL a hand-written file chose. Converting its date must not
+      // move it, because the permalink in the file is what counts.
+      content: draft({ date: '2026-06-02T07:30:00-05:00', permalink: '/reading-the-index/' }),
+    });
+
+    assert.equal(document.permalink, '/reading-the-index/');
+    assert.equal(document.path, 'posts/2026-06-02-reading-the-index.md');
+  });
+
+  it('refuses a date nobody can read rather than writing one it invented', async () => {
+    const { contentDir, store } = await scratch();
+
+    await assert.rejects(
+      saveDocument({
+        contentDir,
+        store,
+        path: 'posts/2026-09-02-hello-world.md',
+        content: draft({ date: 'one fine morning' }),
+      }),
+      TypeError,
+    );
+  });
+});
+
 describe('freeSlug', () => {
   it('hands back the slug it was given when nothing claims it', async () => {
     const { contentDir, store } = await scratch();

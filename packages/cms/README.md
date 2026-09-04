@@ -429,6 +429,46 @@ await cms.sync(); // one full scan; what `serve()` runs on boot
 Set `watch: false` (or `GEEKITY_WATCH=false`) for a host whose content cannot
 change under the process. `geekity sync` sets it for you.
 
+## Dates and the timezone setting
+
+Every date the CMS writes into a file — `date`, `updated` and
+`activitypub.published` — is a UTC instant ending in `Z`. The `timezone`
+setting is not stored with the date; it is the lens the instant is read
+through.
+
+That means one rule in three places:
+
+- **The editor** shows a stored instant as the clock reads in the site's zone,
+  with the zone named under the field (`Wall-clock time in America/Chicago
+(CDT). Stored as UTC.`), and reads what you type back in the same zone. Type
+  `2026-09-04 09:00` in a site set to `America/Chicago` and the file gets
+  `date: '2026-09-04T14:00:00Z'`. A value you write with an offset of its own —
+  `2026-09-04T09:00:00+02:00` — already names an instant, so it is kept as one.
+- **The theme's `date` filter** renders `readable`, `html` and `year` in the
+  site's zone; `iso` stays the instant, because that is what a `<time
+datetime>` and a feed want. Changing the setting changes what every page
+  shows on the very next request, with no file touched and no rebuild.
+- **A new post's filename day and its `/{yyyy}/{mm}/` permalink** come from the
+  calendar day the site's zone was on at that instant, so a post published at
+  half past midnight on 1 October in Berlin is filed under October and not
+  under the 30 September that UTC was still on.
+
+Changing the setting later never moves a URL. The permalink is written
+explicitly into every file the CMS saves, and the day a post is filed under is
+the one in its filename — decided once, when it was written, where no setting
+can reach it.
+
+Files written by hand keep working. A `date` with an offset, or one YAML parses
+into a timestamp by itself, is read for the instant it names, sorts and
+schedules by that instant, and is rewritten as UTC the next time the CMS saves
+that file — never by a mere scan. A hand-written file with no `permalink` still
+resolves to the URL Eleventy gives it, which is cut from the date as the file
+spells it.
+
+Feeds, the sitemap and the ActivityStreams objects emit instants and are
+unaffected by the setting, and a scheduled post fires at its instant whatever
+the zone is set to.
+
 ## Scheduling
 
 A post whose `date` is in the future is written now and published then, the way
@@ -1335,6 +1375,7 @@ the rules the CMS follows that Eleventy does not know about on its own:
 | A file with no `permalink` gets the CMS default | An `addPreprocessor` that fills in `/{yyyy}/{mm}/{slug}/` for a post and `/{slug}/` for a page, slugifying the title exactly as the CMS does. Front matter always wins; the CMS writes `permalink` into every file it saves, so this only matters for hand-authored files.                                                                                                                              |
 | `content/uploads/` is served at `/uploads/`     | `addPassthroughCopy({ 'content/uploads': 'uploads' })`, plus an `ignores` entry for the same path. Without the ignore, an upload that happens to be Markdown would be copied _and_ rendered as a page; the CMS only ever indexes `posts/` and `pages/`.                                                                                                                                                 |
 | `content/_trash/` is not published              | `ignores.add('content/_trash/**')`. Eleventy skips `_includes` and `_data` because they are configured directories, not because of the underscore, so the trash has to be named.                                                                                                                                                                                                                        |
+| Dates are shown in the site's `timezone`        | A `date` filter with the CMS's four formats: `readable`, `html` and `year` are the calendar the site's zone was on at the instant, `iso` is the instant in UTC. The zone is read from `content/_data/site.json`, which the settings screen mirrors, so a zone changed in the CMS changes the built pages too.                                                                                           |
 | A future `date` holds a post back               | An `addPreprocessor` that returns `false` for it. This is the one rule that cannot be exactly the same in both places: a build has no clock, only a moment. A scheduled post is left out of the build that runs before its date and is in the next build after it, so a scheduled site needs a build on a schedule; the CMS publishes it on the date by itself. `BUILD_SCHEDULED=1` builds them anyway. |
 
 It also builds two collections Eleventy has no notion of. `collections.categories`
@@ -1345,6 +1386,37 @@ followed by the pages whose front matter says `navigation: true` — as
 `{ label, url }` entries in the order the header should render them; a layout
 marks the current one itself by comparing `item.url` with `page.url`, because a
 collection is built once for the whole site.
+
+The `date` filter is the one that needs a word. The files hold UTC instants and
+the `timezone` setting decides how they read, so the config's filter takes the
+zone from `content/_data/site.json` — the mirror the settings screen writes —
+and renders with `Intl`, which keeps the file free of dependencies. If your site
+already uses [Luxon](https://moment.github.io/luxon/), which Eleventy ships
+anyway, the same filter is shorter:
+
+```js
+import { DateTime } from 'luxon';
+
+const zone =
+  JSON.parse(readFileSync('content/_data/site.json', 'utf8')).timezone ?? 'utc';
+
+eleventyConfig.addFilter('date', (value, format = 'readable') => {
+  const at = DateTime.fromJSDate(
+    value instanceof Date ? value : new Date(value),
+  ).setZone(zone);
+  if (!at.isValid) return '';
+
+  // `iso` is the instant, never the zone: a <time datetime> and a feed want
+  // UTC and must not move when a setting does.
+  if (format === 'iso') return at.toUTC().toISO();
+  if (format === 'html') return at.toFormat('yyyy-MM-dd');
+  if (format === 'year') return at.toFormat('yyyy');
+  return at.toFormat('d LLLL yyyy');
+});
+```
+
+Either way it is the CMS's own filter, format for format, so a layout moved
+across prints the same dates.
 
 It also turns the template engine off for Markdown
 (`markdownTemplateEngine: false`), because the CMS renders Markdown with

@@ -1,6 +1,6 @@
 ---
 title: Reading the index
-date: '2026-06-02T07:30:00-05:00'
+date: '2026-06-02T12:30:00Z'
 permalink: /reading-the-index/
 tags:
   - sqlite
