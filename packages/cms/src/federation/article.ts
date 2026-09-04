@@ -115,15 +115,22 @@ export function postCreateActivity(
  * ActivityPub offers and all a peer can apply. Its id carries the document's
  * hash, so two edits are two activities and the same edit delivered twice is
  * one; see {@link updateActivityId}.
+ *
+ * `revision` overrides that. A resend (decision-9) is asking for a revision
+ * the followers have already been offered to be offered again, and an activity
+ * id a peer has seen is one it is entitled to drop, so a resend passes the
+ * moment instead of the hash. Everything else about the activity is the same,
+ * which is what makes a resent `Update` and a saved one the same shape.
  */
 export function postUpdateActivity(
   context: Context<FederationContextData>,
   document: Document,
+  revision: string = revisionOf(document),
 ): Update {
   const article = postArticle(context, document);
 
   return new Update({
-    id: updateActivityId(articleObjectId(context, document), revisionOf(document)),
+    id: updateActivityId(articleObjectId(context, document), revision),
     actor: context.getActorUri(SITE_ACTOR_IDENTIFIER),
     object: article,
     published: toInstant(document.updated ?? document.date) ?? null,

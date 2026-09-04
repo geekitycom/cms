@@ -1,5 +1,7 @@
 import type { Hono } from 'hono';
 
+import type { Document } from '../content/document.ts';
+import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
 import { avatarUrl } from '../federation/actor.ts';
@@ -17,7 +19,6 @@ import type {
   DeliveryStatus,
   Follower,
   InboxActivity,
-  OutboundActivity,
   Relay,
   RelayState,
 } from './store.ts';
@@ -26,14 +27,14 @@ import { ADMIN_TEMPLATES } from './templates.ts';
 /** Where the federation screen lives. */
 export const FEDERATION_PATH = `${ADMIN_PREFIX}/federation`;
 
-/** Where a post's Redeliver button posts. */
-export const REDELIVER_PATH = `${FEDERATION_PATH}/redeliver`;
+/** Where a post's Resend button posts. */
+export const RESEND_PATH = `${FEDERATION_PATH}/resend`;
 
 /** Where a relay's Retry button posts. */
 export const RELAY_RETRY_PATH = `${FEDERATION_PATH}/relays/retry`;
 
 /** The fields the screen's forms submit. */
-export const FEDERATION_FIELDS = { activityId: 'activity_id', relay: 'relay' } as const;
+export const FEDERATION_FIELDS = { slug: 'slug', relay: 'relay' } as const;
 
 /** What each relay state reads as on the screen. */
 export const RELAY_STATE_LABELS: Readonly<Record<RelayState, string>> = {
@@ -61,9 +62,17 @@ export interface MountFederationScreenOptions {
  * Register `/admin/federation`: who the site is to the fediverse, who follows
  * it, what arrived in the inbox, and how the posts that went out landed.
  *
- * Everything on it is read out of SQLite rather than fetched: doc-4 keeps the
- * followers, the inbox log and the delivery log there precisely so the admin
- * can show them without dereferencing a remote actor per row.
+ * Nothing on it is fetched: the followers and the inbox log are indexed in
+ * SQLite from the files that hold them precisely so the admin can show them
+ * without dereferencing a remote actor per row.
+ *
+ * The delivery panel is the one that reads two sources at once. Which posts
+ * belong on it is a question for the content index — the posts carrying an
+ * `activitypub.id`, which is the same thing as the posts a follower holds a
+ * copy of — and how each of them last landed is a question for the outcome
+ * cache. That order matters: the cache is disposable (decision-9), so a site
+ * that has just deleted its database sees every federated post listed with
+ * nothing yet recorded against it, rather than an empty panel.
  */
 export function mountFederationScreen(
   app: Hono<GeekityEnv>,
@@ -78,7 +87,7 @@ export function mountFederationScreen(
 
     return render(c, ADMIN_TEMPLATES.federation, {
       section: 'federation',
-      redeliverUrl: REDELIVER_PATH,
+      resendUrl: RESEND_PATH,
       fields: FEDERATION_FIELDS,
       actor: actorSummary(readSiteSettings(c.var.config.contentDir), {
         baseUrl,
@@ -94,18 +103,13 @@ export function mountFederationScreen(
         post,
       }),
       relayRetryUrl: RELAY_RETRY_PATH,
-      relays: admin.listRelays().map((relay) => {
-        const last = admin.lastDeliveryToInbox(relay.inboxId);
-        return relayRow(
-          relay,
-          last,
-          last === undefined ? undefined : admin.getOutboundActivity(last.activityId),
-        );
-      }),
-      posts: deliveryRows(admin.listOutboundActivities({ limit: FEDERATION_RECENT * 4 }), {
+      relays: admin
+        .listRelays()
+        .map((relay) => relayRow(relay, admin.lastDeliveryToInbox(relay.inboxId))),
+      posts: deliveryRows(c.var.store.listFederated({ limit: FEDERATION_RECENT }), {
+        lastDelivery: (objectId) => admin.lastDeliveryToObject(objectId),
         counts: (activityId) => admin.countDeliveriesByStatus(activityId),
-        post,
-      }).slice(0, FEDERATION_RECENT),
+      }),
     });
   });
 
@@ -136,24 +140,24 @@ export function mountFederationScreen(
   });
 
   /**
-   * Send one post's latest activity to every follower the site has now.
+   * Send one post as it now reads to every follower and every accepted relay.
    *
-   * The activity is named rather than the post, so the button sends exactly
-   * what the row it sits in says it will: a post edited between the page load
-   * and the click has a newer activity, and re-sending that one instead would
-   * be a different thing from what was asked for.
+   * The post is named rather than an activity, which is the whole of what
+   * decision-9 changed here: the activity is built from the file when the
+   * button is pressed, so a post edited between the page load and the click
+   * goes out as it is now — which is what somebody pressing Resend is asking
+   * for — rather than as the row said it was.
    */
-  app.post(REDELIVER_PATH, async (c) => {
+  app.post(RESEND_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const activityId = body[FEDERATION_FIELDS.activityId];
+    const slug = body[FEDERATION_FIELDS.slug];
 
-    const report =
-      typeof activityId === 'string' ? await c.var.delivery.redeliver(activityId) : undefined;
+    const report = typeof slug === 'string' ? await c.var.delivery.resend(slug) : undefined;
 
     if (report === undefined) {
-      flash(c, 'error', 'There is no record of that activity, so it cannot be sent again.');
+      flash(c, 'error', 'There is no post to send under that name, so nothing was sent.');
     } else {
-      flash(c, report.deliveries.some(failed) ? 'error' : 'notice', redeliveryMessage(report));
+      flash(c, report.deliveries.some(failed) ? 'error' : 'notice', resendMessage(report));
     }
 
     return c.redirect(FEDERATION_PATH, 303);
@@ -166,12 +170,15 @@ function failed(delivery: Delivery): boolean {
 }
 
 /**
- * What a redelivery came to, in one line.
+ * What a resend came to, in one line.
  *
  * The failures are counted even when there are none, because that zero is the
- * answer to the question the button was pressed to ask.
+ * answer to the question the button was pressed to ask. The activity type is
+ * named because it is not something the person choosing to resend chose: it
+ * follows from the state the post is in, and a `Delete` where somebody
+ * expected an `Update` is worth reading about.
  */
-export function redeliveryMessage(report: DeliveryReport): string {
+export function resendMessage(report: DeliveryReport): string {
   const total = report.deliveries.length;
   if (total === 0) {
     return (
@@ -190,73 +197,80 @@ export function redeliveryMessage(report: DeliveryReport): string {
   // "Recipients" rather than "followers": a relay is one of them too, and it
   // is not a follower.
   const recipients = total === 1 ? '1 recipient' : `${String(total)} recipients`;
-  return `Redelivered ${report.activityType} to ${recipients}: ${parts.join(', ')}.`;
+  return `Sent ${report.activityType} to ${recipients}: ${parts.join(', ')}.`;
 }
 
-/** One post that has been federated, and how its latest activity landed. */
+/** One post the fediverse holds a copy of, and how it last landed. */
 export interface DeliveryRow {
-  /** The post, or its slug when the file has since gone. */
+  /** The post, as the row names and links to it. */
   readonly post: LocalPost;
-  /** The activity the Redeliver button would send. */
-  readonly activityId: string;
-  /** `Create`, `Update` or `Delete`. */
-  readonly activityType: string;
-  /** When that activity was first built. */
-  readonly createdAt: string;
-  /** How many followers it reached, is still queued for, and failed for. */
-  readonly counts: Record<DeliveryStatus, number>;
+  /** What the Resend button submits. */
+  readonly slug: string;
+  /** Whether the post is in the trash, which is why its last activity was a `Delete`. */
+  readonly trashed: boolean;
+  /**
+   * The last activity about this post the cache remembers, or `null` when it
+   * remembers none — which is what a database deleted since is, and is not a
+   * reason to leave the post off the screen.
+   */
+  readonly lastActivity: {
+    /** `Create`, `Update` or `Delete`. */
+    readonly activityType: string;
+    /** When it was delivered. */
+    readonly attemptedAt: string;
+    /** How many recipients it reached, is still queued for, and failed for. */
+    readonly counts: Record<DeliveryStatus, number>;
+  } | null;
 }
 
 /** What {@link deliveryRows} needs to fill a row in. */
 export interface DeliveryRowsContext {
+  /** The newest outcome recorded about one object id, or `undefined`. */
+  readonly lastDelivery: (objectId: string) => Delivery | undefined;
   /** How one activity's deliveries ended, by status. */
   readonly counts: (activityId: string) => Record<DeliveryStatus, number>;
-  /** Resolve one of the site's ActivityStreams object ids to a post. */
-  readonly post: (objectId: string | null) => LocalPost | null;
 }
 
 /**
- * One row per post, holding the newest activity that post has: what the screen
- * shows and what its Redeliver button sends.
+ * One row per post the site has announced, newest post first.
+ *
+ * The posts come from the content index and the outcomes from the cache, in
+ * that order and not the other way round, because they are answers to two
+ * different questions. Which posts belong here is a fact about the files: a
+ * post carrying an `activitypub.id` is one some follower holds a copy of, and
+ * that stays true however often the database is thrown away. How each of them
+ * landed is a fact about the last delivery, which is exactly the sort of thing
+ * a cache is allowed to forget.
  *
  * A post is usually several activities — a `Create` and every `Update` since —
- * and listing all of them would make the panel a log rather than a status. The
- * newest is the one that matters, because it is the version a follower who
- * missed everything is owed. The activities arrive newest first, so the first
- * one seen for an object is that one.
+ * and the newest is the only one worth showing: it is the version a follower
+ * who missed everything is owed, and the one a resend supersedes anyway.
  */
 export function deliveryRows(
-  activities: readonly OutboundActivity[],
+  documents: readonly Document[],
   context: DeliveryRowsContext,
 ): DeliveryRow[] {
-  const rows: DeliveryRow[] = [];
-  const seen = new Set<string>();
+  return documents.map((document) => {
+    const last = context.lastDelivery(document.activitypub?.id ?? '');
 
-  for (const activity of activities) {
-    if (seen.has(activity.objectId)) continue;
-    seen.add(activity.objectId);
-
-    // A `Delete` is about a post that is no longer in the index, so the slug
-    // the activity was built with is the only name left for it.
-    const post = context.post(activity.objectId) ?? slugOnlyPost(activity.slug);
-    if (post === null) continue;
-
-    rows.push({
-      post,
-      activityId: activity.activityId,
-      activityType: activity.activityType,
-      createdAt: activity.createdAt,
-      counts: context.counts(activity.activityId),
-    });
-  }
-
-  return rows;
-}
-
-/** A post the index no longer holds, named by the slug the activity kept. */
-function slugOnlyPost(slug: string | null): LocalPost | null {
-  if (slug === null || slug === '') return null;
-  return { slug, title: slug, editUrl: editorPath(POST_KIND, slug) };
+    return {
+      post: {
+        slug: document.slug,
+        title: document.title,
+        editUrl: editorPath(POST_KIND, document.slug),
+      },
+      slug: document.slug,
+      trashed: isTrashedPath(document.path),
+      lastActivity:
+        last === undefined
+          ? null
+          : {
+              activityType: last.activityType,
+              attemptedAt: last.attemptedAt,
+              counts: context.counts(last.activityId),
+            },
+    };
+  });
 }
 
 /** The site's own actor, as the top of the screen describes it. */
@@ -507,7 +521,7 @@ export interface RelayRow {
   /** The last activity delivered there and how it went, or `null` for nothing yet. */
   readonly lastDelivery: {
     readonly activityId: string;
-    /** `Create`, `Update`, `Delete` — or `Activity` when the log no longer holds it. */
+    /** `Create`, `Update` or `Delete`. */
     readonly activityType: string;
     readonly status: DeliveryStatus;
     readonly error: string | null;
@@ -522,13 +536,10 @@ export interface RelayRow {
  *
  * The last outcome is looked up by inbox rather than by actor, because that is
  * the column a relay is guaranteed to have: a subscription that has not been
- * accepted has no actor id at all, and the point of the row is to say so.
+ * accepted has no actor id at all, and the point of the row is to say so. The
+ * outcome carries what the activity was, so there is nothing else to look up.
  */
-export function relayRow(
-  relay: Relay,
-  lastDelivery: Delivery | undefined,
-  lastActivity: OutboundActivity | undefined,
-): RelayRow {
+export function relayRow(relay: Relay, lastDelivery: Delivery | undefined): RelayRow {
   return {
     inboxId: relay.inboxId,
     state: relay.state,
@@ -542,7 +553,7 @@ export function relayRow(
         ? null
         : {
             activityId: lastDelivery.activityId,
-            activityType: lastActivity?.activityType ?? 'Activity',
+            activityType: lastDelivery.activityType,
             status: lastDelivery.status,
             error: lastDelivery.error,
             attemptedAt: lastDelivery.attemptedAt,

@@ -179,7 +179,7 @@
         <thead>
           <tr>
             <th scope="col">Post</th>
-            <th scope="col">Latest activity</th>
+            <th scope="col">Last activity</th>
             <th scope="col">Sent</th>
             <th scope="col">Queued</th>
             <th scope="col">Failed</th>
@@ -189,25 +189,41 @@
         <tbody>
           {% for row in posts %}
             <tr>
-              <td><a href="{{ row.post.editUrl }}">{{ row.post.title }}</a></td>
-              <td>{{ row.activityType }} <span class="admin-inbox-when">{{ row.createdAt | date('html') }}</span></td>
-              <td>{{ row.counts.sent }}</td>
-              <td>{{ row.counts.queued }}</td>
-              <td>{% if row.counts.failed %}<span class="admin-status admin-status-failed">{{ row.counts.failed }}</span>{% else %}0{% endif %}</td>
+              <td>
+                <a href="{{ row.post.editUrl }}">{{ row.post.title }}</a>
+                {% if row.trashed %}<p class="admin-hint">In the trash.</p>{% endif %}
+              </td>
+              {% if row.lastActivity %}
+                <td>{{ row.lastActivity.activityType }} <span class="admin-inbox-when">{{ row.lastActivity.attemptedAt | date('html') }}</span></td>
+                <td>{{ row.lastActivity.counts.sent }}</td>
+                <td>{{ row.lastActivity.counts.queued }}</td>
+                <td>{% if row.lastActivity.counts.failed %}<span class="admin-status admin-status-failed">{{ row.lastActivity.counts.failed }}</span>{% else %}0{% endif %}</td>
+              {% else %}
+                <td><span class="admin-empty">Nothing recorded.</span></td>
+                <td>—</td>
+                <td>—</td>
+                <td>—</td>
+              {% endif %}
               <td class="admin-actions">
-                <form method="post" action="{{ redeliverUrl }}">
+                <form method="post" action="{{ resendUrl }}">
                   <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-                  <input type="hidden" name="{{ fields.activityId }}" value="{{ row.activityId }}" />
-                  <button type="submit">Redeliver</button>
+                  <input type="hidden" name="{{ fields.slug }}" value="{{ row.slug }}" />
+                  <button type="submit">Resend</button>
                 </form>
               </td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
-      <p class="admin-hint">Redelivering sends that activity to every follower the site has now.</p>
+      <p class="admin-hint">
+        Resending builds the post again from its file and sends it to every
+        follower and every accepted relay the site has now: an update for a
+        published post, a withdrawal for one in the trash. The outcomes are a
+        cache, so a database deleted since leaves the posts listed with nothing
+        recorded against them.
+      </p>
     {% else %}
-      <p class="admin-empty">Nothing has been delivered yet.</p>
+      <p class="admin-empty">No post has been announced to the fediverse yet.</p>
     {% endif %}
   </section>
 {% endblock %}

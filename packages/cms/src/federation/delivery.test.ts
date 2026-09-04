@@ -306,6 +306,19 @@ async function waitForDelivery(type: string, timeoutMs = 5000): Promise<Delivery
   }
 }
 
+/** A draft nobody outside the site has ever seen. */
+function draftPost(): string {
+  return `---
+title: Not finished
+date: 2026-03-04T10:00:00.000Z
+permalink: /2026/03/secret/
+draft: true
+---
+
+Still thinking about it.
+`;
+}
+
 /** A published post file, as a site's own content directory would hold it. */
 function publishedPost(body: string): string {
   return `---
@@ -591,12 +604,11 @@ describe('the delivery log', () => {
     await publishNewPost(agent);
     await cms.delivery.settled();
 
-    const [activity] = cms.admin.listOutboundActivities();
+    const activity = cms.admin.lastDeliveryToObject(`${BASE_URL}/ap/posts/hello-world`);
     assert.ok(activity !== undefined, 'the activity that went out was recorded');
     assert.equal(activity.activityType, 'Create');
     assert.equal(activity.objectId, `${BASE_URL}/ap/posts/hello-world`);
     assert.equal(activity.slug, 'hello-world');
-    assert.match(activity.json, /"Create"/);
 
     const recorded = cms.admin.listDeliveries(activity.activityId);
     assert.deepEqual(
@@ -630,7 +642,7 @@ describe('the delivery log', () => {
     await publishNewPost(agent);
     await cms.delivery.settled();
 
-    const [activity] = cms.admin.listOutboundActivities();
+    const activity = cms.admin.lastDeliveryToObject(`${BASE_URL}/ap/posts/hello-world`);
     assert.ok(activity !== undefined);
     const failed = cms.admin
       .listDeliveries(activity.activityId)
@@ -643,35 +655,162 @@ describe('the delivery log', () => {
       .find((delivery) => delivery.actorId === REMOTE_ACTOR);
     assert.equal(reached?.status, 'sent', 'one bad inbox does not stop the others');
   });
+});
 
-  it('sends a recorded activity again when asked to redeliver it', async () => {
+describe('resending a post', () => {
+  /** Where the editor files the post {@link publishNewPost} writes. */
+  const PUBLISHED_FILE = 'posts/2026-03-04-hello-world.md';
+  const PUBLISHED_OBJECT = `${BASE_URL}/ap/posts/hello-world`;
+
+  it('sends an Update built from the file as it now reads (AC #1)', async () => {
+    const { cms, contentDir } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    const announced = String((delivered('Create')[0] as Delivery).body['id']);
+
+    // Edited on disk and indexed by a scan, which federates nothing: the
+    // followers are a revision behind, which is the state a resend is pressed
+    // in. The front matter is carried through, so the post keeps the id they
+    // were given.
+    const file = path.join(contentDir, ...PUBLISHED_FILE.split('/'));
+    const edited = (await readFile(file, 'utf8')).replace(
+      'The first post.',
+      'A second thought, written later.',
+    );
+    await writeFile(file, edited, 'utf8');
+    await cms.sync();
+    deliveries.length = 0;
+
+    const report = await cms.delivery.resend('hello-world');
+    assert.ok(report !== undefined, 'the post was found and sent');
+    assert.equal(report.activityType, 'Update');
+    assert.equal(report.objectId, PUBLISHED_OBJECT);
+
+    const updates = delivered('Update');
+    assert.equal(updates.length, 1, `expected one Update, saw ${JSON.stringify(deliveries)}`);
+    const update = updates[0] as Delivery;
+    assert.equal(update.body['id'], report.activityId);
+    assert.notEqual(update.body['id'], announced, 'under an id no follower has seen');
+
+    const object = update.body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], PUBLISHED_OBJECT, 'about the object the followers hold');
+    assert.match(String(object['content']), /A second thought, written later\./);
+  });
+
+  it('gives two resends of an unchanged post two activity ids (AC #1)', async () => {
     const { cms } = await site();
     const agent = await signedIn(cms);
     await publishNewPost(agent);
     await cms.delivery.settled();
 
-    const [activity] = cms.admin.listOutboundActivities();
-    assert.ok(activity !== undefined);
-    deliveries.length = 0;
+    // Nothing about the post moves between them, so an id derived from its
+    // content — which is what a save uses — would be the same id twice, and a
+    // peer is entitled to ignore an activity id it has already seen.
+    const first = await cms.delivery.resend('hello-world');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const second = await cms.delivery.resend('hello-world');
 
-    const report = await cms.delivery.redeliver(activity.activityId);
-    assert.ok(report !== undefined, 'the activity was found and sent again');
-    assert.equal(report.activityId, activity.activityId);
-    assert.equal(report.activityType, 'Create');
-    assert.deepEqual(
-      report.deliveries.map((delivery) => delivery.status),
-      ['sent'],
-    );
-
-    const resent = delivered('Create');
-    assert.equal(resent.length, 1, `expected one Create, saw ${JSON.stringify(deliveries)}`);
-    assert.equal((resent[0] as Delivery).body['id'], activity.activityId);
+    assert.ok(first !== undefined && second !== undefined);
+    assert.equal(first.objectId, second.objectId, 'both were about the same post');
+    assert.notEqual(first.activityId, second.activityId);
   });
 
-  it('answers undefined for an activity it never sent', async () => {
+  it('sends a Create and stamps the id into the file when it has none (AC #2)', async () => {
+    const file = 'posts/2026-03-04-watched.md';
+    // Indexed by the boot scan, which federates nothing and stamps nothing, so
+    // the file is a published post no follower has ever been told about.
+    const { cms, contentDir } = await site({
+      files: { [file]: publishedPost('Published, but never announced.') },
+    });
+    assert.deepEqual(deliveries, [], 'the scan announced nothing');
+
+    const report = await cms.delivery.resend('watched');
+    assert.equal(report?.activityType, 'Create');
+
+    const creates = delivered('Create');
+    assert.equal(creates.length, 1, `expected one Create, saw ${JSON.stringify(deliveries)}`);
+    const object = (creates[0] as Delivery).body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], `${BASE_URL}/ap/posts/watched`);
+
+    const source = await readFile(path.join(contentDir, ...file.split('/')), 'utf8');
+    assert.match(source, /activitypub:/, 'and the id is in the file');
+    assert.match(source, new RegExp(`id: ${BASE_URL}/ap/posts/watched`));
+  });
+
+  it('sends a Delete of a Tombstone for a post in the trash (AC #3)', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'trash', return: '' });
+    await cms.delivery.settled();
+    const withdrawn = String((delivered('Delete')[0] as Delivery).body['id']);
+    deliveries.length = 0;
+
+    const report = await cms.delivery.resend('hello-world');
+    assert.equal(report?.activityType, 'Delete');
+
+    const deletes = delivered('Delete');
+    assert.equal(deletes.length, 1, `expected one Delete, saw ${JSON.stringify(deliveries)}`);
+    const withdrawal = deletes[0] as Delivery;
+    assert.notEqual(withdrawal.body['id'], withdrawn, 'under an id no follower has seen');
+
+    const object = withdrawal.body['object'] as Record<string, unknown>;
+    assert.equal(object['type'], 'Tombstone');
+    assert.equal(object['id'], PUBLISHED_OBJECT, 'for the id the followers were given');
+    assert.equal(object['formerType'], 'as:Article');
+  });
+
+  it('sends a Delete of a Tombstone for a post that has become a draft (AC #3)', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+    await cms.delivery.settled();
+    deliveries.length = 0;
+
+    const report = await cms.delivery.resend('hello-world');
+
+    assert.equal(report?.activityType, 'Delete');
+    const object = (delivered('Delete')[0] as Delivery).body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], PUBLISHED_OBJECT);
+  });
+
+  it('records the outcome per follower, exactly as a publish does', async () => {
+    const { cms } = await site({ followers: 2 });
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+
+    const report = await cms.delivery.resend('hello-world');
+    assert.ok(report !== undefined);
+
+    assert.deepEqual(
+      cms.admin.listDeliveries(report.activityId).map((delivery) => delivery.status),
+      ['sent', 'sent'],
+    );
+    const last = cms.admin.lastDeliveryToObject(PUBLISHED_OBJECT);
+    assert.equal(last?.activityType, 'Update');
+    assert.equal(last?.slug, 'hello-world');
+  });
+
+  it('answers undefined for a slug no post answers to', async () => {
     const { cms } = await site();
 
-    assert.equal(await cms.delivery.redeliver(`${BASE_URL}/ap/posts/nothing#create`), undefined);
+    assert.equal(await cms.delivery.resend('nothing-of-the-sort'), undefined);
+    assert.deepEqual(deliveries, [], 'and nothing was sent');
+  });
+
+  it('answers undefined for a draft the site has never announced', async () => {
+    const { cms } = await site({
+      files: { 'posts/2026-03-04-secret.md': draftPost() },
+    });
+
+    assert.equal(await cms.delivery.resend('secret'), undefined);
+    assert.deepEqual(deliveries, [], 'there is no copy anywhere to withdraw');
   });
 });
 
@@ -756,8 +895,8 @@ describe('the site’s own profile', () => {
       'and the screen says so',
     );
 
-    // Recorded like every other delivery, so the log says who was told.
-    const recorded = cms.admin.listOutboundActivities()[0];
+    // Recorded like every other delivery, so the cache says who was told.
+    const recorded = cms.admin.lastDeliveryToObject(`${BASE_URL}/ap/actor`);
     assert.ok(recorded !== undefined);
     assert.equal(recorded.activityType, 'Update');
     assert.equal(recorded.objectId, `${BASE_URL}/ap/actor`);

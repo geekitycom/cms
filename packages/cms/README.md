@@ -254,7 +254,9 @@ files, which is what makes editing `followers.json` by hand and restarting a
 supported thing to do, and what makes deleting the database cost a site
 nothing. `cms.admin.replaceFollowers` and `replaceInboxActivities` are what the
 rebuild calls; `rebuildFederationIndexes({ admin, contentDir })` is the rebuild
-itself. The delivery log stays in SQLite as a cache of what happened.
+itself. The delivery outcomes stay in SQLite as a cache of what happened; the
+activities themselves are not stored at all, because they are rebuilt from the
+posts' files whenever they are wanted again.
 
 The actor's key pairs are the CMS's own too, but they are the one
 thing a site can never regenerate, so they live in files: one JWK per algorithm
@@ -296,17 +298,33 @@ answering. Restoring a trashed post reuses it too.
 
 One POST serves a whole instance — the shared inbox is preferred — but the
 outcome is recorded per recipient, so an admin can see which one did not get it
-and send the activity again:
+and send the post again:
 
 ```ts
-const report = await cms.delivery.redeliver(activityId);
+const report = await cms.delivery.resend(slug);
 report?.deliveries; // one row per follower and relay: inbox, status, error, time
 ```
 
-`cms.admin.listOutboundActivities()` lists what has been sent, newest first,
-and `listDeliveries(activityId)` and `countDeliveriesByStatus(activityId)`
-say how each one landed. A status is `sent` (the inbox took it), `queued`
-(handed to Fedify's queue, which retries out of band) or `failed`.
+`resend` is "send this post as it now reads", not "send that activity again":
+the activity is built from the file at the moment it is called, so a follower
+whose server was down ends up with the post as it stands. Which activity that
+is follows the same table as a save — a published post nobody has been told
+about is a `Create` and is stamped, a published post they hold is an `Update`
+under a fresh id, a draft or a trashed one is a `Delete` of a `Tombstone` — and
+`undefined` comes back when there is no post by that name and nothing to
+withdraw.
+
+Nothing else is stored. What SQLite keeps about anything the site has sent is
+one outcome row per recipient — the activity's id, type, object id and slug,
+the inbox used, how it went, why not, and when — and that is a cache which may
+be empty. `cms.admin.lastDeliveryToObject(objectId)` is the newest outcome
+about one post, and `listDeliveries(activityId)` and
+`countDeliveriesByStatus(activityId)` say how one activity landed with each
+recipient. A status is `sent` (the inbox took it), `queued` (handed to Fedify's
+queue, which retries out of band) or `failed`.
+
+The one capability given up is tombstoning a post whose file is gone entirely
+rather than in the trash: there is no file left to build the `Tombstone` from.
 
 ### Relays
 
@@ -329,7 +347,7 @@ Only an accepted relay is delivered to. From there it is one more inbox in the
 fan-out: every `Create`, `Update` and `Delete` for a post, and the actor
 `Update` a profile change sends, goes to it as well as to the followers, its
 outcome recorded in the delivery log against its actor id and its inbox exactly
-as a follower's is — which is why Redeliver reaches relays too.
+as a follower's is — which is why Resend reaches relays too.
 
 ```ts
 cms.admin.listRelays(); // inbox, actor, state, reason, follow id, times
@@ -362,10 +380,11 @@ that moves one of them tells the followers. A save that only moves the time
 zone or the page size tells nobody, and neither does anything at all on a site
 that has no followers yet.
 
-The `Update` is recorded in the delivery log like every other activity, with
-the actor's id as its object and no slug, and `cms.delivery.updateActor()`
-sends one from code. Because it is about no post, it is not a row in the
-federation screen's per-post delivery table.
+Its outcome is recorded like every other activity's, with the actor's id as its
+object and no slug, and `cms.delivery.updateActor()` sends one from code.
+Because it is about no post, it is not a row in the federation screen's
+per-post delivery table, which is built from the posts the content index
+holds.
 
 ### The federation screen
 
@@ -374,11 +393,18 @@ site's own actor — its avatar, handle and type, the name and summary the
 profile carries, and how many actors follow it — the follower list with avatars and
 follow dates, the recent likes, boosts and replies out of the inbox log, each
 linked to the remote object and to the post it was about, and one row per post
-that has been federated: its latest activity, when it went, and how many
+that has been federated: its last activity, when it went, and how many
 recipients it reached, is queued for, or failed for. Each of those rows has a
-Redeliver button, which is `cms.delivery.redeliver` behind a form: it sends
-that activity to every follower and every accepted relay the site has now and
-says what came of it.
+Resend button, which is `cms.delivery.resend` behind a form: it builds the post
+again from its file, sends it to every follower and every accepted relay the
+site has now, and says what came of it.
+
+Which posts are listed is a question for the files — the posts carrying an
+`activitypub.id`, the trash included, which is the same thing as the posts some
+follower holds a copy of — and how each landed is a question for the outcome
+cache. So a site that has just deleted `data/geekity.db` sees every federated
+post listed with nothing recorded against it, and can press Resend on any of
+them.
 
 A Relays panel sits between the followers and the inbox log: one row per
 subscription with its inbox, whether it is waiting, accepted or rejected, when
@@ -420,7 +446,7 @@ Then, from a Mastodon account:
    two.
 3. Publish a post, from the editor or by writing a file into `content/posts/`.
    A `Create(Article)` is delivered, and the post shows up in the follower's
-   home timeline; `/admin/federation` records the outcome, with a Redeliver
+   home timeline; `/admin/federation` records the outcome, with a Resend
    button if it did not land.
 4. Edit the post, then set `draft: true` on it, to see the `Update` and the
    `Delete` arrive.
@@ -624,7 +650,7 @@ shadow the login form.
 | `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                         |
 | `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                    |
 | `/admin/federation`                              | The actor, the followers, the inbox log, and per-post delivery.                  |
-| `/admin/federation/redeliver`                    | `POST` only. Sends one post's latest activity to the followers again.            |
+| `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.       |
 | `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                   |
 | `/admin/login`                                   | Username and password.                                                           |
 | `/admin/logout`                                  | `POST` only. Deletes the session row.                                            |

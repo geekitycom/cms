@@ -151,14 +151,14 @@ export {
   PREVIEW_PATH,
   profileChanged,
   readSiteSettings,
-  REDELIVER_PATH,
-  redeliveryMessage,
   RELAY_RETRY_PATH,
   RELAY_STATE_LABELS,
   relayList,
   relayRow,
   renamePath,
   renameProblem,
+  RESEND_PATH,
+  resendMessage,
   rewriteTerm,
   MEDIA_DELETE_PATH,
   MEDIA_FIELDS,
@@ -260,10 +260,8 @@ export type {
   NewDelivery,
   NewFollower,
   NewInboxActivity,
-  NewOutboundActivity,
   NewRelay,
   OpenAdminStoreOptions,
-  OutboundActivity,
   Relay,
   RelayState,
   Session,
@@ -739,10 +737,10 @@ export interface Cms {
   /**
    * Outbound ActivityPub delivery: what sends a post to the followers when it
    * is published, edited or withdrawn, and what an admin screen calls to send
-   * a recorded activity again.
+   * one of them as it now reads.
    *
    * It is already subscribed to the index; a site only reaches for it to
-   * redeliver, or to wait for the deliveries in flight.
+   * resend a post, or to wait for the deliveries in flight.
    */
   readonly delivery: DeliveryService;
   /**
@@ -892,7 +890,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // Federation listens to the index rather than to the admin, so a post edited
   // on disk federates exactly as one saved through the editor does (doc-4).
   // It is built before the app because a handler reads it off the context: the
-  // admin's Redeliver button is a request that sends an activity again.
+  // admin's Resend button is a request that sends a post out again.
   const delivery = createDeliveryService({ federation, admin, store, config: resolved });
   content.events.on('change', (change) => delivery.handle(change));
 

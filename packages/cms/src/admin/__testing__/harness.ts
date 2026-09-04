@@ -21,6 +21,15 @@ export interface Sandbox {
   dir(prefix: string): Promise<string>;
   /** A CMS over empty content and data directories of its own. */
   site(config?: GeekityConfig): Promise<Cms>;
+  /**
+   * A CMS over directories the caller names, closed with the sandbox.
+   *
+   * What {@link Sandbox.site} is built on, and what a test booting a second
+   * time over the first one's directories needs: a database deleted and put
+   * back is a thing decision-9 promises works, and proving it takes two boots
+   * over the same content.
+   */
+  open(config: GeekityConfig & { contentDir: string; dataDir: string }): Promise<Cms>;
 }
 
 /** Open a sandbox. Call {@link Sandbox.cleanup} from the file's `after` hook. */
@@ -41,9 +50,15 @@ export function sandbox(): Sandbox {
     },
 
     async site(config = {}) {
-      const contentDir = await this.dir('geekity-admin-content-');
-      const dataDir = await this.dir('geekity-admin-data-');
-      const instance = createCms({ contentDir, dataDir, watch: false, ...config });
+      return await this.open({
+        contentDir: await this.dir('geekity-admin-content-'),
+        dataDir: await this.dir('geekity-admin-data-'),
+        ...config,
+      });
+    },
+
+    async open(config) {
+      const instance = createCms({ watch: false, ...config });
       started.push(instance);
       await instance.sync();
       return instance;
