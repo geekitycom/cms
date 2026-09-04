@@ -333,7 +333,7 @@ Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
 | `/`                    | Published posts, newest first.                                                |
 | `/page/2/` and up      | Later pages of the same archive.                                              |
 | a document's permalink | The post or the page, through the theme.                                      |
-| `/tags/{tag}/`         | Everything published carrying that tag, paginated at `/tags/{tag}/page/2/`.   |
+| `/tag/{tag}/`          | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`.    |
 | `/category/{name}/`    | The second taxonomy, paginated the same way at `/category/{name}/page/2/`.    |
 | `/theme/…`             | The theme's own files, from its `static/` directory, cacheable and validated. |
 | `/uploads/…`           | Files under `content/uploads/`, at the URLs an Eleventy build copies them to. |
@@ -343,6 +343,10 @@ Drafts and documents in the trash 404 and appear in no listing. Trailing
 slashes are canonical, and a request that arrives without one redirects 301 —
 but only when the canonical URL resolves, so a missing address 404s straight
 away instead of bouncing first. `/page/1/` redirects to `/`.
+
+The two archive bases are settings. `tag` and `category` are WordPress's, so a
+site imported from it keeps the URLs it published; the settings screen moves
+either one, and every link, feed and hashtag follows.
 
 Documents are resolved after every registered route has failed to match, so
 routes a site adds — and the admin and federation routes of later milestones —
@@ -393,8 +397,8 @@ like every other POST in the admin.
 ## Site settings
 
 `/admin/settings` holds the values doc-1 keeps only in SQLite: title, tagline,
-base URL, time zone, posts per page, the ActivityPub actor handle and type, and
-the site's avatar.
+base URL, time zone, posts per page, the tag and category archive bases, the
+ActivityPub actor handle and type, and the site's avatar.
 They live in a `settings` table of key and value, alongside the users and
 sessions in the same database file, and they are the half of it that is not
 derived from the content directory.
@@ -410,7 +414,8 @@ renders with the same values and never sees a half-written file. A hand edit of
 the file after that point is overwritten by the next save.
 
 The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
-`timezone` and `avatar`, and every other key it already had is kept — a site may put
+`timezone`, `avatar`, `tagBase` and `categoryBase`, and every other key it
+already had is kept — a site may put
 anything in there, `feedSize` included, and reach it from its templates. The
 theme reads the settings on top of the file, so a saved title is on the public
 site and in the feeds on the very next request rather than when the file's
@@ -425,11 +430,23 @@ back with a 400 and one message under each field that has one:
 | Base URL       | An absolute `http://` or `https://` URL. See [Configuration](#configuration).      |
 | Time zone      | An IANA zone name `Intl` knows, such as `Europe/London`.                           |
 | Posts per page | A whole number of one or more. It is what the home page and tag archives page by.  |
+| Tag base       | One URL-safe path segment. See below.                                              |
+| Category base  | The same, and not the same word as the tag base.                                   |
 | Actor handle   | 1 to 64 letters, digits, dashes or underscores — the local part of `@handle@host`. |
 | Actor type     | One of `Person`, `Organization`, `Service`, `Group` or `Application`.              |
 
 `Person` is the default actor type because some clients hide `Service` actors
 from timelines.
+
+The two archive bases decide where the taxonomy archives live: `/{tagBase}/{tag}/`
+and `/{categoryBase}/{name}/`. They default to WordPress's `tag` and `category`,
+so a site imported from WordPress keeps every archive URL it published. Each is
+one path segment — up to 64 letters, digits, dashes or underscores, starting
+with a letter or a digit — the two may not be the same word, and neither may
+take a path the site already answers on: `page`, `feed`, `admin`, `ap`,
+`theme`, `uploads` or `nodeinfo`. Saving one moves the archive, its paging, its
+tag feeds, every link the theme renders and the `Hashtag` hrefs on the
+ActivityStreams `Article` on the next request; the old base 404s.
 
 The avatar is not one of those fields, because it is a file: it has a pair of
 forms of its own on the same screen, posting to `POST /admin/settings/avatar` —

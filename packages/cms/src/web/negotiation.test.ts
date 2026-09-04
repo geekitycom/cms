@@ -414,7 +414,7 @@ describe('listings', () => {
     );
 
     const tagged = (await (
-      await cms.app.request('/tags/notes/', { headers: { accept: 'application/json' } })
+      await cms.app.request('/tag/notes/', { headers: { accept: 'application/json' } })
     ).json()) as { url: string }[];
     assert.deepEqual(
       tagged.map((item) => item.url),
@@ -425,7 +425,7 @@ describe('listings', () => {
   it('answers the .json extension on a listing URL', async () => {
     const { cms } = await site(ARCHIVE);
 
-    for (const url of ['/index.json', '/page/2/index.json', '/tags/notes/index.json']) {
+    for (const url of ['/index.json', '/page/2/index.json', '/tag/notes/index.json']) {
       const response = await cms.app.request(url, { headers: { accept: 'text/html' } });
       assert.equal(response.status, 200, `${url} resolves`);
       assert.match(response.headers.get('content-type') ?? '', /^application\/json/, url);
@@ -449,21 +449,21 @@ describe('listings', () => {
   it('links only the JSON alternate from a listing, and revalidates', async () => {
     const { cms } = await site(ARCHIVE);
 
-    const response = await cms.app.request('/tags/notes/', {
+    const response = await cms.app.request('/tag/notes/', {
       headers: { accept: 'application/json' },
     });
     const etag = response.headers.get('etag') ?? '';
 
     assert.equal(response.headers.get('vary'), 'Accept');
-    assert.equal(response.headers.get('link'), '</tags/notes/>; rel="alternate"; type="text/html"');
+    assert.equal(response.headers.get('link'), '</tag/notes/>; rel="alternate"; type="text/html"');
     assert.match(etag, /^"[0-9a-f]{32}"$/);
 
-    const again = await cms.app.request('/tags/notes/', {
+    const again = await cms.app.request('/tag/notes/', {
       headers: { accept: 'application/json', 'if-none-match': etag },
     });
     assert.equal(again.status, 304);
 
-    const full = await cms.app.request('/tags/notes/?full=1', {
+    const full = await cms.app.request('/tag/notes/?full=1', {
       headers: { accept: 'application/json', 'if-none-match': etag },
     });
     assert.equal(full.status, 200, 'a fuller body is a different entity');

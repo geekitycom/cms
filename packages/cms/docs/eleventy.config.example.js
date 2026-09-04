@@ -129,17 +129,18 @@ export default function (eleventyConfig) {
   // CMS's second taxonomy, `categories`, is an ordinary data key to Eleventy,
   // so this exposes it: `collections.categories` holds one entry per category
   // in use, `{ name, posts }`, sorted by name with each category's documents
-  // newest first — the order the CMS's own archive at `/category/{name}/`
-  // serves them in.
+  // newest first — the order the CMS's own archive serves them in.
   //
-  // Paginate it to build those archives:
+  // Paginate it to build those archives. The base comes from `site.json`, which
+  // the settings screen mirrors, so a base changed in the CMS moves the built
+  // archives too:
   //
   //     ---
   //     pagination:
   //       data: collections.categories
   //       size: 1
   //       alias: category
-  //     permalink: "/category/{{ category.name | urlencode }}/"
+  //     permalink: "/{{ site.categoryBase or 'category' }}/{{ category.name | urlencode }}/"
   //     ---
   //     {% for post in category.posts %}…{% endfor %}
   eleventyConfig.addCollection('categories', (collectionApi) => {

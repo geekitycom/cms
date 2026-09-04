@@ -12,7 +12,7 @@
   reading time, which is what makes the override visible in a browser.
 #}
 {% extends "layouts/base.njk" %}
-{% import "partials/tags.njk" as taxonomy %}
+{% import "partials/tags.njk" as taxonomy with context %}
 
 {% set minutes = ((content | striptags | wordcount) / 220) | round(0, "ceil") %}
 

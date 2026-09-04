@@ -19,7 +19,12 @@ import { after, before, describe, it } from 'node:test';
 
 import Eleventy from '@11ty/eleventy';
 
-import { categoryHref, isTrashedPath, parseDocument } from '../src/index.ts';
+import {
+  categoryHref,
+  DEFAULT_TAXONOMY_BASES,
+  isTrashedPath,
+  parseDocument,
+} from '../src/index.ts';
 import type { Document } from '../src/index.ts';
 
 /** Where a site's Eleventy build would be run from: the fixtures project root. */
@@ -153,7 +158,9 @@ describe('the fixtures content directory under Eleventy', () => {
       ...publishedDocuments().map((document) => outputPathFor(document.permalink)),
       // The category archives the CMS serves at the same URLs; the test below
       // is what proves those URLs are the ones it serves.
-      ...publishedCategories().map((category) => outputPathFor(categoryHref(category, 0))),
+      ...publishedCategories().map((category) =>
+        outputPathFor(categoryHref(category, 0, DEFAULT_TAXONOMY_BASES)),
+      ),
     ]);
 
     const unexplained = written.filter(
@@ -169,16 +176,20 @@ describe('the fixtures content directory under Eleventy', () => {
 
     for (const category of categories) {
       assert.ok(
-        written.includes(outputPathFor(categoryHref(category, 0))),
-        `the CMS serves ${category} at ${categoryHref(category, 0)}, so Eleventy should have ` +
-          `written ${outputPathFor(categoryHref(category, 0))}; it wrote ${written.join(', ')}`,
+        written.includes(outputPathFor(categoryHref(category, 0, DEFAULT_TAXONOMY_BASES))),
+        `the CMS serves ${category} at ${categoryHref(category, 0, DEFAULT_TAXONOMY_BASES)}, so Eleventy should have ` +
+          `written ${outputPathFor(categoryHref(category, 0, DEFAULT_TAXONOMY_BASES))}; it wrote ${written.join(', ')}`,
       );
     }
   });
 
   it('lists a category’s posts on its archive and nothing else', async () => {
     const html = await readFile(
-      path.join(buildDir, '_site', outputPathFor(categoryHref('general', 0))),
+      path.join(
+        buildDir,
+        '_site',
+        outputPathFor(categoryHref('general', 0, DEFAULT_TAXONOMY_BASES)),
+      ),
       'utf8',
     );
 
@@ -209,7 +220,7 @@ describe('the fixtures content directory under Eleventy', () => {
       for (const category of document.categories) {
         if (publishedCategories().includes(category)) continue;
         assert.ok(
-          !written.includes(outputPathFor(categoryHref(category, 0))),
+          !written.includes(outputPathFor(categoryHref(category, 0, DEFAULT_TAXONOMY_BASES))),
           `${category} is only carried by hidden documents, so it should have no archive`,
         );
       }

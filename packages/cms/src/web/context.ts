@@ -3,6 +3,8 @@ import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { DEFAULT_TAXONOMY_BASES, taxonomyBasesOrDefault } from './taxonomy.ts';
+import type { TaxonomyBases } from './taxonomy.ts';
 
 /** Where the site-wide data file lives, relative to the content directory. */
 export const SITE_DATA_FILE = '_data/site.json';
@@ -33,6 +35,13 @@ export interface SiteData {
   avatar?: string | undefined;
   /** How many posts a listing page holds. */
   postsPerPage?: number | undefined;
+  /**
+   * The first URL segment the tag archives live under, without slashes:
+   * `tag` unless the site says otherwise.
+   */
+  tagBase?: string | undefined;
+  /** The same for the category archives. `category` by default. */
+  categoryBase?: string | undefined;
   [key: string]: unknown;
 }
 
@@ -189,7 +198,12 @@ export function createSiteDataSource(
       // The defaults are rebuilt per read rather than captured, because
       // `config.baseUrl` may have been settled from the settings after this
       // source was made.
-      const defaults: SiteData = { title: 'Geekity', url: config.baseUrl };
+      const defaults: SiteData = {
+        title: 'Geekity',
+        url: config.baseUrl,
+        tagBase: DEFAULT_TAXONOMY_BASES.tag,
+        categoryBase: DEFAULT_TAXONOMY_BASES.category,
+      };
       return { ...defaults, ...fromFile(), ...settings?.read() };
     },
   };
@@ -213,6 +227,19 @@ export function postsPerPage(site: SiteData): number {
     return configured;
   }
   return DEFAULT_POSTS_PER_PAGE;
+}
+
+/**
+ * Where this site's taxonomy archives live, from the site data.
+ *
+ * A base the site could not actually be served under — an empty one, one with
+ * a slash in it, one that would shadow `/admin`, or two that are the same word
+ * — falls back to the default rather than taking the archives down: the value
+ * was refused at the settings screen, so anything that reaches here came from
+ * a hand-edited `site.json`.
+ */
+export function taxonomyBases(site: SiteData): TaxonomyBases {
+  return taxonomyBasesOrDefault({ tag: site['tagBase'], category: site['categoryBase'] });
 }
 
 function toDate(value: string | undefined): Date | undefined {

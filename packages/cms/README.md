@@ -455,21 +455,21 @@ that ship inside the package, deliberately outside the theme search path: a
 site's `theme/` may override any public template, and must not be able to
 shadow the login form.
 
-| Route                          | What it does                                                           |
-| ------------------------------ | ---------------------------------------------------------------------- |
-| `/admin`                       | The dashboard: counts, the five most recent posts, the follower count. |
-| `/admin/posts`, `/admin/pages` | The listings and the editors.                                          |
-| `/admin/settings`              | Site title, tagline, base URL, time zone, posts per page, the actor.   |
-| `/admin/settings/avatar`       | `POST` only. Uploads the site's avatar, or removes it.                 |
-| `/admin/users`                 | Who may sign in. `POST` adds one.                                      |
-| `/admin/users/password`        | `POST` only. Changes the signed-in admin's own password.               |
-| `/admin/users/delete`          | `POST` only. Deletes the user the form names.                          |
-| `/admin/federation`            | The actor, the followers, the inbox log, and per-post delivery.        |
-| `/admin/federation/redeliver`  | `POST` only. Sends one post's latest activity to the followers again.  |
-| `/admin/setup`                 | First run: creates the first admin. Closed once a user exists.         |
-| `/admin/login`                 | Username and password.                                                 |
-| `/admin/logout`                | `POST` only. Deletes the session row.                                  |
-| `/admin/_static/*`             | The admin's own stylesheet, cached for an hour.                        |
+| Route                          | What it does                                                            |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `/admin`                       | The dashboard: counts, the five most recent posts, the follower count.  |
+| `/admin/posts`, `/admin/pages` | The listings and the editors.                                           |
+| `/admin/settings`              | Site title, tagline, base URL, time zone, paging, archive bases, actor. |
+| `/admin/settings/avatar`       | `POST` only. Uploads the site's avatar, or removes it.                  |
+| `/admin/users`                 | Who may sign in. `POST` adds one.                                       |
+| `/admin/users/password`        | `POST` only. Changes the signed-in admin's own password.                |
+| `/admin/users/delete`          | `POST` only. Deletes the user the form names.                           |
+| `/admin/federation`            | The actor, the followers, the inbox log, and per-post delivery.         |
+| `/admin/federation/redeliver`  | `POST` only. Sends one post's latest activity to the followers again.   |
+| `/admin/setup`                 | First run: creates the first admin. Closed once a user exists.          |
+| `/admin/login`                 | Username and password.                                                  |
+| `/admin/logout`                | `POST` only. Deletes the session row.                                   |
+| `/admin/_static/*`             | The admin's own stylesheet, cached for an hour.                         |
 
 The screens behind the login share one layout: a bar across the top with the
 site name and a link to the public site, the sections down the left with the
@@ -519,16 +519,17 @@ admin.close();
 
 Booting mounts the public site on the app. The routes are:
 
-| Route                                           | What it serves                                                              |
-| ----------------------------------------------- | --------------------------------------------------------------------------- |
-| `/`                                             | Published posts, newest first.                                              |
-| `/page/2/` and up                               | Later pages of the same archive.                                            |
-| a document's permalink                          | The post or the page, through the theme.                                    |
-| `/tags/{tag}/`                                  | Everything published carrying that tag, paginated at `/tags/{tag}/page/2/`. |
-| `/feed.xml`, `/feed.json`                       | The recent posts as Atom and JSON Feed.                                     |
-| `/tags/{tag}/feed.xml`, `/tags/{tag}/feed.json` | The same, for one tag.                                                      |
-| `/theme/…`                                      | The theme's own files, from its `static/` directory.                        |
-| anything else                                   | The theme's 404.                                                            |
+| Route                                         | What it serves                                                             |
+| --------------------------------------------- | -------------------------------------------------------------------------- |
+| `/`                                           | Published posts, newest first.                                             |
+| `/page/2/` and up                             | Later pages of the same archive.                                           |
+| a document's permalink                        | The post or the page, through the theme.                                   |
+| `/tag/{tag}/`                                 | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`. |
+| `/category/{name}/`                           | The second taxonomy, paginated the same way.                               |
+| `/feed.xml`, `/feed.json`                     | The recent posts as Atom and JSON Feed.                                    |
+| `/tag/{tag}/feed.xml`, `/tag/{tag}/feed.json` | The same, for one tag.                                                     |
+| `/theme/…`                                    | The theme's own files, from its `static/` directory.                       |
+| anything else                                 | The theme's 404.                                                           |
 
 Drafts and documents in the trash are not on the public site: their URLs 404,
 and they are in no listing.
@@ -540,7 +541,21 @@ address 404s straight away rather than bouncing first. `/page/1/` redirects to
 
 A document is resolved after every registered route has failed to match, so
 routes a site adds always win over a permalink that happens to collide with
-them.
+them. The taxonomy archives are resolved there too, ahead of the documents: a
+route table is fixed when the app is built and the archive bases are a setting,
+so `/{tagBase}/{tag}/` is matched against whatever the site holds at the moment
+of the request.
+
+`tag` and `category` are the bases a site has until it says otherwise —
+WordPress's own, so a site imported from it keeps every archive URL it
+published. `tagBase` and `categoryBase` on the settings screen move them, and
+the routes, the paging, the canonical redirects, the tag feeds, the theme's
+links and the ActivityStreams hashtags all follow on the next request. A base
+is one URL-safe path segment: no slashes, and not a path the site already
+answers on (`page`, `feed`, `admin`, `ap`, `theme`, `uploads`, `nodeinfo`), and
+the two may not be the same word. Both are mirrored into
+`content/_data/site.json` as `tagBase` and `categoryBase`, so an Eleventy build
+of the same content directory can put its archives at the same URLs.
 
 ## Content negotiation
 
@@ -553,7 +568,7 @@ three; a listing has two.
 | `text/markdown`    | `.md`     | The file exactly as it is stored, front matter included. |
 | `application/json` | `.json`   | The document as data, see below.                         |
 
-Listings — `/`, `/page/N/`, `/tags/{tag}/` and `/tags/{tag}/page/N/` — offer
+Listings — `/`, `/page/N/`, `/tag/{tag}/` and `/tag/{tag}/page/N/` — offer
 HTML and JSON only. There is no Markdown file behind a listing to serve.
 
 The representation is chosen like this:
@@ -667,12 +682,12 @@ federation middleware before the negotiator sees them.
 
 The recent posts are syndicated in two formats, at fixed URLs:
 
-| URL                     | Format                                  |
-| ----------------------- | --------------------------------------- |
-| `/feed.xml`             | Atom 1.0 (`application/atom+xml`)       |
-| `/feed.json`            | JSON Feed 1.1 (`application/feed+json`) |
-| `/tags/{tag}/feed.xml`  | The same tag archive, as Atom           |
-| `/tags/{tag}/feed.json` | The same tag archive, as JSON Feed      |
+| URL                    | Format                                  |
+| ---------------------- | --------------------------------------- |
+| `/feed.xml`            | Atom 1.0 (`application/atom+xml`)       |
+| `/feed.json`           | JSON Feed 1.1 (`application/feed+json`) |
+| `/tag/{tag}/feed.xml`  | The same tag archive, as Atom           |
+| `/tag/{tag}/feed.json` | The same tag archive, as JSON Feed      |
 
 A feed holds the newest published posts, newest first. Drafts, documents in the
 trash and pages are never in one, and a tag nothing published carries 404s
@@ -708,7 +723,7 @@ feed is not rendered through the theme.
 
 ```sh
 curl -i https://example.com/feed.xml
-curl -i https://example.com/tags/releases/feed.json
+curl -i https://example.com/tag/releases/feed.json
 ```
 
 Every page of the default theme advertises both feeds in its `<head>`, and a
@@ -742,8 +757,8 @@ const source = {
   site,
   documents: cms.store.listByTag('releases', { limit: 20 }),
   title: `${site.title}: releases`,
-  href: '/tags/releases/',
-  feedHref: '/tags/releases/feed.xml',
+  href: '/tag/releases/',
+  feedHref: '/tag/releases/feed.xml',
   baseUrl: cms.config.baseUrl,
 };
 

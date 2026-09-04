@@ -26,6 +26,8 @@ const DEFAULT_FORM: Record<string, string> = {
   author: 'Somebody',
   actor_handle: 'blog',
   actor_type: 'Person',
+  tag_base: 'tag',
+  category_base: 'category',
 };
 
 /** Submit the settings form, filling in whatever the caller did not name. */
@@ -121,6 +123,8 @@ describe('content/_data/site.json', () => {
       postsPerPage: 7,
       timezone: 'Europe/London',
       avatar: '',
+      tagBase: 'tag',
+      categoryBase: 'category',
     });
   });
 
@@ -511,3 +515,83 @@ function oversizedPng(bytes: number): Uint8Array {
   image.set(png());
   return image;
 }
+
+describe('the taxonomy bases', () => {
+  it("default to WordPress's tag and category (AC #1, AC #3)", async () => {
+    const cms = await box.site();
+    const settings = readSiteSettings(cms.admin);
+
+    assert.equal(settings.tagBase, 'tag');
+    assert.equal(settings.categoryBase, 'category');
+  });
+
+  it('are seeded from an existing site.json, and defaulted when it has none (AC #3)', async () => {
+    const contentDir = await box.dir('geekity-bases-seed-');
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({ title: 'Old Site', tagBase: 'topics' }),
+      'utf8',
+    );
+
+    const cms = await box.site({ contentDir });
+    const settings = readSiteSettings(cms.admin);
+
+    assert.equal(settings.tagBase, 'topics');
+    assert.equal(settings.categoryBase, 'category', 'a key the old file lacks gets the default');
+  });
+
+  it('move the archives and are mirrored to site.json when saved (AC #2, AC #3)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    await mkdir(path.join(cms.config.contentDir, 'posts'), { recursive: true });
+    await writeFile(
+      path.join(cms.config.contentDir, 'posts', 'hello.md'),
+      "---\ntitle: Hello\ndate: '2026-09-01T09:00:00Z'\npermalink: /hello/\ntags:\n  - notes\ncategories:\n  - general\n---\n\nBody.\n",
+      'utf8',
+    );
+    await cms.sync();
+
+    assert.equal((await cms.app.request('/tag/notes/')).status, 200, 'the default base serves it');
+
+    const saved = await saveSettings(agent, { tag_base: 'topics', category_base: 'filed' });
+    assert.equal(saved.status, 303);
+
+    assert.equal((await cms.app.request('/topics/notes/')).status, 200);
+    assert.equal((await cms.app.request('/filed/general/')).status, 200);
+    assert.equal((await cms.app.request('/tag/notes/')).status, 404);
+
+    const mirror: unknown = JSON.parse(
+      await readFile(path.join(cms.config.contentDir, '_data', 'site.json'), 'utf8'),
+    );
+    assert.deepEqual(
+      {
+        tagBase: (mirror as Record<string, unknown>)['tagBase'],
+        categoryBase: (mirror as Record<string, unknown>)['categoryBase'],
+      },
+      { tagBase: 'topics', categoryBase: 'filed' },
+    );
+  });
+
+  it('refuse a base that is empty, holds a slash, is reserved or is the other one (AC #4)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    for (const fields of [
+      { tag_base: '' },
+      { tag_base: 'a/b' },
+      { tag_base: 'admin' },
+      { tag_base: 'page' },
+      { tag_base: 'feed' },
+      { tag_base: 'same', category_base: 'same' },
+    ]) {
+      const response = await saveSettings(agent, fields);
+      assert.equal(response.status, 400, `${JSON.stringify(fields)} should be refused`);
+
+      const settings = readSiteSettings(cms.admin);
+      assert.equal(settings.tagBase, 'tag', 'the stored tag base is unchanged');
+      assert.equal(settings.categoryBase, 'category', 'and so is the category base');
+    }
+  });
+});

@@ -2,10 +2,11 @@ import type { Environment } from 'nunjucks';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { createSiteDataSource, documentContext, postsPerPage } from './context.ts';
+import { createSiteDataSource, documentContext, postsPerPage, taxonomyBases } from './context.ts';
 import { activityStreamsId } from './documents.ts';
 import type { DocumentContext, SiteData, SiteSettingsSource } from './context.ts';
 import type { Pagination } from './pagination.ts';
+import type { TaxonomyBases } from './taxonomy.ts';
 import { createTemplateEnvironment } from './templates.ts';
 
 /** Templates the default theme ships and the public routes ask for by name. */
@@ -49,6 +50,12 @@ export interface Renderer {
   site(): SiteData;
   /** How many documents a listing page holds, per the site data. */
   pageSize(): number;
+  /**
+   * Where the taxonomy archives live, per the site data. The routes read it
+   * per request rather than at boot, so a base saved on the settings screen
+   * moves the archives on the very next one.
+   */
+  taxonomyBases(): TaxonomyBases;
   /** One document through its type's layout. */
   renderDocument(document: Document): string;
   /** A listing through the home, tag or category layout. */
@@ -103,6 +110,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     pageSize() {
       return postsPerPage(siteData.read());
+    },
+
+    taxonomyBases() {
+      return taxonomyBases(siteData.read());
     },
 
     renderDocument(document) {

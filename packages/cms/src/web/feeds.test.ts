@@ -571,18 +571,18 @@ describe('a tag feed', () => {
   it('holds only what carries the tag, in Atom', async () => {
     const { cms } = await site(tagged, { baseUrl: 'https://example.com' });
 
-    const { response, feed } = await atom(cms, '/tags/releases/feed.xml');
+    const { response, feed } = await atom(cms, '/tag/releases/feed.xml');
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'application/atom+xml; charset=utf-8');
-    assert.equal(child(feed, 'id').text, 'https://example.com/tags/releases/');
+    assert.equal(child(feed, 'id').text, 'https://example.com/tag/releases/');
     assert.equal(
       linkWithRel(feed, 'self').attributes['href'],
-      'https://example.com/tags/releases/feed.xml',
+      'https://example.com/tag/releases/feed.xml',
     );
     assert.equal(
       linkWithRel(feed, 'alternate').attributes['href'],
-      'https://example.com/tags/releases/',
+      'https://example.com/tag/releases/',
     );
     assert.ok(child(feed, 'title').text.includes('releases'), 'the feed title names the tag');
 
@@ -595,12 +595,12 @@ describe('a tag feed', () => {
   it('holds only what carries the tag, in JSON', async () => {
     const { cms } = await site(tagged);
 
-    const { response, feed, items } = await jsonFeedAt(cms, '/tags/releases/feed.json');
+    const { response, feed, items } = await jsonFeedAt(cms, '/tag/releases/feed.json');
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'application/feed+json; charset=utf-8');
-    assert.equal(feed['home_page_url'], 'https://example.com/tags/releases/');
-    assert.equal(feed['feed_url'], 'https://example.com/tags/releases/feed.json');
+    assert.equal(feed['home_page_url'], 'https://example.com/tag/releases/');
+    assert.equal(feed['feed_url'], 'https://example.com/tag/releases/feed.json');
     assert.deepEqual(
       items.map((item) => item['title']),
       ['Tagged One'],
@@ -610,13 +610,13 @@ describe('a tag feed', () => {
   it('404s a tag nothing published carries', async () => {
     const { cms } = await site(tagged);
 
-    for (const url of ['/tags/nothing/feed.xml', '/tags/nothing/feed.json']) {
+    for (const url of ['/tag/nothing/feed.xml', '/tag/nothing/feed.json']) {
       const response = await cms.app.request(url);
       assert.equal(response.status, 404, url);
     }
 
     // A tag only a draft carries is a tag the public site does not have.
-    const draftOnly = await cms.app.request('/tags/releases/feed.xml');
+    const draftOnly = await cms.app.request('/tag/releases/feed.xml');
     assert.equal(draftOnly.status, 200);
   });
 
@@ -629,12 +629,12 @@ describe('a tag feed', () => {
       }),
     });
 
-    const { response, feed } = await atom(cms, '/tags/book%20notes/feed.xml');
+    const { response, feed } = await atom(cms, '/tag/book%20notes/feed.xml');
 
     assert.equal(response.status, 200);
     assert.equal(
       linkWithRel(feed, 'self').attributes['href'],
-      'https://example.com/tags/book%20notes/feed.xml',
+      'https://example.com/tag/book%20notes/feed.xml',
     );
     assert.deepEqual(
       childrenNamed(feed, 'entry').map((entry) => child(entry, 'title').text),
@@ -655,7 +655,7 @@ describe('feed caching', () => {
   it('answers a matching If-None-Match with 304 and no body', async () => {
     const { cms } = await site(files);
 
-    for (const url of ['/feed.xml', '/feed.json', '/tags/releases/feed.xml']) {
+    for (const url of ['/feed.xml', '/feed.json', '/tag/releases/feed.xml']) {
       const first = await cms.app.request(url);
       const etag = first.headers.get('etag');
 
@@ -685,7 +685,7 @@ describe('feed caching', () => {
     const { cms } = await site(files);
 
     const etags = await Promise.all(
-      ['/feed.xml', '/feed.json', '/tags/releases/feed.xml', '/tags/releases/feed.json'].map(
+      ['/feed.xml', '/feed.json', '/tag/releases/feed.xml', '/tag/releases/feed.json'].map(
         async (url) => (await cms.app.request(url)).headers.get('etag'),
       ),
     );
@@ -726,7 +726,7 @@ describe('the HTML pages', () => {
   it('advertise both feeds with link rel=alternate', async () => {
     const { cms } = await site(files);
 
-    for (const url of ['/', '/one/', '/about/', '/tags/releases/']) {
+    for (const url of ['/', '/one/', '/about/', '/tag/releases/']) {
       const html = await (await cms.app.request(url)).text();
       const head = html.slice(0, html.indexOf('</head>'));
 
@@ -746,11 +746,11 @@ describe('the HTML pages', () => {
   it('advertise the tag feeds on a tag archive as well as the site ones', async () => {
     const { cms } = await site(files);
 
-    const html = await (await cms.app.request('/tags/releases/')).text();
+    const html = await (await cms.app.request('/tag/releases/')).text();
     const head = html.slice(0, html.indexOf('</head>'));
 
-    assert.ok(head.includes('href="/tags/releases/feed.xml"'), 'the tag Atom feed');
-    assert.ok(head.includes('href="/tags/releases/feed.json"'), 'the tag JSON feed');
+    assert.ok(head.includes('href="/tag/releases/feed.xml"'), 'the tag Atom feed');
+    assert.ok(head.includes('href="/tag/releases/feed.json"'), 'the tag JSON feed');
     assert.ok(head.includes('href="/feed.xml"'), 'and the whole-site Atom feed');
   });
 

@@ -65,7 +65,7 @@ import { serve } from '@hono/node-server';
 import { createFederation, generateCryptoKeyPair, MemoryKvStore } from '@fedify/fedify';
 import { Accept, Application, Create, Endpoints, Follow, isActor } from '@fedify/vocab';
 
-import { writeSiteSettings } from '../src/admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteSettings } from '../src/admin/settings.ts';
 import { openAdminStore } from '../src/admin/store.ts';
 import { createCms } from '../src/index.ts';
 import type { Cms } from '../src/index.ts';
@@ -125,6 +125,7 @@ async function main(): Promise<void> {
     // ActivityStreams id in this run is built from.
     const seed = openAdminStore({ dataDir });
     writeSiteSettings(seed, {
+      ...DEFAULT_SITE_SETTINGS,
       title: 'Federation Smoke',
       tagline: 'A site that exists for one test',
       baseUrl,

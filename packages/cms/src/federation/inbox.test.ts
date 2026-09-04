@@ -19,7 +19,7 @@ import {
   Undo,
 } from '@fedify/vocab';
 
-import { writeSiteSettings } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteSettings } from '../admin/settings.ts';
 import { openAdminStore } from '../admin/store.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
@@ -145,6 +145,7 @@ async function site(): Promise<Cms> {
 
   const seed = openAdminStore({ dataDir });
   writeSiteSettings(seed, {
+    ...DEFAULT_SITE_SETTINGS,
     title: 'Geekity',
     tagline: 'A file-first CMS',
     baseUrl: BASE_URL,

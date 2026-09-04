@@ -95,7 +95,7 @@ describe('splitRepresentationExtension', () => {
   });
 
   it('round-trips with representationHref', () => {
-    for (const href of ['/2026/09/hello/', '/', '/tags/notes/']) {
+    for (const href of ['/2026/09/hello/', '/', '/tag/notes/']) {
       for (const representation of ['markdown', 'json'] as const) {
         const url = representationHref(href, representation);
         const split = splitRepresentationExtension(url);
