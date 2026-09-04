@@ -64,6 +64,11 @@ export const TAXONOMY_BASE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
  * upgrade. `comments` is the site-wide comments feed's root, for the same
  * reason. `taxonomy.test.ts` pins this list against the prefixes those routes
  * are actually registered under, so it cannot fall behind them.
+ *
+ * `sitemap.xml` and `robots.txt` are here because they are paths the site
+ * answers on, which is what the list is: {@link TAXONOMY_BASE_PATTERN} would
+ * refuse either of them anyway for the dot, so the entries are belt and
+ * braces rather than the only thing standing in the way.
  */
 export const RESERVED_TOP_LEVEL_PATHS: readonly string[] = [
   PAGE_SEGMENT,
@@ -74,6 +79,8 @@ export const RESERVED_TOP_LEVEL_PATHS: readonly string[] = [
   'theme',
   'uploads',
   'nodeinfo',
+  'sitemap.xml',
+  'robots.txt',
 ];
 
 /**

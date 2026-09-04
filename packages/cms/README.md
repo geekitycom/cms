@@ -604,6 +604,9 @@ Booting mounts the public site on the app. The routes are:
 | `/tag/{tag}/feed/` and its two siblings | The same, for one tag; `/category/{name}/feed/` likewise.                  |
 | `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                           |
 | `{permalink}feed/`                      | One post's replies, the same way.                                          |
+| `/sitemap.xml`                          | Every public URL, for a search engine.                                     |
+| `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                          |
+| `/robots.txt`                           | What a crawler may have, and where the sitemap is.                         |
 | `/theme/…`                              | The theme's own files, from its `static/` directory.                       |
 | anything else                           | The theme's 404.                                                           |
 
@@ -1047,6 +1050,58 @@ commentsRssFeed({
 });
 ```
 
+## Sitemap and robots.txt
+
+Two more fixed routes, at the two paths a crawler goes looking for on its own.
+
+`/sitemap.xml` is every URL the public site publishes, in the
+[sitemap protocol's](https://www.sitemaps.org/protocol.html) `<urlset>`:
+
+- the home archive and each of its pages, `/`, `/page/2/` and so on;
+- every published post and every page, at its permalink;
+- every tag archive and every category archive, with each of their pages,
+  under whatever bases the site is configured with.
+
+Each `<loc>` is absolute, built on `baseUrl`. `<lastmod>` is a document's
+`updated` when it has one and its `date` otherwise, and for a listing page it
+is the newest of those among the documents on that page. Something nothing
+dates — a page with no date in its front matter — carries no `<lastmod>`
+rather than an invented one.
+
+Nothing hidden reaches it. The sitemap is drawn from the same queries the
+listings are and checked against the same `isPublicDocument`, so drafts, the
+trash and posts whose date has not arrived are absent for the same reason
+their permalinks 404.
+
+The protocol caps one file at 50,000 URLs. Past that, `/sitemap.xml` becomes a
+`<sitemapindex>` naming `/sitemap-1.xml`, `/sitemap-2.xml` and so on, each
+holding its own slice and dated by the newest URL in it. The address a search
+engine holds does not change, which is the point of the index living there.
+While the whole sitemap fits in one file the children name nothing and 404.
+
+`/robots.txt` is short:
+
+```
+User-agent: *
+Disallow: /admin/
+
+Sitemap: https://example.com/sitemap.xml
+```
+
+Everything public is crawlable; only the admin is not. `/ap/` is deliberately
+left open — an actor and an object exist to be fetched, they carry the same
+content as the pages that link to them, and a crawler that follows one gets
+JSON it will ignore.
+
+Both are registered routes rather than anything resolved from the content
+index, so a document permalinked at `/sitemap.xml` cannot take the URL a
+search engine polls, and both carry an `ETag` and answer a conditional request
+with 304 the way the feeds do — the sitemap with a `Last-Modified` as well,
+robots without one, because nothing dates it.
+
+Nothing links the sitemap from a page: `robots.txt` names it, which is where a
+crawler looks.
+
 ## Theme overrides
 
 A template is looked up in the site's `themeDir` first, then in the theme that
@@ -1138,7 +1193,8 @@ can often be moved across with only its `{% extends %}` removed.
 
 The feeds are the one thing that does not carry over: `/feed/`, `/feed/atom/`
 and `/feed/json/` are generated in code here, not by a template, so an Eleventy
-build needs its own. Everything else is the same directory.
+build needs its own. `/sitemap.xml` and `/robots.txt` are the same story, and
+for the same reason. Everything else is the same directory.
 
 ### The compatibility test
 
