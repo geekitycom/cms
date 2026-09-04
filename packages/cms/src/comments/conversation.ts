@@ -37,12 +37,16 @@ export function interactionOf(comment: PostComment, document: Document): Interac
       // website, and nothing that names them anywhere else.
       handle: null,
       url: comment.author.url,
-      avatar: null,
+      // Only a webmention has one: it came out of the source page's `h-card`,
+      // and a form asks nobody for a picture.
+      avatar: comment.author.avatar,
       actorId: null,
     },
-    // Where it can be read: on this page, at its own anchor. A theme that
-    // prints `url` for a fediverse reply prints a working link for this one.
-    url: `${document.permalink}#${commentAnchor(comment.id)}`,
+    // Where it can be read. A comment written here lives here, at its own
+    // anchor; a webmention lives on the page it was sent from, and its `url`
+    // says so. A theme that prints `url` for a fediverse reply prints a
+    // working link for either.
+    url: comment.url ?? `${document.permalink}#${commentAnchor(comment.id)}`,
     content: comment.content.html,
     published: new Date(comment.submitted),
     inReplyTo: comment.inReplyTo,

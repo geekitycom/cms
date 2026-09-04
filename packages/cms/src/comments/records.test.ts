@@ -46,11 +46,17 @@ function ada(overrides: Partial<NewComment> = {}): NewComment {
     source: 'comment',
     kind: 'reply',
     status: 'pending',
-    author: { name: 'Ada Lovelace', url: 'https://ada.example/', email: 'ada@example.com' },
+    author: {
+      name: 'Ada Lovelace',
+      url: 'https://ada.example/',
+      email: 'ada@example.com',
+      avatar: null,
+    },
     content: { markdown: 'Good post.', html: '<p>Good post.</p>\n' },
     submitted: '2026-09-04T10:00:00.000Z',
     addressHash: 'abc123',
     inReplyTo: null,
+    url: null,
     ...overrides,
   };
 }
@@ -71,11 +77,17 @@ describe('a comment file', () => {
             source: 'comment',
             kind: 'reply',
             status: 'pending',
-            author: { name: 'Ada Lovelace', url: 'https://ada.example/', email: 'ada@example.com' },
+            author: {
+              name: 'Ada Lovelace',
+              url: 'https://ada.example/',
+              email: 'ada@example.com',
+              avatar: null,
+            },
             content: { markdown: 'Good post.', html: '<p>Good post.</p>\n' },
             submitted: '2026-09-04T10:00:00.000Z',
             addressHash: 'abc123',
             inReplyTo: null,
+            url: null,
           },
         ],
       },
@@ -86,7 +98,10 @@ describe('a comment file', () => {
     const site = await records();
 
     await addComment(site, ada());
-    await addComment(site, ada({ author: { name: 'Grace', url: null, email: null } }));
+    await addComment(
+      site,
+      ada({ author: { name: 'Grace', url: null, email: null, avatar: null } }),
+    );
 
     const held = readComments(site.contentDir, 'hello-world');
     assert.deepEqual(
@@ -172,7 +187,10 @@ describe('the comment index', () => {
     assert.equal(site.admin.hasApprovedAuthor('Ada Lovelace', 'someone@example.com'), false);
     assert.equal(site.admin.hasApprovedAuthor('Grace Hopper', 'ada@example.com'), false);
     // And an author whose only comment is still waiting is not approved.
-    await addComment(site, ada({ author: { name: 'Grace', url: null, email: 'g@example.com' } }));
+    await addComment(
+      site,
+      ada({ author: { name: 'Grace', url: null, email: 'g@example.com', avatar: null } }),
+    );
     assert.equal(site.admin.hasApprovedAuthor('Grace', 'g@example.com'), false);
   });
 });

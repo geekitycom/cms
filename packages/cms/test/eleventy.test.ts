@@ -358,6 +358,25 @@ describe('the fixtures content directory under Eleventy', () => {
     assert.ok(!html.includes('ada@example.com'), 'the email is never published');
   });
 
+  it('puts a webmention from _data/comments in the mentions of the same conversation', async () => {
+    const html = await readFile(
+      path.join(buildDir, '_site', '2026/09/hello-world/index.html'),
+      'utf8',
+    );
+
+    // The webmention in `content/_data/comments/hello-world.json` is not a
+    // reply and not a reaction, so it is its own group; it links to the page it
+    // came from rather than to an anchor here, and it carries the face the
+    // source page's h-card gave it (TASK-51).
+    assert.ok(html.includes('1 mention'), `it is counted apart: ${html}`);
+    assert.ok(
+      html.includes('href="https://grace.example/2026/09/about-that/"'),
+      'it links to the page that sent it',
+    );
+    assert.ok(html.includes('src="https://grace.example/me.jpg"'), 'with its author’s photo');
+    assert.ok(html.includes('class="mention comment-webmention"'), 'and it says what it is');
+  });
+
   it('renders no conversation under a post nobody has answered', async () => {
     const html = await readFile(path.join(buildDir, '_site', 'notes/renamed/index.html'), 'utf8');
 

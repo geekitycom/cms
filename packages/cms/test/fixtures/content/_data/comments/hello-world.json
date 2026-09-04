@@ -20,11 +20,35 @@
       "inReplyTo": null
     },
     {
+      "id": "01994c7a-0000-7000-8000-00000000ab00",
+      "source": "webmention",
+      "kind": "mention",
+      "status": "approved",
+      "author": {
+        "name": "Grace Hopper",
+        "url": "https://grace.example/",
+        "email": null,
+        "avatar": "https://grace.example/me.jpg"
+      },
+      "content": {
+        "markdown": "Somebody else wrote about this",
+        "html": "<p>Somebody else wrote about this</p>"
+      },
+      "submitted": "2026-09-05T12:00:00.000Z",
+      "addressHash": null,
+      "inReplyTo": null,
+      "url": "https://grace.example/2026/09/about-that/"
+    },
+    {
       "id": "01994c7a-0000-7000-8000-0000000ffff0",
       "source": "comment",
       "kind": "reply",
       "status": "pending",
-      "author": { "name": "Nobody", "url": null, "email": null },
+      "author": {
+        "name": "Nobody",
+        "url": null,
+        "email": null
+      },
       "content": {
         "markdown": "Still waiting for a moderator.",
         "html": "<p>Still waiting for a moderator.</p>\n"

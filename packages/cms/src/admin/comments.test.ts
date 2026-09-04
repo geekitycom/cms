@@ -73,11 +73,12 @@ function comment(overrides: Partial<NewComment> = {}): NewComment {
     source: 'comment',
     kind: 'reply',
     status: 'pending',
-    author: { name: 'Ada Lovelace', url: null, email: 'ada@example.com' },
+    author: { name: 'Ada Lovelace', url: null, email: 'ada@example.com', avatar: null },
     content: { markdown: 'Good post.', html: '<p>Good post.</p>\n' },
     submitted: '2026-09-19T10:00:00.000Z',
     addressHash: 'deadbeefcafe',
     inReplyTo: null,
+    url: null,
     ...overrides,
   };
 }
@@ -216,7 +217,9 @@ describe('the comments screen', () => {
   it('shows how many comments are waiting on the dashboard', async () => {
     const { cms, agent } = await moderating();
     await stored(cms);
-    await stored(cms, { author: { name: 'Grace', url: null, email: 'g@example.com' } });
+    await stored(cms, {
+      author: { name: 'Grace', url: null, email: 'g@example.com', avatar: null },
+    });
 
     const html = await (await agent.get('/admin')).text();
 

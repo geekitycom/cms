@@ -237,18 +237,23 @@ describe('validators and alternates', () => {
   it('advertises Vary and the other representations on every representation', async () => {
     const { cms } = await site(HELLO);
 
+    // Every representation of a document also advertises where a webmention
+    // about it is sent, because a sender should not have to parse a page — or
+    // ask for the HTML one — to find the endpoint (TASK-51).
+    const webmention = ', </_geekity/webmention>; rel="webmention"';
+
     for (const [accept, expected] of [
       [
         'text/html',
-        '</2026/09/hello/index.md>; rel="alternate"; type="text/markdown", </2026/09/hello/index.json>; rel="alternate"; type="application/json"',
+        `</2026/09/hello/index.md>; rel="alternate"; type="text/markdown", </2026/09/hello/index.json>; rel="alternate"; type="application/json"${webmention}`,
       ],
       [
         'text/markdown',
-        '</2026/09/hello/>; rel="alternate"; type="text/html", </2026/09/hello/index.json>; rel="alternate"; type="application/json"',
+        `</2026/09/hello/>; rel="alternate"; type="text/html", </2026/09/hello/index.json>; rel="alternate"; type="application/json"${webmention}`,
       ],
       [
         'application/json',
-        '</2026/09/hello/>; rel="alternate"; type="text/html", </2026/09/hello/index.md>; rel="alternate"; type="text/markdown"',
+        `</2026/09/hello/>; rel="alternate"; type="text/html", </2026/09/hello/index.md>; rel="alternate"; type="text/markdown"${webmention}`,
       ],
     ] as const) {
       const response = await cms.app.request('/2026/09/hello/', { headers: { accept } });

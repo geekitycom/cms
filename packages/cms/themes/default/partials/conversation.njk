@@ -1,6 +1,6 @@
 {#
-  What the fediverse said about a post: replies as a thread, likes and boosts
-  as counts with the actors behind them.
+  What has been said about a post: replies as a thread, and likes, boosts and
+  mentions as counts with the people behind them.
 
   Rendered from `layouts/post.njk` with the `conversation` on the context,
   which is only there when there is something in it, so a post nobody has
@@ -9,7 +9,7 @@
   documented in the theme README under "The conversation".
 
   The macros come first because Nunjucks defines one where it stands rather
-  than hoisting it, and the section below calls both.
+  than hoisting it, and the section below calls all three.
 #}
 {#
   One reply and everything under it. A macro rather than an include so it can
@@ -31,7 +31,7 @@
       <span class="comment-handle">{{ reply.author.handle }}</span>
       {% endif %}
       {% if reply.url %}
-      <a class="comment-permalink u-url" href="{{ reply.url }}"{% if reply.source == "activitypub" %} rel="nofollow noopener noreferrer"{% endif %}>
+      <a class="comment-permalink u-url" href="{{ reply.url }}"{% if reply.source != "comment" %} rel="nofollow noopener noreferrer"{% endif %}>
         <time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time>
       </a>
       {% else %}
@@ -44,10 +44,10 @@
     {#
       Answering a comment on this site needs no JavaScript: the link carries
       the comment's id to the form, which puts it in a hidden field. A
-      fediverse reply is answered on the server that holds it, so it gets no
-      such link.
+      fediverse reply is answered on the server that holds it, and a webmention
+      is answered on the page that sent it, so neither gets such a link.
     #}
-    {% if commentForm and reply.source != "activitypub" %}
+    {% if commentForm and reply.source == "comment" %}
     <p class="comment-reply">
       <a href="{{ page.url }}?reply_to={{ reply.id }}#respond">Reply</a>
     </p>
@@ -75,11 +75,37 @@
   <ul class="reaction-list">
     {% for actor in actors %}
     <li class="reaction h-card">
-      <a href="{{ actor.author.url }}" rel="nofollow noopener noreferrer">
+      <a href="{{ actor.author.url or actor.url }}" rel="nofollow noopener noreferrer">
         {% if actor.author.avatar %}
         <img class="reaction-avatar u-photo" src="{{ actor.author.avatar }}" alt="" width="24" height="24" loading="lazy">
         {% endif %}
         <span class="reaction-name p-name">{{ actor.author.name }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+{% endmacro %}
+
+{#
+  The pages that linked here without answering. A webmention only: the
+  fediverse has no way of saying "I wrote about this" that is not a reply or a
+  boost. Each one links to the page that sent it rather than to its author,
+  because the page is the thing worth reading.
+#}
+{% macro mentions(items) %}
+{% if items.length %}
+<details class="reaction-group">
+  <summary>{{ items.length }} {{ "mention" if items.length == 1 else "mentions" }}</summary>
+  <ul class="reaction-list">
+    {% for item in items %}
+    <li class="reaction h-cite">
+      <a href="{{ item.url }}" rel="nofollow ugc noopener noreferrer">
+        {% if item.author.avatar %}
+        <img class="reaction-avatar u-photo" src="{{ item.author.avatar }}" alt="" width="24" height="24" loading="lazy">
+        {% endif %}
+        <span class="reaction-name p-name">{{ item.author.name }}</span>
       </a>
     </li>
     {% endfor %}
@@ -93,10 +119,11 @@
     {{ conversation.counts.replies }} {{ "reply" if conversation.counts.replies == 1 else "replies" }}
   </h2>
 
-  {% if conversation.likes.length or conversation.boosts.length %}
+  {% if conversation.likes.length or conversation.boosts.length or conversation.mentions.length %}
   <div class="conversation-reactions">
     {{ reactions(conversation.likes, "like", "likes") }}
     {{ reactions(conversation.boosts, "boost", "boosts") }}
+    {{ mentions(conversation.mentions) }}
   </div>
   {% endif %}
 

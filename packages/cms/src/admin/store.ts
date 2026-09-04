@@ -274,6 +274,52 @@ export type NewRelay = Omit<Relay, 'createdAt' | 'updatedAt'> & {
   createdAt?: string | undefined;
 };
 
+/** How one webmention this site sent to one page ended. */
+export const WEBMENTION_SEND_STATUSES = ['sent', 'none', 'failed'] as const;
+
+/**
+ * One of {@link WEBMENTION_SEND_STATUSES}.
+ *
+ * `sent` is an endpoint that accepted the notification. `none` is a page that
+ * advertises no endpoint, which is most of the web and is not a failure —
+ * recording it is what stops the sender asking the same page again on every
+ * edit and what tells a person why nothing went. `failed` is an endpoint that
+ * was there and refused, with the reason in the row.
+ */
+export type WebmentionSendStatus = (typeof WEBMENTION_SEND_STATUSES)[number];
+
+/**
+ * How one attempt to tell one page that a post links to it ended.
+ *
+ * The whole of what SQLite keeps about the webmentions a site has sent, and a
+ * cache like every other outcome here (decision-9): the links are in the
+ * post's file, so a database thrown away costs the record of how yesterday's
+ * notification went and nothing else. One row per (post, target), because the
+ * question it answers is "where does this post stand with that page" and a
+ * resend moves that answer rather than adding a second one.
+ */
+export interface SentWebmention {
+  /** The post the links were in. */
+  readonly slug: string;
+  /** The post's absolute URL, which is the `source` that was sent. */
+  readonly source: string;
+  /** The page that was linked to, which is the `target` that was sent. */
+  readonly target: string;
+  /** The endpoint it was sent to, or `null` when the target advertised none. */
+  readonly endpoint: string | null;
+  /** How it went. */
+  readonly status: WebmentionSendStatus;
+  /** Why it failed, or `null`. */
+  readonly error: string | null;
+  /** When the attempt was made, as an ISO 8601 instant. */
+  readonly attemptedAt: string;
+}
+
+/** A {@link SentWebmention} before the store has timed it. */
+export type NewSentWebmention = Omit<SentWebmention, 'attemptedAt'> & {
+  attemptedAt?: string | undefined;
+};
+
 /** Where a comment came from. */
 export const COMMENT_SOURCES = ['comment', 'webmention'] as const;
 
@@ -287,9 +333,17 @@ export const COMMENT_SOURCES = ['comment', 'webmention'] as const;
 export type CommentSource = (typeof COMMENT_SOURCES)[number];
 
 /** What a comment is: something written, or a wordless pointer at the post. */
-export const COMMENT_KINDS = ['reply', 'like', 'boost'] as const;
+export const COMMENT_KINDS = ['reply', 'like', 'boost', 'mention', 'repost'] as const;
 
-/** One of {@link COMMENT_KINDS}. The same three a conversation knows. */
+/**
+ * One of {@link COMMENT_KINDS}. The same five a conversation knows.
+ *
+ * `reply`, `like` and `boost` are the fediverse's three. `repost` and
+ * `mention` are the webmention vocabulary's two extra: a repost is a boost by
+ * another name and is shown with them, and a mention is the one thing neither
+ * of the others is — somebody's page pointing at this one without answering
+ * it (TASK-51).
+ */
 export type CommentKind = (typeof COMMENT_KINDS)[number];
 
 /** Where a comment stands with the moderator. */
@@ -316,6 +370,15 @@ export interface CommentAuthor {
    * the auto-approval rule, and for the spam checker.
    */
   email: string | null;
+  /**
+   * Their avatar, or `null`.
+   *
+   * Only a webmention ever has one, out of the `u-photo` of the source page's
+   * `h-card` (TASK-51): a form asks for no picture, and one it did ask for
+   * would be a stranger's file on somebody else's page. It is a URL on the
+   * author's own site, printed as an `<img>` exactly as a fediverse reply's is.
+   */
+  avatar: string | null;
 }
 
 /** What a comment says, in both the forms the site keeps. */
@@ -361,6 +424,16 @@ export interface CommentRecord {
   addressHash: string | null;
   /** The comment it answers, or `null` for one answering the post itself. */
   inReplyTo: string | null;
+  /**
+   * Where it lives when it lives somewhere else: the source page of a
+   * webmention, and `null` for a comment written on this site.
+   *
+   * It is what a later webmention from the same page is recognised by, which
+   * is how one updates the comment it made before instead of adding a second,
+   * and it is where the thread's permalink points for an entry this site did
+   * not host.
+   */
+  url: string | null;
 }
 
 /**
@@ -616,6 +689,16 @@ export interface AdminStore {
    * that says where the post currently stands with the fediverse.
    */
   lastDeliveryToObject(objectId: string): Delivery | undefined;
+  /**
+   * Record how one webmention to one page ended, replacing the previous
+   * outcome for that (post, target): the table answers "where does this post
+   * stand with that page", which a resend moves rather than adds to.
+   */
+  recordSentWebmention(sent: NewSentWebmention): SentWebmention;
+  /** What one post's links came to, target by target, in target order. */
+  listSentWebmentions(slug: string): SentWebmention[];
+  /** How many of one post's targets stand at each status. */
+  countSentWebmentionsByStatus(slug: string): Record<WebmentionSendStatus, number>;
   /** Every relay subscription, oldest first, however it stands. */
   listRelays(): Relay[];
   /** One relay subscription by the inbox it was made to, or `undefined`. */
@@ -754,8 +837,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       INSERT INTO comments (
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
-        markdown, html, submitted_at, address_hash, in_reply_to
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -769,7 +852,9 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         html = excluded.html,
         submitted_at = excluded.submitted_at,
         address_hash = excluded.address_hash,
-        in_reply_to = excluded.in_reply_to
+        in_reply_to = excluded.in_reply_to,
+        url = excluded.url,
+        author_avatar = excluded.author_avatar
     `),
     deleteComment: db.prepare('DELETE FROM comments WHERE id = ?'),
     clearComments: db.prepare('DELETE FROM comments'),
@@ -804,6 +889,24 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       SELECT * FROM ap_deliveries WHERE object_id = ?
       ORDER BY attempted_at DESC, rowid DESC
       LIMIT 1
+    `),
+    recordSentWebmention: db.prepare(`
+      INSERT INTO webmentions_sent (
+        slug, source, target, endpoint, status, error, attempted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (slug, target) DO UPDATE SET
+        source = excluded.source,
+        endpoint = excluded.endpoint,
+        status = excluded.status,
+        error = excluded.error,
+        attempted_at = excluded.attempted_at
+      RETURNING *
+    `),
+    listSentWebmentions: db.prepare(
+      'SELECT * FROM webmentions_sent WHERE slug = ? ORDER BY target',
+    ),
+    countSentWebmentionsByStatus: db.prepare(`
+      SELECT status, COUNT(*) AS count FROM webmentions_sent WHERE slug = ? GROUP BY status
     `),
     listRelays: db.prepare('SELECT * FROM ap_relays ORDER BY created_at, inbox_id'),
     relayByInbox: db.prepare('SELECT * FROM ap_relays WHERE inbox_id = ?'),
@@ -1128,6 +1231,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         comment.submitted,
         comment.addressHash,
         comment.inReplyTo,
+        comment.url,
+        comment.author.avatar,
       );
       return comment;
     },
@@ -1155,6 +1260,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             comment.submitted,
             comment.addressHash,
             comment.inReplyTo,
+            comment.url,
+            comment.author.avatar,
           );
         }
       });
@@ -1207,6 +1314,36 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       const row = statements.lastDeliveryToObject.get(objectId) as
         Record<string, unknown> | undefined;
       return row === undefined ? undefined : toDelivery(row);
+    },
+
+    recordSentWebmention(sent) {
+      const row = statements.recordSentWebmention.get(
+        sent.slug,
+        sent.source,
+        sent.target,
+        sent.endpoint,
+        sent.status,
+        sent.error,
+        sent.attemptedAt ?? new Date().toISOString(),
+      ) as Record<string, unknown> | undefined;
+      if (row === undefined) {
+        throw new Error(`The webmention to ${sent.target} could not be recorded.`);
+      }
+      return toSentWebmention(row);
+    },
+
+    listSentWebmentions(slug) {
+      const rows = statements.listSentWebmentions.all(slug) as Record<string, unknown>[];
+      return rows.map(toSentWebmention);
+    },
+
+    countSentWebmentionsByStatus(slug) {
+      const counts: Record<WebmentionSendStatus, number> = { sent: 0, none: 0, failed: 0 };
+      const rows = statements.countSentWebmentionsByStatus.all(slug) as Record<string, unknown>[];
+      for (const row of rows) {
+        counts[webmentionSendStatus(row['status'])] = Number(row['count']);
+      }
+      return counts;
     },
 
     listRelays() {
@@ -1401,6 +1538,23 @@ function toDelivery(row: Record<string, unknown>): Delivery {
   };
 }
 
+function toSentWebmention(row: Record<string, unknown>): SentWebmention {
+  return {
+    slug: String(row['slug']),
+    source: String(row['source']),
+    target: String(row['target']),
+    endpoint: nullableText(row['endpoint']),
+    status: webmentionSendStatus(row['status']),
+    error: nullableText(row['error']),
+    attemptedAt: String(row['attempted_at']),
+  };
+}
+
+/** A stored send status, or `failed` for one this version does not know. */
+function webmentionSendStatus(value: unknown): WebmentionSendStatus {
+  return oneOf(value, WEBMENTION_SEND_STATUSES, 'failed');
+}
+
 function toComment(row: Record<string, unknown>): PostComment {
   return {
     id: String(row['id']),
@@ -1413,11 +1567,13 @@ function toComment(row: Record<string, unknown>): PostComment {
       name: String(row['author_name']),
       url: nullableText(row['author_url']),
       email: nullableText(row['author_email']),
+      avatar: nullableText(row['author_avatar']),
     },
     content: { markdown: String(row['markdown']), html: String(row['html']) },
     submitted: String(row['submitted_at']),
     addressHash: nullableText(row['address_hash']),
     inReplyTo: nullableText(row['in_reply_to']),
+    url: nullableText(row['url']),
   };
 }
 
@@ -1916,6 +2072,41 @@ const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX comments_slug ON comments (slug, submitted_at);
       CREATE INDEX comments_status ON comments (status, submitted_at);
       CREATE INDEX comments_author ON comments (author_name, author_email, status);
+    `,
+  },
+  {
+    // Webmentions (TASK-51), which are two different things and so two changes.
+    //
+    // A comment may now say where it lives, because a webmention lives on
+    // somebody else's page: it is what a later webmention from that page is
+    // recognised by, and what the thread's permalink points at for an entry
+    // this site did not host. Its author may now have a face, out of the source
+    // page's `h-card`. Both columns are an index of the comment files like
+    // every other column of this table, so nothing backfills them — the rebuild
+    // on the next boot does.
+    //
+    // What the site has sent is the other half, and it is a cache of outcomes
+    // exactly as `ap_deliveries` is: no payload, one row per (post, target),
+    // and a resend moves the row rather than adding to it. It is a table of
+    // its own rather than a use of `ap_deliveries` because the federation
+    // screen counts that table per activity, and a webmention is not one.
+    version: 15,
+    sql: `
+      ALTER TABLE comments ADD COLUMN url TEXT;
+      ALTER TABLE comments ADD COLUMN author_avatar TEXT;
+
+      CREATE TABLE webmentions_sent (
+        slug         TEXT NOT NULL,
+        source       TEXT NOT NULL,
+        target       TEXT NOT NULL,
+        endpoint     TEXT,
+        status       TEXT NOT NULL,
+        error        TEXT,
+        attempted_at TEXT NOT NULL,
+        PRIMARY KEY (slug, target)
+      );
+
+      CREATE INDEX webmentions_sent_attempted_at ON webmentions_sent (attempted_at);
     `,
   },
 ];

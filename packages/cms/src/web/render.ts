@@ -18,6 +18,7 @@ import { navigationMenu } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 import { createTemplateEnvironment } from './templates.ts';
+import { webmentionEndpointFor } from '../webmention/routes.ts';
 
 /** Templates the default theme ships and the public routes ask for by name. */
 export const TEMPLATES = {
@@ -195,6 +196,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // theme asks `{% if commentForm %}` rather than working the rules out
       // for itself — and a closed post shows the thread with no form.
       const form = options.commentForm?.(document);
+      // Where a webmention about this page is sent (TASK-51). On the context
+      // only when the site takes them, so a theme asks `{% if webmention %}`
+      // and a site that has turned them off advertises nothing.
+      const webmention = webmentionEndpointFor(siteData.read());
 
       return render(template, {
         ...documentContext(document, config),
@@ -206,6 +211,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
             }),
         ...(said === undefined || said.counts.total === 0 ? {} : { conversation: said }),
         ...(form === undefined ? {} : { commentForm: form }),
+        ...(webmention === undefined ? {} : { webmention }),
         ...extra,
       });
     },

@@ -281,6 +281,8 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     name: form.name.trim(),
     url: normalizeWebsite(form.url.trim()) ?? null,
     email: form.email.trim() === '' ? null : form.email.trim(),
+    // A form asks for no picture: only a webmention brings one (TASK-51).
+    avatar: null,
   };
   const proposed: Omit<PostComment, 'id'> = {
     slug: document.slug,
@@ -295,6 +297,9 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     submitted: now.toISOString(),
     addressHash: hashClientAddress(options.dataDir, options.address),
     inReplyTo: parentOf(form.inReplyTo, document.slug, records),
+    // A comment written here lives here: only a webmention has a page of its
+    // own somewhere else (TASK-51).
+    url: null,
   };
 
   const verdict = await ask(options, proposed, now);

@@ -150,6 +150,7 @@ function commentFrom(value: unknown): CommentRecord | undefined {
       name,
       url: optionalText(author['url']),
       email: optionalText(author['email']),
+      avatar: optionalText(author['avatar']),
     },
     content: {
       markdown: typeof content['markdown'] === 'string' ? content['markdown'] : '',
@@ -158,6 +159,7 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     submitted: typeof value['submitted'] === 'string' ? value['submitted'] : '',
     addressHash: optionalText(value['addressHash']),
     inReplyTo: optionalText(value['inReplyTo']),
+    url: optionalText(value['url']),
   };
 }
 
@@ -189,7 +191,14 @@ export async function addComment(
 }
 
 /**
- * Move a stored comment: approve it, mark it spam, put it back.
+ * Move a stored comment: approve it, mark it spam, put it back, or rewrite
+ * what it says.
+ *
+ * The rewrite is what a webmention needs (TASK-51): a page that links here and
+ * is then edited sends its webmention again, and what this site shows should
+ * be what that page says now rather than what it said last month. Its id, the
+ * post it is on and the source it came from never move, which is what makes it
+ * the same comment.
  *
  * Returns the comment as it now stands, or `undefined` when the index has no
  * such comment. The index is what says which post's file to open, which is the
@@ -198,7 +207,7 @@ export async function addComment(
 export async function updateComment(
   records: CommentRecords,
   id: string,
-  change: Partial<Pick<CommentRecord, 'status' | 'content' | 'author'>>,
+  change: Partial<Pick<CommentRecord, 'status' | 'content' | 'author' | 'kind' | 'submitted'>>,
 ): Promise<PostComment | undefined> {
   const { admin, contentDir } = records;
   const known = admin.getComment(id);
@@ -316,6 +325,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     submitted: comment.submitted,
     addressHash: comment.addressHash,
     inReplyTo: comment.inReplyTo,
+    url: comment.url,
   };
 }
 
@@ -331,6 +341,7 @@ function entryOf(comment: PostComment): CommentRecord {
     submitted: comment.submitted,
     addressHash: comment.addressHash,
     inReplyTo: comment.inReplyTo,
+    url: comment.url,
   };
 }
 

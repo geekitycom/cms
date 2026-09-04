@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-04 22:30'
+updated_date: '2026-09-04 23:09'
 ---
 # Native comments
 
@@ -42,7 +42,8 @@ Eleventy build of the same content directory reads it.
       "author": {
         "name": "Ada Lovelace",
         "url": "https://ada.example/",
-        "email": "ada@example.com"
+        "email": "ada@example.com",
+        "avatar": null
       },
       "content": {
         "markdown": "Good post.",
@@ -50,7 +51,8 @@ Eleventy build of the same content directory reads it.
       },
       "submitted": "2026-09-20T10:00:00.000Z",
       "addressHash": "0123456789abcdef0123456789abcdef",
-      "inReplyTo": null
+      "inReplyTo": null,
+      "url": null
     }
   ]
 }
@@ -62,22 +64,57 @@ belong. `comments` is the list, oldest first.
 | Key           | What it holds                                                                                     |
 | ------------- | ------------------------------------------------------------------------------------------------- |
 | `id`          | Its name, unique across the site, and what a reply puts in `inReplyTo`. A UUID.                   |
-| `source`      | `comment` (the form) or `webmention` (TASK-51). More may follow; an unknown one reads as `comment`. |
-| `kind`        | `reply`, `like` or `boost` — the same three a conversation knows. A form only ever makes a `reply`. |
+| `source`      | `comment` (the form) or `webmention` (doc-7). More may follow; an unknown one reads as `comment`.  |
+| `kind`        | `reply`, `like`, `boost`, `repost` or `mention` — the five a conversation knows. A form only ever makes a `reply`. |
 | `status`      | `pending`, `approved` or `spam`. Only `approved` reaches a reader.                                 |
 | `author.name` | What the page shows.                                                                              |
 | `author.url`  | Their website, or `null`. Marked `nofollow ugc` like every link in a comment.                     |
 | `author.email`| **Never shown.** For the moderator, the auto-approval rule and the spam checker.                  |
+| `author.avatar`| Their face, or `null`. Only a webmention has one; a form asks nobody for a picture.               |
 | `content.markdown` | What was typed, which is the thing a person wrote.                                           |
 | `content.html`| That Markdown through the restricted profile below.                                               |
 | `submitted`   | An ISO 8601 instant (decision-11: a UTC instant, always).                                         |
 | `addressHash` | A salted SHA-256 of the address it came from, truncated, or `null`.                               |
 | `inReplyTo`   | The comment it answers, or `null` for one answering the post.                                     |
+| `url`         | Where it lives when it lives somewhere else: a webmention's source page, `null` for one written here. |
 
 The shape is deliberately wider than a form submission, because a webmention
-lands in the same file: it has a `url` and no email, it may be a like rather
-than a reply, and it should thread with everything else rather than needing a
-store of its own.
+lands in the same file: it has a page of its own and no email, it may be a like
+or a mention rather than a reply, and it should thread with everything else
+rather than needing a store of its own. doc-7 is that half. A webmention entry
+looks like this, and every rule below applies to it unchanged:
+
+```json
+{
+  "id": "0199e5f4-...-c3d4",
+  "source": "webmention",
+  "kind": "mention",
+  "status": "pending",
+  "author": {
+    "name": "Grace Hopper",
+    "url": "https://grace.example/",
+    "email": null,
+    "avatar": "https://grace.example/me.jpg"
+  },
+  "content": {
+    "markdown": "Somebody else wrote about this",
+    "html": "<p>Somebody else wrote about this</p>"
+  },
+  "submitted": "2026-09-21T09:00:00.000Z",
+  "addressHash": "0123456789abcdef0123456789abcdef",
+  "inReplyTo": null,
+  "url": "https://grace.example/2026/09/about-that/"
+}
+```
+
+`url` is its **identity** as well as its address: a page that sends its
+webmention again updates the entry it made rather than adding a second, and one
+whose link has gone deletes it. `content.markdown` for a webmention is the
+source's own words as text rather than Markdown somebody typed — there is no
+Markdown to keep — and a like or a repost carries neither, because a page's
+title is not something its author said about this post. `addressHash` is the
+hash of the address the webmention was *sent from*, hashed exactly as a
+commenter's is.
 
 ### Reading and writing them
 
@@ -128,6 +165,11 @@ out, exactly as they do a fediverse reply, so what is published is checked in
 one place whatever wrote it.
 
 ## Whether a post is taking comments
+
+None of this applies to a webmention either. `commentsOpen` is asked by the form
+and by the form's endpoint and nowhere else, so a closed post still takes what
+another page sends it, exactly as it still takes a fediverse reply.
+
 
 `commentsOpen(document, policy, now)` is the whole rule, read in one place so
 the form under a post and the endpoint that refuses a submission can never
@@ -189,7 +231,9 @@ type CommentVerdict = 'spam' | 'discard' | 'ham' | 'unknown';
 
 `CommentSubmission` carries the comment as it would be stored, the post's slug,
 title and absolute URL, and the **unhashed** address, the `User-Agent` and the
-`Referer` — everything an Akismet-shaped API asks for. The verdicts map onto
+`Referer` — everything an Akismet-shaped API asks for. An incoming webmention
+goes through the very same seam, with `comment.source` reading `webmention`, so
+a checker can label it as one without anything else knowing it exists. The verdicts map onto
 what happens: `spam` files it as spam where a moderator can still see it,
 `discard` throws it away without storing it, `ham` lets it through even where
 the site would have held it, and `unknown` leaves the site's own rules to
@@ -213,7 +257,7 @@ it was wrong. See doc-5.
 ## What a reader sees
 
 The theme's `partials/conversation.njk` renders native comments beside the
-fediverse ones — the entry shape is identical, so nothing branches on `source`
+fediverse ones and the webmentions — the entry shape is identical, so nothing branches on `source`
 unless a theme wants to — and `partials/comment-form.njk` renders the form
 under an open post. Threading needs no JavaScript: a Reply link carries the
 comment's id to the form as `?reply_to=`, and the CMS checks it names an

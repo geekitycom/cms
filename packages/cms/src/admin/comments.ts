@@ -218,7 +218,7 @@ export function mountCommentsScreen(
       source: 'comment',
       kind: 'reply',
       status: 'approved',
-      author: { name: moderatorName(c), url: null, email: null },
+      author: { name: moderatorName(c), url: null, email: null, avatar: null },
       content: { markdown, html: renderCommentMarkdown(markdown) },
       submitted: c.var.config.now().toISOString(),
       // No address is recorded for a reply written in the admin: it came from
@@ -226,6 +226,7 @@ export function mountCommentsScreen(
       // submissions rather than to log the owner of the site.
       addressHash: null,
       inReplyTo: parent.id,
+      url: null,
     });
 
     flash(c, 'notice', `Replied to ${parent.author.name}.`);

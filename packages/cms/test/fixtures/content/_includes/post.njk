@@ -15,8 +15,19 @@
   <p class="conversation-counts">
     {{ conversation.counts.replies }} replies,
     {{ conversation.likes.length }} like{{ "s" if conversation.likes.length != 1 }},
-    {{ conversation.boosts.length }} boost{{ "s" if conversation.boosts.length != 1 }}
+    {{ conversation.boosts.length }} boost{{ "s" if conversation.boosts.length != 1 }},
+    {{ conversation.mentions.length }} mention{{ "s" if conversation.mentions.length != 1 }}
   </p>
+  {% if conversation.mentions.length %}
+  <ul class="mention-list">
+    {% for mention in conversation.mentions %}
+    <li class="mention comment-{{ mention.source }}">
+      <a href="{{ mention.url }}">{{ mention.author.name }}</a>
+      {% if mention.author.avatar %}<img src="{{ mention.author.avatar }}" alt="">{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
   <ol class="comment-list">
     {% for reply in conversation.replies %}
     <li class="comment comment-{{ reply.source }}" id="comment-{{ reply.id }}">

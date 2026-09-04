@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
 
+import { readSiteSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
 import { serializeDocument } from '../content/writer.ts';
@@ -20,6 +21,7 @@ import {
 } from './assets.ts';
 import { COMMENT_NOTICE_PARAM, COMMENT_REPLY_PARAM } from '../comments/form.ts';
 import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments/routes.ts';
+import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
 import { commentCounts, postComments, siteComments } from './comments.ts';
 import { isPublicDocument, publicDocumentAt } from './documents.ts';
 import {
@@ -82,6 +84,10 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // path of the CMS's own, so no permalink can ever shadow it and the route
   // table does not grow with the site.
   mountComments(app);
+
+  // And where a webmention is sent (TASK-51), for the same reason and under
+  // the same prefix.
+  mountWebmentions(app);
 
   app.get('/', (c) => listing(c, { term: undefined, pageNumber: 0 }));
 
@@ -368,6 +374,11 @@ function negotiateDocument(
     representation,
     href: encodePath(document.permalink),
     available: DOCUMENT_REPRESENTATIONS,
+    // Where a webmention about this page is sent. It is a header rather than
+    // only a `<link>` because a sender is allowed to find the endpoint without
+    // parsing the page, and because the JSON and Markdown representations of a
+    // post have no head to put one in (TASK-51).
+    links: webmentionLinks(c),
     ...(validated
       ? {
           etag: representationEtag(representation, document.hash),
@@ -376,6 +387,19 @@ function negotiateDocument(
       : {}),
     conditional: conditionalHeaders(c),
   });
+}
+
+/**
+ * The `Link` header advertising this site's webmention endpoint, or none when
+ * the site does not take them.
+ *
+ * Read per request off the settings, so turning webmentions off on the
+ * settings screen takes the advertisement off the very next page rather than
+ * off the next restart.
+ */
+function webmentionLinks(c: Context<GeekityEnv>): string[] {
+  if (!readSiteSettings(c.var.config.contentDir).webmentionsReceive) return [];
+  return [`<${WEBMENTION_PATH}>; rel="webmention"`];
 }
 
 /** The conditional request headers, as the negotiator wants them. */
