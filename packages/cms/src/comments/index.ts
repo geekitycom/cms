@@ -1,3 +1,21 @@
+export {
+  AKISMET_ENDPOINT,
+  AKISMET_KEY_FILE,
+  AKISMET_TIMEOUT_MS,
+  AKISMET_USER_AGENT,
+  akismetKeyPath,
+  createAkismetChecker,
+  readAkismetKey,
+  removeAkismetKey,
+  verifyAkismetKey,
+  writeAkismetKey,
+} from './akismet.ts';
+export type {
+  AkismetCheckerOptions,
+  AkismetKeyRecord,
+  AkismetKeyStatus,
+  VerifyAkismetKeyOptions,
+} from './akismet.ts';
 export { commentAnchor, commentInteractions, interactionOf } from './conversation.ts';
 export {
   blankValues,

@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 16:43'
+updated_date: '2026-09-04 23:31'
 ---
 # Admin UI
 
@@ -20,7 +20,7 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 | `/admin/pages`, `/admin/pages/new`, `/admin/pages/:slug` | same as posts, without date prefix or tags |
 | `/admin/tags`, `/admin/categories` | every term in use with its post and file counts; rename, merge, delete |
 | `/admin/comments` | pending, approved and spam, with approve, spam, delete and reply on every row |
-| `/admin/settings` | site title, tagline, base URL, timezone, posts per page, comments on/off and closing window, actor handle and type |
+| `/admin/settings` | site title, tagline, base URL, timezone, posts per page, comments on/off and closing window, actor handle and type, the Akismet key |
 | `/admin/users` | list, add, change password (single role: admin) |
 | `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
 
@@ -36,8 +36,13 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 - `/admin/comments` is three lists — Pending, Approved, Spam — with the count beside each, opening on Pending. There is no email in this milestone, so this screen is the notification: the dashboard carries the number waiting and links here.
 - Every row shows the commenter's name, their website, **their email** (the one place it is ever shown), the rendered comment, the post it is on with links to edit and to view it, and a short form of the salted address hash so a run of submissions from one machine is visible.
 - Four actions per row: **Approve**, **Spam**, **Delete**, and **Reply** — a Markdown box that posts an approved comment under the one it answers, signed with the site's `author` setting or the moderator's login.
-- Spam is kept rather than deleted, so a mistake can be undone and so a spam checker can be told it was wrong. Marking something spam calls the checker's `reportSpam`; letting something out of the spam list calls `reportHam`.
+- Spam is kept rather than deleted, so a mistake can be undone and so a spam checker can be told it was wrong. Marking something spam calls the checker's `reportSpam`; letting something out of the spam list calls `reportHam`. With an Akismet key stored, those are `submit-spam` and `submit-ham`.
 - Every action rewrites the comment's file under `content/_data/comments/` and the index inside the same step. The file is the comment (decision-9); this screen only ever moves it. The whole format, the closing rules and the checker seam are in doc-6.
+
+## Settings
+
+- Every setting is a field of one form that rewrites `content/_data/site.json` (decision-9), with two exceptions: the avatar, which is an image, and the Akismet key, which is a credential. Both are their own pair of forms — save and remove — because neither can travel in that body, and because a rejected one must not lose an edit to the title.
+- **Spam checking.** The Akismet key lives in `data/akismet.json` at mode `0600` rather than in `site.json`, which is public and in git. Saving one checks it with Akismet's `verify-key` first; the panel then says connected, "does not recognise this key", "could not be reached", or not connected, and shows the last four characters rather than the key. Remove key turns Akismet off. See doc-6.
 
 ## Auth
 

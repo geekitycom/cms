@@ -37,7 +37,12 @@ import {
 import type { DeliveryService, RelayService, SiteFederation } from './federation/index.ts';
 import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
-import { commentFormFor, commentInteractions, rebuildCommentIndexes } from './comments/index.ts';
+import {
+  commentFormFor,
+  commentInteractions,
+  createAkismetChecker,
+  rebuildCommentIndexes,
+} from './comments/index.ts';
 import { createRenderer, mountPublicSite, postConversation } from './web/index.ts';
 import { createWebmentionService } from './webmention/index.ts';
 import type { WebmentionService } from './webmention/index.ts';
@@ -82,6 +87,10 @@ export {
   adminAssetResponse,
   adminContentSecurityPolicy,
   adminSecurityHeaders,
+  akismetPanel,
+  AKISMET_FIELDS,
+  AKISMET_PATH,
+  AKISMET_REMOVE,
   ARGON2_PARAMETERS,
   AVATAR_FIELDS,
   AVATAR_PATH,
@@ -342,10 +351,16 @@ export type {
 } from './config.ts';
 
 // Native comments: the files they live in, the restricted Markdown they are
-// rendered with, the rules that decide whether a post is still taking them, and
-// the one seam a spam checker plugs into.
+// rendered with, the rules that decide whether a post is still taking them, the
+// one seam a spam checker plugs into, and the Akismet checker that plugs into
+// it when the site has a key.
 export {
   addComment,
+  AKISMET_ENDPOINT,
+  AKISMET_KEY_FILE,
+  AKISMET_TIMEOUT_MS,
+  AKISMET_USER_AGENT,
+  akismetKeyPath,
   blankValues,
   COMMENT_FIELDS,
   COMMENT_NOTICE_PARAM,
@@ -368,6 +383,7 @@ export {
   commentsDirectory,
   commentsFile,
   commentsOpen,
+  createAkismetChecker,
   DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
   deleteComment,
   hashClientAddress,
@@ -379,15 +395,22 @@ export {
   MINIMUM_SUBMIT_SECONDS,
   mountComments,
   normalizeWebsite,
+  readAkismetKey,
   readComments,
   rebuildCommentIndexes,
   refilledCommentForm,
+  removeAkismetKey,
   renderCommentMarkdown,
   submitComment,
   updateComment,
   valuesOf,
+  verifyAkismetKey,
+  writeAkismetKey,
 } from './comments/index.ts';
 export type {
+  AkismetCheckerOptions,
+  AkismetKeyRecord,
+  AkismetKeyStatus,
   CommentChecker,
   CommentForm,
   CommentFormContext,
@@ -403,6 +426,7 @@ export type {
   CommentVerdict,
   NewComment,
   SubmitCommentOptions,
+  VerifyAkismetKeyOptions,
 } from './comments/index.ts';
 
 export {
@@ -1069,6 +1093,22 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // session cookie is `Secure`, and flipping that under a signed-in admin
   // would log them out of the form they just submitted.
   resolved.baseUrl = effectiveBaseUrl(resolved, readSiteSettings(resolved.contentDir));
+
+  // Akismet, when the site has not named a checker of its own (TASK-52). A
+  // config that names one wins outright, because a site that has written a
+  // checker meant it; this is the one the settings screen turns on with a key
+  // rather than a deployment.
+  //
+  // Built whether or not there is a key in `data/akismet.json`: it reads that
+  // file on every call, so a key pasted into the settings screen filters the
+  // next comment and a key removed stops filtering at once, neither of them
+  // needing a restart. With no key it sends nothing anywhere.
+  resolved.commentChecker ??= createAkismetChecker({
+    dataDir: resolved.dataDir,
+    // Read when a comment arrives rather than now, so a change of language on
+    // the settings screen reaches Akismet without a restart either.
+    language: () => readSiteSettings(resolved.contentDir).language,
+  });
 
   const content = createContentSync({
     store,
