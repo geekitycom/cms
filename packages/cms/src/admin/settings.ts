@@ -1,16 +1,19 @@
-import { readFileSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { statSync } from 'node:fs';
 import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
+import {
+  readFileIfPresentSync,
+  updateFileAtomically,
+  writeFileAtomicallySync,
+} from '../files/atomic.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
 import type { RelaySyncReport } from '../federation/relays.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
-import type { SiteData } from '../web/context.ts';
 import { navigationItemsOf } from '../web/navigation.ts';
 import type { NavigationItem } from '../web/navigation.ts';
 import {
@@ -22,7 +25,7 @@ import type { TaxonomyBases, TaxonomyRedirect } from '../web/taxonomy.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
-import type { AdminStore } from './store.ts';
+import type { AdminStore, LegacySetting } from './store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { refusedUpload, storeUpload } from './uploads.ts';
 
@@ -73,11 +76,18 @@ export const ACTOR_HANDLE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 export const LANGUAGE_TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,4}$/;
 
 /**
- * The settings the admin owns, doc-1's "data that lives only in SQLite".
+ * The settings a site holds, as `content/_data/site.json` says them.
  *
- * They are the source of truth once a site has booted once. The public subset
- * is mirrored to `content/_data/site.json` on every save so an Eleventy build
- * of the same content directory renders with the same values.
+ * The file is the source of truth (decision-9): the settings screen reads it,
+ * validates the form and writes it back, and nothing else remembers a setting.
+ * That is what makes a hand edit of the file — in an editor, from a git
+ * checkout, by an Eleventy build's own tooling — show on the very next
+ * request, and what makes `data/geekity.db` a cache a site may delete.
+ *
+ * This shape is the typed view of the file; {@link settingsFromSiteJson} reads
+ * it and {@link siteJsonFor} writes it, so the two stay inverses of each
+ * other. The file may hold keys this shape does not model — `feedSize`,
+ * anything a site put there — and a save keeps every one of them.
  */
 export interface SiteSettings {
   /** Site title, shown in the header, the `<title>` and the feeds. */
@@ -127,14 +137,14 @@ export interface SiteSettings {
    *
    * Each is the relay's own inbox URL, absolute and whole — a relay's inbox is
    * a path like `/user/_____relay_____/inbox`, not an origin. The list is
-   * edited one per line and mirrored to `site.json`; where each subscription
-   * stands is in the database, because the handshake is not the site's to
-   * decide.
+   * edited one per line on the settings screen and held as an array in the
+   * file; where each subscription stands is in the database, because the
+   * handshake is not the site's to decide.
    */
   relays: readonly string[];
   /**
    * The site menu: an ordered list of `{ label, url }` the theme renders in
-   * the header, and the mirror of it in `site.json` an Eleventy build reads.
+   * the header and an Eleventy build reads out of `site.json`.
    *
    * The list is edited one `Label | URL` per line. A page may put itself on
    * the menu as well, with `navigation: true` in its front matter; those come
@@ -222,33 +232,83 @@ export type SettingsForm = Record<SettingsField, string>;
 /** One message per field that is wrong. An empty object is a valid form. */
 export type SettingsProblems = Partial<Record<SettingsField, string>>;
 
-/** The stored settings, with every default filled in. */
-export function readSiteSettings(store: AdminStore): SiteSettings {
-  const stored = store.allSettings();
-  const postsPerPage = Number(stored['postsPerPage']);
+/**
+ * A site's settings, as its `content/_data/site.json` says them right now.
+ *
+ * Read on every request that needs one rather than cached, which is what a
+ * source of truth being a file is worth: a hand edit shows on the public site,
+ * on the settings screen and in the actor document without a restart and
+ * without anything being told. The file is a few hundred bytes, so the read
+ * costs less than the parse of the template that is about to use it.
+ *
+ * A file that is missing, or one that will not parse, is the defaults rather
+ * than an error: a typo in `site.json` should leave a site up and answerable,
+ * with the settings screen there to put it right.
+ */
+export function readSiteSettings(contentDir: string): SiteSettings {
+  return settingsFromSiteJson(readSiteJsonSync(siteDataPath(contentDir)));
+}
+
+/**
+ * `content/_data/site.json` as the settings it names, defaults filled in.
+ *
+ * Read tolerantly, key by key, because the file is public, in git and editable
+ * by hand: a key of the wrong type, or one a site has never written, falls
+ * back to the default rather than taking the site down. The empty string is a
+ * value of its own for `tagline`, `author`, `avatar` and `notifyServer`, where
+ * empty is a decision — no tagline, no avatar, notifications off — and not for
+ * `title`, `timezone`, `language` or the two archive bases, where it is a hole
+ * only a default can fill.
+ */
+export function settingsFromSiteJson(file: Record<string, unknown>): SiteSettings {
+  const postsPerPage = Number(file['postsPerPage']);
 
   return {
-    title: stored['title'] ?? DEFAULT_SITE_SETTINGS.title,
-    tagline: stored['tagline'] ?? DEFAULT_SITE_SETTINGS.tagline,
-    baseUrl: stored['baseUrl'] ?? DEFAULT_SITE_SETTINGS.baseUrl,
-    timezone: stored['timezone'] ?? DEFAULT_SITE_SETTINGS.timezone,
-    language: stored['language'] ?? DEFAULT_SITE_SETTINGS.language,
-    postsPerPage:
-      Number.isInteger(postsPerPage) && postsPerPage > 0
-        ? postsPerPage
-        : DEFAULT_SITE_SETTINGS.postsPerPage,
-    author: stored['author'] ?? DEFAULT_SITE_SETTINGS.author,
-    actorHandle: stored['actorHandle'] ?? DEFAULT_SITE_SETTINGS.actorHandle,
-    actorType: ACTOR_TYPES.includes(stored['actorType'] ?? '')
-      ? (stored['actorType'] as string)
-      : DEFAULT_SITE_SETTINGS.actorType,
-    avatar: stored['avatar'] ?? DEFAULT_SITE_SETTINGS.avatar,
-    tagBase: stored['tagBase'] ?? DEFAULT_SITE_SETTINGS.tagBase,
-    categoryBase: stored['categoryBase'] ?? DEFAULT_SITE_SETTINGS.categoryBase,
-    notifyServer: stored['notifyServer'] ?? DEFAULT_SITE_SETTINGS.notifyServer,
-    relays: relayList(stored['relays'] ?? ''),
-    navigation: navigationList(stored['navigation'] ?? ''),
-    taxonomyRedirects: redirectList(stored['taxonomyRedirects'] ?? ''),
+    ...DEFAULT_SITE_SETTINGS,
+    ...(typeof file['title'] === 'string' && file['title'] !== '' ? { title: file['title'] } : {}),
+    ...(typeof file['tagline'] === 'string' ? { tagline: file['tagline'] } : {}),
+    ...(typeof file['author'] === 'string' ? { author: file['author'] } : {}),
+    ...(typeof file['timezone'] === 'string' && file['timezone'] !== ''
+      ? { timezone: file['timezone'] }
+      : {}),
+    ...(typeof file['language'] === 'string' && file['language'] !== ''
+      ? { language: file['language'] }
+      : {}),
+    ...(typeof file['avatar'] === 'string' ? { avatar: file['avatar'] } : {}),
+    ...(typeof file['actorHandle'] === 'string' && file['actorHandle'] !== ''
+      ? { actorHandle: file['actorHandle'] }
+      : {}),
+    // Only a type this version knows, because it becomes a vocabulary class: a
+    // file naming one it does not is the default actor rather than a 500 on
+    // the actor URL.
+    ...(typeof file['actorType'] === 'string' && ACTOR_TYPES.includes(file['actorType'])
+      ? { actorType: file['actorType'] }
+      : {}),
+    ...(typeof file['tagBase'] === 'string' && file['tagBase'] !== ''
+      ? { tagBase: file['tagBase'] }
+      : {}),
+    ...(typeof file['categoryBase'] === 'string' && file['categoryBase'] !== ''
+      ? { categoryBase: file['categoryBase'] }
+      : {}),
+    ...(typeof file['notifyServer'] === 'string' ? { notifyServer: file['notifyServer'] } : {}),
+    // Through the same normaliser a submitted form goes through, so the file
+    // and the screen cannot mean different things by the same line.
+    ...(Array.isArray(file['relays'])
+      ? {
+          relays: relayList(file['relays'].filter((entry) => typeof entry === 'string').join('\n')),
+        }
+      : {}),
+    ...(Array.isArray(file['navigation'])
+      ? { navigation: navigationItemsOf(file['navigation']) }
+      : {}),
+    // The renames a site has published redirects for: facts about its URLs
+    // rather than preferences, which is why a content directory restored on
+    // its own keeps answering the archive URLs it used to.
+    ...(Array.isArray(file['taxonomyRedirects'])
+      ? { taxonomyRedirects: taxonomyRedirectsOf(file['taxonomyRedirects']) }
+      : {}),
+    ...(Number.isInteger(postsPerPage) && postsPerPage > 0 ? { postsPerPage } : {}),
+    ...(typeof file['url'] === 'string' ? { baseUrl: file['url'] } : {}),
   };
 }
 
@@ -257,75 +317,14 @@ export function taxonomyBasesFromSettings(settings: SiteSettings): TaxonomyBases
   return { tag: settings.tagBase, category: settings.categoryBase };
 }
 
-/** Write a whole settings object back to the store. */
-export function writeSiteSettings(store: AdminStore, settings: SiteSettings): void {
-  store.setSettings({
-    title: settings.title,
-    tagline: settings.tagline,
-    baseUrl: settings.baseUrl,
-    timezone: settings.timezone,
-    language: settings.language,
-    postsPerPage: String(settings.postsPerPage),
-    author: settings.author,
-    actorHandle: settings.actorHandle,
-    actorType: settings.actorType,
-    avatar: settings.avatar,
-    tagBase: settings.tagBase,
-    categoryBase: settings.categoryBase,
-    notifyServer: settings.notifyServer,
-    // One per line, which is the shape the form submits and the shape the
-    // list reads in: the settings table holds strings, and a delimiter that
-    // cannot appear inside a URL costs nothing to parse back.
-    relays: settings.relays.join('\n'),
-    // The same `Label | URL` lines the textarea submits, for the same reason
-    // the relays are stored as their own lines: the settings table holds
-    // strings, and a value that reads back through the parser the form went
-    // through cannot mean something different in the two places.
-    navigation: navigationText(settings.navigation),
-    // One `taxonomy|from|to` line per rename, for the reason the menu is
-    // lines: the settings table holds strings, and a value that reads back
-    // through the parser it was written with cannot mean two things.
-    taxonomyRedirects: redirectText(settings.taxonomyRedirects),
-  });
-}
-
-/**
- * The settings as the `site` global, for the theme and for the JSON mirror.
- *
- * Empty strings are left out rather than written as empty values, so a key a
- * site keeps in `site.json` by hand and leaves blank in the form is overlaid
- * rather than blanked.
- */
-export function settingsSiteData(settings: SiteSettings): Partial<SiteData> {
-  return {
-    ...(settings.title === '' ? {} : { title: settings.title }),
-    ...(settings.tagline === '' ? {} : { tagline: settings.tagline }),
-    ...(settings.baseUrl === '' ? {} : { url: settings.baseUrl }),
-    ...(settings.author === '' ? {} : { author: settings.author }),
-    ...(settings.timezone === '' ? {} : { timezone: settings.timezone }),
-    ...(settings.language === '' ? {} : { language: settings.language }),
-    ...(settings.avatar === '' ? {} : { avatar: settings.avatar }),
-    postsPerPage: settings.postsPerPage,
-    tagBase: settings.tagBase,
-    categoryBase: settings.categoryBase,
-    // Written even when it is empty, unlike the other strings above: empty is
-    // what turns the notifications off, so it has to reach the mirror as a
-    // value rather than as an absence a default would fill back in.
-    notifyServer: settings.notifyServer,
-    relays: [...settings.relays],
-    navigation: settings.navigation.map((item) => ({ ...item })),
-    taxonomyRedirects: settings.taxonomyRedirects.map((entry) => ({ ...entry })),
-  };
-}
-
 /**
  * `content/_data/site.json` as it should read for these settings.
  *
- * Every key the form manages is written whether or not it has a value, so the
- * file's shape is stable and an Eleventy template may reference `site.author`
- * without guarding it. Every other key the file already had is kept: a site
- * may put anything in there and reach it from its templates, and the settings
- * form is not going to be the thing that throws it away.
+ * Every key the settings model is written whether or not it has a value, so
+ * the file's shape is stable and an Eleventy template may reference
+ * `site.author` without guarding it. Every other key the file already had is
+ * kept: a site may put anything in there and reach it from its templates, and
+ * the settings form is not going to be the thing that throws it away.
  */
 export function siteJsonFor(
   settings: SiteSettings,
@@ -341,6 +340,12 @@ export function siteJsonFor(
     timezone: settings.timezone,
     language: settings.language,
     avatar: settings.avatar,
+    // The two the file did not carry while SQLite held the settings. It has to
+    // now: nothing else remembers which handle `@you@example.com` resolves to,
+    // and an actor whose handle changed is one every follower has to find
+    // again.
+    actorHandle: settings.actorHandle,
+    actorType: settings.actorType,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
     notifyServer: settings.notifyServer,
@@ -355,109 +360,137 @@ export function siteDataPath(contentDir: string): string {
   return path.join(contentDir, ...SITE_DATA_FILE.split('/'));
 }
 
+/** The bytes of one settings object, as the file holds them. */
+function siteJsonText(settings: SiteSettings, existing: Record<string, unknown>): string {
+  return `${JSON.stringify(siteJsonFor(settings, existing), null, 2)}\n`;
+}
+
 /**
- * Rewrite `content/_data/site.json` from the settings.
+ * Rewrite `content/_data/site.json` as these settings, keeping the keys they
+ * do not model.
  *
- * Written to a temporary file in the same directory and renamed over the old
- * one, so a reader — an Eleventy build, or the CMS's own site data source —
- * sees either the whole old file or the whole new one and never a half-written
- * one.
+ * {@link updateSiteSettings} for a caller whose new settings depend on the old
+ * ones, which every screen's is: this is for the callers that have the whole
+ * object already, a test's set-up among them.
  */
 export async function writeSiteJson(options: {
   contentDir: string;
   settings: SiteSettings;
 }): Promise<void> {
-  const file = siteDataPath(options.contentDir);
-  await mkdir(path.dirname(file), { recursive: true });
-
-  let existing: Record<string, unknown> = {};
-  try {
-    existing = parseSiteJson(await readFile(file, 'utf8'));
-  } catch {
-    // No file yet, or one that will not parse. Either way the settings are
-    // what the file is about to say.
-  }
-
-  const temporary = `${file}.${process.pid.toString(36)}.tmp`;
-  await writeFile(
-    temporary,
-    `${JSON.stringify(siteJsonFor(options.settings, existing), null, 2)}\n`,
-    'utf8',
-  );
-  await rename(temporary, file);
+  await updateSiteSettings({ contentDir: options.contentDir, change: () => options.settings });
 }
 
 /**
- * Fill an empty settings table from `content/_data/site.json`, so a site that
- * existed before this screen did — or one `geekity init` just wrote — keeps
- * the values it already had.
+ * Change the settings: re-read the file, apply the change, write it back, with
+ * nothing able to write that file in between ({@link updateFileAtomically}).
  *
- * Runs once, on the boot that finds the table empty. After that SQLite is the
- * source and the file is the mirror, so a later hand edit of the file no
- * longer wins.
+ * The re-read is what makes the file win the way it wins for a post
+ * (decision-9). Two people with the settings screen open both save what they
+ * see, and the second save is applied to what the first one actually wrote
+ * rather than to what the second one had on screen — so a change to a field
+ * the second person did not touch survives. The write is a temporary file and
+ * a rename, so a reader — an Eleventy build, the site data source, another
+ * process entirely — never sees a half-written file. Keys the settings do not
+ * model, `feedSize` and anything a site added, are kept.
  */
-export function seedSiteSettings(options: {
-  store: AdminStore;
-  config: Pick<ResolvedConfig, 'contentDir' | 'baseUrl' | 'baseUrlSource'>;
-}): SiteSettings {
-  const { store, config } = options;
-  if (store.countSettings() > 0) return readSiteSettings(store);
+export async function updateSiteSettings(options: {
+  contentDir: string;
+  change: (current: SiteSettings) => SiteSettings;
+}): Promise<SiteSettings> {
+  let written = DEFAULT_SITE_SETTINGS;
 
-  const file = readSiteJsonSync(siteDataPath(config.contentDir));
-  const postsPerPage = Number(file['postsPerPage']);
+  await updateFileAtomically(siteDataPath(options.contentDir), (current) => {
+    const existing = parseSiteJson(current ?? '');
+    written = options.change(settingsFromSiteJson(existing));
+    return siteJsonText(written, existing);
+  });
 
-  const seeded: SiteSettings = {
-    ...DEFAULT_SITE_SETTINGS,
-    ...(typeof file['title'] === 'string' && file['title'] !== '' ? { title: file['title'] } : {}),
-    ...(typeof file['tagline'] === 'string' ? { tagline: file['tagline'] } : {}),
-    ...(typeof file['author'] === 'string' ? { author: file['author'] } : {}),
-    ...(typeof file['timezone'] === 'string' && file['timezone'] !== ''
-      ? { timezone: file['timezone'] }
-      : {}),
-    ...(typeof file['language'] === 'string' && file['language'] !== ''
-      ? { language: file['language'] }
-      : {}),
-    ...(typeof file['avatar'] === 'string' ? { avatar: file['avatar'] } : {}),
-    ...(typeof file['tagBase'] === 'string' && file['tagBase'] !== ''
-      ? { tagBase: file['tagBase'] }
-      : {}),
-    ...(typeof file['categoryBase'] === 'string' && file['categoryBase'] !== ''
-      ? { categoryBase: file['categoryBase'] }
-      : {}),
-    // The empty string counts here, unlike the bases above: a file that says
-    // the notify server is empty is a site that turned the feature off.
-    ...(typeof file['notifyServer'] === 'string' ? { notifyServer: file['notifyServer'] } : {}),
-    // The file is where a site that predates this screen — or one restored
-    // from its content directory — says which relays it belongs to, and the
-    // relay service turns a listed relay with no record into a fresh Follow.
-    ...(Array.isArray(file['relays'])
+  return written;
+}
+
+/**
+ * Turn an older site's settings rows into `content/_data/site.json`, once, and
+ * drop the table.
+ *
+ * TASK-14 made SQLite the source and the file its mirror; decision-9 reversed
+ * that, and a site upgrading across the two has rows nothing would ever read
+ * again. So the first boot of this version writes them out. Which side wins
+ * when both have something to say is decided the way it is decided everywhere
+ * else: the file wins when it was written after the last save, because that is
+ * a hand edit or a restored checkout, and the rows win otherwise. Either way
+ * the actor handle and type come from the rows, because `site.json` never
+ * carried them and losing them would rename the site's actor.
+ *
+ * Synchronous because `createCms` is: it runs before the server is listening
+ * and before anything else has touched the file.
+ */
+export function migrateSettingsToFile(options: { admin: AdminStore; contentDir: string }): void {
+  const { admin, contentDir } = options;
+  const rows = admin.legacySettings();
+
+  if (rows !== undefined && rows.length > 0) {
+    const stored = settingsFromRows(rows);
+    const file = siteDataPath(contentDir);
+    const existing = parseSiteJson(readFileIfPresentSync(file) ?? '');
+    const settings = fileWasEditedLast(file, rows)
       ? {
-          relays: relayList(file['relays'].filter((entry) => typeof entry === 'string').join('\n')),
+          ...settingsFromSiteJson(existing),
+          actorHandle: stored.actorHandle,
+          actorType: stored.actorType,
         }
-      : {}),
-    // The menu a site already had, read the same tolerant way a render reads
-    // it, so a hand-written entry that is not an item is dropped here rather
-    // than stored and mirrored back out.
-    ...(Array.isArray(file['navigation'])
-      ? { navigation: navigationItemsOf(file['navigation']) }
-      : {}),
-    // The renames a site already published redirects for. They are facts about
-    // its URLs rather than preferences, so a content directory restored on its
-    // own keeps answering the archive URLs it used to.
-    ...(Array.isArray(file['taxonomyRedirects'])
-      ? { taxonomyRedirects: taxonomyRedirectsOf(file['taxonomyRedirects']) }
-      : {}),
-    ...(Number.isInteger(postsPerPage) && postsPerPage > 0 ? { postsPerPage } : {}),
-    // The file's `url` only becomes the setting when the deployment has not
-    // named one; otherwise the setting records what is actually in effect.
-    baseUrl:
-      config.baseUrlSource === 'default' && typeof file['url'] === 'string' && file['url'] !== ''
-        ? file['url']
-        : config.baseUrl,
-  };
+      : stored;
 
-  writeSiteSettings(store, seeded);
-  return seeded;
+    writeFileAtomicallySync(file, siteJsonText(settings, existing));
+  }
+
+  // Dropped whether or not it had rows: a fresh database gets the table from
+  // migration 3, which has shipped and so is never edited, and a site that has
+  // been migrated must not be asked again on the next boot.
+  admin.dropLegacyTable('settings');
+}
+
+/** The old key/value rows as settings, defaults filled in. */
+function settingsFromRows(rows: readonly LegacySetting[]): SiteSettings {
+  const stored: Record<string, string> = {};
+  for (const row of rows) stored[row.key] = row.value;
+
+  // Through the file's own reader, so one description of what a setting is
+  // worth serves both: the rows are spelled as the file spells them and read
+  // back the same way. `relays`, `navigation` and `taxonomyRedirects` were
+  // stored one entry per line, which is not how the file holds them.
+  return settingsFromSiteJson({
+    ...stored,
+    ...(stored['baseUrl'] === undefined ? {} : { url: stored['baseUrl'] }),
+    ...(stored['postsPerPage'] === undefined
+      ? {}
+      : { postsPerPage: Number(stored['postsPerPage']) }),
+    relays: relayList(stored['relays'] ?? ''),
+    navigation: navigationList(stored['navigation'] ?? ''),
+    taxonomyRedirects: redirectList(stored['taxonomyRedirects'] ?? ''),
+  });
+}
+
+/**
+ * Whether `site.json` has been written since the newest settings row was.
+ *
+ * A missing file has not, so the rows win. A file whose modification time
+ * cannot be read is treated the same way: the rows are the only thing that is
+ * certainly there.
+ */
+function fileWasEditedLast(file: string, rows: readonly LegacySetting[]): boolean {
+  let modified: number;
+  try {
+    modified = statSync(file).mtimeMs;
+  } catch {
+    return false;
+  }
+
+  const newest = rows.reduce((latest, row) => {
+    const at = Date.parse(row.updatedAt);
+    return Number.isNaN(at) ? latest : Math.max(latest, at);
+  }, 0);
+
+  return modified > newest;
 }
 
 /**
@@ -613,20 +646,25 @@ export interface MountSettingsOptions {
 /**
  * Register the settings screen.
  *
- * A save writes SQLite and `content/_data/site.json` in that order, so the
- * store — which is what the theme reads — is never behind the file. A form the
- * validator has anything to say about is a 400 that writes neither.
+ * Every read is of `content/_data/site.json` as it is at that moment, and a
+ * save rewrites it: the screen is a view of the file rather than of anything
+ * this process remembers (decision-9). A form the validator has anything to
+ * say about is a 400 that writes nothing at all.
  */
 export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptions): void {
   const { render } = options;
 
   app.get(SETTINGS_PATH, (c) =>
-    render(c, ADMIN_TEMPLATES.settings, screen(c.var.config, readSiteSettings(c.var.admin))),
+    render(
+      c,
+      ADMIN_TEMPLATES.settings,
+      screen(c.var.config, readSiteSettings(c.var.config.contentDir)),
+    ),
   );
 
   app.post(SETTINGS_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const stored = readSiteSettings(c.var.admin);
+    const stored = readSiteSettings(c.var.config.contentDir);
     const submitted: SettingsForm = {
       title: field(body[SETTINGS_FIELDS.title]),
       tagline: field(body[SETTINGS_FIELDS.tagline]),
@@ -661,8 +699,12 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       });
     }
 
-    const settings = settingsFromForm(submitted, stored.avatar, stored.taxonomyRedirects);
-    await store(c, settings);
+    // The avatar and the recorded renames are read again inside the write, not
+    // taken from the form's own read: a save of the title must not undo an
+    // avatar somebody uploaded while this form was open.
+    const settings = await save(c, (current) =>
+      settingsFromForm(submitted, current.avatar, current.taxonomyRedirects),
+    );
 
     // The name, the summary and the handle are the actor's profile as much as
     // the avatar is, and a follower's copy of it is only as fresh as the last
@@ -693,7 +735,7 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
    */
   app.post(AVATAR_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const stored = readSiteSettings(c.var.admin);
+    const stored = readSiteSettings(c.var.config.contentDir);
 
     if (field(body[AVATAR_FIELDS.action]) === AVATAR_REMOVE) {
       if (stored.avatar === '') {
@@ -701,7 +743,7 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
         return c.redirect(SETTINGS_PATH, 303);
       }
 
-      await store(c, { ...stored, avatar: '' });
+      await save(c, (current) => ({ ...current, avatar: '' }));
       const removal = await c.var.delivery.updateActor();
       flash(c, 'notice', `Avatar removed.${toldFollowers(removal)}`);
       return c.redirect(SETTINGS_PATH, 303);
@@ -715,46 +757,24 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       return c.redirect(SETTINGS_PATH, 303);
     }
 
-    await store(c, { ...stored, avatar: outcome.url });
+    await save(c, (current) => ({ ...current, avatar: outcome.url }));
     const report = await c.var.delivery.updateActor();
     flash(c, 'notice', `Avatar saved.${toldFollowers(report)}`);
     return c.redirect(SETTINGS_PATH, 303);
   });
 
-  /**
-   * Write settings to SQLite and then to `content/_data/site.json`, in that
-   * order, so the store — which is what the theme reads — is never behind the
-   * file.
-   */
-  async function store(c: Context<GeekityEnv>, settings: SiteSettings): Promise<void> {
-    await storeSiteSettings({
-      admin: c.var.admin,
-      contentDir: c.var.config.contentDir,
-      settings,
-    });
+  /** Change `content/_data/site.json`, re-reading it inside the write. */
+  function save(
+    c: Context<GeekityEnv>,
+    change: (current: SiteSettings) => SiteSettings,
+  ): Promise<SiteSettings> {
+    return updateSiteSettings({ contentDir: c.var.config.contentDir, change });
   }
 }
 
 /**
- * Write settings to SQLite and then to `content/_data/site.json`, in that
- * order, so the store — which is what the theme reads — is never behind the
- * file.
- *
- * Exported because the settings screen is no longer the only thing that writes
- * a setting: the taxonomy screens record a renamed archive, and the two have
- * to write it the same way or the file and the database would drift.
- */
-export async function storeSiteSettings(options: {
-  admin: AdminStore;
-  contentDir: string;
-  settings: SiteSettings;
-}): Promise<void> {
-  writeSiteSettings(options.admin, options.settings);
-  await writeSiteJson({ contentDir: options.contentDir, settings: options.settings });
-}
-
-/**
- * A stored `taxonomy|from|to` block as the renames it names.
+ * A `taxonomy|from|to` block as the renames it names, which is how the old
+ * settings table spelled them ({@link migrateSettingsToFile}).
  *
  * The same tolerance the rest of this file reads its lists with: a line that
  * is not three non-empty parts naming a real taxonomy is dropped rather than
@@ -774,11 +794,6 @@ function redirectList(value: string): TaxonomyRedirect[] {
   // Through the same reader `site.json` goes through, so the two spellings of
   // the list cannot mean different things.
   return taxonomyRedirectsOf(entries);
-}
-
-/** The renames as the settings table holds them, one per line. */
-function redirectText(redirects: readonly TaxonomyRedirect[]): string {
-  return redirects.map((entry) => `${entry.taxonomy}|${entry.from}|${entry.to}`).join('\n');
 }
 
 /**
@@ -849,6 +864,7 @@ function screen(
   settings: SiteSettings,
 ): Record<string, unknown> {
   const overridden = config.baseUrlSource !== 'default';
+  const inEffect = effectiveBaseUrl(config, settings);
 
   return {
     section: 'settings',
@@ -859,9 +875,12 @@ function screen(
     avatarUrl: AVATAR_PATH,
     avatarFields: AVATAR_FIELDS,
     avatarRemove: AVATAR_REMOVE,
-    form: formFromSettings(settings),
+    // The base URL field shows the one in effect rather than the one the file
+    // happens to hold: a site.json with no `url` at all would otherwise render
+    // an empty field that the validator refuses the moment anything is saved.
+    form: formFromSettings({ ...settings, baseUrl: inEffect }),
     problems: {},
-    baseUrlInEffect: effectiveBaseUrl(config, settings),
+    baseUrlInEffect: inEffect,
     baseUrlOverridden: overridden,
     baseUrlSource: config.baseUrlSource,
     baseUrlNote: overridden
@@ -962,16 +981,19 @@ function isValidTimezone(value: string): boolean {
   }
 }
 
+/** One site.json as an object, empty when it is missing or will not parse. */
 function readSiteJsonSync(file: string): Record<string, unknown> {
+  return parseSiteJson(readFileIfPresentSync(file) ?? '');
+}
+
+/** The same, from bytes already in hand. */
+function parseSiteJson(source: string): Record<string, unknown> {
+  let parsed: unknown;
   try {
-    return parseSiteJson(readFileSync(file, 'utf8'));
+    parsed = JSON.parse(source);
   } catch {
     return {};
   }
-}
-
-function parseSiteJson(source: string): Record<string, unknown> {
-  const parsed: unknown = JSON.parse(source);
   return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
     ? (parsed as Record<string, unknown>)
     : {};

@@ -52,7 +52,7 @@ export function postArticle(context: Context<FederationContextData>, document: D
   const { baseUrl } = context.data.config;
   // The archives an activity points at are wherever the site currently serves
   // them, which is a setting rather than a constant (TASK-36).
-  const bases = taxonomyBasesFromSettings(readSiteSettings(context.data.admin));
+  const bases = taxonomyBasesFromSettings(readSiteSettings(context.data.config.contentDir));
 
   return new Article({
     id: articleObjectId(context, document),

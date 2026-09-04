@@ -4,7 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
-import { readSiteSettings, writeSiteSettings } from './settings.ts';
+import { readSiteSettings, writeSiteJson } from './settings.ts';
 import type { Browser } from './__testing__/harness.ts';
 
 const box = sandbox();
@@ -805,12 +805,17 @@ describe('a conflicting save', () => {
   });
 });
 
+/** Put a site in one zone, the way the settings screen would. */
+async function setTimezone(contentDir: string, timezone: string): Promise<void> {
+  await writeSiteJson({ contentDir, settings: { ...readSiteSettings(contentDir), timezone } });
+}
+
 describe('dates in the editor', () => {
   /** A site whose `timezone` setting is `zone`, over the given content. */
   async function siteIn(zone: string, documents: Seed[] = []) {
     const contentDir = await seeded(documents);
     const cms = await box.site({ contentDir });
-    writeSiteSettings(cms.admin, { ...readSiteSettings(cms.admin), timezone: zone });
+    await setTimezone(contentDir, zone);
     return { cms, contentDir, agent: await signedIn(cms) };
   }
 
@@ -924,7 +929,7 @@ describe('dates in the editor', () => {
 
     // 04:30 UTC on 1 October is still 30 September in Chicago but 1 October in
     // Berlin, so a zone-derived month would move this post to /2026/09/.
-    writeSiteSettings(cms.admin, { ...readSiteSettings(cms.admin), timezone: 'America/Chicago' });
+    await setTimezone(contentDir, 'America/Chicago');
     await submit(agent, '/admin/posts/just-after-midnight', { action: 'update' });
 
     const files = await readdir(path.join(contentDir, 'posts'));

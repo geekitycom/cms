@@ -33,7 +33,7 @@ tsconfig.json         so the site type checks against the package
 content/
   posts/              Markdown posts, plus posts.json for Eleventy
   pages/              Markdown pages, plus pages.json
-  _data/site.json     title, tagline, author, page and feed sizes
+  _data/site.json     the settings: title, tagline, author, page and feed sizes
 .gitignore            node_modules, data and .env
 ```
 
@@ -279,8 +279,8 @@ say how each one landed. A status is `sent` (the inbox took it), `queued`
 
 A [Mastodon-style relay][fepae0c] boosts every public activity it is sent on to
 the instances subscribed to it, which is how a site nobody follows yet reaches
-people. `relays` is the setting: one relay inbox per line on `/admin/settings`,
-mirrored to `site.json` like every other setting, and
+people. `relays` is the setting: one relay inbox per line on `/admin/settings`, kept
+in `site.json` like every other setting, and
 `https://tags.pub/user/_____relay_____/inbox` is one worth knowing about — it
 boosts any public post carrying a hashtag it tracks, which every `Article` this
 CMS builds already carries one of per tag and per category.
@@ -315,8 +315,8 @@ on the next boot.
 
 The actor's `icon` is an image uploaded on `/admin/settings`. It is stored with
 the site's other uploads, under `content/uploads/{yyyy}/{mm}/`, and the public
-path it is served at — `/uploads/2026/09/me.png` — is the `avatar` setting,
-mirrored into `content/_data/site.json` like the rest of them. The actor
+path it is served at — `/uploads/2026/09/me.png` — is the `avatar` setting in
+`content/_data/site.json`, like the rest of them. The actor
 carries it as an absolute URL, resolved against the base URL in effect, because
 a peer has no site to resolve a path against; an `avatar` that is already an
 absolute URL is left alone, which is how a site puts its avatar on a CDN.
@@ -641,6 +641,47 @@ admin.createUser({ username: 'ada', password: process.env.PASSWORD ?? '' });
 admin.close();
 ```
 
+### Settings
+
+`content/_data/site.json` is the source of truth for a site's settings. The
+screen at `/admin/settings` reads that file, validates what was typed, and
+writes it back; nothing else remembers a setting, and `data/geekity.db` holds
+none of them.
+
+The write is atomic and serialised: the bytes go to a temporary file beside the
+real one and are renamed over it, and the read of what the file already held
+and the write of what it says next are one step nothing else writing that file
+can get between. So a reader — an Eleventy build, the CMS's own site data
+source, another process entirely — always sees one whole version, and two saves
+at once cannot each keep half of what the other kept.
+
+The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
+`timezone`, `language`, `avatar`, `actorHandle`, `actorType`, `tagBase`,
+`categoryBase`, `notifyServer`, `relays`, `navigation` and `taxonomyRedirects`,
+and every other key it already had is kept, `feedSize` and anything a site put
+there included. A key it does not carry is the default, and a key of the wrong
+type is the default too: a hand-edited `site.json` cannot take the site down.
+
+Because it is the source rather than a copy, editing it by hand while the
+server runs is picked up on the next request — on the public site, in the
+feeds, on the settings screen and in the ActivityPub actor alike — with nothing
+to restart and nothing to tell. Put the file in git and a checkout of it is the
+site's settings.
+
+The one exception is `url`. A base URL decides the absolute URLs in the feeds,
+the ActivityStreams ids and whether the session cookie is `Secure`, so
+`GEEKITY_BASE_URL` and a `baseUrl` in the config file both win over the file's,
+and the settings screen renders the field read-only and says which value is in
+effect and why. When neither names one, the file's `url` becomes the base URL
+at boot — at boot rather than on save, so an `https` base URL cannot log out
+the admin who submitted it over `http`.
+
+A site whose database was written by a version that kept the settings in SQLite
+has those rows written into `site.json` on the first boot of this one, and the
+table is dropped. If the file was written after the rows were — a hand edit, or
+a content directory restored from git — the file wins, keeping only the actor
+handle and type from the rows, because those are the two the file never carried.
+
 ### The media library
 
 `/admin/media` lists every file under `content/uploads`, newest first by
@@ -745,7 +786,7 @@ but it is worth knowing before renaming a tag that half the archive carries.
 
 A rename moves an archive, and an archive is a URL somebody may have linked to,
 so the site records the move in a `taxonomyRedirects` list — `{ taxonomy, from,
-to }` — kept with the settings and mirrored into `content/_data/site.json`. The
+to }` — in `content/_data/site.json` with the rest of the settings. The
 old archive URL and its feed then answer `301` to the new ones. Chains are
 collapsed as they are recorded, so `a → b` followed by `b → c` is stored as
 `a → c` and answered in one hop; a term that comes back into use is served
@@ -876,9 +917,9 @@ links and the ActivityStreams hashtags all follow on the next request. A base
 is one URL-safe path segment: no slashes, and not a path the site already
 answers on (`page`, `feed`, `comments`, `admin`, `ap`, `theme`, `uploads`,
 `nodeinfo`), and
-the two may not be the same word. Both are mirrored into
-`content/_data/site.json` as `tagBase` and `categoryBase`, so an Eleventy build
-of the same content directory can put its archives at the same URLs.
+the two may not be the same word. Both are `tagBase` and `categoryBase` in
+`content/_data/site.json`, so an Eleventy build of the same content directory
+can put its archives at the same URLs.
 
 ### Navigation
 
@@ -906,7 +947,7 @@ opts in with, and a document's own front matter goes on top of the globals as
 Eleventy's data cascade does. The scheduled, drafted and trashed pages are not
 in it, for the same reason they are not on the site.
 
-The setting is mirrored to `content/_data/site.json` as `navigation`, a list of
+The setting is `navigation` in `content/_data/site.json`, a list of
 `{ label, url }`, so an Eleventy build renders the same menu; the example
 config assembles it as `collections.menu`. A `navigation` in a hand-edited
 `site.json` that is not a list of items yields an empty menu rather than an
@@ -1454,7 +1495,7 @@ the rules the CMS follows that Eleventy does not know about on its own:
 | A file with no `permalink` gets the CMS default | An `addPreprocessor` that fills in `/{yyyy}/{mm}/{slug}/` for a post and `/{slug}/` for a page, slugifying the title exactly as the CMS does. Front matter always wins; the CMS writes `permalink` into every file it saves, so this only matters for hand-authored files.                                                                                                                              |
 | `content/uploads/` is served at `/uploads/`     | `addPassthroughCopy({ 'content/uploads': 'uploads' })`, plus an `ignores` entry for the same path. Without the ignore, an upload that happens to be Markdown would be copied _and_ rendered as a page; the CMS only ever indexes `posts/` and `pages/`.                                                                                                                                                 |
 | `content/_trash/` is not published              | `ignores.add('content/_trash/**')`. Eleventy skips `_includes` and `_data` because they are configured directories, not because of the underscore, so the trash has to be named.                                                                                                                                                                                                                        |
-| Dates are shown in the site's `timezone`        | A `date` filter with the CMS's four formats: `readable`, `html` and `year` are the calendar the site's zone was on at the instant, `iso` is the instant in UTC. The zone is read from `content/_data/site.json`, which the settings screen mirrors, so a zone changed in the CMS changes the built pages too.                                                                                           |
+| Dates are shown in the site's `timezone`        | A `date` filter with the CMS's four formats: `readable`, `html` and `year` are the calendar the site's zone was on at the instant, `iso` is the instant in UTC. The zone is read from `content/_data/site.json`, which the settings screen writes, so a zone changed in the CMS changes the built pages too.                                                                                            |
 | A future `date` holds a post back               | An `addPreprocessor` that returns `false` for it. This is the one rule that cannot be exactly the same in both places: a build has no clock, only a moment. A scheduled post is left out of the build that runs before its date and is in the next build after it, so a scheduled site needs a build on a schedule; the CMS publishes it on the date by itself. `BUILD_SCHEDULED=1` builds them anyway. |
 
 It also builds two collections Eleventy has no notion of. `collections.categories`
@@ -1468,7 +1509,7 @@ collection is built once for the whole site.
 
 The `date` filter is the one that needs a word. The files hold UTC instants and
 the `timezone` setting decides how they read, so the config's filter takes the
-zone from `content/_data/site.json` — the mirror the settings screen writes —
+zone from `content/_data/site.json` — the file the settings screen writes —
 and renders with `Intl`, which keeps the file free of dependencies. If your site
 already uses [Luxon](https://moment.github.io/luxon/), which Eleventy ships
 anyway, the same filter is shorter:

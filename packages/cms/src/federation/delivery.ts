@@ -164,7 +164,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     return await saveDocument({
       contentDir: config.contentDir,
       store,
-      timezone: readSiteSettings(admin).timezone,
+      timezone: readSiteSettings(config.contentDir).timezone,
       path: document.path,
       content: { ...documentContent(document), activitypub: { id, published } },
     });
@@ -314,7 +314,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         const context = deliveryContext();
         const actorId = context.getActorUri(SITE_ACTOR_IDENTIFIER);
         const actor = await siteActor(context, SITE_ACTOR_IDENTIFIER, {
-          settings: readSiteSettings(admin),
+          settings: readSiteSettings(config.contentDir),
           baseUrl: config.baseUrl,
         });
 

@@ -533,7 +533,7 @@ function filedDay(input: {
 
 /** The site's time zone, which is what every offset-less date in the admin means. */
 function siteTimezone(c: Context<GeekityEnv>): string {
-  return readSiteSettings(c.var.admin).timezone;
+  return readSiteSettings(c.var.config.contentDir).timezone;
 }
 
 /** A submitted permalink as a URL path, or `undefined` when the field is empty. */

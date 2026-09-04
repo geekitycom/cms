@@ -250,15 +250,17 @@ export function notifyEndpoints(server: string): NotifyServer | undefined {
 }
 
 /**
- * The notify server this site's feeds advertise, from `notifyServer` in the
- * settings — and so in `content/_data/site.json`.
+ * The notify server this site's feeds advertise, from `notifyServer` in
+ * `content/_data/site.json`.
  *
- * A missing key reads as no server rather than as the default. The default
- * lives in the settings, which are written to the mirror whether or not they
- * have a value, so a file that does not name one is a site that turned it off.
+ * An empty value is a site that turned real-time notification off; a missing
+ * key is a site that has never said, and gets {@link DEFAULT_NOTIFY_SERVER}.
+ * That is the same rule the settings read the file by, so the server the feeds
+ * advertise is always the server the CMS pings.
  */
 export function notifyServerOf(site: SiteData): NotifyServer | undefined {
   const configured = site['notifyServer'];
+  if (configured === undefined) return notifyEndpoints(DEFAULT_NOTIFY_SERVER);
   return typeof configured === 'string' ? notifyEndpoints(configured) : undefined;
 }
 

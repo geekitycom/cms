@@ -114,7 +114,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
   federation
     .setActorDispatcher(ACTOR_PATH, async (context, identifier) => {
       if (identifier !== SITE_ACTOR_IDENTIFIER) return null;
-      const settings = readSiteSettings(context.data.admin);
+      const settings = readSiteSettings(context.data.config.contentDir);
       return await siteActor(context, identifier, {
         settings,
         baseUrl: context.data.config.baseUrl,
@@ -124,7 +124,9 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
     // typed into the identifier the URLs are built from, and what makes the
     // handle a setting rather than part of the actor's id.
     .mapHandle((context, username) =>
-      username === readSiteSettings(context.data.admin).actorHandle ? SITE_ACTOR_IDENTIFIER : null,
+      username === readSiteSettings(context.data.config.contentDir).actorHandle
+        ? SITE_ACTOR_IDENTIFIER
+        : null,
     )
     .setKeyPairsDispatcher(async (context, identifier) =>
       identifier === SITE_ACTOR_IDENTIFIER

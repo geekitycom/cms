@@ -1,5 +1,4 @@
 import { readSiteSettings, taxonomyBasesFromSettings } from './admin/settings.ts';
-import type { AdminStore } from './admin/store.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
 import type { DocumentChange } from './content/sync.ts';
@@ -44,13 +43,12 @@ export interface NotifyLogger {
 
 /** What {@link createFeedNotifier} needs. */
 export interface CreateFeedNotifierOptions {
-  /** The settings, which name the server and the two archive bases. */
-  admin: AdminStore;
   /**
-   * Config after defaults and environment overrides, for the base URL and for
-   * the clock a scheduled post is held against.
+   * Config after defaults and environment overrides: the base URL, the clock a
+   * scheduled post is held against, and the content directory the settings —
+   * the notify server and the two archive bases — are read from.
    */
-  config: Pick<ResolvedConfig, 'baseUrl' | 'now'>;
+  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'now'>;
   /** Where failures are reported. Defaults to `console`. */
   logger?: NotifyLogger | undefined;
 }
@@ -99,7 +97,7 @@ export interface FeedNotifier {
  * restart — the same way the feeds pick up the new address.
  */
 export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNotifier {
-  const { admin, config } = options;
+  const { config } = options;
   const logger = options.logger ?? console;
 
   // Pings are chained rather than sent at once, and the chain never rejects:
@@ -114,7 +112,7 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
 
   /** The server the settings name, or `undefined` when they name none. */
   function server(): NotifyServer | undefined {
-    return notifyEndpoints(readSiteSettings(admin).notifyServer);
+    return notifyEndpoints(readSiteSettings(config.contentDir).notifyServer);
   }
 
   /** Tell one server about one feed, answering with what happened. */
@@ -170,7 +168,7 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
       const after = inFeeds(change.next, now);
       if (before === undefined && after === undefined) return [];
 
-      const bases = taxonomyBasesFromSettings(readSiteSettings(admin));
+      const bases = taxonomyBasesFromSettings(readSiteSettings(config.contentDir));
       const urls = new Set<string>();
 
       for (const format of FEED_FORMATS) {

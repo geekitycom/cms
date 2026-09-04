@@ -590,24 +590,24 @@ Changing it moves what every page shows on the next request and moves nothing
 on disk, and it cannot move a URL that already exists. The package README has
 [the whole rule](packages/cms/README.md#dates-and-the-timezone-setting).
 
-**SQLite is the source; `content/_data/site.json` is the mirror.** On the first
-boot that finds the settings table empty, it is seeded from
-`content/_data/site.json` if that file exists, so a site that predates this
-screen — or one `geekity init` has just written — comes up with the values it
-already had. After that the file is no longer read for those keys: every save
-writes SQLite and then rewrites the public subset of the file, through a
-temporary file and a rename, so an Eleventy build of the same content directory
-renders with the same values and never sees a half-written file. A hand edit of
-the file after that point is overwritten by the next save.
+**`content/_data/site.json` is the source.** The settings screen reads that
+file, validates what was typed, and writes it back — to a temporary file in the
+same directory, renamed over the old one, with the read and the write as one
+step nothing else writing that file can get between. Nothing else remembers a
+setting, so a save is on the public site, in the feeds and in the ActivityPub
+actor on the very next request, an Eleventy build of the same content directory
+renders with the same values, and a hand edit of the file while the server runs
+is picked up on the next request exactly as a save is. A site whose database
+was written by an older version has its settings rows written into the file
+once, on the first boot of this one, and the table is dropped.
 
 The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
-`timezone`, `language`, `avatar`, `tagBase`, `categoryBase`, `notifyServer`,
-`relays` and `navigation`, and every other key it
-already had is kept — a site may put
-anything in there, `feedSize` included, and reach it from its templates. The
-theme reads the settings on top of the file, so a saved title is on the public
-site and in the feeds on the very next request rather than when the file's
-modification time is next noticed.
+`timezone`, `language`, `avatar`, `actorHandle`, `actorType`, `tagBase`,
+`categoryBase`, `notifyServer`, `relays`, `navigation` and `taxonomyRedirects`,
+and every other key it already had is kept — a site may put anything in there,
+`feedSize` included, and reach it from its templates. A key it does not carry
+is the default: an absent `notifyServer` is `https://rpc.rsscloud.io`, an empty
+one is real-time notification turned off.
 
 Nothing is written until every field is valid, and a form with a problem comes
 back with a 400 and one message under each field that has one:
@@ -657,8 +657,8 @@ order, with the item whose path is the one being read marked `aria-current`. A
 page can put itself on the end of it by ticking **Show in navigation** in the
 editor, which writes `navigation: true` into its front matter; **Menu order**
 writes `navigationOrder`, and the flagged pages sort by it and then by title
-after every item the setting names. The setting is mirrored to `navigation` in
-`content/_data/site.json` as a list of `{ label, url }`, so an Eleventy build
+after every item the setting names. The setting is `navigation` in
+`content/_data/site.json`, a list of `{ label, url }`, so an Eleventy build
 renders the same menu — `docs/eleventy.config.example.js` assembles it as
 `collections.menu`. A theme reads it as `menu`; see
 [Navigation][navigation] in the theme README.
@@ -682,8 +682,8 @@ goes through the same rules as an editor upload, with one more on top of them:
 it has to be an image, so a PDF the site is happy to accept as an upload is
 refused as a profile picture. A refusal is a message on the screen and the
 avatar the site already had, untouched. What is stored is the public path the
-upload landed at, which is what `content/_data/site.json` mirrors as `avatar`
-and what the ActivityPub actor carries as its `icon`; saving or removing it
+upload landed at, which is `avatar` in `content/_data/site.json` and what the
+ActivityPub actor carries as its `icon`; saving or removing it
 sends an `Update` of the actor to every follower.
 
 ## Tags and categories
@@ -700,7 +700,7 @@ all follow. Each action says how many files it wrote.
 Renaming onto a term that already exists is offered as a merge rather than done
 quietly, with both counts on the screen; a file that carried both keeps the
 target once, where it already stood. A rename is recorded as a
-`taxonomyRedirects` entry in the settings and in `content/_data/site.json`, so
+`taxonomyRedirects` entry in `content/_data/site.json`, so
 the old archive URL and its feed answer `301` at the new one for as long as the
 site keeps the record. Chains are collapsed as they are written, a term that
 comes back into use is served rather than redirected, and deleting a term drops

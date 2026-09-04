@@ -6,8 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { csrfField, signedIn } from './admin/__testing__/harness.ts';
 import type { Browser } from './admin/__testing__/harness.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteSettings } from './admin/settings.ts';
-import { openAdminStore } from './admin/store.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './admin/settings.ts';
 import { createCms } from './index.ts';
 import type { Cms } from './index.ts';
 
@@ -104,13 +103,14 @@ async function site(
     await writeFile(file, source, 'utf8');
   }
 
-  const seed = openAdminStore({ dataDir });
-  writeSiteSettings(seed, {
-    ...DEFAULT_SITE_SETTINGS,
-    baseUrl: BASE_URL,
-    notifyServer: options.notifyServer ?? NOTIFY_SERVER,
+  await writeSiteJson({
+    contentDir,
+    settings: {
+      ...DEFAULT_SITE_SETTINGS,
+      baseUrl: BASE_URL,
+      notifyServer: options.notifyServer ?? NOTIFY_SERVER,
+    },
   });
-  seed.close();
 
   pings.length = 0;
   const cms = createCms({

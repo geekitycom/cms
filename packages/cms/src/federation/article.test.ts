@@ -4,9 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { DEFAULT_SITE_SETTINGS, writeSiteSettings } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
-import { openAdminStore } from '../admin/store.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -58,21 +57,22 @@ async function site(
   const contentDir = await temporaryDir('geekity-article-content-');
   await writeTree(contentDir, files);
 
-  const seed = openAdminStore({ dataDir });
-  writeSiteSettings(seed, {
-    ...DEFAULT_SITE_SETTINGS,
-    title: 'Geekity',
-    tagline: 'A file-first CMS',
-    baseUrl: BASE_URL,
-    timezone: 'UTC',
-    postsPerPage: 10,
-    author: 'Ada',
-    actorHandle: 'blog',
-    actorType: 'Person',
-    avatar: '',
-    ...settings,
+  await writeSiteJson({
+    contentDir,
+    settings: {
+      ...DEFAULT_SITE_SETTINGS,
+      title: 'Geekity',
+      tagline: 'A file-first CMS',
+      baseUrl: BASE_URL,
+      timezone: 'UTC',
+      postsPerPage: 10,
+      author: 'Ada',
+      actorHandle: 'blog',
+      actorType: 'Person',
+      avatar: '',
+      ...settings,
+    },
   });
-  seed.close();
 
   const instance = createCms({ dataDir, contentDir, watch: false, baseUrl: BASE_URL, ...config });
   started.push(instance);
@@ -542,20 +542,21 @@ describe('a site in a subdirectory', () => {
     const contentDir = await temporaryDir('geekity-article-sub-content-');
     await writeTree(contentDir, HELLO);
 
-    const seed = openAdminStore({ dataDir });
-    writeSiteSettings(seed, {
-      ...DEFAULT_SITE_SETTINGS,
-      title: 'Geekity',
-      tagline: '',
-      baseUrl: 'https://example.com/blog',
-      timezone: 'UTC',
-      postsPerPage: 10,
-      author: 'Ada',
-      actorHandle: 'blog',
-      actorType: 'Person',
-      avatar: '',
+    await writeSiteJson({
+      contentDir,
+      settings: {
+        ...DEFAULT_SITE_SETTINGS,
+        title: 'Geekity',
+        tagline: '',
+        baseUrl: 'https://example.com/blog',
+        timezone: 'UTC',
+        postsPerPage: 10,
+        author: 'Ada',
+        actorHandle: 'blog',
+        actorType: 'Person',
+        avatar: '',
+      },
     });
-    seed.close();
 
     const instance = createCms({
       dataDir,

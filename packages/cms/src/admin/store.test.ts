@@ -23,10 +23,16 @@ after(async () => {
   await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-/** An admin store on a data dir of its own, closed when the file finishes. */
-async function store(): Promise<AdminStore> {
+/** A data directory that goes away when the file finishes. */
+async function temporaryDir(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), 'geekity-admin-'));
   temporaryDirs.push(dir);
+  return dir;
+}
+
+/** An admin store on a data dir of its own, closed when the file finishes. */
+async function store(): Promise<AdminStore> {
+  const dir = await temporaryDir();
   const opened = openAdminStore({ dataDir: dir });
   openStores.push(opened);
   return opened;
@@ -274,22 +280,46 @@ describe('flash messages', () => {
   });
 });
 
-describe('settings', () => {
-  it('starts empty, which is what puts a boot into seeding', async () => {
-    const admin = await store();
+describe('the settings table an older version wrote', () => {
+  it('is readable once and then droppable, and is not there on a second boot', async () => {
+    const dataDir = await temporaryDir();
+    const database = new DatabaseSync(path.join(dataDir, 'geekity.db'));
+    // Migration 3 as it shipped, with the ledger row that stops it running
+    // again, which is the schema every upgrading site opens with.
+    database.exec(`
+      CREATE TABLE admin_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+      INSERT INTO admin_migrations (version, applied_at) VALUES (3, '2026-09-01T00:00:00.000Z');
+      CREATE TABLE settings (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO settings (key, value, updated_at)
+      VALUES ('title', 'From the rows', '2026-09-01T00:00:00.000Z');
+    `);
+    database.close();
 
-    assert.equal(admin.countSettings(), 0);
-    assert.deepEqual(admin.allSettings(), {});
+    const admin = openAdminStore({ dataDir });
+    assert.deepEqual(admin.legacySettings(), [
+      { key: 'title', value: 'From the rows', updatedAt: '2026-09-01T00:00:00.000Z' },
+    ]);
+
+    admin.dropLegacyTable('settings');
+    assert.equal(admin.legacySettings(), undefined, 'the table is gone');
+    admin.dropLegacyTable('settings');
+    admin.close();
+
+    const reopened = openAdminStore({ dataDir });
+    assert.equal(reopened.legacySettings(), undefined, 'and stays gone across a boot');
+    reopened.close();
   });
 
-  it('writes, replaces and leaves untouched keys alone', async () => {
+  it('is dropped on a database this version created, where it was never used', async () => {
     const admin = await store();
+    assert.deepEqual(admin.legacySettings(), [], 'migration 3 still creates it, empty');
 
-    admin.setSettings({ title: 'First', tagline: 'A tagline' });
-    admin.setSettings({ title: 'Second' });
-
-    assert.deepEqual(admin.allSettings(), { title: 'Second', tagline: 'A tagline' });
-    assert.equal(admin.countSettings(), 2);
+    admin.dropLegacyTable('settings');
+    assert.equal(admin.legacySettings(), undefined);
   });
 });
 

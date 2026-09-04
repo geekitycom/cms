@@ -228,7 +228,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
 
   return {
     sync() {
-      const listed = readSiteSettings(admin).relays;
+      const listed = readSiteSettings(config.contentDir).relays;
       const known = admin.listRelays();
 
       const followed: string[] = [];

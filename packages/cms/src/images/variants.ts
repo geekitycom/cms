@@ -1,11 +1,12 @@
 import { statSync, readFileSync } from 'node:fs';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import sharp from 'sharp';
 import type { Sharp } from 'sharp';
 
 import type { ResolvedConfig } from '../config.ts';
+import { writeFileAtomically } from '../files/atomic.ts';
 import { findAsset, UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
 import type { StaticAsset } from '../web/assets.ts';
 
@@ -235,7 +236,7 @@ async function derive(
     sourceModified: modified,
     variants,
   };
-  await writeAtomically(path.join(directory, IMAGE_RECORD_NAME), `${JSON.stringify(record)}\n`);
+  await writeFileAtomically(path.join(directory, IMAGE_RECORD_NAME), `${JSON.stringify(record)}\n`);
   records.set(directory, record);
   return record;
 }
@@ -285,7 +286,7 @@ async function encode(input: {
   });
 
   const encoded = await formatted(pipeline, input.format).toBuffer({ resolveWithObject: true });
-  await writeAtomically(path.join(input.directory, name), encoded.data);
+  await writeFileAtomically(path.join(input.directory, name), encoded.data);
 
   return {
     width: encoded.info.width,
@@ -307,20 +308,6 @@ function formatted(pipeline: Sharp, format: string): Sharp {
     default:
       return pipeline.webp({ quality: 80 });
   }
-}
-
-/**
- * Write through a temporary name and rename over the target.
- *
- * A variant is fetched by a browser the moment its URL is in a page, so a
- * half-written file is a broken picture rather than a slow one. The rename is
- * atomic within a filesystem, and the temporary sits in the same directory so
- * it always is one.
- */
-async function writeAtomically(file: string, contents: Buffer | string): Promise<void> {
-  const temporary = `${file}.${process.pid.toString(36)}${Date.now().toString(36)}.tmp`;
-  await writeFile(temporary, contents);
-  await rename(temporary, file);
 }
 
 /**

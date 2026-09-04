@@ -9,8 +9,7 @@ import { Accept, Application, CryptographicKey, Follow, Reject } from '@fedify/v
 
 import { csrfField, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteSettings } from '../admin/settings.ts';
-import { openAdminStore } from '../admin/store.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
@@ -127,15 +126,16 @@ async function site(options: { relays?: readonly string[]; dataDir?: string } = 
   const dataDir = options.dataDir ?? (await temporaryDir('geekity-relays-data-'));
   const contentDir = await temporaryDir('geekity-relays-content-');
 
-  const seed = openAdminStore({ dataDir });
-  writeSiteSettings(seed, {
-    ...DEFAULT_SITE_SETTINGS,
-    title: 'Geekity',
-    baseUrl: BASE_URL,
-    actorHandle: 'blog',
-    relays: options.relays ?? [],
+  await writeSiteJson({
+    contentDir,
+    settings: {
+      ...DEFAULT_SITE_SETTINGS,
+      title: 'Geekity',
+      baseUrl: BASE_URL,
+      actorHandle: 'blog',
+      relays: options.relays ?? [],
+    },
   });
-  seed.close();
 
   sent.length = 0;
   const cms = createCms({

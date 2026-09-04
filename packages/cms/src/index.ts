@@ -4,11 +4,10 @@ import { Hono } from 'hono';
 import {
   baselineSecurityHeaders,
   effectiveBaseUrl,
+  migrateSettingsToFile,
   mountAdmin,
   openAdminStore,
   readSiteSettings,
-  seedSiteSettings,
-  settingsSiteData,
 } from './admin/index.ts';
 import type { AdminStore } from './admin/index.ts';
 import { resolveConfig } from './config.ts';
@@ -119,6 +118,7 @@ export {
   localPosts,
   loginKeys,
   MAXIMUM_USERNAME_LENGTH,
+  migrateSettingsToFile,
   MINIMUM_PASSWORD_LENGTH,
   mountAdmin,
   mountDocumentScreens,
@@ -167,7 +167,6 @@ export {
   refusedUpload,
   refuseOversizedUpload,
   returnPath,
-  seedSiteSettings,
   SESSION_COOKIE,
   SESSION_ID_BYTES,
   sessionIdFrom,
@@ -175,19 +174,19 @@ export {
   SETTINGS_FIELDS,
   SETTINGS_PATH,
   settingsFromForm,
+  settingsFromSiteJson,
   settingsProblems,
-  settingsSiteData,
   SETUP_PATH,
   siteDataPath,
   siteJsonFor,
   splitTags,
-  storeSiteSettings,
   storeUpload,
   TAG_KIND,
   takeFlash,
   TAXONOMY_FIELDS,
   TAXONOMY_KINDS,
   tooLargeMessage,
+  updateSiteSettings,
   UPLOAD_ENVELOPE_BYTES,
   UPLOAD_FIELD,
   UPLOADS_PATH,
@@ -198,7 +197,6 @@ export {
   usesSecureCookies,
   verifyPasswordHash,
   writeSiteJson,
-  writeSiteSettings,
 } from './admin/index.ts';
 export type {
   ActorKey,
@@ -226,6 +224,7 @@ export type {
   InboxActivity,
   InboxRow,
   InboxRowsContext,
+  LegacySetting,
   ListPageOptions,
   LocalPost,
   LoginThrottle,
@@ -285,6 +284,18 @@ export type {
   ResolvedConfig,
   ResolveConfigContext,
 } from './config.ts';
+
+export {
+  readFileIfPresentSync,
+  updateFileAtomically,
+  writeFileAtomically,
+  writeFileAtomicallySync,
+} from './files/index.ts';
+export type {
+  FileContents,
+  ProduceFileContents,
+  WriteFileAtomicallyOptions,
+} from './files/index.ts';
 
 export { DirectoryNotEmptyError, initSite, SITE_TEMPLATE_DIR, siteManifest } from './init.ts';
 export type { InitSiteOptions, InitSiteResult } from './init.ts';
@@ -610,7 +621,6 @@ export type {
   AssetResponseOptions,
   ConditionalHeaders,
   CreateRendererOptions,
-  CreateSiteDataSourceOptions,
   Comment,
   CommentContext,
   CommentFeedSource,
@@ -645,7 +655,6 @@ export type {
   SiteDataSource,
   SitemapResponseOptions,
   SitemapUrl,
-  SiteSettingsSource,
   StaticAsset,
   Taxonomy,
   TaxonomyBaseProblems,
@@ -785,17 +794,17 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const store = openContentStore({ dataDir: resolved.dataDir, now: resolved.now });
   const admin = openAdminStore({ dataDir: resolved.dataDir });
 
-  // An empty settings table is filled from content/_data/site.json, so a site
-  // that predates the settings screen — or one `geekity init` just wrote —
-  // comes up with the values it already had. After this, SQLite is the source
-  // and the file is the mirror.
-  const seeded = seedSiteSettings({ store: admin, config: resolved });
+  // A site upgrading from the version that kept its settings in SQLite has
+  // rows nothing would read again: they become content/_data/site.json here,
+  // once, and the table goes (decision-9). A site that has already been
+  // through it does nothing but check.
+  migrateSettingsToFile({ admin, contentDir: resolved.contentDir });
 
   // The one thing the settings decide before a request arrives. It is settled
-  // here, at boot, rather than on every save: `baseUrl` also decides whether
-  // the session cookie is `Secure`, and flipping that under a signed-in admin
+  // here, at boot, rather than per request: `baseUrl` also decides whether the
+  // session cookie is `Secure`, and flipping that under a signed-in admin
   // would log them out of the form they just submitted.
-  resolved.baseUrl = effectiveBaseUrl(resolved, seeded);
+  resolved.baseUrl = effectiveBaseUrl(resolved, readSiteSettings(resolved.contentDir));
 
   const content = createContentSync({
     store,
@@ -804,7 +813,6 @@ export function createCms(config: GeekityConfig = {}): Cms {
   });
   const renderer = createRenderer({
     config: resolved,
-    settings: { read: () => settingsSiteData(readSiteSettings(admin)) },
     // The pages that put themselves in the site menu are found by asking for
     // every public page and reading their front matter, rather than by an
     // index of their own: a site has a handful of pages, the query is the
@@ -823,7 +831,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
 
   // The notify server listens to the index for the same reason: a post edited
   // on disk changed the same feeds as one saved through the editor.
-  const notifier = createFeedNotifier({ admin, config: resolved });
+  const notifier = createFeedNotifier({ config: resolved });
   content.events.on('change', (change) => notifier.handle(change));
 
   // A post whose date is in the future is held back (TASK-44), and nothing

@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 04:04'
+updated_date: '2026-09-04 15:54'
 ---
 # ActivityPub Federation
 
@@ -46,7 +46,7 @@ The sync layer emits these events from index diffs, so editing a file on disk fe
 
 A Mastodon-style relay (FEP-ae0c) boosts every public activity it is sent on to the instances subscribed to it, which is how a small site reaches people who follow nobody on it. Fedify ships the relay *server* half only, so the client half is ours.
 
-- The relay list is a setting, `relays`, one inbox URL per line, mirrored to `site.json`. `https://tags.pub/user/_____relay_____/inbox` is the one this site uses.
+- The relay list is a setting, `relays`, one inbox URL per line, in `site.json` like every other setting (decision-9). `https://tags.pub/user/_____relay_____/inbox` is the one this site uses.
 - Adding a relay sends a `Follow` whose `object` is the literal Public collection (`https://www.w3.org/ns/activitystreams#Public`) to that inbox, signed the way any other activity is. Fedify attaches the Linked Data signature a Mastodon-style relay verifies.
 - The relay answers `Accept` or `Reject`, possibly days later: a subscription may need a human to approve it. The answer is matched to the subscription by the follow id, then by the relay's actor id, then by a single pending subscription on the answering actor's origin.
 - Removing a relay sends `Undo` of that `Follow` and drops the record.
