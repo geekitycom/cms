@@ -32,14 +32,23 @@ export type {
   SiteDataSource,
   SiteSettingsSource,
 } from './context.ts';
+export { commentCounts, postComments, siteComments } from './comments.ts';
+export type { Comment, CommentContext } from './comments.ts';
 export { activityStreamsId, isPublicDocument, publicDocumentAt } from './documents.ts';
 export {
   atomFeed,
   cdata,
+  commentsFeedPath,
+  commentsFeedResponse,
+  commentsRssFeed,
+  COMMENTS_ROOT,
+  COMMENTS_TITLE_PREFIX,
   contentTypeOf,
+  DC_NAMESPACE,
   DEFAULT_FEED_LANGUAGE,
   DEFAULT_FEED_SIZE,
   escapeXml,
+  excerptFromHtml,
   EXCERPT_WORDS,
   FEED_ALIASES,
   FEED_CONTENT_TYPES,
@@ -59,8 +68,11 @@ export {
   rssFeed,
   SOURCE_NAMESPACE,
   splitFeedPath,
+  WFW_NAMESPACE,
 } from './feeds.ts';
 export type {
+  CommentFeedSource,
+  FeedComment,
   FeedFormat,
   FeedPath,
   FeedResponseOptions,
@@ -105,7 +117,8 @@ export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
 export { createRenderer, TEMPLATES } from './render.ts';
 export type { CreateRendererOptions, Listing, Renderer } from './render.ts';
-export { feedHref, homeHref, mountPublicSite } from './routes.ts';
+export { commentsFeedHref, feedHref, homeHref, mountPublicSite } from './routes.ts';
+export { sanitizeCommentHtml } from './sanitize.ts';
 export {
   categoryHref,
   DEFAULT_TAXONOMY_BASES,

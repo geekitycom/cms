@@ -4,6 +4,7 @@ import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { createSiteDataSource, documentContext, postsPerPage, taxonomyBases } from './context.ts';
 import { activityStreamsId } from './documents.ts';
+import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, SiteData, SiteSettingsSource } from './context.ts';
 import type { Pagination } from './pagination.ts';
 import type { TaxonomyBases } from './taxonomy.ts';
@@ -122,9 +123,18 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // added here rather than in `documentContext` because it needs the
       // site's base URL, which a document on its own does not carry.
       const objectId = activityStreamsId(document, config.baseUrl);
+      // `commentsFeed` is where this post's replies are syndicated. It is set
+      // here rather than in a layout because only a published post has one —
+      // a page never federates, so nothing can ever have replied to it — and
+      // because a site that overrides `post.njk` should keep the link anyway.
       return render(template, {
         ...documentContext(document),
-        ...(objectId === undefined ? {} : { activityStreams: objectId }),
+        ...(objectId === undefined
+          ? {}
+          : {
+              activityStreams: objectId,
+              commentsFeed: commentsFeedPath(document.permalink),
+            }),
       });
     },
 

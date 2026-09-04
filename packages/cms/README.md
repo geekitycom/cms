@@ -528,6 +528,8 @@ Booting mounts the public site on the app. The routes are:
 | `/category/{name}/`                     | The second taxonomy, paginated the same way.                               |
 | `/feed/`, `/feed/atom/`, `/feed/json/`  | The recent posts as RSS 2.0, Atom and JSON Feed.                           |
 | `/tag/{tag}/feed/` and its two siblings | The same, for one tag; `/category/{name}/feed/` likewise.                  |
+| `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                           |
+| `{permalink}feed/`                      | One post's replies, the same way.                                          |
 | `/theme/…`                              | The theme's own files, from its `static/` directory.                       |
 | anything else                           | The theme's 404.                                                           |
 
@@ -552,7 +554,8 @@ published. `tagBase` and `categoryBase` on the settings screen move them, and
 the routes, the paging, the canonical redirects, the tag feeds, the theme's
 links and the ActivityStreams hashtags all follow on the next request. A base
 is one URL-safe path segment: no slashes, and not a path the site already
-answers on (`page`, `feed`, `admin`, `ap`, `theme`, `uploads`, `nodeinfo`), and
+answers on (`page`, `feed`, `comments`, `admin`, `ap`, `theme`, `uploads`,
+`nodeinfo`), and
 the two may not be the same word. Both are mirrored into
 `content/_data/site.json` as `tagBase` and `categoryBase`, so an Eleventy build
 of the same content directory can put its archives at the same URLs.
@@ -690,6 +693,8 @@ so a site moving off it keeps every subscriber it had:
 | `/feed/json/`            | JSON Feed 1.1 (`application/feed+json`)          |
 | `/tag/{tag}/feed/`       | One tag archive, in RSS; `atom/` and `json/` too |
 | `/category/{name}/feed/` | One category archive, the same three             |
+| `/comments/feed/`        | Every reply the site has been sent, in RSS       |
+| `{permalink}feed/`       | One post's replies, in RSS                       |
 
 `/feed/` is RSS because that is the format nearly every existing subscriber
 holds. The two archive bases are settings (`tagBase`, `categoryBase`), so the
@@ -697,8 +702,10 @@ per-archive feeds follow wherever the archives live.
 
 WordPress's older spellings redirect `301` rather than 404: `/feed/rss/` to
 `/feed/`, and the query forms `?feed=rss2`, `?feed=rss`, `?feed=atom` and
-`?feed=json` on any listing to that listing's feed. A feed URL that arrives
-without its trailing slash redirects to the canonical one in a single hop.
+`?feed=json` on any listing to that listing's feed, and `?feed=rss2` or
+`?feed=rss` on a post's permalink to that post's comments feed. A feed URL that
+arrives without its trailing slash redirects to the canonical one in a single
+hop.
 
 A feed holds the newest published posts, newest first. Drafts, documents in the
 trash and pages are never in one, and a term nothing published carries 404s
@@ -737,7 +744,55 @@ cut at 55 words — WordPress's own excerpt length.
 understands Markdown should render from it rather than from `content:encoded`.
 It is the same text the ActivityStreams `Article` carries as its `source`.
 
+Every item also says where its comments are, three ways: `comments` is the page
+to read them on, `wfw:commentRss` (the [Well-Formed Web][wfw-ns] comment API) is
+the feed to poll, and `source:comments` is that same feed with a `count`
+attribute, so a reader can say "3 comments" without fetching anything.
+
 [source-ns]: https://source.scripting.com/
+[wfw-ns]: http://wellformedweb.org/CommentAPI/
+
+### Comments
+
+This CMS stores no comments of its own. What it has instead is the fediverse
+replies its inbox has been sent: a `Create` of a `Note` whose `inReplyTo` names
+a post's ActivityStreams object id (see [Federation](#federation)). Those are
+what the comments feeds publish, at the URLs WordPress publishes its own at —
+`{permalink}feed/` for one post, `/comments/feed/` for the whole site.
+
+Both are RSS 2.0 and nothing else: a comments feed has no Atom or JSON spelling
+here, so `{permalink}feed/atom/` 404s. A post with no replies answers an empty
+feed rather than a 404 — it exists, and a reader that subscribed before anybody
+answered should keep polling — while a permalink that is no published post 404s
+like any other. A page has no comments feed at all: only posts federate, so
+nothing can ever have replied to one.
+
+A channel carries the usual `title` (`Comments on: {post}`), `link`,
+`description`, `language`, `lastBuildDate`, `generator` and `atom:link
+rel="self"`. An item carries the author's name as its `title` and `dc:creator`,
+the reply's `url` as its `link` and its id as `guid isPermaLink="false"`, the
+`published` time the note gave (or when it arrived, if it gave none),
+`description` holding a plain-text excerpt and `content:encoded` holding the
+note. On the site-wide feed the title names the post as well: `{author} on
+{post}`.
+
+The author's name is the profile the site stored when that actor followed it,
+and otherwise the `@user@host` the actor's own URL implies. Naming them
+properly would mean dereferencing the actor, which is a network round trip per
+comment shown.
+
+**The note's HTML is sanitised before it is published.** It is markup a
+stranger wrote, so it is tokenised and rebuilt from an allowlist rather than
+passed through: `p`, `br`, `a`, `em`, `strong`, `del`, `code`, `pre`,
+`blockquote` and the list elements survive; `script` and `style` are dropped
+along with their contents; every other element is unwrapped, keeping its text;
+every attribute goes except an `a`'s `href`, which must be `http`, `https` or
+`mailto` and is marked `rel="nofollow noopener noreferrer"`. `sanitizeCommentHtml`
+is exported for a site that shows comments in its own templates.
+
+A reply to a post that has since been unpublished or moved to the trash
+disappears from `/comments/feed/`, and that post's own feed 404s with the post.
+`feedSize` caps both feeds.
 
 ### Atom and JSON Feed
 
@@ -773,8 +828,10 @@ curl -i https://example.com/tag/releases/feed/json/
 ```
 
 Every page of the default theme advertises all three feeds in its `<head>`, RSS
-first, and an archive advertises that archive's three as well. A theme that does
-not extend `layouts/base.njk` should emit them itself:
+first, then the site's comments feed; an archive advertises that archive's three
+as well, and a post its own comments feed (the renderer puts that URL in
+`commentsFeed`, so a layout that overrides `post.njk` keeps it). A theme that
+does not extend `layouts/base.njk` should emit them itself:
 
 ```html
 <link
@@ -794,6 +851,12 @@ not extend `layouts/base.njk` should emit them itself:
   type="application/feed+json"
   title="My Site"
   href="/feed/json/"
+/>
+<link
+  rel="alternate"
+  type="application/rss+xml"
+  title="My Site comments"
+  href="/comments/feed/"
 />
 ```
 
@@ -817,6 +880,28 @@ const source = {
 rssFeed(source); // a string
 atomFeed(source); // a string
 jsonFeed(source); // a JSON Feed object
+```
+
+`commentsRssFeed` is the same for comments, and `postComments`, `siteComments`
+and `commentCounts` read the replies out of the inbox log:
+
+```ts
+import { commentsRssFeed, siteComments } from '@geekity/cms';
+
+const context = {
+  admin: cms.admin,
+  store: cms.store,
+  baseUrl: cms.config.baseUrl,
+};
+
+commentsRssFeed({
+  site,
+  comments: siteComments(context, 20),
+  title: `${site.title}: comments`,
+  href: '/',
+  feedHref: '/comments/feed/',
+  baseUrl: cms.config.baseUrl,
+});
 ```
 
 ## Theme overrides

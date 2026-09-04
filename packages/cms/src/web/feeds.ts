@@ -9,6 +9,7 @@ import {
   latestModified,
 } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
+import { sanitizeCommentHtml } from './sanitize.ts';
 
 /**
  * The three syndication formats the public site serves.
@@ -48,6 +49,16 @@ export const FEED_ALIASES: Readonly<Record<string, FeedFormat>> = {
   rss: 'rss',
 };
 
+/**
+ * The root the site-wide comments feed hangs off, so `/comments/feed/` is the
+ * URL WordPress served it at. It is a listing root like any other as far as
+ * {@link feedPathUnder} is concerned; nothing is served at the root itself.
+ */
+export const COMMENTS_ROOT = '/comments/';
+
+/** What a post's comments feed calls itself, before the post's title. */
+export const COMMENTS_TITLE_PREFIX = 'Comments on: ';
+
 /** What each format is labelled with on the wire. */
 export const FEED_CONTENT_TYPES: Readonly<Record<FeedFormat, string>> = {
   rss: 'application/rss+xml; charset=utf-8',
@@ -65,6 +76,17 @@ export const FEED_CONTENT_TYPES: Readonly<Record<FeedFormat, string>> = {
 export function feedPathUnder(root: string, format: FeedFormat): string {
   const segment = FEED_SEGMENTS[format];
   return `${root}${FEED_SEGMENT}/${segment === '' ? '' : `${segment}/`}`;
+}
+
+/**
+ * The URL of a comments feed: one post's, or — with no permalink — the whole
+ * site's.
+ *
+ * WordPress's URLs, so a site migrated from it keeps both. There is one format,
+ * RSS 2.0, because that is what a comments feed is read in.
+ */
+export function commentsFeedPath(permalink?: string): string {
+  return feedPathUnder(permalink ?? COMMENTS_ROOT, 'rss');
 }
 
 /** A feed URL taken apart: which listing it syndicates, and in what format. */
@@ -123,6 +145,16 @@ export const JSON_FEED_VERSION = 'https://jsonfeed.org/version/1.1';
  */
 export const SOURCE_NAMESPACE = 'https://source.scripting.com/';
 
+/** Dublin Core, which is where an RSS item's `creator` comes from. */
+export const DC_NAMESPACE = 'http://purl.org/dc/elements/1.1/';
+
+/**
+ * The Well-Formed Web comment API, whose `commentRss` is how an RSS reader is
+ * told where one item's comments are. WordPress puts it on every item, so a
+ * reader that already understands a WordPress feed understands this one.
+ */
+export const WFW_NAMESPACE = 'http://wellformedweb.org/CommentAPI/';
+
 /** How many entries a feed carries when the site does not say. */
 export const DEFAULT_FEED_SIZE = 20;
 
@@ -161,6 +193,15 @@ export interface FeedSource {
   feedHref: string;
   /** The site's public origin, for absolute ids and links. */
   baseUrl: string;
+  /**
+   * How many replies each document has, by permalink, for the comment
+   * pointers every RSS item carries.
+   *
+   * Resolved rather than looked up while the feed is written, because the
+   * counts are part of the feed's own validator: a post that has been answered
+   * since is a changed feed even though no post moved.
+   */
+  commentCounts?: ReadonlyMap<string, number> | undefined;
 }
 
 /**
@@ -201,12 +242,20 @@ export function feedLanguage(site: SiteData): string {
  */
 export function feedExcerpt(document: Document): string {
   if (document.description !== undefined) return document.description;
+  return excerptFromHtml(document.html);
+}
 
+/**
+ * The first paragraph of some HTML as plain text, cut where WordPress cuts an
+ * excerpt. What a post falls back to when it carries no `description`, and
+ * what a comment — which never carries one — always uses.
+ */
+export function excerptFromHtml(html: string): string {
   // Tags are dropped rather than replaced by a space: the markup inside a
   // paragraph is inline, and "now</span>," is one word followed by a comma.
   // What separates the words is the whitespace the renderer already put
   // between its block tags, which the collapse below turns into single spaces.
-  const paragraph = /<p[^>]*>([\s\S]*?)<\/p>/i.exec(document.html)?.[1] ?? document.html;
+  const paragraph = /<p[^>]*>([\s\S]*?)<\/p>/i.exec(html)?.[1] ?? html;
   const text = decodeHtmlText(paragraph.replace(/<[^>]*>/g, ''))
     .replace(/\s+/g, ' ')
     .trim();
@@ -251,8 +300,9 @@ export function rssFeed(source: FeedSource): string {
     '<rss version="2.0"',
     '     xmlns:atom="http://www.w3.org/2005/Atom"',
     '     xmlns:content="http://purl.org/rss/1.0/modules/content/"',
-    '     xmlns:dc="http://purl.org/dc/elements/1.1/"',
-    `     xmlns:source="${SOURCE_NAMESPACE}">`,
+    `     xmlns:dc="${DC_NAMESPACE}"`,
+    `     xmlns:source="${SOURCE_NAMESPACE}"`,
+    `     xmlns:wfw="${WFW_NAMESPACE}">`,
     '  <channel>',
     element('title', source.title, 2),
     element('link', link, 2),
@@ -323,6 +373,7 @@ function rssItem(document: Document, source: FeedSource): string[] {
     ...[...document.categories, ...document.tags].map(
       (term) => `      <category>${escapeXml(term)}</category>`,
     ),
+    ...commentPointers(document, source),
     element('description', feedExcerpt(document), 3),
     `      <content:encoded>${cdata(document.html)}</content:encoded>`,
     // The source of the item, per the namespace: a reader that understands
@@ -330,6 +381,125 @@ function rssItem(document: Document, source: FeedSource): string[] {
     // the same text the ActivityStreams `Article` carries as its `source`.
     `      <source:markdown>${cdata(document.body)}</source:markdown>`,
     '    </item>',
+  ];
+}
+
+/** Everything one comments feed is built from. */
+export interface CommentFeedSource {
+  /** Site-wide data, for the description and the language. */
+  site: SiteData;
+  /** The comments, newest first. Their HTML is sanitised here, not before. */
+  comments: readonly FeedComment[];
+  /** Title of this feed: `Comments on: {post}`, or the site's. */
+  title: string;
+  /** Path of the HTML page these comments are about. */
+  href: string;
+  /** Path of the feed itself, for the self link. */
+  feedHref: string;
+  /** The site's public origin, for absolute links. */
+  baseUrl: string;
+}
+
+/** One comment, as a feed shows it. */
+export interface FeedComment {
+  /** The reply's own name in the fediverse: the `guid`. */
+  id: string;
+  /** Where it can be read. */
+  url: string;
+  /** Who wrote it. */
+  author: string;
+  /** When it was published. */
+  published: Date;
+  /** What it says, as its own server rendered it and before sanitising. */
+  html: string;
+  /**
+   * The post it answers, named on every item of the site-wide feed and on none
+   * of a post's own — there, every item answers the same post.
+   */
+  post?: { title: string; permalink: string } | undefined;
+}
+
+/** One comments feed as an RSS 2.0 document. */
+export function commentsRssFeed(source: CommentFeedSource): string {
+  const { site, comments, baseUrl } = source;
+  const link = absoluteUrl(source.href, baseUrl);
+  const built = comments[0]?.published ?? EMPTY_FEED_UPDATED;
+
+  const lines: string[] = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<rss version="2.0"',
+    '     xmlns:atom="http://www.w3.org/2005/Atom"',
+    '     xmlns:content="http://purl.org/rss/1.0/modules/content/"',
+    `     xmlns:dc="${DC_NAMESPACE}">`,
+    '  <channel>',
+    element('title', source.title, 2),
+    element('link', link, 2),
+    element('description', site.tagline ?? '', 2),
+    element('language', feedLanguage(site), 2),
+    element('lastBuildDate', rfc822(built), 2),
+    element('generator', FEED_GENERATOR, 2),
+    `    <atom:link rel="self" type="${escapeXml(
+      contentTypeOf('rss'),
+    )}" href="${escapeXml(absoluteUrl(source.feedHref, baseUrl))}"/>`,
+  ];
+
+  for (const comment of comments) lines.push(...commentItem(comment));
+
+  lines.push('  </channel>', '</rss>', '');
+  return lines.join('\n');
+}
+
+/**
+ * One comment as an RSS item.
+ *
+ * The sanitising happens here, at the last moment before the markup a stranger
+ * wrote becomes bytes this site publishes, so there is one place to check
+ * rather than one per caller.
+ */
+function commentItem(comment: FeedComment): string[] {
+  const html = sanitizeCommentHtml(comment.html);
+  const title =
+    comment.post === undefined ? comment.author : `${comment.author} on ${comment.post.title}`;
+
+  return [
+    '    <item>',
+    element('title', title, 3),
+    element('link', comment.url, 3),
+    // A reply's id is a name rather than an address: some servers publish a
+    // note at an id nothing dereferences and a `url` somewhere else entirely.
+    `      <guid isPermaLink="false">${escapeXml(comment.id)}</guid>`,
+    element('pubDate', rfc822(comment.published), 3),
+    element('dc:creator', comment.author, 3),
+    element('description', excerptFromHtml(html), 3),
+    `      <content:encoded>${cdata(html)}</content:encoded>`,
+    '    </item>',
+  ];
+}
+
+/**
+ * Where one item's comments are, said three ways.
+ *
+ * `<comments>` is the page a person should read them on and `wfw:commentRss`
+ * the feed a reader should poll, which is the pair WordPress publishes and so
+ * the pair every reader already understands. `source:comments` is the same
+ * feed with the count beside it, so a reader can say "3 comments" without
+ * fetching anything.
+ *
+ * Written only when the source carries counts: a feed whose builder did not
+ * resolve them would otherwise publish "0 comments" about a post with plenty.
+ */
+function commentPointers(document: Document, source: FeedSource): string[] {
+  const counts = source.commentCounts;
+  if (counts === undefined) return [];
+
+  const feed = absoluteUrl(feedPathUnder(document.permalink, 'rss'), source.baseUrl);
+  const page = `${absoluteUrl(document.permalink, source.baseUrl)}#comments`;
+
+  return [
+    element('comments', page, 3),
+    element('wfw:commentRss', feed, 3),
+    `      <source:comments count="${String(counts.get(document.permalink) ?? 0)}" ` +
+      `feedUrl="${escapeXml(feed)}"/>`,
   ];
 }
 
@@ -518,6 +688,45 @@ export function feedResponse(options: FeedResponseOptions): Response {
   return new Response(body, { headers });
 }
 
+/**
+ * One comments feed as an HTTP response.
+ *
+ * Comments arrive from other people's servers rather than from the site's own
+ * files, so the validator is built from the comments themselves; a feed with
+ * none still has one, which is what makes an empty comments feed cheap to poll.
+ */
+export function commentsFeedResponse(
+  source: CommentFeedSource,
+  conditional?: ConditionalHeaders,
+): Response {
+  const etag = contentEtag('comments:rss', commentsFingerprint(source));
+  const lastModified = source.comments[0]?.published;
+
+  const headers = new Headers({ etag, 'cache-control': 'no-cache' });
+  if (lastModified !== undefined) headers.set('last-modified', lastModified.toUTCString());
+
+  if (isNotModified(conditional, etag, lastModified)) {
+    return new Response(null, { status: 304, headers });
+  }
+
+  headers.set('content-type', FEED_CONTENT_TYPES.rss);
+  return new Response(commentsRssFeed(source), { headers });
+}
+
+/** What a comments feed is made of, as one string to hash. */
+function commentsFingerprint(source: CommentFeedSource): string {
+  return [
+    source.feedHref,
+    source.title,
+    source.site.tagline ?? '',
+    feedLanguage(source.site),
+    source.baseUrl,
+    ...source.comments.map((comment) =>
+      [comment.id, comment.author, comment.published.toISOString(), comment.html].join(' '),
+    ),
+  ].join('\n');
+}
+
 /** What a feed is made of, as one string to hash. */
 function feedFingerprint(source: FeedSource): string {
   return [
@@ -528,7 +737,10 @@ function feedFingerprint(source: FeedSource): string {
     source.site.avatar ?? '',
     feedLanguage(source.site),
     source.baseUrl,
-    ...source.documents.map((document) => document.hash),
+    ...source.documents.map(
+      (document) =>
+        `${document.hash} ${String(source.commentCounts?.get(document.permalink) ?? 0)}`,
+    ),
   ].join('\n');
 }
 

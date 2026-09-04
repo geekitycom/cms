@@ -17,16 +17,21 @@ import {
   UPLOAD_ASSET_MAX_AGE,
   UPLOAD_ASSET_PREFIX,
 } from './assets.ts';
+import { commentCounts, postComments, siteComments } from './comments.ts';
 import { isPublicDocument, publicDocumentAt } from './documents.ts';
 import {
+  commentsFeedPath,
+  commentsFeedResponse,
   feedPathUnder,
   feedResponse,
   feedSize,
   splitFeedPath,
+  COMMENTS_ROOT,
+  COMMENTS_TITLE_PREFIX,
   FEED_FORMATS,
   FEED_SEGMENTS,
 } from './feeds.ts';
-import type { FeedFormat, FeedSource } from './feeds.ts';
+import type { CommentFeedSource, FeedComment, FeedFormat, FeedSource } from './feeds.ts';
 import {
   DOCUMENT_REPRESENTATIONS,
   documentJson,
@@ -76,6 +81,9 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
     app.get(feedPathUnder('/', format), (c) => feed(c, format, undefined));
   }
 
+  // The site-wide comments feed, for the same reason and at WordPress's URL.
+  app.get(commentsFeedHref(undefined), (c) => comments(c, undefined));
+
   // The taxonomy archives are deliberately not routes. A route table is fixed
   // when the app is built and the bases are a setting, so an archive is
   // resolved per request in the not-found handler, from the base the site
@@ -101,12 +109,11 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   const pathname = requestPath(c);
   const bases = renderer.taxonomyBases();
 
-  const feedRequest = parseFeedPath(pathname, bases);
+  const feedRequest = parseFeedPath(store, pathname, bases);
   if (feedRequest !== undefined) {
-    if (!feedRequest.canonical) {
-      return c.redirect(feedHref(feedRequest.term, feedRequest.format, bases), 301);
-    }
-    return feed(c, feedRequest.format, feedRequest.term);
+    const { target, format } = feedRequest;
+    if (!feedRequest.canonical) return c.redirect(feedTargetHref(target, format, bases), 301);
+    return target.kind === 'listing' ? feed(c, format, target.term) : comments(c, target.document);
   }
 
   const archive = taxonomyArchive(c, pathname, bases);
@@ -114,6 +121,13 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
 
   const document = publicDocumentAt(store, pathname);
   if (document !== undefined) {
+    // WordPress answered `?feed=rss2` on a permalink with that post's comments
+    // feed, which is the only feed a post has here too. The other spellings
+    // name a format a comments feed does not come in, so they are not a feed
+    // request at all and the page is served.
+    if (document.type === 'post' && queryFeedFormat(c) === 'rss') {
+      return c.redirect(commentsFeedHref(document), 301);
+    }
     return negotiateDocument(c, document, selectFromAccept(c, DOCUMENT_REPRESENTATIONS));
   }
 
@@ -168,10 +182,15 @@ function taxonomyArchive(
   return listing(c, request);
 }
 
+/** What a feed URL syndicates. */
+type FeedTarget =
+  | { kind: 'listing'; term: TaxonomyTerm | undefined }
+  | { kind: 'comments'; document: Document | undefined };
+
 /** One feed, from the URL it was asked for at. */
 interface FeedRequest {
-  /** Whose archive the feed syndicates, or `undefined` for the whole site. */
-  term: TaxonomyTerm | undefined;
+  /** What the feed is over: a listing, or somebody's comments. */
+  target: FeedTarget;
   /** Which format the URL asked for. */
   format: FeedFormat;
   /** Whether the URL is the canonical spelling; a WordPress alias is not. */
@@ -179,23 +198,53 @@ interface FeedRequest {
 }
 
 /**
- * A path as the feed it names: `/feed/`, `/feed/atom/`, `/{base}/x/feed/json/`
- * and the `/feed/rss/` spelling WordPress also answered.
+ * A path as the feed it names: `/feed/`, `/feed/atom/`, `/{base}/x/feed/json/`,
+ * the comments feeds at `/comments/feed/` and `{permalink}feed/`, and the
+ * `/feed/rss/` spelling WordPress also answered at any of those roots.
  *
  * The site's own canonical feeds are real routes and never reach here; what
  * does reach here is every taxonomy feed — their bases are a setting, so they
- * cannot be in the route table — and every alias.
+ * cannot be in the route table — every post's comments feed, and every alias.
  */
-function parseFeedPath(pathname: string, bases: TaxonomyBases): FeedRequest | undefined {
+function parseFeedPath(
+  store: ContentStore,
+  pathname: string,
+  bases: TaxonomyBases,
+): FeedRequest | undefined {
   const split = splitFeedPath(pathname);
   if (split === undefined) return undefined;
+  const { format, canonical } = split;
+
+  if (split.root === COMMENTS_ROOT) {
+    return format === 'rss'
+      ? { target: { kind: 'comments', document: undefined }, format, canonical }
+      : undefined;
+  }
 
   const root = parseListingPath(split.root, bases);
   // Only a listing root has a feed, and only its first page: a feed is not
   // paginated, so `/{base}/x/page/2/feed/` names nothing.
-  if (root === undefined || root.pageNumber !== 0) return undefined;
+  if (root !== undefined) {
+    return root.pageNumber === 0
+      ? { target: { kind: 'listing', term: root.term }, format, canonical }
+      : undefined;
+  }
 
-  return { term: root.term, format: split.format, canonical: split.canonical };
+  // Otherwise it may be a post's comments feed. Only a published post has one:
+  // a page never federates, so nothing in the fediverse can ever have replied
+  // to it, and a comments feed for it would be empty for ever.
+  if (format !== 'rss') return undefined;
+  const document = publicDocumentAt(store, split.root);
+  if (document?.type !== 'post') return undefined;
+
+  return { target: { kind: 'comments', document }, format, canonical };
+}
+
+/** Where the canonical URL of one feed is. */
+function feedTargetHref(target: FeedTarget, format: FeedFormat, bases: TaxonomyBases): string {
+  return target.kind === 'listing'
+    ? feedHref(target.term, format, bases)
+    : commentsFeedHref(target.document);
 }
 
 /**
@@ -295,15 +344,20 @@ function canonicalTarget(
 ): string | undefined {
   const { store, renderer } = c.var;
 
-  // A feed first: `/feed`, `/feed/atom` and `/{base}/x/feed` all lead
-  // somewhere real, and `/feed/rss` leads to `/feed/` in the same one hop
-  // rather than to a second redirect.
-  const feedRequest = parseFeedPath(pathname, bases);
+  // A feed first: `/feed`, `/feed/atom`, `/{base}/x/feed`, `/comments/feed`
+  // and a post's `{permalink}feed` all lead somewhere real, and `/feed/rss`
+  // leads to `/feed/` in the same one hop rather than to a second redirect.
+  const feedRequest = parseFeedPath(store, pathname, bases);
   if (feedRequest !== undefined) {
-    if (feedRequest.term !== undefined && countListing(store, feedRequest.term) === 0) {
+    const { target } = feedRequest;
+    if (
+      target.kind === 'listing' &&
+      target.term !== undefined &&
+      countListing(store, target.term) === 0
+    ) {
       return undefined;
     }
-    return feedHref(feedRequest.term, feedRequest.format, bases);
+    return feedTargetHref(target, feedRequest.format, bases);
   }
 
   const document = store.getByPermalink(pathname);
@@ -521,9 +575,54 @@ function feed(
     href,
     feedHref: feedHref(term, format, bases),
     baseUrl: config.baseUrl,
+    // Only RSS carries the comment pointers; the other two formats have no
+    // vocabulary for them, and counting for a feed that cannot say the number
+    // would be a query per item for nothing.
+    ...(format === 'rss'
+      ? {
+          commentCounts: commentCounts(
+            { admin: c.var.admin, store, baseUrl: config.baseUrl },
+            documents,
+          ),
+        }
+      : {}),
   };
 
   return feedResponse({ format, source, conditional: conditionalHeaders(c) });
+}
+
+/**
+ * A post's comments, or the whole site's, as RSS 2.0.
+ *
+ * A post with no replies answers an empty feed rather than a 404: it exists,
+ * and a reader that subscribed before anybody answered should keep polling.
+ * Only a permalink that is no published post 404s, which is the ordinary
+ * document lookup rather than anything this feed decides.
+ */
+function comments(c: Context<GeekityEnv>, document: Document | undefined): Response {
+  const { store, admin, renderer, config } = c.var;
+  const site = renderer.site();
+  const context = { admin, store, baseUrl: config.baseUrl };
+  const limit = feedSize(site);
+
+  // A post's own feed hands the builder replies with no post attached, and so
+  // its items name no post: there, every item answers the same one.
+  const found: readonly FeedComment[] =
+    document === undefined ? siteComments(context, limit) : postComments(context, document, limit);
+
+  const source: CommentFeedSource = {
+    site,
+    comments: found,
+    title:
+      document === undefined
+        ? `${site.title}: comments`
+        : `${COMMENTS_TITLE_PREFIX}${document.title}`,
+    href: document?.permalink ?? '/',
+    feedHref: commentsFeedHref(document),
+    baseUrl: config.baseUrl,
+  };
+
+  return commentsFeedResponse(source, conditionalHeaders(c));
 }
 
 /**
@@ -596,6 +695,17 @@ export function feedHref(
   bases: TaxonomyBases,
 ): string {
   return feedPathUnder(listingHref(term, 0, bases), format);
+}
+
+/**
+ * Where the site's comments feed lives, and where one post's does.
+ *
+ * WordPress's URLs, so a site migrated from it keeps both: the whole site's
+ * comments at `/comments/feed/`, and a post's under its own permalink. There
+ * is one format, RSS 2.0, because that is what a comments feed is read in.
+ */
+export function commentsFeedHref(document: Document | undefined): string {
+  return commentsFeedPath(document === undefined ? undefined : encodePath(document.permalink));
 }
 
 /** The theme's 404 page. */
