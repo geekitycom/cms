@@ -7,6 +7,7 @@ import type { Context, Hono } from 'hono';
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
+import type { RelaySyncReport } from '../federation/relays.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
 import type { SiteData } from '../web/context.ts';
@@ -114,6 +115,18 @@ export interface SiteSettings {
    */
   notifyServer: string;
   /**
+   * The relay inboxes the site subscribes to (FEP-ae0c): a Mastodon-style
+   * relay boosts every public post it is sent, which is how a small site
+   * reaches instances nobody on it follows.
+   *
+   * Each is the relay's own inbox URL, absolute and whole — a relay's inbox is
+   * a path like `/user/_____relay_____/inbox`, not an origin. The list is
+   * edited one per line and mirrored to `site.json`; where each subscription
+   * stands is in the database, because the handshake is not the site's to
+   * decide.
+   */
+  relays: readonly string[];
+  /**
    * The site's avatar, as the public path the upload endpoint handed back —
    * `/uploads/2026/09/me.png` — or an absolute URL for one hosted elsewhere.
    * Empty when the site has none.
@@ -153,6 +166,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   tagBase: DEFAULT_TAXONOMY_BASES.tag,
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
   notifyServer: DEFAULT_NOTIFY_SERVER,
+  relays: [],
 };
 
 /** The form field each setting is submitted under. */
@@ -169,6 +183,7 @@ export const SETTINGS_FIELDS = {
   tagBase: 'tag_base',
   categoryBase: 'category_base',
   notifyServer: 'notify_server',
+  relays: 'relays',
 } as const satisfies Record<SettingsField, string>;
 
 /** A submitted settings form, before it is known to be valid. */
@@ -201,6 +216,7 @@ export function readSiteSettings(store: AdminStore): SiteSettings {
     tagBase: stored['tagBase'] ?? DEFAULT_SITE_SETTINGS.tagBase,
     categoryBase: stored['categoryBase'] ?? DEFAULT_SITE_SETTINGS.categoryBase,
     notifyServer: stored['notifyServer'] ?? DEFAULT_SITE_SETTINGS.notifyServer,
+    relays: relayList(stored['relays'] ?? ''),
   };
 }
 
@@ -225,6 +241,10 @@ export function writeSiteSettings(store: AdminStore, settings: SiteSettings): vo
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
     notifyServer: settings.notifyServer,
+    // One per line, which is the shape the form submits and the shape the
+    // list reads in: the settings table holds strings, and a delimiter that
+    // cannot appear inside a URL costs nothing to parse back.
+    relays: settings.relays.join('\n'),
   });
 }
 
@@ -251,6 +271,7 @@ export function settingsSiteData(settings: SiteSettings): Partial<SiteData> {
     // what turns the notifications off, so it has to reach the mirror as a
     // value rather than as an absence a default would fill back in.
     notifyServer: settings.notifyServer,
+    relays: [...settings.relays],
   };
 }
 
@@ -280,6 +301,7 @@ export function siteJsonFor(
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
     notifyServer: settings.notifyServer,
+    relays: [...settings.relays],
   };
 }
 
@@ -360,6 +382,14 @@ export function seedSiteSettings(options: {
     // The empty string counts here, unlike the bases above: a file that says
     // the notify server is empty is a site that turned the feature off.
     ...(typeof file['notifyServer'] === 'string' ? { notifyServer: file['notifyServer'] } : {}),
+    // The file is where a site that predates this screen — or one restored
+    // from its content directory — says which relays it belongs to, and the
+    // relay service turns a listed relay with no record into a fresh Follow.
+    ...(Array.isArray(file['relays'])
+      ? {
+          relays: relayList(file['relays'].filter((entry) => typeof entry === 'string').join('\n')),
+        }
+      : {}),
     ...(Number.isInteger(postsPerPage) && postsPerPage > 0 ? { postsPerPage } : {}),
     // The file's `url` only becomes the setting when the deployment has not
     // named one; otherwise the setting records what is actually in effect.
@@ -431,6 +461,16 @@ export function settingsProblems(form: SettingsForm): SettingsProblems {
       'A notify server is an absolute http:// or https:// URL, or empty for none.';
   }
 
+  // A relay list is checked line by line, and the first bad line is what the
+  // field says: a textarea has one message, and pointing at the line somebody
+  // has to fix is more use than counting how many are wrong.
+  const badRelay = relayLines(form.relays).find((line) => normalizeRelayInbox(line) === undefined);
+  if (badRelay !== undefined) {
+    problems.relays =
+      `A relay is its inbox as an absolute http:// or https:// URL, one per line. ` +
+      `"${badRelay}" is not one.`;
+  }
+
   // The two archive bases are checked as a pair: two of the rules — that they
   // differ, and that neither takes a path the site already answers on — are
   // about the pair rather than either one.
@@ -467,6 +507,7 @@ export function settingsFromForm(
     tagBase: form.tagBase.trim(),
     categoryBase: form.categoryBase.trim(),
     notifyServer: normalizeBaseUrl(form.notifyServer) ?? '',
+    relays: relayList(form.relays),
   };
 }
 
@@ -485,6 +526,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
     notifyServer: settings.notifyServer,
+    relays: settings.relays.join('\n'),
   };
 }
 
@@ -531,6 +573,7 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       tagBase: field(body[SETTINGS_FIELDS.tagBase]),
       categoryBase: field(body[SETTINGS_FIELDS.categoryBase]),
       notifyServer: field(body[SETTINGS_FIELDS.notifyServer]),
+      relays: field(body[SETTINGS_FIELDS.relays]),
     };
 
     const problems = settingsProblems(submitted);
@@ -553,7 +596,13 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       ? await c.var.delivery.updateActor()
       : undefined;
 
-    flash(c, 'notice', `Settings saved.${toldFollowers(report)}`);
+    // The relay list is the only setting that is an instruction as well as a
+    // value: a line added is a `Follow` to send and a line removed is an
+    // `Undo`. The reconciliation reads the settings that were just written, so
+    // it has to come after the save rather than be derived from the form.
+    const relays = c.var.relays.sync();
+
+    flash(c, 'notice', `Settings saved.${toldFollowers(report)}${toldRelays(relays)}`);
     return c.redirect(SETTINGS_PATH, 303);
   });
 
@@ -641,6 +690,35 @@ function toldFollowers(report: DeliveryReport | undefined): string {
     : ` ${String(total)} followers have been told.`;
 }
 
+/**
+ * The sentence a flash adds about the relays a save subscribed to or left.
+ *
+ * A relay does not answer at once — FEP-ae0c allows a human to approve the
+ * subscription days later — so the message says a follow was sent rather than
+ * that the site is now on the relay, and points at the screen that will say.
+ */
+function toldRelays(report: RelaySyncReport): string {
+  const parts: string[] = [];
+  if (report.followed.length > 0) {
+    parts.push(
+      report.followed.length === 1
+        ? 'A follow has been sent to one new relay'
+        : `Follows have been sent to ${String(report.followed.length)} new relays`,
+    );
+  }
+  if (report.unfollowed.length > 0) {
+    parts.push(
+      report.unfollowed.length === 1
+        ? 'one relay has been unfollowed'
+        : `${String(report.unfollowed.length)} relays have been unfollowed`,
+    );
+  }
+  if (parts.length === 0) return '';
+
+  const sentence = parts.join(', and ');
+  return ` ${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}; the Federation screen says where each stands.`;
+}
+
 /** Everything the settings template renders, for a given set of settings. */
 function screen(
   config: Pick<ResolvedConfig, 'baseUrl' | 'baseUrlSource'>,
@@ -693,6 +771,59 @@ function normalizeBaseUrl(value: string): string | undefined {
 
   const pathname = parsed.pathname.endsWith('/') ? parsed.pathname.slice(0, -1) : parsed.pathname;
   return parsed.origin + pathname;
+}
+
+/**
+ * The non-empty lines of a relay textarea, trimmed.
+ *
+ * Blank lines are not an error: somebody pasting a list leaves them, and a
+ * blank line asks for nothing.
+ */
+function relayLines(value: string): string[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+}
+
+/**
+ * A relay textarea as the list of inboxes it names: normalised, in the order
+ * they were given, with repeats dropped.
+ *
+ * Exported because the same parsing turns a stored setting, a submitted form
+ * and a `site.json` array into the one list; a second spelling of it would let
+ * the file and the database disagree about what a site subscribes to.
+ */
+export function relayList(value: string): string[] {
+  const relays: string[] = [];
+  for (const line of relayLines(value)) {
+    const inbox = normalizeRelayInbox(line);
+    if (inbox !== undefined && !relays.includes(inbox)) relays.push(inbox);
+  }
+  return relays;
+}
+
+/**
+ * A relay inbox URL, or `undefined` when it is not an absolute http(s) one.
+ *
+ * Unlike {@link normalizeBaseUrl} this keeps the whole URL bar a trailing
+ * slash: a relay inbox is a path — `/user/_____relay_____/inbox` — rather than
+ * an origin, and some relays hang one off a query string.
+ */
+export function normalizeRelayInbox(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed === '') return undefined;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return undefined;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+
+  const href = parsed.href;
+  return href.endsWith('/') && parsed.pathname !== '/' ? href.slice(0, -1) : href;
 }
 
 /** Whether `Intl` knows the zone. An empty name is not a zone. */

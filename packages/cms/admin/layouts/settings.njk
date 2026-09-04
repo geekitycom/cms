@@ -7,7 +7,7 @@
 {% block content %}
   <h1>Settings</h1>
 
-  {% if problems.title or problems.tagline or problems.baseUrl or problems.timezone or problems.postsPerPage or problems.author or problems.actorHandle or problems.actorType or problems.notifyServer %}
+  {% if problems.title or problems.tagline or problems.baseUrl or problems.timezone or problems.postsPerPage or problems.author or problems.actorHandle or problems.actorType or problems.notifyServer or problems.relays %}
     <p class="admin-error">Nothing was saved. Fix the fields marked below and try again.</p>
   {% endif %}
 
@@ -83,6 +83,17 @@
     </select>
     {% if problems.actorType %}<p class="admin-field-error">{{ problems.actorType }}</p>{% endif %}
     <p class="admin-hint">Some clients hide <code>Service</code> actors from timelines; <code>Person</code> is the safer default.</p>
+
+    <label for="settings-relays">Relays</label>
+    <textarea id="settings-relays" name="{{ fields.relays }}" rows="3" spellcheck="false">{{ form.relays }}</textarea>
+    {% if problems.relays %}<p class="admin-field-error">{{ problems.relays }}</p>{% endif %}
+    <p class="admin-hint">
+      One relay inbox per line, such as
+      <code>https://tags.pub/user/_____relay_____/inbox</code>. Adding one sends
+      it a follow; every public post then goes to it as well as to the
+      followers, and it boosts them on to instances nobody here follows. The
+      Federation screen says where each subscription stands.
+    </p>
 
     <h2>Notifications</h2>
 

@@ -10,12 +10,13 @@ export {
   SOURCE_MEDIA_TYPE,
   toInstant,
 } from './article.ts';
-export { createDeliveryService, groupByInbox } from './delivery.ts';
+export { createDeliveryService, deliveryTargets, groupByInbox } from './delivery.ts';
 export type {
   CreateDeliveryServiceOptions,
   DeliveryLogger,
   DeliveryReport,
   DeliveryService,
+  DeliveryTarget,
 } from './delivery.ts';
 export {
   createSiteFederation,
@@ -37,9 +38,11 @@ export {
 } from './followers.ts';
 export {
   followerFrom,
+  handleAccept,
   handleDelete,
   handleFollow,
   handleLoggedActivity,
+  handleReject,
   handleUndo,
   logActivity,
 } from './inbox.ts';
@@ -63,5 +66,19 @@ export {
   SHARED_INBOX_PATH,
   updateActivityId,
 } from './paths.ts';
+export {
+  acceptedRelays,
+  acceptRelay,
+  createRelayService,
+  rejectRelay,
+  relayAnswering,
+  relayRecipient,
+} from './relays.ts';
+export type {
+  CreateRelayServiceOptions,
+  RelayLogger,
+  RelayService,
+  RelaySyncReport,
+} from './relays.ts';
 export { actorHandle, replyFrom, replyTargetOf, REPLY_ACTIVITY_TYPE } from './replies.ts';
 export type { Reply } from './replies.ts';

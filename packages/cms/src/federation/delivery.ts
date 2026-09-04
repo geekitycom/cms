@@ -1,5 +1,6 @@
 import type { Context } from '@fedify/fedify';
 import { Activity, getTypeId, PUBLIC_COLLECTION, Update } from '@fedify/vocab';
+import type { Recipient } from '@fedify/vocab';
 
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore, Delivery, DeliveryStatus, Follower } from '../admin/store.ts';
@@ -21,8 +22,9 @@ import type { FederationContextData, SiteFederation } from './federation.ts';
 import { followerRecipient } from './followers.ts';
 import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
 import { postObjectId, updateActivityId } from './paths.ts';
+import { acceptedRelays, relayRecipient } from './relays.ts';
 
-/** What one activity's delivery came to, follower by follower. */
+/** What one activity's delivery came to, recipient by recipient. */
 export interface DeliveryReport {
   /** The activity that went out. */
   readonly activityId: string;
@@ -33,7 +35,10 @@ export interface DeliveryReport {
    * actor when the profile itself was what moved.
    */
   readonly objectId: string;
-  /** One row per follower, as recorded. Empty when nobody follows the site. */
+  /**
+   * One row per follower and per accepted relay, as recorded. Empty when the
+   * site has neither.
+   */
   readonly deliveries: readonly Delivery[];
 }
 
@@ -57,7 +62,8 @@ export interface CreateDeliveryServiceOptions {
 }
 
 /**
- * Sends a site's posts to its followers, and remembers how that went.
+ * Sends a site's posts to its followers and its relays, and remembers how that
+ * went.
  *
  * Deliveries run one after another on a queue of their own rather than at
  * once, because ActivityPub has no way of saying that a `Create` came before
@@ -76,12 +82,14 @@ export interface DeliveryService {
    * whose object is the actor, which is how a peer learns that the name, the
    * summary or the avatar it cached is out of date.
    *
-   * `undefined` when nobody follows the site, in which case nothing is built
-   * and nothing is recorded: there is no cached profile anywhere to refresh.
+   * `undefined` when the site has no followers and no accepted relay, in which
+   * case nothing is built and nothing is recorded: there is no cached profile
+   * anywhere to refresh.
    */
   updateActor(): Promise<DeliveryReport | undefined>;
   /**
-   * Send a recorded activity again, to every follower the site has now.
+   * Send a recorded activity again, to every follower and every accepted relay
+   * the site has now.
    *
    * decision-5 accepts that an activity queued when the process exits is lost
    * and promises this as the way back. `undefined` means no such activity was
@@ -194,14 +202,16 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   }
 
   /**
-   * Deliver one activity to every follower, one inbox at a time.
+   * Deliver one activity to every follower and every accepted relay, one inbox
+   * at a time.
    *
-   * Fedify's own `sendActivity(…, 'followers', …)` would reach the same
+   * Fedify's own `sendActivity(…, 'followers', …)` would reach the follower
    * inboxes in one call, but it answers `void`: there would be no way of
    * saying which follower did not get it, which is the thing decision-5
-   * promised to record. So the followers are grouped by the inbox they share —
-   * one POST still serves a whole instance — and each group's outcome is
-   * written against every follower behind it.
+   * promised to record. So the recipients are grouped into the inboxes one
+   * POST reaches — the instance shared inbox where followers publish one, and
+   * a relay's own inbox — and each group's outcome is written against every
+   * actor behind it.
    */
   async function fanOut(
     context: Context<FederationContextData>,
@@ -210,14 +220,14 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
 
-    for (const [inboxId, members] of groupByInbox(admin.listFollowers())) {
+    for (const target of deliveryTargets(admin)) {
       let status: DeliveryStatus = synchronous ? 'sent' : 'queued';
       let error: string | null = null;
 
       try {
         await context.sendActivity(
           { identifier: SITE_ACTOR_IDENTIFIER },
-          members.map(followerRecipient),
+          target.recipients,
           activity,
           // The object id keeps a post's activities in order per server, so a
           // follower cannot be shown an Update of something it has not been
@@ -227,15 +237,15 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       } catch (thrown) {
         status = 'failed';
         error = messageOf(thrown);
-        logger.warn(`Could not deliver ${about.activityId} to ${inboxId}: ${error}`);
+        logger.warn(`Could not deliver ${about.activityId} to ${target.inboxId}: ${error}`);
       }
 
-      for (const member of members) {
+      for (const actorId of target.actorIds) {
         deliveries.push(
           admin.recordDelivery({
             activityId: about.activityId,
-            actorId: member.actorId,
-            inboxId,
+            actorId,
+            inboxId: target.inboxId,
             status,
             error,
           }),
@@ -292,9 +302,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
 
     async updateActor() {
       // Building the actor loads — and on a cold database generates — the key
-      // pairs, so a site nobody follows does not pay for an activity that has
-      // nowhere to go.
-      if (admin.countFollowers() === 0) return undefined;
+      // pairs, so a site with nowhere to send a profile update does not pay
+      // for one. A relay counts: it is holding a copy of the profile too.
+      if (deliveryTargets(admin).length === 0) return undefined;
 
       return await enqueue(async () => {
         const context = deliveryContext();
@@ -378,6 +388,57 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       logger.warn(`A delivery failed: ${messageOf(thrown)}`);
     });
   }
+}
+
+/**
+ * One inbox a POST goes to, and who is behind it.
+ *
+ * The unit a fan-out works in. A follower group and a relay are the same thing
+ * from here — an inbox, the recipients Fedify addresses it with, and the actors
+ * whose delivery rows the outcome is written to — which is what lets a relay
+ * be recorded like a follower without pretending to be one.
+ */
+export interface DeliveryTarget {
+  /** The inbox one POST reaches: a shared inbox, a personal one, or a relay's. */
+  readonly inboxId: string;
+  /** What Fedify is handed to address it. */
+  readonly recipients: Recipient[];
+  /** Whose outcome rows this delivery writes: the followers, or the relay. */
+  readonly actorIds: readonly string[];
+}
+
+/**
+ * Everywhere one public activity goes: the followers, grouped by the inbox
+ * they share, and every accepted relay.
+ *
+ * A relay is one target of its own rather than a member of a group, because it
+ * is one inbox with one actor behind it and no shared inbox to fold into. A
+ * pending or rejected relay is not here at all — {@link acceptedRelays} is
+ * where that rule lives.
+ */
+export function deliveryTargets(admin: AdminStore): DeliveryTarget[] {
+  const targets: DeliveryTarget[] = [];
+
+  for (const [inboxId, members] of groupByInbox(admin.listFollowers())) {
+    targets.push({
+      inboxId,
+      recipients: members.map(followerRecipient),
+      actorIds: members.map((member) => member.actorId),
+    });
+  }
+
+  for (const relay of acceptedRelays(admin)) {
+    targets.push({
+      inboxId: relay.inboxId,
+      recipients: [relayRecipient(relay)],
+      // The relay's own id, so its outcomes sit in the same table as a
+      // follower's and the screen can find them. It has one by the time it is
+      // accepted; the inbox is the fallback for a record from somewhere else.
+      actorIds: [relay.actorId ?? relay.inboxId],
+    });
+  }
+
+  return targets;
 }
 
 /**

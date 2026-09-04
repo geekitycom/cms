@@ -18,6 +18,8 @@ import type {
   Follower,
   InboxActivity,
   OutboundActivity,
+  Relay,
+  RelayState,
 } from './store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
@@ -27,8 +29,18 @@ export const FEDERATION_PATH = `${ADMIN_PREFIX}/federation`;
 /** Where a post's Redeliver button posts. */
 export const REDELIVER_PATH = `${FEDERATION_PATH}/redeliver`;
 
-/** The field the Redeliver form submits. */
-export const FEDERATION_FIELDS = { activityId: 'activity_id' } as const;
+/** Where a relay's Retry button posts. */
+export const RELAY_RETRY_PATH = `${FEDERATION_PATH}/relays/retry`;
+
+/** The fields the screen's forms submit. */
+export const FEDERATION_FIELDS = { activityId: 'activity_id', relay: 'relay' } as const;
+
+/** What each relay state reads as on the screen. */
+export const RELAY_STATE_LABELS: Readonly<Record<RelayState, string>> = {
+  pending: 'Waiting',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+};
 
 /**
  * How many rows each of the screen's lists holds.
@@ -81,11 +93,46 @@ export function mountFederationScreen(
         followers: admin.listFollowers(),
         post,
       }),
+      relayRetryUrl: RELAY_RETRY_PATH,
+      relays: admin.listRelays().map((relay) => {
+        const last = admin.lastDeliveryToInbox(relay.inboxId);
+        return relayRow(
+          relay,
+          last,
+          last === undefined ? undefined : admin.getOutboundActivity(last.activityId),
+        );
+      }),
       posts: deliveryRows(admin.listOutboundActivities({ limit: FEDERATION_RECENT * 4 }), {
         counts: (activityId) => admin.countDeliveriesByStatus(activityId),
         post,
       }).slice(0, FEDERATION_RECENT),
     });
+  });
+
+  /**
+   * Send one relay's `Follow` again.
+   *
+   * The relay is named by its inbox, which is what the settings hold and what
+   * the row shows: a subscription is identified by where it was made, not by
+   * the follow it is currently waiting on, which is the thing a retry replaces.
+   */
+  app.post(RELAY_RETRY_PATH, async (c) => {
+    const body = await c.req.parseBody();
+    const inboxId = body[FEDERATION_FIELDS.relay];
+
+    const relay = typeof inboxId === 'string' ? await c.var.relays.retry(inboxId) : undefined;
+
+    if (relay === undefined) {
+      flash(c, 'error', 'The site does not subscribe to that relay, so there is nothing to retry.');
+    } else {
+      flash(
+        c,
+        'notice',
+        `The follow has been sent to ${relay.inboxId} again. A relay may take a while to answer.`,
+      );
+    }
+
+    return c.redirect(FEDERATION_PATH, 303);
   });
 
   /**
@@ -127,7 +174,10 @@ function failed(delivery: Delivery): boolean {
 export function redeliveryMessage(report: DeliveryReport): string {
   const total = report.deliveries.length;
   if (total === 0) {
-    return `Nobody follows the site, so the ${report.activityType} had nowhere to go.`;
+    return (
+      `Nobody follows the site and no relay has accepted it, ` +
+      `so the ${report.activityType} had nowhere to go.`
+    );
   }
 
   const counts: Record<DeliveryStatus, number> = { sent: 0, queued: 0, failed: 0 };
@@ -137,8 +187,10 @@ export function redeliveryMessage(report: DeliveryReport): string {
   if (counts.queued > 0) parts.push(`${String(counts.queued)} queued`);
   parts.push(`${String(counts.failed)} failed`);
 
-  const followers = total === 1 ? '1 follower' : `${String(total)} followers`;
-  return `Redelivered ${report.activityType} to ${followers}: ${parts.join(', ')}.`;
+  // "Recipients" rather than "followers": a relay is one of them too, and it
+  // is not a follower.
+  const recipients = total === 1 ? '1 recipient' : `${String(total)} recipients`;
+  return `Redelivered ${report.activityType} to ${recipients}: ${parts.join(', ')}.`;
 }
 
 /** One post that has been federated, and how its latest activity landed. */
@@ -434,6 +486,72 @@ function property(value: unknown, key: string): unknown {
 /** A JSON-LD value as a string, or `null` for anything else. */
 function text(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/** One relay subscription, as the panel renders it. */
+export interface RelayRow {
+  /** The relay's inbox, which is what the settings list and what identifies it. */
+  readonly inboxId: string;
+  /** Where the subscription stands. */
+  readonly state: RelayState;
+  /** What that state reads as: "Waiting", "Accepted", "Rejected". */
+  readonly stateLabel: string;
+  /** The relay's actor, once it has answered, for a human following the link. */
+  readonly actorId: string | null;
+  /** When the site subscribed. */
+  readonly createdAt: string;
+  /** When it was accepted or refused, which for a waiting one is when it was asked. */
+  readonly updatedAt: string;
+  /** Why it refused, or what went wrong sending the follow, or `null`. */
+  readonly reason: string | null;
+  /** The last activity delivered there and how it went, or `null` for nothing yet. */
+  readonly lastDelivery: {
+    readonly activityId: string;
+    /** `Create`, `Update`, `Delete` — or `Activity` when the log no longer holds it. */
+    readonly activityType: string;
+    readonly status: DeliveryStatus;
+    readonly error: string | null;
+    readonly attemptedAt: string;
+  } | null;
+  /** Whether the row offers Retry: only a subscription still waiting to be answered. */
+  readonly retriable: boolean;
+}
+
+/**
+ * One stored relay as the screen shows it.
+ *
+ * The last outcome is looked up by inbox rather than by actor, because that is
+ * the column a relay is guaranteed to have: a subscription that has not been
+ * accepted has no actor id at all, and the point of the row is to say so.
+ */
+export function relayRow(
+  relay: Relay,
+  lastDelivery: Delivery | undefined,
+  lastActivity: OutboundActivity | undefined,
+): RelayRow {
+  return {
+    inboxId: relay.inboxId,
+    state: relay.state,
+    stateLabel: RELAY_STATE_LABELS[relay.state],
+    actorId: relay.actorId,
+    createdAt: relay.createdAt,
+    updatedAt: relay.updatedAt,
+    reason: relay.reason,
+    lastDelivery:
+      lastDelivery === undefined
+        ? null
+        : {
+            activityId: lastDelivery.activityId,
+            activityType: lastActivity?.activityType ?? 'Activity',
+            status: lastDelivery.status,
+            error: lastDelivery.error,
+            attemptedAt: lastDelivery.attemptedAt,
+          },
+    // A rejected relay is not retried from here: it said no, and asking again
+    // is a decision to take by removing it and adding it back, not a button
+    // that quietly re-asks a server that refused.
+    retriable: relay.state === 'pending',
+  };
 }
 
 /** One follower, as the table renders it. */

@@ -12,6 +12,7 @@ import type {
   NewFollower,
   NewInboxActivity,
   NewOutboundActivity,
+  NewRelay,
 } from './store.ts';
 
 const temporaryDirs: string[] = [];
@@ -791,5 +792,99 @@ describe('the delivery log', () => {
       failed: 0,
     });
     assert.equal(admin.listDeliveries(ACTIVITY_ID)[0]?.error, null);
+  });
+});
+
+describe('relay subscriptions', () => {
+  const RELAY_INBOX = 'https://relay.example/user/_____relay_____/inbox';
+
+  /** One relay subscription, as the relay service first writes it. */
+  function subscription(overrides: Partial<NewRelay> = {}): NewRelay {
+    return {
+      inboxId: RELAY_INBOX,
+      actorId: null,
+      state: 'pending',
+      reason: null,
+      followId: 'https://blog.example/ap/actor#relay-follow/1',
+      ...overrides,
+    };
+  }
+
+  it('starts empty', async () => {
+    const admin = await store();
+
+    assert.deepEqual(admin.listRelays(), []);
+    assert.equal(admin.getRelay(RELAY_INBOX), undefined);
+  });
+
+  it('keeps the follow it sent, so an Accept can be matched to it', async () => {
+    const admin = await store();
+
+    const stored = admin.putRelay(subscription());
+
+    assert.equal(stored.inboxId, RELAY_INBOX);
+    assert.equal(stored.state, 'pending');
+    assert.equal(stored.actorId, null);
+    assert.equal(stored.followId, 'https://blog.example/ap/actor#relay-follow/1');
+    assert.ok(stored.createdAt !== '', 'the subscription was timed');
+    assert.deepEqual(admin.getRelay(RELAY_INBOX), stored);
+    assert.deepEqual(
+      admin.getRelayByFollow('https://blog.example/ap/actor#relay-follow/1'),
+      stored,
+    );
+  });
+
+  it('moves a subscription rather than adding a second one, keeping when it began', async () => {
+    const admin = await store();
+    const first = admin.putRelay(subscription({ createdAt: '2026-03-04T10:00:00.000Z' }));
+
+    const accepted = admin.putRelay(
+      subscription({
+        state: 'accepted',
+        actorId: 'https://relay.example/user/_____relay_____',
+        createdAt: '2026-09-09T10:00:00.000Z',
+      }),
+    );
+
+    assert.equal(admin.listRelays().length, 1);
+    assert.equal(accepted.createdAt, first.createdAt, 'a subscription began once');
+    assert.equal(accepted.state, 'accepted');
+    assert.equal(accepted.actorId, 'https://relay.example/user/_____relay_____');
+    assert.ok(accepted.updatedAt >= first.updatedAt, 'the change was timed');
+  });
+
+  it('forgets a subscription when it is removed', async () => {
+    const admin = await store();
+    admin.putRelay(subscription());
+
+    assert.equal(admin.deleteRelay(RELAY_INBOX), true);
+    assert.equal(admin.deleteRelay(RELAY_INBOX), false);
+    assert.deepEqual(admin.listRelays(), []);
+  });
+
+  it('answers with the last thing delivered to an inbox, whoever it belonged to', async () => {
+    const admin = await store();
+    admin.putOutboundActivity({
+      activityId: 'https://blog.example/ap/posts/hello#create',
+      activityType: 'Create',
+      objectId: 'https://blog.example/ap/posts/hello',
+      slug: 'hello',
+      json: '{"type":"Create"}',
+    });
+
+    assert.equal(admin.lastDeliveryToInbox(RELAY_INBOX), undefined);
+
+    admin.recordDelivery({
+      activityId: 'https://blog.example/ap/posts/hello#create',
+      actorId: 'https://relay.example/user/_____relay_____',
+      inboxId: RELAY_INBOX,
+      status: 'sent',
+      error: null,
+      attemptedAt: '2026-09-09T10:00:00.000Z',
+    });
+
+    const last = admin.lastDeliveryToInbox(RELAY_INBOX);
+    assert.equal(last?.status, 'sent');
+    assert.equal(last?.activityId, 'https://blog.example/ap/posts/hello#create');
   });
 });

@@ -4,6 +4,7 @@ import type { ResolvedConfig } from './config.ts';
 import type { ContentStore } from './content/store.ts';
 import type { DocumentChange } from './content/sync.ts';
 import type { DeliveryService } from './federation/delivery.ts';
+import type { RelayService } from './federation/relays.ts';
 import type { Renderer } from './web/render.ts';
 
 /**
@@ -38,6 +39,12 @@ export interface GeekityEnv {
      * request.
      */
     delivery: DeliveryService;
+    /**
+     * The site's relay subscriptions (FEP-ae0c), so a save of the settings can
+     * follow a relay somebody added and unfollow one they took away, and so
+     * the federation screen's Retry can send a stuck `Follow` again.
+     */
+    relays: RelayService;
     /**
      * The session this request carries, set by the admin guard: a login, the
      * anonymous session that holds a CSRF token before login, or `undefined`

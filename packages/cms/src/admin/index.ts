@@ -52,6 +52,9 @@ export {
   mountFederationScreen,
   REDELIVER_PATH,
   redeliveryMessage,
+  RELAY_RETRY_PATH,
+  RELAY_STATE_LABELS,
+  relayRow,
 } from './federation.ts';
 export type {
   ActorSummary,
@@ -62,6 +65,7 @@ export type {
   InboxRowsContext,
   LocalPost,
   MountFederationScreenOptions,
+  RelayRow,
 } from './federation.ts';
 export { flash, takeFlash } from './flash.ts';
 export { mountPreview, PREVIEW_PATH } from './preview.ts';
@@ -97,6 +101,8 @@ export {
   settingsProblems,
   settingsSiteData,
   siteDataPath,
+  normalizeRelayInbox,
+  relayList,
   siteJsonFor,
   writeSiteJson,
   writeSiteSettings,
@@ -137,6 +143,7 @@ export {
   DELIVERY_STATUSES,
   DuplicateUsernameError,
   openAdminStore,
+  RELAY_STATES,
   SESSION_ID_BYTES,
 } from './store.ts';
 export type {
@@ -157,8 +164,11 @@ export type {
   NewFollower,
   NewInboxActivity,
   NewOutboundActivity,
+  NewRelay,
   OpenAdminStoreOptions,
   OutboundActivity,
+  Relay,
+  RelayState,
   Session,
   StoredUser,
   User,

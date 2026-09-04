@@ -256,18 +256,54 @@ an `Update` rather than a second post, and `/ap/posts/{old-slug}` goes on
 answering. Restoring a trashed post reuses it too.
 
 One POST serves a whole instance — the shared inbox is preferred — but the
-outcome is recorded per follower, so an admin can see which one did not get it
+outcome is recorded per recipient, so an admin can see which one did not get it
 and send the activity again:
 
 ```ts
 const report = await cms.delivery.redeliver(activityId);
-report?.deliveries; // one row per follower: inbox, status, error, time
+report?.deliveries; // one row per follower and relay: inbox, status, error, time
 ```
 
 `cms.admin.listOutboundActivities()` lists what has been sent, newest first,
 and `listDeliveries(activityId)` and `countDeliveriesByStatus(activityId)`
 say how each one landed. A status is `sent` (the inbox took it), `queued`
 (handed to Fedify's queue, which retries out of band) or `failed`.
+
+### Relays
+
+A [Mastodon-style relay][fepae0c] boosts every public activity it is sent on to
+the instances subscribed to it, which is how a site nobody follows yet reaches
+people. `relays` is the setting: one relay inbox per line on `/admin/settings`,
+mirrored to `site.json` like every other setting, and
+`https://tags.pub/user/_____relay_____/inbox` is one worth knowing about — it
+boosts any public post carrying a hashtag it tracks, which every `Article` this
+CMS builds already carries one of per tag and per category.
+
+Adding a line sends that inbox a `Follow` whose object is the ActivityStreams
+Public collection, signed by the site actor and carrying the Linked Data
+signature a Mastodon-style relay verifies. The relay answers `Accept` or
+`Reject` — possibly days later, because a subscription may need a human to
+approve it — and that answer arrives in the site's inbox and moves the
+subscription. Removing the line sends `Undo` of the same `Follow`.
+
+Only an accepted relay is delivered to. From there it is one more inbox in the
+fan-out: every `Create`, `Update` and `Delete` for a post, and the actor
+`Update` a profile change sends, goes to it as well as to the followers, its
+outcome recorded in the delivery log against its actor id and its inbox exactly
+as a follower's is — which is why Redeliver reaches relays too.
+
+```ts
+cms.admin.listRelays(); // inbox, actor, state, reason, follow id, times
+cms.relays.sync(); // reconcile the records with the setting
+await cms.relays.retry(inboxId); // send the follow again
+```
+
+The records live in `ap_relays`, keyed by inbox, and are operational state
+rather than a source: the setting is. A relay the settings name that has no
+record — a rebuilt database, a restored content directory — is followed again
+on the next boot.
+
+[fepae0c]: https://w3id.org/fep/ae0c
 
 ### The site's avatar
 
@@ -300,9 +336,16 @@ profile carries, and how many actors follow it — the follower list with avatar
 follow dates, the recent likes, boosts and replies out of the inbox log, each
 linked to the remote object and to the post it was about, and one row per post
 that has been federated: its latest activity, when it went, and how many
-followers it reached, is queued for, or failed for. Each of those rows has a
+recipients it reached, is queued for, or failed for. Each of those rows has a
 Redeliver button, which is `cms.delivery.redeliver` behind a form: it sends
-that activity to every follower the site has now and says what came of it.
+that activity to every follower and every accepted relay the site has now and
+says what came of it.
+
+A Relays panel sits between the followers and the inbox log: one row per
+subscription with its inbox, whether it is waiting, accepted or rejected, when
+it last moved, why it was refused if it was, and the last activity delivered
+there with how that went. A subscription still waiting has a Retry, which sends
+the `Follow` again under a fresh id.
 
 ### Testing federation against a real Mastodon account
 

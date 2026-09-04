@@ -53,6 +53,12 @@ export interface SiteData {
    * as an absolute URL. Empty — or missing — means the site names none.
    */
   notifyServer?: string | undefined;
+  /**
+   * The relay inboxes the site subscribes to (FEP-ae0c), as absolute URLs.
+   * The mirror of the setting; where each subscription stands lives in the
+   * database rather than here.
+   */
+  relays?: readonly string[] | undefined;
   [key: string]: unknown;
 }
 

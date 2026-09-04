@@ -17,10 +17,11 @@ import type { ContentEvents, ContentEventMap, ContentStore, SyncResult } from '.
 import type { GeekityEnv } from './env.ts';
 import {
   createDeliveryService,
+  createRelayService,
   createSiteFederation,
   mountFederation,
 } from './federation/index.ts';
-import type { DeliveryService, SiteFederation } from './federation/index.ts';
+import type { DeliveryService, RelayService, SiteFederation } from './federation/index.ts';
 import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
 import { createRenderer, mountPublicSite } from './web/index.ts';
@@ -40,6 +41,7 @@ export {
   ACTOR_KEY_ALGORITHMS,
   ACTOR_TYPES,
   DELIVERY_STATUSES,
+  RELAY_STATES,
   ADMIN_ASSET_MAX_AGE,
   ADMIN_ASSET_PREFIX,
   ADMIN_PREFIX,
@@ -115,6 +117,11 @@ export {
   readSiteSettings,
   REDELIVER_PATH,
   redeliveryMessage,
+  RELAY_RETRY_PATH,
+  RELAY_STATE_LABELS,
+  relayList,
+  relayRow,
+  normalizeRelayInbox,
   refusedUpload,
   refuseOversizedUpload,
   returnPath,
@@ -178,6 +185,7 @@ export type {
   LocalPost,
   MountDocumentScreensOptions,
   MountFederationScreenOptions,
+  RelayRow,
   MountSettingsOptions,
   MountUsersOptions,
   NewActorKey,
@@ -185,8 +193,11 @@ export type {
   NewFollower,
   NewInboxActivity,
   NewOutboundActivity,
+  NewRelay,
   OpenAdminStoreOptions,
   OutboundActivity,
+  Relay,
+  RelayState,
   Session,
   SettingsField,
   SettingsForm,
@@ -281,6 +292,8 @@ export type {
 export type { GeekityEnv } from './env.ts';
 
 export {
+  acceptedRelays,
+  acceptRelay,
   ACTOR_CLASSES,
   ACTOR_PATH,
   actorClassFor,
@@ -288,8 +301,10 @@ export {
   avatarUrl,
   createActivityId,
   createDeliveryService,
+  createRelayService,
   createSiteFederation,
   deleteActivityId,
+  deliveryTargets,
   federatedObject,
   federatedPost,
   FEDERATION_PREFIX,
@@ -302,9 +317,11 @@ export {
   followersPage,
   FOLLOWING_PATH,
   groupByInbox,
+  handleAccept,
   handleDelete,
   handleFollow,
   handleLoggedActivity,
+  handleReject,
   handleUndo,
   INBOX_PATH,
   isFederatedDocument,
@@ -322,6 +339,9 @@ export {
   postObjectId,
   postObjectPath,
   postUpdateActivity,
+  rejectRelay,
+  relayAnswering,
+  relayRecipient,
   REPLY_ACTIVITY_TYPE,
   replyFrom,
   replyTargetOf,
@@ -335,11 +355,16 @@ export {
 } from './federation/index.ts';
 export type {
   CreateDeliveryServiceOptions,
+  CreateRelayServiceOptions,
   CreateSiteFederationOptions,
   DeliveryLogger,
   DeliveryReport,
   DeliveryService,
+  DeliveryTarget,
   FederationContextData,
+  RelayLogger,
+  RelayService,
+  RelaySyncReport,
   SiteActorOptions,
   SiteFederation,
   Reply,
@@ -540,6 +565,12 @@ export interface Cms {
    */
   readonly delivery: DeliveryService;
   /**
+   * The site's relay subscriptions (FEP-ae0c): what follows a relay when one
+   * is added to the settings, what an `Accept` marks accepted, and what every
+   * public activity is delivered to alongside the followers.
+   */
+  readonly relays: RelayService;
+  /**
    * The site's rssCloud and WebSub client: what tells the notify server named
    * in the settings that a feed changed, so a subscriber hears at once rather
    * than on its next poll.
@@ -648,6 +679,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const notifier = createFeedNotifier({ admin, config: resolved });
   content.events.on('change', (change) => notifier.handle(change));
 
+  // Relay subscriptions (FEP-ae0c). The list is a setting and the handshake is
+  // a record, so booting reconciles the two: a relay the file names and the
+  // database has never heard of is followed here, which is what makes a
+  // rebuilt database catch up rather than silently stop federating to it.
+  const relays = createRelayService({ federation, admin, store, config: resolved });
+  relays.sync();
+
   const app = new Hono<GeekityEnv>();
 
   app.use('*', async (c, next) => {
@@ -657,6 +695,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('renderer', renderer);
     c.set('announce', (change) => content.announce(change));
     c.set('delivery', delivery);
+    c.set('relays', relays);
     await next();
   });
 
@@ -705,6 +744,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     admin,
     federation,
     delivery,
+    relays,
     notifier,
     events: content.events,
 
@@ -747,6 +787,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // Anything already on its way out is allowed to finish, so closing never
       // leaves a delivery half recorded.
       await delivery.settled();
+      await relays.settled();
       await notifier.settled();
 
       if (running !== undefined) {
