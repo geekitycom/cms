@@ -68,6 +68,7 @@ export type {
   RelayRow,
 } from './federation.ts';
 export { flash, takeFlash } from './flash.ts';
+export { formatInTimezone } from './formatting.ts';
 export { mountPreview, PREVIEW_PATH } from './preview.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from './passwords.ts';
 export {

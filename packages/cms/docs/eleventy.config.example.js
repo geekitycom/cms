@@ -4,15 +4,16 @@
  * Copy this to `eleventy.config.js` in the root of your site and run
  * `npx @11ty/eleventy`. The same `content/` directory that the CMS serves
  * becomes a static site at the same URLs, which is the promise this file
- * exists to keep: nothing here is Geekity-specific magic, only the four rules
- * the CMS follows written out in Eleventy's own terms.
+ * exists to keep: nothing here is Geekity-specific magic, only the rules the
+ * CMS follows written out in Eleventy's own terms.
  *
  * 1. `draft: true` hides a document.
- * 2. A document with no `permalink` gets the CMS default:
+ * 2. A `date` in the future holds a post back until it arrives.
+ * 3. A document with no `permalink` gets the CMS default:
  *    `/{yyyy}/{mm}/{slug}/` for posts, `/{slug}/` for pages.
- * 3. `content/uploads/` is copied through to `/uploads/`.
- * 4. `content/_trash/` is not built.
- * 5. `categories`, the CMS's second taxonomy, becomes `collections.categories`.
+ * 4. `content/uploads/` is copied through to `/uploads/`.
+ * 5. `content/_trash/` is not built.
+ * 6. `categories`, the CMS's second taxonomy, becomes `collections.categories`.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
  * says `"layout": "post"`, `pages.json` says `"layout": "page"` — so
@@ -114,6 +115,22 @@ export default function (eleventyConfig) {
   // them locally.
   eleventyConfig.addPreprocessor('geekity-drafts', '*', (data) => {
     if (data.draft === true && !process.env.BUILD_DRAFTS) return false;
+  });
+
+  // A post dated in the future is scheduled: the CMS holds it until its date
+  // and publishes it then. A build has no clock, only the moment it ran, so the
+  // nearest equivalent is to leave a future-dated post out of this build and
+  // let the next build after its date pick it up — which means a site with
+  // scheduled posts needs a build on a schedule. Set BUILD_SCHEDULED=1 to
+  // include them anyway.
+  eleventyConfig.addPreprocessor('geekity-scheduled', '*', (data) => {
+    if (process.env.BUILD_SCHEDULED) return;
+
+    const date = data.date ?? data.page?.date;
+    if (date === undefined || date === null) return;
+
+    const at = date instanceof Date ? date : new Date(date);
+    if (!Number.isNaN(at.getTime()) && at.getTime() > Date.now()) return false;
   });
 
   // The CMS writes `permalink` into every file it saves, so this only matters

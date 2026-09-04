@@ -205,6 +205,95 @@ describe('the posts listing', () => {
   });
 });
 
+describe('a scheduled post in the admin', () => {
+  /** Two posts, one due and one not, under a clock this test can move. */
+  async function scheduled(): Promise<{ agent: Browser; set: (instant: string) => void }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-09-03-live.md',
+        title: 'Out in the world',
+        date: "'2026-09-03T09:00:00Z'",
+        permalink: '/2026/09/live/',
+      },
+      {
+        file: 'posts/2026-09-04-tomorrow.md',
+        title: 'Waiting its turn',
+        date: "'2026-09-04T09:00:00-05:00'",
+        permalink: '/2026/09/tomorrow/',
+      },
+    ]);
+    let now = new Date('2026-09-03T12:00:00Z');
+    const cms = await box.site({ contentDir, now: () => now });
+    return {
+      agent: await signedIn(cms),
+      set: (instant: string) => {
+        now = new Date(instant);
+      },
+    };
+  }
+
+  it('is listed as Scheduled, has its own filter, and is not counted as published', async () => {
+    const { agent } = await scheduled();
+
+    const titles = async (query: string): Promise<string[]> => {
+      const html = await (await agent.get(`/admin/posts${query}`)).text();
+      return [...html.matchAll(/<td><a href="\/admin\/posts\/[^"]+">([^<]+)<\/a><\/td>/g)].map(
+        (match) => match[1] ?? '',
+      );
+    };
+
+    const all = await (await agent.get('/admin/posts')).text();
+    assert.match(all, /admin-status-scheduled">Scheduled</, 'the status badge');
+    assert.match(all, /href="\/admin\/posts\?status=scheduled"/, 'the filter');
+    assert.ok(
+      !/<a href="\/2026\/09\/tomorrow\/">View<\/a>/.test(all),
+      'there is nothing public to view yet',
+    );
+
+    assert.deepEqual(await titles('?status=scheduled'), ['Waiting its turn']);
+    assert.deepEqual(await titles('?status=published'), ['Out in the world']);
+    assert.deepEqual(await titles(''), ['Waiting its turn', 'Out in the world']);
+  });
+
+  it('tells the editor when it goes out, in the site’s own time zone', async () => {
+    const { agent, set } = await scheduled();
+
+    const html = await (await agent.get('/admin/posts/tomorrow')).text();
+
+    assert.match(html, /Scheduled/, 'the editor says so');
+    assert.match(
+      html,
+      /Scheduled for 4 September 2026 at 14:00 UTC/,
+      'the 09:00 the file wrote at -05:00, in the UTC the site is set to',
+    );
+    assert.ok(!/href="\/2026\/09\/tomorrow\/"/.test(html), 'and offers no View link');
+
+    set('2026-09-04T14:00:00Z');
+
+    const after = await (await agent.get('/admin/posts/tomorrow')).text();
+    assert.ok(!/Scheduled/.test(after), 'once it is out the note has gone');
+    assert.match(after, /href="\/2026\/09\/tomorrow\/"/, 'and the View link is there');
+  });
+
+  it('says a save was scheduled rather than published', async () => {
+    const cms = await box.site({
+      contentDir: await seeded([]),
+      now: () => new Date('2026-09-03T12:00:00Z'),
+    });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/posts/new', {
+      title: 'Waiting its turn',
+      slug: 'waiting',
+      date: '2026-09-04T09:00:00Z',
+      action: 'publish',
+    });
+    const html = await (await agent.get('/admin/posts/waiting')).text();
+
+    assert.match(html, /Scheduled: Waiting its turn/, 'the flash names what happened');
+  });
+});
+
 describe('the post editor', () => {
   it('offers every field doc-5 lists, and the buttons for something not written yet', async () => {
     const cms = await box.site({ contentDir: await seeded([]) });

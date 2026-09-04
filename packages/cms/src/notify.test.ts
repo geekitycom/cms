@@ -89,7 +89,11 @@ async function temporaryDir(prefix: string): Promise<string> {
 
 /** A CMS whose settings name a notify server, over a content directory of its own. */
 async function site(
-  options: { notifyServer?: string; files?: Record<string, string> } = {},
+  options: {
+    notifyServer?: string;
+    files?: Record<string, string>;
+    now?: () => Date;
+  } = {},
 ): Promise<{ cms: Cms; contentDir: string }> {
   const dataDir = await temporaryDir('geekity-notify-data-');
   const contentDir = await temporaryDir('geekity-notify-content-');
@@ -109,7 +113,14 @@ async function site(
   seed.close();
 
   pings.length = 0;
-  const cms = createCms({ dataDir, contentDir, port: 0, watch: false, baseUrl: BASE_URL });
+  const cms = createCms({
+    dataDir,
+    contentDir,
+    port: 0,
+    watch: false,
+    baseUrl: BASE_URL,
+    ...(options.now === undefined ? {} : { now: options.now }),
+  });
   started.push(cms);
   await cms.sync();
   return { cms, contentDir };
@@ -220,6 +231,27 @@ describe('pinging the notify server', () => {
     const first = pings[0] as Ping;
     assert.equal(first.url, PING_URL);
     assert.match(first.contentType ?? '', /application\/x-www-form-urlencoded/);
+  });
+
+  it('says nothing while a post is scheduled, and everything when it comes due', async () => {
+    let now = new Date('2026-09-03T12:00:00Z');
+    const { cms } = await site({ now: () => now });
+    const agent = await signedIn(cms);
+    await cms.scheduler.start();
+
+    await publish(agent, { date: '2026-09-04T09:00:00.000Z', tags: 'web', categories: 'general' });
+    await cms.notifier.settled();
+
+    assert.deepEqual(pingedFeeds(), [], 'a feed nobody can see has not changed');
+
+    now = new Date('2026-09-04T09:00:00Z');
+    await cms.scheduler.run();
+    await cms.notifier.settled();
+
+    assert.deepEqual(
+      pingedFeeds(),
+      [...feedsUnder('/'), ...feedsUnder('/tag/web/'), ...feedsUnder('/category/general/')].sort(),
+    );
   });
 
   it('tells it about the feeds a post left as well as the ones it joined', async () => {

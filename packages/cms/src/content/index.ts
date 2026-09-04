@@ -21,15 +21,32 @@ export {
   serializeDocument,
 } from './writer.ts';
 export {
+  createScheduler,
+  isScheduled,
+  MAXIMUM_DELAY_MS,
+  SCHEDULE_ORIGIN,
+  scheduledFor,
+  systemTimers,
+} from './schedule.ts';
+export type {
+  CreateSchedulerOptions,
+  ScheduleLogger,
+  Scheduler,
+  ScheduleTimers,
+  ScheduleWatermark,
+} from './schedule.ts';
+export {
   DATABASE_FILE,
   dateSortKey,
   DuplicatePermalinkError,
   isTrashedPath,
   openContentStore,
+  systemClock,
   TRASH_DIRECTORY,
 } from './store.ts';
 export type {
   CategoryCount,
+  Clock,
   ContentCounts,
   ContentStore,
   ListAllOptions,

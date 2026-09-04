@@ -70,7 +70,9 @@ async function activityStreamsDocument(
   if (!prefersActivityStreams(c.req.header('accept'))) return undefined;
 
   const document = publicDocumentAt(c.var.store, requestPath(c));
-  if (document === undefined || !isFederatedDocument(document)) return undefined;
+  if (document === undefined || !isFederatedDocument(document, c.var.store.now())) {
+    return undefined;
+  }
 
   const context = federation.createContext(c.req.raw, contextData(c));
   return await respondWithObject(postArticle(context, document), {

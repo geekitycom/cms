@@ -9,7 +9,7 @@ import type { SiteSettings } from '../admin/settings.ts';
 import { openAdminStore } from '../admin/store.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { createCms } from '../index.ts';
-import type { Cms } from '../index.ts';
+import type { Cms, GeekityConfig } from '../index.ts';
 import { OUTBOX_PAGE_SIZE } from './federation.ts';
 import { createActivityId, postObjectId } from './paths.ts';
 
@@ -52,6 +52,7 @@ async function writeTree(root: string, files: Record<string, string>): Promise<v
 async function site(
   files: Record<string, string>,
   settings: Partial<SiteSettings> = {},
+  config: GeekityConfig = {},
 ): Promise<Cms> {
   const dataDir = await temporaryDir('geekity-article-data-');
   const contentDir = await temporaryDir('geekity-article-content-');
@@ -73,7 +74,7 @@ async function site(
   });
   seed.close();
 
-  const instance = createCms({ dataDir, contentDir, watch: false, baseUrl: BASE_URL });
+  const instance = createCms({ dataDir, contentDir, watch: false, baseUrl: BASE_URL, ...config });
   started.push(instance);
   await instance.sync();
   return instance;
@@ -359,6 +360,36 @@ describe('the outbox', () => {
       ),
       ['Hello, World!'],
     );
+  });
+
+  it('leaves out a post whose date has not arrived, and 404s its object', async () => {
+    let now = new Date('2026-09-03T12:00:00Z');
+    const instance = await site(
+      {
+        ...HELLO,
+        'posts/2026-09-04-tomorrow.md': post('Tomorrow', {
+          date: '2026-09-04T09:00:00Z',
+          permalink: '/2026/09/tomorrow/',
+        }),
+      },
+      {},
+      { now: () => now },
+    );
+
+    const before = (await (
+      await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+    assert.equal(before['totalItems'], 1);
+    assert.equal((await get(instance, '/ap/posts/tomorrow', ACTIVITY_STREAMS)).status, 404);
+    assert.equal((await get(instance, '/2026/09/tomorrow/', ACTIVITY_STREAMS)).status, 404);
+
+    now = new Date('2026-09-04T09:00:00Z');
+
+    const after = (await (
+      await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+    assert.equal(after['totalItems'], 2);
+    assert.equal((await get(instance, '/ap/posts/tomorrow', ACTIVITY_STREAMS)).status, 200);
   });
 });
 

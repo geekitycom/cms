@@ -268,7 +268,7 @@ describe('a tag archive', () => {
     const { cms } = await site({
       ...tagged,
       'posts/hidden.md': post('Hidden', {
-        date: '2026-09-04T09:00:00Z',
+        date: '2026-08-04T09:00:00Z',
         permalink: '/hidden/',
         tags: ['eleventy'],
         draft: true,
@@ -435,13 +435,13 @@ describe('a category archive', () => {
     const { cms } = await site({
       ...filed,
       'posts/hidden.md': post('Hidden', {
-        date: '2026-09-04T09:00:00Z',
+        date: '2026-08-04T09:00:00Z',
         permalink: '/hidden/',
         categories: ['general'],
         draft: true,
       }),
       '_trash/posts/gone.md': post('Gone', {
-        date: '2026-09-05T09:00:00Z',
+        date: '2026-08-05T09:00:00Z',
         permalink: '/gone/',
         categories: ['general'],
       }),
@@ -509,6 +509,74 @@ describe('a category archive', () => {
 
     assert.ok(html.includes('/category/general/'), 'the first category links to its archive');
     assert.ok(html.includes('/category/meta/'), 'the second category links to its archive');
+  });
+});
+
+describe('a scheduled post', () => {
+  /** A site whose clock this test moves, holding one post dated ahead of it. */
+  async function scheduledSite(): Promise<{ cms: Cms; set: (instant: string) => void }> {
+    let now = new Date('2026-09-03T12:00:00Z');
+    const { cms } = await site(
+      {
+        'posts/2026-09-03-live.md': post('Live', {
+          date: '2026-09-03T09:00:00Z',
+          permalink: '/2026/09/live/',
+          tags: ['eleventy'],
+          categories: ['general'],
+        }),
+        'posts/2026-09-04-tomorrow.md': post('Tomorrow', {
+          date: '2026-09-04T09:00:00Z',
+          permalink: '/2026/09/tomorrow/',
+          tags: ['scheduling'],
+          categories: ['general'],
+        }),
+      },
+      { now: () => now },
+    );
+    return {
+      cms,
+      set: (instant: string) => {
+        now = new Date(instant);
+      },
+    };
+  }
+
+  it('is absent from the home page and its permalink 404s until its date', async () => {
+    const { cms, set } = await scheduledSite();
+
+    const before = await cms.app.request('/');
+    const beforeHtml = await before.text();
+
+    assert.ok(!beforeHtml.includes('/2026/09/tomorrow/'), 'the scheduled post is not linked');
+    assert.ok(!beforeHtml.includes('Tomorrow'), 'its title does not leak');
+    assert.ok(beforeHtml.includes('/2026/09/live/'), 'the published one is still there');
+    assert.equal((await cms.app.request('/2026/09/tomorrow/')).status, 404);
+    assert.equal((await cms.app.request('/2026/09/tomorrow/index.json')).status, 404);
+    assert.equal((await cms.app.request('/2026/09/tomorrow/index.md')).status, 404);
+
+    set('2026-09-04T09:00:00Z');
+
+    const after = await cms.app.request('/');
+
+    assert.ok((await after.text()).includes('/2026/09/tomorrow/'), 'it is linked once due');
+    assert.equal((await cms.app.request('/2026/09/tomorrow/')).status, 200);
+  });
+
+  it('creates no archive of its own, and is missing from one it shares', async () => {
+    const { cms, set } = await scheduledSite();
+
+    assert.equal((await cms.app.request('/tag/scheduling/')).status, 404);
+    const shared = await (await cms.app.request('/category/general/')).text();
+    assert.ok(!shared.includes('Tomorrow'), 'it is not in the archive it shares');
+    assert.ok(shared.includes('Live'), 'the published one is');
+
+    set('2026-09-04T09:00:00Z');
+
+    assert.equal((await cms.app.request('/tag/scheduling/')).status, 200);
+    assert.ok(
+      (await (await cms.app.request('/category/general/')).text()).includes('Tomorrow'),
+      'it joins the shared archive once due',
+    );
   });
 });
 

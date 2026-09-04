@@ -261,8 +261,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       // A full scan is a rebuild of the index, not news about the site.
       if (change.origin === 'scan') return;
 
-      const before = federatedOrUndefined(change.previous);
-      const after = federatedOrUndefined(change.next);
+      const now = store.now();
+      const before = federatedOrUndefined(change.previous, now);
+      const after = federatedOrUndefined(change.next, now);
       if (before === undefined && after === undefined) return;
 
       const context = deliveryContext();
@@ -459,9 +460,9 @@ export function groupByInbox(followers: readonly Follower[]): Map<string, Follow
 }
 
 /** The document, when it is one this site federates, and `undefined` otherwise. */
-function federatedOrUndefined(document: Document | undefined): Document | undefined {
+function federatedOrUndefined(document: Document | undefined, now: Date): Document | undefined {
   if (document === undefined) return undefined;
-  return isFederatedDocument(document) ? document : undefined;
+  return isFederatedDocument(document, now) ? document : undefined;
 }
 
 /** An activity's short type name — `Create`, `Update`, `Delete` — from its type URI. */

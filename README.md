@@ -241,7 +241,7 @@ cms.store.listPosts({ limit: 10, offset: 0 }); // published, newest first
 cms.store.listByTag('eleventy', { type: 'post' });
 cms.store.listByCategory('general'); // the second taxonomy, same shape
 cms.store.listAll({ draft: true }); // the admin's view
-cms.store.counts(); // { total, posts, pages, drafts, trashed }
+cms.store.counts(); // { total, posts, pages, drafts, scheduled, trashed }
 ```
 
 A row round-trips to the `Document` it came from: optional fields stay absent
@@ -259,6 +259,11 @@ A few rules worth knowing:
   trash is all it takes. `listPosts`, `listByTag` and `listByCategory` exclude
   drafts and trash;
   `listAll` shows drafts but hides trash unless asked with `{ trashed: true }`.
+- **Scheduling.** A non-draft document whose `date` has not arrived is not
+  public yet, so every listing above excludes it too; `listAll` shows it, and
+  `{ scheduled: true }` shows only those. The index reads the clock through
+  `store.now()`, which `createCms` gives it from the `now` config option — one
+  clock, so the listings, the permalink and the scheduler cannot disagree.
 - **Permalinks** are unique and indexed. Indexing a second document at a URL
   another file already claims throws `DuplicatePermalinkError`, which names
   both paths.
@@ -318,9 +323,12 @@ stop(); // `on` returns the unsubscribe
 
 Every change carries `previous` and `next` — the whole documents, so a
 subscriber can compare them itself — plus `path` and `origin`, which is `scan`
-for a scan (including the one on boot) and `watch` for a live edit. A cold
+for a scan (including the one on boot), `watch` for a live edit, `admin` for a
+write the editor made, and `schedule` for a post whose date arrived. A cold
 index reports its whole first scan as `created`, so a subscriber that must not
-act on a rebuild should check `origin`.
+act on a rebuild should check `origin`. A `schedule` change carries no
+`previous`: nothing had ever been told about the post, so its arrival is a
+creation to everything downstream.
 
 Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
 
@@ -341,7 +349,9 @@ Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
 | `/uploads/…`           | Files under `content/uploads/`, at the URLs an Eleventy build copies them to.  |
 | anything else          | The theme's 404.                                                               |
 
-Drafts and documents in the trash 404 and appear in no listing. Trailing
+Drafts, documents in the trash and posts whose date is still ahead 404 and
+appear in no listing; a future-dated post is published on its date without a
+restart. Trailing
 slashes are canonical, and a request that arrives without one redirects 301 —
 but only when the canonical URL resolves, so a missing address 404s straight
 away instead of bouncing first. `/page/1/` redirects to `/`.
@@ -382,7 +392,10 @@ devDependency: nothing is fetched from a CDN, and the admin works offline.
 
 `POST /admin/preview` renders through the same `renderMarkdown` and the same
 theme layout the public site uses, so what the preview shows is what publishing
-would put on the site, theme overrides included. It writes nothing.
+would put on the site, theme overrides included. It writes nothing. It is also
+the only way to look at a scheduled post: the public permalink 404s until the
+date arrives, for a signed-in admin too, because the public site deliberately
+has no session and every response it gives is cacheable.
 
 `POST /admin/uploads` stores one file at
 `content/uploads/{yyyy}/{mm}/{slug}{ext}` and answers with `{ url, markdown }`.

@@ -382,6 +382,7 @@ describe('listPosts', () => {
       posts: 4,
       pages: 1,
       drafts: 1,
+      scheduled: 0,
       trashed: 1,
     });
   });
@@ -515,6 +516,153 @@ describe('listAll', () => {
       'posts/2026-09-01-newest.md',
       'posts/2026-09-02-a-draft.md',
     ]);
+  });
+});
+
+describe('scheduled documents', () => {
+  /** A store whose clock this test moves, and the handle that moves it. */
+  async function scheduledCorpus(): Promise<{ index: ContentStore; set: (now: string) => void }> {
+    let now = new Date('2026-09-03T12:00:00Z');
+    const index = openContentStore({ dataDir: await dataDir(), now: () => now });
+    openStores.push(index);
+    index.upsertAll([
+      ...corpus(),
+      post({
+        path: 'posts/2026-09-04-tomorrow.md',
+        slug: 'tomorrow',
+        permalink: '/2026/09/tomorrow/',
+        title: 'Tomorrow',
+        date: '2026-09-04T09:00:00Z',
+        tags: ['scheduling'],
+        categories: ['engineering'],
+      }),
+    ]);
+    return {
+      index,
+      set: (instant: string) => {
+        now = new Date(instant);
+      },
+    };
+  }
+
+  it('keeps a future-dated post out of listPosts until the clock reaches its date', async () => {
+    let now = new Date('2026-09-03T12:00:00Z');
+    const index = openContentStore({ dataDir: await dataDir(), now: () => now });
+    openStores.push(index);
+    index.upsert(post({ date: '2026-09-04T09:00:00Z' }));
+
+    assert.deepEqual(titles(index.listPosts()), []);
+
+    now = new Date('2026-09-04T09:00:00Z');
+
+    assert.deepEqual(titles(index.listPosts()), ['Hello, World!']);
+  });
+
+  it('keeps it out of both taxonomy archives and out of the terms in use', async () => {
+    const { index, set } = await scheduledCorpus();
+
+    assert.deepEqual(titles(index.listByTag('scheduling')), []);
+    assert.equal(index.countByTag('scheduling'), 0);
+    assert.equal(
+      index.listTags().some((entry) => entry.tag === 'scheduling'),
+      false,
+    );
+    assert.equal(index.countByCategory('engineering'), 2);
+    assert.deepEqual(
+      index.listCategories().find((entry) => entry.category === 'engineering'),
+      { category: 'engineering', count: 2 },
+    );
+
+    set('2026-09-04T09:00:00Z');
+
+    assert.deepEqual(titles(index.listByTag('scheduling')), ['Tomorrow']);
+    assert.equal(index.countByTag('scheduling'), 1);
+    assert.equal(index.countByCategory('engineering'), 3);
+  });
+
+  it('counts it as scheduled rather than as part of the public archive', async () => {
+    const { index, set } = await scheduledCorpus();
+
+    assert.equal(index.counts().posts, 4);
+    assert.equal(index.counts().scheduled, 1);
+
+    set('2026-09-04T09:00:00Z');
+
+    assert.equal(index.counts().posts, 5);
+    assert.equal(index.counts().scheduled, 0);
+  });
+
+  it('is still in the index, so the admin can list it and filter for it', async () => {
+    const { index } = await scheduledCorpus();
+
+    assert.equal(index.getByPermalink('/2026/09/tomorrow/')?.title, 'Tomorrow');
+    assert.ok(titles(index.listAll()).includes('Tomorrow'));
+    assert.deepEqual(titles(index.listAll({ scheduled: true })), ['Tomorrow']);
+    assert.equal(titles(index.listAll({ scheduled: false })).includes('Tomorrow'), false);
+    assert.equal(titles(index.listAll({ scheduled: false })).includes('A Draft'), true);
+  });
+
+  it('answers when it is next due, and reports nothing once everything has come due', async () => {
+    const { index, set } = await scheduledCorpus();
+
+    assert.equal(index.nextDue(), '2026-09-04T09:00:00.000Z');
+
+    set('2026-09-04T09:00:00Z');
+
+    assert.equal(index.nextDue(), undefined);
+  });
+
+  it('lists what has come due since an instant, oldest first, and nothing twice', async () => {
+    const { index, set } = await scheduledCorpus();
+    index.upsert(
+      post({
+        path: 'posts/2026-09-05-later.md',
+        slug: 'later',
+        permalink: '/2026/09/later/',
+        title: 'Later',
+        date: '2026-09-05T09:00:00Z',
+      }),
+    );
+    const watermark = '2026-09-03T12:00:00.000Z';
+
+    assert.deepEqual(titles(index.listDueSince(watermark)), []);
+
+    set('2026-09-05T09:00:00Z');
+
+    assert.deepEqual(titles(index.listDueSince(watermark)), ['Tomorrow', 'Later']);
+    assert.deepEqual(titles(index.listDueSince('2026-09-04T09:00:00.000Z')), ['Later']);
+  });
+
+  it('leaves a draft and a trashed document out of what comes due', async () => {
+    let now = new Date('2026-09-03T12:00:00Z');
+    const index = openContentStore({ dataDir: await dataDir(), now: () => now });
+    openStores.push(index);
+    index.upsertAll([
+      post({ path: 'posts/a.md', slug: 'a', permalink: '/a/', title: 'A Draft', draft: true }),
+      post({
+        path: '_trash/posts/b.md',
+        slug: 'b',
+        permalink: '/b/',
+        title: 'Thrown Away',
+        date: '2026-09-04T09:00:00Z',
+      }),
+    ]);
+    index.upsert(
+      post({
+        path: 'posts/c.md',
+        slug: 'c',
+        permalink: '/c/',
+        title: 'A Draft Ahead',
+        date: '2026-09-04T09:00:00Z',
+        draft: true,
+      }),
+    );
+
+    assert.equal(index.nextDue(), undefined);
+
+    now = new Date('2026-09-04T09:00:00Z');
+
+    assert.deepEqual(titles(index.listDueSince('2026-09-03T12:00:00.000Z')), []);
   });
 });
 

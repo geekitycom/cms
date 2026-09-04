@@ -46,8 +46,11 @@ export interface NotifyLogger {
 export interface CreateFeedNotifierOptions {
   /** The settings, which name the server and the two archive bases. */
   admin: AdminStore;
-  /** Config after defaults and environment overrides, for the base URL. */
-  config: Pick<ResolvedConfig, 'baseUrl'>;
+  /**
+   * Config after defaults and environment overrides, for the base URL and for
+   * the clock a scheduled post is held against.
+   */
+  config: Pick<ResolvedConfig, 'baseUrl' | 'now'>;
   /** Where failures are reported. Defaults to `console`. */
   logger?: NotifyLogger | undefined;
 }
@@ -162,8 +165,9 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
       // deleted the database.
       if (change.origin === 'scan') return [];
 
-      const before = inFeeds(change.previous);
-      const after = inFeeds(change.next);
+      const now = config.now();
+      const before = inFeeds(change.previous, now);
+      const after = inFeeds(change.next, now);
       if (before === undefined && after === undefined) return [];
 
       const bases = taxonomyBasesFromSettings(readSiteSettings(admin));
@@ -201,9 +205,9 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
  * published post is what goes to the followers and what goes in the feeds, and
  * a draft or a page is in neither.
  */
-function inFeeds(document: Document | undefined): Document | undefined {
+function inFeeds(document: Document | undefined, now: Date): Document | undefined {
   if (document === undefined) return undefined;
-  return isFederatedDocument(document) ? document : undefined;
+  return isFederatedDocument(document, now) ? document : undefined;
 }
 
 /** Every taxonomy term either version of a post carried, without repeats. */

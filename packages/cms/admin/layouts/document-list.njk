@@ -58,6 +58,8 @@
                 <span class="admin-status admin-status-trashed">Trash</span>
               {% elif document.draft %}
                 <span class="admin-status admin-status-draft">Draft</span>
+              {% elif document.scheduled %}
+                <span class="admin-status admin-status-scheduled">Scheduled</span>
               {% else %}
                 <span class="admin-status">Published</span>
               {% endif %}
