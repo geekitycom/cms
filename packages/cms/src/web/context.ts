@@ -179,8 +179,11 @@ export interface CreateSiteDataSourceOptions {
 /**
  * A source over one site's data.
  *
- * The file is read once and then only again when its modification time moves,
- * so a render costs one `stat` rather than one parse. A file that is missing
+ * The file is read once and then only again when its `stat` changes, so a
+ * render costs one `stat` rather than one parse. The modification time alone
+ * is not enough: a filesystem rounds it, so two writes inside one tick would
+ * look like none, and the settings writer replaces the file by rename, which
+ * changes its inode. Size and inode go into the key with it. A file that is missing
  * or will not parse falls back to the defaults instead of failing the request:
  * a typo in `site.json` should not take the site down.
  *
@@ -198,21 +201,22 @@ export function createSiteDataSource(
   const settings = options.settings;
 
   let cached: Record<string, unknown> = {};
-  let cachedAt: number | undefined;
+  let cachedKey: string | undefined;
 
   function fromFile(): Record<string, unknown> {
-    let modifiedAt: number | undefined;
+    let key: string;
     try {
-      modifiedAt = statSync(file).mtimeMs;
+      const stats = statSync(file);
+      key = `${stats.mtimeMs}:${stats.size}:${stats.ino}`;
     } catch {
-      cachedAt = undefined;
+      cachedKey = undefined;
       cached = {};
       return cached;
     }
 
-    if (modifiedAt === cachedAt) return cached;
+    if (key === cachedKey) return cached;
 
-    cachedAt = modifiedAt;
+    cachedKey = key;
     cached = readSiteFile(file);
     return cached;
   }
