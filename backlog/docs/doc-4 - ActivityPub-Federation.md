@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 17:40'
+updated_date: '2026-09-04 21:54'
 ---
 # ActivityPub Federation
 
@@ -66,6 +66,23 @@ Handled in phase one:
 - `Accept` and `Reject`: the answer to a relay subscription, which is the only thing this site follows.
 
 Logged but not acted on: `Like`, `Announce`, `Create(Note)` replies. Every handled activity, the follow traffic included, is appended to `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` — one compact JSON-LD activity per line, prefixed with the `receivedAt` the log stamped it with, which is the one thing the activity cannot say for itself. The whole activity is kept so a later phase can surface likes, boosts, and comments without knowing in advance what it will want. The `ap_inbox` table is an index of that file, rebuilt from it on every boot: its columns — the activity id, type, actor, object, arrival time and the `in_reply_to` a `Create` named — are all derived from the line by one function that the live append and the rebuild both call, so a rebuilt row cannot say something the live one did not. That `in_reply_to` index is what the comments feeds (doc-3) read.
+
+## The conversation on the page
+
+The inbox log is also what a reader sees. `postConversation({ admin, baseUrl }, document)` reads everything the log holds about one post and returns a `Conversation`: the replies as a thread, and the likes and boosts as counts with the actors behind them. The renderer puts it on the post's template context as `conversation`, and only when there is something in it, so a post nobody has answered renders no empty section; `themes/default/partials/conversation.njk` is the section, and a site replaces it through the ordinary theme lookup. The whole shape is documented in the theme README under "The conversation".
+
+Nothing about that shape is ActivityPub's. An entry says where it came from (`source`, `"activitypub"` here) and what it is (`kind`, one of `reply`, `like`, `boost`), and everything else — the author, the sanitised content, the time, what it answers — is the same whatever produced it, so native comments and webmentions join the same thread rather than needing one of their own.
+
+The conversation is derived from the log at read time, exactly as the comments feeds are: the site stores no comment. Reading it is a walk outwards from the post's object id, because a reply names the post, a reply to that reply names the reply, and a `Delete` or an `Undo` names the activity it takes back — `listActivitiesAbout` answers each round, over `object_id` and the `in_reply_to` index. What the walk finds is then read by the rules a reader would expect:
+
+- A reply whose author deleted it is gone, and the answers to it move up to whatever it was answering rather than disappearing with it. A `Delete` or an `Undo` counts only from the actor that did the thing in the first place — the rule already applied to `Undo(Follow)` — so a signed stranger cannot delete somebody else's comment off the page.
+- A like or a boost is counted once per actor however often it was delivered, and disappears when that actor undoes it. A reaction to a *reply* belongs to that reply's own conversation, not to the post's.
+- A note answering something the post has nothing to do with is left out, even though the log holds it.
+
+Remote HTML is sanitised by `sanitizeCommentHtml`, the same allowlist the comments feeds republish through, so the page and the feed cannot disagree about what a stranger's markup is allowed to be.
+
+An Eleventy build of the same content shows the same conversation, because it is all in the files: `docs/eleventy.config.example.js` adds a `conversation` filter over `federation.inbox` and puts the post's object id on the context as `activityStreams`, and `test/eleventy.test.ts` builds the fixtures and checks the reply, the like count and the sanitising against what the CMS renders.
+
 
 ## Collections
 

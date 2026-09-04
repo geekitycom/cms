@@ -644,6 +644,174 @@ describe('canonical URLs', () => {
   });
 });
 
+describe('the conversation under a post', () => {
+  const files = {
+    'posts/2026-09-02-hello.md': post('Hello, World!', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/2026/09/hello/',
+    }),
+  };
+
+  /** The object id the fediverse knows the post by. */
+  const HELLO = 'https://example.com/ap/posts/hello';
+
+  /** A CMS whose posts are federated, so a reply can name one. */
+  async function federated(): Promise<Cms> {
+    const { cms } = await site(files, { baseUrl: 'https://example.com' });
+    return cms;
+  }
+
+  /** Log a reply the way the inbox logs one: a compacted `Create` of a `Note`. */
+  function reply(
+    cms: Cms,
+    options: { id: string; inReplyTo: string; actor?: string; content?: string; url?: string },
+  ): void {
+    const actor = options.actor ?? 'https://remote.example/users/ada';
+    cms.admin.logInboxActivity({
+      activityId: `${options.id}/activity`,
+      activityType: 'Create',
+      actorId: actor,
+      objectId: options.id,
+      json: JSON.stringify({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: `${options.id}/activity`,
+        type: 'Create',
+        actor,
+        object: {
+          id: options.id,
+          type: 'Note',
+          attributedTo: actor,
+          content: options.content ?? '<p>Good post.</p>',
+          inReplyTo: options.inReplyTo,
+          published: '2026-09-02T10:00:00Z',
+          ...(options.url === undefined ? {} : { url: options.url }),
+        },
+      }),
+    });
+  }
+
+  /** Log a like or a boost of the post. */
+  function reaction(cms: Cms, type: 'Like' | 'Announce', id: string, actor: string): void {
+    cms.admin.logInboxActivity({
+      activityId: id,
+      activityType: type,
+      actorId: actor,
+      objectId: HELLO,
+      json: JSON.stringify({ id, type, actor, object: HELLO }),
+    });
+  }
+
+  it('shows the replies the inbox logged, with author, avatar, time and a link', async () => {
+    const cms = await federated();
+    cms.admin.putFollower({
+      actorId: 'https://remote.example/users/ada',
+      inboxId: 'https://remote.example/users/ada/inbox',
+      sharedInboxId: null,
+      handle: '@ada@remote.example',
+      name: 'Ada Lovelace',
+      iconUrl: 'https://remote.example/avatars/ada.png',
+      url: 'https://remote.example/@ada',
+    });
+    reply(cms, {
+      id: 'https://remote.example/notes/1',
+      inReplyTo: HELLO,
+      url: 'https://remote.example/@ada/1',
+    });
+    reply(cms, {
+      id: 'https://remote.example/notes/2',
+      inReplyTo: 'https://remote.example/notes/1',
+      actor: 'https://remote.example/users/bob',
+      content: '<p>Agreed<script>alert(1)</script>.</p>',
+    });
+
+    const html = await (await cms.app.request('/2026/09/hello/')).text();
+
+    assert.ok(html.includes('Ada Lovelace'), 'the author is named from the follower profile');
+    assert.ok(html.includes('https://remote.example/avatars/ada.png'), 'the avatar is shown');
+    assert.ok(
+      html.includes('href="https://remote.example/@ada"'),
+      'the author links to the remote profile',
+    );
+    assert.ok(
+      html.includes('href="https://remote.example/@ada/1"'),
+      'the reply links to the remote note',
+    );
+    assert.ok(html.includes('datetime="2026-09-02T10:00:00.000Z"'), 'the reply carries its time');
+    assert.ok(html.includes('<p>Good post.</p>'), 'the reply content is rendered');
+    assert.ok(html.includes('@bob@remote.example'), 'an author nobody follows is named by handle');
+    assert.ok(!html.includes('alert(1)'), 'the remote HTML is sanitised');
+
+    // The answer to the reply is nested inside it rather than beside it.
+    const first = html.indexOf('<p>Good post.</p>');
+    const nested = html.indexOf('comment-replies');
+    assert.ok(nested > first && nested < html.indexOf('Agreed'), 'the answer is nested');
+  });
+
+  it('shows the likes and the boosts as counts with the actors behind them', async () => {
+    const cms = await federated();
+    reaction(cms, 'Like', 'https://remote.example/likes/1', 'https://remote.example/users/ada');
+    reaction(cms, 'Like', 'https://remote.example/likes/2', 'https://remote.example/users/bob');
+    reaction(
+      cms,
+      'Announce',
+      'https://remote.example/boosts/1',
+      'https://remote.example/users/cal',
+    );
+
+    const html = await (await cms.app.request('/2026/09/hello/')).text();
+
+    assert.ok(html.includes('2 likes'), 'the likes are counted');
+    assert.ok(html.includes('1 boost'), 'the boosts are counted, in the singular');
+    assert.ok(html.includes('<details'), 'the actors are behind a disclosure');
+    assert.ok(html.includes('@ada@remote.example'), 'the first liker is listed');
+    assert.ok(html.includes('@cal@remote.example'), 'the booster is listed');
+  });
+
+  it('drops a reply whose author deleted it', async () => {
+    const cms = await federated();
+    reply(cms, { id: 'https://remote.example/notes/1', inReplyTo: HELLO });
+    cms.admin.logInboxActivity({
+      activityId: 'https://remote.example/deletes/1',
+      activityType: 'Delete',
+      actorId: 'https://remote.example/users/ada',
+      objectId: 'https://remote.example/notes/1',
+      json: JSON.stringify({
+        type: 'Delete',
+        actor: 'https://remote.example/users/ada',
+        object: { id: 'https://remote.example/notes/1', type: 'Tombstone' },
+      }),
+    });
+
+    const html = await (await cms.app.request('/2026/09/hello/')).text();
+
+    assert.ok(!html.includes('Good post.'), 'the deleted reply is gone');
+    assert.ok(!html.includes('class="conversation"'), 'and the section goes with it');
+  });
+
+  it('renders no section at all under a post nobody has answered', async () => {
+    const cms = await federated();
+
+    const html = await (await cms.app.request('/2026/09/hello/')).text();
+
+    assert.ok(!html.includes('conversation'), 'there is no empty conversation section');
+  });
+
+  it('lets a site theme replace the partial', async () => {
+    const themeDir = await temporaryDir('geekity-web-theme-');
+    await writeTree(themeDir, {
+      'partials/conversation.njk':
+        '<p class="my-own">{{ conversation.counts.total }} interactions</p>\n',
+    });
+    const { cms } = await site(files, { baseUrl: 'https://example.com', themeDir });
+    reply(cms, { id: 'https://remote.example/notes/1', inReplyTo: HELLO });
+
+    const html = await (await cms.app.request('/2026/09/hello/')).text();
+
+    assert.ok(html.includes('<p class="my-own">1 interactions</p>'), 'the override is used');
+    assert.ok(!html.includes('Good post.'), 'and the packaged partial is not');
+  });
+});
+
 describe('theme assets', () => {
   it('serves the default theme stylesheet from /theme/ with cache headers', async () => {
     const { cms } = await site({});

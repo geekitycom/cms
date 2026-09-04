@@ -632,6 +632,41 @@ describe('the reply index', () => {
     assert.equal(admin.countRepliesTo(POST), 2);
   });
 
+  it('lists everything that names one of a set of objects, oldest first', async () => {
+    const admin = await store();
+    const note = 'https://remote.example/notes/1';
+
+    const created = admin.logInboxActivity(reply());
+    const liked = admin.logInboxActivity({
+      activityId: 'https://remote.example/likes/1',
+      activityType: 'Like',
+      actorId: 'https://remote.example/users/bob',
+      objectId: POST,
+      json: JSON.stringify({ type: 'Like', object: POST }),
+    });
+    const deleted = admin.logInboxActivity({
+      activityId: 'https://remote.example/deletes/1',
+      activityType: 'Delete',
+      actorId: 'https://remote.example/users/ada',
+      objectId: note,
+      json: JSON.stringify({ type: 'Delete', object: note }),
+    });
+    // Somebody else's conversation, which names neither the post nor the note.
+    admin.logInboxActivity({
+      activityId: 'https://remote.example/likes/2',
+      activityType: 'Like',
+      actorId: 'https://remote.example/users/cal',
+      objectId: 'https://blog.example/ap/posts/other',
+      json: JSON.stringify({ type: 'Like', object: 'https://blog.example/ap/posts/other' }),
+    });
+
+    // The post is named by the like, and answered by the reply; the note is
+    // named by the delete. Oldest first, because a conversation reads that way.
+    assert.deepEqual(admin.listActivitiesAbout([POST, note]), [created, liked, deleted]);
+    assert.deepEqual(admin.listActivitiesAbout([note]), [created, deleted]);
+    assert.deepEqual(admin.listActivitiesAbout([]), []);
+  });
+
   it('keeps the arrival time it is given, so a rebuild puts the log’s own times back', async () => {
     const admin = await store();
 

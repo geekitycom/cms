@@ -1,0 +1,95 @@
+{#
+  What the fediverse said about a post: replies as a thread, likes and boosts
+  as counts with the actors behind them.
+
+  Rendered from `layouts/post.njk` with the `conversation` on the context,
+  which is only there when there is something in it, so a post nobody has
+  answered renders none of this. A site replaces the whole section by shipping
+  `theme/partials/conversation.njk` of its own; the shape it is handed is
+  documented in the theme README under "The conversation".
+
+  The macros come first because Nunjucks defines one where it stands rather
+  than hoisting it, and the section below calls both.
+#}
+{#
+  One reply and everything under it. A macro rather than an include so it can
+  call itself: a reply that answers a reply is the same thing one level in.
+#}
+{% macro comment(reply) %}
+<li class="comment h-cite">
+  <article>
+    <header class="comment-header">
+      {% if reply.author.avatar %}
+      <img class="comment-avatar u-photo" src="{{ reply.author.avatar }}" alt="" width="48" height="48" loading="lazy">
+      {% endif %}
+      <a class="comment-author p-author h-card" href="{{ reply.author.url }}" rel="nofollow noopener noreferrer">{{ reply.author.name }}</a>
+      {% if reply.author.handle and reply.author.handle != reply.author.name %}
+      <span class="comment-handle">{{ reply.author.handle }}</span>
+      {% endif %}
+      {% if reply.url %}
+      <a class="comment-permalink u-url" href="{{ reply.url }}" rel="nofollow noopener noreferrer">
+        <time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time>
+      </a>
+      {% else %}
+      <time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time>
+      {% endif %}
+    </header>
+    <div class="comment-body e-content p-content">
+      {{ reply.content | safe }}
+    </div>
+  </article>
+  {% if reply.replies.length %}
+  <ol class="comment-replies">
+    {% for child in reply.replies %}
+    {{ comment(child) }}
+    {% endfor %}
+  </ol>
+  {% endif %}
+</li>
+{% endmacro %}
+
+{#
+  A count of one kind of reaction with the actors behind it, closed until a
+  reader opens it. `<details>` rather than a hover, so it works on a phone and
+  needs no script.
+#}
+{% macro reactions(actors, one, many) %}
+{% if actors.length %}
+<details class="reaction-group">
+  <summary>{{ actors.length }} {{ one if actors.length == 1 else many }}</summary>
+  <ul class="reaction-list">
+    {% for actor in actors %}
+    <li class="reaction h-card">
+      <a href="{{ actor.author.url }}" rel="nofollow noopener noreferrer">
+        {% if actor.author.avatar %}
+        <img class="reaction-avatar u-photo" src="{{ actor.author.avatar }}" alt="" width="24" height="24" loading="lazy">
+        {% endif %}
+        <span class="reaction-name p-name">{{ actor.author.name }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+{% endmacro %}
+
+<section class="conversation" id="comments">
+  <h2 class="conversation-title">
+    {{ conversation.counts.replies }} {{ "reply" if conversation.counts.replies == 1 else "replies" }}
+  </h2>
+
+  {% if conversation.likes.length or conversation.boosts.length %}
+  <div class="conversation-reactions">
+    {{ reactions(conversation.likes, "like", "likes") }}
+    {{ reactions(conversation.boosts, "boost", "boosts") }}
+  </div>
+  {% endif %}
+
+  {% if conversation.replies.length %}
+  <ol class="comment-list">
+    {% for reply in conversation.replies %}
+    {{ comment(reply) }}
+    {% endfor %}
+  </ol>
+  {% endif %}
+</section>

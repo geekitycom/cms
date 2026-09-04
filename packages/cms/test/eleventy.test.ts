@@ -311,6 +311,35 @@ describe('the fixtures content directory under Eleventy', () => {
     ]);
   });
 
+  it('renders the conversation under a post from the same inbox log', async () => {
+    const html = await readFile(
+      path.join(buildDir, '_site', '2026/09/hello-world/index.html'),
+      'utf8',
+    );
+
+    // The reply the log holds, under the post it answers, with the author
+    // named the way the CMS names one nobody follows and the remote note
+    // linked. This is TASK-49's fifth criterion: the data files carry the
+    // whole conversation, so a static build shows what the CMS shows.
+    // The note's markup, rebuilt from the sanitiser's allowlist: the script is
+    // gone, and the link that pointed at one is unwrapped down to its words.
+    assert.ok(html.includes('<p>Good post. link</p>'), `the reply is on the page: ${html}`);
+    assert.ok(html.includes('@grace@remote.example'), `the author is named: ${html}`);
+    assert.ok(html.includes('href="https://remote.example/@grace/1"'), 'the note is linked');
+    assert.ok(html.includes('1 like'), 'the like is counted');
+
+    // The content is somebody else's markup, and the build sanitises it for
+    // the same reason the CMS does.
+    assert.ok(!html.includes('alert(1)'), 'the script the note carried is gone');
+    assert.ok(!html.includes('javascript:'), 'and so is the script URL');
+  });
+
+  it('renders no conversation under a post nobody has answered', async () => {
+    const html = await readFile(path.join(buildDir, '_site', 'notes/renamed/index.html'), 'utf8');
+
+    assert.ok(!html.includes('class="conversation"'), 'there is no empty section');
+  });
+
   it('renders the same site menu the CMS renders, from site.json and the flagged pages', async () => {
     const html = await readFile(path.join(buildDir, '_site', 'about/index.html'), 'utf8');
     const nav = /<nav class="site-nav">[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';

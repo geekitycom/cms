@@ -358,3 +358,98 @@ a:visited {
 .post-footer {
   margin-top: 2.5rem;
 }
+
+/* The conversation: fediverse replies, likes and boosts under a post. */
+
+.conversation {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.conversation-title {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
+
+.conversation-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.reaction-group summary {
+  cursor: pointer;
+  color: var(--ink-muted);
+}
+
+.reaction-list,
+.comment-list,
+.comment-replies {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reaction-list {
+  margin-top: 0.5rem;
+}
+
+.reaction a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+}
+
+.reaction-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.comment {
+  margin-bottom: 1.5rem;
+}
+
+.comment-replies {
+  margin-top: 1.5rem;
+  padding-inline-start: 1.25rem;
+  border-inline-start: 2px solid var(--rule);
+}
+
+.comment-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.comment-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+}
+
+.comment-author {
+  font-weight: 600;
+}
+
+.comment-handle,
+.comment-permalink {
+  color: var(--ink-muted);
+}
+
+.comment-permalink {
+  margin-inline-start: auto;
+}
+
+.comment-body {
+  margin-top: 0.35rem;
+}
+
+.comment-body p {
+  margin: 0.5rem 0;
+}

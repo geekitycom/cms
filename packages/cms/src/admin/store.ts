@@ -423,6 +423,21 @@ export interface AdminStore {
   /** One object's replies, newest first, optionally one page of them. */
   listRepliesTo(objectId: string, options?: ListPageOptions): InboxActivity[];
   /**
+   * Every logged activity that names one of these objects — as what it is
+   * about, or as what it answers — oldest first.
+   *
+   * The query a conversation is built from: the likes and boosts of a post,
+   * the replies to it, and the `Delete` or `Undo` that takes one of those
+   * back, all name an object this side already knows the id of. Both columns
+   * are read because a `Create` is *about* the note it carries and only
+   * `in_reply_to` says which post that note answers.
+   *
+   * Oldest first, because that is the order a thread reads in; a caller
+   * wanting the newest can reverse a page it has. Naming nothing returns
+   * nothing rather than everything.
+   */
+  listActivitiesAbout(objectIds: readonly string[]): InboxActivity[];
+  /**
    * Record how one delivery to one follower ended, replacing the previous
    * outcome for that pair: the table answers "where does this activity stand
    * with each follower", which a resend moves rather than adds to.
@@ -841,6 +856,24 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         options.limit ?? NO_LIMIT,
         options.offset ?? 0,
       ) as Record<string, unknown>[];
+      return rows.map(toInboxActivity);
+    },
+
+    listActivitiesAbout(objectIds) {
+      if (objectIds.length === 0) return [];
+
+      // Prepared here rather than beside the others because the number of
+      // placeholders is the number of ids: a conversation asks about the post,
+      // then about the notes that answered it, and neither count is known when
+      // the statements are built.
+      const placeholders = objectIds.map(() => '?').join(', ');
+      const rows = db
+        .prepare(
+          `SELECT * FROM ap_inbox
+           WHERE object_id IN (${placeholders}) OR in_reply_to IN (${placeholders})
+           ORDER BY id ASC`,
+        )
+        .all(...objectIds, ...objectIds) as Record<string, unknown>[];
       return rows.map(toInboxActivity);
     },
 
@@ -1519,6 +1552,16 @@ const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX ap_deliveries_object_id ON ap_deliveries (object_id, attempted_at);
 
       DROP TABLE ap_outbound;
+    `,
+  },
+  {
+    // What a post's conversation is read by (TASK-49). `in_reply_to` already
+    // had an index because a post's replies are counted on every feed; the
+    // object an activity is about had none, and that is the column a like, a
+    // boost, a `Delete` of a reply and an `Undo` of a like are all found by.
+    version: 13,
+    sql: `
+      CREATE INDEX ap_inbox_object_id ON ap_inbox (object_id);
     `,
   },
 ];

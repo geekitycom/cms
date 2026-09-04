@@ -9,6 +9,7 @@ import {
   taxonomyBases,
   termRedirects,
 } from './context.ts';
+import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, SiteData } from './context.ts';
@@ -96,6 +97,17 @@ export interface CreateRendererOptions {
    * index would get anyway.
    */
   pages?: (() => readonly Document[]) | undefined;
+  /**
+   * What has been said about a post: the replies, likes and boosts the theme
+   * renders under it (TASK-49).
+   *
+   * Injected rather than read here for the same reason the pages are — the
+   * renderer holds no store — and read per render, so a reply that arrives
+   * while the page is cached in nobody's browser is on the very next one. A
+   * renderer built without it renders no conversation at all, which is what
+   * every test over one template wants.
+   */
+  conversation?: ((document: Document) => Conversation) | undefined;
 }
 
 /**
@@ -157,6 +169,12 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // here rather than in a layout because only a published post has one —
       // a page never federates, so nothing can ever have replied to it — and
       // because a site that overrides `post.njk` should keep the link anyway.
+      // `conversation` is what the fediverse said back. It is on the context
+      // only when there is something in it, so a theme can ask `{% if
+      // conversation %}` and a post nobody has answered renders no empty
+      // section (TASK-49).
+      const said = options.conversation?.(document);
+
       return render(template, {
         ...documentContext(document, config),
         ...(objectId === undefined
@@ -165,6 +183,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
               activityStreams: objectId,
               commentsFeed: commentsFeedPath(document.permalink),
             }),
+        ...(said === undefined || said.counts.total === 0 ? {} : { conversation: said }),
       });
     },
 
