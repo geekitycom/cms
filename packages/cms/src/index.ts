@@ -100,7 +100,6 @@ export {
   POST_KIND,
   PREVIEW_PATH,
   profileChanged,
-  QUICK_DRAFT_PATH,
   readSiteSettings,
   REDELIVER_PATH,
   redeliveryMessage,

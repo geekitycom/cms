@@ -59,20 +59,5 @@
         <p class="admin-empty">Nothing written yet.</p>
       {% endif %}
     </section>
-
-    <section class="admin-panel">
-      <h2>Quick draft</h2>
-      <form method="post" action="{{ quickDraftUrl }}">
-        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-
-        <label for="quick-draft-title">Title</label>
-        <input id="quick-draft-title" name="title" type="text" required />
-
-        <label for="quick-draft-body">Body</label>
-        <textarea id="quick-draft-body" name="body" rows="6"></textarea>
-
-        <button type="submit">Save draft</button>
-      </form>
-    </section>
   </div>
 {% endblock %}

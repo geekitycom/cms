@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-02 13:23'
+updated_date: '2026-09-04 00:40'
 ---
 # Admin UI
 
@@ -14,7 +14,7 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 | Route | Purpose |
 | --- | --- |
 | `/admin/login` | username + password form |
-| `/admin` | dashboard: counts, recent posts, quick draft |
+| `/admin` | dashboard: counts, recent posts, follower count |
 | `/admin/posts` | table: title, author, tags, date, status; filters for all/published/draft/trash |
 | `/admin/posts/new`, `/admin/posts/:slug` | editor |
 | `/admin/pages`, `/admin/pages/new`, `/admin/pages/:slug` | same as posts, without date prefix or tags |

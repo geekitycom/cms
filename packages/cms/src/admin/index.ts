@@ -74,7 +74,6 @@ export {
   LOGOUT_PATH,
   mountAdmin,
   postEditorPath,
-  QUICK_DRAFT_PATH,
   SETUP_PATH,
 } from './routes.ts';
 export type { AdminSection } from './routes.ts';

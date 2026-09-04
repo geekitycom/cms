@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
@@ -39,18 +39,30 @@ async function seeded(documents: Seed[]): Promise<string> {
   return contentDir;
 }
 
-/** Post the quick draft form the dashboard is showing. */
-async function quickDraft(
-  agent: Browser,
-  fields: { title: string; body?: string },
-): Promise<Response> {
-  const token = csrfField(await (await agent.get('/admin')).text());
-  assert.ok(token !== undefined, 'the dashboard carries a form with a CSRF token');
+/**
+ * Save a new draft post through the editor, the way a browser would: load the
+ * form for its CSRF token and post the fields back with the save-draft action.
+ * The tests below only need a post to exist and a flash to have been queued.
+ */
+async function newDraft(agent: Browser, title: string): Promise<Response> {
+  const html = await (await agent.get('/admin/posts/new')).text();
+  const token = csrfField(html);
+  assert.ok(token !== undefined, 'the editor carries a form with a CSRF token');
 
-  return agent.post('/admin/quick-draft', {
+  const saveUrl = /<form class="admin-editor" method="post" action="([^"]+)"/.exec(html)?.[1];
+  assert.ok(saveUrl !== undefined, 'the editor knew where to post');
+
+  return agent.post(saveUrl, {
     csrf_token: token,
-    title: fields.title,
-    body: fields.body ?? '',
+    hash: '',
+    title,
+    slug: '',
+    permalink: '',
+    date: '',
+    tags: '',
+    description: '',
+    body: '',
+    action: 'save-draft',
   });
 }
 
@@ -197,69 +209,12 @@ describe('the dashboard', () => {
   });
 });
 
-describe('the quick draft', () => {
-  it('writes a draft post file and sends the browser to its editor', async () => {
-    const contentDir = await seeded([]);
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    const response = await quickDraft(agent, {
-      title: 'A thought I nearly lost',
-      body: 'Which is the point of the box.',
-    });
-
-    assert.equal(response.status, 303);
-    assert.equal(response.headers.get('location'), '/admin/posts/a-thought-i-nearly-lost');
-
-    const files = await readdir(path.join(contentDir, 'posts'));
-    assert.equal(files.length, 1);
-    assert.match(files[0] ?? '', /^\d{4}-\d{2}-\d{2}-a-thought-i-nearly-lost\.md$/);
-
-    const written = await readFile(path.join(contentDir, 'posts', files[0] ?? ''), 'utf8');
-    assert.match(written, /^title: A thought I nearly lost$/m);
-    assert.match(written, /^draft: true$/m);
-    assert.match(written, /^permalink: \/\d{4}\/\d{2}\/a-thought-i-nearly-lost\/$/m);
-    assert.match(written, /Which is the point of the box\./);
-
-    assert.equal(
-      cms.store.getBySlug('a-thought-i-nearly-lost')?.draft,
-      true,
-      'and the index knows about it without waiting for the watcher',
-    );
-  });
-
-  it('refuses a draft with no title, and writes nothing', async () => {
-    const contentDir = await seeded([]);
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    const response = await quickDraft(agent, { title: '   ' });
-
-    assert.equal(response.status, 303);
-    assert.equal(response.headers.get('location'), '/admin');
-    assert.equal(cms.store.counts().total, 0);
-    assert.match(await (await agent.get('/admin')).text(), /A draft needs a title/);
-  });
-
-  it('numbers a second draft that would land on the first one', async () => {
-    const contentDir = await seeded([]);
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    await quickDraft(agent, { title: 'Twice' });
-    const second = await quickDraft(agent, { title: 'Twice' });
-
-    assert.equal(second.headers.get('location'), '/admin/posts/twice-2');
-    assert.equal((await readdir(path.join(contentDir, 'posts'))).length, 2);
-  });
-});
-
 describe('flash messages', () => {
   it('survive one redirect and then clear', async () => {
     const cms = await box.site({ contentDir: await seeded([]) });
     const agent = await signedIn(cms);
 
-    const created = await quickDraft(agent, { title: 'Kept for one page' });
+    const created = await newDraft(agent, 'Kept for one page');
     const editor = created.headers.get('location');
     assert.ok(editor !== null);
 
@@ -274,7 +229,7 @@ describe('flash messages', () => {
   it('are not shown to a different session', async () => {
     const cms = await box.site({ contentDir: await seeded([]) });
     const agent = await signedIn(cms);
-    await quickDraft(agent, { title: 'Mine alone' });
+    await newDraft(agent, 'Mine alone');
 
     const stranger = await signIn(cms);
     const html = await (await stranger.get('/admin')).text();

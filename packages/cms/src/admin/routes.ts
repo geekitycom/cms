@@ -1,15 +1,12 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 import type { Environment } from 'nunjucks';
 
-import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
-import { defaultPermalink, slugify } from '../content/slug.ts';
-import { normalizeBody } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';
 import { editorPath, mountDocumentScreens, PAGE_KIND, POST_KIND } from './documents.ts';
 import { FEDERATION_PATH, mountFederationScreen } from './federation.ts';
-import { flash, takeFlash } from './flash.ts';
+import { takeFlash } from './flash.ts';
 import { mountPreview } from './preview.ts';
 import { AVATAR_PATH, mountSettings } from './settings.ts';
 import {
@@ -32,9 +29,6 @@ export const LOGIN_PATH = `${ADMIN_PREFIX}/login`;
 export const SETUP_PATH = `${ADMIN_PREFIX}/setup`;
 /** Where the logout form posts. */
 export const LOGOUT_PATH = `${ADMIN_PREFIX}/logout`;
-/** Where the dashboard's quick draft form posts. */
-export const QUICK_DRAFT_PATH = `${ADMIN_PREFIX}/quick-draft`;
-
 /** One entry in the admin's left-hand navigation. */
 export interface AdminSection {
   /** The name a screen passes as `section` to mark itself current. */
@@ -215,66 +209,11 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
         draft: document.draft,
         editUrl: postEditorPath(document.slug),
       })),
-      quickDraftUrl: QUICK_DRAFT_PATH,
       // The one number on the dashboard that is not about the content
       // directory: it is what says whether publishing is reaching anybody.
       followers: c.var.admin.countFollowers(),
       federationUrl: FEDERATION_PATH,
     });
-  });
-
-  /**
-   * The dashboard's quick draft: a title and a body, straight to a draft file.
-   *
-   * It writes a draft rather than a published post because the point of the box
-   * is to catch an idea before it goes, and because the editor TASK-11 builds is
-   * where the decision to publish belongs.
-   */
-  app.post(QUICK_DRAFT_PATH, async (c) => {
-    const body = await c.req.parseBody();
-    const title = text(body['title']).trim();
-
-    if (title === '') {
-      flash(c, 'error', 'A draft needs a title.');
-      return c.redirect(ADMIN_PREFIX, 303);
-    }
-
-    const contentDir = c.var.config.contentDir;
-    const store = c.var.store;
-    const date = new Date().toISOString();
-    const slug = await freeSlug({
-      contentDir,
-      store,
-      type: 'post',
-      slug: slugify(title) || 'untitled',
-      date,
-    });
-
-    const document = await saveDocument({
-      contentDir,
-      store,
-      path: contentFilePath({ type: 'post', slug, date }),
-      content: {
-        title,
-        date,
-        permalink: defaultPermalink({ type: 'post', slug, date }),
-        tags: [],
-        draft: true,
-        extra: {},
-        body: normalizeBody(text(body['body'])),
-      },
-    });
-
-    await c.var.announce({
-      type: 'created',
-      path: document.path,
-      previous: undefined,
-      next: document,
-      origin: 'admin',
-    });
-
-    flash(c, 'notice', `Draft saved: ${document.title}`);
-    return c.redirect(postEditorPath(document.slug), 303);
   });
 
   // The listing and the editor. Posts and pages are the same screens over the
