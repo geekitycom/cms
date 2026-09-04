@@ -722,8 +722,9 @@ post on a site that publishes several.
 
 The channel carries `title`, `link`, `description` (the tagline), `language`
 (the `language` setting, `en` by default), `lastBuildDate`, `generator`, an
-`atom:link rel="self"`, and an `image` built from the avatar when the site has
-one.
+`atom:link rel="self"`, the three notify-server elements described under
+[Real-time notification](#real-time-notification), and an `image` built from the
+avatar when the site has one.
 
 An item carries `title`, `link`, `guid isPermaLink="false"`, `pubDate` in
 RFC 822, `dc:creator` from the post's author or the site's, one `category` per
@@ -768,8 +769,8 @@ like any other. A page has no comments feed at all: only posts federate, so
 nothing can ever have replied to one.
 
 A channel carries the usual `title` (`Comments on: {post}`), `link`,
-`description`, `language`, `lastBuildDate`, `generator` and `atom:link
-rel="self"`. An item carries the author's name as its `title` and `dc:creator`,
+`description`, `language`, `lastBuildDate`, `generator`, `atom:link rel="self"`
+and the same notify-server elements every other feed carries. An item carries the author's name as its `title` and `dc:creator`,
 the reply's `url` as its `link` and its id as `guid isPermaLink="false"`, the
 `published` time the note gave (or when it arrived, if it gave none),
 `description` holding a plain-text excerpt and `content:encoded` holding the
@@ -801,17 +802,85 @@ An Atom entry carries `id` (the post's absolute URL), `title`, `updated`,
 one, a `category` per tag, a `summary` when the front matter has a
 `description`, and the whole rendered post as `content type="html"`. The feed
 itself carries `id`, `title`, `subtitle` from the site's tagline, `updated`,
-`link rel="self"`, `link rel="alternate"` to the HTML page, a `generator` and an
-`xml:lang` from the `language` setting.
+`link rel="self"`, `link rel="alternate"` to the HTML page, a `generator`, an
+`xml:lang` from the `language` setting, and — when the site names a notify
+server — a `source:cloud` and a `link rel="hub"`.
 
 A JSON Feed item carries `id`, `url`, `title`, `content_html`, `summary`,
 `date_published`, `date_modified`, `tags` and `authors`; the feed carries
-`version`, `title`, `home_page_url`, `feed_url`, `description` and `authors`.
-Keys with nothing behind them are left out rather than sent empty.
+`version`, `title`, `home_page_url`, `feed_url`, `description`, `authors` and
+`hubs`. Keys with nothing behind them are left out rather than sent empty.
 
 The XML is written by this package rather than by a library. Text is escaped;
 `content:encoded` and `source:markdown` are CDATA sections, with any `]]>` in
 the text split across two sections so it cannot end one early.
+
+### Real-time notification
+
+A feed reader that polls hears about a post when it next polls. An [rssCloud][]
+or [WebSub][] server turns that around: the reader registers with the server,
+the site tells the server when a feed changes, and the server tells every
+subscriber at once.
+
+One setting, `notifyServer`, is the whole of it. It defaults to
+`https://rpc.rsscloud.io`, which speaks both protocols, and everything else is
+derived from it: `{notifyServer}/pleaseNotify` is where a subscriber registers,
+`{notifyServer}/websub` is the hub, and `{notifyServer}/ping` is where this site
+says a feed changed. Emptying the setting removes every element, every header
+and every ping; a different URL moves all of them.
+
+**Advertising.** An RSS channel carries all three spellings, so a reader of any
+age finds one it understands:
+
+```xml
+<cloud domain="rpc.rsscloud.io" port="80" path="/pleaseNotify"
+       registerProcedure="" protocol="http-post"/>
+<source:cloud>https://rpc.rsscloud.io/pleaseNotify</source:cloud>
+<atom:link rel="hub" href="https://rpc.rsscloud.io/websub"/>
+```
+
+The port and protocol of the legacy `<cloud>` are `80` and `http-post` whatever
+scheme the server is actually reached over, because that is what
+[rpc.rsscloud.io's quick start][quick-start] prescribes and what a 2001
+aggregator expects to read. An Atom feed carries the `source:cloud` and the
+`rel="hub"` link but no `<cloud>`, which is an RSS 2.0 element with no namespace.
+A JSON Feed carries JSON Feed 1.1's `hubs`:
+
+```json
+{ "hubs": [{ "type": "WebSub", "url": "https://rpc.rsscloud.io/websub" }] }
+```
+
+And every feed response in every format — the site's, each archive's and both
+comments feeds — carries WebSub's discovery header, on the `304` as well as on
+the body, because a poller mostly gets the `304`:
+
+```
+Link: <https://rpc.rsscloud.io/websub>; rel="hub", <https://example.com/feed/>; rel="self"
+```
+
+**Pinging.** The server notifies nobody until it hears the feed changed. So when
+a post is published, edited or withdrawn — the same index changes that drive
+ActivityPub delivery, and never a full scan — the site posts
+`url={feed}` to `{notifyServer}/ping`, once for each feed whose contents moved:
+the three site feeds, and the three feeds of every tag and category the post
+carried before _and_ after the change, because a post that left a tag changed
+that tag's feed as much as the one it joined.
+
+Pings are best effort. They run one after another on a queue of their own, a
+repeated URL is sent once, each is given ten seconds, and a refusal is logged
+rather than thrown: a notify server that is down costs a line in the log, never
+a save. A site can ping a feed of its own:
+
+```js
+await cms.notifyFeeds(['https://example.com/podcast/feed/']);
+```
+
+`cms.notifier` is the service behind it — `notify(urls)`, `feedsFor(change)`,
+`handle(change)` and `settled()` — already subscribed to the index.
+
+[rsscloud]: https://rpc.rsscloud.io/docs
+[websub]: https://www.w3.org/TR/websub/
+[quick-start]: https://rpc.rsscloud.io/docs/quick-start
 
 ### Caching and discovery
 

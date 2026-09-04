@@ -21,7 +21,18 @@ import {
   mountFederation,
 } from './federation/index.ts';
 import type { DeliveryService, SiteFederation } from './federation/index.ts';
+import { createFeedNotifier } from './notify.ts';
+import type { FeedNotifier, NotifyReport } from './notify.ts';
 import { createRenderer, mountPublicSite } from './web/index.ts';
+
+export { createFeedNotifier, NOTIFY_TIMEOUT_MS } from './notify.ts';
+export type {
+  CreateFeedNotifierOptions,
+  FeedNotifier,
+  NotifyLogger,
+  NotifyPing,
+  NotifyReport,
+} from './notify.ts';
 
 export {
   ACTOR_HANDLE_PATTERN,
@@ -364,6 +375,7 @@ export {
   contentTypeOf,
   DC_NAMESPACE,
   DEFAULT_FEED_LANGUAGE,
+  DEFAULT_NOTIFY_SERVER,
   documentJson,
   escapeXml,
   excerptFromHtml,
@@ -378,6 +390,7 @@ export {
   feedExcerpt,
   feedHref,
   feedLanguage,
+  feedLinkHeader,
   feedPathUnder,
   feedResponse,
   feedSize,
@@ -398,6 +411,11 @@ export {
   MEDIA_TYPES,
   mountPublicSite,
   notAcceptableResponse,
+  NOTIFY_CLOUD_PORT,
+  NOTIFY_CLOUD_PROTOCOL,
+  NOTIFY_PATHS,
+  notifyEndpoints,
+  notifyServerOf,
   offsetForPage,
   PACKAGED_THEME_DIR,
   PAGE_SEGMENT,
@@ -458,12 +476,15 @@ export type {
   DocumentJsonOptions,
   FeedComment,
   FeedFormat,
+  FeedIdentity,
   FeedPath,
   FeedResponseOptions,
   FeedSource,
   JsonFeed,
   JsonFeedAuthor,
+  JsonFeedHub,
   JsonFeedItem,
+  NotifyServer,
   Listing,
   PageContext,
   PaginateOptions,
@@ -519,6 +540,16 @@ export interface Cms {
    */
   readonly delivery: DeliveryService;
   /**
+   * The site's rssCloud and WebSub client: what tells the notify server named
+   * in the settings that a feed changed, so a subscriber hears at once rather
+   * than on its next poll.
+   *
+   * It is already subscribed to the index; a site reaches for it to ping a
+   * feed of its own ({@link Cms.notifyFeeds}), or to wait for the pings in
+   * flight.
+   */
+  readonly notifier: FeedNotifier;
+  /**
    * Index changes, as they happen: `created`, `updated`, `deleted`,
    * `published`, `unpublished` and the catch-all `change`. Every listener is
    * handed the document before and after the change.
@@ -541,6 +572,16 @@ export interface Cms {
    * function that unsubscribes.
    */
   onPublish(hook: DocumentChangeHook): () => void;
+  /**
+   * Tell the notify server that these feeds changed — absolute URLs, because
+   * it is going to fetch them. The hook a site calls for a feed the CMS does
+   * not know it has.
+   *
+   * Best effort: the pings are queued behind whatever is already going out, a
+   * repeated URL is sent once, and a refusal is logged rather than thrown. A
+   * site that names no notify server gets an empty report.
+   */
+  notifyFeeds(urls: readonly string[]): Promise<NotifyReport>;
   /**
    * Walk the content directory once and bring the index into line with it.
    * What `serve()` does on boot, and what the `geekity sync` command runs.
@@ -602,6 +643,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const delivery = createDeliveryService({ federation, admin, store, config: resolved });
   content.events.on('change', (change) => delivery.handle(change));
 
+  // The notify server listens to the index for the same reason: a post edited
+  // on disk changed the same feeds as one saved through the editor.
+  const notifier = createFeedNotifier({ admin, config: resolved });
+  content.events.on('change', (change) => notifier.handle(change));
+
   const app = new Hono<GeekityEnv>();
 
   app.use('*', async (c, next) => {
@@ -659,6 +705,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     admin,
     federation,
     delivery,
+    notifier,
     events: content.events,
 
     onDocumentChange(hook) {
@@ -667,6 +714,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
 
     onPublish(hook) {
       return subscribe('published', hook);
+    },
+
+    notifyFeeds(urls) {
+      return notifier.notify(urls);
     },
 
     sync() {
@@ -696,6 +747,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // Anything already on its way out is allowed to finish, so closing never
       // leaves a delivery half recorded.
       await delivery.settled();
+      await notifier.settled();
 
       if (running !== undefined) {
         await new Promise<void>((resolve, reject) => {
