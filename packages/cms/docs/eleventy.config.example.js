@@ -310,6 +310,26 @@ export default function (eleventyConfig) {
   eleventyConfig.addPassthroughCopy({ 'content/uploads': 'uploads' });
   eleventyConfig.ignores.add('content/uploads/**');
 
+  // The CMS's derived image variants are NOT copied and NOT ignored here,
+  // because there is nothing to ignore: they live in `data/images/`, outside
+  // this build's input directory, and they are disposable state the CMS
+  // rebuilds on demand (decision-9, decision-10). A build makes its own.
+  //
+  // To get the markup the CMS serves — a <picture> with a WebP <source> and an
+  // <img> carrying srcset, sizes, width, height and loading="lazy" — run
+  // @11ty/eleventy-img over the same originals, at the same widths:
+  //
+  //     import { eleventyImageTransformPlugin } from '@11ty/eleventy-img';
+  //
+  //     eleventyConfig.addPlugin(eleventyImageTransformPlugin, {
+  //       widths: [320, 640, 960, 1280, 1920],
+  //       formats: ['webp', 'auto'],
+  //       defaultAttributes: { loading: 'lazy', sizes: '100vw' },
+  //     });
+  //
+  // It is left out of this file rather than switched on, because this config
+  // promises to have no dependencies beyond Eleventy itself.
+
   // Eleventy ignores `_includes` and `_data` because they are configured
   // directories; every other underscore directory is built unless it is
   // ignored, and the CMS keeps deleted documents in `content/_trash/`.

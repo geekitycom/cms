@@ -680,8 +680,40 @@ name a file elsewhere in the content directory.
 `deleteUpload` takes a `removeDerived` hook, called with the same
 content-relative path once the original is gone. The original under
 `content/uploads` is the only source of truth (decision-10) and anything
-generated from it is derived state that must not outlive it; the hook is where
-the image variants are removed.
+generated from it is derived state that must not outlive it; the hook defaults
+to `removeImageVariants`, which takes the file's derived images with it.
+
+### Image variants
+
+`generateImageVariants(config, uploadPath)` derives one upload's copies with
+sharp and writes them, plus an `image.json` sidecar, into
+`<dataDir>/images/<the upload's path>/`. It runs inside `storeUpload`, so the
+editor's control, the avatar and the media library all produce the same
+variants for the same file and the encoding is paid for by whoever uploaded it.
+It answers `undefined`, having written nothing, for a GIF, an animation, a PDF,
+a text file, an upload that is not there, and a site with `imageOptimization`
+off — every one of which means "serve the original", which is what the site
+would have done anyway.
+
+| Function                           | What it is for                                                                       |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| `generateImageVariants`            | Derive the whole set and write the sidecar. Two callers at once share one encode.    |
+| `describeImage`                    | The record, synchronously and cached, for a renderer that must not open a file.      |
+| `findImageVariant`                 | One derived file by request path, generating it when it is missing.                  |
+| `removeImageVariants`              | Take a source's derived directory away.                                              |
+| `responsiveImages(html, describe)` | Rewrite `<img src="/uploads/…">` as `<picture>`. Pure: hand it any lookup.           |
+| `siteImageMarkup(config, html)`    | The same, over one site's own records, deriving in the background for a record miss. |
+
+`describeImage` is synchronous and cached because it is called once per image
+while a page renders, and decision-10 forbids probing an image file at render
+time. Its cache entry outlives the sidecar on purpose: `data/images/` is
+disposable, so a page whose variants have been swept away keeps rendering the
+markup that asks for them back, and the first request for each one rebuilds it.
+
+`documentContext(document, images)` is where the rewrite is applied. Passing the
+config is what turns the page's `content` into `<picture>` markup; the feeds,
+`documentJson`, the Markdown representation and `postArticle` all read
+`document.html` directly and so keep the plain `<img>` by construction.
 
 ### Managing tags and categories
 
@@ -817,6 +849,8 @@ Booting mounts the public site on the app. The routes are:
 | `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                          |
 | `/robots.txt`                           | What a crawler may have, and where the sitemap is.                         |
 | `/theme/…`                              | The theme's own files, from its `static/` directory.                       |
+| `/uploads/…`                            | A file from `content/uploads/`, byte for byte as it was stored.            |
+| `/uploads/_/…`                          | One derived copy of an uploaded image, generated on the spot if missing.   |
 | anything else                           | The theme's 404.                                                           |
 
 Drafts, documents in the trash and posts whose date has not arrived are not on

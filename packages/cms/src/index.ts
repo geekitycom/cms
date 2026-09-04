@@ -270,9 +270,12 @@ export type {
 } from './admin/index.ts';
 
 export {
+  DEFAULT_IMAGE_FORMATS,
+  DEFAULT_IMAGE_WIDTHS,
   DEFAULT_UPLOAD_MAX_BYTES,
   DEFAULT_UPLOAD_TYPES,
   defineConfig,
+  KNOWN_IMAGE_FORMATS,
   resolveConfig,
 } from './config.ts';
 export type {
@@ -285,6 +288,22 @@ export type {
 
 export { DirectoryNotEmptyError, initSite, SITE_TEMPLATE_DIR, siteManifest } from './init.ts';
 export type { InitSiteOptions, InitSiteResult } from './init.ts';
+
+export {
+  describeImage,
+  findImageVariant,
+  generateImageVariants,
+  imageMediaType,
+  IMAGE_DIRECTORY,
+  IMAGE_RECORD_NAME,
+  IMAGE_SIZES,
+  removeImageVariants,
+  responsiveImages,
+  siteImageMarkup,
+  variantUrl,
+  VARIANT_ASSET_PREFIX,
+} from './images/index.ts';
+export type { DescribeImage, ImageConfig, ImageRecord, ImageVariant } from './images/index.ts';
 
 export {
   calendarDayIn,

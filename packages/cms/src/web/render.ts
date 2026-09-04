@@ -164,7 +164,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // a page never federates, so nothing can ever have replied to it — and
       // because a site that overrides `post.njk` should keep the link anyway.
       return render(template, {
-        ...documentContext(document),
+        ...documentContext(document, config),
         ...(objectId === undefined
           ? {}
           : {
@@ -175,7 +175,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     },
 
     renderListing(listing) {
-      const items: DocumentContext[] = listing.documents.map(documentContext);
+      const items: DocumentContext[] = listing.documents.map((document) =>
+        documentContext(document, config),
+      );
 
       return render(listing.template ?? TEMPLATES.home, {
         title: listing.title,

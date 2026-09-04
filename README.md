@@ -134,15 +134,18 @@ directory; absolute ones are used as given.
 | `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped. |
 | `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                               |
 
-The admin adds five more:
+The admin adds eight more:
 
-| Field            | Default             | Environment override       | Meaning                                                                    |
-| ---------------- | ------------------- | -------------------------- | -------------------------------------------------------------------------- |
-| `uploadMaxBytes` | `10485760` (10 MiB) | `GEEKITY_UPLOAD_MAX_BYTES` | Largest file the editor's upload endpoint accepts.                         |
-| `uploadTypes`    | every type below    | `GEEKITY_UPLOAD_TYPES`     | Extensions it accepts, as a list (comma-separated in the env).             |
-| `loginAttempts`  | `5`                 | `GEEKITY_LOGIN_ATTEMPTS`   | Failed sign-ins a username or an address may make before it is locked out. |
-| `loginLockout`   | `900` (15 minutes)  | `GEEKITY_LOGIN_LOCKOUT`    | How long the first lockout lasts, in seconds.                              |
-| `trustProxy`     | `false`             | `GEEKITY_TRUST_PROXY`      | Believe `X-Forwarded-For` when deciding which address a sign-in came from. |
+| Field               | Default                     | Environment override         | Meaning                                                                    |
+| ------------------- | --------------------------- | ---------------------------- | -------------------------------------------------------------------------- |
+| `uploadMaxBytes`    | `10485760` (10 MiB)         | `GEEKITY_UPLOAD_MAX_BYTES`   | Largest file the editor's upload endpoint accepts.                         |
+| `uploadTypes`       | every type below            | `GEEKITY_UPLOAD_TYPES`       | Extensions it accepts, as a list (comma-separated in the env).             |
+| `imageOptimization` | `true`                      | `GEEKITY_IMAGE_OPTIMIZATION` | Derive smaller copies of uploaded images and offer them in the pages.      |
+| `imageWidths`       | `320, 640, 960, 1280, 1920` | `GEEKITY_IMAGE_WIDTHS`       | The widths those copies are made at, in pixels.                            |
+| `imageFormats`      | `['webp']`                  | `GEEKITY_IMAGE_FORMATS`      | The formats besides the original's own. `avif` is opt-in.                  |
+| `loginAttempts`     | `5`                         | `GEEKITY_LOGIN_ATTEMPTS`     | Failed sign-ins a username or an address may make before it is locked out. |
+| `loginLockout`      | `900` (15 minutes)          | `GEEKITY_LOGIN_LOCKOUT`      | How long the first lockout lasts, in seconds.                              |
+| `trustProxy`        | `false`                     | `GEEKITY_TRUST_PROXY`        | Believe `X-Forwarded-For` when deciding which address a sign-in came from. |
 
 `uploadTypes` defaults to `.avif`, `.gif`, `.jpeg`, `.jpg`, `.md`, `.pdf`,
 `.png`, `.txt` and `.webp` — every type the CMS knows a media type for. The
@@ -475,6 +478,96 @@ change the documents, and a trashed post can be restored tomorrow. Whatever was
 derived from the file goes with it, which is the hook the image variants hang
 on. The paths the form carries are resolved against `content/uploads` and
 refused if they land outside it.
+
+## Image optimization
+
+An uploaded photograph goes out at whatever size the camera made it unless
+something narrows it, so the CMS derives smaller and more modern copies with
+[sharp](https://sharp.pixelplumbing.com/) and offers them in the site's pages
+(decision-10). The original under `content/uploads/` is never touched, never
+re-encoded and never moved: it stays the only source of truth, and it is what
+every representation but the HTML page keeps pointing at.
+
+Uploading a PNG, JPEG, WebP or AVIF writes, into
+`data/images/{yyyy}/{mm}/{name}{ext}/`, one file per width per format —
+`320.webp`, `320.png`, `640.webp` and so on — plus an `image.json` recording
+the original's intrinsic width and height and everything derived from it. The
+widths are [`imageWidths`](#configuration), 11ty/image's own set by default;
+nothing is ever upscaled, and the original's own width is always added so a
+wide display has a full-size copy to pick that is not the unprocessed upload.
+The formats are [`imageFormats`](#configuration) plus the original's own, which
+is what the `<img>` falls back to. EXIF orientation is applied and the metadata
+— the camera, the timestamp, the location — is dropped. A GIF is stored and
+served exactly as it arrived: an animation cannot survive being resized into a
+still.
+
+A post page then renders the picture as
+
+```html
+<picture>
+  <source
+    type="image/webp"
+    srcset="/uploads/_/2026/09/photo.jpg/320.webp 320w, …"
+    sizes="100vw"
+  />
+  <img
+    src="/uploads/2026/09/photo.jpg"
+    alt="A photo"
+    srcset="/uploads/_/2026/09/photo.jpg/320.jpg 320w, …"
+    sizes="100vw"
+    width="2400"
+    height="1600"
+    loading="lazy"
+  />
+</picture>
+```
+
+`sizes` is `100vw`, which is 11ty/image's default and the only honest one a CMS
+can give: how wide a picture is drawn is a fact about the theme's stylesheet.
+Attributes the author wrote win — a hand-written `width`, `loading` or
+`srcset` is left alone — and an image pointing at another origin is untouched.
+
+Only the theme's HTML gets that markup. The RSS and Atom `content:encoded`, the
+JSON and Markdown representations of a document and the ActivityStreams
+`content` a fediverse instance fetches all keep the plain `<img>` of the
+original, because none of those readers can resolve this site's derived files
+sensibly.
+
+`data/images/` is derived state and may be deleted at any moment, exactly as
+the SQLite index may (decision-9). A request for a file that is not there
+rebuilds the whole set for that source and serves it; a request for a width or
+a format the site does not offer is a 404 and encodes nothing. The directory is
+inside `data/`, so git ignores it, the content sync never sees it and an
+Eleventy build never reads it.
+
+Turning `imageOptimization` off changes nothing on disk and nothing in the
+feeds: the pages go back to the plain `<img>`, and uploading stops encoding.
+
+### The same pictures from an Eleventy build
+
+A site that builds the same `content/` with Eleventy gets equivalent markup
+from [`@11ty/eleventy-img`](https://github.com/11ty/image) over the same
+originals — which is why the CMS's width set and output shape are that
+plugin's. The CMS's own `data/images/` is not involved; the plugin keeps its
+own cache under `_site/img/`, and the two never meet.
+
+```js
+// eleventy.config.js, on top of the copied example config
+import { eleventyImageTransformPlugin } from '@11ty/eleventy-img';
+
+export default function (eleventyConfig) {
+  eleventyConfig.addPlugin(eleventyImageTransformPlugin, {
+    widths: [320, 640, 960, 1280, 1920],
+    formats: ['webp', 'auto'],
+    defaultAttributes: { loading: 'lazy', sizes: '100vw' },
+  });
+}
+```
+
+The transform rewrites every `<img>` in the built HTML, so it finds the same
+uploads the CMS's renderer does. Keep the two width lists in step — a build and
+a serve of the same directory should not disagree about what a reader is
+offered.
 
 ## Site settings
 

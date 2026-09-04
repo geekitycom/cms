@@ -240,6 +240,74 @@ describe('resolveConfig', () => {
     );
   });
 
+  it('optimises images by default, at the widths 11ty/image uses, in WebP alone', () => {
+    const config = resolveConfig({}, { cwd: '/srv/site', env: {} });
+
+    assert.equal(config.imageOptimization, true);
+    assert.deepEqual(config.imageWidths, [320, 640, 960, 1280, 1920]);
+    assert.deepEqual(config.imageFormats, ['webp']);
+  });
+
+  it('takes image widths from the config or the environment, sorted and deduplicated', () => {
+    assert.deepEqual(
+      resolveConfig({ imageWidths: [800, 400, 800] }, { cwd: '/srv/site', env: {} }).imageWidths,
+      [400, 800],
+    );
+    assert.deepEqual(
+      resolveConfig(
+        { imageWidths: [800] },
+        { cwd: '/srv/site', env: { GEEKITY_IMAGE_WIDTHS: '640, 320' } },
+      ).imageWidths,
+      [320, 640],
+    );
+  });
+
+  it('rejects an image width that is not a positive whole number of pixels', () => {
+    assert.throws(
+      () => resolveConfig({ imageWidths: [0] }, { cwd: '/srv/site', env: {} }),
+      /imageWidths/,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_IMAGE_WIDTHS: 'wide' } }),
+      /GEEKITY_IMAGE_WIDTHS/,
+    );
+  });
+
+  it('takes image formats from the config or the environment, normalised', () => {
+    assert.deepEqual(
+      resolveConfig({ imageFormats: ['AVIF', 'WebP'] }, { cwd: '/srv/site', env: {} }).imageFormats,
+      ['avif', 'webp'],
+    );
+    assert.deepEqual(
+      resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_IMAGE_FORMATS: 'avif , webp' } })
+        .imageFormats,
+      ['avif', 'webp'],
+    );
+  });
+
+  it('rejects an image format sharp cannot write for the web', () => {
+    assert.throws(
+      () => resolveConfig({ imageFormats: ['bmp'] }, { cwd: '/srv/site', env: {} }),
+      /imageFormats/,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_IMAGE_FORMATS: 'tiff' } }),
+      /GEEKITY_IMAGE_FORMATS/,
+    );
+  });
+
+  it('turns image optimization off from the config or the environment', () => {
+    assert.equal(
+      resolveConfig({ imageOptimization: false }, { cwd: '/srv/site', env: {} }).imageOptimization,
+      false,
+    );
+    assert.equal(
+      resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_IMAGE_OPTIMIZATION: 'off' } })
+        .imageOptimization,
+      false,
+    );
+  });
+
   it('defaults cwd and env to the running process', () => {
     const config = resolveConfig({ baseUrl: 'https://geekity.example' });
 
