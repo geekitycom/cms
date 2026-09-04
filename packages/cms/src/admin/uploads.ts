@@ -165,11 +165,23 @@ export const refuseOversizedUpload: MiddlewareHandler<GeekityEnv> = async (c, ne
   const declared = Number(c.req.header('content-length') ?? '');
   const limit = c.var.config.uploadMaxBytes;
   if (Number.isFinite(declared) && declared > limit + UPLOAD_ENVELOPE_BYTES) {
-    return c.json({ error: tooLargeMessage(limit) }, 413);
+    // JSON for the editor's control, which reads it, and plain text for the
+    // media screen's form, which is a navigation: a browser that has just
+    // submitted a form and been shown a JSON object has been told nothing.
+    // There is no session yet — the guard has not run — so a flash and a
+    // redirect are not available here.
+    return submittedFromABrowser(c.req.header('accept'))
+      ? c.text(tooLargeMessage(limit), 413)
+      : c.json({ error: tooLargeMessage(limit) }, 413);
   }
 
   await next();
 };
+
+/** Whether a request wants a page back rather than the editor's JSON. */
+function submittedFromABrowser(accept: string | undefined): boolean {
+  return (accept ?? '').includes('text/html');
+}
 
 /**
  * Register the editor's upload endpoint.
@@ -194,9 +206,11 @@ export function mountUploads(app: Hono<GeekityEnv>): void {
 
     const result: UploadResult = {
       url: outcome.url,
-      markdown: outcome.media.image
-        ? `![${escapeLabel(outcome.label)}](${outcome.url})`
-        : `[${escapeLabel(outcome.label)}](${outcome.url})`,
+      markdown: uploadMarkdown({
+        url: outcome.url,
+        label: outcome.label,
+        image: outcome.media.image,
+      }),
     };
     return c.json(result, 201);
   });
@@ -225,6 +239,29 @@ async function writeWithoutOverwriting(
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
   }
+}
+
+/** What {@link uploadMarkdown} writes a link for. */
+export interface UploadMarkdownOptions {
+  /** The public URL of the file. */
+  url: string;
+  /** What the link says: the submitted name without its extension. */
+  label: string;
+  /** Whether the Markdown is an embed rather than a link. */
+  image: boolean;
+}
+
+/**
+ * The Markdown for one upload: an embed for an image, a link for anything else.
+ *
+ * It is a function of its own because the editor's upload control is no longer
+ * the only thing that offers it — the media screen hands out the same line for
+ * a file uploaded months ago — and a picture that embedded from one screen and
+ * linked from the other would be a difference nobody could explain.
+ */
+export function uploadMarkdown(options: UploadMarkdownOptions): string {
+  const label = escapeLabel(options.label);
+  return options.image ? `![${label}](${options.url})` : `[${label}](${options.url})`;
 }
 
 /** What an upload over the site's limit is told, and the limit it went over. */

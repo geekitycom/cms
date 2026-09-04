@@ -575,24 +575,27 @@ that ship inside the package, deliberately outside the theme search path: a
 site's `theme/` may override any public template, and must not be able to
 shadow the login form.
 
-| Route                                            | What it does                                                                  |
-| ------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.        |
-| `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                 |
-| `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                             |
-| `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.               |
-| `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                  |
-| `/admin/settings`                                | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor. |
-| `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                        |
-| `/admin/users`                                   | Who may sign in. `POST` adds one.                                             |
-| `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                      |
-| `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                 |
-| `/admin/federation`                              | The actor, the followers, the inbox log, and per-post delivery.               |
-| `/admin/federation/redeliver`                    | `POST` only. Sends one post's latest activity to the followers again.         |
-| `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                |
-| `/admin/login`                                   | Username and password.                                                        |
-| `/admin/logout`                                  | `POST` only. Deletes the session row.                                         |
-| `/admin/_static/*`                               | The admin's own stylesheet, cached for an hour.                               |
+| Route                                            | What it does                                                                     |
+| ------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.           |
+| `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                    |
+| `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                |
+| `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                  |
+| `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                     |
+| `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it. |
+| `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.          |
+| `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.      |
+| `/admin/settings`                                | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor.    |
+| `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                           |
+| `/admin/users`                                   | Who may sign in. `POST` adds one.                                                |
+| `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                         |
+| `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                    |
+| `/admin/federation`                              | The actor, the followers, the inbox log, and per-post delivery.                  |
+| `/admin/federation/redeliver`                    | `POST` only. Sends one post's latest activity to the followers again.            |
+| `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                   |
+| `/admin/login`                                   | Username and password.                                                           |
+| `/admin/logout`                                  | `POST` only. Deletes the session row.                                            |
+| `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                      |
 
 The screens behind the login share one layout: a bar across the top with the
 site name and a link to the public site, the sections down the left with the
@@ -637,6 +640,48 @@ const admin = openAdminStore({ dataDir: 'data' });
 admin.createUser({ username: 'ada', password: process.env.PASSWORD ?? '' });
 admin.close();
 ```
+
+### The media library
+
+`/admin/media` lists every file under `content/uploads`, newest first by
+modification time, with a thumbnail for a picture and its extension at the same
+size for anything else, the size in bytes, the date, and — for a library that
+has grown — a pager, twenty-four files to a page.
+
+The list is a walk of the directory on every request rather than a query.
+Nothing records that an upload exists: the filesystem is the truth
+(decision-1, decision-9), so a file copied in over ssh, pulled in by git, or
+written by an Eleventy build is on the screen without a restart, and one
+removed the same way is off it. The only question the index is asked is which
+documents mention a URL, which is the one thing a directory cannot answer.
+
+Each row carries the public URL and the ready-made Markdown — `![name](url)`
+for a picture and `[name](url)` for anything else, from the same function the
+editor's upload control pastes from — as readonly text fields, which select and
+copy on their own. `admin/static/copy.js` reveals a Copy button beside each and
+does nothing else, so the screen is complete before it loads and a browser
+without the clipboard API is not shown a button that would fail.
+
+The upload form is `storeUpload`, the same function behind `POST /admin/uploads`
+and the avatar: one allowlist, one signature check, one
+`{yyyy}/{mm}/{slug}{ext}` naming rule, and one set of refusals, shown as a flash
+on the next page rather than as the editor's JSON.
+
+Delete asks when it should. A file nothing points at is deleted on the first
+click. A file a document still mentions — anywhere in its body, as Markdown, as
+HTML or in prose — brings back a confirmation naming every document that does,
+linked to its editor and marked when it is in the trash, and only a form
+carrying `confirm` goes through. The trash counts because a trashed post can be
+restored, and restoring one whose picture went in the meantime is a broken post
+nobody was warned about. The submitted path is resolved against
+`content/uploads` and refused when it lands outside, so a form field cannot
+name a file elsewhere in the content directory.
+
+`deleteUpload` takes a `removeDerived` hook, called with the same
+content-relative path once the original is gone. The original under
+`content/uploads` is the only source of truth (decision-10) and anything
+generated from it is derived state that must not outlive it; the hook is where
+the image variants are removed.
 
 ### Managing tags and categories
 

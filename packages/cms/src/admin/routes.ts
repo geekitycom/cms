@@ -9,6 +9,7 @@ import { editorPath, mountDocumentScreens, PAGE_KIND, POST_KIND } from './docume
 import { FEDERATION_PATH, mountFederationScreen } from './federation.ts';
 import { takeFlash } from './flash.ts';
 import { adminSecurityHeaders } from './headers.ts';
+import { MEDIA_PATH, MEDIA_SECTION, MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
 import { mountPreview } from './preview.ts';
 import { AVATAR_PATH, mountSettings } from './settings.ts';
 import {
@@ -58,6 +59,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   { section: 'pages', label: 'Pages', url: `${ADMIN_PREFIX}/pages` },
   { section: TAG_KIND.section, label: TAG_KIND.plural, url: TAG_KIND.basePath },
   { section: CATEGORY_KIND.section, label: CATEGORY_KIND.plural, url: CATEGORY_KIND.basePath },
+  { section: MEDIA_SECTION, label: 'Media', url: MEDIA_PATH },
   { section: 'settings', label: 'Settings', url: `${ADMIN_PREFIX}/settings` },
   { section: 'users', label: 'Users', url: `${ADMIN_PREFIX}/users` },
   { section: 'federation', label: 'Federation', url: `${ADMIN_PREFIX}/federation` },
@@ -158,10 +160,12 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   });
 
   // In front of the guard, because the guard parses the form to find the CSRF
-  // token and parsing a multipart form reads the whole file into memory. Both
-  // multipart endpoints need it: the editor's uploads and the avatar's.
+  // token and parsing a multipart form reads the whole file into memory. Every
+  // multipart endpoint needs it: the editor's uploads, the avatar, and the
+  // media screen's own form.
   app.use(UPLOADS_PATH, refuseOversizedUpload);
   app.use(AVATAR_PATH, refuseOversizedUpload);
+  app.use(MEDIA_UPLOAD_PATH, refuseOversizedUpload);
 
   app.use(ADMIN_PREFIX, guard);
   app.use(`${ADMIN_PREFIX}/*`, guard);
@@ -293,6 +297,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountPreview(app);
   mountUploads(app);
 
+  // Everything under content/uploads: what is there, what links to it, and
+  // the upload form that stores a file by the same rules the editor does.
+  mountMediaScreen(app, { render });
+
   // The site's own settings: SQLite is the source, content/_data/site.json is
   // the mirror an Eleventy build of the same content reads.
   mountSettings(app, { render });
@@ -310,6 +318,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     PAGE_KIND.section,
     TAG_KIND.section,
     CATEGORY_KIND.section,
+    MEDIA_SECTION,
     'dashboard',
     'settings',
     'users',

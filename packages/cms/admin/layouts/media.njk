@@ -1,0 +1,160 @@
+{# /admin/media: everything under content/uploads, what links to it, and the
+   two things that can be done to it. The directory is walked on every request,
+   so a file copied in by hand is here without a restart.
+
+   Everything works with JavaScript switched off. The URL and the Markdown are
+   readonly fields, which select and copy like any other text; copy.js adds a
+   button beside each of them and nothing else. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1>{{ heading }}</h1>
+
+  {% if confirm %}
+    <form class="admin-settings" method="post" action="{{ deleteUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+      <input type="hidden" name="{{ fields.path }}" value="{{ confirm.path }}" />
+      <input type="hidden" name="{{ fields.confirm }}" value="1" />
+
+      <h2>Delete {{ confirm.url }}?</h2>
+
+      <p>
+        {{ confirm.references.length }}
+        {% if confirm.references.length == 1 %}document still points{% else %}documents still point{% endif %}
+        at it. Deleting the file does not change them, so they will point at nothing.
+      </p>
+
+      <ul class="admin-references">
+        {% for reference in confirm.references %}
+          <li>
+            <a href="{{ reference.editUrl }}">{{ reference.title }}</a>
+            {% if reference.trashed %}<span class="admin-status admin-status-trashed">Trash</span>{% endif %}
+            <code>{{ reference.path }}</code>
+          </li>
+        {% endfor %}
+      </ul>
+
+      <p class="admin-settings-buttons">
+        <button type="submit">Delete it anyway</button>
+        <a href="{{ listUrl }}">Cancel</a>
+      </p>
+    </form>
+  {% endif %}
+
+  <form class="admin-settings admin-media-upload" method="post" action="{{ uploadUrl }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    <label for="media-file">Add a file</label>
+    <input id="media-file" name="{{ fields.file }}" type="file" accept="{{ accepts }}" required />
+    <p class="admin-hint">
+      This site accepts {{ accepts | replace(',', ', ') }}, up to {{ maxBytes }} bytes. The same
+      rules the editor’s upload control enforces.
+    </p>
+    <p class="admin-settings-buttons">
+      <button type="submit">Upload</button>
+    </p>
+  </form>
+
+  {% if total == 0 %}
+    <p class="admin-empty">Nothing has been uploaded yet.</p>
+  {% else %}
+    <table class="admin-list admin-media">
+      <thead>
+        <tr>
+          <th scope="col">File</th>
+          <th scope="col">Uploaded</th>
+          <th scope="col">Size</th>
+          <th scope="col">Link</th>
+          <th scope="col">Used by</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for file in files %}
+          <tr>
+            <td class="admin-media-file">
+              {% if file.image %}
+                <a href="{{ file.url }}">
+                  <img class="admin-media-thumbnail" src="{{ file.url }}" alt="" width="60" height="60" />
+                </a>
+              {% else %}
+                <span class="admin-media-icon" aria-hidden="true">{{ file.extension | replace('.', '') | upper }}</span>
+              {% endif %}
+              <a href="{{ file.url }}">{{ file.path }}</a>
+            </td>
+            <td>{{ file.modified | date('html') }}</td>
+            <td>{{ file.bytes }}</td>
+            <td class="admin-media-links">
+              <label class="admin-visually-hidden" for="media-url-{{ loop.index }}">
+                URL of {{ file.name }}
+              </label>
+              <span class="admin-copy">
+                <input id="media-url-{{ loop.index }}" type="text" value="{{ file.url }}" readonly />
+                <button type="button" class="admin-copy-button" data-copy="media-url-{{ loop.index }}" hidden>
+                  Copy
+                </button>
+              </span>
+
+              <label class="admin-visually-hidden" for="media-markdown-{{ loop.index }}">
+                Markdown for {{ file.name }}
+              </label>
+              <span class="admin-copy">
+                <input id="media-markdown-{{ loop.index }}" type="text" value="{{ file.markdown }}" readonly />
+                <button type="button" class="admin-copy-button" data-copy="media-markdown-{{ loop.index }}" hidden>
+                  Copy
+                </button>
+              </span>
+            </td>
+            <td>
+              {% if file.references.length %}
+                <ul class="admin-references">
+                  {% for reference in file.references %}
+                    <li>
+                      <a href="{{ reference.editUrl }}">{{ reference.title }}</a>
+                      {% if reference.trashed %}
+                        <span class="admin-status admin-status-trashed">Trash</span>
+                      {% endif %}
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <span class="admin-status">Nothing</span>
+              {% endif %}
+            </td>
+            <td class="admin-actions">
+              <form method="post" action="{{ deleteUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.path }}" value="{{ file.path }}" />
+                <button type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if previousUrl or nextUrl %}
+      <nav class="admin-pagination" aria-label="Pages">
+        {% if previousUrl %}
+          <a rel="prev" href="{{ previousUrl }}">Newer</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ pages }}</span>
+        {% if nextUrl %}
+          <a rel="next" href="{{ nextUrl }}">Older</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+
+    <p class="admin-hint">
+      The list is the <code>content/uploads</code> directory itself, read afresh on every request,
+      so a file copied in by hand is here without a restart. Deleting one removes the file and
+      whatever was derived from it; it does not touch the documents that link to it, which is why
+      a file something still points at asks first.
+    </p>
+  {% endif %}
+
+  {# The one enhancement on this screen. The fields above are readonly inputs
+     and already copy by hand; this adds a button beside each of them. #}
+  <script defer src="{{ assetPrefix }}copy.js"></script>
+{% endblock %}

@@ -763,3 +763,76 @@ button[type='submit']:hover,
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* The media library. Wide rows: a thumbnail, the two copyable fields, and the
+   documents pointing at the file, which is what a delete has to warn about. */
+
+.admin-media td {
+  vertical-align: top;
+}
+
+.admin-media-file {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.admin-media-thumbnail {
+  display: block;
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  background: var(--admin-field);
+  border: 1px solid var(--admin-border);
+}
+
+/* What a file that is not a picture gets instead of a thumbnail: its
+   extension, at the size a thumbnail would have been, so the rows line up. */
+
+.admin-media-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  flex: 0 0 auto;
+  background: var(--admin-field);
+  border: 1px solid var(--admin-border);
+  color: var(--admin-muted);
+  font-size: 0.75em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.admin-media-links {
+  min-width: 18rem;
+}
+
+/* The copy control: a readonly field that works on its own, and a button that
+   copy.js reveals. The field is monospaced because what is in it is a URL or a
+   line of Markdown, and both are read character by character. */
+
+.admin-copy {
+  display: flex;
+  align-items: stretch;
+  gap: 0.3rem;
+  margin-bottom: 0.3rem;
+}
+
+.admin-copy input {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+}
+
+.admin-copy button {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.admin-references {
+  margin: 0;
+  padding-left: 1.1rem;
+}

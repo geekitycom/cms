@@ -86,6 +86,29 @@ export type {
   RelayRow,
 } from './federation.ts';
 export { flash, takeFlash } from './flash.ts';
+export {
+  deleteUpload,
+  describeUpload,
+  listUploads,
+  MEDIA_DELETE_PATH,
+  MEDIA_FIELDS,
+  MEDIA_PATH,
+  MEDIA_PER_PAGE,
+  MEDIA_SECTION,
+  MEDIA_UPLOAD_PATH,
+  mediaPageUrl,
+  mentionsUpload,
+  mountMediaScreen,
+  referencesTo,
+  resolveUpload,
+} from './media.ts';
+export type {
+  DeleteUploadOptions,
+  MediaFile,
+  MediaReference,
+  MountMediaScreenOptions,
+  RemoveDerived,
+} from './media.ts';
 export { formatInTimezone } from './formatting.ts';
 export {
   adminContentSecurityPolicy,
@@ -222,6 +245,7 @@ export {
   refusedUpload,
   storeUpload,
   tooLargeMessage,
+  uploadMarkdown,
   UPLOAD_ENVELOPE_BYTES,
   UPLOAD_FIELD,
   UPLOADS_PATH,
@@ -230,6 +254,7 @@ export type {
   StoredUpload,
   StoreUploadOptions,
   UploadConfig,
+  UploadMarkdownOptions,
   UploadRefusal,
   UploadResult,
 } from './uploads.ts';
