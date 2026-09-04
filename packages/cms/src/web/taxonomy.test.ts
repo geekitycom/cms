@@ -8,13 +8,18 @@ import { COMMENTS_ROOT } from './feeds.ts';
 import { ROBOTS_PATH, SITEMAP_PATH } from './sitemap.ts';
 import {
   DEFAULT_TAXONOMY_BASES,
+  forgetTerm,
   PAGE_SEGMENT,
+  recordTermRename,
+  redirectedTerm,
   RESERVED_TOP_LEVEL_PATHS,
   taxonomyBaseProblems,
   taxonomyBasesOrDefault,
   taxonomyForSegment,
+  taxonomyRedirectsOf,
   termHref,
 } from './taxonomy.ts';
+import type { TaxonomyRedirect } from './taxonomy.ts';
 
 describe('the default taxonomy bases', () => {
   it('are the ones WordPress uses, so a migrated site keeps its URLs', () => {
@@ -116,5 +121,75 @@ describe('taxonomyBasesOrDefault', () => {
       taxonomyBasesOrDefault({ tag: 'same', category: 'same' }),
       DEFAULT_TAXONOMY_BASES,
     );
+  });
+});
+
+describe('recordTermRename', () => {
+  const tag = (from: string, to: string): TaxonomyRedirect => ({ taxonomy: 'tag', from, to });
+
+  it('collapses a chain so an old URL is answered in one hop', () => {
+    const first = recordTermRename([], tag('a', 'b'));
+    assert.deepEqual(recordTermRename(first, tag('b', 'c')), [tag('a', 'c'), tag('b', 'c')]);
+  });
+
+  it('replaces an older record of the same term moving', () => {
+    const stale = [tag('a', 'b')];
+    assert.deepEqual(recordTermRename(stale, tag('a', 'c')), [tag('a', 'c')]);
+  });
+
+  it('drops a record of a term that has come back into use', () => {
+    const moved = [tag('a', 'b')];
+    // Something else is renamed to `a`, so `a` answers again and the record of
+    // where it used to point would only get in the way.
+    assert.deepEqual(recordTermRename(moved, tag('z', 'a')), [tag('z', 'a')]);
+  });
+
+  it('leaves the other taxonomy alone', () => {
+    const category: TaxonomyRedirect = { taxonomy: 'category', from: 'a', to: 'b' };
+    assert.deepEqual(recordTermRename([category], tag('a', 'c')), [category, tag('a', 'c')]);
+  });
+});
+
+describe('forgetTerm', () => {
+  it('drops every record touching a deleted term, and nothing else', () => {
+    const redirects: TaxonomyRedirect[] = [
+      { taxonomy: 'tag', from: 'a', to: 'gone' },
+      { taxonomy: 'tag', from: 'gone', to: 'b' },
+      { taxonomy: 'tag', from: 'c', to: 'd' },
+      { taxonomy: 'category', from: 'a', to: 'gone' },
+    ];
+
+    assert.deepEqual(forgetTerm(redirects, 'tag', 'gone'), [
+      { taxonomy: 'tag', from: 'c', to: 'd' },
+      { taxonomy: 'category', from: 'a', to: 'gone' },
+    ]);
+  });
+});
+
+describe('taxonomyRedirectsOf', () => {
+  it('keeps the entries that are renames and drops the rest', () => {
+    assert.deepEqual(
+      taxonomyRedirectsOf([
+        { taxonomy: 'tag', from: 'a', to: 'b' },
+        { taxonomy: 'nonsense', from: 'a', to: 'b' },
+        { taxonomy: 'tag', from: '', to: 'b' },
+        { taxonomy: 'tag', from: 'a', to: 'a' },
+        { taxonomy: 'category', from: 'x', to: 2 },
+        'not an object',
+        null,
+      ]),
+      [{ taxonomy: 'tag', from: 'a', to: 'b' }],
+    );
+    assert.deepEqual(taxonomyRedirectsOf(undefined), []);
+  });
+});
+
+describe('redirectedTerm', () => {
+  it('answers for the taxonomy that moved and no other', () => {
+    const redirects: TaxonomyRedirect[] = [{ taxonomy: 'tag', from: 'a', to: 'b' }];
+
+    assert.equal(redirectedTerm(redirects, { taxonomy: 'tag', term: 'a' }), 'b');
+    assert.equal(redirectedTerm(redirects, { taxonomy: 'category', term: 'a' }), undefined);
+    assert.equal(redirectedTerm(redirects, { taxonomy: 'tag', term: 'b' }), undefined);
   });
 });

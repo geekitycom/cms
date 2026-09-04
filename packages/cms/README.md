@@ -535,21 +535,24 @@ that ship inside the package, deliberately outside the theme search path: a
 site's `theme/` may override any public template, and must not be able to
 shadow the login form.
 
-| Route                          | What it does                                                                  |
-| ------------------------------ | ----------------------------------------------------------------------------- |
-| `/admin`                       | The dashboard: counts, the five most recent posts, the follower count.        |
-| `/admin/posts`, `/admin/pages` | The listings and the editors.                                                 |
-| `/admin/settings`              | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor. |
-| `/admin/settings/avatar`       | `POST` only. Uploads the site's avatar, or removes it.                        |
-| `/admin/users`                 | Who may sign in. `POST` adds one.                                             |
-| `/admin/users/password`        | `POST` only. Changes the signed-in admin's own password.                      |
-| `/admin/users/delete`          | `POST` only. Deletes the user the form names.                                 |
-| `/admin/federation`            | The actor, the followers, the inbox log, and per-post delivery.               |
-| `/admin/federation/redeliver`  | `POST` only. Sends one post's latest activity to the followers again.         |
-| `/admin/setup`                 | First run: creates the first admin. Closed once a user exists.                |
-| `/admin/login`                 | Username and password.                                                        |
-| `/admin/logout`                | `POST` only. Deletes the session row.                                         |
-| `/admin/_static/*`             | The admin's own stylesheet, cached for an hour.                               |
+| Route                                            | What it does                                                                  |
+| ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.        |
+| `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                 |
+| `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                             |
+| `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.               |
+| `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                  |
+| `/admin/settings`                                | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor. |
+| `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                        |
+| `/admin/users`                                   | Who may sign in. `POST` adds one.                                             |
+| `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                      |
+| `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                 |
+| `/admin/federation`                              | The actor, the followers, the inbox log, and per-post delivery.               |
+| `/admin/federation/redeliver`                    | `POST` only. Sends one post's latest activity to the followers again.         |
+| `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                |
+| `/admin/login`                                   | Username and password.                                                        |
+| `/admin/logout`                                  | `POST` only. Deletes the session row.                                         |
+| `/admin/_static/*`                               | The admin's own stylesheet, cached for an hour.                               |
 
 The screens behind the login share one layout: a bar across the top with the
 site name and a link to the public site, the sections down the left with the
@@ -594,6 +597,43 @@ const admin = openAdminStore({ dataDir: 'data' });
 admin.createUser({ username: 'ada', password: process.env.PASSWORD ?? '' });
 admin.close();
 ```
+
+### Managing tags and categories
+
+`/admin/tags` and `/admin/categories` list every term in use with two counts and
+a link to its archive: **Posts**, what the public site lists under it, and
+**Files**, every file carrying it — drafts, scheduled posts and the trash
+included. The second is the one to look at before acting, because it is what an
+action is about to rewrite.
+
+Three things can be done to a term, and all three are the same operation. Typing
+a new name into a row's field and pressing Rename rewrites the front matter of
+every file carrying it. Renaming onto a term that already exists is a **merge**:
+the screen comes back with a question naming both counts, and only a confirmed
+form goes through, because a merge cannot be undone by renaming back. A file
+that carried both terms keeps the target once, in the place it already had.
+Delete takes the term out of every file and leaves everything else alone.
+
+Each of them says how many files it wrote. The files are the truth (doc-1), so
+each file is re-read and re-parsed from disk before it is rewritten rather than
+being taken from the index: the index can be a moment behind a hand edit, and a
+bulk rewrite that trusted it would put that edit back. A file that has gone or
+will not parse is skipped, counted, and named in the message.
+
+Every rewrite is announced the way an editor save is, so the index, the feeds,
+the notify server and the fediverse all follow — one `Update(Article)` per
+affected published post, because the hashtags on those posts have just changed.
+A term on many published posts is therefore many deliveries; that is the point,
+but it is worth knowing before renaming a tag that half the archive carries.
+
+A rename moves an archive, and an archive is a URL somebody may have linked to,
+so the site records the move in a `taxonomyRedirects` list — `{ taxonomy, from,
+to }` — kept with the settings and mirrored into `content/_data/site.json`. The
+old archive URL and its feed then answer `301` to the new ones. Chains are
+collapsed as they are recorded, so `a → b` followed by `b → c` is stored as
+`a → c` and answered in one hop; a term that comes back into use is served
+rather than redirected; and deleting a term drops every record pointing at it,
+because a redirect to a 404 is worse than the 404.
 
 ### Login hardening
 

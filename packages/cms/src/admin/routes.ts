@@ -21,6 +21,7 @@ import {
 } from './session.ts';
 import { DuplicateUsernameError } from './store.ts';
 import type { Session, User } from './store.ts';
+import { CATEGORY_KIND, mountTaxonomyScreens, TAG_KIND, TAXONOMY_KINDS } from './taxonomy.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
 import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './throttle.ts';
 import type { LoginThrottle } from './throttle.ts';
@@ -55,6 +56,8 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   { section: 'dashboard', label: 'Dashboard', url: ADMIN_PREFIX },
   { section: 'posts', label: 'Posts', url: `${ADMIN_PREFIX}/posts` },
   { section: 'pages', label: 'Pages', url: `${ADMIN_PREFIX}/pages` },
+  { section: TAG_KIND.section, label: TAG_KIND.plural, url: TAG_KIND.basePath },
+  { section: CATEGORY_KIND.section, label: CATEGORY_KIND.plural, url: CATEGORY_KIND.basePath },
   { section: 'settings', label: 'Settings', url: `${ADMIN_PREFIX}/settings` },
   { section: 'users', label: 'Users', url: `${ADMIN_PREFIX}/users` },
   { section: 'federation', label: 'Federation', url: `${ADMIN_PREFIX}/federation` },
@@ -280,6 +283,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountDocumentScreens(app, { kind: POST_KIND, render });
   mountDocumentScreens(app, { kind: PAGE_KIND, render });
 
+  // The terms themselves: what is in use, and the three things — rename,
+  // merge, delete — that rewrite every file carrying one.
+  for (const kind of TAXONOMY_KINDS) mountTaxonomyScreens(app, { kind, render });
+
   // The two endpoints the editor talks to rather than navigates to. Both are
   // inside the guard, so both need the session's CSRF token like every other
   // POST in the admin.
@@ -301,6 +308,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   const built = new Set([
     POST_KIND.section,
     PAGE_KIND.section,
+    TAG_KIND.section,
+    CATEGORY_KIND.section,
     'dashboard',
     'settings',
     'users',

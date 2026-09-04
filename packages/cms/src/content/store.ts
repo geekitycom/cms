@@ -110,6 +110,19 @@ export interface ContentStore {
   countByCategory(category: string, options?: ListByTagOptions): number;
   /** Every category in use on published, untrashed documents, with its count. */
   listCategories(): CategoryCount[];
+  /**
+   * Every term in use in one taxonomy, in alphabetical order, with the number
+   * of documents the public site lists under it and the number of files
+   * carrying it at all.
+   *
+   * The second count is the one the taxonomy screens act on: renaming a term
+   * rewrites every file that carries it, drafts, scheduled posts and the trash
+   * included, so a screen that only showed the public count would understate
+   * what a rename is about to touch. Alphabetical because it is a list to find
+   * a term in rather than a list of what a site writes about, which is what
+   * {@link ContentStore.listTags} is for.
+   */
+  listTermUsage(taxonomy: TaxonomyName): TermUsage[];
   /** Close the database. Safe to call twice. */
   close(): void;
 }
@@ -173,6 +186,25 @@ export interface TagCount {
 export interface CategoryCount {
   category: string;
   count: number;
+}
+
+/**
+ * Which of the two taxonomies a query is about.
+ *
+ * Spelled here rather than imported from `web/taxonomy.ts` because the index
+ * is underneath the web layer and should not depend on it; the two types are
+ * the same union, so they are assignable to each other.
+ */
+export type TaxonomyName = 'tag' | 'category';
+
+/** One term, and how much of the site carries it. */
+export interface TermUsage {
+  /** The term itself, as the files spell it. */
+  term: string;
+  /** Documents the public site lists under it: published, untrashed, due. */
+  published: number;
+  /** Every file carrying it, drafts, scheduled posts and the trash included. */
+  total: number;
 }
 
 /**
@@ -330,6 +362,8 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       GROUP BY document_categories.category
       ORDER BY count DESC, category ASC
     `),
+    tagUsage: db.prepare(termUsageSql('document_tags', 'tag')),
+    categoryUsage: db.prepare(termUsageSql('document_categories', 'category')),
     nextDue: db.prepare(`
       SELECT MIN(date_sort) AS due FROM documents
       WHERE draft = 0 AND trashed = 0 AND ${SCHEDULED_CLAUSE}
@@ -576,12 +610,44 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       }));
     },
 
+    listTermUsage(taxonomy) {
+      const query = taxonomy === 'tag' ? statements.tagUsage : statements.categoryUsage;
+      return query.all(nowKey()).map((row) => ({
+        term: String(row['term']),
+        published: Number(row['published']),
+        total: Number(row['total']),
+      }));
+    },
+
     close() {
       if (!open) return;
       open = false;
       db.close();
     },
   };
+}
+
+/**
+ * The query behind {@link ContentStore.listTermUsage} for one of the two join
+ * tables: every term, the public count and the total, in one pass.
+ *
+ * The table and column names are the module's own literals rather than
+ * anything a caller supplies, so there is nothing here to interpolate from
+ * outside; the clock is the one bound parameter.
+ */
+function termUsageSql(table: 'document_tags' | 'document_categories', column: string): string {
+  return `
+    SELECT ${table}.${column} AS term,
+      COALESCE(SUM(
+        documents.draft = 0 AND documents.trashed = 0
+          AND (documents.date_sort IS NULL OR documents.date_sort <= ?)
+      ), 0) AS published,
+      COUNT(*) AS total
+    FROM ${table}
+    JOIN documents ON documents.path = ${table}.path
+    GROUP BY ${table}.${column}
+    ORDER BY term ASC
+  `;
 }
 
 function limitClause(options: ListOptions): string {

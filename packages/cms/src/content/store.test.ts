@@ -456,6 +456,23 @@ describe('listByCategory', () => {
     ]);
   });
 
+  it('reports every term in use with both counts, for the management screens', async () => {
+    const index = await populated();
+
+    // Alphabetical rather than by count: this is what a screen that manages
+    // the terms lists, and the second count is every file carrying the term —
+    // drafts, scheduled and trash included — because that is what a rename
+    // would rewrite.
+    assert.deepEqual(index.listTermUsage('tag'), [
+      { term: 'eleventy', published: 4, total: 6 },
+      { term: 'sqlite', published: 2, total: 2 },
+    ]);
+    assert.deepEqual(index.listTermUsage('category'), [
+      { term: 'engineering', published: 2, total: 2 },
+      { term: 'general', published: 4, total: 6 },
+    ]);
+  });
+
   it('keeps the two taxonomies apart', async () => {
     const index = await populated();
 

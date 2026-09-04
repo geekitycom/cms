@@ -2,13 +2,19 @@ import type { Environment } from 'nunjucks';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { createSiteDataSource, documentContext, postsPerPage, taxonomyBases } from './context.ts';
+import {
+  createSiteDataSource,
+  documentContext,
+  postsPerPage,
+  taxonomyBases,
+  termRedirects,
+} from './context.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, SiteData, SiteSettingsSource } from './context.ts';
 import { navigationMenu } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
-import type { TaxonomyBases } from './taxonomy.ts';
+import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 import { createTemplateEnvironment } from './templates.ts';
 
 /** Templates the default theme ships and the public routes ask for by name. */
@@ -58,6 +64,12 @@ export interface Renderer {
    * moves the archives on the very next one.
    */
   taxonomyBases(): TaxonomyBases;
+  /**
+   * The archive renames the site records, per the site data. Read per request
+   * for the same reason the bases are: a rename made on the taxonomy screen
+   * has to answer at the old URL on the very next one.
+   */
+  termRedirects(): readonly TaxonomyRedirect[];
   /** One document through its type's layout. */
   renderDocument(document: Document): string;
   /** A listing through the home, tag or category layout. */
@@ -135,6 +147,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     taxonomyBases() {
       return taxonomyBases(siteData.read());
+    },
+
+    termRedirects() {
+      return termRedirects(siteData.read());
     },
 
     renderDocument(document) {

@@ -30,6 +30,23 @@ export interface TaxonomyTerm {
 export type TaxonomyBases = Readonly<Record<Taxonomy, string>>;
 
 /**
+ * One term that was renamed, and what it was renamed to.
+ *
+ * A rename moves an archive, and an archive is a URL somebody may have linked
+ * to. The site records the move so the old URL can point at the new one for as
+ * long as it says so — a small list in the settings, mirrored to `site.json`
+ * so an Eleventy build of the same content can publish the same redirects.
+ */
+export interface TaxonomyRedirect {
+  /** Which taxonomy's archive moved. */
+  taxonomy: Taxonomy;
+  /** The term that used to be there. */
+  from: string;
+  /** The term that is there now. */
+  to: string;
+}
+
+/**
  * The bases a site has before anybody says otherwise: WordPress's own, so a
  * site imported from it keeps every archive URL it had published.
  */
@@ -182,4 +199,95 @@ export function taxonomyBasesOrDefault(bases: Partial<Record<Taxonomy, unknown>>
   // unreachable, so a pair that collides falls back to the defaults rather
   // than serving half of what was asked for.
   return candidate.tag === candidate.category ? DEFAULT_TAXONOMY_BASES : candidate;
+}
+
+/**
+ * The recorded renames after one more, with chains collapsed.
+ *
+ * Three rules, all of them about not making a browser walk a history it does
+ * not care about. Anything that pointed at `from` is repointed at `to`, so
+ * `a → b` followed by `b → c` is stored as `a → c` and answered in one hop. An
+ * older record of `from` moving somewhere else is replaced, because it is no
+ * longer true. And any record of `to` having moved away is dropped, because
+ * the term is back and an archive that answers always beats a record of where
+ * it used to be.
+ */
+export function recordTermRename(
+  existing: readonly TaxonomyRedirect[],
+  change: TaxonomyRedirect,
+): TaxonomyRedirect[] {
+  const recorded: TaxonomyRedirect[] = [];
+
+  for (const entry of existing) {
+    if (entry.taxonomy !== change.taxonomy) {
+      recorded.push(entry);
+      continue;
+    }
+    if (entry.from === change.from || entry.from === change.to) continue;
+    recorded.push(entry.to === change.from ? { ...entry, to: change.to } : entry);
+  }
+
+  recorded.push(change);
+  return recorded.filter((entry) => entry.from !== entry.to);
+}
+
+/**
+ * The recorded renames after a term is deleted.
+ *
+ * Every record pointing at it goes: the archive it named is about to 404, and
+ * a redirect to a 404 costs a round trip and tells the reader nothing. So does
+ * any record of that term having moved, which the delete has just settled.
+ */
+export function forgetTerm(
+  existing: readonly TaxonomyRedirect[],
+  taxonomy: Taxonomy,
+  term: string,
+): TaxonomyRedirect[] {
+  return existing.filter(
+    (entry) => entry.taxonomy !== taxonomy || (entry.from !== term && entry.to !== term),
+  );
+}
+
+/**
+ * Where a term went, or `undefined` when nothing says it went anywhere.
+ *
+ * One hop, deliberately: the list is written with its chains already collapsed
+ * ({@link recordTermRename}), and following it further would let a hand-edited
+ * `site.json` send a reader round a loop.
+ */
+export function redirectedTerm(
+  redirects: readonly TaxonomyRedirect[],
+  term: TaxonomyTerm,
+): string | undefined {
+  const found = redirects.find(
+    (entry) => entry.taxonomy === term.taxonomy && entry.from === term.term,
+  );
+  return found?.to;
+}
+
+/**
+ * A value out of `site.json` or a stored setting as the renames it names.
+ *
+ * Tolerant, like everything that reads that file: an entry that is not a
+ * `{ taxonomy, from, to }` of three non-empty strings is dropped rather than
+ * failing the read, and so is one that redirects a term to itself.
+ */
+export function taxonomyRedirectsOf(value: unknown): TaxonomyRedirect[] {
+  if (!Array.isArray(value)) return [];
+
+  const redirects: TaxonomyRedirect[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    const taxonomy = record['taxonomy'];
+    const from = record['from'];
+    const to = record['to'];
+
+    if (!TAXONOMIES.includes(taxonomy as Taxonomy)) continue;
+    if (typeof from !== 'string' || typeof to !== 'string') continue;
+    if (from.trim() === '' || to.trim() === '' || from === to) continue;
+
+    redirects.push({ taxonomy: taxonomy as Taxonomy, from, to });
+  }
+  return redirects;
 }

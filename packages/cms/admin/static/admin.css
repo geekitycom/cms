@@ -729,3 +729,37 @@ button[type='submit']:hover,
 .admin-status-failed {
   color: var(--admin-error);
 }
+
+/* The taxonomy screens: a table of terms with an inline rename field in each
+   row, so a rename is one field and one button rather than a second screen. */
+
+.admin-inline {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.admin-inline input[type='text'] {
+  width: 12rem;
+  margin: 0;
+}
+
+.admin-inline button {
+  margin: 0;
+}
+
+/* A label the screen reader reads and the eye does not: every rename field
+   needs its own name, and printing "Rename eleventy to" beside each one would
+   say five times over what the column heading says once. */
+
+.admin-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
