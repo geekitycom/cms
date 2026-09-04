@@ -1,6 +1,7 @@
 {# The editor behind /admin/posts/{slug} and /admin/pages/{slug}, and behind
    .../new. One template for both kinds: `kind` decides whether there is a date
-   and a tag field, and the handler decides which buttons the form carries. #}
+   and the taxonomy fields, and the handler decides which buttons the form
+   carries. #}
 {% extends "layouts/shell.njk" %}
 
 {% block title %}{{ heading }}{% endblock %}
@@ -71,6 +72,12 @@
       {% if kind.tagged %}
         <label for="editor-tags">Tags</label>
         <input id="editor-tags" name="tags" type="text" value="{{ form.tags }}" />
+        <p class="admin-hint">Separated by commas.</p>
+      {% endif %}
+
+      {% if kind.categorised %}
+        <label for="editor-categories">Categories</label>
+        <input id="editor-categories" name="categories" type="text" value="{{ form.categories }}" />
         <p class="admin-hint">Separated by commas.</p>
       {% endif %}
 

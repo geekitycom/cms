@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-02 13:23'
+updated_date: '2026-09-04 02:02'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -37,6 +37,7 @@ Keys the CMS reads and writes. Eleventy semantics are preserved.
 | `date` | posts | sets page date | publish date, ISO 8601 with offset |
 | `permalink` | yes | output URL | canonical URL path; always written explicitly so 11ty and the CMS agree |
 | `tags` | no | collections | taxonomy; `post` tag comes from `posts.json`, not from the file |
+| `categories` | no | data | the second taxonomy, archived at `/category/{name}/`; Eleventy reads it as an ordinary data key |
 | `draft` | no | honoured by an 11ty preprocessor | `true` hides from public site and feeds |
 | `description` | no | data | meta description and excerpt fallback |
 | `layout` | no | template | not written per file; comes from directory data |

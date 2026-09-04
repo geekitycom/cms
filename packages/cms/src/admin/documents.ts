@@ -22,7 +22,7 @@ import { UPLOADS_PATH } from './uploads.ts';
  * Everything that differs between the posts screens and the pages screens.
  *
  * Posts and pages are the same screens over the same store with two knobs
- * turned: a post carries a date and tags, a page carries neither. Keeping the
+ * turned: a post carries a date and taxonomy, a page carries neither. Keeping the
  * difference in data rather than in two copies of the code is what lets
  * `/admin/pages` be one call to {@link mountDocumentScreens}.
  */
@@ -41,6 +41,8 @@ export interface DocumentKind {
   dated: boolean;
   /** Whether a document of this kind carries tags. */
   tagged: boolean;
+  /** Whether a document of this kind is filed under categories. */
+  categorised: boolean;
   /**
    * Whether the editor offers the `eleventyExcludeFromCollections` flag. doc-2
    * mirrors it for pages that should not list; a post is in the archive by
@@ -58,7 +60,7 @@ export interface DocumentKind {
  */
 export const EXCLUDE_KEY = 'eleventyExcludeFromCollections';
 
-/** The posts screens: dated, tagged, filed under `posts/`. */
+/** The posts screens: dated, tagged, categorised, filed under `posts/`. */
 export const POST_KIND: DocumentKind = {
   type: 'post',
   section: 'posts',
@@ -67,6 +69,7 @@ export const POST_KIND: DocumentKind = {
   plural: 'Posts',
   dated: true,
   tagged: true,
+  categorised: true,
   excludable: false,
 };
 
@@ -79,6 +82,7 @@ export const PAGE_KIND: DocumentKind = {
   plural: 'Pages',
   dated: false,
   tagged: false,
+  categorised: false,
   excludable: true,
 };
 
@@ -137,7 +141,7 @@ export interface MountDocumentScreensOptions {
  * Both `/admin/posts` and `/admin/pages` are this function with a different
  * {@link DocumentKind}: the screens, the templates and the write path are
  * shared, and the kind decides what a file is called, whether the form has a
- * date and tags, and which section of the navigation marks itself.
+ * date and a taxonomy, and which section of the navigation marks itself.
  */
 export function mountDocumentScreens(
   app: Hono<GeekityEnv>,
@@ -244,6 +248,7 @@ async function saveFromForm(
     permalink: text(body['permalink']).trim(),
     date: text(body['date']).trim(),
     tags: text(body['tags']).trim(),
+    categories: text(body['categories']).trim(),
     description: text(body['description']).trim(),
     draft: body['draft'] !== undefined,
     exclude: body['exclude'] !== undefined,
@@ -304,6 +309,7 @@ async function saveFromForm(
     updated: new Date().toISOString(),
     permalink,
     tags: kind.tagged ? splitTags(form.tags) : [],
+    categories: kind.categorised ? splitTags(form.categories) : [],
     draft,
     ...(form.description === '' ? {} : { description: form.description }),
     ...optional('author', document?.author ?? currentUsername(c)),
@@ -445,7 +451,10 @@ function resolveExtra(
   return extra;
 }
 
-/** A comma-separated tag field as a list, without the blanks and the repeats. */
+/**
+ * A comma-separated taxonomy field as a list, without the blanks and the
+ * repeats. Tags and categories are both entered this way.
+ */
 export function splitTags(value: string): string[] {
   const tags: string[] = [];
   for (const tag of value.split(',')) {
@@ -529,6 +538,7 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     ...(form.date === '' ? {} : { date: form.date }),
     permalink: form.permalink === '' ? document.permalink : form.permalink,
     tags: kind.tagged ? splitTags(form.tags) : [],
+    categories: kind.categorised ? splitTags(form.categories) : [],
     draft: form.draft,
     ...(form.description === '' ? {} : { description: form.description }),
     ...optional('author', document.author),
@@ -666,6 +676,7 @@ export interface EditorForm {
   permalink: string;
   date: string;
   tags: string;
+  categories: string;
   description: string;
   draft: boolean;
   /** Whether `eleventyExcludeFromCollections` is set. Pages only. */
@@ -683,6 +694,7 @@ export function blankForm(kind: DocumentKind): EditorForm {
     permalink: '',
     date: kind.dated ? new Date().toISOString() : '',
     tags: '',
+    categories: '',
     description: '',
     draft: false,
     exclude: false,
@@ -699,6 +711,7 @@ export function formFor(document: Document): EditorForm {
     permalink: document.permalink,
     date: document.date ?? '',
     tags: document.tags.join(', '),
+    categories: document.categories.join(', '),
     description: document.description ?? '',
     draft: document.draft,
     exclude: document.extra[EXCLUDE_KEY] === true,
@@ -798,6 +811,7 @@ export interface DocumentRow {
   slug: string;
   author: string | undefined;
   tags: string;
+  categories: string;
   date: string | undefined;
   /** The most recent change to the document, for a kind with no publish date. */
   updated: string | undefined;
@@ -816,6 +830,7 @@ function listRow(kind: DocumentKind, document: Document): DocumentRow {
     slug: document.slug,
     author: document.author,
     tags: document.tags.join(', '),
+    categories: document.categories.join(', '),
     date: document.date,
     // Both come out of the index, so the listing costs no reads of its own.
     // A page that has never been saved through the admin has no `updated`, and

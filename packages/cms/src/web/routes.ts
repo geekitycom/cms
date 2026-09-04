@@ -1,6 +1,7 @@
 import type { Context, Hono } from 'hono';
 
 import type { Document } from '../content/document.ts';
+import type { ContentStore, ListOptions } from '../content/store.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import {
@@ -42,6 +43,26 @@ export const PAGE_SEGMENT = 'page';
 /** Root of the tag archives. */
 export const TAG_SEGMENT = 'tags';
 
+/** Root of the category archives. */
+export const CATEGORY_SEGMENT = 'category';
+
+/** Which taxonomy an archive is over. */
+export type Taxonomy = 'tag' | 'category';
+
+/** One archive: a taxonomy and the term whose documents it lists. */
+export interface TaxonomyTerm {
+  /** `tag` or `category`. */
+  taxonomy: Taxonomy;
+  /** The term itself, as the file spells it. */
+  term: string;
+}
+
+/** The URL segment each taxonomy's archives live under. */
+const TAXONOMY_SEGMENTS: Readonly<Record<Taxonomy, string>> = {
+  tag: TAG_SEGMENT,
+  category: CATEGORY_SEGMENT,
+};
+
 /**
  * Register the public site on a Hono app.
  *
@@ -54,13 +75,13 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   app.get(`${THEME_ASSET_PREFIX}*`, themeAsset);
   app.get(`${UPLOAD_ASSET_PREFIX}*`, upload);
 
-  app.get('/', (c) => listing(c, { tag: undefined, pageNumber: 0 }));
+  app.get('/', (c) => listing(c, { term: undefined, pageNumber: 0 }));
 
   app.get(`/${PAGE_SEGMENT}/:page{[0-9]+}/`, (c) => {
     const requested = Number(c.req.param('page'));
     // Page one is the home page; it does not get a second URL.
     if (requested <= 1) return c.redirect('/', 301);
-    return listing(c, { tag: undefined, pageNumber: requested - 1 });
+    return listing(c, { term: undefined, pageNumber: requested - 1 });
   });
 
   // Feeds are routes rather than representations, so a reader's careless
@@ -73,14 +94,22 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   app.get(`/${TAG_SEGMENT}/:tag/${FEED_FILES.atom}`, (c) => feed(c, 'atom', c.req.param('tag')));
   app.get(`/${TAG_SEGMENT}/:tag/${FEED_FILES.json}`, (c) => feed(c, 'json', c.req.param('tag')));
 
-  app.get(`/${TAG_SEGMENT}/:tag/`, (c) => listing(c, { tag: c.req.param('tag'), pageNumber: 0 }));
+  // The two taxonomies are the same archive over two tables, so they are
+  // registered from one loop and can never drift apart.
+  for (const taxonomy of ['tag', 'category'] as const) {
+    const segment = TAXONOMY_SEGMENTS[taxonomy];
 
-  app.get(`/${TAG_SEGMENT}/:tag/${PAGE_SEGMENT}/:page{[0-9]+}/`, (c) => {
-    const tag = c.req.param('tag');
-    const requested = Number(c.req.param('page'));
-    if (requested <= 1) return c.redirect(tagHref(tag, 0), 301);
-    return listing(c, { tag, pageNumber: requested - 1 });
-  });
+    app.get(`/${segment}/:term/`, (c) =>
+      listing(c, { term: { taxonomy, term: c.req.param('term') }, pageNumber: 0 }),
+    );
+
+    app.get(`/${segment}/:term/${PAGE_SEGMENT}/:page{[0-9]+}/`, (c) => {
+      const term: TaxonomyTerm = { taxonomy, term: c.req.param('term') };
+      const requested = Number(c.req.param('page'));
+      if (requested <= 1) return c.redirect(termHref(term, 0), 301);
+      return listing(c, { term, pageNumber: requested - 1 });
+    });
+  }
 
   app.notFound(resolveDocument);
 }
@@ -109,8 +138,9 @@ function resolveDocument(c: Context<GeekityEnv>): Response {
       if (found !== undefined) return negotiateDocument(c, found, extension.representation);
     }
 
-    // `/index.json`, `/page/2/index.json`, `/tags/x/index.json`: the same
-    // escape hatch over a listing, for the representations a listing has.
+    // `/index.json`, `/page/2/index.json`, `/tags/x/index.json`,
+    // `/category/x/index.json`: the same escape hatch over a listing, for the
+    // representations a listing has.
     if (LISTING_REPRESENTATIONS.includes(extension.representation)) {
       for (const candidate of extension.paths) {
         const request = parseListingPath(candidate);
@@ -208,46 +238,79 @@ function canonicalTarget(c: Context<GeekityEnv>, pathname: string): string | und
   const listing = parseListingPath(pathname);
   if (listing === undefined) return undefined;
 
-  // The home listing exists even with nothing on it; a tag archive does not.
-  const total = listing.tag === undefined ? store.counts().posts : store.countByTag(listing.tag);
-  if (listing.tag !== undefined && total === 0) return undefined;
+  // The home listing exists even with nothing on it; a taxonomy archive does not.
+  const total = countListing(store, listing.term);
+  if (listing.term !== undefined && total === 0) return undefined;
 
   const totalPages = Math.max(1, Math.ceil(total / renderer.pageSize()));
   if (listing.pageNumber >= totalPages) return undefined;
 
-  return listing.tag === undefined
-    ? homeHref(listing.pageNumber)
-    : tagHref(listing.tag, listing.pageNumber);
+  return listingHref(listing.term, listing.pageNumber);
 }
 
 /** Which page of which listing a request is for. */
 interface ListingRequest {
-  /** The tag whose archive this is, or `undefined` for the home listing. */
-  tag: string | undefined;
+  /** The archive this is, or `undefined` for the home listing. */
+  term: TaxonomyTerm | undefined;
   /** Zero-based index of the page. */
   pageNumber: number;
 }
 
-/** `/`, `/page/N/`, `/tags/x/` and `/tags/x/page/N/`, as a listing to check. */
+/**
+ * `/`, `/page/N/`, and either taxonomy's `/{base}/x/` and `/{base}/x/page/N/`,
+ * as a listing to check.
+ */
 function parseListingPath(pathname: string): ListingRequest | undefined {
   const segments = pathname.split('/').filter((segment) => segment !== '');
 
-  if (segments.length === 0) return { tag: undefined, pageNumber: 0 };
+  if (segments.length === 0) return { term: undefined, pageNumber: 0 };
 
   if (segments[0] === PAGE_SEGMENT && segments.length === 2) {
     const page = pageIndex(segments[1]);
-    return page === undefined ? undefined : { tag: undefined, pageNumber: page };
+    return page === undefined ? undefined : { term: undefined, pageNumber: page };
   }
 
-  if (segments[0] !== TAG_SEGMENT || segments[1] === undefined) return undefined;
-  const tag = segments[1];
+  const taxonomy = taxonomyForSegment(segments[0]);
+  if (taxonomy === undefined || segments[1] === undefined) return undefined;
+  const term: TaxonomyTerm = { taxonomy, term: segments[1] };
 
-  if (segments.length === 2) return { tag, pageNumber: 0 };
+  if (segments.length === 2) return { term, pageNumber: 0 };
   if (segments.length === 4 && segments[2] === PAGE_SEGMENT) {
     const page = pageIndex(segments[3]);
-    return page === undefined ? undefined : { tag, pageNumber: page };
+    return page === undefined ? undefined : { term, pageNumber: page };
   }
   return undefined;
+}
+
+/** The taxonomy a first URL segment names, or `undefined` when it names none. */
+function taxonomyForSegment(segment: string | undefined): Taxonomy | undefined {
+  for (const taxonomy of ['tag', 'category'] as const) {
+    if (TAXONOMY_SEGMENTS[taxonomy] === segment) return taxonomy;
+  }
+  return undefined;
+}
+
+/** How many published documents a listing holds. */
+function countListing(store: ContentStore, term: TaxonomyTerm | undefined): number {
+  if (term === undefined) return store.counts().posts;
+  return term.taxonomy === 'tag' ? store.countByTag(term.term) : store.countByCategory(term.term);
+}
+
+/** One page of a listing's documents, newest first. */
+function listListing(
+  store: ContentStore,
+  term: TaxonomyTerm | undefined,
+  paging: ListOptions,
+): Document[] {
+  if (term === undefined) return store.listPosts(paging);
+  return term.taxonomy === 'tag'
+    ? store.listByTag(term.term, paging)
+    : store.listByCategory(term.term, paging);
+}
+
+/** The URL of a page of a listing: the home archive's, or a taxonomy's. */
+function listingHref(term: TaxonomyTerm | undefined, index: number): string {
+  return term === undefined ? homeHref(index) : termHref(term, index);
 }
 
 /**
@@ -267,27 +330,27 @@ function listing(
   representation: Representation | undefined = selectFromAccept(c, LISTING_REPRESENTATIONS),
 ): Response {
   const { store, renderer } = c.var;
-  const { tag } = request;
+  const { term } = request;
   const size = renderer.pageSize();
 
-  // A tag archive only exists while something carries the tag; the home
+  // A taxonomy archive only exists while something carries the term; the home
   // listing exists even with nothing on it.
-  const total = tag === undefined ? store.counts().posts : store.countByTag(tag);
-  if (tag !== undefined && total === 0) return notFound(c);
+  const total = countListing(store, term);
+  if (term !== undefined && total === 0) return notFound(c);
 
-  const href = tag === undefined ? homeHref(request.pageNumber) : tagHref(tag, request.pageNumber);
+  const href = listingHref(term, request.pageNumber);
   const pagination = paginate({
     total,
     size,
     pageNumber: request.pageNumber,
-    hrefForPage: (index) => (tag === undefined ? homeHref(index) : tagHref(tag, index)),
+    hrefForPage: (index) => listingHref(term, index),
   });
 
   if (request.pageNumber >= pagination.totalPages) return notFound(c);
   if (representation === undefined) return notAcceptableResponse(href, LISTING_REPRESENTATIONS);
 
   const paging = { limit: size, offset: offsetForPage(request.pageNumber, size) };
-  const documents = tag === undefined ? store.listPosts(paging) : store.listByTag(tag, paging);
+  const documents = listListing(store, term, paging);
 
   const full = wantsFullDocuments(c);
   const body =
@@ -296,11 +359,11 @@ function listing(
           documentJson(document, { baseUrl: c.var.config.baseUrl, body: full }),
         )
       : renderer.renderListing({
-          title: tag ?? renderer.site().title,
+          title: term?.term ?? renderer.site().title,
           url: href,
           documents,
           pagination,
-          ...(tag === undefined ? {} : { tag, template: TEMPLATES.tag }),
+          ...(term === undefined ? {} : taxonomyContext(term)),
         });
 
   const validated = representation !== 'html' || !c.var.config.watch;
@@ -431,8 +494,38 @@ export function homeHref(index: number): string {
 
 /** The URL of a page of a tag archive, by zero-based index. */
 export function tagHref(tag: string, index: number): string {
-  const root = `/${TAG_SEGMENT}/${encodeURIComponent(tag)}/`;
+  return termHref({ taxonomy: 'tag', term: tag }, index);
+}
+
+/** The URL of a page of a category archive, by zero-based index. */
+export function categoryHref(category: string, index: number): string {
+  return termHref({ taxonomy: 'category', term: category }, index);
+}
+
+/**
+ * The URL of a page of either taxonomy's archive, by zero-based index.
+ *
+ * This is the one place a taxonomy archive URL is spelled, so the routes, the
+ * pager, the canonical redirect, the theme links and the ActivityStreams
+ * hashtags cannot disagree about where an archive lives.
+ */
+export function termHref(term: TaxonomyTerm, index: number): string {
+  const root = `/${TAXONOMY_SEGMENTS[term.taxonomy]}/${encodeURIComponent(term.term)}/`;
   return index === 0 ? root : `${root}${PAGE_SEGMENT}/${String(index + 1)}/`;
+}
+
+/**
+ * What the theme is told about a taxonomy archive: the term under the name of
+ * its taxonomy, and the layout that taxonomy uses.
+ */
+function taxonomyContext(term: TaxonomyTerm): {
+  tag?: string;
+  category?: string;
+  template: string;
+} {
+  return term.taxonomy === 'tag'
+    ? { tag: term.term, template: TEMPLATES.tag }
+    : { category: term.term, template: TEMPLATES.category };
 }
 
 /** The URL of a feed: the whole archive's, or one tag's. */

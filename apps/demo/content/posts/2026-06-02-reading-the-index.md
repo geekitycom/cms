@@ -4,6 +4,8 @@ date: '2026-06-02T07:30:00-05:00'
 permalink: /reading-the-index/
 tags:
   - sqlite
+categories:
+  - engineering
 description: A post that keeps a flat URL, because a permalink in the front matter always wins.
 author: Andrew Shell
 ---

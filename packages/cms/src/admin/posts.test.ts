@@ -16,6 +16,7 @@ interface Seed {
   permalink: string;
   date?: string | undefined;
   tags?: string[] | undefined;
+  categories?: string[] | undefined;
   author?: string | undefined;
   description?: string | undefined;
   draft?: boolean | undefined;
@@ -36,6 +37,9 @@ async function seeded(documents: Seed[]): Promise<string> {
       document.date === undefined ? undefined : `date: ${document.date}`,
       `permalink: ${document.permalink}`,
       document.tags === undefined ? undefined : `tags: [${document.tags.join(', ')}]`,
+      document.categories === undefined
+        ? undefined
+        : `categories: [${document.categories.join(', ')}]`,
       document.draft === true ? 'draft: true' : undefined,
       document.author === undefined ? undefined : `author: ${document.author}`,
       document.description === undefined ? undefined : `description: ${document.description}`,
@@ -80,6 +84,7 @@ async function submit(
     permalink: field(html, 'permalink') ?? '',
     date: field(html, 'date') ?? '',
     tags: field(html, 'tags') ?? '',
+    categories: field(html, 'categories') ?? '',
     description: field(html, 'description') ?? '',
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
     action: 'update',
@@ -93,7 +98,7 @@ async function submit(
 }
 
 describe('the posts listing', () => {
-  it('shows every live post with its author, tags, date and status', async () => {
+  it('shows every live post with its author, tags, categories, date and status', async () => {
     const contentDir = await seeded([
       {
         file: 'posts/2026-01-02-published.md',
@@ -101,6 +106,7 @@ describe('the posts listing', () => {
         date: '2026-01-02',
         permalink: '/2026/01/published/',
         tags: ['essays', 'notes'],
+        categories: ['general', 'meta'],
         author: 'ada',
       },
       {
@@ -122,6 +128,7 @@ describe('the posts listing', () => {
     assert.match(html, /<a href="\/admin\/posts\/hidden">Still cooking<\/a>/);
     assert.match(html, />ada</, 'the author column');
     assert.match(html, />essays, notes</, 'the tag column');
+    assert.match(html, />general, meta</, 'the category column');
     assert.match(html, /2026-01-02/, 'the date column');
     assert.match(html, /admin-status-draft">Draft</, 'and which of them is a draft');
   });
@@ -207,7 +214,16 @@ describe('the post editor', () => {
     assert.equal(response.status, 200);
 
     const html = await response.text();
-    for (const field of ['title', 'slug', 'permalink', 'date', 'tags', 'description', 'body']) {
+    for (const field of [
+      'title',
+      'slug',
+      'permalink',
+      'date',
+      'tags',
+      'categories',
+      'description',
+      'body',
+    ]) {
       assert.match(html, new RegExp(`name="${field}"`), field);
     }
     assert.match(html, /name="draft" type="checkbox"/, 'the draft checkbox');
@@ -226,6 +242,7 @@ describe('the post editor', () => {
         date: '2026-01-02T09:00:00-05:00',
         permalink: '/2026/01/published/',
         tags: ['essays', 'notes'],
+        categories: ['general'],
         description: 'What it is about.',
         body: 'The body of the thing.',
       },
@@ -241,6 +258,7 @@ describe('the post editor', () => {
     assert.match(html, /name="slug" type="text" value="published"/);
     assert.match(html, /name="permalink" type="text" value="\/2026\/01\/published\/"/);
     assert.match(html, /name="tags" type="text" value="essays, notes"/);
+    assert.match(html, /name="categories" type="text" value="general"/);
     assert.match(html, /The body of the thing\./);
     assert.match(html, new RegExp(`name="hash" value="${document.hash}"`));
 
@@ -254,6 +272,58 @@ describe('the post editor', () => {
     const agent = await signedIn(cms);
 
     assert.equal((await agent.get('/admin/posts/never-written')).status, 404);
+  });
+
+  it('saves categories, shows them on reload and serves the archive', async () => {
+    const contentDir = await seeded([]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await submit(agent, '/admin/posts/new', {
+      title: 'Filed away',
+      date: '2026-03-04T10:00:00Z',
+      tags: 'essays',
+      categories: 'general, meta, general',
+      body: 'Written in a textarea.',
+      action: 'publish',
+    });
+    assert.equal(response.status, 303);
+
+    const written = await readFile(
+      path.join(contentDir, 'posts', '2026-03-04-filed-away.md'),
+      'utf8',
+    );
+    assert.match(written, /^categories:\n {2}- general\n {2}- meta$/m, 'and no repeat');
+
+    const reloaded = await (await agent.get('/admin/posts/filed-away')).text();
+    assert.match(reloaded, /name="categories" type="text" value="general, meta"/);
+
+    const archive = await cms.app.request('/category/general/');
+    assert.equal(archive.status, 200);
+    assert.match(await archive.text(), /Filed away/);
+  });
+
+  it('takes categories back off a post that had them', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+        categories: ['general'],
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/posts/published', { categories: '' });
+
+    const written = await readFile(
+      path.join(contentDir, 'posts', '2026-01-02-published.md'),
+      'utf8',
+    );
+    assert.ok(!/^categories:/m.test(written), 'the key is gone, not left empty');
+    assert.equal((await cms.app.request('/category/general/')).status, 404);
   });
 });
 

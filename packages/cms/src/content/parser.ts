@@ -54,7 +54,8 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
   const content: DocumentContent = {
     title,
     permalink,
-    tags: asTags(data['tags']),
+    tags: asTerms(data['tags']),
+    categories: asTerms(data['categories']),
     draft: data['draft'] === true,
     extra: extraOf(data),
     body,
@@ -167,12 +168,18 @@ function asDate(value: unknown, key: string, path: string): string | undefined {
   return text;
 }
 
-/** Eleventy accepts one tag as a bare string; the CMS always keeps a list. */
-function asTags(value: unknown): string[] {
+/**
+ * One taxonomy's terms: `tags` or `categories`.
+ *
+ * Eleventy accepts one tag as a bare string, so both keys do; the CMS always
+ * keeps a list, and both taxonomies are read the same way so a category
+ * behaves exactly as a tag does.
+ */
+function asTerms(value: unknown): string[] {
   if (value === undefined || value === null) return [];
   if (typeof value === 'string') return value === '' ? [] : [value];
   if (!Array.isArray(value)) return [];
-  return value.filter((tag): tag is string => typeof tag === 'string' && tag !== '');
+  return value.filter((term): term is string => typeof term === 'string' && term !== '');
 }
 
 function asActivityPub(value: unknown, path: string): ActivityPubMetadata | undefined {

@@ -5,6 +5,8 @@ permalink: /2026/08/one-url-many-representations/
 tags:
   - content
   - web
+categories:
+  - engineering
 description: A post is a page, a Markdown file and a JSON object at the same address.
 author: Andrew Shell
 ---

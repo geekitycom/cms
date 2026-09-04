@@ -38,6 +38,7 @@ function draft(overrides: Partial<DocumentContent> = {}): DocumentContent {
     date: '2026-09-02T10:00:00.000Z',
     permalink: '/2026/09/hello-world/',
     tags: [],
+    categories: [],
     draft: true,
     extra: {},
     body: 'A first paragraph.',

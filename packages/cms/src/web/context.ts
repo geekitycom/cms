@@ -67,6 +67,8 @@ export interface DocumentContext {
   date?: Date | undefined;
   /** Taxonomy, in the order the file lists it. */
   tags: string[];
+  /** The second taxonomy: what the document is filed under, in file order. */
+  categories: string[];
   /** The Markdown body rendered to HTML. Templates print it with `| safe`. */
   content: string;
   /** The document's URL path, the same value as `page.url`. */
@@ -102,6 +104,7 @@ export function documentContext(document: Document): DocumentContext {
     title: document.title,
     ...optional('date', date),
     tags: document.tags,
+    categories: document.categories,
     content: document.html,
     url: document.permalink,
     type: document.type,

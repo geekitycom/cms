@@ -90,12 +90,16 @@ export type { Pagination, PaginateOptions } from './pagination.ts';
 export { createRenderer, TEMPLATES } from './render.ts';
 export type { CreateRendererOptions, Listing, Renderer } from './render.ts';
 export {
+  categoryHref,
+  CATEGORY_SEGMENT,
   feedHref,
   homeHref,
   mountPublicSite,
   PAGE_SEGMENT,
   tagHref,
   TAG_SEGMENT,
+  termHref,
 } from './routes.ts';
+export type { Taxonomy, TaxonomyTerm } from './routes.ts';
 export { createTemplateEnvironment, formatDate, PACKAGED_THEME_DIR } from './templates.ts';
 export type { CreateTemplateEnvironmentOptions, DateFormat } from './templates.ts';

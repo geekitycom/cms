@@ -39,6 +39,7 @@ export function documentContent(document: DocumentContent): DocumentContent {
     ...(document.updated === undefined ? {} : { updated: document.updated }),
     permalink: document.permalink,
     tags: [...document.tags],
+    categories: [...document.categories],
     draft: document.draft,
     ...(document.description === undefined ? {} : { description: document.description }),
     ...(document.author === undefined ? {} : { author: document.author }),
@@ -71,6 +72,7 @@ export function documentFrontMatter(document: DocumentContent): Record<string, u
   if (document.updated !== undefined) data['updated'] = document.updated;
   data['permalink'] = document.permalink;
   if (document.tags.length > 0) data['tags'] = [...document.tags];
+  if (document.categories.length > 0) data['categories'] = [...document.categories];
   if (document.draft) data['draft'] = true;
   if (document.description !== undefined) data['description'] = document.description;
   if (document.author !== undefined) data['author'] = document.author;

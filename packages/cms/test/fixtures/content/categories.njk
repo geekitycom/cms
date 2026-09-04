@@ -1,0 +1,22 @@
+---
+pagination:
+  data: collections.categories
+  size: 1
+  alias: category
+permalink: '/category/{{ category.name | urlencode }}/'
+eleventyExcludeFromCollections: true
+---
+{#
+  A category archive per category in use, at the URL the CMS serves one from.
+
+  Eleventy builds collections from `tags` on its own; `categories` is an
+  ordinary data key to it, so the example config exposes `collections.categories`
+  and this is the template that turns it into pages. It lives in the fixtures
+  rather than in the package so `test/eleventy.test.ts` can prove the URLs match.
+#}
+<h1>Filed under &ldquo;{{ category.name }}&rdquo;</h1>
+<ul>
+  {% for post in category.posts %}
+  <li><a href="{{ post.url }}">{{ post.data.title }}</a></li>
+  {% endfor %}
+</ul>

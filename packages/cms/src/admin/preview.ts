@@ -61,6 +61,7 @@ function previewDocument(
     title: title === '' ? 'Untitled' : title,
     ...(date === undefined ? {} : { date }),
     tags: splitTags(text(body['tags'])),
+    categories: splitTags(text(body['categories'])),
     draft: body['draft'] !== undefined,
     ...(text(body['description']) === '' ? {} : { description: text(body['description']).trim() }),
     ...(currentUsername(c) === undefined ? {} : { author: currentUsername(c) }),

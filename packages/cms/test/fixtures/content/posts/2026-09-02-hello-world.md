@@ -5,6 +5,9 @@ permalink: /2026/09/hello-world/
 tags:
   - introductions
   - eleventy
+categories:
+  - general
+  - meta
 description: The first post on a file-first site.
 author: andrew
 ---

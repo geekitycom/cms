@@ -5,6 +5,8 @@ updated: '2026-08-20T11:02:00-04:00'
 permalink: /2026/08/notes-from-a-draft/
 tags:
   - notes
+categories:
+  - unpublished
 draft: true
 description: An unfinished post that the public site must not show.
 author: andrew

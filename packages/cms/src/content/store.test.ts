@@ -46,6 +46,7 @@ function post(overrides: Partial<Document> = {}): Document {
     title: 'Hello, World!',
     date: '2026-09-02T09:00:00-05:00',
     tags: ['introductions'],
+    categories: ['general'],
     draft: false,
     extra: {},
     body: 'Hello.',
@@ -167,20 +168,91 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
     }
   });
+
+  it('empties an index written before categories existed, so the next scan re-reads it', async () => {
+    const dir = await dataDir();
+
+    // A version 1 database: the documents table, with a row in it, and nothing
+    // that knows about categories.
+    const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
+    legacy.exec(`
+      CREATE TABLE migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+      ${MIGRATION_ONE}
+      INSERT INTO migrations (version, applied_at) VALUES (1, '2026-01-01T00:00:00.000Z');
+      INSERT INTO documents (
+        path, type, slug, permalink, title, date, date_sort, updated, draft, trashed,
+        description, author, activitypub, extra, body, html, hash
+      ) VALUES (
+        'posts/old.md', 'post', 'old', '/old/', 'Old', NULL, NULL, NULL, 0, 0,
+        NULL, NULL, NULL, '{}', 'Old.', '<p>Old.</p>', 'b'
+      );
+    `);
+    legacy.close();
+
+    const upgraded = openContentStore({ dataDir: dir });
+    try {
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2]);
+      // The hash of a file with no categories has not changed, so a sync would
+      // leave a surviving row alone and never learn its categories. The row
+      // has to go; the file it was derived from is still on disk.
+      assert.equal(upgraded.counts().total, 0);
+
+      upgraded.upsert(post({ path: 'posts/old.md', permalink: '/old/', slug: 'old' }));
+      assert.deepEqual(upgraded.getByPath('posts/old.md')?.categories, ['general']);
+    } finally {
+      upgraded.close();
+    }
+  });
 });
+
+/** The version 1 schema, as the package shipped it, for the upgrade test above. */
+const MIGRATION_ONE = `
+  CREATE TABLE documents (
+    path         TEXT PRIMARY KEY,
+    type         TEXT NOT NULL,
+    slug         TEXT NOT NULL,
+    permalink    TEXT NOT NULL,
+    title        TEXT NOT NULL,
+    date         TEXT,
+    date_sort    TEXT,
+    updated      TEXT,
+    draft        INTEGER NOT NULL,
+    trashed      INTEGER NOT NULL,
+    description  TEXT,
+    author       TEXT,
+    activitypub  TEXT,
+    extra        TEXT NOT NULL,
+    body         TEXT NOT NULL,
+    html         TEXT NOT NULL,
+    hash         TEXT NOT NULL
+  );
+
+  CREATE UNIQUE INDEX documents_permalink ON documents (permalink);
+  CREATE INDEX documents_slug ON documents (slug);
+  CREATE INDEX documents_listing ON documents (type, draft, trashed, date_sort DESC);
+
+  CREATE TABLE document_tags (
+    path     TEXT NOT NULL REFERENCES documents (path) ON DELETE CASCADE,
+    tag      TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (path, tag)
+  );
+
+  CREATE INDEX document_tags_tag ON document_tags (tag);
+`;
 
 /** Three published posts, newest last in this list, plus the odd ones out. */
 function corpus(): Document[] {
@@ -192,6 +264,7 @@ function corpus(): Document[] {
       title: 'Oldest',
       date: '2026-01-01T00:00:00Z',
       tags: ['eleventy'],
+      categories: ['general'],
     }),
     post({
       path: 'posts/2026-06-01-middle.md',
@@ -201,6 +274,7 @@ function corpus(): Document[] {
       // Written as an offset, and later than the UTC noon below once normalised.
       date: '2026-06-01T09:00:00-05:00',
       tags: ['eleventy', 'sqlite'],
+      categories: ['general', 'engineering'],
     }),
     post({
       path: 'posts/2026-06-01-earlier-same-day.md',
@@ -209,6 +283,7 @@ function corpus(): Document[] {
       title: 'Earlier Same Day',
       date: '2026-06-01T12:00:00Z',
       tags: ['sqlite'],
+      categories: ['engineering'],
     }),
     post({
       path: 'posts/2026-09-01-newest.md',
@@ -217,6 +292,7 @@ function corpus(): Document[] {
       title: 'Newest',
       date: '2026-09-01T00:00:00Z',
       tags: ['eleventy'],
+      categories: ['general'],
     }),
     post({
       path: 'posts/2026-09-02-a-draft.md',
@@ -226,6 +302,7 @@ function corpus(): Document[] {
       date: '2026-09-02T00:00:00Z',
       draft: true,
       tags: ['eleventy'],
+      categories: ['general'],
     }),
     post({
       path: '_trash/posts/2026-09-03-thrown-away.md',
@@ -234,6 +311,7 @@ function corpus(): Document[] {
       title: 'Thrown Away',
       date: '2026-09-03T00:00:00Z',
       tags: ['eleventy'],
+      categories: ['general'],
     }),
     post({
       type: 'page',
@@ -243,6 +321,7 @@ function corpus(): Document[] {
       title: 'About',
       date: undefined,
       tags: ['eleventy'],
+      categories: ['general'],
     }),
   ];
 }
@@ -340,6 +419,62 @@ describe('listByTag', () => {
   });
 });
 
+describe('listByCategory', () => {
+  it('returns the documents filed under a category, newest first', async () => {
+    const index = await populated();
+
+    assert.deepEqual(titles(index.listByCategory('engineering')), ['Middle', 'Earlier Same Day']);
+  });
+
+  it('excludes drafts and trashed documents and paginates', async () => {
+    const index = await populated();
+
+    assert.deepEqual(titles(index.listByCategory('general')), [
+      'Newest',
+      'Middle',
+      'Oldest',
+      'About',
+    ]);
+    assert.deepEqual(titles(index.listByCategory('general', { type: 'post' })), [
+      'Newest',
+      'Middle',
+      'Oldest',
+    ]);
+    assert.deepEqual(titles(index.listByCategory('general', { limit: 1, offset: 1 })), ['Middle']);
+    assert.equal(index.countByCategory('general'), 4);
+    assert.equal(index.countByCategory('general', { type: 'post' }), 3);
+    assert.deepEqual(index.listByCategory('nothing-is-filed-here'), []);
+  });
+
+  it('reports the categories in use with their counts', async () => {
+    const index = await populated();
+
+    assert.deepEqual(index.listCategories(), [
+      { category: 'general', count: 4 },
+      { category: 'engineering', count: 2 },
+    ]);
+  });
+
+  it('keeps the two taxonomies apart', async () => {
+    const index = await populated();
+
+    assert.deepEqual(index.listByCategory('eleventy'), []);
+    assert.deepEqual(index.listByTag('general'), []);
+  });
+
+  it('replaces a document’s categories on a rewrite rather than adding to them', async () => {
+    const index = await store();
+    index.upsert(post({ categories: ['general', 'engineering'] }));
+
+    index.upsert(post({ categories: ['engineering'] }));
+
+    assert.deepEqual(index.getByPath('posts/2026-09-02-hello-world.md')?.categories, [
+      'engineering',
+    ]);
+    assert.equal(index.countByCategory('general'), 0);
+  });
+});
+
 describe('listAll', () => {
   it('shows the admin drafts alongside published documents, but not the trash', async () => {
     const index = await populated();
@@ -354,13 +489,17 @@ describe('listAll', () => {
     ]);
   });
 
-  it('filters by type, draft, trash and tag', async () => {
+  it('filters by type, draft, trash, tag and category', async () => {
     const index = await populated();
 
     assert.deepEqual(titles(index.listAll({ type: 'page' })), ['About']);
     assert.deepEqual(titles(index.listAll({ draft: true })), ['A Draft']);
     assert.deepEqual(titles(index.listAll({ trashed: true })), ['Thrown Away']);
     assert.deepEqual(titles(index.listAll({ tag: 'sqlite' })), ['Middle', 'Earlier Same Day']);
+    assert.deepEqual(titles(index.listAll({ category: 'engineering' })), [
+      'Middle',
+      'Earlier Same Day',
+    ]);
     assert.deepEqual(titles(index.listAll({ limit: 1 })), ['A Draft']);
   });
 

@@ -23,6 +23,7 @@ function content(overrides: Partial<DocumentContent> = {}): DocumentContent {
     title: 'A Title',
     permalink: '/a-title/',
     tags: [],
+    categories: [],
     draft: false,
     extra: {},
     body: 'Body.',
@@ -38,6 +39,7 @@ describe('serializeDocument', () => {
       updated: '2026-01-03T00:00:00Z',
       permalink: '/2026/01/order-matters/',
       tags: ['one', 'two'],
+      categories: ['general'],
       draft: true,
       description: 'Every modelled key, in order.',
       author: 'andrew',
@@ -55,6 +57,8 @@ permalink: /2026/01/order-matters/
 tags:
   - one
   - two
+categories:
+  - general
 draft: true
 description: Every modelled key, in order.
 author: andrew
@@ -104,6 +108,22 @@ Body.
 
     assert.match(text, /\ndate: '2026-01-02T03:04:05-05:00'\n/);
     assert.equal(parseDocument(text, { path: 'posts/a.md' }).date, '2026-01-02T03:04:05-05:00');
+  });
+
+  it('leaves an empty category list out, as it does an empty tag list', () => {
+    assert.doesNotMatch(serializeDocument(content({ categories: [] })), /categories/);
+  });
+
+  it('round trips a categorised document through a write and a parse', () => {
+    const text = serializeDocument(
+      content({ tags: ['notes'], categories: ['general', 'meta'], date: '2026-01-02T03:04:05Z' }),
+    );
+
+    const parsed = parseDocument(text, { path: 'posts/a.md' });
+
+    assert.deepEqual(parsed.categories, ['general', 'meta']);
+    assert.deepEqual(parsed.tags, ['notes']);
+    assert.equal(serializeDocument(parsed), text);
   });
 
   it('drops an activitypub block with nothing in it', () => {

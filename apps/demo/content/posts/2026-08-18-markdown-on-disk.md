@@ -4,8 +4,14 @@ date: '2026-08-18T09:15:00-05:00'
 permalink: /2026/08/markdown-on-disk/
 tags:
   - content
+categories:
+  - general
+  - engineering
 description: Why the files are the source of truth and the database is only an index.
 author: Andrew Shell
+activitypub:
+  id: http://localhost:3000/ap/posts/markdown-on-disk
+  published: '2026-08-18T09:15:00-05:00'
 ---
 
 Every post on this site is a file. `content/posts/2026-08-18-markdown-on-disk.md`
