@@ -345,6 +345,8 @@ Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
 | `/category/{name}/`    | The second taxonomy, paginated the same way at `/category/{name}/page/2/`.     |
 | `/feed/`               | The recent posts as RSS 2.0; `/feed/atom/` and `/feed/json/` are its siblings. |
 | an archive's `feed/`   | The same three over one tag or category, e.g. `/tag/{tag}/feed/atom/`.         |
+| `/sitemap.xml`         | Every public URL with its `lastmod`, split into an index past 50,000 of them.  |
+| `/robots.txt`          | Everything but `/admin/`, and the sitemap's absolute URL.                      |
 | `/theme/…`             | The theme's own files, from its `static/` directory, cacheable and validated.  |
 | `/uploads/…`           | Files under `content/uploads/`, at the URLs an Eleventy build copies them to.  |
 | anything else          | The theme's 404.                                                               |

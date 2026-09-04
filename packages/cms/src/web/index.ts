@@ -131,6 +131,23 @@ export type { CreateRendererOptions, Listing, Renderer } from './render.ts';
 export { commentsFeedHref, feedHref, homeHref, mountPublicSite } from './routes.ts';
 export { sanitizeCommentHtml } from './sanitize.ts';
 export {
+  robotsResponse,
+  robotsTxt,
+  ROBOTS_CONTENT_TYPE,
+  ROBOTS_PATH,
+  sitemapChildPath,
+  sitemapDate,
+  sitemapIndexXml,
+  sitemapResponse,
+  sitemapXml,
+  SITEMAP_CHILD_ROUTE,
+  SITEMAP_CONTENT_TYPE,
+  SITEMAP_MAX_URLS,
+  SITEMAP_NAMESPACE,
+  SITEMAP_PATH,
+} from './sitemap.ts';
+export type { SitemapResponseOptions, SitemapUrl } from './sitemap.ts';
+export {
   categoryHref,
   DEFAULT_TAXONOMY_BASES,
   PAGE_SEGMENT,

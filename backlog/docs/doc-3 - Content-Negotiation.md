@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 03:36'
+updated_date: '2026-09-04 05:21'
 ---
 # Content Negotiation
 
@@ -69,6 +69,22 @@ The two comments feeds carry the fediverse replies the inbox has logged: a `Crea
 A published post always has one, empty when nobody has answered: it exists, and a reader that subscribed early should keep polling. A permalink that is no published post 404s, and so does a page's, because only posts federate. A reply whose post is later unpublished or trashed leaves `/comments/feed/` with it.
 
 Each RSS post item points at its own comments three ways: `<comments>` (the page), `<wfw:commentRss>` (the feed) and `<source:comments count feedUrl>` (the feed and how many). The reply HTML is sanitised against an allowlist before it is published: it is markup a stranger wrote.
+
+## Crawlers
+
+Two more fixed routes, at the only paths a crawler looks for them:
+
+| URL | Body |
+| --- | --- |
+| `/sitemap.xml` | Every public URL as a `<urlset>`, or a `<sitemapindex>` once there are more than 50,000 |
+| `/sitemap-{n}.xml` | One file of an index, numbered from one; 404 while the whole sitemap fits in one |
+| `/robots.txt` | `User-agent: *`, `Disallow: /admin/`, and an absolute `Sitemap:` line |
+
+The sitemap lists the home archive and each of its pages, every public post and page, and every tag and category archive with each of its pages, under the bases the site holds at that moment. `<lastmod>` is `updated` else `date` for a document, and the newest of those on a listing page; something nothing dates carries no `<lastmod>` rather than an invented one. Drafts, the trash and posts whose date has not arrived are absent, because the sitemap is drawn from the same queries and the same `isPublicDocument` the listings use.
+
+Nothing else is disallowed in `robots.txt`. `/ap/` is left open on purpose: an actor and an object are documents meant to be fetched, and a crawler that follows one gets JSON it will ignore.
+
+Both are registered routes rather than anything resolved from the index, so a document permalinked at `/sitemap.xml` cannot take the URL a search engine polls, and both carry `ETag` and `Last-Modified` and answer conditional requests with 304 the way the feeds do.
 
 ## Caching
 

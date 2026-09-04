@@ -48,6 +48,14 @@ import type { ConditionalHeaders, Representation } from './negotiate.ts';
 import { offsetForPage, paginate } from './pagination.ts';
 import type { Pagination } from './pagination.ts';
 import { TEMPLATES } from './render.ts';
+import {
+  robotsResponse,
+  sitemapResponse,
+  ROBOTS_PATH,
+  SITEMAP_CHILD_ROUTE,
+  SITEMAP_PATH,
+} from './sitemap.ts';
+import type { SitemapUrl } from './sitemap.ts';
 import { PAGE_SEGMENT, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
@@ -83,6 +91,14 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
 
   // The site-wide comments feed, for the same reason and at WordPress's URL.
   app.get(commentsFeedHref(undefined), (c) => comments(c, undefined));
+
+  // The sitemap, its children and the robots file: fixed paths at the root of
+  // the site, which is the only place a crawler looks, and routes for the same
+  // reason the feeds are — no document permalinked there can take the URL a
+  // search engine polls.
+  app.get(SITEMAP_PATH, (c) => sitemap(c, undefined));
+  app.get(SITEMAP_CHILD_ROUTE, (c) => sitemap(c, Number(c.req.param('page'))));
+  app.get(ROBOTS_PATH, (c) => robotsResponse(c.var.config.baseUrl, conditionalHeaders(c)));
 
   // The taxonomy archives are deliberately not routes. A route table is fixed
   // when the app is built and the bases are a setting, so an archive is
@@ -623,6 +639,81 @@ function comments(c: Context<GeekityEnv>, document: Document | undefined): Respo
   };
 
   return commentsFeedResponse(source, conditionalHeaders(c));
+}
+
+/**
+ * The sitemap, or one of its children once the site is too big for one file.
+ *
+ * A child that does not exist 404s through the theme like any other missing
+ * URL: `/sitemap-1.xml` names nothing at all on a site whose whole sitemap
+ * fits, and a crawler asking for one should be told so rather than handed an
+ * empty file it would come back to.
+ */
+function sitemap(c: Context<GeekityEnv>, page: number | undefined): Response {
+  const response = sitemapResponse({
+    urls: sitemapUrls(c),
+    baseUrl: c.var.config.baseUrl,
+    page,
+    conditional: conditionalHeaders(c),
+  });
+  return response ?? notFound(c);
+}
+
+/**
+ * Every URL the public site publishes, in the order the sitemap lists them:
+ * the home archive's pages, then every post and page, then every tag archive
+ * and every category archive with their own pages.
+ *
+ * Everything here is spelled by the same functions the site's own links go
+ * through — {@link homeHref}, the permalinks, {@link termHref} — and drawn
+ * from the same queries the listings use, so a sitemap can never advertise a
+ * URL the site does not serve. Nothing hidden reaches it either: the index's
+ * public queries already exclude drafts, the trash and posts whose date has
+ * not arrived, and {@link isPublicDocument} is asked again with the store's
+ * own clock so the two answers cannot drift apart.
+ */
+function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
+  const { store, renderer } = c.var;
+  const now = store.now();
+  const size = renderer.pageSize();
+  const bases = renderer.taxonomyBases();
+  const urls: SitemapUrl[] = [];
+
+  /** The pages of one listing, each dated by the newest document on it. */
+  const listingPages = (
+    documents: readonly Document[],
+    hrefForPage: (index: number) => string,
+  ): void => {
+    const totalPages = Math.max(1, Math.ceil(documents.length / size));
+    for (let index = 0; index < totalPages; index += 1) {
+      const onPage = documents.slice(index * size, (index + 1) * size);
+      urls.push({ loc: hrefForPage(index), lastmod: latestModified(onPage) });
+    }
+  };
+
+  const posts = store.listPosts().filter((document) => isPublicDocument(document, now));
+  listingPages(posts, homeHref);
+
+  const pages = store
+    .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
+    .filter((document) => isPublicDocument(document, now));
+
+  for (const document of [...posts, ...pages]) {
+    urls.push({ loc: document.permalink, lastmod: lastModifiedOf(document) });
+  }
+
+  // A taxonomy archive exists only while something public carries the term,
+  // which is exactly what these two queries report.
+  for (const { tag } of store.listTags()) {
+    const term: TaxonomyTerm = { taxonomy: 'tag', term: tag };
+    listingPages(store.listByTag(tag), (index) => termHref(term, index, bases));
+  }
+  for (const { category } of store.listCategories()) {
+    const term: TaxonomyTerm = { taxonomy: 'category', term: category };
+    listingPages(store.listByCategory(category), (index) => termHref(term, index, bases));
+  }
+
+  return urls;
 }
 
 /**
