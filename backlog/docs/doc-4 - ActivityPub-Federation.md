@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 15:54'
+updated_date: '2026-09-04 16:21'
 ---
 # ActivityPub Federation
 
@@ -14,7 +14,7 @@ Federation is implemented with Fedify (`@fedify/fedify` 2.x) mounted into Hono t
 - Handle: `@{settings.actorHandle}@{host}`, default handle `blog`.
 - Type: `Person` by default with a setting to switch to `Service`. Some clients hide `Service` actors from timelines; `Person` is the safer default for a personal blog.
 - Profile fields come from settings: name = site title, summary = tagline, url = base URL, icon = uploaded avatar.
-- Key pairs (RSA-PKCS#1-v1.5 and Ed25519) are generated on first boot and stored in SQLite. Fedify's `setKeyPairsDispatcher` reads them.
+- Key pairs (RSA-PKCS#1-v1.5 and Ed25519) are generated on first boot and stored as JWK files under `data/keys/`, one per algorithm, named after the actor's identifier rather than its handle (`actor.rsassa-pkcs1-v1_5.jwk`, `actor.ed25519.jwk`) and written `0600` in a `0700` directory. Each file holds the private key alone; the public half is derived from it. Fedify's `setKeyPairsDispatcher` reads them. A file that will not import stops the boot rather than being replaced: regenerating would change the actor's identity and every follower's cached public key would stop verifying, and Fedify answers a throwing key pairs dispatcher with an actor document that has no `publicKey` at all, which peers would cache.
 
 ## Objects
 

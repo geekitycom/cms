@@ -47,7 +47,16 @@ export {
   logActivity,
 } from './inbox.ts';
 export type { SiteInboxContext } from './inbox.ts';
-export { loadActorKeyPairs, SITE_ACTOR_IDENTIFIER } from './keys.ts';
+export {
+  ACTOR_KEY_ALGORITHMS,
+  actorKeyFile,
+  actorKeysDir,
+  assertActorKeysUsable,
+  loadActorKeyPairs,
+  migrateActorKeysToFiles,
+  SITE_ACTOR_IDENTIFIER,
+} from './keys.ts';
+export type { ActorKeyAlgorithm } from './keys.ts';
 export { mountFederation } from './mount.ts';
 export {
   ACTOR_PATH,

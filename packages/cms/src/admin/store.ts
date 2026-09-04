@@ -95,39 +95,6 @@ export interface CreateSessionInput {
 export const SESSION_ID_BYTES = 32;
 
 /**
- * The two signature algorithms doc-4 asks a site actor to hold.
- *
- * `RSASSA-PKCS1-v1_5` signs HTTP Signatures, which is what Mastodon and most
- * of the fediverse verify; `Ed25519` signs FEP-8b32 object integrity proofs.
- * They are Fedify's own spellings, so a row round-trips into
- * `generateCryptoKeyPair` without translation.
- */
-export const ACTOR_KEY_ALGORITHMS = ['RSASSA-PKCS1-v1_5', 'Ed25519'] as const;
-
-/** One of {@link ACTOR_KEY_ALGORITHMS}. */
-export type ActorKeyAlgorithm = (typeof ACTOR_KEY_ALGORITHMS)[number];
-
-/** A stored actor key pair, both halves as serialized JWK. */
-export interface ActorKey {
-  /**
-   * Which actor the pair belongs to. The site actor's identifier is a
-   * constant, not the handle, so renaming the handle does not orphan the keys.
-   */
-  readonly identifier: string;
-  /** Which algorithm the pair is for. */
-  readonly algorithm: ActorKeyAlgorithm;
-  /** The private key as JWK, JSON encoded. Never leaves the server. */
-  readonly privateJwk: string;
-  /** The public key as JWK, JSON encoded. This is what the actor publishes. */
-  readonly publicJwk: string;
-  /** When the pair was generated, as an ISO 8601 instant. */
-  readonly createdAt: string;
-}
-
-/** An {@link ActorKey} before the store has stamped it with a creation time. */
-export type NewActorKey = Omit<ActorKey, 'createdAt'>;
-
-/**
  * A remote actor that follows this site.
  *
  * doc-4 keeps the followers in SQLite rather than in Fedify's KV store,
@@ -400,6 +367,18 @@ export interface AdminStore {
    */
   legacySettings(): LegacySetting[] | undefined;
   /**
+   * The rows of the actor key table an older version of this CMS wrote, or
+   * `undefined` when the table is gone — which it is on every site that has
+   * booted this version once.
+   *
+   * Key pairs live in `data/keys` now (decision-9). This is the one read left
+   * of the table they used to live in, and the reason it exists at all is that
+   * losing an actor's private key is the one loss a federated site cannot
+   * recover from; `migrateActorKeysToFiles` in `federation/keys.ts` writes them
+   * out before the table is dropped.
+   */
+  legacyActorKeys(): LegacyActorKey[] | undefined;
+  /**
    * Drop a table whose contents this version keeps in files instead.
    *
    * Called once the rows have been written out, and safe when the table is
@@ -421,17 +400,6 @@ export interface AdminStore {
   getState(key: string): string | undefined;
   /** Write one piece of that state. */
   setState(key: string, value: string): void;
-  /**
-   * Every key pair an actor holds, in {@link ACTOR_KEY_ALGORITHMS} order, so a
-   * caller handing them to Fedify gets HTTP Signatures first whatever order
-   * they were written in. Empty on a site that has not federated yet.
-   */
-  listActorKeys(identifier: string): ActorKey[];
-  /**
-   * Store one key pair, replacing whatever that actor held for the same
-   * algorithm. Rotating a key is therefore a write rather than a migration.
-   */
-  putActorKey(key: NewActorKey): ActorKey;
   /** How many actors follow the site. What the followers collection counts. */
   countFollowers(): number;
   /**
@@ -590,15 +558,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     putState: db.prepare(`
       INSERT INTO cms_state (key, value, updated_at) VALUES (?, ?, ?)
       ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-    `),
-    actorKeys: db.prepare('SELECT * FROM actor_keys WHERE identifier = ?'),
-    putActorKey: db.prepare(`
-      INSERT INTO actor_keys (identifier, algorithm, private_jwk, public_jwk, created_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT (identifier, algorithm) DO UPDATE SET
-        private_jwk = excluded.private_jwk,
-        public_jwk = excluded.public_jwk,
-        created_at = excluded.created_at
     `),
     countFollowers: db.prepare('SELECT COUNT(*) AS count FROM followers'),
     listFollowers: db.prepare(`
@@ -851,39 +810,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return Number(statements.deleteSessionsForUser.run(userId, options.except ?? null).changes);
     },
 
-    listActorKeys(identifier) {
-      const rows = statements.actorKeys.all(identifier) as Record<string, unknown>[];
-      const keys = rows
-        .map((row) => ({
-          identifier: String(row['identifier']),
-          algorithm: String(row['algorithm']) as ActorKeyAlgorithm,
-          privateJwk: String(row['private_jwk']),
-          publicJwk: String(row['public_jwk']),
-          createdAt: String(row['created_at']),
-        }))
-        // An algorithm this version has never heard of is a row a later
-        // version wrote; ignoring it is better than handing Fedify a key it
-        // cannot import.
-        .filter((key) => ACTOR_KEY_ALGORITHMS.includes(key.algorithm));
-
-      return keys.sort(
-        (a, b) =>
-          ACTOR_KEY_ALGORITHMS.indexOf(a.algorithm) - ACTOR_KEY_ALGORITHMS.indexOf(b.algorithm),
-      );
-    },
-
-    putActorKey(key) {
-      const stored: ActorKey = { ...key, createdAt: new Date().toISOString() };
-      statements.putActorKey.run(
-        stored.identifier,
-        stored.algorithm,
-        stored.privateJwk,
-        stored.publicJwk,
-        stored.createdAt,
-      );
-      return stored;
-    },
-
     countFollowers() {
       const row = statements.countFollowers.get() as Record<string, unknown> | undefined;
       return Number(row?.['count'] ?? 0);
@@ -1114,6 +1040,24 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       }));
     },
 
+    legacyActorKeys() {
+      // Prepared here for the same reason `legacySettings` is: the table is one
+      // that will not be there, and a statement over a missing table throws
+      // when it is prepared rather than when it is run.
+      if (!hasTable(db, 'actor_keys')) return undefined;
+
+      return (
+        db.prepare('SELECT identifier, algorithm, private_jwk FROM actor_keys').all() as Record<
+          string,
+          unknown
+        >[]
+      ).map((row) => ({
+        identifier: String(row['identifier']),
+        algorithm: String(row['algorithm']),
+        privateJwk: String(row['private_jwk']),
+      }));
+    },
+
     dropLegacyTable(name) {
       // The name is never a caller's to invent: it is one of this file's own
       // shipped table names, so quoting it is enough.
@@ -1311,6 +1255,28 @@ export interface LegacySetting {
   updatedAt: string;
 }
 
+/**
+ * One row of the actor key table TASK-16 wrote, for the one boot that reads it.
+ *
+ * Key pairs live in `data/keys` as JWK files now (decision-9), so this shape
+ * exists only so `migrateActorKeysToFiles` can write the rows out before the
+ * table goes. The public half the table also held is not here: it is derived
+ * from the private one, and reading it would only invite the two to disagree.
+ */
+export interface LegacyActorKey {
+  /** Which actor the pair belonged to: the sentinel identifier, not a handle. */
+  identifier: string;
+  /**
+   * Which algorithm it is for, as the table spelled it. A bare string rather
+   * than one of the algorithms this version knows, on purpose: a row a later
+   * version wrote is still a key that must reach a file rather than go with
+   * the table.
+   */
+  algorithm: string;
+  /** The private key as JWK, JSON encoded. What the file ends up holding. */
+  privateJwk: string;
+}
+
 /** One schema version: the statements it runs, and any backfill they need. */
 interface Migration {
   /** Its place in the order, and its entry in the ledger. */
@@ -1384,11 +1350,12 @@ const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // The site actor's signing keys (doc-4). They are generated on the first
-    // boot that federates and never again: an actor whose key changes is an
-    // actor every follower has to re-verify, so this is the one table in the
-    // database that a site really cannot afford to lose. Keyed by identifier
-    // rather than by handle, so renaming `@blog@example.com` keeps the keys.
+    // The site actor's signing keys, when SQLite still held them. decision-9
+    // moved them into JWK files under `data/keys`, so nothing reads this table
+    // any more: `migrateActorKeysToFiles` writes its rows out on the first boot
+    // of that version and drops it. The migration stays exactly as it shipped,
+    // because a shipped migration is never edited — which does mean a brand new
+    // database creates the table here and drops it a moment later.
     version: 4,
     sql: `
       CREATE TABLE actor_keys (

@@ -76,6 +76,19 @@ export async function siteActor(
   const baseUrl = options.baseUrl ?? settings.baseUrl;
   const icon = avatarUrl(settings.avatar, baseUrl);
   const keys = await context.getActorKeyPairs(identifier);
+  // Fedify catches whatever the key pairs dispatcher throws and hands back an
+  // empty list, so this is the only place a key file damaged since boot can be
+  // noticed. An actor document with no `publicKey` is worse than no answer: a
+  // peer caches it, and every signature the site makes fails to verify against
+  // what the peer holds. Failing the request keeps the last good document in
+  // the peer's cache instead.
+  if (keys.length === 0) {
+    throw new Error(
+      `The actor ${identifier} has no usable key pairs. Its key files under the ` +
+        'data directory could not be read; see the error the key loader raised. ' +
+        'Restore them from a backup, or delete them to ask for new keys on purpose.',
+    );
+  }
   const ActorClass = actorClassFor(settings.actorType);
 
   return new ActorClass({

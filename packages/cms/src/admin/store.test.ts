@@ -323,83 +323,51 @@ describe('the settings table an older version wrote', () => {
   });
 });
 
-describe('actor keys', () => {
-  it('starts with no key pair for an actor', async () => {
-    const admin = await store();
+describe('the actor key table an older version wrote', () => {
+  it('reads its rows out and then goes, for good', async () => {
+    const dataDir = await temporaryDir();
+    const database = new DatabaseSync(path.join(dataDir, 'geekity.db'));
 
-    assert.deepEqual(admin.listActorKeys('actor'), []);
+    // Exactly migration 4, with the ledger rows that stop the migrations this
+    // version ships from running, so the store under test opens the schema a
+    // site upgrading from TASK-16 actually has.
+    database.exec(`
+      CREATE TABLE admin_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+      INSERT INTO admin_migrations (version, applied_at) VALUES (4, '2026-09-01T00:00:00.000Z');
+      CREATE TABLE actor_keys (
+        identifier  TEXT NOT NULL,
+        algorithm   TEXT NOT NULL,
+        private_jwk TEXT NOT NULL,
+        public_jwk  TEXT NOT NULL,
+        created_at  TEXT NOT NULL,
+        PRIMARY KEY (identifier, algorithm)
+      );
+      INSERT INTO actor_keys (identifier, algorithm, private_jwk, public_jwk, created_at)
+      VALUES ('actor', 'Ed25519', '{"d":"private"}', '{"x":"public"}', '2026-09-01T00:00:00.000Z');
+    `);
+    database.close();
+
+    const admin = openAdminStore({ dataDir });
+    assert.deepEqual(admin.legacyActorKeys(), [
+      { identifier: 'actor', algorithm: 'Ed25519', privateJwk: '{"d":"private"}' },
+    ]);
+
+    admin.dropLegacyTable('actor_keys');
+    assert.equal(admin.legacyActorKeys(), undefined, 'the table is gone');
+    admin.dropLegacyTable('actor_keys');
+    admin.close();
+
+    const reopened = openAdminStore({ dataDir });
+    assert.equal(reopened.legacyActorKeys(), undefined, 'and stays gone across a boot');
+    reopened.close();
   });
 
-  it('stores a key pair and reads it back whole', async () => {
+  it('is dropped on a database this version created, where it was never used', async () => {
     const admin = await store();
+    assert.deepEqual(admin.legacyActorKeys(), [], 'migration 4 still creates it, empty');
 
-    admin.putActorKey({
-      identifier: 'actor',
-      algorithm: 'RSASSA-PKCS1-v1_5',
-      privateJwk: '{"kty":"RSA","d":"private"}',
-      publicJwk: '{"kty":"RSA","n":"public"}',
-    });
-
-    const stored = admin.listActorKeys('actor');
-    assert.equal(stored.length, 1);
-    assert.equal(stored[0]?.algorithm, 'RSASSA-PKCS1-v1_5');
-    assert.equal(stored[0]?.privateJwk, '{"kty":"RSA","d":"private"}');
-    assert.equal(stored[0]?.publicJwk, '{"kty":"RSA","n":"public"}');
-    assert.ok(stored[0]?.createdAt !== undefined, 'the row records when it was made');
-  });
-
-  it('keeps one row per algorithm, and one actor’s keys away from another’s', async () => {
-    const admin = await store();
-
-    admin.putActorKey({
-      identifier: 'actor',
-      algorithm: 'RSASSA-PKCS1-v1_5',
-      privateJwk: '{"rsa":"private"}',
-      publicJwk: '{"rsa":"public"}',
-    });
-    admin.putActorKey({
-      identifier: 'actor',
-      algorithm: 'Ed25519',
-      privateJwk: '{"ed":"private"}',
-      publicJwk: '{"ed":"public"}',
-    });
-    admin.putActorKey({
-      identifier: 'other',
-      algorithm: 'Ed25519',
-      privateJwk: '{"other":"private"}',
-      publicJwk: '{"other":"public"}',
-    });
-
-    assert.deepEqual(
-      admin.listActorKeys('actor').map((key) => key.algorithm),
-      ['RSASSA-PKCS1-v1_5', 'Ed25519'],
-    );
-    assert.deepEqual(
-      admin.listActorKeys('other').map((key) => key.privateJwk),
-      ['{"other":"private"}'],
-    );
-  });
-
-  it('replaces a key pair rather than adding a second of the same algorithm', async () => {
-    const admin = await store();
-
-    admin.putActorKey({
-      identifier: 'actor',
-      algorithm: 'Ed25519',
-      privateJwk: '{"first":"private"}',
-      publicJwk: '{"first":"public"}',
-    });
-    admin.putActorKey({
-      identifier: 'actor',
-      algorithm: 'Ed25519',
-      privateJwk: '{"second":"private"}',
-      publicJwk: '{"second":"public"}',
-    });
-
-    assert.deepEqual(
-      admin.listActorKeys('actor').map((key) => key.privateJwk),
-      ['{"second":"private"}'],
-    );
+    admin.dropLegacyTable('actor_keys');
+    assert.equal(admin.legacyActorKeys(), undefined);
   });
 });
 

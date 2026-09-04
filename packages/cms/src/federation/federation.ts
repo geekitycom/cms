@@ -58,7 +58,7 @@ export const OUTBOX_PAGE_SIZE = 20;
 
 /** What every Fedify dispatcher in the CMS is handed. */
 export interface FederationContextData {
-  /** Settings and, through them, the actor's profile and its keys. */
+  /** The followers, the inbox log and the relay records. */
   readonly admin: AdminStore;
   /** The content index, which the outbox and the post objects are built from. */
   readonly store: ContentStore;
@@ -130,7 +130,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
     )
     .setKeyPairsDispatcher(async (context, identifier) =>
       identifier === SITE_ACTOR_IDENTIFIER
-        ? await loadActorKeyPairs(context.data.admin, identifier)
+        ? await loadActorKeyPairs(context.data.config.dataDir, identifier)
         : [],
     );
 

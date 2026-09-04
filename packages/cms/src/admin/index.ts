@@ -198,7 +198,6 @@ export {
   usesSecureCookies,
 } from './session.ts';
 export {
-  ACTOR_KEY_ALGORITHMS,
   DELIVERY_STATUSES,
   DuplicateUsernameError,
   openAdminStore,
@@ -206,8 +205,6 @@ export {
   SESSION_ID_BYTES,
 } from './store.ts';
 export type {
-  ActorKey,
-  ActorKeyAlgorithm,
   AdminStore,
   CreateSessionInput,
   CreateUserInput,
@@ -217,9 +214,9 @@ export type {
   FlashMessage,
   Follower,
   InboxActivity,
+  LegacyActorKey,
   LegacySetting,
   ListPageOptions,
-  NewActorKey,
   NewDelivery,
   NewFollower,
   NewInboxActivity,
