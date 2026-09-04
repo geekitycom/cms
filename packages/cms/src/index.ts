@@ -5,6 +5,7 @@ import {
   baselineSecurityHeaders,
   effectiveBaseUrl,
   migrateSettingsToFile,
+  migrateUsersToFile,
   mountAdmin,
   openAdminStore,
   readSiteSettings,
@@ -75,12 +76,15 @@ export {
   createNonce,
   credentialProblem,
   clientAddress,
+  countUsers,
+  createUser,
   CSRF_FIELD,
   csrfTokenMatches,
   DASHBOARD_RECENT_POSTS,
   describeWait,
   DEFAULT_SITE_SETTINGS,
   DELETE_USER_PATH,
+  deleteUser,
   deleteUserRefusal,
   deliveryRows,
   DOCUMENT_FILTERS,
@@ -95,6 +99,8 @@ export {
   FEDERATION_RECENT,
   findAdminAsset,
   findBySlug,
+  findUser,
+  findUserById,
   followerRow,
   formatInTimezone,
   formFor,
@@ -117,10 +123,12 @@ export {
   LOGOUT_PATH,
   listingUrl,
   listOptionsFor,
+  listUsers,
   localPosts,
   loginKeys,
   MAXIMUM_USERNAME_LENGTH,
   migrateSettingsToFile,
+  migrateUsersToFile,
   MINIMUM_PASSWORD_LENGTH,
   mountAdmin,
   mountDocumentScreens,
@@ -192,12 +200,17 @@ export {
   UPLOAD_ENVELOPE_BYTES,
   UPLOAD_FIELD,
   UPLOADS_PATH,
+  setUserPassword,
   USER_FIELDS,
   USERNAME_PATTERN,
   usernameProblem,
+  USERS_FILE,
+  USERS_FILE_MODE,
+  usersFile,
   USERS_PATH,
   usesSecureCookies,
   verifyPasswordHash,
+  verifyUserPassword,
   writeSiteJson,
 } from './admin/index.ts';
 export type {
@@ -226,6 +239,7 @@ export type {
   InboxRowsContext,
   LegacyActorKey,
   LegacySetting,
+  LegacyUser,
   ListPageOptions,
   LocalPost,
   LoginThrottle,
@@ -812,6 +826,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // the rows are written out before the table is dropped, and a file that is
   // already there always wins.
   migrateActorKeysToFiles({ admin, dataDir: resolved.dataDir });
+
+  // And the accounts, which become data/users.json. The ids come with them, so
+  // a session the database already holds still names the person it was made
+  // for, and the file wins where there already is one.
+  migrateUsersToFile({ admin, dataDir: resolved.dataDir });
 
   // And, once the files are the whole story, that they are readable. This is
   // the one thing here that can stop a boot: an actor that publishes no key

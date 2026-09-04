@@ -202,21 +202,21 @@ export default defineConfig({
 Every field is optional. Relative directories resolve against the working
 directory; absolute ones are used as given.
 
-| Field              | Default                   | Environment override        | Meaning                                                                                                                                        |
-| ------------------ | ------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `port`             | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on. `0` picks a free one.                                                                                         |
-| `contentDir`       | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                              |
-| `dataDir`          | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and, under `keys/`, the actor's key pairs, which are not derived and must be backed up. |
-| `themeDir`         | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme. Need not exist.                                                           |
-| `baseUrl`          | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                     |
-| `watch`            | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                   |
-| `sessionLifetime`  | `1209600` (14 days)       | `GEEKITY_SESSION_LIFETIME`  | How long an admin login lasts, in seconds.                                                                                                     |
-| `loginAttempts`    | `5`                       | `GEEKITY_LOGIN_ATTEMPTS`    | Failed sign-ins a username or an address may make before it is locked out.                                                                     |
-| `loginLockout`     | `900` (15 minutes)        | `GEEKITY_LOGIN_LOCKOUT`     | How long the first lockout lasts, in seconds. See [Login hardening](#login-hardening).                                                         |
-| `trustProxy`       | `false`                   | `GEEKITY_TRUST_PROXY`       | Believe `X-Forwarded-For` when deciding which address a sign-in came from.                                                                     |
-| `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                                                                                   |
-| `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                 |
-| `federation`       | `{}`                      | —                           | Federation stores and guards. See [Federation](#federation).                                                                                   |
+| Field              | Default                   | Environment override        | Meaning                                                                                                                                                                             |
+| ------------------ | ------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port`             | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on. `0` picks a free one.                                                                                                                              |
+| `contentDir`       | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                   |
+| `dataDir`          | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, the actor's key pairs. |
+| `themeDir`         | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme. Need not exist.                                                                                                |
+| `baseUrl`          | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                          |
+| `watch`            | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                        |
+| `sessionLifetime`  | `1209600` (14 days)       | `GEEKITY_SESSION_LIFETIME`  | How long an admin login lasts, in seconds.                                                                                                                                          |
+| `loginAttempts`    | `5`                       | `GEEKITY_LOGIN_ATTEMPTS`    | Failed sign-ins a username or an address may make before it is locked out.                                                                                                          |
+| `loginLockout`     | `900` (15 minutes)        | `GEEKITY_LOGIN_LOCKOUT`     | How long the first lockout lasts, in seconds. See [Login hardening](#login-hardening).                                                                                              |
+| `trustProxy`       | `false`                   | `GEEKITY_TRUST_PROXY`       | Believe `X-Forwarded-For` when deciding which address a sign-in came from.                                                                                                          |
+| `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                        |
+| `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                      |
+| `federation`       | `{}`                      | —                           | Federation stores and guards. See [Federation](#federation).                                                                                                                        |
 
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site. A boolean environment variable
@@ -618,10 +618,18 @@ current one marked, and a place for flash messages. A message queued with
 browser asks for, and cleared as it is read, so it survives exactly one
 redirect.
 
-Users and sessions live in the same SQLite file as the content index, in tables
-of their own. That is the half of the database that is _not_ derived from the
-content directory: deleting the file loses every login, while everything else
-in it is rebuilt on the next boot.
+Who may sign in is `data/users.json`: one entry per user with an id, a
+username, an argon2 hash and a created time, written atomically with `0600`
+permissions and serialised against itself, so two admins adding the same name
+at once cannot both succeed. It is in `data/` rather than `content/` because
+`content/` is published with the site, and it is one of the two things under
+`dataDir` that must be backed up — the actor's keys are the other.
+
+Sessions stay in SQLite, where the rest of the cache lives. They name a user by
+id and are joined against the file on every admin request, so a session whose
+user is no longer there is not a login: deleting `data/geekity.db` signs
+everybody out and loses nothing else, and restoring an old one cannot bring
+back an account that was deleted or a password that was changed.
 
 Passwords are hashed with argon2id through `node:crypto`, so there is no native
 module to build. The cost parameters travel with each hash, which means raising
@@ -641,18 +649,26 @@ The first admin comes from `/admin/setup` or from
 that comes from `/admin/users`, which lists who may sign in, adds a user with a
 password you supply or one it generates and shows once, deletes another user,
 and changes your own password — which signs out every other browser holding
-that login and leaves the one you are using alone. There is a single role, so a
-row has nothing else to edit. The last remaining user cannot be deleted, and
-nobody may delete their own account.
+that login and leaves the one you are using alone. There is a single role, so
+an account has nothing else to edit. The last remaining user cannot be deleted,
+and nobody may delete their own account.
+
+A site whose database was written by a version that kept the accounts in a
+`users` table has those rows written into `data/users.json` on the first boot
+of this one — ids and hashes as they stand, so nobody has to log in again — and
+the table is dropped. A `users.json` that is already there wins and is left
+alone.
 
 Creating one from your own code, which is what the CLI does:
 
 ```ts
-import { openAdminStore } from '@geekity/cms';
+import { createUser } from '@geekity/cms';
 
-const admin = openAdminStore({ dataDir: 'data' });
-admin.createUser({ username: 'ada', password: process.env.PASSWORD ?? '' });
-admin.close();
+await createUser({
+  dataDir: 'data',
+  username: 'ada',
+  password: process.env.PASSWORD ?? '',
+});
 ```
 
 ### Settings

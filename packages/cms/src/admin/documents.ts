@@ -21,6 +21,7 @@ import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { isPublicDocument } from '../web/documents.ts';
 import { NAVIGATION_KEY, NAVIGATION_ORDER_KEY, navigationOrder } from '../web/navigation.ts';
+import { findUserById } from './accounts.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
 import { readSiteSettings } from './settings.ts';
@@ -609,7 +610,7 @@ export function splitTags(value: string): string[] {
 function currentUsername(c: Context<GeekityEnv>): string | undefined {
   const userId = c.var.session?.userId;
   if (userId == null) return undefined;
-  return c.var.admin.getUserById(userId)?.username;
+  return findUserById(c.var.config.dataDir, userId)?.username;
 }
 
 /** The file as it is now, when it is not the file the form was filled in from. */

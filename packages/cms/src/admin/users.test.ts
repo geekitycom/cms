@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
+import { countUsers, createUser, findUser, verifyUserPassword } from './accounts.ts';
 import {
   browser,
   csrfField,
@@ -26,7 +27,11 @@ describe('the users screen', () => {
   it('lists every user, marking the one who is signed in', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    cms.admin.createUser({ username: 'grace', password: 'a password of her own' });
+    await createUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    });
 
     const { html } = await usersScreen(agent);
 
@@ -97,7 +102,7 @@ describe('a bad add form', () => {
     const html = await response.text();
     assert.match(html, /A username is 1 to 64 letters/);
     assert.match(html, /value="grace hopper"/, 'the field still holds what was typed');
-    assert.equal(cms.admin.countUsers(), 1, 'nothing was written');
+    assert.equal(countUsers(cms.config.dataDir), 1, 'nothing was written');
   });
 
   it('refuses a password the setup form would have refused', async () => {
@@ -113,7 +118,7 @@ describe('a bad add form', () => {
 
     assert.equal(response.status, 400);
     assert.match(await response.text(), /A password is at least 8 characters/);
-    assert.equal(cms.admin.getUser('grace'), undefined);
+    assert.equal(findUser(cms.config.dataDir, 'grace'), undefined);
   });
 
   it('refuses a name that is already taken', async () => {
@@ -129,9 +134,9 @@ describe('a bad add form', () => {
 
     assert.equal(response.status, 400);
     assert.match(await response.text(), /already exists/);
-    assert.equal(cms.admin.countUsers(), 1);
+    assert.equal(countUsers(cms.config.dataDir), 1);
     // The name was not quietly given the new password either.
-    assert.ok(cms.admin.verifyPassword('ada', FIRST_ADMIN.password) !== undefined);
+    assert.ok(verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined);
   });
 });
 
@@ -204,7 +209,7 @@ describe('a bad password form', () => {
     assert.match(html, /not your current password/);
     assert.doesNotMatch(html, /a brand new password/, 'no password is echoed back into the HTML');
     assert.ok(
-      cms.admin.verifyPassword('ada', FIRST_ADMIN.password) !== undefined,
+      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
       'the old password still works',
     );
   });
@@ -233,7 +238,7 @@ describe('a bad password form', () => {
     assert.match(await short.text(), /A password is at least 8 characters/);
 
     assert.ok(
-      cms.admin.verifyPassword('ada', FIRST_ADMIN.password) !== undefined,
+      verifyUserPassword(cms.config.dataDir, 'ada', FIRST_ADMIN.password) !== undefined,
       'neither refusal changed anything',
     );
   });
@@ -244,7 +249,7 @@ describe('deleting a user', () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
     const { html, token } = await usersScreen(agent);
-    const ada = cms.admin.getUser('ada');
+    const ada = findUser(cms.config.dataDir, 'ada');
     assert.ok(ada !== undefined);
     assert.doesNotMatch(html, /<button type="submit">Delete<\/button>/, 'no button is offered');
 
@@ -254,7 +259,7 @@ describe('deleting a user', () => {
     });
 
     assert.equal(response.status, 303);
-    assert.equal(cms.admin.countUsers(), 1, 'nobody was deleted');
+    assert.equal(countUsers(cms.config.dataDir), 1, 'nobody was deleted');
     assert.match(
       await (await agent.get('/admin/users')).text(),
       /only user/,
@@ -265,7 +270,11 @@ describe('deleting a user', () => {
   it('deletes another user and takes their sessions with them', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    const grace = cms.admin.createUser({ username: 'grace', password: 'a password of her own' });
+    const grace = await createUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    });
     const hers = await signIn(cms, { username: 'grace', password: 'a password of her own' });
     const { html, token } = await usersScreen(agent);
     assert.match(html, /<button type="submit">Delete<\/button>/, 'her row has a button');
@@ -276,7 +285,7 @@ describe('deleting a user', () => {
     });
 
     assert.equal(response.status, 303);
-    assert.equal(cms.admin.getUser('grace'), undefined);
+    assert.equal(findUser(cms.config.dataDir, 'grace'), undefined);
     assert.equal((await hers.get('/admin')).status, 302, 'her session went with her');
 
     const after = await (await agent.get('/admin/users')).text();
@@ -287,8 +296,12 @@ describe('deleting a user', () => {
   it('refuses to delete you, even when somebody else is left', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
-    cms.admin.createUser({ username: 'grace', password: 'a password of her own' });
-    const ada = cms.admin.getUser('ada');
+    await createUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    });
+    const ada = findUser(cms.config.dataDir, 'ada');
     assert.ok(ada !== undefined);
     const { token } = await usersScreen(agent);
 
@@ -298,7 +311,7 @@ describe('deleting a user', () => {
     });
 
     assert.equal(response.status, 303);
-    assert.equal(cms.admin.getUser('ada')?.id, ada.id, 'ada is still there');
+    assert.equal(findUser(cms.config.dataDir, 'ada')?.id, ada.id, 'ada is still there');
     assert.match(await (await agent.get('/admin/users')).text(), /own account/);
   });
 });

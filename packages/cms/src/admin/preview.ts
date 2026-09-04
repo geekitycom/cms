@@ -7,6 +7,7 @@ import { calendarDayIn, toUtcInstant } from '../content/time.ts';
 import { normalizeBody } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { documentContext } from '../web/context.ts';
+import { findUserById } from './accounts.ts';
 import { TEMPLATES } from '../web/render.ts';
 import { splitTags } from './documents.ts';
 import { readSiteSettings } from './settings.ts';
@@ -116,7 +117,7 @@ function orNow(value: string, timezone: string, now: Date): string {
 function currentUsername(c: Context<GeekityEnv>): string | undefined {
   const userId = c.var.session?.userId;
   if (userId == null) return undefined;
-  return c.var.admin.getUserById(userId)?.username;
+  return findUserById(c.var.config.dataDir, userId)?.username;
 }
 
 /** A form field as a string. A file upload, or a missing field, is the empty one. */

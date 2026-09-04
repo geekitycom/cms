@@ -3,11 +3,11 @@ id: doc-1
 title: Architecture Overview
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 00:18'
+updated_date: '2026-09-04 16:43'
 ---
 # Architecture Overview
 
-Geekity CMS is a single Node.js process that is both the editing backend and the public website, in the same way WordPress is. Content is plain Markdown files on disk. A SQLite database holds a derived index of those files plus data that has no natural file form (users, sessions, ActivityPub followers and keys).
+Geekity CMS is a single Node.js process that is both the editing backend and the public website, in the same way WordPress is. Content is plain Markdown files on disk. Everything a site cannot afford to lose is a file; the SQLite database is a cache — a derived index of those files, plus the sessions and the indexes rebuilt from them — and may be deleted at rest (decision-9).
 
 The CMS ships as an npm package. A site is its own repository that depends on the package, owns its content and theme, and upgrades by bumping a version number. There is no upstream git relationship between a site and the CMS.
 

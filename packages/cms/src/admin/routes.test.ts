@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
+import { countUsers, listUsers } from './accounts.ts';
 import {
   browser,
   cookieValue,
@@ -54,9 +55,9 @@ describe('setup', () => {
 
     assert.equal(created.status, 303);
     assert.equal(created.headers.get('location'), '/admin');
-    assert.equal(cms.admin.countUsers(), 1);
+    assert.equal(countUsers(cms.config.dataDir), 1);
     assert.deepEqual(
-      cms.admin.listUsers().map((user) => user.username),
+      listUsers(cms.config.dataDir).map((user) => user.username),
       ['ada'],
     );
 
@@ -92,7 +93,7 @@ describe('setup', () => {
     });
 
     assert.equal(response.status, 403);
-    assert.equal(cms.admin.countUsers(), 0, 'and created nobody');
+    assert.equal(countUsers(cms.config.dataDir), 0, 'and created nobody');
   });
 
   it('refuses a post whose CSRF token belongs to another session', async () => {
@@ -112,7 +113,7 @@ describe('setup', () => {
     });
 
     assert.equal(response.status, 403);
-    assert.equal(cms.admin.countUsers(), 0);
+    assert.equal(countUsers(cms.config.dataDir), 0);
   });
 
   it('returns the form with a message when the passwords disagree', async () => {
@@ -130,7 +131,7 @@ describe('setup', () => {
 
     assert.equal(response.status, 400);
     assert.match(await response.text(), /do not match/);
-    assert.equal(cms.admin.countUsers(), 0);
+    assert.equal(countUsers(cms.config.dataDir), 0);
   });
 
   it('closes the setup form once a user exists', async () => {
