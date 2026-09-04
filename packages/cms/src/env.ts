@@ -51,5 +51,11 @@ export interface GeekityEnv {
      * outside `/admin` and for a request whose session has expired.
      */
     session: Session | undefined;
+    /**
+     * The Content-Security-Policy nonce this admin response's policy names, so
+     * a template can put it on a script tag. `undefined` outside `/admin`,
+     * where there is no policy to be part of.
+     */
+    cspNonce: string | undefined;
   };
 }

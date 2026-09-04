@@ -1,12 +1,14 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 import type { Environment } from 'nunjucks';
 
+import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
 import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';
 import { editorPath, mountDocumentScreens, PAGE_KIND, POST_KIND } from './documents.ts';
 import { FEDERATION_PATH, mountFederationScreen } from './federation.ts';
 import { takeFlash } from './flash.ts';
+import { adminSecurityHeaders } from './headers.ts';
 import { mountPreview } from './preview.ts';
 import { AVATAR_PATH, mountSettings } from './settings.ts';
 import {
@@ -20,6 +22,8 @@ import {
 import { DuplicateUsernameError } from './store.ts';
 import type { Session, User } from './store.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
+import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './throttle.ts';
+import type { LoginThrottle } from './throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 import { mountUsers } from './users.ts';
 
@@ -87,6 +91,22 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return environment;
   }
 
+  // One throttle for the whole mount, built on the first failed sign-in for
+  // the same reason: the limits and the clock are on the context. It holds
+  // nothing but recent failures, so it belongs to the process rather than to
+  // the database — a restart clears it, which is the right trade for state an
+  // anonymous caller can create.
+  let throttled: LoginThrottle | undefined;
+
+  function loginThrottle(config: ResolvedConfig): LoginThrottle {
+    throttled ??= createLoginThrottle({
+      attempts: config.loginAttempts,
+      lockoutSeconds: config.loginLockout,
+      now: config.now,
+    });
+    return throttled;
+  }
+
   /**
    * Render one admin template.
    *
@@ -111,12 +131,20 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       navigation: ADMIN_SECTIONS,
       logoutUrl: LOGOUT_PATH,
       csrfToken: session?.csrfToken ?? '',
+      cspNonce: c.var.cspNonce ?? '',
       user: userId === null ? undefined : c.var.admin.getUserById(userId),
       flash: takeFlash(c),
       ...context,
     });
     return c.html(html);
   }
+
+  // In front of everything, including the static files and the login form, so
+  // "every admin response" means every one of them rather than every one a
+  // handler happened to reach. It also mints the CSP nonce the editor's script
+  // tag carries, which is why it has to run before any template is rendered.
+  app.use(ADMIN_PREFIX, adminSecurityHeaders);
+  app.use(`${ADMIN_PREFIX}/*`, adminSecurityHeaders);
 
   // Registered before the guard, so the login page can load its stylesheet
   // while nobody is logged in. Nothing under it is secret.
@@ -170,12 +198,41 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   });
 
   app.post(LOGIN_PATH, async (c) => {
+    const config = c.var.config;
     const body = await c.req.parseBody();
     const username = text(body[USERNAME_FIELD]).trim();
     const password = text(body[PASSWORD_FIELD]);
 
+    const address = clientAddress(c, config);
+    const keys = loginKeys(username, address);
+
+    // Checked before the password is verified, so a lockout refuses the right
+    // password too. An attacker who found the password on the last allowed
+    // guess would otherwise be let straight in.
+    const throttle = loginThrottle(config);
+    const wait = throttle.retryAfter(keys);
+    if (wait !== undefined) {
+      console.warn(
+        `Refused a sign-in for ${JSON.stringify(username)} from ${address ?? 'an unknown address'}: locked out for another ${wait}s`,
+      );
+      anonymousSession(c);
+      c.status(429);
+      c.header('Retry-After', String(wait));
+      return render(c, ADMIN_TEMPLATES.login, {
+        loginUrl: LOGIN_PATH,
+        username,
+        // Says nothing about whether that username exists: an unknown one is
+        // counted and locked out exactly as a real one is.
+        error: `Too many sign-in attempts. Try again in ${describeWait(wait)}.`,
+      });
+    }
+
     const user = c.var.admin.verifyPassword(username, password);
     if (user === undefined) {
+      throttle.fail(keys);
+      console.warn(
+        `Failed sign-in for ${JSON.stringify(username)} from ${address ?? 'an unknown address'}`,
+      );
       // One message for both failures, so the form cannot be used to find out
       // which usernames exist.
       anonymousSession(c);
@@ -187,6 +244,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       });
     }
 
+    throttle.succeed(keys);
     return logIn(c, user);
   });
 

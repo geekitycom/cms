@@ -94,6 +94,28 @@ export interface GeekityConfig {
    */
   uploadTypes?: string[];
   /**
+   * How many failed sign-ins a username or a client address may make before
+   * the admin locks it out. Default 5. Overridden by `GEEKITY_LOGIN_ATTEMPTS`.
+   */
+  loginAttempts?: number;
+  /**
+   * How long the first lockout lasts, in seconds. Default 15 minutes. Each
+   * further failure doubles the wait, up to sixteen times the first one.
+   * Overridden by `GEEKITY_LOGIN_LOCKOUT`.
+   */
+  loginLockout?: number;
+  /**
+   * Whether an `X-Forwarded-For` header may be believed when the admin decides
+   * which client address a failed login belongs to. Default `false`.
+   * Overridden by `GEEKITY_TRUST_PROXY`.
+   *
+   * Off by default because anyone may send that header: believing it on a site
+   * reached directly would let an attacker put every guess on a different
+   * make-believe address and never be locked out at all. Turn it on only when
+   * a reverse proxy in front of the site sets it.
+   */
+  trustProxy?: boolean;
+  /**
    * Called for every `created`, `updated` and `deleted` the index records.
    *
    * The boot scan reports a cold index as a directory full of creations, so a
@@ -149,6 +171,9 @@ export interface ResolvedConfig {
   uploadMaxBytes: number;
   /** Normalised: lower case, each with its leading dot. */
   uploadTypes: string[];
+  loginAttempts: number;
+  loginLockout: number;
+  trustProxy: boolean;
   onDocumentChange: DocumentChangeHook | undefined;
   onPublish: DocumentChangeHook | undefined;
   /** The clock the index and the scheduler read. */
@@ -180,6 +205,10 @@ export const DEFAULT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
  * and so is opt-in.
  */
 export const DEFAULT_UPLOAD_TYPES: readonly string[] = KNOWN_UPLOAD_TYPES;
+/** Failed sign-ins allowed before the admin locks a username or an address out. */
+export const DEFAULT_LOGIN_ATTEMPTS = 5;
+/** How long the first lockout lasts by default: a quarter of an hour, in seconds. */
+export const DEFAULT_LOGIN_LOCKOUT = 15 * 60;
 
 /**
  * Identity helper that gives a `geekity.config.ts` file type checking and
@@ -211,13 +240,33 @@ export function resolveConfig(
     themeDir: resolveDir(cwd, env['GEEKITY_THEME_DIR'], config.themeDir, DEFAULT_THEME_DIR),
     baseUrl: resolveBaseUrl(env['GEEKITY_BASE_URL'], config.baseUrl, port),
     baseUrlSource: baseUrlSource(env['GEEKITY_BASE_URL'], config.baseUrl),
-    watch: resolveWatch(env['GEEKITY_WATCH'], config.watch),
+    watch: resolveBoolean('GEEKITY_WATCH', env['GEEKITY_WATCH'], config.watch, true),
     sessionLifetime: resolveSessionLifetime(
       env['GEEKITY_SESSION_LIFETIME'],
       config.sessionLifetime,
     ),
     uploadMaxBytes: resolveUploadMaxBytes(env['GEEKITY_UPLOAD_MAX_BYTES'], config.uploadMaxBytes),
     uploadTypes: resolveUploadTypes(env['GEEKITY_UPLOAD_TYPES'], config.uploadTypes),
+    loginAttempts: resolveCount(
+      'GEEKITY_LOGIN_ATTEMPTS',
+      'loginAttempts',
+      env['GEEKITY_LOGIN_ATTEMPTS'],
+      config.loginAttempts,
+      DEFAULT_LOGIN_ATTEMPTS,
+    ),
+    loginLockout: resolveCount(
+      'GEEKITY_LOGIN_LOCKOUT',
+      'loginLockout',
+      env['GEEKITY_LOGIN_LOCKOUT'],
+      config.loginLockout,
+      DEFAULT_LOGIN_LOCKOUT,
+    ),
+    trustProxy: resolveBoolean(
+      'GEEKITY_TRUST_PROXY',
+      env['GEEKITY_TRUST_PROXY'],
+      config.trustProxy,
+      false,
+    ),
     onDocumentChange: config.onDocumentChange,
     onPublish: config.onPublish,
     now: config.now ?? systemClock,
@@ -287,16 +336,52 @@ function checkedUploadTypes(values: string[], source: string): string[] {
 }
 
 /** `true`, `1`, `yes` and `on` mean yes; `false`, `0`, `no` and `off` mean no. */
-function resolveWatch(fromEnv: string | undefined, configured: boolean | undefined): boolean {
+function resolveBoolean(
+  variable: string,
+  fromEnv: string | undefined,
+  configured: boolean | undefined,
+  fallback: boolean,
+): boolean {
   if (fromEnv !== undefined && fromEnv !== '') {
     const normalized = fromEnv.trim().toLowerCase();
     if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
     if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
     throw new TypeError(
-      `GEEKITY_WATCH must be a boolean such as true or false, received ${JSON.stringify(fromEnv)}`,
+      `${variable} must be a boolean such as true or false, received ${JSON.stringify(fromEnv)}`,
     );
   }
-  return configured ?? true;
+  return configured ?? fallback;
+}
+
+/** A positive whole number, from the environment, the config or the default. */
+function resolveCount(
+  variable: string,
+  field: string,
+  fromEnv: string | undefined,
+  configured: number | undefined,
+  fallback: number,
+): number {
+  if (fromEnv !== undefined && fromEnv !== '') {
+    const parsed = Number(fromEnv);
+    if (!isValidCount(parsed)) {
+      throw new TypeError(
+        `${variable} must be a positive whole number, received ${JSON.stringify(fromEnv)}`,
+      );
+    }
+    return parsed;
+  }
+
+  if (configured === undefined) return fallback;
+  if (!isValidCount(configured)) {
+    throw new TypeError(
+      `config.${field} must be a positive whole number, received ${JSON.stringify(configured)}`,
+    );
+  }
+  return configured;
+}
+
+function isValidCount(value: number): boolean {
+  return Number.isInteger(value) && value > 0;
 }
 
 /** Seconds, positive and finite. Fractions are allowed; zero and below are not. */

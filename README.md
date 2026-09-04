@@ -134,12 +134,15 @@ directory; absolute ones are used as given.
 | `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped. |
 | `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                               |
 
-The admin adds two more:
+The admin adds five more:
 
-| Field            | Default             | Environment override       | Meaning                                                        |
-| ---------------- | ------------------- | -------------------------- | -------------------------------------------------------------- |
-| `uploadMaxBytes` | `10485760` (10 MiB) | `GEEKITY_UPLOAD_MAX_BYTES` | Largest file the editor's upload endpoint accepts.             |
-| `uploadTypes`    | every type below    | `GEEKITY_UPLOAD_TYPES`     | Extensions it accepts, as a list (comma-separated in the env). |
+| Field            | Default             | Environment override       | Meaning                                                                    |
+| ---------------- | ------------------- | -------------------------- | -------------------------------------------------------------------------- |
+| `uploadMaxBytes` | `10485760` (10 MiB) | `GEEKITY_UPLOAD_MAX_BYTES` | Largest file the editor's upload endpoint accepts.                         |
+| `uploadTypes`    | every type below    | `GEEKITY_UPLOAD_TYPES`     | Extensions it accepts, as a list (comma-separated in the env).             |
+| `loginAttempts`  | `5`                 | `GEEKITY_LOGIN_ATTEMPTS`   | Failed sign-ins a username or an address may make before it is locked out. |
+| `loginLockout`   | `900` (15 minutes)  | `GEEKITY_LOGIN_LOCKOUT`    | How long the first lockout lasts, in seconds.                              |
+| `trustProxy`     | `false`             | `GEEKITY_TRUST_PROXY`      | Believe `X-Forwarded-For` when deciding which address a sign-in came from. |
 
 `uploadTypes` defaults to `.avif`, `.gif`, `.jpeg`, `.jpg`, `.md`, `.pdf`,
 `.png`, `.txt` and `.webp` — every type the CMS knows a media type for. The
@@ -410,6 +413,34 @@ big gets a 413 and one of the wrong type a 415, both as JSON. See
 
 Both endpoints are behind the admin's guard and need the session's CSRF token,
 like every other POST in the admin.
+
+### Login hardening and security headers
+
+`/admin/login` counts failed sign-ins per username and per client address.
+After `loginAttempts` failures — five by default — that key is locked out for
+`loginLockout` seconds, fifteen minutes by default, and the wait doubles each
+time the lockout is tripped again, up to sixteen times the first one. The
+lockout is checked _before_ the password is verified, so a correct password
+during a lockout is refused too, and the message says nothing about whether the
+username exists: an unknown one is counted and locked out exactly as a real one
+is. A sign-in that works clears both keys. The counts live in memory — a
+restart clears them, which is the right trade for state an anonymous caller can
+create — and both refusals are logged. `trustProxy` says whether
+`X-Forwarded-For` may be believed for the address; it is off by default,
+because on a site reached directly anybody could set it and never be locked out
+by address at all.
+
+Every response carries `X-Content-Type-Options: nosniff`, plus
+`Strict-Transport-Security` when `baseUrl` is https. Every response under
+`/admin` also carries `Referrer-Policy: same-origin`,
+`X-Frame-Options: SAMEORIGIN` and a `Content-Security-Policy` that is `'self'`
+almost everywhere — with a per-response nonce on `style-src` for the styles
+CodeMirror injects at runtime, `data:` on `img-src` for a preview of a post
+holding a data URI image, and `frame-ancestors 'self'` because the editor
+frames its own preview. There is no inline script in the admin, so `script-src`
+is a bare `'self'`. The public site gets none of that, so a theme is free to
+reference whatever it likes. The package README has
+[the whole table and the reasoning](packages/cms/README.md#security-headers).
 
 ## Site settings
 

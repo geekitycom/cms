@@ -2,6 +2,7 @@ import { serve as serveNode } from '@hono/node-server';
 import { Hono } from 'hono';
 
 import {
+  baselineSecurityHeaders,
   effectiveBaseUrl,
   mountAdmin,
   openAdminStore,
@@ -57,19 +58,26 @@ export {
   actorSummary,
   addUserProblems,
   adminAssetResponse,
+  adminContentSecurityPolicy,
+  adminSecurityHeaders,
   ARGON2_PARAMETERS,
   AVATAR_FIELDS,
   AVATAR_PATH,
   AVATAR_REMOVE,
+  baselineSecurityHeaders,
   blankForm,
   CHANGE_PASSWORD_PATH,
   changePasswordProblems,
   clearSessionCookie,
   createAdminTemplateEnvironment,
+  createLoginThrottle,
+  createNonce,
   credentialProblem,
+  clientAddress,
   CSRF_FIELD,
   csrfTokenMatches,
   DASHBOARD_RECENT_POSTS,
+  describeWait,
   DEFAULT_SITE_SETTINGS,
   DELETE_USER_PATH,
   deleteUserRefusal,
@@ -96,13 +104,17 @@ export {
   generatePassword,
   guard,
   hashPassword,
+  HSTS_MAX_AGE,
+  HSTS_VALUE,
   INBOX_INTERACTIONS,
   inboxRows,
+  LOCKOUT_GROWTH_LIMIT,
   LOGIN_PATH,
   LOGOUT_PATH,
   listingUrl,
   listOptionsFor,
   localPosts,
+  loginKeys,
   MAXIMUM_USERNAME_LENGTH,
   MINIMUM_PASSWORD_LENGTH,
   mountAdmin,
@@ -113,6 +125,7 @@ export {
   mountUploads,
   mountUsers,
   newEditorPath,
+  NONCE_BYTES,
   openAdminStore,
   PAGE_KIND,
   PACKAGED_ADMIN_DIR,
@@ -168,7 +181,6 @@ export type {
   AddUserProblems,
   AdminRender,
   AdminSection,
-  AdminStore,
   ChangePasswordProblems,
   CreateAdminTemplateEnvironmentOptions,
   CreateSessionInput,
@@ -190,6 +202,8 @@ export type {
   InboxRowsContext,
   ListPageOptions,
   LocalPost,
+  LoginThrottle,
+  LoginThrottleOptions,
   MountDocumentScreensOptions,
   MountFederationScreenOptions,
   RelayRow,
@@ -784,6 +798,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('relays', relays);
     await next();
   });
+
+  // Two headers on everything the CMS answers, admin and public alike. The
+  // admin adds a policy of its own on top; the public site does not, so a
+  // theme is free to reference whatever it likes.
+  app.use('*', baselineSecurityHeaders);
 
   app.get('/_geekity/health', (c) => c.json({ status: 'ok' }));
 

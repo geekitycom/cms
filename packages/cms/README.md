@@ -193,6 +193,9 @@ export default defineConfig({
   baseUrl: 'http://localhost:3000',
   watch: true,
   sessionLifetime: 60 * 60 * 24 * 14,
+  loginAttempts: 5,
+  loginLockout: 15 * 60,
+  trustProxy: false,
 });
 ```
 
@@ -208,6 +211,9 @@ directory; absolute ones are used as given.
 | `baseUrl`          | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped. |
 | `watch`            | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                               |
 | `sessionLifetime`  | `1209600` (14 days)       | `GEEKITY_SESSION_LIFETIME`  | How long an admin login lasts, in seconds.                                                 |
+| `loginAttempts`    | `5`                       | `GEEKITY_LOGIN_ATTEMPTS`    | Failed sign-ins a username or an address may make before it is locked out.                 |
+| `loginLockout`     | `900` (15 minutes)        | `GEEKITY_LOGIN_LOCKOUT`     | How long the first lockout lasts, in seconds. See [Login hardening](#login-hardening).     |
+| `trustProxy`       | `false`                   | `GEEKITY_TRUST_PROXY`       | Believe `X-Forwarded-For` when deciding which address a sign-in came from.                 |
 | `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                               |
 | `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                             |
 | `federation`       | `{}`                      | —                           | Federation stores and guards. See [Federation](#federation).                               |
@@ -588,6 +594,84 @@ const admin = openAdminStore({ dataDir: 'data' });
 admin.createUser({ username: 'ada', password: process.env.PASSWORD ?? '' });
 admin.close();
 ```
+
+### Login hardening
+
+`/admin/login` counts failed sign-ins against two keys: the username that was
+typed, and the address the request came from. Once either has failed
+`loginAttempts` times — five by default — the admin refuses further attempts
+from that key for `loginLockout` seconds, fifteen minutes by default, and
+answers `429` with a `Retry-After` header and a message saying how long is
+left.
+
+Three things about that are deliberate:
+
+- **The lockout is checked before the password is.** A correct password during
+  a lockout is refused too. Verifying first would hand the site to whoever
+  guessed right on the attempt that tripped the limit.
+- **The wait doubles each time the lockout is tripped again**, up to sixteen
+  times the first one — four hours at the default. There is no artificial pause
+  on an individual attempt: a `sleep` in the handler holds a connection open for
+  as long as it lasts, so it would cost the server more than the attacker.
+- **The message says nothing about who exists.** A username nobody has is
+  counted and locked out exactly as a real one is, so the lockout cannot be used
+  to enumerate accounts, and a wrong password and an unknown username still read
+  the same.
+
+A sign-in that works clears both keys, and so does time: a key that stops
+failing is forgotten. The counts live in memory, so a restart clears them.
+That is the point — a failed login writes nothing an anonymous caller could
+grow, and the run of guesses this defends against happens over minutes, which
+no restart interrupts. Both refusals are logged with the username and the
+address.
+
+`trustProxy` decides where the address comes from. It is `false` by default and
+the address is the socket's own, because anybody may send `X-Forwarded-For`: on
+a site reached directly, believing it would let one attacker put every guess on
+a different make-believe address and never be locked out by address at all. Turn
+it on — and only on — when a reverse proxy in front of the site sets that
+header; the leftmost entry is then used. With neither available, which is what
+happens when the app is driven in process rather than served, the username is
+the only key.
+
+### Security headers
+
+Every response the CMS sends carries `X-Content-Type-Options: nosniff`, and
+`Strict-Transport-Security: max-age=31536000; includeSubDomains` when `baseUrl`
+is an `https` URL — the same test that decides whether the session cookie is
+`Secure`, so the two cannot disagree. That is all the public site gets: a theme
+is somebody else's HTML and the CMS has no business deciding what it may
+reference.
+
+Every response under `/admin`, static files and redirects included, carries
+three more:
+
+| Header                    | Value                                         |
+| ------------------------- | --------------------------------------------- |
+| `Referrer-Policy`         | `same-origin`                                 |
+| `X-Frame-Options`         | `SAMEORIGIN`                                  |
+| `Content-Security-Policy` | `default-src 'self'` and the directives below |
+
+The policy is `'self'` almost everywhere: the stylesheet and the editor bundle
+come from `/admin/_static/`, the editor's preview and upload calls are
+same-origin `fetch`, and the preview frame renders the site's own theme and
+uploads. Four directives say more than that:
+
+- `style-src 'self' 'nonce-…'` — a fresh nonce on every response. CodeMirror 6
+  mounts its themes as `<style>` elements at runtime, which is an inline style
+  however it is written. The nonce is put on the editor bundle's `<script>` tag
+  and read back through the element's `nonce` property, which a browser keeps
+  after blanking the attribute, and handed to CodeMirror through
+  `EditorView.cspNonce`. So the admin never says `'unsafe-inline'`.
+- `script-src 'self'` — no nonce and no `'unsafe-inline'`, because there is no
+  inline script in the admin at all. The slug and permalink auto-fill lives in
+  `/admin/_static/slug.js`.
+- `img-src 'self' data:` — a preview of a post somebody is writing may hold a
+  data URI image, and refusing it would make the preview lie about what
+  publishing would show.
+- `frame-ancestors 'self'` rather than `'none'` — the editor's preview is a
+  sandboxed `srcdoc` iframe, which inherits this policy, and its one ancestor is
+  the admin page itself.
 
 ## The public site
 
