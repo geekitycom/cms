@@ -15,6 +15,7 @@
  * 5. `content/_trash/` is not built.
  * 6. `categories`, the CMS's second taxonomy, becomes `collections.categories`.
  * 7. The site menu becomes `collections.menu`.
+ * 8. A `date` filter that reads a UTC instant through `site.timezone`.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
  * says `"layout": "post"`, `pages.json` says `"layout": "page"` — so
@@ -26,8 +27,56 @@
  * URLs still match.
  */
 
+import { readFileSync } from 'node:fs';
+
 /** The content subdirectory that holds dated posts; everything else is a page. */
 const POSTS_DIRECTORY = 'posts';
+
+/**
+ * The zone the CMS shows its dates in.
+ *
+ * Dates in the files are UTC instants; the `timezone` setting is the lens they
+ * are read through, and the settings screen mirrors it into `site.json`. It is
+ * read here rather than off the template context because a filter's `this`
+ * differs between Eleventy's template engines and a build has one site.
+ */
+function siteTimezone() {
+  try {
+    const site = JSON.parse(readFileSync('content/_data/site.json', 'utf8'));
+    return typeof site.timezone === 'string' && site.timezone !== '' ? site.timezone : 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/** The calendar day a zone was on at an instant, `YYYY-MM-DD`. */
+function calendarDayIn(date, zone) {
+  const parts = {};
+  for (const part of new Intl.DateTimeFormat('en-US', {
+    timeZone: zone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)) {
+    parts[part.type] = part.value;
+  }
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
 
 /**
  * Letters that Unicode decomposition leaves alone, spelled out before the
@@ -112,6 +161,30 @@ function defaultPermalink(data) {
 }
 
 export default function (eleventyConfig) {
+  // The CMS's `date` filter, in Eleventy's terms: `readable` (the default),
+  // `html` and `year` are the calendar the site's own zone is on, and `iso` is
+  // the instant, because a <time datetime> and a feed want UTC and must not
+  // move when a setting does. Pass a zone as the second argument to override.
+  //
+  // With Luxon — which Eleventy already ships — the same filter reads:
+  //
+  //     const at = DateTime.fromJSDate(new Date(value)).setZone(zone ?? siteTimezone());
+  //     return { iso: at.toUTC().toISO(), html: at.toFormat('yyyy-MM-dd'),
+  //              year: at.toFormat('yyyy') }[format] ?? at.toFormat('d LLLL yyyy');
+  //
+  // This version uses Intl so the file keeps its promise of no dependencies.
+  const defaultZone = siteTimezone();
+  eleventyConfig.addFilter('date', (value, format = 'readable', zone = defaultZone) => {
+    const at = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(at.getTime())) return '';
+    if (format === 'iso') return at.toISOString();
+
+    const [year, month, day] = calendarDayIn(at, zone).split('-');
+    if (format === 'html') return `${year}-${month}-${day}`;
+    if (format === 'year') return year;
+    return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
+  });
+
   // `draft: true` is the CMS's only status flag. Set BUILD_DRAFTS=1 to preview
   // them locally.
   eleventyConfig.addPreprocessor('geekity-drafts', '*', (data) => {

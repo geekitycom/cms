@@ -1,6 +1,6 @@
 ---
 title: One URL, many representations
-date: '2026-08-27T14:40:00-05:00'
+date: '2026-08-27T19:40:00Z'
 permalink: /2026/08/one-url-many-representations/
 tags:
   - content

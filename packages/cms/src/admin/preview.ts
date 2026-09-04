@@ -3,11 +3,13 @@ import type { Context, Hono } from 'hono';
 import type { Document, DocumentType } from '../content/document.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { defaultPermalink, slugify } from '../content/slug.ts';
+import { calendarDayIn, toUtcInstant } from '../content/time.ts';
 import { normalizeBody } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { documentContext } from '../web/context.ts';
 import { TEMPLATES } from '../web/render.ts';
 import { splitTags } from './documents.ts';
+import { readSiteSettings } from './settings.ts';
 import { ADMIN_PREFIX } from './session.ts';
 
 /** Where the editor posts a body it wants to see rendered. */
@@ -46,8 +48,13 @@ function previewDocument(
 ): Document {
   const { type, body } = input;
 
+  const timezone = readSiteSettings(c.var.admin).timezone;
   const title = text(body['title']).trim();
-  const date = type === 'post' ? orNow(text(body['date']).trim()) : undefined;
+  // The editor's field is wall-clock time in the site's zone (decision-11), so
+  // the preview reads it the way the save will and shows the date the saved
+  // post would show rather than one the server's own zone invented.
+  const date =
+    type === 'post' ? orNow(text(body['date']).trim(), timezone, c.var.store.now()) : undefined;
   const slug = slugify(text(body['slug']).trim()) || slugify(title) || 'preview';
   const markdown = normalizeBody(text(body['body']));
 
@@ -57,7 +64,12 @@ function previewDocument(
     // prints them; neither is ever written anywhere.
     path: `${type === 'post' ? 'posts' : 'pages'}/${slug}.md`,
     slug,
-    permalink: permalinkFor({ type, slug, date, submitted: text(body['permalink']).trim() }),
+    permalink: permalinkFor({
+      type,
+      slug,
+      date: date === undefined ? undefined : (calendarDayIn(date, timezone) ?? date),
+      submitted: text(body['permalink']).trim(),
+    }),
     title: title === '' ? 'Untitled' : title,
     ...(date === undefined ? {} : { date }),
     tags: splitTags(text(body['tags'])),
@@ -89,9 +101,13 @@ function permalinkFor(input: {
   }
 }
 
-/** A date field that is empty or unusable becomes now, so the layout has one. */
-function orNow(value: string): string {
-  return /^\d{4}-\d{2}-\d{2}/.test(value) ? value : new Date().toISOString();
+/**
+ * The date field as a UTC instant. One that is empty or unusable becomes now,
+ * so the layout always has one to print.
+ */
+function orNow(value: string, timezone: string, now: Date): string {
+  const instant = /^\d{4}-\d{2}-\d{2}/.test(value) ? toUtcInstant(value, timezone) : undefined;
+  return instant ?? now.toISOString();
 }
 
 /** The signed-in user's login, so a byline in the theme has something to print. */

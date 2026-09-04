@@ -266,12 +266,14 @@ export { DirectoryNotEmptyError, initSite, SITE_TEMPLATE_DIR, siteManifest } fro
 export type { InitSiteOptions, InitSiteResult } from './init.ts';
 
 export {
+  calendarDayIn,
   contentFilePath,
   createContentSync,
   createScheduler,
   DATABASE_FILE,
   dateSortKey,
   DEFAULT_DEBOUNCE_MS,
+  DEFAULT_TIMEZONE,
   defaultPermalink,
   documentContent,
   documentFrontMatter,
@@ -296,9 +298,12 @@ export {
   slugify,
   systemClock,
   systemTimers,
+  toUtcInstant,
   TRASH_DIRECTORY,
   typeForPath,
   UPLOAD_MEDIA_TYPES,
+  wallClockIn,
+  zoneLabel,
 } from './content/index.ts';
 export type {
   ActivityPubMetadata,

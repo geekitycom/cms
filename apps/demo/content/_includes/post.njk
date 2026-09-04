@@ -19,7 +19,9 @@
     <article class="post">
       <h1>{{ title }}</h1>
       {% if date %}
-      <p class="post-meta"><time datetime="{{ page.date.toISOString() }}">{{ page.date.toDateString() }}</time></p>
+      {# The `date` filter the example config adds: the instant in the
+         datetime attribute, the site's own time zone on the page. #}
+      <p class="post-meta"><time datetime="{{ date | date("iso") }}">{{ date | date }}</time></p>
       {% endif %}
       {{ content | safe }}
     </article>

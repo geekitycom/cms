@@ -143,6 +143,60 @@ describe('the theme filters', () => {
     assert.equal(formatDate('not a date', 'readable'), '');
   });
 
+  it('renders readable, html and year in the timezone it is given', () => {
+    // Nine in the evening in Chicago is the next day in UTC.
+    const instant = '2026-09-02T02:00:00Z';
+
+    assert.equal(formatDate(instant, 'readable', 'America/Chicago'), '1 September 2026');
+    assert.equal(formatDate(instant, 'html', 'America/Chicago'), '2026-09-01');
+    assert.equal(formatDate(instant, 'year', 'America/Chicago'), '2026');
+    assert.equal(formatDate('2026-01-01T02:00:00Z', 'year', 'America/Chicago'), '2025');
+  });
+
+  it('keeps iso the instant whatever the timezone', () => {
+    assert.equal(
+      formatDate('2026-09-02T02:00:00Z', 'iso', 'America/Chicago'),
+      '2026-09-02T02:00:00.000Z',
+    );
+  });
+
+  it('takes the zone from the site the template is rendering', () => {
+    const env = environment('https://geekity.example');
+    const template = '{{ d | date("html") }}';
+
+    assert.equal(
+      env.renderString(template, {
+        site: { timezone: 'America/Chicago' },
+        d: '2026-09-02T02:00:00Z',
+      }),
+      '2026-09-01',
+    );
+    assert.equal(
+      env.renderString(template, {
+        site: { timezone: 'Europe/Berlin' },
+        d: '2026-09-02T02:00:00Z',
+      }),
+      '2026-09-02',
+    );
+    assert.equal(
+      env.renderString(template, { d: '2026-09-02T02:00:00Z' }),
+      '2026-09-02',
+      'and UTC when the site names no zone',
+    );
+  });
+
+  it('lets a template name a zone of its own', () => {
+    const env = environment('https://geekity.example');
+
+    assert.equal(
+      env.renderString('{{ d | date("html", "Europe/Berlin") }}', {
+        site: { timezone: 'America/Chicago' },
+        d: '2026-09-02T02:00:00Z',
+      }),
+      '2026-09-02',
+    );
+  });
+
   it('leaves a root-relative URL alone when the site is served from the root', () => {
     const env = environment('https://geekity.example');
 

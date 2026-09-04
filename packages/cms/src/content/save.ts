@@ -6,6 +6,7 @@ import type { Document, DocumentContent, DocumentType } from './document.ts';
 import { parseDocument } from './parser.ts';
 import { defaultPermalink } from './slug.ts';
 import type { ContentStore } from './store.ts';
+import { DEFAULT_TIMEZONE, toUtcInstant } from './time.ts';
 import { serializeDocument } from './writer.ts';
 
 /** What {@link contentFilePath} needs to name a file. */
@@ -83,6 +84,11 @@ export interface SaveDocumentOptions {
   path: string;
   /** The document to serialize. */
   content: DocumentContent;
+  /**
+   * The site's time zone, which is what an offset-less date means. UTC unless
+   * a caller says otherwise; the admin passes the `timezone` setting.
+   */
+  timezone?: string | undefined;
 }
 
 /**
@@ -98,7 +104,9 @@ export interface SaveDocumentOptions {
 export async function saveDocument(options: SaveDocumentOptions): Promise<Document> {
   const relative = options.path.replace(/\\/g, '/');
   const file = path.join(options.contentDir, ...relative.split('/'));
-  const source = serializeDocument(options.content);
+  const source = serializeDocument(
+    utcDates(options.content, options.timezone ?? DEFAULT_TIMEZONE, relative),
+  );
 
   // Parsed before it is written, so a document that cannot be read back is
   // refused rather than left on disk for the watcher to complain about.
@@ -117,6 +125,61 @@ export async function saveDocument(options: SaveDocumentOptions): Promise<Docume
 
   options.store.upsert(document);
   return document;
+}
+
+/**
+ * The document with every date it carries turned into a UTC instant.
+ *
+ * decision-11: a date the CMS writes ends in `Z`, whatever the file it came
+ * from spelled. That is done here, once, rather than in each of the three
+ * callers — the editor, a taxonomy rewrite and the federation's stamp — so
+ * every write converts and none of them has to remember to. It is done before
+ * the serialize rather than inside it because {@link saveDocument} parses its
+ * own output back and hashes it: normalising later would leave the index
+ * holding a hash of bytes that were never written.
+ *
+ * A mere scan does not come through here, so a hand-written file with an
+ * offset keeps its offset until something actually saves it.
+ */
+function utcDates(content: DocumentContent, timezone: string, path: string): DocumentContent {
+  const date = instant(content.date, timezone, 'date', path);
+  const updated = instant(content.updated, timezone, 'updated', path);
+  const published = instant(
+    content.activitypub?.published,
+    timezone,
+    'activitypub.published',
+    path,
+  );
+
+  return {
+    ...content,
+    ...(date === undefined ? {} : { date }),
+    ...(updated === undefined ? {} : { updated }),
+    ...(content.activitypub === undefined
+      ? {}
+      : {
+          activitypub: {
+            ...content.activitypub,
+            ...(published === undefined ? {} : { published }),
+          },
+        }),
+  };
+}
+
+/** One date as its instant. A date that is there and unreadable is refused. */
+function instant(
+  value: string | undefined,
+  timezone: string,
+  key: string,
+  path: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+
+  const utc = toUtcInstant(value, timezone);
+  if (utc === undefined) {
+    throw new TypeError(`${path} has a ${key} that is not a date: ${JSON.stringify(value)}`);
+  }
+  return utc;
 }
 
 /** The calendar day of a date as written, without shifting it into another one. */

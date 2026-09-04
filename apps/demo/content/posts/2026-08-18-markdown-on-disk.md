@@ -1,6 +1,6 @@
 ---
 title: Markdown on disk
-date: '2026-08-18T09:15:00-05:00'
+date: '2026-08-18T14:15:00Z'
 permalink: /2026/08/markdown-on-disk/
 tags:
   - content
@@ -11,7 +11,7 @@ description: Why the files are the source of truth and the database is only an i
 author: Andrew Shell
 activitypub:
   id: http://localhost:3000/ap/posts/markdown-on-disk
-  published: '2026-08-18T09:15:00-05:00'
+  published: '2026-08-18T14:15:00Z'
 ---
 
 Every post on this site is a file. `content/posts/2026-08-18-markdown-on-disk.md`

@@ -1,6 +1,6 @@
 ---
 title: Now
-updated: '2026-09-02T11:00:00-05:00'
+updated: '2026-09-02T16:00:00Z'
 permalink: /now/
 description: What the project is working on at the moment.
 ---

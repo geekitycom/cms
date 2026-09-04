@@ -4,6 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import { readSiteSettings, writeSiteSettings } from './settings.ts';
 import type { Browser } from './__testing__/harness.ts';
 
 const box = sandbox();
@@ -801,5 +802,138 @@ describe('a conflicting save', () => {
 
     assert.equal(accepted.status, 303);
     assert.match(await readFile(file, 'utf8'), /What I wrote in the editor\./);
+  });
+});
+
+describe('dates in the editor', () => {
+  /** A site whose `timezone` setting is `zone`, over the given content. */
+  async function siteIn(zone: string, documents: Seed[] = []) {
+    const contentDir = await seeded(documents);
+    const cms = await box.site({ contentDir });
+    writeSiteSettings(cms.admin, { ...readSiteSettings(cms.admin), timezone: zone });
+    return { cms, contentDir, agent: await signedIn(cms) };
+  }
+
+  it('reads an offset-less date as the wall clock in the site timezone and writes the instant', async () => {
+    const { agent, contentDir } = await siteIn('America/Chicago');
+
+    await submit(agent, '/admin/posts/new', {
+      title: 'Hello from the editor',
+      date: '2026-09-04 09:00:00',
+      action: 'publish',
+    });
+
+    const written = await readFile(
+      path.join(contentDir, 'posts', '2026-09-04-hello-from-the-editor.md'),
+      'utf8',
+    );
+    assert.match(written, /^date: '2026-09-04T14:00:00Z'$/m);
+    assert.match(
+      written,
+      /^updated: '\d{4}-\d{2}-\d{2}T[\d:.]+Z'$/m,
+      'and updated is an instant too',
+    );
+  });
+
+  it('files a new post under the calendar day the site zone was on, not the one UTC was', async () => {
+    // Half past midnight on 1 October in Berlin is still 30 September in UTC.
+    const { agent, contentDir } = await siteIn('Europe/Berlin');
+
+    const response = await submit(agent, '/admin/posts/new', {
+      title: 'Just after midnight',
+      date: '2026-10-01 00:30:00',
+      action: 'publish',
+    });
+
+    assert.equal(response.status, 303);
+    const files = await readdir(path.join(contentDir, 'posts'));
+    assert.deepEqual(files, ['2026-10-01-just-after-midnight.md']);
+
+    const written = await readFile(path.join(contentDir, 'posts', files[0] ?? ''), 'utf8');
+    assert.match(written, /^date: '2026-09-30T22:30:00Z'$/m);
+    assert.match(written, /^permalink: \/2026\/10\/just-after-midnight\/$/m);
+  });
+
+  it('shows a stored instant as the wall clock in the site zone, with the zone named', async () => {
+    const { agent } = await siteIn('America/Chicago', [
+      {
+        file: 'posts/2026-06-02-reading-the-index.md',
+        title: 'Reading the index',
+        date: "'2026-06-02T12:30:00Z'",
+        permalink: '/2026/06/reading-the-index/',
+      },
+    ]);
+
+    const html = await (await agent.get('/admin/posts/reading-the-index')).text();
+    assert.equal(field(html, 'date'), '2026-06-02 07:30:00');
+    assert.match(html, /America\/Chicago \(CDT\)/);
+  });
+
+  it('round-trips the instant unchanged when the date field is left alone', async () => {
+    const { agent, contentDir } = await siteIn('America/Chicago', [
+      {
+        file: 'posts/2026-06-02-reading-the-index.md',
+        title: 'Reading the index',
+        date: "'2026-06-02T12:30:00Z'",
+        permalink: '/2026/06/reading-the-index/',
+      },
+    ]);
+
+    await submit(agent, '/admin/posts/reading-the-index', { action: 'update' });
+
+    const written = await readFile(
+      path.join(contentDir, 'posts', '2026-06-02-reading-the-index.md'),
+      'utf8',
+    );
+    assert.match(written, /^date: '2026-06-02T12:30:00Z'$/m);
+  });
+
+  it('rewrites a hand-written offset as UTC the next time it is saved', async () => {
+    const { agent, contentDir } = await siteIn('America/Chicago', [
+      {
+        file: 'posts/2026-06-02-reading-the-index.md',
+        title: 'Reading the index',
+        date: "'2026-06-02T07:30:00-05:00'",
+        permalink: '/reading-the-index/',
+      },
+    ]);
+
+    await submit(agent, '/admin/posts/reading-the-index', { action: 'update' });
+
+    const written = await readFile(
+      path.join(contentDir, 'posts', '2026-06-02-reading-the-index.md'),
+      'utf8',
+    );
+    assert.match(written, /^date: '2026-06-02T12:30:00Z'$/m);
+    assert.match(
+      written,
+      /^permalink: \/reading-the-index\/$/m,
+      'and the URL it chose is untouched',
+    );
+  });
+
+  it('keeps an existing URL where it is when the timezone setting moves', async () => {
+    const { cms, agent, contentDir } = await siteIn('America/Chicago', [
+      {
+        file: 'posts/2026-10-01-just-after-midnight.md',
+        title: 'Just after midnight',
+        date: "'2026-10-01T04:30:00Z'",
+        permalink: '/2026/10/just-after-midnight/',
+      },
+    ]);
+
+    // 04:30 UTC on 1 October is still 30 September in Chicago but 1 October in
+    // Berlin, so a zone-derived month would move this post to /2026/09/.
+    writeSiteSettings(cms.admin, { ...readSiteSettings(cms.admin), timezone: 'America/Chicago' });
+    await submit(agent, '/admin/posts/just-after-midnight', { action: 'update' });
+
+    const files = await readdir(path.join(contentDir, 'posts'));
+    assert.deepEqual(files, ['2026-10-01-just-after-midnight.md']);
+    const written = await readFile(path.join(contentDir, 'posts', files[0] ?? ''), 'utf8');
+    assert.match(written, /^permalink: \/2026\/10\/just-after-midnight\/$/m);
+    assert.equal(
+      cms.store.getByPermalink('/2026/10/just-after-midnight/')?.title,
+      'Just after midnight',
+    );
   });
 });
