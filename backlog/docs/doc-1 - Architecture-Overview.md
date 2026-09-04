@@ -3,7 +3,7 @@ id: doc-1
 title: Architecture Overview
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-02 13:37'
+updated_date: '2026-09-04 00:18'
 ---
 # Architecture Overview
 
@@ -85,13 +85,17 @@ The `geekity` CLI also runs without an entry file (`geekity serve` reads `geekit
 - **Admin writes:** the writer serialises front matter and body, writes the file atomically (temp file + rename), then upserts the index directly so the response does not wait for the watcher. The watcher event that follows is a no-op because the hash matches.
 - **Conflicts:** files win. If the admin edits a document whose on-disk hash changed since the form loaded, the save is refused with a diff-style warning rather than silently overwriting.
 
-## Data that lives only in SQLite
+## Where durable state lives (decision-9)
 
-- Users and password hashes, sessions.
-- Site settings (title, tagline, base URL, timezone, posts per page). These are also mirrored to `content/_data/site.json` so an Eleventy build sees the same values.
-- ActivityPub: actor key pairs, followers, delivered activity IDs, inbound activity log.
+Files are the source of truth for everything a site cannot afford to lose; the database is a cache that can be deleted at rest and is rebuilt on the next boot or by `geekity rebuild`.
 
-Database migrations ship inside the package and run on boot, so a site upgrade that changes the schema needs no manual step.
+- `content/_data/site.json`: site settings (title, tagline, base URL, timezone, posts per page, author, actor handle and type, avatar). Public, in git, read by Eleventy.
+- `content/_data/federation/followers.json` and `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`: ActivityPub followers and the inbound activity log. Public, in git, exposed to Eleventy as data.
+- `data/keys/`: the actor's key pairs as JWK files. Private, backed up, never in git.
+- `data/users.json`: usernames and password hashes. Private, backed up, never in git.
+- `data/geekity.db`: the content index, sessions, the followers and inbox indexes, delivery outcomes, and later the search index. Disposable.
+
+Database migrations still ship inside the package and run on boot, so a site upgrade that changes the cache schema needs no manual step; a schema too old to migrate is simply rebuilt.
 
 ## Quality and release
 

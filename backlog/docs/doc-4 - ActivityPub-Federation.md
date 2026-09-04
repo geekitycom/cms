@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-02 13:23'
+updated_date: '2026-09-04 00:18'
 ---
 # ActivityPub Federation
 
@@ -66,7 +66,9 @@ Logged but not acted on: `Like`, `Announce`, `Create(Note)` replies. These are s
 
 ## Storage
 
-Fedify needs a KV store and a message queue. Phase one uses `MemoryKvStore` and `InProcessMessageQueue` (see decision-5). Followers, keys, and the inbox log are ours and live in SQLite regardless.
+Fedify needs a KV store and a message queue. Phase one uses `MemoryKvStore` and `InProcessMessageQueue` (see decision-5). Followers, keys, and the inbox log are ours and live in files (decision-9): `content/_data/federation/followers.json` and `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` are published with the site and exposed to Eleventy as data; the key pairs are JWK files under `data/keys/`. SQLite indexes the followers and the inbox log for paging and holds the delivery outcomes, and all of it is rebuilt from the files on boot.
+
+Redeliver means "resend the current state of the post": the activity is rebuilt from the file when the button is pressed, so a follower whose server was down ends up with the post as it is now rather than with the activity that failed.
 
 ## Testing
 
