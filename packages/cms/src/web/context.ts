@@ -3,6 +3,8 @@ import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { siteImageMarkup } from '../images/markup.ts';
+import type { ImageConfig } from '../images/variants.ts';
 import { DEFAULT_TAXONOMY_BASES, taxonomyBasesOrDefault, taxonomyRedirectsOf } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 
@@ -120,8 +122,15 @@ export interface DocumentContext {
  * Front matter goes on first so the keys the CMS models always win: a file
  * with a stray `content` or `page` key cannot displace the rendered body or
  * the page data.
+ *
+ * `images` is the site's image config, and giving it is what turns an uploaded
+ * picture in `content` into a `<picture>` with a `srcset` (decision-10). It is
+ * an argument rather than something `renderMarkdown` does, because only the
+ * theme's HTML may have it: the feeds, the JSON and Markdown representations
+ * and the ActivityStreams `content` all read `document.html` directly and must
+ * keep the plain `<img>` of the original.
  */
-export function documentContext(document: Document): DocumentContext {
+export function documentContext(document: Document, images?: ImageConfig): DocumentContext {
   const date = toDate(document.date);
 
   return {
@@ -138,7 +147,7 @@ export function documentContext(document: Document): DocumentContext {
     ...optional('date', date),
     tags: document.tags,
     categories: document.categories,
-    content: document.html,
+    content: images === undefined ? document.html : siteImageMarkup(images, document.html),
     url: document.permalink,
     type: document.type,
     page: {

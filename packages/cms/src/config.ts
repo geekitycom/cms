@@ -94,6 +94,38 @@ export interface GeekityConfig {
    */
   uploadTypes?: string[];
   /**
+   * Derive smaller and more modern copies of an uploaded raster image, and
+   * serve the site's pages a `<picture>` that offers them. Default `true`.
+   * Overridden by `GEEKITY_IMAGE_OPTIMIZATION`.
+   *
+   * Turning it off changes nothing on disk under `content/uploads/` — the
+   * original was always the only source of truth (decision-10) — and nothing
+   * about the feeds. The pages go back to the plain `<img>` the Markdown
+   * asked for, and no encoding happens on upload.
+   */
+  imageOptimization?: boolean;
+  /**
+   * The widths variants are made at, in pixels. Default 320, 640, 960, 1280
+   * and 1920, which is 11ty/image's own set. Overridden by
+   * `GEEKITY_IMAGE_WIDTHS`, a comma-separated list.
+   *
+   * Nothing is ever upscaled: a width wider than the original is skipped, and
+   * the original's own width is always added, so the `srcset` has a full-size
+   * entry whatever the list says.
+   */
+  imageWidths?: number[];
+  /**
+   * The formats variants are made in, besides the original's own. Default
+   * `['webp']`. Overridden by `GEEKITY_IMAGE_FORMATS`, a comma-separated list.
+   *
+   * The original's format is always generated too, because it is what the
+   * `<img>` inside the `<picture>` falls back to; these are the `<source>`
+   * elements in front of it, in the order they are given. AVIF is opt-in —
+   * `['avif', 'webp']` — because its encoder is an order of magnitude slower
+   * than WebP's and the encoding happens in the request that uploads the file.
+   */
+  imageFormats?: string[];
+  /**
    * How many failed sign-ins a username or a client address may make before
    * the admin locks it out. Default 5. Overridden by `GEEKITY_LOGIN_ATTEMPTS`.
    */
@@ -171,6 +203,11 @@ export interface ResolvedConfig {
   uploadMaxBytes: number;
   /** Normalised: lower case, each with its leading dot. */
   uploadTypes: string[];
+  imageOptimization: boolean;
+  /** Ascending and without repeats. */
+  imageWidths: number[];
+  /** Normalised: lower case, in the order the `<source>` elements go. */
+  imageFormats: string[];
   loginAttempts: number;
   loginLockout: number;
   trustProxy: boolean;
@@ -205,6 +242,26 @@ export const DEFAULT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
  * and so is opt-in.
  */
 export const DEFAULT_UPLOAD_TYPES: readonly string[] = KNOWN_UPLOAD_TYPES;
+/**
+ * The widths an image is offered at by default.
+ *
+ * These are 11ty/image's own defaults, and deliberately so: decision-10 makes
+ * that plugin the reference for the markup and the width set, so a site that
+ * builds the same `content/` with Eleventy and runs the plugin over the same
+ * originals gets an equivalent `srcset` rather than a different one.
+ */
+export const DEFAULT_IMAGE_WIDTHS: readonly number[] = [320, 640, 960, 1280, 1920];
+/** The derived formats a site gets without asking. AVIF is not one; see {@link GeekityConfig.imageFormats}. */
+export const DEFAULT_IMAGE_FORMATS: readonly string[] = ['webp'];
+/**
+ * The formats a site may ask for.
+ *
+ * Every one of them is something sharp can write and every browser that
+ * matters can read. There is no `gif` and no `svg`: an animated GIF cannot
+ * survive being resized frame by frame into a still, and an SVG has no
+ * intrinsic pixels to resize at all, so neither is ever varianted.
+ */
+export const KNOWN_IMAGE_FORMATS: readonly string[] = ['avif', 'jpeg', 'png', 'webp'];
 /** Failed sign-ins allowed before the admin locks a username or an address out. */
 export const DEFAULT_LOGIN_ATTEMPTS = 5;
 /** How long the first lockout lasts by default: a quarter of an hour, in seconds. */
@@ -247,6 +304,14 @@ export function resolveConfig(
     ),
     uploadMaxBytes: resolveUploadMaxBytes(env['GEEKITY_UPLOAD_MAX_BYTES'], config.uploadMaxBytes),
     uploadTypes: resolveUploadTypes(env['GEEKITY_UPLOAD_TYPES'], config.uploadTypes),
+    imageOptimization: resolveBoolean(
+      'GEEKITY_IMAGE_OPTIMIZATION',
+      env['GEEKITY_IMAGE_OPTIMIZATION'],
+      config.imageOptimization,
+      true,
+    ),
+    imageWidths: resolveImageWidths(env['GEEKITY_IMAGE_WIDTHS'], config.imageWidths),
+    imageFormats: resolveImageFormats(env['GEEKITY_IMAGE_FORMATS'], config.imageFormats),
     loginAttempts: resolveCount(
       'GEEKITY_LOGIN_ATTEMPTS',
       'loginAttempts',
@@ -333,6 +398,77 @@ function checkedUploadTypes(values: string[], source: string): string[] {
     if (!types.includes(normalized)) types.push(normalized);
   }
   return types;
+}
+
+/**
+ * A width set, checked and put in order.
+ *
+ * Ascending and deduplicated because the `srcset` it becomes is read by a
+ * browser picking the first entry wide enough, and because two identical
+ * widths would be two encodes of the same picture.
+ */
+function resolveImageWidths(
+  fromEnv: string | undefined,
+  configured: number[] | undefined,
+): number[] {
+  if (fromEnv !== undefined && fromEnv !== '') {
+    return checkedImageWidths(
+      fromEnv
+        .split(',')
+        .map((value) => value.trim())
+        .filter((value) => value !== '')
+        .map(Number),
+      'GEEKITY_IMAGE_WIDTHS',
+    );
+  }
+  if (configured === undefined) return [...DEFAULT_IMAGE_WIDTHS];
+  return checkedImageWidths(configured, 'config.imageWidths');
+}
+
+function checkedImageWidths(values: number[], source: string): number[] {
+  const widths = new Set<number>();
+  for (const value of values) {
+    if (!isValidCount(value)) {
+      throw new TypeError(
+        `${source} must be positive whole numbers of pixels, received ${JSON.stringify(value)}`,
+      );
+    }
+    widths.add(value);
+  }
+  return [...widths].sort((a, b) => a - b);
+}
+
+/**
+ * A format set, checked and normalised.
+ *
+ * A name sharp cannot write is refused rather than dropped, for the reason an
+ * unknown upload type is: a config that silently produced nothing would be a
+ * config that lies about what the site is serving.
+ */
+function resolveImageFormats(
+  fromEnv: string | undefined,
+  configured: string[] | undefined,
+): string[] {
+  if (fromEnv !== undefined && fromEnv !== '') {
+    return checkedImageFormats(fromEnv.split(','), 'GEEKITY_IMAGE_FORMATS');
+  }
+  if (configured === undefined) return [...DEFAULT_IMAGE_FORMATS];
+  return checkedImageFormats(configured, 'config.imageFormats');
+}
+
+function checkedImageFormats(values: string[], source: string): string[] {
+  const formats: string[] = [];
+  for (const value of values) {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === '') continue;
+    if (!KNOWN_IMAGE_FORMATS.includes(normalized)) {
+      throw new TypeError(
+        `${source} names ${JSON.stringify(normalized)}, which is not a format the CMS writes. It knows ${KNOWN_IMAGE_FORMATS.join(', ')}.`,
+      );
+    }
+    if (!formats.includes(normalized)) formats.push(normalized);
+  }
+  return formats;
 }
 
 /** `true`, `1`, `yes` and `on` mean yes; `false`, `0`, `no` and `off` mean no. */

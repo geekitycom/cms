@@ -20,6 +20,7 @@ import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
+import { removeImageVariants } from '../images/variants.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
 import { editorPath, PAGE_KIND, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
@@ -342,7 +343,11 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
     const deleted = await deleteUpload({
       contentDir: c.var.config.contentDir,
       path: relative,
-      removeDerived,
+      // The site's own image variants unless the caller named something else,
+      // so nothing has to be wired at the mount site for the ordinary case
+      // and a test can still watch the hook being called.
+      removeDerived:
+        removeDerived ?? ((uploadPath) => removeImageVariants(c.var.config, uploadPath)),
     });
 
     flash(

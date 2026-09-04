@@ -8,6 +8,8 @@ import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import type { UploadMediaType } from '../content/media.ts';
 import { slugify } from '../content/slug.ts';
 import type { GeekityEnv } from '../env.ts';
+import { generateImageVariants } from '../images/variants.ts';
+import type { ImageConfig } from '../images/variants.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
 import { ADMIN_PREFIX } from './session.ts';
 
@@ -35,8 +37,16 @@ export interface UploadResult {
   markdown: string;
 }
 
-/** The part of the config the upload rules are read out of. */
-export type UploadConfig = Pick<ResolvedConfig, 'contentDir' | 'uploadTypes' | 'uploadMaxBytes'>;
+/**
+ * The part of the config the upload rules are read out of.
+ *
+ * It carries the image settings as well as the upload ones because storing a
+ * picture and deriving its variants is one act: an upload whose variants were
+ * generated later, or by whichever screen remembered to ask, would be an
+ * upload that is responsive on some pages and not on others.
+ */
+export type UploadConfig = Pick<ResolvedConfig, 'contentDir' | 'uploadTypes' | 'uploadMaxBytes'> &
+  ImageConfig;
 
 /** One file that has landed under `content/uploads/`. */
 export interface StoredUpload {
@@ -140,6 +150,19 @@ export async function storeUpload(
 
   const stem = slugify(original.slice(0, original.length - extension.length)) || 'upload';
   const name = await writeWithoutOverwriting(directory, stem, extension, bytes);
+
+  // Derived immediately rather than on first sight in a page, so the encoding
+  // is paid for by whoever uploaded the file and not by whoever reads the
+  // post. A format with nothing to derive — a GIF, a PDF, a text file — comes
+  // straight back (decision-10), and a failure is reported and swallowed: a
+  // stored file with no variants is a site that serves the original, which is
+  // what it did before this feature existed.
+  try {
+    await generateImageVariants(config, `${month}/${name}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Stored ${month}/${name} but could not derive its variants: ${message}`);
+  }
 
   return {
     url: `${UPLOAD_ASSET_PREFIX}${month}/${name}`,

@@ -4,6 +4,7 @@ import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
+import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
 import {
   assetNotModified,
   assetResponse,
@@ -69,6 +70,10 @@ import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
  */
 export function mountPublicSite(app: Hono<GeekityEnv>): void {
   app.get(`${THEME_ASSET_PREFIX}*`, themeAsset);
+  // Derived images go on first: their prefix is inside the uploads one, so the
+  // general route would otherwise swallow them and answer 404 for a file that
+  // is not under `content/uploads/` at all.
+  app.get(`${VARIANT_ASSET_PREFIX}*`, imageVariant);
   app.get(`${UPLOAD_ASSET_PREFIX}*`, upload);
 
   app.get('/', (c) => listing(c, { term: undefined, pageNumber: 0 }));
@@ -755,6 +760,39 @@ function themeAsset(c: Context<GeekityEnv>): Response {
     return themeAssetNotModified(asset);
   }
   return themeAssetResponse(asset);
+}
+
+/**
+ * One derived copy of an upload, generated on the spot if it is not there.
+ *
+ * The directory these live in is disposable (decision-9): deleting it costs
+ * the next reader of each picture one encode and costs the site nothing else,
+ * which is what this handler is for. A width or a format the site does not
+ * offer is a 404 and encodes nothing, so the URL space cannot be used to make
+ * the server work.
+ *
+ * The cache lifetime is the uploads' own, and it is honest for the same
+ * reason: a derived URL names one width of one file, and the file it was
+ * derived from is never overwritten.
+ */
+async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
+  const relative = requestPath(c).slice(VARIANT_ASSET_PREFIX.length);
+  const asset = await findImageVariant(c.var.config, decodeVariantPath(relative));
+  if (asset === undefined) return notFound(c);
+
+  const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
+  return matchesEtag(c.req.header('if-none-match'), asset.etag)
+    ? assetNotModified(asset, options)
+    : assetResponse(asset, options);
+}
+
+/** A request path as a path on disk: percent-encoding off, segment by segment. */
+function decodeVariantPath(relative: string): string {
+  try {
+    return relative.split('/').map(decodeURIComponent).join('/');
+  } catch {
+    return relative;
+  }
 }
 
 /**

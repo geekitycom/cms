@@ -35,7 +35,9 @@ export function mountPreview(app: Hono<GeekityEnv>): void {
     return c.html(
       c.var.renderer.render(
         type === 'post' ? TEMPLATES.post : TEMPLATES.page,
-        documentContext(previewDocument(c, { type, body })),
+        // With the site's image config, so a preview shows the `<picture>` the
+        // published page would show rather than the plain image behind it.
+        documentContext(previewDocument(c, { type, body }), c.var.config),
       ),
     );
   });
