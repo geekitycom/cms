@@ -161,6 +161,7 @@ describe('the dashboard', () => {
       posts: 2,
       pages: 1,
       drafts: 1,
+      scheduled: 0,
       trashed: 0,
     });
     assert.match(html, /Published posts<\/dt>\s*<dd>2<\/dd>/);

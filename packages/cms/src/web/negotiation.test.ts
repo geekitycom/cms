@@ -353,7 +353,7 @@ const ARCHIVE = {
   'posts/one.md': post('One', '2026-09-03T09:00:00Z', '/one/', ['notes']),
   'posts/two.md': post('Two', '2026-09-02T09:00:00Z', '/two/', ['notes']),
   'posts/three.md': post('Three', '2026-09-01T09:00:00Z', '/three/'),
-  'posts/hidden.md': `---\ntitle: Hidden\ndate: '2026-09-04T09:00:00Z'\npermalink: /hidden/\ndraft: true\n---\n\nNo.\n`,
+  'posts/hidden.md': `---\ntitle: Hidden\ndate: '2026-08-04T09:00:00Z'\npermalink: /hidden/\ndraft: true\n---\n\nNo.\n`,
 };
 
 describe('listings', () => {

@@ -121,6 +121,7 @@ describe('the content index', () => {
       posts: 0,
       pages: 0,
       drafts: 0,
+      scheduled: 0,
       trashed: 0,
     });
   });

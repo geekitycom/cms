@@ -3,6 +3,8 @@ import path from 'node:path';
 import type { KvStore, MessageQueue } from '@fedify/fedify';
 
 import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './content/media.ts';
+import { systemClock } from './content/store.ts';
+import type { Clock } from './content/store.ts';
 import type { DocumentChange } from './content/sync.ts';
 
 /**
@@ -106,6 +108,15 @@ export interface GeekityConfig {
    */
   onPublish?: DocumentChangeHook;
   /**
+   * What the CMS reads the time from.
+   *
+   * A post's date decides whether it is public yet (TASK-44), so the index and
+   * the scheduler both need a clock, and it is one clock so they cannot
+   * disagree. Defaults to {@link systemClock}. A site has no reason to name
+   * one; a test that wants to be somewhere else in time does.
+   */
+  now?: Clock;
+  /**
    * Federation stores and guards. Every field has a default; see
    * {@link FederationOverrides}.
    */
@@ -140,6 +151,8 @@ export interface ResolvedConfig {
   uploadTypes: string[];
   onDocumentChange: DocumentChangeHook | undefined;
   onPublish: DocumentChangeHook | undefined;
+  /** The clock the index and the scheduler read. */
+  now: Clock;
   /** Federation stores and guards, empty when the site named none. */
   federation: FederationOverrides;
 }
@@ -207,6 +220,7 @@ export function resolveConfig(
     uploadTypes: resolveUploadTypes(env['GEEKITY_UPLOAD_TYPES'], config.uploadTypes),
     onDocumentChange: config.onDocumentChange,
     onPublish: config.onPublish,
+    now: config.now ?? systemClock,
     federation: config.federation ?? {},
   };
 }

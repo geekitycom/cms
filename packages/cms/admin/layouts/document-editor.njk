@@ -17,6 +17,10 @@
     <p class="admin-note">This {{ kind.singular }} is in the trash. The public site is not serving it.</p>
   {% endif %}
 
+  {% if scheduledFor %}
+    <p class="admin-note">Scheduled for {{ scheduledFor }}. The public site starts serving it then, and the followers are told then.</p>
+  {% endif %}
+
   <form class="admin-editor" method="post" action="{{ saveUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
     {# The hash of the file this form was filled in from. A save whose hash no

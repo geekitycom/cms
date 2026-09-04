@@ -7,6 +7,7 @@ import type { FSWatcher } from 'chokidar';
 
 import type { Document, DocumentType } from './document.ts';
 import { parseDocument } from './parser.ts';
+import { isScheduled } from './schedule.ts';
 import { DuplicatePermalinkError, isTrashedPath, TRASH_DIRECTORY } from './store.ts';
 import type { ContentStore } from './store.ts';
 
@@ -33,8 +34,14 @@ export type DocumentChangeType = 'created' | 'updated' | 'deleted';
  * the CMS made itself and announced, because the admin corrects the index as
  * soon as the bytes land (doc-1) and the watcher's later re-read of that file
  * is a hash no-op that would otherwise emit nothing at all.
+ *
+ * `schedule` is the odd one out: nothing was written at all, and the file is
+ * exactly as it was. What moved is the clock, past the date of a post that was
+ * waiting for it. It carries no `previous`, because until that moment no
+ * subscriber knew the post existed — which is why every one of them can treat
+ * it as the creation it looks like.
  */
-export type ChangeOrigin = 'scan' | 'watch' | 'admin';
+export type ChangeOrigin = 'scan' | 'watch' | 'admin' | 'schedule';
 
 /**
  * One change to the index, as the subscriber sees it.
@@ -200,7 +207,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
       const stale = store.getByPath(conflicting);
       store.remove(conflicting);
       if (stale !== undefined) {
-        await emitChange(events, {
+        await emitChange(events, store.now(), {
           type: 'deleted',
           path: conflicting,
           previous: stale,
@@ -219,7 +226,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     if (source === undefined) {
       if (previous === undefined) return false;
       store.remove(relativePath);
-      await emitChange(events, {
+      await emitChange(events, store.now(), {
         type: 'deleted',
         path: relativePath,
         previous,
@@ -249,7 +256,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
       throw new SkippedFile();
     }
 
-    await emitChange(events, {
+    await emitChange(events, store.now(), {
       type: previous === undefined ? 'created' : 'updated',
       path: relativePath,
       previous,
@@ -356,7 +363,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     events,
 
     announce(change) {
-      return emitChange(events, change);
+      return emitChange(events, store.now(), change);
     },
 
     sync() {
@@ -422,20 +429,27 @@ class SkippedFile extends Error {
  * The events go out in order rather than at once, so a subscriber that listens
  * for both `created` and `published` sees them the way the names read.
  */
-async function emitChange(events: Emitter, change: DocumentChange): Promise<void> {
+async function emitChange(events: Emitter, now: Date, change: DocumentChange): Promise<void> {
   await events.emit(change.type, change);
   await events.emit('change', change);
 
-  const wasPublic = isPublic(change.previous);
-  const isNowPublic = isPublic(change.next);
+  const wasPublic = isPublic(change.previous, now);
+  const isNowPublic = isPublic(change.next, now);
   if (isNowPublic && !wasPublic) await events.emit('published', change);
   else if (wasPublic && !isNowPublic) await events.emit('unpublished', change);
 }
 
-/** A document is public when it exists, is not a draft and is not in the trash. */
-function isPublic(document: Document | undefined): boolean {
+/**
+ * A document is public when it exists, is not a draft, is not in the trash and
+ * its date has arrived.
+ *
+ * The date is why an edit that pushes a published post into the future reads
+ * as an `unpublished`: the post has gone from the site as surely as if it had
+ * been drafted, and every subscriber should be told so.
+ */
+function isPublic(document: Document | undefined, now: Date): boolean {
   if (document === undefined) return false;
-  return !document.draft && !isTrashedPath(document.path);
+  return !document.draft && !isTrashedPath(document.path) && !isScheduled(document, now);
 }
 
 /** The file's text, or `undefined` when it is not there any more. */

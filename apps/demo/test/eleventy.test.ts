@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 
 import Eleventy from '@11ty/eleventy';
-import { isTrashedPath, parseDocument } from '@geekity/cms';
+import { isPublicDocument, parseDocument } from '@geekity/cms';
 import type { Document } from '@geekity/cms';
 
 /** The demo site's root: what a site runs `npx @11ty/eleventy` from. */
@@ -130,9 +130,10 @@ describe('the demo content directory under Eleventy', () => {
   });
 
   it('writes every published document at the permalink the CMS computes', () => {
-    const published = documents.filter(
-      (document) => !document.draft && !isTrashedPath(document.path),
-    );
+    // The CMS's own public predicate, so this comparison keeps meaning "what
+    // the site serves" as that grows: drafts, the trash, and a post whose date
+    // has not arrived (which the example config's preprocessor leaves out too).
+    const published = documents.filter((document) => isPublicDocument(document));
     assert.ok(published.length >= 8, 'the demo does not exercise enough documents');
 
     for (const document of published) {
@@ -147,7 +148,7 @@ describe('the demo content directory under Eleventy', () => {
   it('writes nothing the CMS would not serve at that URL', () => {
     const expected = new Set(
       documents
-        .filter((document) => !document.draft && !isTrashedPath(document.path))
+        .filter((document) => isPublicDocument(document))
         .map((document) => outputPathFor(document.permalink)),
     );
 

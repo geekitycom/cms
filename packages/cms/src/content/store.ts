@@ -11,10 +11,26 @@ export const DATABASE_FILE = 'geekity.db';
 /** Directory name that marks a document as thrown away but not yet deleted. */
 export const TRASH_DIRECTORY = '_trash';
 
+/**
+ * What the index reads the time from.
+ *
+ * A post's date decides whether it is public yet, so the index has a clock;
+ * this is the seam that lets a test move it without waiting.
+ */
+export type Clock = () => Date;
+
+/** The clock an index uses when it is not given one. */
+export const systemClock: Clock = () => new Date();
+
 /** Where {@link openContentStore} puts the database. */
 export interface OpenContentStoreOptions {
   /** Directory the database lives in. Created if it is missing. */
   dataDir: string;
+  /**
+   * What "now" means to the public queries, for the scheduling clause. Defaults
+   * to {@link systemClock}; a test hands one it can move.
+   */
+  now?: Clock | undefined;
 }
 
 /**
@@ -27,6 +43,16 @@ export interface OpenContentStoreOptions {
 export interface ContentStore {
   /** Absolute path of the SQLite file. */
   readonly file: string;
+  /**
+   * What the index thinks the time is: the instant every public query holds a
+   * future-dated document against.
+   *
+   * It is here so that a caller applying the same rule outside SQL — the
+   * public site deciding whether to serve a permalink, the admin deciding
+   * whether to offer a View link — asks the same clock the listings did, and
+   * so a test that moves the index's clock moves theirs with it.
+   */
+  now(): Date;
   /**
    * Insert or replace the row for `document.path`, tags and categories
    * included.
@@ -48,8 +74,24 @@ export interface ContentStore {
    * years, so the newest match wins.
    */
   getBySlug(slug: string): Document | undefined;
-  /** Published, untrashed posts, newest first. */
+  /** Published, untrashed, already-due posts, newest first. */
   listPosts(options?: ListOptions): Document[];
+  /**
+   * When the next scheduled document becomes public, as the UTC instant the
+   * index sorts by, or `undefined` when nothing is waiting.
+   *
+   * What a scheduler sets its timer from: one indexed lookup rather than a
+   * walk of the archive.
+   */
+  nextDue(): string | undefined;
+  /**
+   * Published, untrashed documents whose date falls in `(after, now]`, oldest
+   * first: everything that has come due since a scheduler last looked.
+   *
+   * Oldest first because they are announced in the order they became public,
+   * and a follower should be told about the older post first.
+   */
+  listDueSince(after: string): Document[];
   /** Published, untrashed documents carrying a tag, newest first. */
   listByTag(tag: string, options?: ListByTagOptions): Document[];
   /** Published, untrashed documents filed under a category, newest first. */
@@ -94,6 +136,11 @@ export interface ListAllOptions extends ListOptions {
   draft?: boolean | undefined;
   /** `true` for trashed only, `false` for live only. Defaults to live only. */
   trashed?: boolean | undefined;
+  /**
+   * `true` for documents whose date has not arrived, `false` for those already
+   * due. Defaults to both, which is what the admin's "All" view shows.
+   */
+  scheduled?: boolean | undefined;
   /** Restrict to documents carrying this tag. */
   tag?: string | undefined;
   /** Restrict to documents filed under this category. */
@@ -104,12 +151,14 @@ export interface ListAllOptions extends ListOptions {
 export interface ContentCounts {
   /** Every indexed document, trash included. */
   total: number;
-  /** Published, untrashed posts: the size of the public archive. */
+  /** Published, untrashed, already-due posts: the size of the public archive. */
   posts: number;
-  /** Published, untrashed pages. */
+  /** Published, untrashed, already-due pages. */
   pages: number;
   /** Untrashed drafts of either type. */
   drafts: number;
+  /** Untrashed non-drafts of either type whose date has not arrived yet. */
+  scheduled: number;
   /** Documents under `_trash/`. */
   trashed: number;
 }
@@ -174,13 +223,34 @@ export function dateSortKey(date: string | undefined): string | null {
 }
 
 /**
+ * The clause every public query carries: a document is public only once its
+ * date has arrived.
+ *
+ * A document with no date — or one nobody can read — has nothing to wait for
+ * and is public straight away, which is what keeps an undated page out of the
+ * scheduling rule without a second predicate. The value compared against is a
+ * {@link dateSortKey} of the clock, so the comparison is between two UTC ISO
+ * strings and lexicographic order is chronological order.
+ */
+const DUE_CLAUSE = '(date_sort IS NULL OR date_sort <= ?)';
+
+/** The reverse: a document whose date is still ahead of the clock. */
+const SCHEDULED_CLAUSE = '(date_sort IS NOT NULL AND date_sort > ?)';
+
+/**
  * Open (and if needed create) the index in `dataDir`, applying every migration
  * the package ships. Applying them is idempotent, so reopening an up-to-date
  * database does nothing.
  */
 export function openContentStore(options: OpenContentStoreOptions): ContentStore {
   const file = path.join(options.dataDir, DATABASE_FILE);
+  const clock = options.now ?? systemClock;
   mkdirSync(options.dataDir, { recursive: true });
+
+  /** The clock as the index sorts dates, so the two compare as strings. */
+  function nowKey(): string {
+    return clock().toISOString();
+  }
 
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL');
@@ -235,9 +305,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     counts: db.prepare(`
       SELECT
         COUNT(*) AS total,
-        COALESCE(SUM(type = 'post' AND draft = 0 AND trashed = 0), 0) AS posts,
-        COALESCE(SUM(type = 'page' AND draft = 0 AND trashed = 0), 0) AS pages,
+        COALESCE(SUM(type = 'post' AND draft = 0 AND trashed = 0 AND ${DUE_CLAUSE}), 0) AS posts,
+        COALESCE(SUM(type = 'page' AND draft = 0 AND trashed = 0 AND ${DUE_CLAUSE}), 0) AS pages,
         COALESCE(SUM(draft = 1 AND trashed = 0), 0) AS drafts,
+        COALESCE(SUM(draft = 0 AND trashed = 0 AND ${SCHEDULED_CLAUSE}), 0) AS scheduled,
         COALESCE(SUM(trashed = 1), 0) AS trashed
       FROM documents
     `),
@@ -246,6 +317,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       FROM document_tags
       JOIN documents ON documents.path = document_tags.path
       WHERE documents.draft = 0 AND documents.trashed = 0
+        AND (documents.date_sort IS NULL OR documents.date_sort <= ?)
       GROUP BY document_tags.tag
       ORDER BY count DESC, tag ASC
     `),
@@ -254,8 +326,19 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       FROM document_categories
       JOIN documents ON documents.path = document_categories.path
       WHERE documents.draft = 0 AND documents.trashed = 0
+        AND (documents.date_sort IS NULL OR documents.date_sort <= ?)
       GROUP BY document_categories.category
       ORDER BY count DESC, category ASC
+    `),
+    nextDue: db.prepare(`
+      SELECT MIN(date_sort) AS due FROM documents
+      WHERE draft = 0 AND trashed = 0 AND ${SCHEDULED_CLAUSE}
+    `),
+    dueSince: db.prepare(`
+      SELECT * FROM documents
+      WHERE draft = 0 AND trashed = 0
+        AND date_sort IS NOT NULL AND date_sort > ? AND date_sort <= ?
+      ORDER BY date_sort ASC, path ASC
     `),
   };
 
@@ -314,9 +397,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     const where = [
       'draft = 0',
       'trashed = 0',
+      DUE_CLAUSE,
       `path IN (SELECT path FROM ${table} WHERE ${column} = ?)`,
     ];
-    const params: unknown[] = [term];
+    const params: unknown[] = [nowKey(), term];
     if (options.type !== undefined) {
       where.unshift('type = ?');
       params.unshift(options.type);
@@ -331,8 +415,13 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     term: string,
     options: ListByTagOptions,
   ): number {
-    const where = ['documents.draft = 0', 'documents.trashed = 0', `${table}.${column} = ?`];
-    const params: unknown[] = [term];
+    const where = [
+      'documents.draft = 0',
+      'documents.trashed = 0',
+      '(documents.date_sort IS NULL OR documents.date_sort <= ?)',
+      `${table}.${column} = ?`,
+    ];
+    const params: unknown[] = [nowKey(), term];
     if (options.type !== undefined) {
       where.push('documents.type = ?');
       params.push(options.type);
@@ -359,6 +448,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
   return {
     file,
+
+    now() {
+      return clock();
+    },
 
     upsert(document) {
       writeOne(document);
@@ -392,7 +485,17 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     listPosts(options = {}) {
-      return select(["type = 'post'", 'draft = 0', 'trashed = 0'], [], options);
+      return select(["type = 'post'", 'draft = 0', 'trashed = 0', DUE_CLAUSE], [nowKey()], options);
+    },
+
+    nextDue() {
+      const row = statements.nextDue.get(nowKey()) as Record<string, unknown>;
+      return text(row['due']);
+    },
+
+    listDueSince(after) {
+      const rows = statements.dueSince.all(after, nowKey()) as Record<string, unknown>[];
+      return hydrateAll(rows);
     },
 
     listByTag(tag, options = {}) {
@@ -417,6 +520,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       }
       where.push('trashed = ?');
       params.push(options.trashed === true ? 1 : 0);
+      if (options.scheduled !== undefined) {
+        where.push(options.scheduled ? SCHEDULED_CLAUSE : DUE_CLAUSE);
+        params.push(nowKey());
+      }
 
       if (options.tag !== undefined) {
         where.push('path IN (SELECT path FROM document_tags WHERE tag = ?)');
@@ -435,12 +542,14 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     counts() {
-      const row = statements.counts.get() as Record<string, unknown>;
+      const now = nowKey();
+      const row = statements.counts.get(now, now, now) as Record<string, unknown>;
       return {
         total: Number(row['total']),
         posts: Number(row['posts']),
         pages: Number(row['pages']),
         drafts: Number(row['drafts']),
+        scheduled: Number(row['scheduled']),
         trashed: Number(row['trashed']),
       };
     },
@@ -454,14 +563,14 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     listTags() {
-      return statements.tagCounts.all().map((row) => ({
+      return statements.tagCounts.all(nowKey()).map((row) => ({
         tag: String(row['tag']),
         count: Number(row['count']),
       }));
     },
 
     listCategories() {
-      return statements.categoryCounts.all().map((row) => ({
+      return statements.categoryCounts.all(nowKey()).map((row) => ({
         category: String(row['category']),
         count: Number(row['count']),
       }));

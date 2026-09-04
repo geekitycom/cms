@@ -227,7 +227,9 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
  */
 export function federatedPost(store: ContentStore, slug: string): Document | undefined {
   const document = store.getBySlug(slug);
-  return document !== undefined && isFederatedDocument(document) ? document : undefined;
+  return document !== undefined && isFederatedDocument(document, store.now())
+    ? document
+    : undefined;
 }
 
 /**

@@ -1,4 +1,5 @@
 import type { Document } from '../content/document.ts';
+import { isScheduled } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import { postObjectId } from '../federation/paths.ts';
@@ -6,12 +7,18 @@ import { postObjectId } from '../federation/paths.ts';
 /**
  * Whether the public site may show a document.
  *
- * Two things hide one: `draft: true` in the front matter, and living under
- * `_trash/`. Both stay indexed so the admin can find them; neither is ever
- * served, listed, or fed.
+ * Three things hide one: `draft: true` in the front matter, living under
+ * `_trash/`, and a date that has not arrived yet. All three stay indexed so
+ * the admin can find them; none is ever served, listed, or fed.
+ *
+ * This is the predicate the index answers in SQL, so anything that has to
+ * decide about a single document in hand — a permalink, a View link, the
+ * sitemap — asks it here rather than deriving the rule again. The clock
+ * defaults to the system one; a caller with a store should pass
+ * {@link ContentStore.now} so the answer matches the listings it came from.
  */
-export function isPublicDocument(document: Document): boolean {
-  return !document.draft && !isTrashedPath(document.path);
+export function isPublicDocument(document: Document, now: Date = new Date()): boolean {
+  return !document.draft && !isTrashedPath(document.path) && !isScheduled(document, now);
 }
 
 /**
@@ -23,7 +30,7 @@ export function isPublicDocument(document: Document): boolean {
  */
 export function publicDocumentAt(store: ContentStore, permalink: string): Document | undefined {
   const document = store.getByPermalink(permalink);
-  if (document === undefined || !isPublicDocument(document)) return undefined;
+  if (document === undefined || !isPublicDocument(document, store.now())) return undefined;
   return document;
 }
 

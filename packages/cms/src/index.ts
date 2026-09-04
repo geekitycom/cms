@@ -12,8 +12,14 @@ import {
 import type { AdminStore } from './admin/index.ts';
 import { resolveConfig } from './config.ts';
 import type { DocumentChangeHook, GeekityConfig, ResolvedConfig } from './config.ts';
-import { createContentSync, openContentStore } from './content/index.ts';
-import type { ContentEvents, ContentEventMap, ContentStore, SyncResult } from './content/index.ts';
+import { createContentSync, createScheduler, openContentStore } from './content/index.ts';
+import type {
+  ContentEvents,
+  ContentEventMap,
+  ContentStore,
+  Scheduler,
+  SyncResult,
+} from './content/index.ts';
 import type { GeekityEnv } from './env.ts';
 import {
   createDeliveryService,
@@ -81,6 +87,7 @@ export {
   findAdminAsset,
   findBySlug,
   followerRow,
+  formatInTimezone,
   formFor,
   formFromSettings,
   flash,
@@ -232,6 +239,7 @@ export type { InitSiteOptions, InitSiteResult } from './init.ts';
 export {
   contentFilePath,
   createContentSync,
+  createScheduler,
   DATABASE_FILE,
   dateSortKey,
   DEFAULT_DEBOUNCE_MS,
@@ -241,18 +249,24 @@ export {
   freeSlug,
   DuplicatePermalinkError,
   hashDocument,
+  isScheduled,
   isTrashedPath,
   KNOWN_FRONT_MATTER_KEYS,
   KNOWN_UPLOAD_TYPES,
   matchesSignature,
+  MAXIMUM_DELAY_MS,
   normalizeBody,
   normalizeUploadType,
   openContentStore,
   parseDocument,
   renderMarkdown,
   saveDocument,
+  SCHEDULE_ORIGIN,
+  scheduledFor,
   serializeDocument,
   slugify,
+  systemClock,
+  systemTimers,
   TRASH_DIRECTORY,
   typeForPath,
   UPLOAD_MEDIA_TYPES,
@@ -261,6 +275,7 @@ export type {
   ActivityPubMetadata,
   CategoryCount,
   ChangeOrigin,
+  Clock,
   ContentCounts,
   ContentFilePathInput,
   ContentEventListener,
@@ -269,6 +284,7 @@ export type {
   ContentStore,
   ContentSync,
   CreateContentSyncOptions,
+  CreateSchedulerOptions,
   DefaultPermalinkInput,
   Document,
   DocumentChange,
@@ -282,6 +298,10 @@ export type {
   OpenContentStoreOptions,
   ParseDocumentOptions,
   SaveDocumentOptions,
+  ScheduleLogger,
+  Scheduler,
+  ScheduleTimers,
+  ScheduleWatermark,
   SyncLogger,
   SyncResult,
   TagCount,
@@ -529,6 +549,12 @@ export type {
   ThemeAsset,
 } from './web/index.ts';
 
+/**
+ * Where the scheduler's watermark lives in {@link AdminStore.getState}: the
+ * instant up to which scheduled documents have been announced.
+ */
+export const SCHEDULE_WATERMARK_KEY = 'schedule.watermark';
+
 /** A running (or runnable) CMS instance. */
 export interface Cms {
   /**
@@ -580,6 +606,15 @@ export interface Cms {
    * flight.
    */
   readonly notifier: FeedNotifier;
+  /**
+   * The publisher of scheduled posts: what holds a future-dated post back and
+   * releases it when its date arrives.
+   *
+   * It is already subscribed to the index and started by {@link Cms.serve}; a
+   * site reaches for it to ask what it is waiting for, or to release what is
+   * due without waiting for the timer.
+   */
+  readonly scheduler: Scheduler;
   /**
    * Index changes, as they happen: `created`, `updated`, `deleted`,
    * `published`, `unpublished` and the catch-all `change`. Every listener is
@@ -641,7 +676,7 @@ export interface Cms {
  */
 export function createCms(config: GeekityConfig = {}): Cms {
   const resolved = resolveConfig(config);
-  const store = openContentStore({ dataDir: resolved.dataDir });
+  const store = openContentStore({ dataDir: resolved.dataDir, now: resolved.now });
   const admin = openAdminStore({ dataDir: resolved.dataDir });
 
   // An empty settings table is filled from content/_data/site.json, so a site
@@ -678,6 +713,25 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // on disk changed the same feeds as one saved through the editor.
   const notifier = createFeedNotifier({ admin, config: resolved });
   content.events.on('change', (change) => notifier.handle(change));
+
+  // A post whose date is in the future is held back (TASK-44), and nothing
+  // watches a clock: this is what notices that one has come due and reports it
+  // as the publish it is, so delivery, the notifier and a site's `onPublish`
+  // all run without knowing a timer was involved. Subscribed to every change
+  // so a save that moves a date moves the timer with it.
+  const scheduler = createScheduler({
+    store,
+    announce: (change) => content.announce(change),
+    watermark: {
+      read: () => admin.getState(SCHEDULE_WATERMARK_KEY),
+      write: (instant) => {
+        admin.setState(SCHEDULE_WATERMARK_KEY, instant);
+      },
+    },
+  });
+  content.events.on('change', (change) => {
+    scheduler.handle(change);
+  });
 
   // Relay subscriptions (FEP-ae0c). The list is a setting and the handshake is
   // a record, so booting reconciles the two: a relay the file names and the
@@ -746,6 +800,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     delivery,
     relays,
     notifier,
+    scheduler,
     events: content.events,
 
     onDocumentChange(hook) {
@@ -773,6 +828,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // never serves a stale document, and the watcher takes over from there.
       await content.start();
 
+      // After the scan, because the catch-up reads the index: a post whose
+      // date passed while nothing was running is published here, once.
+      await scheduler.start();
+
       return new Promise((resolve) => {
         server = serveNode({ fetch: app.fetch, port: resolved.port }, (info) => {
           resolve({ port: info.port });
@@ -783,7 +842,9 @@ export function createCms(config: GeekityConfig = {}): Cms {
     async close() {
       const running = server;
       server = undefined;
+      scheduler.stop();
       await content.stop();
+      await scheduler.settled();
       // Anything already on its way out is allowed to finish, so closing never
       // leaves a delivery half recorded.
       await delivery.settled();

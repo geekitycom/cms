@@ -406,6 +406,18 @@ export interface AdminStore {
    */
   setSettings(values: Record<string, string>): void;
   /**
+   * One piece of the CMS's own operational state, or `undefined`.
+   *
+   * Not a setting: nothing here is a site's choice, nothing is mirrored to
+   * `content/_data/site.json`, and nothing here counts towards
+   * {@link AdminStore.countSettings}, which is what decides whether a site is
+   * seeded from that file. The scheduler's watermark — how far through the
+   * calendar it has got — lives here.
+   */
+  getState(key: string): string | undefined;
+  /** Write one piece of that state. */
+  setState(key: string, value: string): void;
+  /**
    * Every key pair an actor holds, in {@link ACTOR_KEY_ALGORITHMS} order, so a
    * caller handing them to Fedify gets HTTP Signatures first whatever order
    * they were written in. Empty on a site that has not federated yet.
@@ -571,6 +583,11 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     readFlash: db.prepare('SELECT flash FROM sessions WHERE id = ?'),
     writeFlash: db.prepare('UPDATE sessions SET flash = ? WHERE id = ?'),
     countSettings: db.prepare('SELECT COUNT(*) AS count FROM settings'),
+    getState: db.prepare('SELECT value FROM cms_state WHERE key = ?'),
+    putState: db.prepare(`
+      INSERT INTO cms_state (key, value, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `),
     allSettings: db.prepare('SELECT key, value FROM settings'),
     putSetting: db.prepare(`
       INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
@@ -1113,6 +1130,15 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       }
     },
 
+    getState(key) {
+      const row = statements.getState.get(key) as Record<string, unknown> | undefined;
+      return row === undefined ? undefined : String(row['value']);
+    },
+
+    setState(key, value) {
+      statements.putState.run(key, value, new Date().toISOString());
+    },
+
     pushFlash(sessionId, entry) {
       const queued = [...readFlash(sessionId), entry];
       statements.writeFlash.run(JSON.stringify(queued), sessionId);
@@ -1486,6 +1512,20 @@ const MIGRATIONS: readonly Migration[] = [
 
       CREATE INDEX ap_relays_follow_id ON ap_relays (follow_id);
       CREATE INDEX ap_relays_actor_id ON ap_relays (actor_id);
+    `,
+  },
+  {
+    // The CMS's own operational state, as opposed to the site's settings. It
+    // is a table of its own rather than more rows in `settings` because the
+    // number of settings is what decides whether a site is seeded from
+    // content/_data/site.json, and because nothing here belongs in that file.
+    version: 10,
+    sql: `
+      CREATE TABLE cms_state (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `,
   },
 ];

@@ -6,6 +6,7 @@ import type { Context, Hono } from 'hono';
 import type { Document, DocumentContent, DocumentType } from '../content/document.ts';
 import { parseDocument } from '../content/parser.ts';
 import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
+import { scheduledFor } from '../content/schedule.ts';
 import { defaultPermalink, slugify } from '../content/slug.ts';
 import { DuplicatePermalinkError, isTrashedPath, TRASH_DIRECTORY } from '../content/store.ts';
 import type { ContentStore, ListAllOptions } from '../content/store.ts';
@@ -13,6 +14,8 @@ import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { isPublicDocument } from '../web/documents.ts';
 import { flash } from './flash.ts';
+import { formatInTimezone } from './formatting.ts';
+import { readSiteSettings } from './settings.ts';
 import { PREVIEW_PATH } from './preview.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -96,11 +99,23 @@ export function newEditorPath(kind: DocumentKind): string {
   return `${kind.basePath}/new`;
 }
 
-/** The four views of a listing doc-5 asks for. */
-export type DocumentFilter = 'all' | 'published' | 'draft' | 'trash';
+/**
+ * The views of a listing doc-5 asks for, plus the one scheduling adds.
+ *
+ * `published` means published *and* out: a post whose date has not arrived is
+ * under `scheduled` and nowhere else, because a listing that showed it as
+ * published would disagree with the site, which is not serving it.
+ */
+export type DocumentFilter = 'all' | 'published' | 'scheduled' | 'draft' | 'trash';
 
 /** The filters, in the order they are shown. */
-export const DOCUMENT_FILTERS: readonly DocumentFilter[] = ['all', 'published', 'draft', 'trash'];
+export const DOCUMENT_FILTERS: readonly DocumentFilter[] = [
+  'all',
+  'published',
+  'scheduled',
+  'draft',
+  'trash',
+];
 
 /** How many rows one page of a listing holds. */
 export const DOCUMENTS_PER_PAGE = 25;
@@ -115,7 +130,8 @@ export function listOptionsFor(kind: DocumentKind, filter: DocumentFilter): List
   return {
     type: kind.type,
     trashed: filter === 'trash',
-    ...(filter === 'published' ? { draft: false } : {}),
+    ...(filter === 'published' ? { draft: false, scheduled: false } : {}),
+    ...(filter === 'scheduled' ? { draft: false, scheduled: true } : {}),
     ...(filter === 'draft' ? { draft: true } : {}),
   };
 }
@@ -172,7 +188,7 @@ export function mountDocumentScreens(
         url: listingUrl(kind, name, 1),
         current: name === filter,
       })),
-      documents: rows.map((document) => listRow(kind, document)),
+      documents: rows.map((document) => listRow(kind, document, c.var.store.now())),
       newUrl: newEditorPath(kind),
       returnUrl: listingUrl(kind, filter, pageNumber),
       page: pageNumber,
@@ -351,13 +367,22 @@ async function saveFromForm(
     origin: 'admin',
   });
 
-  flash(c, 'notice', savedMessage(kind, document, saved));
+  flash(c, 'notice', savedMessage(kind, document, saved, store.now()));
   return c.redirect(editorPath(kind, saved.slug), 303);
 }
 
 /** What the flash says after a save, which depends on what the save did. */
-function savedMessage(kind: DocumentKind, previous: Document | undefined, saved: Document): string {
+function savedMessage(
+  kind: DocumentKind,
+  previous: Document | undefined,
+  saved: Document,
+  now: Date,
+): string {
   if (saved.draft) return `Draft saved: ${saved.title}`;
+  // A date in the future is not a refusal to publish, it is an instruction
+  // about when, and the flash has to say so or the author will think the
+  // Publish button did nothing.
+  if (scheduledFor(saved, now) !== undefined) return `Scheduled: ${saved.title}`;
   if (previous === undefined || previous.draft) return `Published: ${saved.title}`;
   return `Updated: ${saved.title}`;
 }
@@ -750,6 +775,11 @@ interface RenderEditorOptions {
 function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Response {
   const { kind, document, form } = options;
   const trashed = document !== undefined && isTrashedPath(document.path);
+  const now = c.var.store.now();
+  // Printed in the site's own time zone rather than in UTC: an author who
+  // scheduled a post for nine in the morning meant their own morning.
+  const scheduledAt =
+    document === undefined || trashed || document.draft ? undefined : scheduledFor(document, now);
 
   const actions: EditorAction[] = [];
   if (document === undefined || document.draft) {
@@ -775,7 +805,11 @@ function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Res
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
     uploadUrl: UPLOADS_PATH,
-    viewUrl: document !== undefined && isPublicDocument(document) ? document.permalink : undefined,
+    viewUrl:
+      document !== undefined && isPublicDocument(document, now) ? document.permalink : undefined,
+    ...(scheduledAt === undefined
+      ? {}
+      : { scheduledFor: formatInTimezone(scheduledAt, readSiteSettings(c.var.admin).timezone) }),
     ...(options.error === undefined ? {} : { error: options.error }),
   });
 }
@@ -817,14 +851,16 @@ export interface DocumentRow {
   updated: string | undefined;
   draft: boolean;
   trashed: boolean;
+  /** Whether its date has not arrived, so the public site is holding it back. */
+  scheduled: boolean;
   /** Where the editor for it lives. */
   editUrl: string;
   /** Its public URL, or `undefined` when the public site would not serve it. */
   viewUrl: string | undefined;
 }
 
-function listRow(kind: DocumentKind, document: Document): DocumentRow {
-  const isPublic = isPublicDocument(document);
+function listRow(kind: DocumentKind, document: Document, now: Date): DocumentRow {
+  const isPublic = isPublicDocument(document, now);
   return {
     title: document.title,
     slug: document.slug,
@@ -838,6 +874,7 @@ function listRow(kind: DocumentKind, document: Document): DocumentRow {
     updated: document.updated ?? document.date,
     draft: document.draft,
     trashed: isTrashedPath(document.path),
+    scheduled: scheduledFor(document, now) !== undefined,
     editUrl: editorPath(kind, document.slug),
     viewUrl: isPublic ? document.permalink : undefined,
   };
@@ -846,6 +883,7 @@ function listRow(kind: DocumentKind, document: Document): DocumentRow {
 const FILTER_LABELS: Record<DocumentFilter, string> = {
   all: 'All',
   published: 'Published',
+  scheduled: 'Scheduled',
   draft: 'Drafts',
   trash: 'Trash',
 };

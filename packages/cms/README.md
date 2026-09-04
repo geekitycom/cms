@@ -423,6 +423,37 @@ await cms.sync(); // one full scan; what `serve()` runs on boot
 Set `watch: false` (or `GEEKITY_WATCH=false`) for a host whose content cannot
 change under the process. `geekity sync` sets it for you.
 
+## Scheduling
+
+A post whose `date` is in the future is written now and published then, the way
+WordPress schedules one. Save it with Publish; the editor answers `Scheduled:
+{title}` and says when it goes out, in the site's `timezone` setting.
+
+Until that moment the post is not public in any sense: it is off the home page,
+off every archive, out of all three feeds and out of the ActivityPub outbox,
+its permalink 404s in every representation, and no follower has been told about
+it. When the moment comes the running server publishes it — no restart, no
+build — and the same delivery that a live publish runs sends the
+`Create(Article)` and pings the notify server.
+
+There is no `scheduled` key and no state to keep: a scheduled post is an
+ordinary published one whose date has not arrived, which is a question asked of
+the clock on every query. So moving the date moves the publication, ticking
+Draft cancels it, and a date pushed into the future withdraws a post that was
+already out — with a `Delete` to the followers, exactly as drafting it would.
+
+A post whose date passed while the server was down is public the moment the
+next boot has scanned, and is federated once on that boot. The CMS remembers
+how far through the calendar it has got, so a restart never announces the same
+post twice and a deleted database never announces the archive.
+
+The admin lists scheduled posts under their own Scheduled filter, with a
+Scheduled status beside them. The public permalink 404s for a signed-in admin
+too: the public site has no session, deliberately — every response it gives is
+cacheable, and a URL that answered differently for one viewer would be cached
+and served to the rest. Use the editor's Preview button, which renders the post
+through the theme's own layout at an admin URL.
+
 ## Hooks
 
 Two hooks let a site do something of its own when content changes. Both are
@@ -576,8 +607,8 @@ Booting mounts the public site on the app. The routes are:
 | `/theme/…`                              | The theme's own files, from its `static/` directory.                       |
 | anything else                           | The theme's 404.                                                           |
 
-Drafts and documents in the trash are not on the public site: their URLs 404,
-and they are in no listing.
+Drafts, documents in the trash and posts whose date has not arrived are not on
+the public site: their URLs 404, and they are in no listing.
 
 Trailing slashes are canonical. A request that arrives without one redirects
 301 to the URL with it, but only when that URL resolves — a genuinely missing
@@ -1084,14 +1115,15 @@ npx @11ty/eleventy
 ```
 
 It is a plain ESM config with no dependency on this package, and it writes out
-the four rules the CMS follows that Eleventy does not know about on its own:
+the five rules the CMS follows that Eleventy does not know about on its own:
 
-| Rule                                            | How the config does it                                                                                                                                                                                                                                                     |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `draft: true` hides a document                  | An `addPreprocessor` that returns `false` for it. `BUILD_DRAFTS=1` builds drafts anyway, for a local preview.                                                                                                                                                              |
-| A file with no `permalink` gets the CMS default | An `addPreprocessor` that fills in `/{yyyy}/{mm}/{slug}/` for a post and `/{slug}/` for a page, slugifying the title exactly as the CMS does. Front matter always wins; the CMS writes `permalink` into every file it saves, so this only matters for hand-authored files. |
-| `content/uploads/` is served at `/uploads/`     | `addPassthroughCopy({ 'content/uploads': 'uploads' })`, plus an `ignores` entry for the same path. Without the ignore, an upload that happens to be Markdown would be copied _and_ rendered as a page; the CMS only ever indexes `posts/` and `pages/`.                    |
-| `content/_trash/` is not published              | `ignores.add('content/_trash/**')`. Eleventy skips `_includes` and `_data` because they are configured directories, not because of the underscore, so the trash has to be named.                                                                                           |
+| Rule                                            | How the config does it                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `draft: true` hides a document                  | An `addPreprocessor` that returns `false` for it. `BUILD_DRAFTS=1` builds drafts anyway, for a local preview.                                                                                                                                                                                                                                                                                           |
+| A file with no `permalink` gets the CMS default | An `addPreprocessor` that fills in `/{yyyy}/{mm}/{slug}/` for a post and `/{slug}/` for a page, slugifying the title exactly as the CMS does. Front matter always wins; the CMS writes `permalink` into every file it saves, so this only matters for hand-authored files.                                                                                                                              |
+| `content/uploads/` is served at `/uploads/`     | `addPassthroughCopy({ 'content/uploads': 'uploads' })`, plus an `ignores` entry for the same path. Without the ignore, an upload that happens to be Markdown would be copied _and_ rendered as a page; the CMS only ever indexes `posts/` and `pages/`.                                                                                                                                                 |
+| `content/_trash/` is not published              | `ignores.add('content/_trash/**')`. Eleventy skips `_includes` and `_data` because they are configured directories, not because of the underscore, so the trash has to be named.                                                                                                                                                                                                                        |
+| A future `date` holds a post back               | An `addPreprocessor` that returns `false` for it. This is the one rule that cannot be exactly the same in both places: a build has no clock, only a moment. A scheduled post is left out of the build that runs before its date and is in the next build after it, so a scheduled site needs a build on a schedule; the CMS publishes it on the date by itself. `BUILD_SCHEDULED=1` builds them anyway. |
 
 It also turns the template engine off for Markdown
 (`markdownTemplateEngine: false`), because the CMS renders Markdown with

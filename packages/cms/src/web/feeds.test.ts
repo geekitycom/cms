@@ -477,12 +477,12 @@ describe('the RSS feed', () => {
         permalink: '/three/',
       }),
       'posts/2026-09-04-draft.md': post('Secret Draft', {
-        date: '2026-09-04T09:00:00Z',
+        date: '2026-08-04T09:00:00Z',
         permalink: '/draft/',
         draft: true,
       }),
       '_trash/posts/2026-09-05-gone.md': post('Thrown Away', {
-        date: '2026-09-05T09:00:00Z',
+        date: '2026-08-05T09:00:00Z',
         permalink: '/gone/',
       }),
       'pages/about.md': `---\ntitle: About\npermalink: /about/\n---\n\nA page.\n`,
@@ -493,6 +493,39 @@ describe('the RSS feed', () => {
     assert.deepEqual(
       childrenNamed(channel, 'item').map((item) => child(item, 'title').text),
       ['One', 'Two'],
+    );
+  });
+
+  it('leaves out a post whose date has not arrived, in all three formats', async () => {
+    let now = new Date('2026-09-03T12:00:00Z');
+    const { cms } = await site(
+      {
+        'posts/2026-09-03-live.md': post('Live', {
+          date: '2026-09-03T09:00:00Z',
+          permalink: '/live/',
+        }),
+        'posts/2026-09-04-tomorrow.md': post('Tomorrow', {
+          date: '2026-09-04T09:00:00Z',
+          permalink: '/tomorrow/',
+        }),
+      },
+      { now: () => now },
+    );
+
+    const { channel } = await rss(cms, '/feed/');
+    assert.deepEqual(
+      childrenNamed(channel, 'item').map((item) => child(item, 'title').text),
+      ['Live'],
+    );
+    assert.ok(!(await (await cms.app.request('/feed/atom/')).text()).includes('Tomorrow'));
+    assert.ok(!(await (await cms.app.request('/feed/json/')).text()).includes('Tomorrow'));
+
+    now = new Date('2026-09-04T09:00:00Z');
+
+    const after = await rss(cms, '/feed/');
+    assert.deepEqual(
+      childrenNamed(after.channel, 'item').map((item) => child(item, 'title').text),
+      ['Tomorrow', 'Live'],
     );
   });
 

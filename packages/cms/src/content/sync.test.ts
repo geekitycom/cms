@@ -571,15 +571,15 @@ describe('the watcher', () => {
 
     const addLater = () =>
       writeFiles(dir, {
-        'posts/2026-09-04-later.md': markdown({
+        'posts/2026-08-04-later.md': markdown({
           title: 'Later',
-          permalink: '/2026/09/later/',
-          date: '2026-09-04T09:00:00Z',
+          permalink: '/2026/08/later/',
+          date: '2026-08-04T09:00:00Z',
         }),
       });
     await addLater();
     const document = await eventually(
-      () => index.getByPath('posts/2026-09-04-later.md'),
+      () => index.getByPath('posts/2026-08-04-later.md'),
       'the watcher to keep working after a parse failure',
       addLater,
     );

@@ -149,7 +149,12 @@ interface Site {
  * private-address guard off, because neither host in this file resolves.
  */
 async function site(
-  options: { watch?: boolean; followers?: number; files?: Record<string, string> } = {},
+  options: {
+    watch?: boolean;
+    followers?: number;
+    files?: Record<string, string>;
+    now?: () => Date;
+  } = {},
 ): Promise<Site> {
   const dataDir = await temporaryDir('geekity-delivery-data-');
   const contentDir = await temporaryDir('geekity-delivery-content-');
@@ -181,6 +186,7 @@ async function site(
     watch: options.watch ?? false,
     baseUrl: BASE_URL,
     federation: { queue: null, allowPrivateAddress: true },
+    ...(options.now === undefined ? {} : { now: options.now }),
   });
   started.push(cms);
 
@@ -353,6 +359,124 @@ describe('publishing a post from the admin', () => {
     const indexed = cms.store.getBySlug('hello-world');
     assert.equal(indexed?.activitypub?.id, `${BASE_URL}/ap/posts/hello-world`);
     assert.equal(indexed?.activitypub?.published, '2026-03-04T10:00:00.000Z');
+  });
+});
+
+describe('a scheduled post', () => {
+  it('federates nothing while its date is ahead, then one Create when it arrives', async () => {
+    let now = new Date('2026-09-03T12:00:00Z');
+    const { cms } = await site({ now: () => now });
+    const agent = await signedIn(cms);
+    await cms.scheduler.start();
+
+    const response = await publishNewPost(agent, { date: '2026-09-04T09:00:00.000Z' });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    assert.deepEqual(deliveries, [], 'nothing goes out while the post is held');
+    assert.equal(cms.scheduler.waitingFor(), '2026-09-04T09:00:00.000Z');
+
+    now = new Date('2026-09-04T09:00:00Z');
+    assert.equal(await cms.scheduler.run(), 1);
+    await cms.delivery.settled();
+
+    const creates = delivered('Create');
+    assert.equal(creates.length, 1, `expected one Create, saw ${JSON.stringify(deliveries)}`);
+    const object = (creates[0] as Delivery).body['object'] as Record<string, unknown>;
+    assert.equal(object['type'], 'Article');
+    assert.equal(object['name'], 'Hello, world');
+    assert.equal(object['id'], `${BASE_URL}/ap/posts/hello-world`);
+
+    await cms.scheduler.run();
+    await cms.delivery.settled();
+
+    assert.equal(delivered('Create').length, 1, 'and only once');
+  });
+
+  it('withdraws a published post whose date is pushed into the future', async () => {
+    const now = new Date('2026-09-03T12:00:00Z');
+    const { cms } = await site({ now: () => now });
+    const agent = await signedIn(cms);
+    await publishNewPost(agent, { date: '2026-09-03T09:00:00.000Z' });
+    await cms.delivery.settled();
+    assert.equal(delivered('Create').length, 1);
+
+    await submitEditor(agent, '/admin/posts/hello-world', { date: '2026-09-10T09:00:00.000Z' });
+    await cms.delivery.settled();
+
+    const deletes = delivered('Delete');
+    assert.equal(deletes.length, 1, `expected one Delete, saw ${JSON.stringify(deliveries)}`);
+    const tombstone = (deletes[0] as Delivery).body['object'] as Record<string, unknown>;
+    assert.equal(tombstone['type'], 'Tombstone');
+    assert.equal(tombstone['formerType'], 'as:Article');
+  });
+
+  it('federates once, on the next boot, a post that came due while nothing was running', async () => {
+    const now = new Date('2026-09-03T12:00:00Z');
+    const { cms, dataDir, contentDir } = await site({ now: () => now });
+    const agent = await signedIn(cms);
+    await cms.scheduler.start();
+    await publishNewPost(agent, { date: '2026-09-04T09:00:00.000Z' });
+    await cms.delivery.settled();
+    assert.deepEqual(deliveries, []);
+    await cms.close();
+
+    // The date passed while nothing was running; the same directories come back
+    // up under a clock that is past it.
+    let later = new Date('2026-09-05T08:00:00Z');
+    const rebooted = createCms({
+      dataDir,
+      contentDir,
+      port: 0,
+      watch: false,
+      baseUrl: BASE_URL,
+      federation: { queue: null, allowPrivateAddress: true },
+      now: () => later,
+    });
+    started.push(rebooted);
+    await rebooted.sync();
+    await rebooted.scheduler.start();
+    await rebooted.delivery.settled();
+
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+
+    // And a second boot after that says nothing about it again.
+    await rebooted.close();
+    later = new Date('2026-09-06T08:00:00Z');
+    const again = createCms({
+      dataDir,
+      contentDir,
+      port: 0,
+      watch: false,
+      baseUrl: BASE_URL,
+      federation: { queue: null, allowPrivateAddress: true },
+      now: () => later,
+    });
+    started.push(again);
+    await again.sync();
+    await again.scheduler.start();
+    await again.delivery.settled();
+
+    assert.equal(delivered('Create').length, 1, 'the watermark had already passed it');
+  });
+
+  it('publishes on its own timer, with no restart and nothing prompting it', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    await cms.scheduler.start();
+
+    const due = new Date(Date.now() + 150).toISOString();
+    await publishNewPost(agent, { date: due });
+    await cms.delivery.settled();
+    assert.deepEqual(deliveries, [], 'nothing goes out at the moment of saving');
+
+    const create = await waitForDelivery('Create');
+
+    assert.equal(
+      (create.body['object'] as Record<string, unknown>)['name'],
+      'Hello, world',
+      'the timer fired on its own',
+    );
   });
 });
 
