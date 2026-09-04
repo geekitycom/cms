@@ -69,6 +69,23 @@ export type {
 } from './federation.ts';
 export { flash, takeFlash } from './flash.ts';
 export { formatInTimezone } from './formatting.ts';
+export {
+  adminContentSecurityPolicy,
+  adminSecurityHeaders,
+  baselineSecurityHeaders,
+  createNonce,
+  HSTS_MAX_AGE,
+  HSTS_VALUE,
+  NONCE_BYTES,
+} from './headers.ts';
+export {
+  clientAddress,
+  createLoginThrottle,
+  describeWait,
+  LOCKOUT_GROWTH_LIMIT,
+  loginKeys,
+} from './throttle.ts';
+export type { LoginThrottle, LoginThrottleOptions } from './throttle.ts';
 export { mountPreview, PREVIEW_PATH } from './preview.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from './passwords.ts';
 export {

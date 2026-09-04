@@ -116,6 +116,19 @@ export default tseslint.config(
   },
 
   {
+    // The admin's hand-written browser scripts, served as they are. Same
+    // reasoning as the block above: `globals.node` would let a `process`
+    // through the linter into a page. `editor.js` beside them is esbuild's
+    // output and is ignored; its source is linted as TypeScript.
+    name: 'geekity/admin-static',
+    files: ['packages/cms/admin/static/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: globals.browser,
+    },
+  },
+
+  {
     name: 'geekity/tests',
     files: ['**/*.test.ts', 'packages/cms/test/**/*.ts'],
     rules: {

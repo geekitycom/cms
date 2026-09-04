@@ -269,4 +269,72 @@ describe('baseUrlSource', () => {
       'an empty value is not a value',
     );
   });
+
+  it('allows five failed logins and a quarter-hour lockout unless the site says otherwise', () => {
+    const config = resolveConfig({}, { cwd: '/srv/site', env: {} });
+
+    assert.equal(config.loginAttempts, 5);
+    assert.equal(config.loginLockout, 15 * 60);
+  });
+
+  it('takes the login limits from the config or the environment', () => {
+    assert.equal(
+      resolveConfig({ loginAttempts: 3 }, { cwd: '/srv/site', env: {} }).loginAttempts,
+      3,
+    );
+    assert.equal(
+      resolveConfig(
+        { loginAttempts: 3 },
+        { cwd: '/srv/site', env: { GEEKITY_LOGIN_ATTEMPTS: '9' } },
+      ).loginAttempts,
+      9,
+    );
+    assert.equal(
+      resolveConfig({ loginLockout: 30 }, { cwd: '/srv/site', env: {} }).loginLockout,
+      30,
+    );
+    assert.equal(
+      resolveConfig(
+        { loginLockout: 30 },
+        { cwd: '/srv/site', env: { GEEKITY_LOGIN_LOCKOUT: '45' } },
+      ).loginLockout,
+      45,
+    );
+  });
+
+  it('rejects login limits that are not positive whole numbers', () => {
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_LOGIN_ATTEMPTS: 'three' } }),
+      /GEEKITY_LOGIN_ATTEMPTS/,
+    );
+    assert.throws(
+      () => resolveConfig({ loginAttempts: 0 }, { cwd: '/srv/site', env: {} }),
+      /loginAttempts/,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_LOGIN_LOCKOUT: '-1' } }),
+      /GEEKITY_LOGIN_LOCKOUT/,
+    );
+    assert.throws(
+      () => resolveConfig({ loginLockout: 0 }, { cwd: '/srv/site', env: {} }),
+      /loginLockout/,
+    );
+  });
+
+  it('does not believe a forwarding header until the site says it is behind a proxy', () => {
+    assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).trustProxy, false);
+    assert.equal(
+      resolveConfig({ trustProxy: true }, { cwd: '/srv/site', env: {} }).trustProxy,
+      true,
+    );
+    assert.equal(
+      resolveConfig({ trustProxy: true }, { cwd: '/srv/site', env: { GEEKITY_TRUST_PROXY: 'off' } })
+        .trustProxy,
+      false,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_TRUST_PROXY: 'maybe' } }),
+      /GEEKITY_TRUST_PROXY/,
+    );
+  });
 });

@@ -10,6 +10,7 @@ import {
   setCookie,
   setUpFirstAdmin,
 } from './__testing__/harness.ts';
+import type { Browser } from './__testing__/harness.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -323,5 +324,225 @@ describe('the session cookie', () => {
     assert.equal(expired.status, 302);
     assert.equal(expired.headers.get('location'), '/admin/login');
     assert.equal(cms.admin.getSession(sessionId), undefined, 'and the row was pruned');
+  });
+});
+
+describe('security headers', () => {
+  it('puts the defensive set on every admin response, whatever it is', async () => {
+    const cms = await site();
+    const agent = browser(cms);
+    await setUpFirstAdmin(agent);
+
+    const responses = [
+      await agent.get('/admin'),
+      await agent.get('/admin/posts/new'),
+      await agent.get('/admin/_static/admin.css'),
+      await cms.app.request('/admin/settings'),
+      await cms.app.request('/admin/nowhere-at-all'),
+    ];
+
+    for (const response of responses) {
+      assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+      assert.equal(response.headers.get('referrer-policy'), 'same-origin');
+      assert.equal(response.headers.get('x-frame-options'), 'SAMEORIGIN');
+      assert.match(response.headers.get('content-security-policy') ?? '', /default-src 'self'/);
+    }
+  });
+
+  it('names the editor bundle, the preview frame and the uploads in the policy', async () => {
+    const cms = await site();
+    const agent = browser(cms);
+    await setUpFirstAdmin(agent);
+
+    const policy = (await agent.get('/admin/posts/new')).headers.get('content-security-policy');
+    assert.ok(policy !== null);
+
+    // The bundle is same-origin and there is no inline script left in the admin.
+    assert.match(policy, /script-src 'self'/);
+    assert.ok(!policy.includes("script-src 'self' 'unsafe-inline'"), 'no inline script is allowed');
+    // The preview renders the theme's own stylesheet and the site's uploads.
+    assert.match(policy, /style-src [^;]*'self'/);
+    assert.match(policy, /img-src [^;]*'self'/);
+    // The editor posts to /admin/preview and /admin/uploads with fetch.
+    assert.match(policy, /connect-src 'self'/);
+    // The editor frames its own preview, so it may be framed by itself.
+    assert.match(policy, /frame-ancestors 'self'/);
+    assert.match(policy, /object-src 'none'/);
+    assert.match(policy, /base-uri 'self'/);
+    assert.match(policy, /form-action 'self'/);
+  });
+
+  it('gives each response its own style nonce and hands it to the editor bundle', async () => {
+    const cms = await site();
+    const agent = browser(cms);
+    await setUpFirstAdmin(agent);
+
+    const response = await agent.get('/admin/posts/new');
+    const policy = response.headers.get('content-security-policy') ?? '';
+    const html = await response.text();
+
+    const inPolicy = /style-src [^;]*'nonce-([A-Za-z0-9+/=_-]+)'/.exec(policy)?.[1];
+    assert.ok(inPolicy !== undefined, 'the policy carries a nonce');
+    assert.match(html, new RegExp(`<script[^>]*nonce="${inPolicy}"`), 'and so does the bundle tag');
+
+    const second = await agent.get('/admin/posts/new');
+    const other = /'nonce-([A-Za-z0-9+/=_-]+)'/.exec(
+      second.headers.get('content-security-policy') ?? '',
+    )?.[1];
+    assert.notEqual(other, inPolicy, 'a nonce is used once');
+  });
+
+  it('leaves no inline script in the admin for the policy to have to allow', async () => {
+    const cms = await site();
+    const agent = browser(cms);
+    await setUpFirstAdmin(agent);
+
+    const html = await (await agent.get('/admin/posts/new')).text();
+
+    assert.doesNotMatch(html, /<script(?![^>]*\ssrc=)[^>]*>[\s\S]*?\S/, 'every script has a src');
+  });
+
+  it('keeps the public site to nosniff and constrains no theme', async () => {
+    const cms = await site();
+    const response = await cms.app.request('/');
+
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(response.headers.get('content-security-policy'), null);
+    assert.equal(response.headers.get('x-frame-options'), null);
+  });
+
+  it('adds HSTS only when the site says it is served over https', async () => {
+    const plain = await site();
+    assert.equal(
+      (await plain.app.request('/admin/login')).headers.get('strict-transport-security'),
+      null,
+    );
+
+    const secure = await site({ baseUrl: 'https://geekity.example' });
+    assert.match(
+      (await secure.app.request('/admin/login')).headers.get('strict-transport-security') ?? '',
+      /max-age=\d{7,}/,
+    );
+    assert.match(
+      (await secure.app.request('/')).headers.get('strict-transport-security') ?? '',
+      /max-age=\d{7,}/,
+      'the public site gets it too: it is the same host',
+    );
+  });
+});
+
+describe('the login throttle', () => {
+  /** A clock the test moves, in the shape `config.now` has. */
+  function movableClock(): { now: () => Date; advance: (seconds: number) => void } {
+    let millis = Date.UTC(2026, 8, 4, 12, 0, 0);
+    return {
+      now: () => new Date(millis),
+      advance(seconds) {
+        millis += seconds * 1000;
+      },
+    };
+  }
+
+  /** Post the login form with a fresh token off the form itself. */
+  async function attempt(agent: Browser, username: string, password: string): Promise<Response> {
+    const token = csrfField(await (await agent.get('/admin/login')).text());
+    assert.ok(token !== undefined, 'the login form carried a CSRF token');
+    return agent.post('/admin/login', { csrf_token: token, username, password });
+  }
+
+  it('refuses even the right password once a username has failed too often', async () => {
+    const clock = movableClock();
+    const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });
+    await setUpFirstAdmin(browser(cms));
+
+    const agent = browser(cms);
+    for (let i = 0; i < 3; i += 1) {
+      const refused = await attempt(agent, 'ada', 'not the password');
+      assert.equal(refused.status, 401, `attempt ${i + 1} is a plain refusal`);
+    }
+
+    const locked = await attempt(agent, 'ada', 'correct horse battery');
+    assert.equal(locked.status, 429);
+    assert.match(await locked.text(), /Too many sign-in attempts.*2 minutes/s);
+    assert.equal(locked.headers.get('retry-after'), '120');
+
+    const dashboard = await agent.get('/admin');
+    assert.equal(dashboard.status, 302, 'and nobody was logged in');
+  });
+
+  it('lets the right password through once the lockout has run out', async () => {
+    const clock = movableClock();
+    const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });
+    await setUpFirstAdmin(browser(cms));
+
+    const agent = browser(cms);
+    for (let i = 0; i < 3; i += 1) await attempt(agent, 'ada', 'not the password');
+    assert.equal((await attempt(agent, 'ada', 'correct horse battery')).status, 429);
+
+    clock.advance(121);
+
+    const allowed = await attempt(agent, 'ada', 'correct horse battery');
+    assert.equal(allowed.status, 303);
+    assert.equal(allowed.headers.get('location'), '/admin');
+  });
+
+  it('says the same thing about a username that does not exist', async () => {
+    const clock = movableClock();
+    const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });
+    await setUpFirstAdmin(browser(cms));
+
+    const agent = browser(cms);
+    for (let i = 0; i < 3; i += 1) await attempt(agent, 'nobody', 'guess');
+
+    const locked = await attempt(agent, 'nobody', 'guess');
+    assert.equal(locked.status, 429, 'an unknown username locks out exactly as a real one does');
+    assert.match(await locked.text(), /Too many sign-in attempts/);
+  });
+
+  it('lets one username go on trying while another is locked out', async () => {
+    const clock = movableClock();
+    const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });
+    await setUpFirstAdmin(browser(cms));
+
+    const agent = browser(cms);
+    for (let i = 0; i < 3; i += 1) await attempt(agent, 'nobody', 'guess');
+    assert.equal((await attempt(agent, 'nobody', 'guess')).status, 429);
+
+    const allowed = await attempt(agent, 'ada', 'correct horse battery');
+    assert.equal(allowed.status, 303, 'the site owner can still get in');
+  });
+
+  it('starts the count over after a sign-in that worked', async () => {
+    const clock = movableClock();
+    const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 120 });
+    await setUpFirstAdmin(browser(cms));
+
+    const agent = browser(cms);
+    await attempt(agent, 'ada', 'not the password');
+    await attempt(agent, 'ada', 'not the password');
+    assert.equal((await attempt(agent, 'ada', 'correct horse battery')).status, 303);
+
+    const second = browser(cms);
+    await attempt(second, 'ada', 'not the password');
+    await attempt(second, 'ada', 'not the password');
+    assert.equal(
+      (await attempt(second, 'ada', 'correct horse battery')).status,
+      303,
+      'the two earlier failures were forgotten',
+    );
+  });
+
+  it('holds the lockout longer each time it is tripped again', async () => {
+    const clock = movableClock();
+    const cms = await site({ now: clock.now, loginAttempts: 3, loginLockout: 60 });
+    await setUpFirstAdmin(browser(cms));
+
+    const agent = browser(cms);
+    for (let i = 0; i < 3; i += 1) await attempt(agent, 'ada', 'not the password');
+    assert.equal((await attempt(agent, 'ada', 'x')).headers.get('retry-after'), '60');
+
+    clock.advance(61);
+    await attempt(agent, 'ada', 'not the password');
+    assert.equal((await attempt(agent, 'ada', 'x')).headers.get('retry-after'), '120');
   });
 });

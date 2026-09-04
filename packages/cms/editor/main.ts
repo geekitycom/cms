@@ -23,6 +23,8 @@ const TOOLS_ID = 'editor-enhance';
 const BODY_ID = 'editor-body';
 /** The no-JS Preview button, which becomes a tab. */
 const FALLBACK_ID = 'editor-preview-fallback';
+/** This script's own tag, which carries the page's Content-Security-Policy nonce. */
+const SCRIPT_ID = 'editor-script';
 
 enhance();
 
@@ -55,6 +57,10 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   const view = new EditorView({
     doc: textarea.value,
     extensions: [
+      // CodeMirror mounts its themes as <style> elements at runtime, which the
+      // admin's `style-src` refuses without this. The nonce comes off this
+      // script's own tag, so nothing else on the page has to carry it.
+      EditorView.cspNonce.of(cspNonce()),
       basicSetup,
       markdown(),
       EditorView.lineWrapping,
@@ -285,6 +291,20 @@ function tab(label: string, selected: boolean): HTMLButtonElement {
   button.textContent = label;
   button.setAttribute('aria-selected', String(selected));
   return button;
+}
+
+/**
+ * The nonce the server put on this script's tag.
+ *
+ * Read through the `nonce` property rather than `getAttribute`: a browser
+ * blanks the content attribute once the document has a policy, precisely so a
+ * CSS selector cannot read it back, and the property is what survives. An
+ * empty string when there is none, which is what a page with no policy gets
+ * and what CodeMirror treats as "do not set one".
+ */
+function cspNonce(): string {
+  const script = document.getElementById(SCRIPT_ID);
+  return script instanceof HTMLScriptElement ? script.nonce : '';
 }
 
 /** Whether a drag is carrying files rather than, say, selected text. */
