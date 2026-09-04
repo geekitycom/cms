@@ -290,6 +290,15 @@ function linkWithRel(element: XmlElement, rel: string): XmlElement {
   return found[0] as XmlElement;
 }
 
+/** The `<atom:link>` with a given `rel`, asserting there is exactly one. */
+function atomLinkWithRel(element: XmlElement, rel: string): XmlElement {
+  const found = childrenNamed(element, 'atom:link').filter(
+    (link) => link.attributes['rel'] === rel,
+  );
+  assert.equal(found.length, 1, `exactly one <atom:link rel="${rel}"> inside <${element.name}>`);
+  return found[0] as XmlElement;
+}
+
 /** The Atom feed at a URL, parsed. */
 async function atom(cms: Cms, url: string): Promise<{ response: Response; feed: XmlElement }> {
   const response = await cms.app.request(url);
@@ -349,8 +358,7 @@ describe('the RSS feed', () => {
     assert.equal(child(channel, 'lastBuildDate').text, 'Wed, 02 Sep 2026 09:00:00 GMT');
     assert.ok(child(channel, 'generator').text.length > 0, 'the channel names its generator');
 
-    const self = child(channel, 'atom:link');
-    assert.equal(self.attributes['rel'], 'self');
+    const self = atomLinkWithRel(channel, 'self');
     assert.equal(self.attributes['type'], 'application/rss+xml');
     assert.equal(self.attributes['href'], 'https://example.com/feed/');
 
@@ -800,7 +808,7 @@ describe('the taxonomy feeds', () => {
       assert.equal(response.status, 200, `${root}feed/`);
       assert.equal(child(channel, 'link').text, `https://example.com${root}`);
       assert.equal(
-        child(channel, 'atom:link').attributes['href'],
+        atomLinkWithRel(channel, 'self').attributes['href'],
         `https://example.com${root}feed/`,
       );
       assert.deepEqual(
@@ -1252,7 +1260,7 @@ describe('a post’s comments feed', () => {
     assert.equal(child(channel, 'link').text, 'https://example.com/2026/09/hello/');
     assert.equal(child(channel, 'description').text, 'A file-first site');
     assert.equal(
-      child(channel, 'atom:link').attributes['href'],
+      atomLinkWithRel(channel, 'self').attributes['href'],
       'https://example.com/2026/09/hello/feed/',
     );
 
@@ -1375,7 +1383,7 @@ describe('the site-wide comments feed', () => {
     assert.equal(child(channel, 'title').text, 'Geekity Demo: comments');
     assert.equal(child(channel, 'link').text, 'https://example.com/');
     assert.equal(
-      child(channel, 'atom:link').attributes['href'],
+      atomLinkWithRel(channel, 'self').attributes['href'],
       'https://example.com/comments/feed/',
     );
 
@@ -1578,5 +1586,187 @@ describe('the comments feeds on an HTML page', () => {
 
     const page = (await (await cms.app.request('/about/')).text()).split('</head>')[0] ?? '';
     assert.ok(!page.includes('/about/feed/'), 'a page has no comments feed to advertise');
+  });
+});
+
+describe('the notify server a feed advertises', () => {
+  const files = {
+    '_data/site.json': JSON.stringify({ title: 'Geekity Demo' }),
+    'posts/2026-09-02-hello.md': post('Hello, World!', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/2026/09/hello/',
+      tags: ['web'],
+    }),
+  };
+
+  it('is rpc.rsscloud.io, said three ways, in the RSS channel', async () => {
+    const { cms } = await site(files);
+    const { channel } = await rss(cms, '/feed/');
+
+    // https://rpc.rsscloud.io/docs/quick-start: the legacy element names the
+    // host, port 80 and http-post whatever the server's own scheme is.
+    const cloud = child(channel, 'cloud');
+    assert.equal(cloud.attributes['domain'], 'rpc.rsscloud.io');
+    assert.equal(cloud.attributes['port'], '80');
+    assert.equal(cloud.attributes['path'], '/pleaseNotify');
+    assert.equal(cloud.attributes['registerProcedure'], '');
+    assert.equal(cloud.attributes['protocol'], 'http-post');
+
+    assert.equal(child(channel, 'source:cloud').text, 'https://rpc.rsscloud.io/pleaseNotify');
+
+    const hub = atomLinkWithRel(channel, 'hub');
+    assert.equal(hub.attributes['href'], 'https://rpc.rsscloud.io/websub');
+
+    // The self link the hub is written beside is still there and still alone.
+    assert.equal(atomLinkWithRel(channel, 'self').attributes['href'], 'https://example.com/feed/');
+  });
+
+  it('is the hub and the source cloud in Atom, and no <cloud>', async () => {
+    const { cms } = await site(files);
+    const { feed } = await atom(cms, '/feed/atom/');
+
+    assert.equal(child(feed, 'source:cloud').text, 'https://rpc.rsscloud.io/pleaseNotify');
+    assert.equal(linkWithRel(feed, 'hub').attributes['href'], 'https://rpc.rsscloud.io/websub');
+    assert.equal(linkWithRel(feed, 'self').attributes['href'], 'https://example.com/feed/atom/');
+    assert.equal(
+      childrenNamed(feed, 'cloud').length,
+      0,
+      'Atom has no place for the legacy element',
+    );
+  });
+
+  it('is a WebSub hub in the JSON feed, per JSON Feed 1.1', async () => {
+    const { cms } = await site(files);
+    const body = (await (await cms.app.request('/feed/json/')).json()) as {
+      hubs?: { type: string; url: string }[];
+    };
+
+    assert.deepEqual(body.hubs, [{ type: 'WebSub', url: 'https://rpc.rsscloud.io/websub' }]);
+  });
+
+  it('is a Link header on every feed response, self included', async () => {
+    const { cms } = await site({
+      ...files,
+      'posts/2026-09-02-hello.md': post('Hello, World!', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/hello/',
+        tags: ['web'],
+        categories: ['general'],
+      }),
+    });
+
+    const feeds = [
+      '/feed/',
+      '/feed/atom/',
+      '/feed/json/',
+      '/tag/web/feed/',
+      '/tag/web/feed/atom/',
+      '/tag/web/feed/json/',
+      '/category/general/feed/',
+      '/category/general/feed/atom/',
+      '/category/general/feed/json/',
+      '/comments/feed/',
+      '/2026/09/hello/feed/',
+    ];
+
+    for (const url of feeds) {
+      const response = await cms.app.request(url);
+      assert.equal(response.status, 200, `${url} is served`);
+      assert.equal(
+        response.headers.get('link'),
+        `<https://rpc.rsscloud.io/websub>; rel="hub", <https://example.com${url}>; rel="self"`,
+        `${url} advertises its hub and itself`,
+      );
+    }
+  });
+
+  it('is on the 304 as well, which is the response a poller usually gets', async () => {
+    const { cms } = await site(files);
+
+    const first = await cms.app.request('/feed/');
+    const etag = first.headers.get('etag');
+    assert.ok(etag !== null, 'the feed carried a validator');
+
+    const second = await cms.app.request('/feed/', { headers: { 'if-none-match': etag } });
+    assert.equal(second.status, 304);
+    assert.equal(second.headers.get('link'), first.headers.get('link'));
+  });
+
+  it('is advertised by a comments feed too, which is a feed like any other', async () => {
+    const { cms } = await site(files);
+    const { rss: document, channel } = await rss(cms, '/comments/feed/');
+
+    assert.equal(document.attributes['xmlns:source'], 'https://source.scripting.com/');
+    assert.equal(child(channel, 'cloud').attributes['domain'], 'rpc.rsscloud.io');
+    assert.equal(child(channel, 'source:cloud').text, 'https://rpc.rsscloud.io/pleaseNotify');
+    assert.equal(
+      atomLinkWithRel(channel, 'hub').attributes['href'],
+      'https://rpc.rsscloud.io/websub',
+    );
+  });
+
+  it('is gone from every feed, in every format, when the setting is emptied', async () => {
+    const { cms } = await site(files);
+    cms.admin.setSettings({ notifyServer: '' });
+
+    const { rss: document, channel } = await rss(cms, '/feed/');
+    assert.equal(childrenNamed(channel, 'cloud').length, 0);
+    assert.equal(childrenNamed(channel, 'source:cloud').length, 0);
+    assert.equal(childrenNamed(channel, 'atom:link').length, 1, 'only the self link is left');
+    // The namespace stays declared: it is what `source:markdown` is written in.
+    assert.equal(document.attributes['xmlns:source'], 'https://source.scripting.com/');
+
+    const { feed } = await atom(cms, '/feed/atom/');
+    assert.equal(childrenNamed(feed, 'source:cloud').length, 0);
+    assert.deepEqual(
+      childrenNamed(feed, 'link').map((link) => link.attributes['rel']),
+      ['self', 'alternate'],
+    );
+
+    const json = (await (await cms.app.request('/feed/json/')).json()) as { hubs?: unknown };
+    assert.equal(json.hubs, undefined);
+
+    for (const url of ['/feed/', '/feed/atom/', '/feed/json/', '/comments/feed/']) {
+      const response = await cms.app.request(url);
+      assert.equal(response.headers.get('link'), null, `${url} advertises no hub`);
+    }
+  });
+
+  it('moves everywhere at once when the setting names another server', async () => {
+    const { cms } = await site(files);
+    cms.admin.setSettings({ notifyServer: 'https://cloud.example/rpc/' });
+
+    const { channel } = await rss(cms, '/feed/');
+    const cloud = child(channel, 'cloud');
+    assert.equal(cloud.attributes['domain'], 'cloud.example');
+    assert.equal(cloud.attributes['path'], '/rpc/pleaseNotify');
+    assert.equal(cloud.attributes['port'], '80');
+    assert.equal(child(channel, 'source:cloud').text, 'https://cloud.example/rpc/pleaseNotify');
+    assert.equal(
+      atomLinkWithRel(channel, 'hub').attributes['href'],
+      'https://cloud.example/rpc/websub',
+    );
+
+    const json = (await (await cms.app.request('/feed/json/')).json()) as {
+      hubs?: { type: string; url: string }[];
+    };
+    assert.deepEqual(json.hubs, [{ type: 'WebSub', url: 'https://cloud.example/rpc/websub' }]);
+
+    assert.equal(
+      (await cms.app.request('/feed/atom/')).headers.get('link'),
+      '<https://cloud.example/rpc/websub>; rel="hub", ' +
+        '<https://example.com/feed/atom/>; rel="self"',
+    );
+  });
+
+  it('changes a feed’s validator, because a moved hub is a changed feed', async () => {
+    const { cms } = await site(files);
+    const before = (await cms.app.request('/feed/')).headers.get('etag');
+
+    cms.admin.setSettings({ notifyServer: 'https://cloud.example' });
+    const after = (await cms.app.request('/feed/')).headers.get('etag');
+
+    assert.ok(before !== null && after !== null);
+    assert.notEqual(before, after);
   });
 });

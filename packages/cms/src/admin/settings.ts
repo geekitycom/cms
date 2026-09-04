@@ -8,6 +8,7 @@ import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
+import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
 import type { SiteData } from '../web/context.ts';
 import { DEFAULT_TAXONOMY_BASES, taxonomyBaseProblems } from '../web/taxonomy.ts';
 import type { TaxonomyBases } from '../web/taxonomy.ts';
@@ -106,6 +107,13 @@ export interface SiteSettings {
   /** The same for the category archives, `category` by default. */
   categoryBase: string;
   /**
+   * Where the site announces that a feed changed, and the server its feeds
+   * advertise as their rssCloud endpoint and their WebSub hub. An absolute
+   * http(s) URL, {@link DEFAULT_NOTIFY_SERVER} by default; empty turns
+   * real-time notification off altogether.
+   */
+  notifyServer: string;
+  /**
    * The site's avatar, as the public path the upload endpoint handed back —
    * `/uploads/2026/09/me.png` — or an absolute URL for one hosted elsewhere.
    * Empty when the site has none.
@@ -144,6 +152,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   avatar: '',
   tagBase: DEFAULT_TAXONOMY_BASES.tag,
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
+  notifyServer: DEFAULT_NOTIFY_SERVER,
 };
 
 /** The form field each setting is submitted under. */
@@ -159,6 +168,7 @@ export const SETTINGS_FIELDS = {
   actorType: 'actor_type',
   tagBase: 'tag_base',
   categoryBase: 'category_base',
+  notifyServer: 'notify_server',
 } as const satisfies Record<SettingsField, string>;
 
 /** A submitted settings form, before it is known to be valid. */
@@ -190,6 +200,7 @@ export function readSiteSettings(store: AdminStore): SiteSettings {
     avatar: stored['avatar'] ?? DEFAULT_SITE_SETTINGS.avatar,
     tagBase: stored['tagBase'] ?? DEFAULT_SITE_SETTINGS.tagBase,
     categoryBase: stored['categoryBase'] ?? DEFAULT_SITE_SETTINGS.categoryBase,
+    notifyServer: stored['notifyServer'] ?? DEFAULT_SITE_SETTINGS.notifyServer,
   };
 }
 
@@ -213,6 +224,7 @@ export function writeSiteSettings(store: AdminStore, settings: SiteSettings): vo
     avatar: settings.avatar,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
+    notifyServer: settings.notifyServer,
   });
 }
 
@@ -235,6 +247,10 @@ export function settingsSiteData(settings: SiteSettings): Partial<SiteData> {
     postsPerPage: settings.postsPerPage,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
+    // Written even when it is empty, unlike the other strings above: empty is
+    // what turns the notifications off, so it has to reach the mirror as a
+    // value rather than as an absence a default would fill back in.
+    notifyServer: settings.notifyServer,
   };
 }
 
@@ -263,6 +279,7 @@ export function siteJsonFor(
     avatar: settings.avatar,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
+    notifyServer: settings.notifyServer,
   };
 }
 
@@ -340,6 +357,9 @@ export function seedSiteSettings(options: {
     ...(typeof file['categoryBase'] === 'string' && file['categoryBase'] !== ''
       ? { categoryBase: file['categoryBase'] }
       : {}),
+    // The empty string counts here, unlike the bases above: a file that says
+    // the notify server is empty is a site that turned the feature off.
+    ...(typeof file['notifyServer'] === 'string' ? { notifyServer: file['notifyServer'] } : {}),
     ...(Number.isInteger(postsPerPage) && postsPerPage > 0 ? { postsPerPage } : {}),
     // The file's `url` only becomes the setting when the deployment has not
     // named one; otherwise the setting records what is actually in effect.
@@ -403,6 +423,14 @@ export function settingsProblems(form: SettingsForm): SettingsProblems {
     problems.actorType = `An actor type is one of ${ACTOR_TYPES.join(', ')}.`;
   }
 
+  // Empty is a value here — it is how a site turns real-time notification off
+  // — so only a non-empty one has to be a URL. http as well as https, because
+  // a notify server on a private network or a loopback port is a real one.
+  if (form.notifyServer.trim() !== '' && normalizeBaseUrl(form.notifyServer) === undefined) {
+    problems.notifyServer =
+      'A notify server is an absolute http:// or https:// URL, or empty for none.';
+  }
+
   // The two archive bases are checked as a pair: two of the rules — that they
   // differ, and that neither takes a path the site already answers on — are
   // about the pair rather than either one.
@@ -438,6 +466,7 @@ export function settingsFromForm(
     actorType: form.actorType,
     tagBase: form.tagBase.trim(),
     categoryBase: form.categoryBase.trim(),
+    notifyServer: normalizeBaseUrl(form.notifyServer) ?? '',
   };
 }
 
@@ -455,6 +484,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     actorType: settings.actorType,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
+    notifyServer: settings.notifyServer,
   };
 }
 
@@ -500,6 +530,7 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       actorType: field(body[SETTINGS_FIELDS.actorType]),
       tagBase: field(body[SETTINGS_FIELDS.tagBase]),
       categoryBase: field(body[SETTINGS_FIELDS.categoryBase]),
+      notifyServer: field(body[SETTINGS_FIELDS.notifyServer]),
     };
 
     const problems = settingsProblems(submitted);

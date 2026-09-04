@@ -102,7 +102,10 @@ A listing — the home page, a tag archive or a category archive — adds:
 How many posts a listing page holds comes from `postsPerPage` in
 `content/_data/site.json`, and defaults to 10. How many entries a feed holds
 comes from `feedSize` in the same file, and defaults to 20. The `<html lang>`
-comes from `language`, and defaults to `en`.
+comes from `language`, and defaults to `en`. The rssCloud and WebSub server the
+feeds advertise comes from `notifyServer`, and is empty for none; the theme
+writes nothing for it, because a cloud is advertised in the feed rather than on
+the page.
 
 ## Feeds
 

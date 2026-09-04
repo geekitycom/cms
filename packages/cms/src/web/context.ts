@@ -48,6 +48,11 @@ export interface SiteData {
   tagBase?: string | undefined;
   /** The same for the category archives. `category` by default. */
   categoryBase?: string | undefined;
+  /**
+   * The rssCloud and WebSub server the feeds advertise and this site pings,
+   * as an absolute URL. Empty — or missing — means the site names none.
+   */
+  notifyServer?: string | undefined;
   [key: string]: unknown;
 }
 

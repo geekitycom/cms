@@ -400,7 +400,8 @@ like every other POST in the admin.
 
 `/admin/settings` holds the values doc-1 keeps only in SQLite: title, tagline,
 base URL, time zone, language, posts per page, the tag and category archive
-bases, the ActivityPub actor handle and type, and the site's avatar.
+bases, the ActivityPub actor handle and type, the notify server the feeds
+advertise, and the site's avatar.
 They live in a `settings` table of key and value, alongside the users and
 sessions in the same database file, and they are the half of it that is not
 derived from the content directory.
@@ -416,7 +417,8 @@ renders with the same values and never sees a half-written file. A hand edit of
 the file after that point is overwritten by the next save.
 
 The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
-`timezone`, `language`, `avatar`, `tagBase` and `categoryBase`, and every other key it
+`timezone`, `language`, `avatar`, `tagBase`, `categoryBase` and `notifyServer`,
+and every other key it
 already had is kept — a site may put
 anything in there, `feedSize` included, and reach it from its templates. The
 theme reads the settings on top of the file, so a saved title is on the public
@@ -437,9 +439,21 @@ back with a 400 and one message under each field that has one:
 | Category base  | The same, and not the same word as the tag base.                                   |
 | Actor handle   | 1 to 64 letters, digits, dashes or underscores — the local part of `@handle@host`. |
 | Actor type     | One of `Person`, `Organization`, `Service`, `Group` or `Application`.              |
+| Notify server  | An absolute `http://` or `https://` URL, or empty for none. See below.             |
 
 `Person` is the default actor type because some clients hide `Service` actors
 from timelines.
+
+The notify server is an [rssCloud][rsscloud] and [WebSub][websub] server, and
+it defaults to `https://rpc.rsscloud.io`, which speaks both. Every feed
+advertises it, and the site tells it whenever a feed changes, so a subscriber
+hears about a post at once instead of on its next poll. Emptying the field
+takes the advertisement out of every feed and stops the pings; a different URL
+moves both. See [Real-time notification][notify] in the package README.
+
+[rsscloud]: https://rpc.rsscloud.io/docs
+[websub]: https://www.w3.org/TR/websub/
+[notify]: packages/cms/README.md#real-time-notification
 
 The two archive bases decide where the taxonomy archives live: `/{tagBase}/{tag}/`
 and `/{categoryBase}/{name}/`. They default to WordPress's `tag` and `category`,

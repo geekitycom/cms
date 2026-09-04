@@ -7,7 +7,7 @@
 {% block content %}
   <h1>Settings</h1>
 
-  {% if problems.title or problems.tagline or problems.baseUrl or problems.timezone or problems.postsPerPage or problems.author or problems.actorHandle or problems.actorType %}
+  {% if problems.title or problems.tagline or problems.baseUrl or problems.timezone or problems.postsPerPage or problems.author or problems.actorHandle or problems.actorType or problems.notifyServer %}
     <p class="admin-error">Nothing was saved. Fix the fields marked below and try again.</p>
   {% endif %}
 
@@ -83,6 +83,17 @@
     </select>
     {% if problems.actorType %}<p class="admin-field-error">{{ problems.actorType }}</p>{% endif %}
     <p class="admin-hint">Some clients hide <code>Service</code> actors from timelines; <code>Person</code> is the safer default.</p>
+
+    <h2>Notifications</h2>
+
+    <label for="settings-notify-server">Notify server</label>
+    <input id="settings-notify-server" name="{{ fields.notifyServer }}" type="text" value="{{ form.notifyServer }}" inputmode="url" />
+    {% if problems.notifyServer %}<p class="admin-field-error">{{ problems.notifyServer }}</p>{% endif %}
+    <p class="admin-hint">
+      An rssCloud and WebSub server, told whenever a feed changes so subscribers
+      hear at once instead of waiting for their next poll. Every feed advertises
+      it. Leave it empty for none.
+    </p>
 
     <p class="admin-settings-buttons">
       <button type="submit">Save settings</button>

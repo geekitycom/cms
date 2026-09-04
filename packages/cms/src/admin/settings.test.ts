@@ -29,6 +29,7 @@ const DEFAULT_FORM: Record<string, string> = {
   actor_type: 'Person',
   tag_base: 'tag',
   category_base: 'category',
+  notify_server: 'https://rpc.rsscloud.io',
 };
 
 /** Submit the settings form, filling in whatever the caller did not name. */
@@ -129,6 +130,7 @@ describe('content/_data/site.json', () => {
       avatar: '',
       tagBase: 'tag',
       categoryBase: 'category',
+      notifyServer: 'https://rpc.rsscloud.io',
     });
   });
 
@@ -637,5 +639,71 @@ describe('the taxonomy bases', () => {
       assert.equal(settings.tagBase, 'tag', 'the stored tag base is unchanged');
       assert.equal(settings.categoryBase, 'category', 'and so is the category base');
     }
+  });
+});
+
+describe('the notify server setting', () => {
+  it('starts on rpc.rsscloud.io, shows on the form and reaches the mirror', async () => {
+    const contentDir = await box.dir('geekity-settings-notify-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings')).text();
+    assert.equal(field(html, 'notify_server'), 'https://rpc.rsscloud.io');
+
+    assert.equal(
+      (await saveSettings(agent, { notify_server: 'https://cloud.example/' })).status,
+      303,
+    );
+    assert.equal(readSiteSettings(cms.admin).notifyServer, 'https://cloud.example');
+
+    const written = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.equal(written['notifyServer'], 'https://cloud.example');
+  });
+
+  it('takes an empty value, which is how the feature is turned off', async () => {
+    const contentDir = await box.dir('geekity-settings-notify-off-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    assert.equal((await saveSettings(agent, { notify_server: '' })).status, 303);
+    assert.equal(readSiteSettings(cms.admin).notifyServer, '');
+
+    const written = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.equal(written['notifyServer'], '', 'the mirror says so rather than saying nothing');
+
+    // An emptied setting seeds as empty on the next boot, rather than being
+    // filled back in from the default.
+    const again = await box.site({
+      contentDir,
+      dataDir: await box.dir('geekity-settings-notify-boot-'),
+    });
+    assert.equal(readSiteSettings(again.admin).notifyServer, '');
+  });
+
+  it('refuses anything that is not an absolute URL, and keeps the stored one', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    assert.equal(
+      (await saveSettings(agent, { notify_server: 'https://kept.example' })).status,
+      303,
+    );
+
+    for (const bad of ['rpc.rsscloud.io', 'ftp://cloud.example', '/pleaseNotify']) {
+      const response = await saveSettings(agent, { notify_server: bad });
+      assert.equal(response.status, 400, JSON.stringify(bad));
+      assert.match(
+        await response.text(),
+        /absolute http:\/\/ or https:\/\/ URL/,
+        JSON.stringify(bad),
+      );
+    }
+
+    assert.equal(readSiteSettings(cms.admin).notifyServer, 'https://kept.example');
   });
 });

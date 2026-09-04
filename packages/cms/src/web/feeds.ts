@@ -138,6 +138,9 @@ export function contentTypeOf(format: FeedFormat): string {
 /** The `version` every JSON Feed this CMS writes declares. */
 export const JSON_FEED_VERSION = 'https://jsonfeed.org/version/1.1';
 
+/** What JSON Feed 1.1 calls the protocol the notify server's hub speaks. */
+export const JSON_FEED_HUB_TYPE = 'WebSub';
+
 /**
  * Dave Winer's `source` namespace, which RSS 2.0 feeds here declare so an item
  * can carry the Markdown it was written from. TASK-38's `source:cloud` is the
@@ -154,6 +157,110 @@ export const DC_NAMESPACE = 'http://purl.org/dc/elements/1.1/';
  * reader that already understands a WordPress feed understands this one.
  */
 export const WFW_NAMESPACE = 'http://wellformedweb.org/CommentAPI/';
+
+/**
+ * The notify server a site advertises and pings when it has not said
+ * otherwise: the one this CMS's author runs, which speaks both rssCloud and
+ * WebSub, so one server covers every real-time subscriber a feed has.
+ */
+export const DEFAULT_NOTIFY_SERVER = 'https://rpc.rsscloud.io';
+
+/** The three paths a notify server answers on, under whatever URL it lives at. */
+export const NOTIFY_PATHS = {
+  /** Where a subscriber registers for rssCloud notifications. */
+  pleaseNotify: 'pleaseNotify',
+  /** The WebSub hub: where a subscriber subscribes, and a publisher publishes. */
+  hub: 'websub',
+  /** Where this site says a feed changed. */
+  ping: 'ping',
+} as const;
+
+/**
+ * The port and protocol the legacy `<cloud>` element carries, whatever scheme
+ * the server itself is reached over.
+ *
+ * rpc.rsscloud.io's quick start prescribes exactly these: the element predates
+ * TLS being the default, and a reader that understands it is looking for the
+ * shape rather than for a port to dial.
+ */
+export const NOTIFY_CLOUD_PORT = 80;
+
+/** The `protocol` of that same element. */
+export const NOTIFY_CLOUD_PROTOCOL = 'http-post';
+
+/** One notify server, as the three vocabularies that talk to it spell it. */
+export interface NotifyServer {
+  /** The server's URL, without a trailing slash. What the setting holds. */
+  base: string;
+  /** Where an rssCloud subscriber registers: `source:cloud`. */
+  pleaseNotify: string;
+  /** The WebSub hub: `atom:link rel="hub"` and JSON Feed's `hubs`. */
+  hub: string;
+  /** Where this site announces that a feed changed. */
+  ping: string;
+  /** The same registration endpoint, taken apart for RSS's `<cloud>`. */
+  cloud: {
+    /** The server's host name. */
+    domain: string;
+    /** Always {@link NOTIFY_CLOUD_PORT}. */
+    port: number;
+    /** The registration path, from the root of that host. */
+    path: string;
+    /** Empty: the REST endpoint takes no procedure name. */
+    registerProcedure: string;
+    /** Always {@link NOTIFY_CLOUD_PROTOCOL}. */
+    protocol: string;
+  };
+}
+
+/**
+ * One notify server URL as everything derived from it, or `undefined` when
+ * there is no server: an empty setting is how a site turns the whole feature
+ * off, and a value that is not an absolute http(s) URL is treated the same way
+ * rather than published as nonsense.
+ */
+export function notifyEndpoints(server: string): NotifyServer | undefined {
+  const trimmed = server.trim();
+  if (trimmed === '') return undefined;
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+
+  const path = url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
+  const base = url.origin + path;
+
+  return {
+    base,
+    pleaseNotify: `${base}/${NOTIFY_PATHS.pleaseNotify}`,
+    hub: `${base}/${NOTIFY_PATHS.hub}`,
+    ping: `${base}/${NOTIFY_PATHS.ping}`,
+    cloud: {
+      domain: url.hostname,
+      port: NOTIFY_CLOUD_PORT,
+      path: `${path}/${NOTIFY_PATHS.pleaseNotify}`,
+      registerProcedure: '',
+      protocol: NOTIFY_CLOUD_PROTOCOL,
+    },
+  };
+}
+
+/**
+ * The notify server this site's feeds advertise, from `notifyServer` in the
+ * settings — and so in `content/_data/site.json`.
+ *
+ * A missing key reads as no server rather than as the default. The default
+ * lives in the settings, which are written to the mirror whether or not they
+ * have a value, so a file that does not name one is a site that turned it off.
+ */
+export function notifyServerOf(site: SiteData): NotifyServer | undefined {
+  const configured = site['notifyServer'];
+  return typeof configured === 'string' ? notifyEndpoints(configured) : undefined;
+}
 
 /** How many entries a feed carries when the site does not say. */
 export const DEFAULT_FEED_SIZE = 20;
@@ -315,6 +422,7 @@ export function rssFeed(source: FeedSource): string {
     `    <atom:link rel="self" type="${escapeXml(
       contentTypeOf('rss'),
     )}" href="${escapeXml(absoluteUrl(source.feedHref, baseUrl))}"/>`,
+    ...cloudElements(site),
     ...channelImage(source, link),
   ];
 
@@ -324,6 +432,30 @@ export function rssFeed(source: FeedSource): string {
 
   lines.push('  </channel>', '</rss>', '');
   return lines.join('\n');
+}
+
+/**
+ * The notify server, said the three ways an RSS channel can say it: the legacy
+ * `<cloud>` a 2001 aggregator understands, `<source:cloud>` for one that reads
+ * Dave Winer's namespace, and the WebSub `rel="hub"` link.
+ *
+ * All three name the same server, so a subscriber gets told the moment the
+ * feed changes whichever of the protocols it speaks. Nothing at all when the
+ * site names no server.
+ */
+function cloudElements(site: SiteData): string[] {
+  const notify = notifyServerOf(site);
+  if (notify === undefined) return [];
+  const { cloud } = notify;
+
+  return [
+    `    <cloud domain="${escapeXml(cloud.domain)}" port="${String(cloud.port)}"` +
+      ` path="${escapeXml(cloud.path)}"` +
+      ` registerProcedure="${escapeXml(cloud.registerProcedure)}"` +
+      ` protocol="${escapeXml(cloud.protocol)}"/>`,
+    element('source:cloud', notify.pleaseNotify, 2),
+    `    <atom:link rel="hub" href="${escapeXml(notify.hub)}"/>`,
+  ];
 }
 
 /**
@@ -430,7 +562,8 @@ export function commentsRssFeed(source: CommentFeedSource): string {
     '<rss version="2.0"',
     '     xmlns:atom="http://www.w3.org/2005/Atom"',
     '     xmlns:content="http://purl.org/rss/1.0/modules/content/"',
-    `     xmlns:dc="${DC_NAMESPACE}">`,
+    `     xmlns:dc="${DC_NAMESPACE}"`,
+    `     xmlns:source="${SOURCE_NAMESPACE}">`,
     '  <channel>',
     element('title', source.title, 2),
     element('link', link, 2),
@@ -441,6 +574,10 @@ export function commentsRssFeed(source: CommentFeedSource): string {
     `    <atom:link rel="self" type="${escapeXml(
       contentTypeOf('rss'),
     )}" href="${escapeXml(absoluteUrl(source.feedHref, baseUrl))}"/>`,
+    // A comments feed is polled like any other, so it advertises the same
+    // server: a subscriber to one is told a reply arrived rather than finding
+    // out on its next poll.
+    ...cloudElements(site),
   ];
 
   for (const comment of comments) lines.push(...commentItem(comment));
@@ -510,7 +647,9 @@ export function atomFeed(source: FeedSource): string {
 
   const lines: string[] = [
     '<?xml version="1.0" encoding="utf-8"?>',
-    `<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="${escapeXml(feedLanguage(site))}">`,
+    `<feed xmlns="http://www.w3.org/2005/Atom"`,
+    `      xmlns:source="${SOURCE_NAMESPACE}"`,
+    `      xml:lang="${escapeXml(feedLanguage(site))}">`,
     element('id', absoluteUrl(source.href, baseUrl)),
     element('title', source.title),
     ...optionalElement('subtitle', site.tagline),
@@ -521,6 +660,7 @@ export function atomFeed(source: FeedSource): string {
       href: absoluteUrl(source.feedHref, baseUrl),
     }),
     link({ rel: 'alternate', type: 'text/html', href: absoluteUrl(source.href, baseUrl) }),
+    ...atomCloud(site),
     `  <generator uri="${escapeXml(FEED_GENERATOR_URI)}">${escapeXml(FEED_GENERATOR)}</generator>`,
     ...author(site.author, 1),
   ];
@@ -531,6 +671,19 @@ export function atomFeed(source: FeedSource): string {
 
   lines.push('</feed>', '');
   return lines.join('\n');
+}
+
+/**
+ * The notify server as an Atom feed can say it: the `rel="hub"` link WebSub
+ * defines, and `<source:cloud>`, which is namespaced and so belongs here as
+ * much as in RSS. The legacy `<cloud>` is not: it is an RSS 2.0 element with
+ * no namespace, and Atom has nowhere to put it.
+ */
+function atomCloud(site: SiteData): string[] {
+  const notify = notifyServerOf(site);
+  if (notify === undefined) return [];
+
+  return [element('source:cloud', notify.pleaseNotify), link({ rel: 'hub', href: notify.hub })];
 }
 
 /** One document as an Atom entry. */
@@ -574,8 +727,24 @@ export interface JsonFeed {
   description?: string;
   /** Site-level authors, when the site names one. */
   authors?: JsonFeedAuthor[];
+  /**
+   * Where a subscriber can be told the feed changed rather than polling it.
+   * One entry, the site's notify server, when it names one.
+   */
+  hubs?: JsonFeedHub[];
   /** The entries, newest first. */
   items: JsonFeedItem[];
+}
+
+/**
+ * A real-time endpoint, as JSON Feed 1.1 models one. `type` names the protocol
+ * rather than a media type, and `WebSub` is the one this CMS's server speaks.
+ */
+export interface JsonFeedHub {
+  /** The protocol: `WebSub`. */
+  type: string;
+  /** The hub's URL. */
+  url: string;
 }
 
 /** An author, as JSON Feed 1.1 models one. */
@@ -608,6 +777,7 @@ export interface JsonFeedItem {
 /** One feed as a JSON Feed 1.1 document. */
 export function jsonFeed(source: FeedSource): JsonFeed {
   const { site, baseUrl } = source;
+  const notify = notifyServerOf(site);
 
   return {
     version: JSON_FEED_VERSION,
@@ -616,6 +786,7 @@ export function jsonFeed(source: FeedSource): JsonFeed {
     feed_url: absoluteUrl(source.feedHref, baseUrl),
     ...(site.tagline === undefined ? {} : { description: site.tagline }),
     ...(site.author === undefined ? {} : { authors: [{ name: site.author }] }),
+    ...(notify === undefined ? {} : { hubs: [{ type: JSON_FEED_HUB_TYPE, url: notify.hub }] }),
     items: source.documents.map((document) => jsonFeedItem(document, baseUrl)),
   };
 }
@@ -669,9 +840,7 @@ export function feedResponse(options: FeedResponseOptions): Response {
   const { format, source } = options;
   const etag = contentEtag(`feed:${format}`, feedFingerprint(source));
   const lastModified = latestModified(source.documents);
-
-  const headers = new Headers({ etag, 'cache-control': 'no-cache' });
-  if (lastModified !== undefined) headers.set('last-modified', lastModified.toUTCString());
+  const headers = feedHeaders(source, etag, lastModified);
 
   if (isNotModified(options.conditional, etag, lastModified)) {
     return new Response(null, { status: 304, headers });
@@ -701,9 +870,7 @@ export function commentsFeedResponse(
 ): Response {
   const etag = contentEtag('comments:rss', commentsFingerprint(source));
   const lastModified = source.comments[0]?.published;
-
-  const headers = new Headers({ etag, 'cache-control': 'no-cache' });
-  if (lastModified !== undefined) headers.set('last-modified', lastModified.toUTCString());
+  const headers = feedHeaders(source, etag, lastModified);
 
   if (isNotModified(conditional, etag, lastModified)) {
     return new Response(null, { status: 304, headers });
@@ -713,6 +880,42 @@ export function commentsFeedResponse(
   return new Response(commentsRssFeed(source), { headers });
 }
 
+/** Enough of any feed to say where it lives: what a header needs from one. */
+export type FeedIdentity = Pick<FeedSource, 'site' | 'feedHref' | 'baseUrl'>;
+
+/**
+ * The headers every feed response carries, whichever kind of feed it is and
+ * whether it becomes a body or a 304.
+ *
+ * They are built in one place, and before the conditional is decided, because
+ * a poller mostly gets the 304 — and a 304 that dropped the hub would hide the
+ * one thing that stops it polling.
+ */
+function feedHeaders(source: FeedIdentity, etag: string, lastModified: Date | undefined): Headers {
+  const headers = new Headers({ etag, 'cache-control': 'no-cache' });
+  if (lastModified !== undefined) headers.set('last-modified', lastModified.toUTCString());
+
+  const link = feedLinkHeader(source);
+  if (link !== undefined) headers.set('link', link);
+
+  return headers;
+}
+
+/**
+ * WebSub's discovery header: the hub and the feed's own URL, in that order.
+ *
+ * A subscriber is meant to find both without parsing the body, which is the
+ * only way a JSON Feed or a 304 could tell it anything at all. `undefined`
+ * when the site names no notify server.
+ */
+export function feedLinkHeader(source: FeedIdentity): string | undefined {
+  const notify = notifyServerOf(source.site);
+  if (notify === undefined) return undefined;
+
+  const self = absoluteUrl(source.feedHref, source.baseUrl);
+  return `<${notify.hub}>; rel="hub", <${self}>; rel="self"`;
+}
+
 /** What a comments feed is made of, as one string to hash. */
 function commentsFingerprint(source: CommentFeedSource): string {
   return [
@@ -720,6 +923,7 @@ function commentsFingerprint(source: CommentFeedSource): string {
     source.title,
     source.site.tagline ?? '',
     feedLanguage(source.site),
+    notifyServerOf(source.site)?.base ?? '',
     source.baseUrl,
     ...source.comments.map((comment) =>
       [comment.id, comment.author, comment.published.toISOString(), comment.html].join(' '),
@@ -736,6 +940,7 @@ function feedFingerprint(source: FeedSource): string {
     source.site.author ?? '',
     source.site.avatar ?? '',
     feedLanguage(source.site),
+    notifyServerOf(source.site)?.base ?? '',
     source.baseUrl,
     ...source.documents.map(
       (document) =>
@@ -817,11 +1022,12 @@ function optionalElement(name: string, text: string | undefined, depth = 1): str
   return text === undefined ? [] : [element(name, text, depth)];
 }
 
-/** An Atom `<link>`. */
-function link(attributes: { rel: string; type: string; href: string }, depth = 1): string {
-  return `${'  '.repeat(depth)}<link rel="${escapeXml(attributes.rel)}" type="${escapeXml(
-    attributes.type,
-  )}" href="${escapeXml(attributes.href)}"/>`;
+/** An Atom `<link>`. The `type` is left off when there is nothing to declare. */
+function link(attributes: { rel: string; type?: string; href: string }, depth = 1): string {
+  const type = attributes.type === undefined ? '' : ` type="${escapeXml(attributes.type)}"`;
+  return `${'  '.repeat(depth)}<link rel="${escapeXml(
+    attributes.rel,
+  )}"${type} href="${escapeXml(attributes.href)}"/>`;
 }
 
 /** An Atom `<author>`, or nothing when nobody is named. */

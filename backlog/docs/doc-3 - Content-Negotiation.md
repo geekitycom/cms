@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 03:12'
+updated_date: '2026-09-04 03:36'
 ---
 # Content Negotiation
 
@@ -53,6 +53,14 @@ Feeds are routes, not representations, because feed readers do not send useful `
 `/feed/` is RSS because that is the format nearly every existing subscriber holds. The site's three are registered routes; the per-archive ones are resolved in the not-found handler, because the two bases are a setting and a route table is fixed when the app is built.
 
 WordPress's older spellings redirect 301 rather than 404: `/feed/rss/` at any of those roots to that root's RSS feed, `?feed=rss2`, `?feed=rss`, `?feed=atom` and `?feed=json` on any listing to that listing's feed, and `?feed=rss2` or `?feed=rss` on a post's permalink to that post's comments feed. A feed URL without its trailing slash redirects to the canonical one in a single hop, exactly as any other listing URL does.
+
+## Real-time notification
+
+One setting, `notifyServer`, decides it: an rssCloud and WebSub server, `https://rpc.rsscloud.io` by default and empty for none. Every feed advertises it and the site pings it, so a subscriber hears about a post at once rather than on its next poll.
+
+An RSS channel carries all three spellings — the legacy `<cloud domain port="80" path="/pleaseNotify" registerProcedure="" protocol="http-post">`, `<source:cloud>` holding `{notifyServer}/pleaseNotify`, and `<atom:link rel="hub">` holding `{notifyServer}/websub` — beside the existing `rel="self"`. An Atom feed carries the `source:cloud` and the hub link but no `<cloud>`, which has no namespace. A JSON Feed carries `hubs: [{ type: "WebSub", url }]`. Every feed response in every format, the comments feeds included, carries `Link: <hub>; rel="hub", <self>; rel="self"`, on a 304 as well as on a body: a poller mostly gets the 304, and that is the response that should tell it to stop polling.
+
+Pinging is a form POST of `url={feed}` to `{notifyServer}/ping`, one per feed whose contents moved, when a post is published, edited or withdrawn — the index changes that drive ActivityPub delivery, and never a full scan. The feeds that moved are the site's three plus the three of every tag and category the post carried before and after the change. Pings are serialised, deduplicated, time-limited and best effort: a failure is logged and the save stands.
 
 ## Comments
 
