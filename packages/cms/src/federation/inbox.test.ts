@@ -20,9 +20,11 @@ import {
 } from '@fedify/vocab';
 
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
+import { readFileIfPresentSync } from '../files/atomic.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
+import { followersFile, inboxFile, readFollowers, readInboxLog } from './records.ts';
 
 /** The site under test. Fedify answers by origin, so every request uses this one. */
 const BASE_URL = 'https://blog.example';
@@ -168,6 +170,11 @@ async function site(): Promise<Cms> {
   });
   started.push(instance);
   return instance;
+}
+
+/** The content directory the site under test writes its federation files to. */
+function contentOf(instance: Cms): string {
+  return instance.config.contentDir;
 }
 
 /** How a POST to the inbox is signed. */
@@ -497,5 +504,111 @@ describe('an invalid HTTP signature', () => {
       `a Follow signed by an unknown key was answered ${String(response.status)}`,
     );
     assert.equal(instance.admin.countFollowers(), 0);
+  });
+});
+
+describe('the federation files', () => {
+  it('gains the follower on a Follow and loses it on an Undo, valid JSON throughout', async () => {
+    const instance = await site();
+
+    await deliver(instance, follow());
+
+    const held = readFollowers(contentOf(instance));
+    assert.deepEqual(
+      held.map((follower) => [follower.actorId, follower.inboxId, follower.handle]),
+      [[REMOTE_ACTOR, REMOTE_INBOX, '@ada@remote.example']],
+    );
+    assert.equal(held[0]?.sharedInboxId, REMOTE_SHARED_INBOX);
+    assert.equal(held[0]?.name, 'Ada Lovelace');
+    assert.equal(held[0]?.iconUrl, `${REMOTE_ORIGIN}/avatars/ada.png`);
+    assert.equal(held[0]?.url, `${REMOTE_ORIGIN}/@ada`);
+
+    await deliver(
+      instance,
+      new Undo({
+        id: new URL(`${REMOTE_ORIGIN}/undos/file`),
+        actor: new URL(REMOTE_ACTOR),
+        object: follow(),
+      }),
+    );
+
+    assert.deepEqual(readFollowers(contentOf(instance)), []);
+    assert.deepEqual(
+      JSON.parse(readFileIfPresentSync(followersFile(contentOf(instance))) ?? 'null'),
+      [],
+    );
+  });
+
+  it('loses the follower when the actor deletes itself', async () => {
+    const instance = await site();
+    await deliver(instance, follow());
+
+    await deliver(
+      instance,
+      new Delete({
+        id: new URL(`${REMOTE_ORIGIN}/deletes/1`),
+        actor: new URL(REMOTE_ACTOR),
+        object: new URL(REMOTE_ACTOR),
+      }),
+    );
+
+    assert.deepEqual(readFollowers(contentOf(instance)), []);
+  });
+
+  it('gains a line per like, boost and reply, in the month they arrived in', async () => {
+    const instance = await site();
+
+    await deliver(
+      instance,
+      new Like({
+        id: new URL(`${REMOTE_ORIGIN}/likes/file`),
+        actor: new URL(REMOTE_ACTOR),
+        object: new URL(`${BASE_URL}/ap/posts/hello`),
+      }),
+    );
+    await deliver(
+      instance,
+      new Announce({
+        id: new URL(`${REMOTE_ORIGIN}/announces/file`),
+        actor: new URL(REMOTE_ACTOR),
+        object: new URL(`${BASE_URL}/ap/posts/hello`),
+      }),
+    );
+    await deliver(
+      instance,
+      new Create({
+        id: new URL(`${REMOTE_ORIGIN}/creates/file`),
+        actor: new URL(REMOTE_ACTOR),
+        object: new Note({
+          id: new URL(`${REMOTE_ORIGIN}/notes/file`),
+          attribution: new URL(REMOTE_ACTOR),
+          content: 'Good post.',
+          replyTarget: new URL(`${BASE_URL}/ap/posts/hello`),
+        }),
+      }),
+    );
+
+    const log = readInboxLog(contentOf(instance));
+    const types = log.map((line) => (JSON.parse(line.json) as { type: string }).type);
+    assert.deepEqual(types, ['Like', 'Announce', 'Create']);
+
+    // Every line is one whole compact activity with the arrival time in front
+    // of it, and it landed in the file for the month it arrived in.
+    const month = inboxFile(contentOf(instance), log[0]?.receivedAt ?? '');
+    const text = readFileIfPresentSync(month) ?? '';
+    assert.equal(text.split('\n').filter((line) => line !== '').length, 3);
+    assert.ok(text.endsWith('\n'), 'every line, the last one included, is terminated');
+    assert.match(text, /"receivedAt":"20/);
+    assert.match(text, /Good post\./);
+
+    // And what the index says is what the file says, because the row is
+    // derived from the line either way.
+    assert.deepEqual(
+      instance.admin
+        .listInboxActivities()
+        .map((entry) => entry.activityType)
+        .reverse(),
+      types,
+    );
   });
 });

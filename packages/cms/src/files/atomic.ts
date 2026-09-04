@@ -94,7 +94,7 @@ export function updateFileAtomically(
   produce: ProduceFileContents,
   options: WriteFileAtomicallyOptions = {},
 ): Promise<void> {
-  return enqueue(file, async () => {
+  return withFileLock(file, async () => {
     let current: string | undefined;
     try {
       current = await readFile(file, 'utf8');
@@ -103,6 +103,28 @@ export function updateFileAtomically(
     }
     await write(file, await produce(current), options);
   });
+}
+
+/**
+ * Run a task with one path's queue to itself, and hand back what it returned.
+ *
+ * The queue {@link updateFileAtomically} keeps around a read and a write, for
+ * a caller whose step is more than those two. The one that needs it is a file
+ * that SQLite indexes: a follower arriving has to reach `followers.json` and
+ * the `followers` table, and if the second of those were a step after the lock
+ * rather than inside it, a follow and an unfollow racing could leave the index
+ * saying something the file does not — and the file is the truth, so the index
+ * would be wrong until the next boot rebuilt it.
+ *
+ * The task is not handed a writer, because the writer it wants is the one that
+ * does not queue: {@link readFileIfPresentSync} and
+ * {@link writeFileAtomicallySync} inside the lock are the whole pattern.
+ * Calling {@link writeFileAtomically} or {@link updateFileAtomically} on the
+ * same path from inside a task would wait for a queue the task is itself at
+ * the head of, and never return.
+ */
+export function withFileLock<T>(file: string, task: () => T | Promise<T>): Promise<T> {
+  return enqueue(file, async () => await task());
 }
 
 /**
@@ -152,7 +174,7 @@ export function readFileIfPresentSync(file: string): string | undefined {
 }
 
 /** Run a task once every task already queued for this path has finished. */
-function enqueue(file: string, task: () => Promise<void>): Promise<void> {
+function enqueue<T>(file: string, task: () => Promise<T>): Promise<T> {
   const key = path.resolve(file);
   const queue = queues.get(key) ?? { last: Promise.resolve(), waiting: 0 };
   queue.waiting += 1;

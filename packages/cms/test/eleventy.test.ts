@@ -281,6 +281,36 @@ describe('the fixtures content directory under Eleventy', () => {
     }
   });
 
+  it('sees the followers and the inbox log under _data/federation as data', async () => {
+    const html = await readFile(path.join(buildDir, '_site', 'about/index.html'), 'utf8');
+
+    // `content/_data/federation/followers.json` is a data file in a namespaced
+    // subdirectory, so Eleventy hands it over as `federation.followers`
+    // without being told anything.
+    const followers = [
+      ...(/<ul class="followers">([\s\S]*?)<\/ul>/.exec(html)?.[1] ?? '').matchAll(
+        /<a href="([^"]*)">([^<]*)<\/a>/g,
+      ),
+    ].map((match) => [match[2], match[1]]);
+    assert.deepEqual(followers, [
+      ['Ada Lovelace', 'https://remote.example/@ada'],
+      ['Grace Hopper', 'https://remote.example/@grace'],
+    ]);
+
+    // The inbox log is JSON Lines, which Eleventy has no reader for until the
+    // example config registers one; each month file is then an entry of
+    // `federation.inbox` holding that month's activities.
+    const inbox = [
+      ...(/<ul class="inbox">([\s\S]*?)<\/ul>/.exec(html)?.[1] ?? '').matchAll(
+        /<li>([^<]*)<\/li>/g,
+      ),
+    ].map((match) => (match[1] ?? '').trim());
+    assert.deepEqual(inbox, [
+      'Like from https://remote.example/users/ada in 2026-09',
+      'Create from https://remote.example/users/grace in 2026-09',
+    ]);
+  });
+
   it('renders the same site menu the CMS renders, from site.json and the flagged pages', async () => {
     const html = await readFile(path.join(buildDir, '_site', 'about/index.html'), 'utf8');
     const nav = /<nav class="site-nav">[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';

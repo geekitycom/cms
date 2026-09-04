@@ -3,7 +3,7 @@ id: doc-1
 title: Architecture Overview
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 16:43'
+updated_date: '2026-09-04 17:11'
 ---
 # Architecture Overview
 
@@ -39,6 +39,7 @@ packages/cms/                 published as @geekity/cms
     web/                      public routes, content negotiation, theme rendering
     admin/                    auth, session, posts/pages/settings screens
     federation/               Fedify setup, actor, inbox handlers, outbox delivery
+      records.ts              content/_data/federation: followers.json + the inbox log
   themes/default/             default theme, shipped in the package
   templates/site/             files copied by geekity init
   test/
@@ -90,7 +91,7 @@ The `geekity` CLI also runs without an entry file (`geekity serve` reads `geekit
 Files are the source of truth for everything a site cannot afford to lose; the database is a cache that can be deleted at rest and is rebuilt on the next boot or by `geekity rebuild`.
 
 - `content/_data/site.json`: site settings (title, tagline, base URL, timezone, posts per page, author, actor handle and type, avatar). Public, in git, read by Eleventy.
-- `content/_data/federation/followers.json` and `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`: ActivityPub followers and the inbound activity log. Public, in git, exposed to Eleventy as data.
+- `content/_data/federation/followers.json` and `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`: ActivityPub followers, one object per follower, and the inbound activity log, one compact JSON-LD activity per line with the time it arrived in front of it. Public, in git, exposed to Eleventy as `federation.followers` and `federation.inbox`. Every write updates the `followers` and `ap_inbox` indexes inside the same lock on the file, and both indexes are emptied and read back from the files on every boot.
 - `data/keys/`: the actor's key pairs as JWK files. Private, backed up, never in git.
 - `data/users.json`: usernames and password hashes. Private, backed up, never in git.
 - `data/geekity.db`: the content index, sessions, the followers and inbox indexes, delivery outcomes, and later the search index. Disposable.

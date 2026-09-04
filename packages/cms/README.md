@@ -34,6 +34,7 @@ content/
   posts/              Markdown posts, plus posts.json for Eleventy
   pages/              Markdown pages, plus pages.json
   _data/site.json     the settings: title, tagline, author, page and feed sizes
+  _data/federation/   once the site federates: followers.json and the inbox log
 .gitignore            node_modules, data and .env
 ```
 
@@ -235,9 +236,27 @@ outgrown them says so:
 | `queue`               | `InProcessMessageQueue` | The delivery and inbox queue. `null` means no queue: activities are handled and delivered inside the request that carried them, with no retry. |
 | `allowPrivateAddress` | `false`                 | Whether Fedify may fetch private and loopback addresses. Leave it off: turning it on removes an SSRF guard. It exists for tests.               |
 
-Followers, the inbound activity log and the delivery log are the CMS's own and
-live in SQLite whatever those are set to, so a restart never costs a site a
-follower. The actor's key pairs are the CMS's own too, but they are the one
+Followers and the log of what the inbox was told are the CMS's own, and they
+are files the site publishes (decision-9):
+`content/_data/federation/followers.json` holds one object per follower — actor
+id, inbox, shared inbox, handle, name, icon, profile URL and follow time,
+oldest follow first — and
+`content/_data/federation/inbox/{yyyy}-{mm}.jsonl` holds one compact JSON-LD
+activity per line, with the `receivedAt` the log stamped it with in front of
+it. Both are in git beside the posts, and an Eleventy build of the same content
+directory sees them as `federation.followers` and `federation.inbox`. A `Follow`
+appends to the first, an `Undo(Follow)` or an actor's own `Delete` takes the
+entry out, and a like, a boost or a reply appends a line to the second; each
+write updates the SQLite index in the same step, behind a lock on the file, so
+the two can never disagree. The `followers` and `ap_inbox` tables are that
+index and nothing more: every boot empties them and reads them back from the
+files, which is what makes editing `followers.json` by hand and restarting a
+supported thing to do, and what makes deleting the database cost a site
+nothing. `cms.admin.replaceFollowers` and `replaceInboxActivities` are what the
+rebuild calls; `rebuildFederationIndexes({ admin, contentDir })` is the rebuild
+itself. The delivery log stays in SQLite as a cache of what happened.
+
+The actor's key pairs are the CMS's own too, but they are the one
 thing a site can never regenerate, so they live in files: one JWK per algorithm
 under `dataDir/keys` (`actor.rsassa-pkcs1-v1_5.jwk` and `actor.ed25519.jwk`),
 written `0600` in a `0700` directory, each holding the private key alone
@@ -1524,6 +1543,7 @@ the rules the CMS follows that Eleventy does not know about on its own:
 | `draft: true` hides a document                  | An `addPreprocessor` that returns `false` for it. `BUILD_DRAFTS=1` builds drafts anyway, for a local preview.                                                                                                                                                                                                                                                                                           |
 | A file with no `permalink` gets the CMS default | An `addPreprocessor` that fills in `/{yyyy}/{mm}/{slug}/` for a post and `/{slug}/` for a page, slugifying the title exactly as the CMS does. Front matter always wins; the CMS writes `permalink` into every file it saves, so this only matters for hand-authored files.                                                                                                                              |
 | `content/uploads/` is served at `/uploads/`     | `addPassthroughCopy({ 'content/uploads': 'uploads' })`, plus an `ignores` entry for the same path. Without the ignore, an upload that happens to be Markdown would be copied _and_ rendered as a page; the CMS only ever indexes `posts/` and `pages/`.                                                                                                                                                 |
+| `content/_data/federation/` is data             | `followers.json` is an ordinary data file in a namespaced `_data` subdirectory, so Eleventy hands it over as `federation.followers` without being told. The monthly inbox logs are JSON Lines, which Eleventy has no reader for, so the config registers one with `addDataExtension('jsonl', …)`: each month becomes an entry of `federation.inbox`, keyed by its `{yyyy}-{mm}` name.                   |
 | `content/_trash/` is not published              | `ignores.add('content/_trash/**')`. Eleventy skips `_includes` and `_data` because they are configured directories, not because of the underscore, so the trash has to be named.                                                                                                                                                                                                                        |
 | Dates are shown in the site's `timezone`        | A `date` filter with the CMS's four formats: `readable`, `html` and `year` are the calendar the site's zone was on at the instant, `iso` is the instant in UTC. The zone is read from `content/_data/site.json`, which the settings screen writes, so a zone changed in the CMS changes the built pages too.                                                                                            |
 | A future `date` holds a post back               | An `addPreprocessor` that returns `false` for it. This is the one rule that cannot be exactly the same in both places: a build has no clock, only a moment. A scheduled post is left out of the build that runs before its date and is in the next build after it, so a scheduled site needs a build on a schedule; the CMS publishes it on the date by itself. `BUILD_SCHEDULED=1` builds them anyway. |

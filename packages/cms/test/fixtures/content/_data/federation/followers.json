@@ -1,0 +1,22 @@
+[
+  {
+    "actorId": "https://remote.example/users/ada",
+    "inboxId": "https://remote.example/users/ada/inbox",
+    "sharedInboxId": "https://remote.example/inbox",
+    "handle": "@ada@remote.example",
+    "name": "Ada Lovelace",
+    "iconUrl": "https://remote.example/avatars/ada.png",
+    "url": "https://remote.example/@ada",
+    "followedAt": "2026-09-01T10:00:00.000Z"
+  },
+  {
+    "actorId": "https://remote.example/users/grace",
+    "inboxId": "https://remote.example/users/grace/inbox",
+    "sharedInboxId": null,
+    "handle": "@grace@remote.example",
+    "name": "Grace Hopper",
+    "iconUrl": null,
+    "url": "https://remote.example/@grace",
+    "followedAt": "2026-09-02T10:00:00.000Z"
+  }
+]

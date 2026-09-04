@@ -5,7 +5,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { updateFileAtomically, writeFileAtomically, writeFileAtomicallySync } from './atomic.ts';
+import {
+  readFileIfPresentSync,
+  updateFileAtomically,
+  withFileLock,
+  writeFileAtomically,
+  writeFileAtomicallySync,
+} from './atomic.ts';
 
 const dirs: string[] = [];
 after(async () => {
@@ -136,5 +142,88 @@ describe('writeFileAtomicallySync', () => {
     assert.equal(await readFile(file, 'utf8'), '{"title":"Booted"}\n');
     assert.equal((await stat(file)).mode & 0o777, 0o600);
     assert.deepEqual(await readdir(path.dirname(file)), ['site.json']);
+  });
+});
+
+describe('withFileLock', () => {
+  it('runs one task at a time per path and hands back what the task returned', async () => {
+    const dir = await temporaryDir();
+    const file = path.join(dir, 'followers.json');
+
+    const order: string[] = [];
+    const results = await Promise.all(
+      ['a', 'b', 'c'].map((name) =>
+        withFileLock(file, async () => {
+          order.push(`${name}:start`);
+          await Promise.resolve();
+          order.push(`${name}:end`);
+          return name.toUpperCase();
+        }),
+      ),
+    );
+
+    assert.deepEqual(results, ['A', 'B', 'C']);
+    assert.deepEqual(order, ['a:start', 'a:end', 'b:start', 'b:end', 'c:start', 'c:end']);
+  });
+
+  it('holds the lock over everything the task does, writes and their index alike', async () => {
+    const dir = await temporaryDir();
+    const file = path.join(dir, 'followers.json');
+    const index: string[] = [];
+
+    // What every writer in this CMS does: read the file, write it back, and
+    // bring a cache into line with it. The cache write is inside the lock, so
+    // an add racing a remove cannot leave the cache saying what the file does
+    // not.
+    async function add(name: string): Promise<void> {
+      await withFileLock(file, async () => {
+        const held = JSON.parse(readFileIfPresentSync(file) ?? '[]') as string[];
+        await Promise.resolve();
+        const next = [...held, name];
+        writeFileAtomicallySync(file, JSON.stringify(next));
+        index.length = 0;
+        index.push(...next);
+      });
+    }
+
+    await Promise.all(['ada', 'grace', 'katherine'].map(add));
+
+    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), ['ada', 'grace', 'katherine']);
+    assert.deepEqual(index, ['ada', 'grace', 'katherine']);
+  });
+
+  it('lets the next task run after one throws, and reports the throw to its own caller', async () => {
+    const dir = await temporaryDir();
+    const file = path.join(dir, 'followers.json');
+
+    const failed = withFileLock(file, () => {
+      throw new Error('the file would not parse');
+    });
+    const after = withFileLock(file, () => 'ran anyway');
+
+    await assert.rejects(failed, /the file would not parse/);
+    assert.equal(await after, 'ran anyway');
+  });
+
+  it('does not serialise tasks on different paths', async () => {
+    const dir = await temporaryDir();
+    let started = 0;
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const first = withFileLock(path.join(dir, 'one.json'), async () => {
+      started += 1;
+      await held;
+    });
+    const second = withFileLock(path.join(dir, 'two.json'), () => {
+      started += 1;
+    });
+
+    await second;
+    assert.equal(started, 2, 'the second path waited for the first');
+    release();
+    await first;
   });
 });

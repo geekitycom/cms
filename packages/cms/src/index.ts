@@ -28,7 +28,9 @@ import {
   createRelayService,
   createSiteFederation,
   migrateActorKeysToFiles,
+  migrateFederationToFiles,
   mountFederation,
+  rebuildFederationIndexes,
   SITE_ACTOR_IDENTIFIER,
 } from './federation/index.ts';
 import type { DeliveryService, RelayService, SiteFederation } from './federation/index.ts';
@@ -302,6 +304,7 @@ export type {
 export {
   readFileIfPresentSync,
   updateFileAtomically,
+  withFileLock,
   writeFileAtomically,
   writeFileAtomicallySync,
 } from './files/index.ts';
@@ -414,6 +417,8 @@ export {
   acceptedRelays,
   acceptRelay,
   ACTOR_CLASSES,
+  addFollower,
+  appendInboxActivity,
   ACTOR_KEY_ALGORITHMS,
   ACTOR_PATH,
   actorClassFor,
@@ -430,13 +435,16 @@ export {
   deliveryTargets,
   federatedObject,
   federatedPost,
+  FEDERATION_DATA_DIRECTORY,
   FEDERATION_PREFIX,
   federationOrigin,
   followerFrom,
   followerRecipient,
+  FOLLOWERS_FILE,
   FOLLOWERS_PAGE_SIZE,
   FOLLOWERS_PATH,
   actorHandle,
+  followersFile,
   followersPage,
   FOLLOWING_PATH,
   groupByInbox,
@@ -449,9 +457,15 @@ export {
   INBOX_PATH,
   isFederatedDocument,
   lastFollowersCursor,
+  inboxDirectory,
+  inboxFile,
+  inboxMonth,
+  INBOX_DIRECTORY,
+  inboxRowFrom,
   loadActorKeyPairs,
   logActivity,
   migrateActorKeysToFiles,
+  migrateFederationToFiles,
   mountFederation,
   NODEINFO_PATH,
   OUTBOX_PAGE_SIZE,
@@ -463,6 +477,9 @@ export {
   postObjectId,
   postObjectPath,
   postUpdateActivity,
+  readFollowers,
+  readInboxLog,
+  rebuildFederationIndexes,
   rejectRelay,
   relayAnswering,
   relayRecipient,
@@ -480,6 +497,9 @@ export {
 export type {
   ActorKeyAlgorithm,
   CreateDeliveryServiceOptions,
+  FederationIndexReport,
+  FederationRecords,
+  InboxLine,
   CreateRelayServiceOptions,
   CreateSiteFederationOptions,
   DeliveryLogger,
@@ -831,6 +851,14 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // a session the database already holds still names the person it was made
   // for, and the file wins where there already is one.
   migrateUsersToFile({ admin, dataDir: resolved.dataDir });
+
+  // And the followers and the log of what the inbox was told, which become
+  // content/_data/federation/followers.json and inbox/{yyyy}-{mm}.jsonl.
+  // Unlike the three above, no table is dropped: `followers` and `ap_inbox`
+  // stay as indexes of those files, which is why the rebuild is next and runs
+  // on every boot rather than once.
+  migrateFederationToFiles({ admin, contentDir: resolved.contentDir });
+  rebuildFederationIndexes({ admin, contentDir: resolved.contentDir });
 
   // And, once the files are the whole story, that they are readable. This is
   // the one thing here that can stop a boot: an actor that publishes no key

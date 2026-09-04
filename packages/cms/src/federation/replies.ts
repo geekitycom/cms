@@ -136,8 +136,12 @@ function activityObject(json: string): Record<string, unknown> | undefined {
  * and either of those wrapped in an array — all mean the same thing here, and
  * the first of a list is the one that is kept: a note that answers several
  * things is shown under the first one it names.
+ *
+ * Exported for the inbox log's sake: every id column of the index is read out
+ * of the stored activity by this, so what a rebuilt row says about an actor or
+ * an object is what a live one says.
  */
-function uriOf(value: unknown): string | null {
+export function uriOf(value: unknown): string | null {
   if (Array.isArray(value)) {
     for (const item of value) {
       const found = uriOf(item);
