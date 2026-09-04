@@ -13,6 +13,7 @@ import type { ContentStore, ListAllOptions } from '../content/store.ts';
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { isPublicDocument } from '../web/documents.ts';
+import { NAVIGATION_KEY, NAVIGATION_ORDER_KEY, navigationOrder } from '../web/navigation.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
 import { readSiteSettings } from './settings.ts';
@@ -52,6 +53,12 @@ export interface DocumentKind {
    * definition and has no use for it.
    */
   excludable: boolean;
+  /**
+   * Whether the editor offers the site menu. Pages only: a post is in the
+   * archive and in the feeds, and putting one in the header beside About is
+   * not what a menu is for.
+   */
+  navigable: boolean;
 }
 
 /**
@@ -74,6 +81,7 @@ export const POST_KIND: DocumentKind = {
   tagged: true,
   categorised: true,
   excludable: false,
+  navigable: false,
 };
 
 /** The pages screens: standing content, no date prefix and no taxonomy. */
@@ -87,6 +95,7 @@ export const PAGE_KIND: DocumentKind = {
   tagged: false,
   categorised: false,
   excludable: true,
+  navigable: true,
 };
 
 /** The URL of the editor for one document. */
@@ -268,6 +277,8 @@ async function saveFromForm(
     description: text(body['description']).trim(),
     draft: body['draft'] !== undefined,
     exclude: body['exclude'] !== undefined,
+    navigation: body['navigation'] !== undefined,
+    navigationOrder: text(body['navigation_order']).trim(),
     body: normalizeBody(text(body['body'])),
     hash: text(body['hash']),
   };
@@ -289,6 +300,10 @@ async function saveFromForm(
   }
 
   if (form.title === '') return refuse(`A ${kind.singular} needs a title.`);
+
+  if (form.navigationOrder !== '' && !Number.isFinite(Number(form.navigationOrder))) {
+    return refuse('A menu order is a number, and pulls the lower numbers to the front.');
+  }
 
   const date = kind.dated ? (form.date === '' ? new Date().toISOString() : form.date) : undefined;
   if (date !== undefined && !/^\d{4}-\d{2}-\d{2}/.test(date)) {
@@ -330,7 +345,7 @@ async function saveFromForm(
     ...(form.description === '' ? {} : { description: form.description }),
     ...optional('author', document?.author ?? currentUsername(c)),
     ...optional('activitypub', document?.activitypub),
-    extra: resolveExtra(kind, document, form.exclude),
+    extra: resolveExtra(kind, document, form),
     body: form.body,
   };
 
@@ -466,13 +481,32 @@ function normalizePermalink(value: string): string | undefined {
 function resolveExtra(
   kind: DocumentKind,
   document: Document | undefined,
-  exclude: boolean,
+  form: Pick<EditorForm, 'exclude' | 'navigation' | 'navigationOrder'>,
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
-  if (!kind.excludable) return extra;
 
-  if (exclude) extra[EXCLUDE_KEY] = true;
-  else if (EXCLUDE_KEY in extra) extra[EXCLUDE_KEY] = false;
+  if (kind.excludable) {
+    if (form.exclude) extra[EXCLUDE_KEY] = true;
+    else if (EXCLUDE_KEY in extra) extra[EXCLUDE_KEY] = false;
+  }
+
+  if (kind.navigable) {
+    if (form.navigation) {
+      extra[NAVIGATION_KEY] = true;
+      if (form.navigationOrder === '') delete extra[NAVIGATION_ORDER_KEY];
+      else extra[NAVIGATION_ORDER_KEY] = Number(form.navigationOrder);
+    } else {
+      // Both keys go rather than being written `false`, which is where this
+      // parts company with `eleventyExcludeFromCollections` above. That one is
+      // Eleventy's key and a site may have written it by hand for a build of
+      // its own, so a `false` says something; these two are the CMS's own, and
+      // absent and false mean the same thing to everything that reads them. An
+      // order on a page that is not in the menu means nothing at all.
+      delete extra[NAVIGATION_KEY];
+      delete extra[NAVIGATION_ORDER_KEY];
+    }
+  }
+
   return extra;
 }
 
@@ -568,7 +602,7 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     ...(form.description === '' ? {} : { description: form.description }),
     ...optional('author', document.author),
     ...optional('activitypub', document.activitypub),
-    extra: resolveExtra(kind, document, form.exclude),
+    extra: resolveExtra(kind, document, form),
     body: form.body,
   });
 
@@ -706,6 +740,10 @@ export interface EditorForm {
   draft: boolean;
   /** Whether `eleventyExcludeFromCollections` is set. Pages only. */
   exclude: boolean;
+  /** Whether the page put itself in the site menu. Pages only. */
+  navigation: boolean;
+  /** Where in the menu it goes, as typed. Empty for "after the ordered ones". */
+  navigationOrder: string;
   body: string;
   /** The hash of the file the form was filled in from; empty for a new one. */
   hash: string;
@@ -723,6 +761,8 @@ export function blankForm(kind: DocumentKind): EditorForm {
     description: '',
     draft: false,
     exclude: false,
+    navigation: false,
+    navigationOrder: '',
     body: '',
     hash: '',
   };
@@ -740,6 +780,8 @@ export function formFor(document: Document): EditorForm {
     description: document.description ?? '',
     draft: document.draft,
     exclude: document.extra[EXCLUDE_KEY] === true,
+    navigation: document.extra[NAVIGATION_KEY] === true,
+    navigationOrder: navigationOrder(document)?.toString() ?? '',
     body: document.body,
     hash: document.hash,
   };

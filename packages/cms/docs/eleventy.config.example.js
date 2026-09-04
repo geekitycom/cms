@@ -14,6 +14,7 @@
  * 4. `content/uploads/` is copied through to `/uploads/`.
  * 5. `content/_trash/` is not built.
  * 6. `categories`, the CMS's second taxonomy, becomes `collections.categories`.
+ * 7. The site menu becomes `collections.menu`.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
  * says `"layout": "post"`, `pages.json` says `"layout": "page"` — so
@@ -177,6 +178,52 @@ export default function (eleventyConfig) {
         .slice()
         .sort((a, b) => Number(b.date ?? 0) - Number(a.date ?? 0)),
     }));
+  });
+
+  // The site menu. The CMS puts it on every template as `menu`; here it is
+  // `collections.menu`, because a collection is the only place a build can see
+  // both the global data and every page at once.
+  //
+  // It is the `navigation` array of `content/_data/site.json`, which the
+  // settings screen mirrors, followed by every page whose front matter says
+  // `navigation: true`, ordered by `navigationOrder` and then by title. Each
+  // entry is `{ label, url }`; a layout marks the current one itself, because a
+  // collection is built once for the whole site and `page.url` is per template:
+  //
+  //     {% for item in collections.menu %}
+  //     <a href="{{ item.url }}"
+  //        {% if item.url == page.url %}aria-current="page"{% endif %}>{{ item.label }}</a>
+  //     {% endfor %}
+  eleventyConfig.addCollection('menu', (collectionApi) => {
+    const all = collectionApi.getAll();
+    const site = all[0]?.data?.site ?? {};
+
+    const items = (Array.isArray(site.navigation) ? site.navigation : [])
+      .filter(
+        (item) =>
+          item &&
+          typeof item.label === 'string' &&
+          item.label !== '' &&
+          typeof item.url === 'string' &&
+          item.url !== '',
+      )
+      .map((item) => ({ label: item.label, url: item.url }));
+
+    const pages = all
+      .filter((item) => item.data.navigation === true && !isPost(item.data.page?.inputPath ?? ''))
+      .map((item) => ({
+        label: String(item.data.title ?? ''),
+        url: item.url,
+        order:
+          typeof item.data.navigationOrder === 'number' &&
+          Number.isFinite(item.data.navigationOrder)
+            ? item.data.navigationOrder
+            : Number.POSITIVE_INFINITY,
+      }))
+      .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label))
+      .map(({ label, url }) => ({ label, url }));
+
+    return [...items, ...pages];
   });
 
   // Documents are Markdown; Nunjucks and HTML are here for the layouts and for

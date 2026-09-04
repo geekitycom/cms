@@ -64,6 +64,7 @@ Every template gets:
 | Key    | What it holds                                                                                                                                                                                           |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `site` | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
+| `menu` | The site menu for this page: a list of `{ label, url, current }`. See [Navigation](#navigation).                                                                                                        |
 
 A document — one post, one page, or one entry of a listing — adds:
 
@@ -106,6 +107,42 @@ comes from `language`, and defaults to `en`. The rssCloud and WebSub server the
 feeds advertise comes from `notifyServer`, and is empty for none; the theme
 writes nothing for it, because a cloud is advertised in the feed rather than on
 the page.
+
+## Navigation
+
+`menu` is the site menu, already in order and already knowing which of its items
+is the page being looked at. Every template gets it, so a layout that overrides
+`header` renders the menu the same way `layouts/base.njk` does:
+
+```njk
+{% if menu.length %}
+<nav class="site-nav" aria-label="Site">
+  <ul>
+    {% for item in menu %}
+    <li><a href="{{ item.url | url }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
+    {% endfor %}
+  </ul>
+</nav>
+{% endif %}
+```
+
+Each item is `{ label, url, current }`. `url` is a site-root path or an absolute
+URL for somewhere else, so put it through the `url` filter as above and a site
+served from a subdirectory still links correctly. `current` is true for the item
+whose path is the one being rendered, comparing without the trailing slash; an
+item pointing off the site is never current.
+
+The list is the `navigation` setting first, in the order the settings screen
+names it, and then every published page whose front matter says
+`navigation: true`, ordered by `navigationOrder` and then by title. A page that
+names no order sorts after every page that does.
+
+It is called `menu` rather than `navigation` because `navigation` is the
+front-matter key a page opts in with, and a document's own front matter goes on
+top of the globals exactly as Eleventy's data cascade does. The setting is
+mirrored to `navigation` in `content/_data/site.json`, so an Eleventy build of
+the same content renders the same menu; `docs/eleventy.config.example.js` builds
+it as `collections.menu`.
 
 ## Feeds
 

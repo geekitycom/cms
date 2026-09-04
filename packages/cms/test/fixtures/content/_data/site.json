@@ -2,5 +2,15 @@
   "title": "Fixture Site",
   "tagline": "Content that has to build under Eleventy too",
   "url": "https://fixtures.example",
-  "author": "andrew"
+  "author": "andrew",
+  "navigation": [
+    {
+      "label": "Home",
+      "url": "/"
+    },
+    {
+      "label": "Elsewhere",
+      "url": "https://elsewhere.example/"
+    }
+  ]
 }

@@ -455,6 +455,13 @@ export {
   matchesEtag,
   MEDIA_TYPES,
   mountPublicSite,
+  navigationItems,
+  navigationItemsOf,
+  navigationMenu,
+  navigationOrder,
+  navigationPages,
+  NAVIGATION_KEY,
+  NAVIGATION_ORDER_KEY,
   notAcceptableResponse,
   NOTIFY_CLOUD_PORT,
   NOTIFY_CLOUD_PROTOCOL,
@@ -545,6 +552,9 @@ export type {
   JsonFeedItem,
   NotifyServer,
   Listing,
+  MenuItem,
+  NavigationItem,
+  NavigationMenuOptions,
   PageContext,
   PaginateOptions,
   Pagination,
@@ -715,6 +725,12 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const renderer = createRenderer({
     config: resolved,
     settings: { read: () => settingsSiteData(readSiteSettings(admin)) },
+    // The pages that put themselves in the site menu are found by asking for
+    // every public page and reading their front matter, rather than by an
+    // index of their own: a site has a handful of pages, the query is the
+    // same one the listing index already serves, and doing it per render is
+    // what makes a page flagged in the editor appear in the menu at once.
+    pages: () => store.listAll({ type: 'page', draft: false, trashed: false, scheduled: false }),
   });
   const federation = createSiteFederation({ baseUrl: resolved.baseUrl, ...resolved.federation });
 

@@ -132,6 +132,7 @@ describe('content/_data/site.json', () => {
       categoryBase: 'category',
       notifyServer: 'https://rpc.rsscloud.io',
       relays: [],
+      navigation: [],
     });
   });
 
@@ -819,5 +820,104 @@ describe('the relays setting', () => {
 
     await cms.relays.settled();
     assert.deepEqual(readSiteSettings(cms.admin).relays, ['https://kept.example/inbox']);
+  });
+});
+
+describe('the navigation setting', () => {
+  /** The content of a named textarea in the rendered settings screen. */
+  function textarea(html: string, name: string): string | undefined {
+    const match = new RegExp(`<textarea[^>]*name="${name}"[^>]*>([\\s\\S]*?)</textarea>`).exec(
+      html,
+    );
+    return match?.[1];
+  }
+
+  it('takes one label and URL per line, and reaches the store, the mirror and the form', async () => {
+    const contentDir = await box.dir('geekity-settings-navigation-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings')).text();
+    assert.equal(textarea(html, 'navigation'), '', 'a new site has no menu');
+
+    assert.equal(
+      (
+        await saveSettings(agent, {
+          navigation: 'Home | /\n\n  About | /about/  \nElsewhere | https://example.org/',
+        })
+      ).status,
+      303,
+    );
+
+    assert.deepEqual(readSiteSettings(cms.admin).navigation, [
+      { label: 'Home', url: '/' },
+      { label: 'About', url: '/about/' },
+      { label: 'Elsewhere', url: 'https://example.org/' },
+    ]);
+
+    const written = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.deepEqual(written['navigation'], [
+      { label: 'Home', url: '/' },
+      { label: 'About', url: '/about/' },
+      { label: 'Elsewhere', url: 'https://example.org/' },
+    ]);
+
+    const back = await (await agent.get('/admin/settings')).text();
+    assert.equal(
+      textarea(back, 'navigation'),
+      'Home | /\nAbout | /about/\nElsewhere | https://example.org/',
+    );
+  });
+
+  it('refuses a line missing a label or a URL, and keeps what was stored (AC #4)', async () => {
+    const contentDir = await box.dir('geekity-settings-navigation-bad-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    assert.equal((await saveSettings(agent, { navigation: 'Home | /' })).status, 303);
+
+    for (const bad of ['About', 'About |', '| /about/', '  | ', 'About | not a url']) {
+      const response = await saveSettings(agent, { navigation: bad, title: 'Should Not Land' });
+      assert.equal(response.status, 400, JSON.stringify(bad));
+      assert.match(await response.text(), /Label \| URL/, JSON.stringify(bad));
+    }
+
+    const settings = readSiteSettings(cms.admin);
+    assert.deepEqual(settings.navigation, [{ label: 'Home', url: '/' }]);
+    assert.equal(settings.title, 'A Site', 'the rest of the refused form was not written either');
+
+    const written = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.deepEqual(written['navigation'], [{ label: 'Home', url: '/' }]);
+  });
+
+  it('is seeded from a site.json that has one, and empty from one that has not (AC #3)', async () => {
+    const contentDir = await box.dir('geekity-settings-navigation-seed-');
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({
+        title: 'Seeded',
+        navigation: [{ label: 'About', url: '/about/' }, { label: 'Nowhere' }, 'Home'],
+      }),
+      'utf8',
+    );
+
+    const cms = await box.site({ contentDir });
+    assert.deepEqual(readSiteSettings(cms.admin).navigation, [{ label: 'About', url: '/about/' }]);
+
+    const older = await box.dir('geekity-settings-navigation-old-');
+    await mkdir(path.join(older, '_data'), { recursive: true });
+    await writeFile(
+      path.join(older, '_data', 'site.json'),
+      JSON.stringify({ title: 'From before the setting' }),
+      'utf8',
+    );
+
+    const before = await box.site({ contentDir: older });
+    assert.deepEqual(readSiteSettings(before.admin).navigation, []);
   });
 });

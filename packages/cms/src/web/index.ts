@@ -124,6 +124,16 @@ export type {
   RepresentationExtension,
   RepresentationResponseOptions,
 } from './negotiate.ts';
+export {
+  navigationItems,
+  navigationItemsOf,
+  navigationMenu,
+  navigationOrder,
+  navigationPages,
+  NAVIGATION_KEY,
+  NAVIGATION_ORDER_KEY,
+} from './navigation.ts';
+export type { MenuItem, NavigationItem, NavigationMenuOptions } from './navigation.ts';
 export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
 export { createRenderer, TEMPLATES } from './render.ts';

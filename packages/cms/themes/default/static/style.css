@@ -107,6 +107,39 @@ a:visited {
   color: var(--ink-muted);
 }
 
+.site-nav {
+  margin-top: 0.9rem;
+}
+
+.site-nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-nav a {
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.site-nav a:hover,
+.site-nav a:focus {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* The page being read. Underlined as well as coloured, so it is not the colour
+   alone that says which one it is. */
+.site-nav a.is-current {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
 .site-main {
   padding: 2rem 0 3rem;
 }
