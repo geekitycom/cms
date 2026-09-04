@@ -5,6 +5,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { promisify } from 'node:util';
 import { execFile as execFileCallback } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 import { PassThrough } from 'node:stream';
 
 import {
@@ -757,15 +758,24 @@ describe('geekity rebuild', () => {
     const directory = await federatedSite();
     const database = path.join(directory, 'data', 'geekity.db');
     await runCli(['sync'], directory);
-    // Something the rebuild must not carry over: a row nothing in the files
-    // says anything about.
-    await fs.writeFile(path.join(directory, 'data', 'geekity.db-marker'), 'x', 'utf8');
-    const before = (await fs.stat(database)).ino;
+    // Something the rebuild must not carry over: a table nothing in the files
+    // says anything about. Its absence afterwards is what proves the file was
+    // replaced rather than migrated in place — an inode comparison would say
+    // the same on macOS, but Linux hands a deleted file's inode straight to
+    // the next file created in the directory.
+    const marker = new DatabaseSync(database);
+    marker.exec('CREATE TABLE leftover (x)');
+    marker.close();
 
     const run = await runCli(['rebuild'], directory);
 
     assert.equal(run.code, 0, run.stderr);
-    assert.notEqual((await fs.stat(database)).ino, before, 'a different file entirely');
+    const rebuilt = new DatabaseSync(database);
+    const leftover = rebuilt
+      .prepare("SELECT name FROM sqlite_master WHERE name = 'leftover'")
+      .all();
+    rebuilt.close();
+    assert.equal(leftover.length, 0, 'a different file entirely');
     assert.match(run.stdout, /Rebuilt/);
     assert.match(run.stdout, /geekity\.db/);
     assert.match(run.stdout, /Scanned 2: 2 created/);
