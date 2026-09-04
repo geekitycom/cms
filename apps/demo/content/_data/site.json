@@ -2,7 +2,16 @@
   "title": "Geekity Demo",
   "tagline": "A file-first site, served straight from Markdown",
   "url": "http://localhost:3000",
-  "author": "Andrew Shell",
+  "author": "Joe Blog",
   "postsPerPage": 2,
-  "feedSize": 20
+  "feedSize": 20,
+  "timezone": "America/Chicago",
+  "avatar": "/uploads/2026/09/geekity-icon.png",
+  "language": "en",
+  "tagBase": "tag",
+  "categoryBase": "category",
+  "notifyServer": "https://rpc.rsscloud.io",
+  "relays": [],
+  "navigation": [],
+  "taxonomyRedirects": []
 }
