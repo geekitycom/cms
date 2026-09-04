@@ -37,6 +37,7 @@ import {
 import type { DeliveryService, RelayService, SiteFederation } from './federation/index.ts';
 import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
+import { commentFormFor, commentInteractions, rebuildCommentIndexes } from './comments/index.ts';
 import { createRenderer, mountPublicSite, postConversation } from './web/index.ts';
 
 export { createFeedNotifier, NOTIFY_TIMEOUT_MS } from './notify.ts';
@@ -52,6 +53,20 @@ export {
   ACTOR_HANDLE_PATTERN,
   LANGUAGE_TAG_PATTERN,
   ACTOR_TYPES,
+  COMMENT_ACTIONS,
+  COMMENT_ADMIN_FIELDS,
+  COMMENT_KINDS,
+  COMMENT_SOURCES,
+  COMMENT_STATUSES,
+  COMMENT_TABS,
+  COMMENTS_MODERATE_PATH,
+  COMMENTS_PATH,
+  COMMENTS_PER_PAGE,
+  COMMENTS_REPLY_PATH,
+  COMMENTS_SECTION,
+  commentListUrl,
+  mountCommentsScreen,
+  pendingComments,
   DELIVERY_STATUSES,
   RELAY_STATES,
   ADMIN_ASSET_MAX_AGE,
@@ -221,6 +236,17 @@ export type {
   AddUserProblems,
   AdminRender,
   AdminSection,
+  CommentAction,
+  CommentAuthor,
+  CommentContent,
+  CommentKind,
+  CommentRecord,
+  CommentRow,
+  CommentSource,
+  CommentStatus,
+  ListCommentsOptions,
+  MountCommentsScreenOptions,
+  PostComment,
   ChangePasswordProblems,
   CreateAdminTemplateEnvironmentOptions,
   CreateSessionInput,
@@ -312,6 +338,70 @@ export type {
   ResolvedConfig,
   ResolveConfigContext,
 } from './config.ts';
+
+// Native comments: the files they live in, the restricted Markdown they are
+// rendered with, the rules that decide whether a post is still taking them, and
+// the one seam a spam checker plugs into.
+export {
+  addComment,
+  blankValues,
+  COMMENT_FIELDS,
+  COMMENT_NOTICE_PARAM,
+  COMMENT_NOTICES,
+  COMMENT_POST_PATH,
+  COMMENT_RATE_LIMIT,
+  COMMENT_RATE_WINDOW_SECONDS,
+  COMMENT_REPLY_PARAM,
+  COMMENT_SALT_FILE,
+  COMMENTS_DATA_DIRECTORY,
+  COMMENTS_FRONT_MATTER_KEY,
+  commentAnchor,
+  commentForm,
+  commentFormFor,
+  commentInteractions,
+  commentKeys,
+  commentNoticeFor,
+  commentPolicyOf,
+  commentProblems,
+  commentsDirectory,
+  commentsFile,
+  commentsOpen,
+  DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
+  deleteComment,
+  hashClientAddress,
+  interactionOf,
+  MAXIMUM_BODY_LENGTH,
+  MAXIMUM_FORM_AGE_SECONDS,
+  MAXIMUM_NAME_LENGTH,
+  MAXIMUM_URL_LENGTH,
+  MINIMUM_SUBMIT_SECONDS,
+  mountComments,
+  normalizeWebsite,
+  readComments,
+  rebuildCommentIndexes,
+  refilledCommentForm,
+  renderCommentMarkdown,
+  submitComment,
+  updateComment,
+  valuesOf,
+} from './comments/index.ts';
+export type {
+  CommentChecker,
+  CommentForm,
+  CommentFormContext,
+  CommentIndexReport,
+  CommentOutcome,
+  CommentPolicy,
+  CommentProblems,
+  CommentRecords,
+  CommentRefusal,
+  CommentReport,
+  CommentSubmission,
+  CommentThrottle,
+  CommentVerdict,
+  NewComment,
+  SubmitCommentOptions,
+} from './comments/index.ts';
 
 export {
   readFileIfPresentSync,
@@ -916,6 +1006,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
   migrateFederationToFiles({ admin, contentDir: resolved.contentDir });
   rebuildFederationIndexes({ admin, contentDir: resolved.contentDir });
 
+  // And the comments, which are files under content/_data/comments/ and
+  // nothing else (TASK-50). No migration goes with this one, because no
+  // earlier version of this CMS stored a comment anywhere: the rebuild is the
+  // whole of it, and it runs on every boot for the same reason the federation
+  // one does.
+  rebuildCommentIndexes({ admin, contentDir: resolved.contentDir });
+
   // And, once the files are the whole story, that they are readable. This is
   // the one thing here that can stop a boot: an actor that publishes no key
   // is one no follower can verify, and Fedify would serve exactly that rather
@@ -945,7 +1042,24 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // What the fediverse said about a post, read per render for the same
     // reason: a reply logged a second ago is on the page the next request
     // draws (TASK-49).
-    conversation: (document) => postConversation({ admin, baseUrl: resolved.baseUrl }, document),
+    conversation: (document) =>
+      postConversation(
+        {
+          admin,
+          baseUrl: resolved.baseUrl,
+          // Native comments join the fediverse replies in one thread rather
+          // than in a section of their own (TASK-50). Only the approved ones,
+          // and read per render for the same reason: a comment approved a
+          // second ago is on the page the next request draws.
+          comments: (post) => commentInteractions(admin, post),
+        },
+        document,
+      ),
+    // And the form under it, when the post is still taking comments. Asked per
+    // render because whether it is depends on the clock: a post that closed an
+    // hour ago stops offering one on the very next request.
+    commentForm: (document) =>
+      commentFormFor({ document, site: renderer.site(), now: resolved.now() }),
   });
   const federation = createSiteFederation({ baseUrl: resolved.baseUrl, ...resolved.federation });
 

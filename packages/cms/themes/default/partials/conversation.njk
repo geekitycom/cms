@@ -16,18 +16,22 @@
   call itself: a reply that answers a reply is the same thing one level in.
 #}
 {% macro comment(reply) %}
-<li class="comment h-cite">
+<li class="comment h-cite comment-{{ reply.source }}" id="comment-{{ reply.id }}">
   <article>
     <header class="comment-header">
       {% if reply.author.avatar %}
       <img class="comment-avatar u-photo" src="{{ reply.author.avatar }}" alt="" width="48" height="48" loading="lazy">
       {% endif %}
-      <a class="comment-author p-author h-card" href="{{ reply.author.url }}" rel="nofollow noopener noreferrer">{{ reply.author.name }}</a>
+      {% if reply.author.url %}
+      <a class="comment-author p-author h-card" href="{{ reply.author.url }}" rel="nofollow ugc noopener noreferrer">{{ reply.author.name }}</a>
+      {% else %}
+      <span class="comment-author p-author h-card">{{ reply.author.name }}</span>
+      {% endif %}
       {% if reply.author.handle and reply.author.handle != reply.author.name %}
       <span class="comment-handle">{{ reply.author.handle }}</span>
       {% endif %}
       {% if reply.url %}
-      <a class="comment-permalink u-url" href="{{ reply.url }}" rel="nofollow noopener noreferrer">
+      <a class="comment-permalink u-url" href="{{ reply.url }}"{% if reply.source == "activitypub" %} rel="nofollow noopener noreferrer"{% endif %}>
         <time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time>
       </a>
       {% else %}
@@ -37,6 +41,17 @@
     <div class="comment-body e-content p-content">
       {{ reply.content | safe }}
     </div>
+    {#
+      Answering a comment on this site needs no JavaScript: the link carries
+      the comment's id to the form, which puts it in a hidden field. A
+      fediverse reply is answered on the server that holds it, so it gets no
+      such link.
+    #}
+    {% if commentForm and reply.source != "activitypub" %}
+    <p class="comment-reply">
+      <a href="{{ page.url }}?reply_to={{ reply.id }}#respond">Reply</a>
+    </p>
+    {% endif %}
   </article>
   {% if reply.replies.length %}
   <ol class="comment-replies">

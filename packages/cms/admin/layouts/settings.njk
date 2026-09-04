@@ -7,7 +7,7 @@
 {% block content %}
   <h1>Settings</h1>
 
-  {% if problems.title or problems.tagline or problems.baseUrl or problems.timezone or problems.postsPerPage or problems.author or problems.actorHandle or problems.actorType or problems.notifyServer or problems.relays or problems.navigation %}
+  {% if problems.title or problems.tagline or problems.baseUrl or problems.timezone or problems.postsPerPage or problems.author or problems.actorHandle or problems.actorType or problems.commentsCloseAfterDays or problems.notifyServer or problems.relays or problems.navigation %}
     <p class="admin-error">Nothing was saved. Fix the fields marked below and try again.</p>
   {% endif %}
 
@@ -79,6 +79,28 @@
     <input id="settings-category-base" name="{{ fields.categoryBase }}" type="text" value="{{ form.categoryBase }}" required />
     {% if problems.categoryBase %}<p class="admin-field-error">{{ problems.categoryBase }}</p>{% endif %}
     <p class="admin-hint">The category archives live at <code>/{{ form.categoryBase }}/{name}/</code>.</p>
+
+    <h2>Comments</h2>
+
+    <p class="admin-check">
+      <input id="settings-comments" name="{{ fields.comments }}" type="checkbox" value="1"{% if form.comments %} checked{% endif %} />
+      <label for="settings-comments">Take comments on this site</label>
+    </p>
+    <p class="admin-hint">
+      Clear this and no post shows a comment form and every submission is
+      refused. Fediverse replies keep arriving and keep being shown either way:
+      a remote server sends those, and nothing here can stop it.
+    </p>
+
+    <label for="settings-comments-close">Close comments after</label>
+    <input id="settings-comments-close" name="{{ fields.commentsCloseAfterDays }}" type="number" min="0" step="1" value="{{ form.commentsCloseAfterDays }}" />
+    {% if problems.commentsCloseAfterDays %}<p class="admin-field-error">{{ problems.commentsCloseAfterDays }}</p>{% endif %}
+    <p class="admin-hint">
+      Days after a post's date that it stops taking comments; <code>0</code>
+      never closes one. A post overrides this for itself with
+      <code>comments: true</code> or <code>comments: false</code>, which the
+      editor offers as a field. Pages are closed unless they say otherwise.
+    </p>
 
     <h2>Federation</h2>
 

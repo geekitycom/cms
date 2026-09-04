@@ -18,7 +18,9 @@
  * 8. A `date` filter that reads a UTC instant through `site.timezone`.
  * 9. `content/_data/federation/` — the followers and the inbox log — is data.
  * 10. A `conversation` filter that builds a post's replies, likes and boosts
- *     out of that log, sanitised and nested, as the CMS's own theme gets them.
+ *     out of that log — and the approved comments from
+ *     `content/_data/comments/` alongside them — sanitised and nested, as the
+ *     CMS's own theme gets them.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
  * says `"layout": "post"`, `pages.json` says `"layout": "page"` — so
@@ -240,6 +242,33 @@ function handleOf(actorId) {
   }
 }
 
+/**
+ * One post's approved comments, as `content/_data/comments/{slug}.json` says
+ * them (TASK-50).
+ *
+ * Read from disk rather than through Eleventy's data cascade on purpose. A
+ * namespaced `_data/comments/` directory would arrive as a global called
+ * `comments`, and `comments: true` or `comments: false` in a post's front
+ * matter is a real key that would shadow it on exactly the pages that need it.
+ *
+ * A missing file is a post nobody has commented on, and a file that will not
+ * parse is treated the same way: a build should not fail over one broken
+ * comment file, which is the rule the CMS applies to it too.
+ */
+function nativeCommentsFor(slug) {
+  if (typeof slug !== 'string' || slug === '') return [];
+
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(`content/_data/comments/${slug}.json`, 'utf8'));
+  } catch {
+    return [];
+  }
+
+  const held = Array.isArray(parsed?.comments) ? parsed.comments : [];
+  return held.filter((entry) => entry?.status === 'approved' && typeof entry.id === 'string');
+}
+
 /** Every activity in the log, oldest month first and in arrival order. */
 function activitiesIn(inbox) {
   const months = Object.keys(inbox ?? {}).sort();
@@ -257,16 +286,20 @@ function activitiesIn(inbox) {
  * `inReplyTo`, and one whose target was deleted moves up to whatever that was
  * answering rather than disappearing with it.
  */
-function conversationIn(inbox, objectId) {
+function conversationIn(inbox, objectId, slug) {
   const empty = {
     replies: [],
     likes: [],
     boosts: [],
     counts: { replies: 0, likes: 0, boosts: 0, total: 0 },
   };
-  if (typeof objectId !== 'string' || objectId === '') return empty;
 
-  const activities = activitiesIn(inbox);
+  // What a top-level answer names. A post that has never been delivered has no
+  // object id and so no fediverse replies, but it can still have comments, and
+  // they have to hang off something.
+  const root = typeof objectId === 'string' && objectId !== '' ? objectId : '\u0000post';
+
+  const activities = root === objectId ? activitiesIn(inbox) : [];
   const owners = new Map();
   const withdrawn = new Set();
   const notes = [];
@@ -328,6 +361,36 @@ function conversationIn(inbox, objectId) {
     }
   }
 
+  // The comments people left on the site itself. They are the same shape as a
+  // fediverse reply, so they thread with them rather than sitting in a section
+  // of their own — which is the whole reason an entry says its `source`.
+  for (const stored of nativeCommentsFor(slug)) {
+    notes.push({
+      id: stored.id,
+      source: stored.source ?? 'comment',
+      kind: stored.kind ?? 'reply',
+      author: {
+        name: stored.author?.name ?? '',
+        handle: null,
+        url: stored.author?.url ?? null,
+        avatar: null,
+        actorId: null,
+      },
+      url: `#comment-${stored.id}`,
+      content: stored.content?.html ?? '',
+      published: stored.submitted ?? '',
+      inReplyTo: stored.inReplyTo ?? root,
+      status: stored.status,
+      replies: [],
+    });
+  }
+
+  if (notes.length === 0 && likes.length === 0 && boosts.length === 0) return empty;
+
+  // Oldest first, whatever source an entry came from, which is the order a
+  // conversation reads in.
+  notes.sort((left, right) => String(left.published).localeCompare(String(right.published)));
+
   // A second pass, because a `Delete` may arrive before this walk has seen the
   // thing it deletes.
   for (const activity of activities) {
@@ -347,7 +410,7 @@ function conversationIn(inbox, objectId) {
     let target = targets.get(note.id);
     for (let step = 0; step <= targets.size; step += 1) {
       if (target === undefined) break;
-      if (target === objectId) {
+      if (target === root) {
         top.push(note);
         break;
       }
@@ -617,6 +680,13 @@ export default function (eleventyConfig) {
     if (permalink !== undefined) data.permalink = permalink;
   });
 
+  // The slug the CMS knows a document by: the permalink's last segment. It is
+  // what names the document's comment file under `content/_data/comments/`,
+  // and the `conversation` filter below takes it as its second argument.
+  eleventyConfig.addPreprocessor('geekity-slug', 'md', (data) => {
+    data.geekitySlug = slugOf(data);
+  });
+
   // The post's name in the fediverse, which is what a reply, a like or a boost
   // in the inbox log points at. The CMS puts it on the template context as
   // `activityStreams`, and this does the same, so a layout can hand it to the
@@ -644,13 +714,20 @@ export default function (eleventyConfig) {
   // whole log is in memory as `federation.inbox`, so this is a filter rather
   // than a collection:
   //
-  //     {% set conversation = federation.inbox | conversation(activityStreams) %}
+  //     {% set conversation = federation.inbox | conversation(activityStreams, geekitySlug) %}
   //     {% for reply in conversation.replies %}…{% endfor %}
+  //
+  // The second argument is the post's slug, which is what names its comment
+  // file under `content/_data/comments/`: the approved comments there are
+  // threaded in with the fediverse replies, exactly as the CMS threads them.
+  // `geekitySlug` is put on the context by the preprocessor above.
   //
   // What comes back is `{ replies, likes, boosts, counts }`, with `replies`
   // nested by `inReplyTo` and every `content` already sanitised. The theme
   // README documents the whole shape under "The conversation".
-  eleventyConfig.addFilter('conversation', (inbox, objectId) => conversationIn(inbox, objectId));
+  eleventyConfig.addFilter('conversation', (inbox, objectId, slug) =>
+    conversationIn(inbox, objectId, slug),
+  );
 
   // Eleventy builds a collection from every value of `tags` by itself. The
   // CMS's second taxonomy, `categories`, is an ordinary data key to Eleventy,

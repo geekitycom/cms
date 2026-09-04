@@ -953,6 +953,8 @@ describe('the site’s own profile', () => {
       actor_type: 'Person',
       tag_base: 'tag',
       category_base: 'category',
+      comments: '1',
+      comments_close_after_days: '14',
     };
 
     assert.equal(

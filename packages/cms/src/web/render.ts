@@ -9,6 +9,7 @@ import {
   taxonomyBases,
   termRedirects,
 } from './context.ts';
+import type { CommentFormContext } from '../comments/form.ts';
 import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
@@ -71,8 +72,14 @@ export interface Renderer {
    * has to answer at the old URL on the very next one.
    */
   termRedirects(): readonly TaxonomyRedirect[];
-  /** One document through its type's layout. */
-  renderDocument(document: Document): string;
+  /**
+   * One document through its type's layout.
+   *
+   * `extra` goes on the context last and so wins: it is how the comment
+   * endpoint puts a refused form back on the page it came from, and how the
+   * redirect after a submission gets its thank-you onto the post.
+   */
+  renderDocument(document: Document, extra?: Record<string, unknown>): string;
   /** A listing through the home, tag or category layout. */
   renderListing(listing: Listing): string;
   /** The 404 page, for a path that resolved to nothing. */
@@ -108,6 +115,16 @@ export interface CreateRendererOptions {
    * every test over one template wants.
    */
   conversation?: ((document: Document) => Conversation) | undefined;
+  /**
+   * The comment form for a post that is taking comments, and `undefined` for
+   * one that is not (TASK-50).
+   *
+   * Injected for the same reason the conversation is, and asked per render for
+   * a sharper reason: whether a post is still open depends on the clock, so a
+   * form decided at boot would go on being offered for a post that closed an
+   * hour ago. A renderer built without it renders no form at all.
+   */
+  commentForm?: ((document: Document) => CommentFormContext | undefined) | undefined;
 }
 
 /**
@@ -159,7 +176,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       return termRedirects(siteData.read());
     },
 
-    renderDocument(document) {
+    renderDocument(document, extra = {}) {
       const template = document.type === 'post' ? TEMPLATES.post : TEMPLATES.page;
       // `activityStreams` is the object id the base layout advertises. It is
       // added here rather than in `documentContext` because it needs the
@@ -174,6 +191,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // conversation %}` and a post nobody has answered renders no empty
       // section (TASK-49).
       const said = options.conversation?.(document);
+      // `commentForm` is on the context only when the post is open, so the
+      // theme asks `{% if commentForm %}` rather than working the rules out
+      // for itself — and a closed post shows the thread with no form.
+      const form = options.commentForm?.(document);
 
       return render(template, {
         ...documentContext(document, config),
@@ -184,6 +205,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
               commentsFeed: commentsFeedPath(document.permalink),
             }),
         ...(said === undefined || said.counts.total === 0 ? {} : { conversation: said }),
+        ...(form === undefined ? {} : { commentForm: form }),
+        ...extra,
       });
     },
 

@@ -1,0 +1,133 @@
+{# /admin/comments: the moderation queue. There is no email in this milestone,
+   so this screen is the notification — which is why the dashboard carries the
+   pending count and why this list opens on Pending.
+
+   Every button is a form of its own, so the whole screen works with
+   JavaScript switched off. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1>{{ heading }}</h1>
+
+  <nav class="admin-filters" aria-label="Comment status">
+    <ul>
+      {% for tab in tabs %}
+        <li>
+          <a href="{{ tab.url }}"{% if tab.current %} aria-current="page"{% endif %}>
+            {{ tab.label }} ({{ tab.count }})
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </nav>
+
+  {% if rows.length == 0 %}
+    <p class="admin-empty">Nothing here.</p>
+  {% else %}
+    <ul class="admin-comments">
+      {% for row in rows %}
+        <li class="admin-comment">
+          <div class="admin-comment-meta">
+            <span class="admin-comment-author">{{ row.author }}</span>
+            {% if row.url %}
+              <a class="admin-comment-site" href="{{ row.url }}" rel="nofollow ugc noopener noreferrer">{{ row.url }}</a>
+            {% endif %}
+            {% if row.email %}
+              <span class="admin-comment-email">{{ row.email }}</span>
+            {% endif %}
+            <span class="admin-status admin-status-{{ row.status }}">{{ row.status }}</span>
+            {% if row.source != 'comment' %}
+              <span class="admin-status">{{ row.source }}</span>
+            {% endif %}
+          </div>
+
+          <p class="admin-comment-where">
+            <time>{{ row.submitted }}</time>
+            on
+            {% if row.editUrl %}
+              <a href="{{ row.editUrl }}">{{ row.post }}</a>
+            {% else %}
+              {{ row.post }}
+            {% endif %}
+            {% if row.postUrl %}
+              &middot; <a href="{{ row.postUrl }}#comment-{{ row.id }}">View</a>
+            {% endif %}
+            {% if row.inReplyTo %}
+              &middot; a reply to another comment
+            {% endif %}
+            {% if row.address %}
+              &middot; <code title="A salted hash of the address it came from">{{ row.address }}</code>
+            {% endif %}
+          </p>
+
+          <div class="admin-comment-body">{{ row.html | safe }}</div>
+
+          <div class="admin-actions">
+            {% if row.status != 'approved' %}
+              <form method="post" action="{{ moderateUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.id }}" value="{{ row.id }}" />
+                <input type="hidden" name="{{ fields.status }}" value="{{ status }}" />
+                <button type="submit" name="{{ fields.action }}" value="approve">Approve</button>
+              </form>
+            {% endif %}
+
+            {% if row.status != 'spam' %}
+              <form method="post" action="{{ moderateUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.id }}" value="{{ row.id }}" />
+                <input type="hidden" name="{{ fields.status }}" value="{{ status }}" />
+                <button type="submit" name="{{ fields.action }}" value="spam">Spam</button>
+              </form>
+            {% endif %}
+
+            <form method="post" action="{{ moderateUrl }}">
+              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+              <input type="hidden" name="{{ fields.id }}" value="{{ row.id }}" />
+              <input type="hidden" name="{{ fields.status }}" value="{{ status }}" />
+              <button type="submit" name="{{ fields.action }}" value="delete">Delete</button>
+            </form>
+          </div>
+
+          <details class="admin-comment-reply">
+            <summary>Reply</summary>
+            <form method="post" action="{{ replyUrl }}">
+              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+              <input type="hidden" name="{{ fields.id }}" value="{{ row.id }}" />
+              <input type="hidden" name="{{ fields.status }}" value="{{ status }}" />
+              <label class="admin-visually-hidden" for="reply-{{ loop.index }}">
+                Reply to {{ row.author }}
+              </label>
+              <textarea id="reply-{{ loop.index }}" name="{{ fields.body }}" rows="4" required></textarea>
+              <p class="admin-hint">Markdown, rendered the same way a visitor’s comment is. It is posted approved, under this one.</p>
+              <p class="admin-settings-buttons">
+                <button type="submit">Post reply</button>
+              </p>
+            </form>
+          </details>
+        </li>
+      {% endfor %}
+    </ul>
+
+    {% if previousUrl or nextUrl %}
+      <nav class="admin-pagination" aria-label="Pages">
+        {% if previousUrl %}
+          <a rel="prev" href="{{ previousUrl }}">Newer</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ pages }}</span>
+        {% if nextUrl %}
+          <a rel="next" href="{{ nextUrl }}">Older</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  {% endif %}
+
+  <p class="admin-hint">
+    Comments live as one JSON file per post under <code>content/_data/comments/</code>, so they
+    are in git beside the posts and an Eleventy build of the same directory shows them. Everything
+    here rewrites that file; the database is only an index of it. Spam is kept rather than deleted,
+    so a mistake can be undone — and so a spam checker can be told when it was wrong.
+  </p>
+{% endblock %}

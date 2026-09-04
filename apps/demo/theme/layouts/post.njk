@@ -56,4 +56,12 @@
 {% if conversation %}
 {% include "partials/conversation.njk" %}
 {% endif %}
+
+{#
+  And the comment form, the same way: only on the context when the post is
+  still taking comments, so this is the whole of what a site has to keep.
+#}
+{% if commentForm %}
+{% include "partials/comment-form.njk" %}
+{% endif %}
 {% endblock %}

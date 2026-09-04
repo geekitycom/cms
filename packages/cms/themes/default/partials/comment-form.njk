@@ -1,0 +1,90 @@
+{#
+  The form under a post that is still taking comments.
+
+  `commentForm` is on the context only when the post is open — the site switch,
+  the closing window and the post's own `comments:` front matter all agree
+  before it gets here — so a layout asks `{% if commentForm %}` and nothing
+  else. A site replaces this whole section by shipping
+  `theme/partials/comment-form.njk` of its own; the shape it is handed is
+  documented in the theme README under "The comment form".
+
+  It works with JavaScript switched off, and there is no script on it.
+#}
+<section class="comment-form" id="respond">
+  <h2 class="comment-form-title">Leave a comment</h2>
+
+  {% if commentNotice %}
+  <p class="comment-notice" role="status">{{ commentNotice }}</p>
+  {% endif %}
+
+  {% if commentForm.error %}
+  <p class="comment-error" role="alert">{{ commentForm.error }}</p>
+  {% endif %}
+
+  <form method="post" action="{{ commentForm.action }}">
+    <input type="hidden" name="{{ commentForm.fields.post }}" value="{{ commentForm.post }}" />
+    <input type="hidden" name="{{ commentForm.fields.loaded }}" value="{{ commentForm.loaded }}" />
+    {#
+      What this comment answers. `commentReplyTo` is the `?reply_to=` on the
+      URL, which a Reply link put there and the CMS has already checked names
+      an approved comment on this very post; otherwise it is whatever a refused
+      submission carried.
+    #}
+    {% set replyTo = commentReplyTo if commentReplyTo else commentForm.values.inReplyTo %}
+    <input type="hidden" name="{{ commentForm.fields.inReplyTo }}" value="{{ replyTo }}" />
+
+    {% if commentReplyingTo %}
+    <p class="comment-replying-to">
+      Replying to {{ commentReplyingTo }}.
+      <a href="{{ page.url }}#respond">Comment on the post instead</a>
+    </p>
+    {% endif %}
+
+    {#
+      The honeypot. Hidden from sight and from assistive technology, out of the
+      tab order, and told not to autofill: a person never sees it and never
+      fills it in, so anything that does is not a person.
+    #}
+    <div class="comment-trap" aria-hidden="true">
+      <label for="comment-website">Website</label>
+      <input id="comment-website" name="{{ commentForm.fields.trap }}" type="text" tabindex="-1" autocomplete="off" value="" />
+    </div>
+
+    <p class="comment-field">
+      <label for="comment-name">Name</label>
+      <input id="comment-name" name="{{ commentForm.fields.name }}" type="text" value="{{ commentForm.values.name }}" maxlength="{{ commentForm.nameLength }}" autocomplete="name" required />
+      {% if commentForm.problems.name %}
+      <span class="comment-field-error">{{ commentForm.problems.name }}</span>
+      {% endif %}
+    </p>
+
+    <p class="comment-field">
+      <label for="comment-email">Email <span class="comment-optional">(optional, never shown)</span></label>
+      <input id="comment-email" name="{{ commentForm.fields.email }}" type="email" value="{{ commentForm.values.email }}" autocomplete="email" />
+      {% if commentForm.problems.email %}
+      <span class="comment-field-error">{{ commentForm.problems.email }}</span>
+      {% endif %}
+    </p>
+
+    <p class="comment-field">
+      <label for="comment-url">Your site <span class="comment-optional">(optional)</span></label>
+      <input id="comment-url" name="{{ commentForm.fields.url }}" type="text" inputmode="url" value="{{ commentForm.values.url }}" autocomplete="url" />
+      {% if commentForm.problems.url %}
+      <span class="comment-field-error">{{ commentForm.problems.url }}</span>
+      {% endif %}
+    </p>
+
+    <p class="comment-field">
+      <label for="comment-body">Comment</label>
+      <textarea id="comment-body" name="{{ commentForm.fields.body }}" rows="6" maxlength="{{ commentForm.bodyLength }}" required>{{ commentForm.values.body }}</textarea>
+      {% if commentForm.problems.body %}
+      <span class="comment-field-error">{{ commentForm.problems.body }}</span>
+      {% endif %}
+      <span class="comment-hint">Markdown works. Links are marked <code>nofollow ugc</code>; HTML is not.</span>
+    </p>
+
+    <p class="comment-buttons">
+      <button type="submit">Post comment</button>
+    </p>
+  </form>
+</section>

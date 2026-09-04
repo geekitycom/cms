@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
 
+import { DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from '../comments/policy.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
 import {
@@ -124,6 +125,24 @@ export interface SiteSettings {
   /** The same for the category archives, `category` by default. */
   categoryBase: string;
   /**
+   * Whether the site takes native comments at all (TASK-50).
+   *
+   * Off means off everywhere: no form under any post, and every submission
+   * refused. It does not touch the fediverse — a reply, a like or a boost
+   * arrives because a remote server sent it, and a site cannot stop that or
+   * pretend it did not happen.
+   */
+  comments: boolean;
+  /**
+   * How many days after its `date` a post stops taking comments. Zero never
+   * closes one.
+   *
+   * The age at which a post stops being a conversation and starts being a spam
+   * target; fourteen days is WordPress's own default. A post may say otherwise
+   * for itself with `comments: true` or `comments: false` in its front matter.
+   */
+  commentsCloseAfterDays: number;
+  /**
    * Where the site announces that a feed changed, and the server its feeds
    * advertise as their rssCloud endpoint and their WebSub hub. An absolute
    * http(s) URL, {@link DEFAULT_NOTIFY_SERVER} by default; empty turns
@@ -202,6 +221,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   avatar: '',
   tagBase: DEFAULT_TAXONOMY_BASES.tag,
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
+  comments: true,
+  commentsCloseAfterDays: DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
   notifyServer: DEFAULT_NOTIFY_SERVER,
   relays: [],
   navigation: [],
@@ -221,6 +242,8 @@ export const SETTINGS_FIELDS = {
   actorType: 'actor_type',
   tagBase: 'tag_base',
   categoryBase: 'category_base',
+  comments: 'comments',
+  commentsCloseAfterDays: 'comments_close_after_days',
   notifyServer: 'notify_server',
   relays: 'relays',
   navigation: 'navigation',
@@ -262,6 +285,7 @@ export function readSiteSettings(contentDir: string): SiteSettings {
  */
 export function settingsFromSiteJson(file: Record<string, unknown>): SiteSettings {
   const postsPerPage = Number(file['postsPerPage']);
+  const closeAfterDays = Number(file['commentsCloseAfterDays']);
 
   return {
     ...DEFAULT_SITE_SETTINGS,
@@ -289,6 +313,10 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
       : {}),
     ...(typeof file['categoryBase'] === 'string' && file['categoryBase'] !== ''
       ? { categoryBase: file['categoryBase'] }
+      : {}),
+    ...(typeof file['comments'] === 'boolean' ? { comments: file['comments'] } : {}),
+    ...(Number.isInteger(closeAfterDays) && closeAfterDays >= 0
+      ? { commentsCloseAfterDays: closeAfterDays }
       : {}),
     ...(typeof file['notifyServer'] === 'string' ? { notifyServer: file['notifyServer'] } : {}),
     // Through the same normaliser a submitted form goes through, so the file
@@ -348,6 +376,8 @@ export function siteJsonFor(
     actorType: settings.actorType,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
+    comments: settings.comments,
+    commentsCloseAfterDays: settings.commentsCloseAfterDays,
     notifyServer: settings.notifyServer,
     relays: [...settings.relays],
     navigation: settings.navigation.map((item) => ({ ...item })),
@@ -543,6 +573,16 @@ export function settingsProblems(form: SettingsForm): SettingsProblems {
     problems.actorType = `An actor type is one of ${ACTOR_TYPES.join(', ')}.`;
   }
 
+  // The empty string is refused rather than read as zero, which is what
+  // `Number('')` would make it: a cleared field is a mistake, and "never close
+  // comments" should have to be typed.
+  const closeAfterTyped = form.commentsCloseAfterDays.trim();
+  const closeAfter = Number(closeAfterTyped);
+  if (closeAfterTyped === '' || !Number.isInteger(closeAfter) || closeAfter < 0) {
+    problems.commentsCloseAfterDays =
+      'Comments close after a whole number of days, or 0 for never.';
+  }
+
   // Empty is a value here — it is how a site turns real-time notification off
   // — so only a non-empty one has to be a URL. http as well as https, because
   // a notify server on a private network or a loopback port is a real one.
@@ -611,6 +651,10 @@ export function settingsFromForm(
     actorType: form.actorType,
     tagBase: form.tagBase.trim(),
     categoryBase: form.categoryBase.trim(),
+    // A checkbox submits nothing at all when it is clear, which is what the
+    // empty string here means.
+    comments: form.comments !== '',
+    commentsCloseAfterDays: Number(form.commentsCloseAfterDays),
     notifyServer: normalizeBaseUrl(form.notifyServer) ?? '',
     relays: relayList(form.relays),
     navigation: navigationList(form.navigation),
@@ -631,6 +675,8 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     actorType: settings.actorType,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
+    comments: settings.comments ? '1' : '',
+    commentsCloseAfterDays: String(settings.commentsCloseAfterDays),
     notifyServer: settings.notifyServer,
     relays: settings.relays.join('\n'),
     navigation: navigationText(settings.navigation),
@@ -684,6 +730,8 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       actorType: field(body[SETTINGS_FIELDS.actorType]),
       tagBase: field(body[SETTINGS_FIELDS.tagBase]),
       categoryBase: field(body[SETTINGS_FIELDS.categoryBase]),
+      comments: field(body[SETTINGS_FIELDS.comments]),
+      commentsCloseAfterDays: field(body[SETTINGS_FIELDS.commentsCloseAfterDays]),
       notifyServer: field(body[SETTINGS_FIELDS.notifyServer]),
       relays: field(body[SETTINGS_FIELDS.relays]),
       navigation: field(body[SETTINGS_FIELDS.navigation]),

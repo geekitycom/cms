@@ -256,6 +256,18 @@ function withoutCsrf(html: string): string {
   return html.replaceAll(/name="csrf_token" value="[^"]*"/g, 'name="csrf_token"');
 }
 
+/**
+ * A rendered public page with the one thing on it that is per-render taken
+ * out.
+ *
+ * The comment form stamps the moment it was rendered, which is what the
+ * minimum submit time is measured against; two renders a second apart
+ * legitimately differ there and nowhere else.
+ */
+function withoutFormAge(html: string): string {
+  return html.replaceAll(/name="loaded" value="[^"]*"/g, 'name="loaded"');
+}
+
 /** One admin screen, as the signed-in browser sees it. */
 async function screen(agent: Browser, url: string): Promise<string> {
   const response = await agent.get(url);
@@ -281,10 +293,12 @@ async function logIn(cms: Cms): Promise<{ agent: Browser; status: number; locati
  * Everything a reader, a follower and an admin can see, in one object that can
  * be compared with `deepEqual`.
  *
- * Two things are deliberately normalised, and only two. The session cookie is
- * new every login by design, so it is not captured at all. The CSRF token is
+ * Three things are deliberately normalised, and only three. The session cookie
+ * is new every login by design, so it is not captured at all. The CSRF token is
  * minted per session for the same reason, so {@link withoutCsrf} takes it out
- * of the two screens that carry one. Everything else — the actor document with
+ * of the two screens that carry one, and the comment form's `loaded` stamp is
+ * per render, so {@link withoutFormAge} takes that out of the post. Everything
+ * else — the actor document with
  * its public keys, the followers collection, the outbox, the settings form's
  * values, the rendered post with its `<picture>`, the bytes of a derived image
  * — is asserted byte for byte.
@@ -311,7 +325,7 @@ async function capture(cms: Cms): Promise<Record<string, unknown>> {
     login: { status, location },
     settings: withoutCsrf(await screen(agent, '/admin/settings')),
     federationScreen: withoutCsrf(await screen(agent, '/admin/federation')),
-    post: await post.text(),
+    post: withoutFormAge(await post.text()),
     variant: {
       type: variant.headers.get('content-type'),
       bytes: Buffer.from(await variant.arrayBuffer()).toString('base64'),
