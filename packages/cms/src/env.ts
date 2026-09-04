@@ -5,6 +5,7 @@ import type { ContentStore } from './content/store.ts';
 import type { DocumentChange } from './content/sync.ts';
 import type { DeliveryService } from './federation/delivery.ts';
 import type { RelayService } from './federation/relays.ts';
+import type { WebmentionService } from './webmention/service.ts';
 import type { Renderer } from './web/render.ts';
 
 /**
@@ -45,6 +46,12 @@ export interface GeekityEnv {
      * the federation screen's Retry can send a stuck `Follow` again.
      */
     relays: RelayService;
+    /**
+     * The site's outgoing webmentions, so the federation screen's Resend
+     * button tells the pages a post links to at the same time as it tells the
+     * followers. Everything else about sending happens off the index.
+     */
+    webmentions: WebmentionService;
     /**
      * The session this request carries, set by the admin guard: a login, the
      * anonymous session that holds a CSRF token before login, or `undefined`

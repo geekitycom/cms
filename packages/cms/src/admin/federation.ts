@@ -6,6 +6,7 @@ import type { ContentStore } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
 import { avatarUrl } from '../federation/actor.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
+import type { WebmentionReport } from '../webmention/service.ts';
 import { SITE_ACTOR_IDENTIFIER } from '../federation/keys.ts';
 import { ACTOR_PATH, federationOrigin, FEDERATION_PREFIX } from '../federation/paths.ts';
 import { editorPath, POST_KIND } from './documents.ts';
@@ -21,6 +22,7 @@ import type {
   InboxActivity,
   Relay,
   RelayState,
+  WebmentionSendStatus,
 } from './store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
@@ -109,6 +111,7 @@ export function mountFederationScreen(
       posts: deliveryRows(c.var.store.listFederated({ limit: FEDERATION_RECENT }), {
         lastDelivery: (objectId) => admin.lastDeliveryToObject(objectId),
         counts: (activityId) => admin.countDeliveriesByStatus(activityId),
+        webmentions: (slug) => admin.countSentWebmentionsByStatus(slug),
       }),
     });
   });
@@ -153,11 +156,20 @@ export function mountFederationScreen(
     const slug = body[FEDERATION_FIELDS.slug];
 
     const report = typeof slug === 'string' ? await c.var.delivery.resend(slug) : undefined;
+    // The webmentions go with it, because "send this post out again" is one
+    // thing to the person pressing the button and the links are as much a part
+    // of a post going out as the followers are (TASK-51). It is asked for
+    // separately because it answers for a post that has never federated at
+    // all, which `resend` says nothing about.
+    const links = typeof slug === 'string' ? await c.var.webmentions.send(slug) : undefined;
 
-    if (report === undefined) {
+    if (report === undefined && links === undefined) {
       flash(c, 'error', 'There is no post to send under that name, so nothing was sent.');
     } else {
-      flash(c, report.deliveries.some(failed) ? 'error' : 'notice', resendMessage(report));
+      const failedSomewhere =
+        (report?.deliveries.some(failed) ?? false) ||
+        (links?.sent.some((one) => one.status === 'failed') ?? false);
+      flash(c, failedSomewhere ? 'error' : 'notice', resendMessage(report, links));
     }
 
     return c.redirect(FEDERATION_PATH, 303);
@@ -178,7 +190,19 @@ function failed(delivery: Delivery): boolean {
  * follows from the state the post is in, and a `Delete` where somebody
  * expected an `Update` is worth reading about.
  */
-export function resendMessage(report: DeliveryReport): string {
+export function resendMessage(
+  report: DeliveryReport | undefined,
+  links?: WebmentionReport,
+): string {
+  return [deliveryMessage(report), webmentionMessage(links)]
+    .filter((part) => part !== undefined)
+    .join(' ');
+}
+
+/** What the ActivityPub half of a resend came to. */
+function deliveryMessage(report: DeliveryReport | undefined): string | undefined {
+  if (report === undefined) return undefined;
+
   const total = report.deliveries.length;
   if (total === 0) {
     return (
@@ -198,6 +222,28 @@ export function resendMessage(report: DeliveryReport): string {
   // is not a follower.
   const recipients = total === 1 ? '1 recipient' : `${String(total)} recipients`;
   return `Sent ${report.activityType} to ${recipients}: ${parts.join(', ')}.`;
+}
+
+/**
+ * What the webmention half came to, or nothing at all when the post links
+ * nowhere outside the site.
+ *
+ * Silence rather than "0 webmentions", because most posts link to nothing and
+ * a line about it on every resend would be noise about a thing that did not
+ * happen.
+ */
+function webmentionMessage(links: WebmentionReport | undefined): string | undefined {
+  if (links === undefined || links.sent.length === 0) return undefined;
+
+  const counts = { sent: 0, none: 0, failed: 0 };
+  for (const one of links.sent) counts[one.status] += 1;
+
+  const linked =
+    links.sent.length === 1 ? '1 linked page' : `${String(links.sent.length)} linked pages`;
+  const parts = [`${String(counts.sent)} told`];
+  if (counts.none > 0) parts.push(`${String(counts.none)} take none`);
+  parts.push(`${String(counts.failed)} failed`);
+  return `Webmentions to ${linked}: ${parts.join(', ')}.`;
 }
 
 /** One post the fediverse holds a copy of, and how it last landed. */
@@ -221,6 +267,15 @@ export interface DeliveryRow {
     /** How many recipients it reached, is still queued for, and failed for. */
     readonly counts: Record<DeliveryStatus, number>;
   } | null;
+  /**
+   * How the post's outgoing webmentions stand: how many linked pages were
+   * told, how many advertise no endpoint, and how many refused (TASK-51).
+   *
+   * All zero for a post that links nowhere outside the site, and for one whose
+   * links have never been sent — which, like the delivery counts, is what a
+   * deleted database looks like rather than a fact about the post.
+   */
+  readonly webmentions: Record<WebmentionSendStatus, number>;
 }
 
 /** What {@link deliveryRows} needs to fill a row in. */
@@ -229,6 +284,8 @@ export interface DeliveryRowsContext {
   readonly lastDelivery: (objectId: string) => Delivery | undefined;
   /** How one activity's deliveries ended, by status. */
   readonly counts: (activityId: string) => Record<DeliveryStatus, number>;
+  /** How one post's outgoing webmentions ended, by status. */
+  readonly webmentions: (slug: string) => Record<WebmentionSendStatus, number>;
 }
 
 /**
@@ -269,6 +326,7 @@ export function deliveryRows(
               attemptedAt: last.attemptedAt,
               counts: context.counts(last.activityId),
             },
+      webmentions: context.webmentions(document.slug),
     };
   });
 }

@@ -288,6 +288,15 @@ export interface RepresentationResponseOptions {
   href: string;
   /** Which representations this resource offers, for the `Link` alternates. */
   available: readonly Representation[];
+  /**
+   * Whole `Link` header values to advertise alongside the alternates — the
+   * webmention endpoint is the one that uses it (TASK-51).
+   *
+   * Spelled by the caller rather than built here, because they are not
+   * representations of this resource and nothing about them is this module's
+   * business beyond joining them to the header.
+   */
+  links?: readonly string[] | undefined;
   /** Validator for this representation. Omit when one cannot be trusted. */
   etag?: string | undefined;
   /** When the resource last changed. */
@@ -308,7 +317,12 @@ export interface RepresentationResponseOptions {
 export function representationResponse(options: RepresentationResponseOptions): Response {
   const headers = new Headers({
     vary: 'Accept',
-    link: alternateLinks(options.href, options.representation, options.available),
+    link: [
+      alternateLinks(options.href, options.representation, options.available),
+      ...(options.links ?? []),
+    ]
+      .filter((value) => value !== '')
+      .join(', '),
   });
 
   if (options.etag !== undefined) headers.set('etag', options.etag);

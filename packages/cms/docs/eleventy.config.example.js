@@ -17,9 +17,9 @@
  * 7. The site menu becomes `collections.menu`.
  * 8. A `date` filter that reads a UTC instant through `site.timezone`.
  * 9. `content/_data/federation/` — the followers and the inbox log — is data.
- * 10. A `conversation` filter that builds a post's replies, likes and boosts
- *     out of that log — and the approved comments from
- *     `content/_data/comments/` alongside them — sanitised and nested, as the
+ * 10. A `conversation` filter that builds a post's replies, likes, boosts and
+ *     mentions out of that log — and the approved comments and webmentions
+ *     from `content/_data/comments/` alongside them — sanitised and nested, as the
  *     CMS's own theme gets them.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
@@ -291,7 +291,8 @@ function conversationIn(inbox, objectId, slug) {
     replies: [],
     likes: [],
     boosts: [],
-    counts: { replies: 0, likes: 0, boosts: 0, total: 0 },
+    mentions: [],
+    counts: { replies: 0, likes: 0, boosts: 0, mentions: 0, total: 0 },
   };
 
   // What a top-level answer names. A post that has never been delivered has no
@@ -305,6 +306,7 @@ function conversationIn(inbox, objectId, slug) {
   const notes = [];
   const likes = [];
   const boosts = [];
+  const mentions = [];
   const reacted = new Set();
 
   const author = (actorId) => {
@@ -361,31 +363,43 @@ function conversationIn(inbox, objectId, slug) {
     }
   }
 
-  // The comments people left on the site itself. They are the same shape as a
-  // fediverse reply, so they thread with them rather than sitting in a section
-  // of their own — which is the whole reason an entry says its `source`.
+  // The comments people left on the site itself, and the webmentions other
+  // pages sent it. They are the same shape as a fediverse reply, so they thread
+  // with them rather than sitting in a section of their own — which is the
+  // whole reason an entry says its `source`. A webmention lives on the page it
+  // came from, so its `url` is that page rather than an anchor here; a repost
+  // is a boost by another name and joins them; and a mention is neither an
+  // answer nor a reaction, so it gets a list of its own.
   for (const stored of nativeCommentsFor(slug)) {
-    notes.push({
+    const kind = stored.kind ?? 'reply';
+    const entry = {
       id: stored.id,
       source: stored.source ?? 'comment',
-      kind: stored.kind ?? 'reply',
+      kind,
       author: {
         name: stored.author?.name ?? '',
         handle: null,
         url: stored.author?.url ?? null,
-        avatar: null,
+        avatar: stored.author?.avatar ?? null,
         actorId: null,
       },
-      url: `#comment-${stored.id}`,
+      url: stored.url ?? `#comment-${stored.id}`,
       content: stored.content?.html ?? '',
       published: stored.submitted ?? '',
       inReplyTo: stored.inReplyTo ?? root,
       status: stored.status,
       replies: [],
-    });
+    };
+
+    if (kind === 'reply') notes.push(entry);
+    else if (kind === 'like') likes.push(entry);
+    else if (kind === 'mention') mentions.push(entry);
+    else boosts.push(entry);
   }
 
-  if (notes.length === 0 && likes.length === 0 && boosts.length === 0) return empty;
+  if (notes.length === 0 && likes.length === 0 && boosts.length === 0 && mentions.length === 0) {
+    return empty;
+  }
 
   // Oldest first, whatever source an entry came from, which is the order a
   // conversation reads in.
@@ -431,11 +445,13 @@ function conversationIn(inbox, objectId, slug) {
     replies: top,
     likes: heldLikes,
     boosts: heldBoosts,
+    mentions,
     counts: {
       replies: kept,
       likes: heldLikes.length,
       boosts: heldBoosts.length,
-      total: kept + heldLikes.length + heldBoosts.length,
+      mentions: mentions.length,
+      total: kept + heldLikes.length + heldBoosts.length + mentions.length,
     },
   };
 }
@@ -722,7 +738,7 @@ export default function (eleventyConfig) {
   // threaded in with the fediverse replies, exactly as the CMS threads them.
   // `geekitySlug` is put on the context by the preprocessor above.
   //
-  // What comes back is `{ replies, likes, boosts, counts }`, with `replies`
+  // What comes back is `{ replies, likes, boosts, mentions, counts }`, with `replies`
   // nested by `inReplyTo` and every `content` already sanitised. The theme
   // README documents the whole shape under "The conversation".
   eleventyConfig.addFilter('conversation', (inbox, objectId, slug) =>

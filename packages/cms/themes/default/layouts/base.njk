@@ -30,6 +30,9 @@
     <link rel="alternate" type="application/activity+json" href="{{ activityStreams }}">
     {% endif %}
     {% endblock %}
+    {% if webmention %}
+    <link rel="webmention" href="{{ webmention | url }}">
+    {% endif %}
     {% block head %}{% endblock %}
   </head>
   <body>

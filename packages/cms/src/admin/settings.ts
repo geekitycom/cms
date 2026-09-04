@@ -143,6 +143,23 @@ export interface SiteSettings {
    */
   commentsCloseAfterDays: number;
   /**
+   * Whether the site tells the pages a post links to that it has (TASK-51).
+   *
+   * On by default, because a link nobody is told about is half a conversation.
+   * Off means no webmention is ever sent, including by the Resend button.
+   */
+  webmentionsSend: boolean;
+  /**
+   * Whether the site accepts webmentions sent to it (TASK-51).
+   *
+   * On by default. Off takes the endpoint off every page and answers the
+   * endpoint itself with a 404, which is what a site that does not receive
+   * them looks like from outside. It does not touch the fediverse, and it does
+   * not touch what has already arrived: a webmention already in the queue is
+   * still there for a moderator.
+   */
+  webmentionsReceive: boolean;
+  /**
    * Where the site announces that a feed changed, and the server its feeds
    * advertise as their rssCloud endpoint and their WebSub hub. An absolute
    * http(s) URL, {@link DEFAULT_NOTIFY_SERVER} by default; empty turns
@@ -223,6 +240,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
   comments: true,
   commentsCloseAfterDays: DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
+  webmentionsSend: true,
+  webmentionsReceive: true,
   notifyServer: DEFAULT_NOTIFY_SERVER,
   relays: [],
   navigation: [],
@@ -244,6 +263,8 @@ export const SETTINGS_FIELDS = {
   categoryBase: 'category_base',
   comments: 'comments',
   commentsCloseAfterDays: 'comments_close_after_days',
+  webmentionsSend: 'webmentions_send',
+  webmentionsReceive: 'webmentions_receive',
   notifyServer: 'notify_server',
   relays: 'relays',
   navigation: 'navigation',
@@ -318,6 +339,12 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(Number.isInteger(closeAfterDays) && closeAfterDays >= 0
       ? { commentsCloseAfterDays: closeAfterDays }
       : {}),
+    ...(typeof file['webmentionsSend'] === 'boolean'
+      ? { webmentionsSend: file['webmentionsSend'] }
+      : {}),
+    ...(typeof file['webmentionsReceive'] === 'boolean'
+      ? { webmentionsReceive: file['webmentionsReceive'] }
+      : {}),
     ...(typeof file['notifyServer'] === 'string' ? { notifyServer: file['notifyServer'] } : {}),
     // Through the same normaliser a submitted form goes through, so the file
     // and the screen cannot mean different things by the same line.
@@ -378,6 +405,8 @@ export function siteJsonFor(
     categoryBase: settings.categoryBase,
     comments: settings.comments,
     commentsCloseAfterDays: settings.commentsCloseAfterDays,
+    webmentionsSend: settings.webmentionsSend,
+    webmentionsReceive: settings.webmentionsReceive,
     notifyServer: settings.notifyServer,
     relays: [...settings.relays],
     navigation: settings.navigation.map((item) => ({ ...item })),
@@ -655,6 +684,8 @@ export function settingsFromForm(
     // empty string here means.
     comments: form.comments !== '',
     commentsCloseAfterDays: Number(form.commentsCloseAfterDays),
+    webmentionsSend: form.webmentionsSend !== '',
+    webmentionsReceive: form.webmentionsReceive !== '',
     notifyServer: normalizeBaseUrl(form.notifyServer) ?? '',
     relays: relayList(form.relays),
     navigation: navigationList(form.navigation),
@@ -677,6 +708,8 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     categoryBase: settings.categoryBase,
     comments: settings.comments ? '1' : '',
     commentsCloseAfterDays: String(settings.commentsCloseAfterDays),
+    webmentionsSend: settings.webmentionsSend ? '1' : '',
+    webmentionsReceive: settings.webmentionsReceive ? '1' : '',
     notifyServer: settings.notifyServer,
     relays: settings.relays.join('\n'),
     navigation: navigationText(settings.navigation),
@@ -732,6 +765,8 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       categoryBase: field(body[SETTINGS_FIELDS.categoryBase]),
       comments: field(body[SETTINGS_FIELDS.comments]),
       commentsCloseAfterDays: field(body[SETTINGS_FIELDS.commentsCloseAfterDays]),
+      webmentionsSend: field(body[SETTINGS_FIELDS.webmentionsSend]),
+      webmentionsReceive: field(body[SETTINGS_FIELDS.webmentionsReceive]),
       notifyServer: field(body[SETTINGS_FIELDS.notifyServer]),
       relays: field(body[SETTINGS_FIELDS.relays]),
       navigation: field(body[SETTINGS_FIELDS.navigation]),

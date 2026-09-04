@@ -39,6 +39,8 @@ import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
 import { commentFormFor, commentInteractions, rebuildCommentIndexes } from './comments/index.ts';
 import { createRenderer, mountPublicSite, postConversation } from './web/index.ts';
+import { createWebmentionService } from './webmention/index.ts';
+import type { WebmentionService } from './webmention/index.ts';
 
 export { createFeedNotifier, NOTIFY_TIMEOUT_MS } from './notify.ts';
 export type {
@@ -814,6 +816,40 @@ export type {
   TaxonomyTerm,
   ThemeAsset,
 } from './web/index.ts';
+export {
+  classesOf,
+  createWebmentionService,
+  discoverEndpoint,
+  DISCOVERY_MAX_BYTES,
+  DISCOVERY_TIMEOUT_MS,
+  elementsIn,
+  endpointInHeader,
+  endpointInHtml,
+  externalLinks,
+  innerHtmlOf,
+  isElement,
+  itemsIn,
+  linksTo,
+  parseHtml,
+  rawTextOf,
+  readCapped,
+  SEND_TIMEOUT_MS,
+  sourceEntry,
+  textOf,
+  WEBMENTION_USER_AGENT,
+} from './webmention/index.ts';
+export type {
+  CreateWebmentionServiceOptions,
+  HtmlElement,
+  HtmlNode,
+  HtmlText,
+  MicroformatItem,
+  MicroformatValue,
+  SourceEntry,
+  WebmentionKind,
+  WebmentionLogger,
+  WebmentionReport,
+} from './webmention/index.ts';
 
 /**
  * Where the scheduler's watermark lives in {@link AdminStore.getState}: the
@@ -865,6 +901,14 @@ export interface Cms {
    * public activity is delivered to alongside the followers.
    */
   readonly relays: RelayService;
+  /**
+   * The site's outgoing webmentions: what tells the pages a post links to that
+   * it links to them, and what an admin screen calls to tell them again.
+   *
+   * It is already subscribed to the index; a site reaches for it to send one
+   * post's links again, or to wait for the ones in flight.
+   */
+  readonly webmentions: WebmentionService;
   /**
    * The site's rssCloud and WebSub client: what tells the notify server named
    * in the settings that a feed changed, so a subscriber hears at once rather
@@ -1070,6 +1114,14 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const delivery = createDeliveryService({ federation, admin, store, config: resolved });
   content.events.on('change', (change) => delivery.handle(change));
 
+  // And so does the webmention sender: telling the pages a post links to is
+  // the same news as telling the followers, and it should not matter which
+  // door the post came in by (TASK-51).
+  const webmentions = createWebmentionService({ admin, store, config: resolved });
+  content.events.on('change', (change) => {
+    webmentions.handle(change);
+  });
+
   // The notify server listens to the index for the same reason: a post edited
   // on disk changed the same feeds as one saved through the editor.
   const notifier = createFeedNotifier({ config: resolved });
@@ -1111,6 +1163,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('announce', (change) => content.announce(change));
     c.set('delivery', delivery);
     c.set('relays', relays);
+    c.set('webmentions', webmentions);
     await next();
   });
 
@@ -1165,6 +1218,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     federation,
     delivery,
     relays,
+    webmentions,
     notifier,
     scheduler,
     events: content.events,
@@ -1215,6 +1269,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // leaves a delivery half recorded.
       await delivery.settled();
       await relays.settled();
+      await webmentions.settled();
       await notifier.settled();
 
       if (running !== undefined) {

@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 21:54'
+updated_date: '2026-09-04 23:10'
 ---
 # ActivityPub Federation
 
@@ -69,9 +69,9 @@ Logged but not acted on: `Like`, `Announce`, `Create(Note)` replies. Every handl
 
 ## The conversation on the page
 
-The inbox log is also what a reader sees. `postConversation({ admin, baseUrl }, document)` reads everything the log holds about one post and returns a `Conversation`: the replies as a thread, and the likes and boosts as counts with the actors behind them. The renderer puts it on the post's template context as `conversation`, and only when there is something in it, so a post nobody has answered renders no empty section; `themes/default/partials/conversation.njk` is the section, and a site replaces it through the ordinary theme lookup. The whole shape is documented in the theme README under "The conversation".
+The inbox log is also what a reader sees. `postConversation({ admin, baseUrl }, document)` reads everything the log holds about one post and returns a `Conversation`: the replies as a thread, and the likes, boosts and mentions as counts with the people behind them. The renderer puts it on the post's template context as `conversation`, and only when there is something in it, so a post nobody has answered renders no empty section; `themes/default/partials/conversation.njk` is the section, and a site replaces it through the ordinary theme lookup. The whole shape is documented in the theme README under "The conversation".
 
-Nothing about that shape is ActivityPub's. An entry says where it came from (`source`, `"activitypub"` here) and what it is (`kind`, one of `reply`, `like`, `boost`), and everything else — the author, the sanitised content, the time, what it answers — is the same whatever produced it, so native comments and webmentions join the same thread rather than needing one of their own. Native comments do exactly that already: `postConversation` takes a `comments` reader alongside the inbox index, the approved ones are threaded in by the same `inReplyTo` rule, and a post that has never been delivered — and so has no object id at all — still has a conversation, hanging off its permalink instead. doc-6 is that half.
+Nothing about that shape is ActivityPub's. An entry says where it came from (`source`, `"activitypub"` here) and what it is (`kind`, one of `reply`, `like`, `boost`, `repost` or `mention`), and everything else — the author, the sanitised content, the time, what it answers — is the same whatever produced it, so native comments and webmentions join the same thread rather than needing one of their own. Both do exactly that: `postConversation` takes a `comments` reader alongside the inbox index, the approved ones are threaded in by the same `inReplyTo` rule, and a post that has never been delivered — and so has no object id at all — still has a conversation, hanging off its permalink instead. doc-6 is the comments half and doc-7 the webmentions half. The last two kinds are the webmention vocabulary's: a `repost` is a boost by another name and is shown with the boosts, and a `mention` — somebody's page linking here without answering — is neither an answer nor a reaction and gets `conversation.mentions` of its own.
 
 The fediverse half of the conversation is derived from the log at read time, exactly as the comments feeds are: nothing a remote server sent is stored anywhere but the log. Reading it is a walk outwards from the post's object id, because a reply names the post, a reply to that reply names the reply, and a `Delete` or an `Undo` names the activity it takes back — `listActivitiesAbout` answers each round, over `object_id` and the `in_reply_to` index. What the walk finds is then read by the rules a reader would expect:
 

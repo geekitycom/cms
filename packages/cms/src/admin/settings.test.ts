@@ -161,6 +161,10 @@ describe('content/_data/site.json', () => {
       categoryBase: 'category',
       comments: true,
       commentsCloseAfterDays: 14,
+      // The form this save submitted carried neither checkbox, and a checkbox
+      // nobody ticked is a setting turned off.
+      webmentionsSend: false,
+      webmentionsReceive: false,
       notifyServer: 'https://rpc.rsscloud.io',
       relays: [],
       navigation: [],

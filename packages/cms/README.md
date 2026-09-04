@@ -639,6 +639,44 @@ that is down never stops a site taking comments. `/admin/comments` is the
 moderation queue and the dashboard carries the number waiting; there is no
 email in this version, so the screen is the notification.
 
+## Webmentions
+
+The open web's version of what ActivityPub does: one page telling another that
+it linked to it. Both directions are on by default and each has a switch on the
+settings screen.
+
+| Setting in `site.json` | What it does                                                             |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `webmentionsSend`      | Tell the external pages a post links to, when it is published or edited. |
+| `webmentionsReceive`   | Advertise the endpoint on every page and accept what is sent to it.      |
+
+**Sending** runs off the same index changes federation does, so a post saved in
+the editor and one edited on disk are one thing, and a full scan sends nothing.
+Every external link in the rendered body is asked whether it advertises a
+Webmention endpoint — the `Link` header first, then the first `<link>` or `<a>`
+with `rel="webmention"` — and told if it does. Both versions of an edited post
+are read, so a page that has just been _unlinked_ is told too and can drop what
+it was showing. One outcome is recorded per link (`sent`, `none` for a page that
+takes none, or `failed`), shown per post on `/admin/federation`, and the Resend
+button there sends them again from the file as it now reads.
+
+**Receiving** advertises `/_geekity/webmention` two ways — a `Link` header on
+every representation of a document, and a `<link rel="webmention">` in the head
+— and takes a form `POST` of `source` and `target`. It answers `202` for
+anything worth checking and `400` for anything that is not, and does the looking
+afterwards: it fetches the source, checks it really links to the target, reads
+its microformats (`h-entry`, `h-card`, and whether it is a reply, a like, a
+repost or a plain mention), and files the result as a **pending comment** with
+`source: "webmention"` in the same file, the same thread and the same moderation
+queue as everything else — through the same `commentChecker` seam, so a checker
+can tell one from a form submission by its `source`.
+
+The source URL is its identity. A page that sends its webmention again updates
+what it left rather than adding a second, and one whose link has gone — or which
+answers 404 or 410 — takes it away. Closing rules do not apply: a post that
+stopped taking comments still hears about a page that links to it, exactly as it
+still hears a fediverse reply.
+
 ## Keeping the index in step
 
 Booting scans `contentDir`, indexes every Markdown file under `posts/` and
@@ -900,7 +938,8 @@ at once cannot each keep half of what the other kept.
 
 The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `timezone`, `language`, `avatar`, `actorHandle`, `actorType`, `tagBase`,
-`categoryBase`, `notifyServer`, `relays`, `navigation` and `taxonomyRedirects`,
+`categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
+`relays`, `navigation` and `taxonomyRedirects`,
 and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
 type is the default too: a hand-edited `site.json` cannot take the site down.
@@ -1132,6 +1171,8 @@ Booting mounts the public site on the app. The routes are:
 | `/sitemap.xml`                          | Every public URL, for a search engine.                                     |
 | `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                          |
 | `/robots.txt`                           | What a crawler may have, and where the sitemap is.                         |
+| `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                  |
+| `/_geekity/webmention`                  | `POST` only. Where a webmention is sent; advertised on every document.     |
 | `/theme/…`                              | The theme's own files, from its `static/` directory.                       |
 | `/uploads/…`                            | A file from `content/uploads/`, byte for byte as it was stored.            |
 | `/uploads/_/…`                          | One derived copy of an uploaded image, generated on the spot if missing.   |

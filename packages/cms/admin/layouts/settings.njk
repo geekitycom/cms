@@ -102,6 +102,29 @@
       editor offers as a field. Pages are closed unless they say otherwise.
     </p>
 
+    <h2>Webmentions</h2>
+
+    <p class="admin-check">
+      <input id="settings-webmentions-send" name="{{ fields.webmentionsSend }}" type="checkbox" value="1"{% if form.webmentionsSend %} checked{% endif %} />
+      <label for="settings-webmentions-send">Tell the pages a post links to</label>
+    </p>
+    <p class="admin-hint">
+      When a post is published or edited, every external page it links to is
+      asked whether it takes webmentions and told about the post if it does.
+      The Resend button on the federation screen sends them again.
+    </p>
+
+    <p class="admin-check">
+      <input id="settings-webmentions-receive" name="{{ fields.webmentionsReceive }}" type="checkbox" value="1"{% if form.webmentionsReceive %} checked{% endif %} />
+      <label for="settings-webmentions-receive">Accept webmentions sent here</label>
+    </p>
+    <p class="admin-hint">
+      Every post advertises an endpoint, and a page that links to one and says
+      so lands in the comment queue like a comment. Clear this and the endpoint
+      is gone from the pages and answers nothing; what has already arrived
+      stays where it is.
+    </p>
+
     <h2>Federation</h2>
 
     <label for="settings-actor-handle">Actor handle</label>

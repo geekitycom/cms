@@ -183,6 +183,7 @@
             <th scope="col">Sent</th>
             <th scope="col">Queued</th>
             <th scope="col">Failed</th>
+            <th scope="col">Webmentions</th>
             <th scope="col">Actions</th>
           </tr>
         </thead>
@@ -204,6 +205,13 @@
                 <td>—</td>
                 <td>—</td>
               {% endif %}
+              <td>
+                {% if row.webmentions.sent or row.webmentions["none"] or row.webmentions.failed %}
+                  {{ row.webmentions.sent }} told{% if row.webmentions["none"] %}, {{ row.webmentions["none"] }} take none{% endif %}{% if row.webmentions.failed %}, <span class="admin-status admin-status-failed">{{ row.webmentions.failed }} failed</span>{% endif %}
+                {% else %}
+                  <span class="admin-empty">—</span>
+                {% endif %}
+              </td>
               <td class="admin-actions">
                 <form method="post" action="{{ resendUrl }}">
                   <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
@@ -217,7 +225,8 @@
       </table>
       <p class="admin-hint">
         Resending builds the post again from its file and sends it to every
-        follower and every accepted relay the site has now: an update for a
+        follower and every accepted relay the site has now, and tells every
+        page the post links to at the same time: an update for a
         published post, a withdrawal for one in the trash. The outcomes are a
         cache, so a database deleted since leaves the posts listed with nothing
         recorded against them.

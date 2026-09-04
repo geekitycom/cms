@@ -86,6 +86,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `type`                                                | `post` or `page`.                                                                                                 |
 | `permalink`, `slug`, `draft`, `description`, `author` | Straight from the front matter.                                                                                   |
 | `activityStreams`                                     | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
+| `webmention`                                          | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.      |
 | `conversation`                                        | The replies, likes and boosts under the post. Only when there are any. See [The conversation](#the-conversation). |
 | everything else                                       | Any front matter key the CMS does not model is on the context under its own name.                                 |
 
@@ -192,6 +193,19 @@ does not call `super()` has to emit both itself. They are on the context rather
 than in `post.njk` so that a site which overrides that layout, as the demo
 does, keeps them.
 
+After the block, and outside it, the base layout writes the webmention
+endpoint:
+
+```html
+<link rel="webmention" href="/_geekity/webmention" />
+```
+
+It comes from `webmention` on the context, which is on a rendered document only
+when the site is taking webmentions, so a theme asks `{% if webmention %}` and a
+site that has turned them off advertises nothing. The CMS also sends the same
+endpoint as a `Link` header on every representation of a document, so a sender
+that does not parse HTML still finds it.
+
 `layouts/tag.njk` and `layouts/category.njk` override that block, call `super()`
 and add the archive's own three feeds:
 
@@ -213,7 +227,8 @@ Category archives get their own three the same way.
 ## The conversation
 
 `conversation` is what has been said about a post: the fediverse replies, likes
-and boosts its inbox was sent, and the comments people left on the page itself.
+and boosts its inbox was sent, the comments people left on the page itself, and
+the webmentions other pages sent it.
 It is on the context of a rendered post **only when there is something in it**,
 so a post nobody has answered renders no empty section and a layout can simply
 ask:
@@ -225,12 +240,12 @@ ask:
 ```
 
 That is what `layouts/post.njk` does. `partials/conversation.njk` is the whole
-section — the reply thread, and the likes and boosts as counts with the actors
-behind them inside a `<details>` — and a site replaces it by shipping
+section — the reply thread, and the likes, boosts and mentions as counts with
+the people behind them inside a `<details>` — and a site replaces it by shipping
 `theme/partials/conversation.njk` of its own, exactly as it replaces any other
-template. It defines two macros, `comment(reply)` and
-`reactions(actors, one, many)`, and a layout that wants to place the pieces
-itself can import them:
+template. It defines three macros, `comment(reply)`,
+`reactions(actors, one, many)` and `mentions(items)`, and a layout that wants to
+place the pieces itself can import them:
 
 ```njk
 {% import "partials/conversation.njk" as thread with context %}
@@ -240,38 +255,41 @@ itself can import them:
 ### The shape
 
 The conversation is deliberately **not** spelled in ActivityPub's vocabulary.
-Native comments already land in the same thread and webmentions will, so every
+Native comments and webmentions land in the same thread, so every
 entry says where it came from and what it is, and nothing else about it changes
 with the source. A theme that never looks at `source` renders all of them
-correctly; one that does can style them apart.
+correctly; one that does can style them apart. The one thing a theme does have
+to look at is `kind`: a `mention` is in `conversation.mentions` rather than in
+the thread, because it is not an answer.
 
-| Key                             | What it holds                                                                               |
-| ------------------------------- | ------------------------------------------------------------------------------------------- |
-| `replies`                       | The replies to the post, oldest first, each carrying its own `replies`. See below.          |
-| `likes`                         | The likes, oldest first, in the same shape.                                                 |
-| `boosts`                        | The boosts, oldest first, in the same shape.                                                |
-| `counts.replies`                | How many replies, counted through the whole thread rather than the top of it.               |
-| `counts.likes`, `counts.boosts` | How many of each.                                                                           |
-| `counts.total`                  | All three added up. Zero never reaches a template: there would be no `conversation` at all. |
+| Key                                                | What it holds                                                                              |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `replies`                                          | The replies to the post, oldest first, each carrying its own `replies`. See below.         |
+| `likes`                                            | The likes, oldest first, in the same shape.                                                |
+| `boosts`                                           | The boosts, oldest first, in the same shape. A webmention `repost` is one of them.         |
+| `mentions`                                         | The pages that linked here without answering, oldest first, in the same shape.             |
+| `counts.replies`                                   | How many replies, counted through the whole thread rather than the top of it.              |
+| `counts.likes`, `counts.boosts`, `counts.mentions` | How many of each.                                                                          |
+| `counts.total`                                     | All four added up. Zero never reaches a template: there would be no `conversation` at all. |
 
 Each entry — a reply, a like or a boost — is:
 
-| Key              | What it holds                                                                                                                                        |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`             | What it is called: a reply's own note id, which is what an answer to it names.                                                                       |
-| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page. `"webmention"` is reserved.                                             |
-| `kind`           | `"reply"`, `"like"` or `"boost"`.                                                                                                                    |
-| `author.name`    | The best name available: their display name, else their handle, else their id.                                                                       |
-| `author.handle`  | `@user@host`, or `null`. Taken from the follower profile the site holds, else guessed from the actor URL. `null` for a native comment.               |
-| `author.url`     | Their profile page, or the website a commenter typed. May be `null`, so guard the link.                                                              |
-| `author.avatar`  | Their avatar, or `null`. The site only knows one for an actor that follows it.                                                                       |
-| `author.actorId` | Their id, which is what identifies them however they are named. `null` for a native comment.                                                         |
-| `url`            | Where it can be read: the remote note's `url` for a fediverse reply, and `{permalink}#comment-{id}` — this page's own anchor — for a native comment. |
-| `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.                                                        |
-| `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                        |
-| `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                         |
-| `status`         | `"published"`. On the record for the sources that moderate.                                                                                          |
-| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                                                                          |
+| Key              | What it holds                                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`             | What it is called: a reply's own note id, which is what an answer to it names.                                                                                                         |
+| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here.                                                             |
+| `kind`           | `"reply"`, `"like"`, `"boost"`, `"repost"` or `"mention"`. The last two only ever come from a webmention.                                                                              |
+| `author.name`    | The best name available: their display name, else their handle, else their id. For a webmention, the source's `h-card` name, else its host.                                            |
+| `author.handle`  | `@user@host`, or `null`. Taken from the follower profile the site holds, else guessed from the actor URL. `null` for a native comment.                                                 |
+| `author.url`     | Their profile page, the website a commenter typed, or a webmention author's `u-url`. May be `null`, so guard the link.                                                                 |
+| `author.avatar`  | Their avatar, or `null`. The site knows one for an actor that follows it and for a webmention whose `h-card` carried a `u-photo`.                                                      |
+| `author.actorId` | Their id, which is what identifies them however they are named. `null` for a native comment.                                                                                           |
+| `url`            | Where it can be read: the remote note's `url` for a fediverse reply, the source page for a webmention, and `{permalink}#comment-{id}` — this page's own anchor — for a native comment. |
+| `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.                                                                                          |
+| `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                                                          |
+| `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                           |
+| `status`         | `"published"`. On the record for the sources that moderate.                                                                                                                            |
+| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                                                                                                            |
 
 Three rules decide what is in the thread, and they are the CMS's rather than a
 theme's: a reply whose author deleted it is gone, and its own answers move up to
@@ -279,18 +297,23 @@ whatever it was answering; a like is counted once per actor and disappears when
 that actor undoes it; and a note answering something this post has nothing to do
 with is left out.
 
-`content` is safe to print either way, and safe for different reasons. A
-fediverse reply is HTML somebody else's server composed, rebuilt from an
+`content` is safe to print whatever produced it, and safe for different reasons.
+A fediverse reply is HTML somebody else's server composed, rebuilt from an
 allowlist — `a`, `p`, `br`, lists, `blockquote`, `pre`, `code` and the inline
 emphasis tags, with every link carrying `rel="nofollow noopener noreferrer"`. A
-native comment is Markdown the commenter typed, rendered with raw HTML off, no
-images embedded, and every link carrying `rel="nofollow ugc"`. Nothing else
-survives either route, so a theme may print both directly.
+webmention's `e-content` goes through the same allowlist. A native comment is
+Markdown the commenter typed, rendered with raw HTML off, no images embedded,
+and every link carrying `rel="nofollow ugc"`. Nothing else survives any of the
+three routes, so a theme may print all of them directly.
 
 The packaged partial gives each entry `id="comment-{{ reply.id }}"` and a
-`comment-{{ reply.source }}` class, and puts a Reply link on the native ones
-when the post is still open — the link carries the comment's id to the form as
-`?reply_to=`, so threading needs no JavaScript.
+`comment-{{ reply.source }}` class, and puts a Reply link on the ones written
+here — `source == "comment"` — when the post is still open; the link carries the
+comment's id to the form as `?reply_to=`, so threading needs no JavaScript. A
+fediverse reply is answered on the server that holds it and a webmention on the
+page that sent it, so neither gets one. Mentions are drawn by a third macro,
+`mentions(items)`, as a `<details>` beside the likes and the boosts, each one
+linking to the page it came from.
 
 An Eleventy build of the same content gets the same thing from the same files:
 `docs/eleventy.config.example.js` adds a `conversation` filter over
