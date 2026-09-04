@@ -50,7 +50,7 @@ function previewDocument(
 ): Document {
   const { type, body } = input;
 
-  const timezone = readSiteSettings(c.var.admin).timezone;
+  const timezone = readSiteSettings(c.var.config.contentDir).timezone;
   const title = text(body['title']).trim();
   // The editor's field is wall-clock time in the site's zone (decision-11), so
   // the preview reads it the way the save will and shows the date the saved

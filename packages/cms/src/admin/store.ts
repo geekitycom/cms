@@ -301,9 +301,9 @@ export type RelayState = (typeof RELAY_STATES)[number];
 /**
  * The site's subscription to one relay.
  *
- * The list of relays itself is a setting, mirrored to `site.json`; this is the
- * state of the handshake with each of them, which is operational rather than
- * editorial. Keyed by the inbox because that is the only thing known when the
+ * The list of relays itself is a setting, and so lives in `site.json`; this is
+ * the state of the handshake with each of them, which is operational rather
+ * than editorial. Keyed by the inbox because that is the only thing known when the
  * `Follow` goes out: a relay's actor id is not learned until it answers.
  */
 export interface Relay {
@@ -389,29 +389,33 @@ export interface AdminStore {
    */
   deleteSessionsForUser(userId: number, options?: { except?: string }): number;
   /**
-   * How many settings are stored. Zero on a site that has never saved the
-   * settings form, which is what decides whether to seed from
-   * `content/_data/site.json`.
+   * The rows of the settings table an older version of this CMS wrote, or
+   * `undefined` when the table is gone — which it is on every site that has
+   * booted this version once.
+   *
+   * Settings live in `content/_data/site.json` now (decision-9). This is the
+   * one read left of the table they used to live in, so the first boot after
+   * the upgrade can write them out; `migrateSettingsToFile` in `settings.ts`
+   * is what decides what they mean.
    */
-  countSettings(): number;
+  legacySettings(): LegacySetting[] | undefined;
   /**
-   * Every stored setting, by key. The store keeps no opinion about what the
-   * keys mean or what they are worth; `readSiteSettings` in `settings.ts` is
-   * what turns them into a typed shape with defaults.
+   * Drop a table whose contents this version keeps in files instead.
+   *
+   * Called once the rows have been written out, and safe when the table is
+   * already gone. It is deliberately not a schema migration: a migration runs
+   * when the database is opened, which is before anything knows where the
+   * content directory is, and dropping the rows before they are written out is
+   * the one mistake this milestone cannot make.
    */
-  allSettings(): Record<string, string>;
-  /**
-   * Write settings, in one transaction, leaving keys not named alone. An
-   * existing key is replaced.
-   */
-  setSettings(values: Record<string, string>): void;
+  dropLegacyTable(name: string): void;
   /**
    * One piece of the CMS's own operational state, or `undefined`.
    *
-   * Not a setting: nothing here is a site's choice, nothing is mirrored to
-   * `content/_data/site.json`, and nothing here counts towards
-   * {@link AdminStore.countSettings}, which is what decides whether a site is
-   * seeded from that file. The scheduler's watermark — how far through the
+   * Not a setting: nothing here is a site's choice and nothing here belongs in
+   * `content/_data/site.json`, which is where a setting lives. It is a cache
+   * like the rest of the database, and losing it costs a site nothing it
+   * cannot work out again. The scheduler's watermark — how far through the
    * calendar it has got — lives here.
    */
   getState(key: string): string | undefined;
@@ -582,15 +586,9 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     pruneSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
     readFlash: db.prepare('SELECT flash FROM sessions WHERE id = ?'),
     writeFlash: db.prepare('UPDATE sessions SET flash = ? WHERE id = ?'),
-    countSettings: db.prepare('SELECT COUNT(*) AS count FROM settings'),
     getState: db.prepare('SELECT value FROM cms_state WHERE key = ?'),
     putState: db.prepare(`
       INSERT INTO cms_state (key, value, updated_at) VALUES (?, ?, ?)
-      ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-    `),
-    allSettings: db.prepare('SELECT key, value FROM settings'),
-    putSetting: db.prepare(`
-      INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
       ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     `),
     actorKeys: db.prepare('SELECT * FROM actor_keys WHERE identifier = ?'),
@@ -1101,33 +1099,25 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return Number(statements.pruneSessions.run(now.toISOString()).changes);
     },
 
-    countSettings() {
-      const row = statements.countSettings.get() as Record<string, unknown> | undefined;
-      return Number(row?.['count'] ?? 0);
+    legacySettings() {
+      // Prepared here rather than with the rest, because the table this reads
+      // is one that will not be there: a statement over a missing table throws
+      // when it is prepared, which would take the whole store down.
+      if (!hasTable(db, 'settings')) return undefined;
+
+      return (
+        db.prepare('SELECT key, value, updated_at FROM settings').all() as Record<string, unknown>[]
+      ).map((row) => ({
+        key: String(row['key']),
+        value: String(row['value']),
+        updatedAt: String(row['updated_at']),
+      }));
     },
 
-    allSettings() {
-      const settings: Record<string, string> = {};
-      for (const row of statements.allSettings.all() as Record<string, unknown>[]) {
-        settings[String(row['key'])] = String(row['value']);
-      }
-      return settings;
-    },
-
-    setSettings(values) {
-      const updatedAt = new Date().toISOString();
-      // One transaction, so a save that fails half way through leaves the
-      // stored settings as they were rather than as a mixture of two versions.
-      db.exec('BEGIN');
-      try {
-        for (const [key, value] of Object.entries(values)) {
-          statements.putSetting.run(key, value, updatedAt);
-        }
-        db.exec('COMMIT');
-      } catch (error) {
-        db.exec('ROLLBACK');
-        throw error;
-      }
+    dropLegacyTable(name) {
+      // The name is never a caller's to invent: it is one of this file's own
+      // shipped table names, so quoting it is enough.
+      db.exec(`DROP TABLE IF EXISTS "${name.replace(/"/g, '""')}"`);
     },
 
     getState(key) {
@@ -1292,8 +1282,33 @@ function randomToken(): string {
   return randomBytes(SESSION_ID_BYTES).toString('hex');
 }
 
+/** Whether the database has a table by that name. */
+function hasTable(db: DatabaseSync, name: string): boolean {
+  return (
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").all(name)
+      .length > 0
+  );
+}
+
 function isUniqueViolation(error: unknown): boolean {
   return error instanceof Error && /UNIQUE constraint failed/i.test(error.message);
+}
+
+/**
+ * One row of the settings table TASK-14 wrote, for the one boot that reads it.
+ *
+ * Settings live in `content/_data/site.json` now (decision-9), so this shape
+ * exists only so `migrateSettingsToFile` can write the rows out before the
+ * table goes. `updatedAt` is what tells a row written by the settings screen
+ * from a `site.json` a person edited afterwards.
+ */
+export interface LegacySetting {
+  /** The setting's name, e.g. `title`. */
+  key: string;
+  /** Its value, always a string; numbers and lists were spelled as text. */
+  value: string;
+  /** When it was last written, as an ISO instant. */
+  updatedAt: string;
 }
 
 /** One schema version: the statements it runs, and any backfill they need. */
@@ -1353,10 +1368,12 @@ const MIGRATIONS: readonly Migration[] = [
     sql: `ALTER TABLE sessions ADD COLUMN flash TEXT`,
   },
   {
-    // Site settings: doc-1's "data that lives only in SQLite", mirrored to
-    // content/_data/site.json on every save. Key and value rather than one
-    // row per site, so the federation settings M3 adds cost a row rather than
-    // a migration each.
+    // Site settings, when SQLite was still the source of them. decision-9
+    // moved them into content/_data/site.json, so nothing reads this table
+    // any more: `migrateSettingsToFile` writes its rows out on the first boot
+    // of that version and drops it. The migration stays exactly as it shipped,
+    // because a shipped migration is never edited — which does mean a brand
+    // new database creates the table here and drops it a moment later.
     version: 3,
     sql: `
       CREATE TABLE settings (

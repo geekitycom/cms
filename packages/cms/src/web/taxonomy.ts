@@ -34,8 +34,8 @@ export type TaxonomyBases = Readonly<Record<Taxonomy, string>>;
  *
  * A rename moves an archive, and an archive is a URL somebody may have linked
  * to. The site records the move so the old URL can point at the new one for as
- * long as it says so — a small list in the settings, mirrored to `site.json`
- * so an Eleventy build of the same content can publish the same redirects.
+ * long as it says so — a small list in the settings, and so in `site.json`,
+ * where an Eleventy build of the same content can publish the same redirects.
  */
 export interface TaxonomyRedirect {
   /** Which taxonomy's archive moved. */

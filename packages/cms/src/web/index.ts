@@ -25,14 +25,7 @@ export {
   taxonomyBases,
   termRedirects,
 } from './context.ts';
-export type {
-  CreateSiteDataSourceOptions,
-  DocumentContext,
-  PageContext,
-  SiteData,
-  SiteDataSource,
-  SiteSettingsSource,
-} from './context.ts';
+export type { DocumentContext, PageContext, SiteData, SiteDataSource } from './context.ts';
 export { commentCounts, postComments, siteComments } from './comments.ts';
 export type { Comment, CommentContext } from './comments.ts';
 export { activityStreamsId, isPublicDocument, publicDocumentAt } from './documents.ts';

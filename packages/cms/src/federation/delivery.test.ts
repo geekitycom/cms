@@ -9,8 +9,7 @@ import { CryptographicKey, Endpoints, Image, Person } from '@fedify/vocab';
 
 import { csrfField, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteSettings } from '../admin/settings.ts';
-import { openAdminStore } from '../admin/store.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 
@@ -163,20 +162,21 @@ async function site(
     await writeDocument(contentDir, relative, source);
   }
 
-  const seed = openAdminStore({ dataDir });
-  writeSiteSettings(seed, {
-    ...DEFAULT_SITE_SETTINGS,
-    title: 'Geekity',
-    tagline: 'A file-first CMS',
-    baseUrl: BASE_URL,
-    timezone: 'UTC',
-    postsPerPage: 10,
-    author: 'Ada',
-    actorHandle: 'blog',
-    actorType: 'Person',
-    avatar: '',
+  await writeSiteJson({
+    contentDir,
+    settings: {
+      ...DEFAULT_SITE_SETTINGS,
+      title: 'Geekity',
+      tagline: 'A file-first CMS',
+      baseUrl: BASE_URL,
+      timezone: 'UTC',
+      postsPerPage: 10,
+      author: 'Ada',
+      actorHandle: 'blog',
+      actorType: 'Person',
+      avatar: '',
+    },
   });
-  seed.close();
 
   deliveries.length = 0;
   const cms = createCms({

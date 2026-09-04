@@ -301,8 +301,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // the upload form that stores a file by the same rules the editor does.
   mountMediaScreen(app, { render });
 
-  // The site's own settings: SQLite is the source, content/_data/site.json is
-  // the mirror an Eleventy build of the same content reads.
+  // The site's own settings, which are content/_data/site.json itself: the
+  // screen reads that file and writes it back (decision-9).
   mountSettings(app, { render });
 
   // Who may sign in: the list, the add form, and the change-password form for

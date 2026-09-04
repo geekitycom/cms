@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { readSiteSettings, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { child, childrenNamed, parseXml } from './__testing__/xml.ts';
@@ -54,6 +55,12 @@ async function site(
   started.push(instance);
   await instance.sync();
   return { cms: instance, contentDir };
+}
+
+/** Point the site's feeds at another notify server, or at none. */
+async function setNotifyServer(cms: Cms, notifyServer: string): Promise<void> {
+  const contentDir = cms.config.contentDir;
+  await writeSiteJson({ contentDir, settings: { ...readSiteSettings(contentDir), notifyServer } });
 }
 
 /** A post file. */
@@ -1551,7 +1558,7 @@ describe('the notify server a feed advertises', () => {
 
   it('is gone from every feed, in every format, when the setting is emptied', async () => {
     const { cms } = await site(files);
-    cms.admin.setSettings({ notifyServer: '' });
+    await setNotifyServer(cms, '');
 
     const { rss: document, channel } = await rss(cms, '/feed/');
     assert.equal(childrenNamed(channel, 'cloud').length, 0);
@@ -1578,7 +1585,7 @@ describe('the notify server a feed advertises', () => {
 
   it('moves everywhere at once when the setting names another server', async () => {
     const { cms } = await site(files);
-    cms.admin.setSettings({ notifyServer: 'https://cloud.example/rpc/' });
+    await setNotifyServer(cms, 'https://cloud.example/rpc/');
 
     const { channel } = await rss(cms, '/feed/');
     const cloud = child(channel, 'cloud');
@@ -1607,7 +1614,7 @@ describe('the notify server a feed advertises', () => {
     const { cms } = await site(files);
     const before = (await cms.app.request('/feed/')).headers.get('etag');
 
-    cms.admin.setSettings({ notifyServer: 'https://cloud.example' });
+    await setNotifyServer(cms, 'https://cloud.example');
     const after = (await cms.app.request('/feed/')).headers.get('etag');
 
     assert.ok(before !== null && after !== null);

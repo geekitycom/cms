@@ -57,8 +57,8 @@ export interface SiteData {
   notifyServer?: string | undefined;
   /**
    * The relay inboxes the site subscribes to (FEP-ae0c), as absolute URLs.
-   * The mirror of the setting; where each subscription stands lives in the
-   * database rather than here.
+   * The setting itself; where each subscription stands lives in the database
+   * rather than here, because a handshake is not the site's to decide.
    */
   relays?: readonly string[] | undefined;
   /**
@@ -166,48 +166,22 @@ export interface SiteDataSource {
 }
 
 /**
- * The settings the admin stores, as site data.
- *
- * The admin's settings screen is the source of truth for the values it
- * manages, and `content/_data/site.json` is the mirror it writes for an
- * Eleventy build. Handing the source a reader for the settings is what makes a
- * saved title show on the very next request rather than on the next time the
- * file's modification time is noticed.
- */
-export interface SiteSettingsSource {
-  /** The stored settings as site data. Empty when nothing is stored. */
-  read(): Partial<SiteData>;
-}
-
-/** What {@link createSiteDataSource} reads from besides the config. */
-export interface CreateSiteDataSourceOptions {
-  /** The admin's settings, when the CMS has an admin store to read them from. */
-  settings?: SiteSettingsSource | undefined;
-}
-
-/**
  * A source over one site's data.
+ *
+ * `content/_data/site.json` is the only source of it (decision-9): the
+ * settings screen writes that file and nothing else remembers what it said, so
+ * a save and a hand edit reach the theme by exactly the same route.
  *
  * The file is read once and then only again when its `stat` changes, so a
  * render costs one `stat` rather than one parse. The modification time alone
  * is not enough: a filesystem rounds it, so two writes inside one tick would
- * look like none, and the settings writer replaces the file by rename, which
- * changes its inode. Size and inode go into the key with it. A file that is missing
- * or will not parse falls back to the defaults instead of failing the request:
- * a typo in `site.json` should not take the site down.
- *
- * The stored settings, when there are any, go on top of the file. They are the
- * same values the file was last written from, so the two normally agree; the
- * overlay is what keeps them agreeing in the moment between a save and the
- * file's `mtime` being noticed, and the file underneath is what carries the
- * keys the settings form does not manage.
+ * look like none, and every writer replaces the file by rename, which changes
+ * its inode. Size and inode go into the key with it. A file that is missing or
+ * will not parse falls back to the defaults instead of failing the request: a
+ * typo in `site.json` should not take the site down.
  */
-export function createSiteDataSource(
-  config: ResolvedConfig,
-  options: CreateSiteDataSourceOptions = {},
-): SiteDataSource {
+export function createSiteDataSource(config: ResolvedConfig): SiteDataSource {
   const file = path.join(config.contentDir, ...SITE_DATA_FILE.split('/'));
-  const settings = options.settings;
 
   let cached: Record<string, unknown> = {};
   let cachedKey: string | undefined;
@@ -241,7 +215,7 @@ export function createSiteDataSource(
         tagBase: DEFAULT_TAXONOMY_BASES.tag,
         categoryBase: DEFAULT_TAXONOMY_BASES.category,
       };
-      return { ...defaults, ...fromFile(), ...settings?.read() };
+      return { ...defaults, ...fromFile() };
     },
   };
 }

@@ -19,8 +19,7 @@ import {
   Undo,
 } from '@fedify/vocab';
 
-import { DEFAULT_SITE_SETTINGS, writeSiteSettings } from '../admin/settings.ts';
-import { openAdminStore } from '../admin/store.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
@@ -143,20 +142,21 @@ async function site(): Promise<Cms> {
   const dataDir = await temporaryDir('geekity-inbox-data-');
   const contentDir = await temporaryDir('geekity-inbox-content-');
 
-  const seed = openAdminStore({ dataDir });
-  writeSiteSettings(seed, {
-    ...DEFAULT_SITE_SETTINGS,
-    title: 'Geekity',
-    tagline: 'A file-first CMS',
-    baseUrl: BASE_URL,
-    timezone: 'UTC',
-    postsPerPage: 10,
-    author: 'Ada',
-    actorHandle: 'blog',
-    actorType: 'Person',
-    avatar: '',
+  await writeSiteJson({
+    contentDir,
+    settings: {
+      ...DEFAULT_SITE_SETTINGS,
+      title: 'Geekity',
+      tagline: 'A file-first CMS',
+      baseUrl: BASE_URL,
+      timezone: 'UTC',
+      postsPerPage: 10,
+      author: 'Ada',
+      actorHandle: 'blog',
+      actorType: 'Person',
+      avatar: '',
+    },
   });
-  seed.close();
 
   deliveries.length = 0;
   const instance = createCms({

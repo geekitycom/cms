@@ -80,7 +80,7 @@ export function mountFederationScreen(
       section: 'federation',
       redeliverUrl: REDELIVER_PATH,
       fields: FEDERATION_FIELDS,
-      actor: actorSummary(readSiteSettings(admin), {
+      actor: actorSummary(readSiteSettings(c.var.config.contentDir), {
         baseUrl,
         followers: admin.countFollowers(),
       }),

@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, utimes, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { after, before, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
-import { readSiteSettings, writeSiteSettings } from './settings.ts';
+import { readSiteSettings, writeSiteJson } from './settings.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -45,7 +47,7 @@ async function saveSettings(
 }
 
 describe('the settings screen', () => {
-  it('shows the site data the settings were seeded from', async () => {
+  it('shows what content/_data/site.json says (AC #2)', async () => {
     const contentDir = await box.dir('geekity-settings-content-');
     await mkdir(path.join(contentDir, '_data'), { recursive: true });
     await writeFile(
@@ -100,10 +102,33 @@ describe('saving settings', () => {
     const json = (await (await cms.app.request('/feed/json/')).json()) as Record<string, unknown>;
     assert.equal(json['title'], 'A Renamed Site');
   });
+
+  it('reaches the ActivityPub actor without a restart (AC #1)', async () => {
+    const base = 'https://actor.example';
+    const cms = await box.site({ baseUrl: base });
+    const agent = await signedIn(cms);
+
+    await saveSettings(agent, {
+      title: 'The Actor Renamed',
+      tagline: 'and re-summarised',
+      actor_handle: 'writer',
+      base_url: base,
+    });
+
+    const actor = (await (
+      await cms.app.request(
+        new Request(`${base}/ap/actor`, { headers: { accept: 'application/activity+json' } }),
+      )
+    ).json()) as Record<string, unknown>;
+
+    assert.equal(actor['name'], 'The Actor Renamed');
+    assert.match(String(actor['summary']), /and re-summarised/);
+    assert.equal(actor['preferredUsername'], 'writer');
+  });
 });
 
 describe('content/_data/site.json', () => {
-  it('is rewritten on save with title, tagline, url and author (AC #2)', async () => {
+  it('is rewritten on save with every setting the file carries (AC #1)', async () => {
     const contentDir = await box.dir('geekity-settings-mirror-');
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
@@ -128,6 +153,8 @@ describe('content/_data/site.json', () => {
       timezone: 'Europe/London',
       language: 'en',
       avatar: '',
+      actorHandle: 'blog',
+      actorType: 'Person',
       tagBase: 'tag',
       categoryBase: 'category',
       notifyServer: 'https://rpc.rsscloud.io',
@@ -252,7 +279,7 @@ describe('a form the validator refuses', () => {
     assert.equal((await saveSettings(agent, { timezone: 'Europe/London' })).status, 303);
   });
 
-  it('carries the language into the page, both feeds and the site.json mirror', async () => {
+  it('carries the language into the page, both feeds and site.json', async () => {
     const contentDir = await box.dir('geekity-settings-language-');
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
@@ -339,7 +366,7 @@ describe('the site avatar', () => {
     assert.equal(uploaded.status, 303, await uploaded.text());
     assert.equal(uploaded.headers.get('location'), '/admin/settings');
 
-    const stored = readSiteSettings(cms.admin).avatar;
+    const stored = readSiteSettings(cms.config.contentDir).avatar;
     assert.match(
       stored,
       /^\/uploads\/\d{4}\/\d{2}\/me-at-the-beach\.png$/,
@@ -353,10 +380,10 @@ describe('the site avatar', () => {
     assert.equal(served.status, 200, 'and the site serves them at that URL');
     assert.equal(served.headers.get('content-type'), 'image/png');
 
-    const mirror = JSON.parse(
+    const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
     ) as Record<string, unknown>;
-    assert.equal(mirror['avatar'], stored, 'site.json mirrors it');
+    assert.equal(written['avatar'], stored, 'site.json carries it');
 
     const after = await (await agent.get('/admin/settings')).text();
     assert.match(after, new RegExp(`<img[^>]+src="${stored}"`), 'and the screen shows it');
@@ -374,7 +401,7 @@ describe('the site avatar', () => {
       { name: 'me.png', type: 'image/png', bytes: png() },
       'avatar',
     );
-    const uploaded = readSiteSettings(cms.admin).avatar;
+    const uploaded = readSiteSettings(cms.config.contentDir).avatar;
     assert.notEqual(uploaded, '');
 
     const html = await (await agent.get('/admin/settings')).text();
@@ -386,11 +413,11 @@ describe('the site avatar', () => {
     });
     assert.equal(removed.status, 303);
 
-    assert.equal(readSiteSettings(cms.admin).avatar, '', 'the setting is empty again');
-    const mirror = JSON.parse(
+    assert.equal(readSiteSettings(cms.config.contentDir).avatar, '', 'the setting is empty again');
+    const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
     ) as Record<string, unknown>;
-    assert.equal(mirror['avatar'], '', 'and so is the mirror');
+    assert.equal(written['avatar'], '', 'and so is site.json');
 
     const screen = await (await agent.get('/admin/settings')).text();
     assert.match(screen, /admin-avatar-blank/, 'the placeholder is back');
@@ -415,7 +442,7 @@ describe('the site avatar', () => {
       { name: 'good.png', type: 'image/png', bytes: png() },
       'avatar',
     );
-    const kept = readSiteSettings(cms.admin).avatar;
+    const kept = readSiteSettings(cms.config.contentDir).avatar;
     assert.notEqual(kept, '', 'there is an avatar to lose');
 
     const refusals: [string, { name: string; type: string; bytes: Uint8Array }, RegExp][] = [
@@ -448,7 +475,7 @@ describe('the site avatar', () => {
       const html = await (await agent.get('/admin/settings')).text();
       assert.match(html, message, what);
       assert.match(html, /The avatar is unchanged/, what);
-      assert.equal(readSiteSettings(cms.admin).avatar, kept, what);
+      assert.equal(readSiteSettings(cms.config.contentDir).avatar, kept, what);
       assert.match(html, new RegExp(`<img[^>]+src="${kept}"`), what);
     }
   });
@@ -462,42 +489,221 @@ async function avatarToken(agent: Browser): Promise<string> {
 }
 
 describe('where the values come from', () => {
-  it('makes SQLite the source once the settings are stored, not the file', async () => {
+  it('is the file, so a hand edit shows on the site and on the screen (AC #2)', async () => {
     const contentDir = await box.dir('geekity-settings-source-');
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
 
-    await saveSettings(agent, { title: 'From the settings' });
+    await saveSettings(agent, { title: 'Saved on the screen' });
+    assert.match(await (await cms.app.request('/')).text(), /Saved on the screen/);
 
-    // A hand edit of the mirror, with a modification time the file source
-    // cannot miss. The settings are the source of truth, so it is ignored.
+    // A hand edit of the file while the server runs. It is the source of
+    // truth, so the next request is built on it — nothing is restarted and
+    // nothing is told.
     const file = path.join(contentDir, '_data', 'site.json');
-    await writeFile(file, JSON.stringify({ title: 'From the file', feedSize: 3 }), 'utf8');
-    await utimes(file, new Date(), new Date(Date.now() + 1000));
+    const edited = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    await writeFile(
+      file,
+      JSON.stringify({ ...edited, title: 'Edited by hand', tagline: 'in an editor' }),
+      'utf8',
+    );
 
     const html = await (await cms.app.request('/')).text();
-    assert.match(html, /From the settings/);
-    assert.doesNotMatch(html, /From the file/);
+    assert.match(html, /Edited by hand/, 'the public site');
+    assert.doesNotMatch(html, /Saved on the screen/);
+
+    const screen = await (await agent.get('/admin/settings')).text();
+    assert.equal(field(screen, 'title'), 'Edited by hand', 'the settings screen');
+    assert.equal(field(screen, 'tagline'), 'in an editor');
+
+    const actor = (await (
+      await cms.app.request(
+        new Request('http://localhost/ap/actor', {
+          headers: { accept: 'application/activity+json' },
+        }),
+      )
+    ).json()) as Record<string, unknown>;
+    assert.equal(actor['name'], 'Edited by hand', 'and the actor');
   });
 
-  it('seeds from the file once, and never again', async () => {
-    const contentDir = await box.dir('geekity-settings-seed-once-');
-    const dataDir = await box.dir('geekity-settings-seed-once-data-');
-    await mkdir(path.join(contentDir, '_data'), { recursive: true });
-    const file = path.join(contentDir, '_data', 'site.json');
-    await writeFile(file, JSON.stringify({ title: 'First boot' }), 'utf8');
+  it('survives a restart, because nothing else holds the settings', async () => {
+    const contentDir = await box.dir('geekity-settings-restart-');
+    const dataDir = await box.dir('geekity-settings-restart-data-');
 
     const first = await box.site({ contentDir, dataDir });
-    assert.equal(readSiteSettings(first.admin).title, 'First boot');
+    await saveSettings(await signedIn(first), { title: 'Before the restart' });
     await first.close();
 
-    await writeFile(file, JSON.stringify({ title: 'Edited behind the CMS' }), 'utf8');
     const second = await box.site({ contentDir, dataDir });
-    assert.equal(
-      readSiteSettings(second.admin).title,
-      'First boot',
-      'the second boot found settings and left them alone',
+    assert.equal(readSiteSettings(contentDir).title, 'Before the restart');
+    assert.match(await (await second.app.request('/')).text(), /Before the restart/);
+  });
+
+  it('cannot be torn by two saves at once (AC #5)', async () => {
+    const contentDir = await box.dir('geekity-settings-concurrent-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+    await saveSettings(agent, { title: 'Before' });
+
+    const file = path.join(contentDir, '_data', 'site.json');
+    let torn = 0;
+    const readers = setInterval(() => {
+      try {
+        JSON.parse(readFileSync(file, 'utf8'));
+      } catch {
+        torn += 1;
+      }
+    }, 0);
+
+    const saves = await Promise.all([
+      saveSettings(agent, { title: 'One', author: 'Ada' }),
+      saveSettings(agent, { title: 'Two', author: 'Grace' }),
+      saveSettings(agent, { title: 'Three', author: 'Katherine' }),
+    ]);
+    clearInterval(readers);
+
+    assert.deepEqual(
+      saves.map((response) => response.status),
+      [303, 303, 303],
     );
+    assert.equal(torn, 0, 'no reader saw a half-written file');
+
+    const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    const whole = [
+      { title: 'One', author: 'Ada' },
+      { title: 'Two', author: 'Grace' },
+      { title: 'Three', author: 'Katherine' },
+    ];
+    assert.ok(
+      whole.some((one) => one.title === written['title'] && one.author === written['author']),
+      `the file holds one whole save, not a mixture: ${JSON.stringify(written)}`,
+    );
+    assert.deepEqual(
+      (await readdir(path.join(contentDir, '_data'))).filter((name) => name.endsWith('.tmp')),
+      [],
+      'and no temporary file was left behind',
+    );
+  });
+});
+
+describe('a database whose settings are still rows', () => {
+  /** A `dataDir` holding a database in the shape TASK-14 left behind. */
+  async function legacyDatabase(rows: Record<string, string>): Promise<string> {
+    const dataDir = await box.dir('geekity-settings-legacy-data-');
+    const database = new DatabaseSync(path.join(dataDir, 'geekity.db'));
+
+    // Exactly migration 3, with the ledger row that stops it being applied
+    // again, so the boot under test meets the schema a shipped site has.
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS admin_migrations (
+        version    INTEGER PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
+      INSERT INTO admin_migrations (version, applied_at) VALUES (3, '2026-09-01T00:00:00.000Z');
+      CREATE TABLE settings (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    const insert = database.prepare(
+      'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)',
+    );
+    for (const [key, value] of Object.entries(rows)) {
+      insert.run(key, value, new Date().toISOString());
+    }
+    database.close();
+    return dataDir;
+  }
+
+  /** Whether the database still has a table by that name. */
+  function hasSettingsTable(dataDir: string): boolean {
+    const database = new DatabaseSync(path.join(dataDir, 'geekity.db'));
+    const found = database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'")
+      .all();
+    database.close();
+    return found.length > 0;
+  }
+
+  it('writes the rows into site.json on the first boot, then drops the table (AC #3)', async () => {
+    const contentDir = await box.dir('geekity-settings-legacy-');
+    const dataDir = await legacyDatabase({
+      title: 'A Site With Rows',
+      tagline: 'stored in SQLite',
+      baseUrl: 'https://rows.example',
+      author: 'Ada',
+      timezone: 'Europe/London',
+      language: 'en-GB',
+      postsPerPage: '4',
+      actorHandle: 'writer',
+      actorType: 'Organization',
+      tagBase: 'topic',
+      categoryBase: 'section',
+      notifyServer: '',
+      avatar: '/uploads/2026/09/me.png',
+    });
+
+    const cms = await box.site({ contentDir, dataDir });
+
+    const written = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.equal(written['title'], 'A Site With Rows');
+    assert.equal(written['tagline'], 'stored in SQLite');
+    assert.equal(written['url'], 'https://rows.example');
+    assert.equal(written['author'], 'Ada');
+    assert.equal(written['timezone'], 'Europe/London');
+    assert.equal(written['language'], 'en-GB');
+    assert.equal(written['postsPerPage'], 4);
+    assert.equal(written['actorHandle'], 'writer');
+    assert.equal(written['actorType'], 'Organization');
+    assert.equal(written['tagBase'], 'topic');
+    assert.equal(written['categoryBase'], 'section');
+    assert.equal(written['notifyServer'], '');
+    assert.equal(written['avatar'], '/uploads/2026/09/me.png');
+
+    assert.match(await (await cms.app.request('/')).text(), /A Site With Rows/, 'and the site');
+    await cms.close();
+    assert.equal(hasSettingsTable(dataDir), false, 'the table is gone');
+
+    // The second boot has nothing to migrate and must not fall back to the
+    // defaults for a site whose file already says everything.
+    const again = await box.site({ contentDir, dataDir });
+    assert.equal(readSiteSettings(contentDir).title, 'A Site With Rows');
+    assert.match(await (await again.app.request('/')).text(), /A Site With Rows/);
+  });
+
+  it('keeps a site.json that was edited after the rows were last written (AC #3)', async () => {
+    const contentDir = await box.dir('geekity-settings-legacy-file-');
+    const dataDir = await legacyDatabase({
+      title: 'The Rows',
+      actorHandle: 'writer',
+      actorType: 'Service',
+    });
+
+    // The file is written after the rows, which is the site that was edited by
+    // hand — or restored from git — since the last save. The file wins, as it
+    // does for a post; the two settings it has never been able to carry come
+    // from the rows.
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({ title: 'The File', feedSize: 9 }),
+      'utf8',
+    );
+
+    const cms = await box.site({ contentDir, dataDir });
+
+    const written = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.equal(written['title'], 'The File');
+    assert.equal(written['feedSize'], 9, 'a key the form does not manage survived');
+    assert.equal(written['actorHandle'], 'writer', 'the handle the file could not carry');
+    assert.equal(written['actorType'], 'Service');
+
+    assert.match(await (await cms.app.request('/')).text(), /The File/);
   });
 });
 
@@ -543,7 +749,7 @@ describe('the base URL', () => {
       title: 'Still saved',
     });
     assert.equal(saved.status, 303);
-    assert.equal(readSiteSettings(cms.admin).baseUrl, 'https://deployed.example');
+    assert.equal(readSiteSettings(cms.config.contentDir).baseUrl, 'https://deployed.example');
     assert.equal(cms.config.baseUrl, 'https://deployed.example');
   });
 });
@@ -568,7 +774,7 @@ function oversizedPng(bytes: number): Uint8Array {
 describe('the taxonomy bases', () => {
   it("default to WordPress's tag and category (AC #1, AC #3)", async () => {
     const cms = await box.site();
-    const settings = readSiteSettings(cms.admin);
+    const settings = readSiteSettings(cms.config.contentDir);
 
     assert.equal(settings.tagBase, 'tag');
     assert.equal(settings.categoryBase, 'category');
@@ -584,13 +790,13 @@ describe('the taxonomy bases', () => {
     );
 
     const cms = await box.site({ contentDir });
-    const settings = readSiteSettings(cms.admin);
+    const settings = readSiteSettings(cms.config.contentDir);
 
     assert.equal(settings.tagBase, 'topics');
     assert.equal(settings.categoryBase, 'category', 'a key the old file lacks gets the default');
   });
 
-  it('move the archives and are mirrored to site.json when saved (AC #2, AC #3)', async () => {
+  it('move the archives and reach site.json when saved (AC #2, AC #3)', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
@@ -638,7 +844,7 @@ describe('the taxonomy bases', () => {
       const response = await saveSettings(agent, fields);
       assert.equal(response.status, 400, `${JSON.stringify(fields)} should be refused`);
 
-      const settings = readSiteSettings(cms.admin);
+      const settings = readSiteSettings(cms.config.contentDir);
       assert.equal(settings.tagBase, 'tag', 'the stored tag base is unchanged');
       assert.equal(settings.categoryBase, 'category', 'and so is the category base');
     }
@@ -646,7 +852,7 @@ describe('the taxonomy bases', () => {
 });
 
 describe('the notify server setting', () => {
-  it('starts on rpc.rsscloud.io, shows on the form and reaches the mirror', async () => {
+  it('starts on rpc.rsscloud.io, shows on the form and reaches site.json', async () => {
     const contentDir = await box.dir('geekity-settings-notify-');
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
@@ -658,7 +864,7 @@ describe('the notify server setting', () => {
       (await saveSettings(agent, { notify_server: 'https://cloud.example/' })).status,
       303,
     );
-    assert.equal(readSiteSettings(cms.admin).notifyServer, 'https://cloud.example');
+    assert.equal(readSiteSettings(cms.config.contentDir).notifyServer, 'https://cloud.example');
 
     const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
@@ -672,12 +878,12 @@ describe('the notify server setting', () => {
     const agent = await signedIn(cms);
 
     assert.equal((await saveSettings(agent, { notify_server: '' })).status, 303);
-    assert.equal(readSiteSettings(cms.admin).notifyServer, '');
+    assert.equal(readSiteSettings(cms.config.contentDir).notifyServer, '');
 
     const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
     ) as Record<string, unknown>;
-    assert.equal(written['notifyServer'], '', 'the mirror says so rather than saying nothing');
+    assert.equal(written['notifyServer'], '', 'the file says so rather than saying nothing');
 
     // An emptied setting seeds as empty on the next boot, rather than being
     // filled back in from the default.
@@ -685,7 +891,7 @@ describe('the notify server setting', () => {
       contentDir,
       dataDir: await box.dir('geekity-settings-notify-boot-'),
     });
-    assert.equal(readSiteSettings(again.admin).notifyServer, '');
+    assert.equal(readSiteSettings(again.config.contentDir).notifyServer, '');
   });
 
   it('refuses anything that is not an absolute URL, and keeps the stored one', async () => {
@@ -707,7 +913,7 @@ describe('the notify server setting', () => {
       );
     }
 
-    assert.equal(readSiteSettings(cms.admin).notifyServer, 'https://kept.example');
+    assert.equal(readSiteSettings(cms.config.contentDir).notifyServer, 'https://kept.example');
   });
 });
 
@@ -751,7 +957,7 @@ describe('the relays setting', () => {
     return match?.[1];
   }
 
-  it('starts empty, takes one inbox URL per line and reaches the mirror', async () => {
+  it('starts empty, takes one inbox URL per line and reaches site.json', async () => {
     const contentDir = await box.dir('geekity-settings-relays-');
     const cms = await relaySite(contentDir);
     const agent = await signedIn(cms);
@@ -768,7 +974,7 @@ describe('the relays setting', () => {
       303,
     );
     await cms.relays.settled();
-    assert.deepEqual(readSiteSettings(cms.admin).relays, [
+    assert.deepEqual(readSiteSettings(cms.config.contentDir).relays, [
       'https://relay.example/inbox',
       'https://tags.example/user/_____relay_____/inbox',
     ]);
@@ -798,7 +1004,7 @@ describe('the relays setting', () => {
     });
 
     await cms.relays.settled();
-    assert.deepEqual(readSiteSettings(cms.admin).relays, [
+    assert.deepEqual(readSiteSettings(cms.config.contentDir).relays, [
       'https://relay.example/user/_____relay_____/inbox',
     ]);
   });
@@ -820,7 +1026,9 @@ describe('the relays setting', () => {
     }
 
     await cms.relays.settled();
-    assert.deepEqual(readSiteSettings(cms.admin).relays, ['https://kept.example/inbox']);
+    assert.deepEqual(readSiteSettings(cms.config.contentDir).relays, [
+      'https://kept.example/inbox',
+    ]);
   });
 });
 
@@ -833,7 +1041,7 @@ describe('the navigation setting', () => {
     return match?.[1];
   }
 
-  it('takes one label and URL per line, and reaches the store, the mirror and the form', async () => {
+  it('takes one label and URL per line, and reaches site.json and the form', async () => {
     const contentDir = await box.dir('geekity-settings-navigation-');
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
@@ -850,7 +1058,7 @@ describe('the navigation setting', () => {
       303,
     );
 
-    assert.deepEqual(readSiteSettings(cms.admin).navigation, [
+    assert.deepEqual(readSiteSettings(cms.config.contentDir).navigation, [
       { label: 'Home', url: '/' },
       { label: 'About', url: '/about/' },
       { label: 'Elsewhere', url: 'https://example.org/' },
@@ -885,7 +1093,7 @@ describe('the navigation setting', () => {
       assert.match(await response.text(), /Label \| URL/, JSON.stringify(bad));
     }
 
-    const settings = readSiteSettings(cms.admin);
+    const settings = readSiteSettings(cms.config.contentDir);
     assert.deepEqual(settings.navigation, [{ label: 'Home', url: '/' }]);
     assert.equal(settings.title, 'A Site', 'the rest of the refused form was not written either');
 
@@ -908,7 +1116,9 @@ describe('the navigation setting', () => {
     );
 
     const cms = await box.site({ contentDir });
-    assert.deepEqual(readSiteSettings(cms.admin).navigation, [{ label: 'About', url: '/about/' }]);
+    assert.deepEqual(readSiteSettings(cms.config.contentDir).navigation, [
+      { label: 'About', url: '/about/' },
+    ]);
 
     const older = await box.dir('geekity-settings-navigation-old-');
     await mkdir(path.join(older, '_data'), { recursive: true });
@@ -919,7 +1129,7 @@ describe('the navigation setting', () => {
     );
 
     const before = await box.site({ contentDir: older });
-    assert.deepEqual(readSiteSettings(before.admin).navigation, []);
+    assert.deepEqual(readSiteSettings(before.config.contentDir).navigation, []);
   });
 });
 
@@ -941,7 +1151,7 @@ describe('the recorded archive renames', () => {
 
     const cms = await box.site({ contentDir });
 
-    assert.deepEqual(readSiteSettings(cms.admin).taxonomyRedirects, [
+    assert.deepEqual(readSiteSettings(cms.config.contentDir).taxonomyRedirects, [
       { taxonomy: 'tag', from: 'eleventy', to: '11ty' },
     ]);
   });
@@ -950,14 +1160,17 @@ describe('the recorded archive renames', () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
-    writeSiteSettings(cms.admin, {
-      ...readSiteSettings(cms.admin),
-      taxonomyRedirects: [{ taxonomy: 'category', from: 'misc', to: 'general' }],
+    await writeSiteJson({
+      contentDir: cms.config.contentDir,
+      settings: {
+        ...readSiteSettings(cms.config.contentDir),
+        taxonomyRedirects: [{ taxonomy: 'category', from: 'misc', to: 'general' }],
+      },
     });
 
     await saveSettings(agent, { title: 'Renamed by the form' });
 
-    assert.deepEqual(readSiteSettings(cms.admin).taxonomyRedirects, [
+    assert.deepEqual(readSiteSettings(cms.config.contentDir).taxonomyRedirects, [
       { taxonomy: 'category', from: 'misc', to: 'general' },
     ]);
   });

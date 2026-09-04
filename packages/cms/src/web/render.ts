@@ -11,7 +11,7 @@ import {
 } from './context.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
-import type { DocumentContext, SiteData, SiteSettingsSource } from './context.ts';
+import type { DocumentContext, SiteData } from './context.ts';
 import { navigationMenu } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
@@ -87,12 +87,6 @@ export interface CreateRendererOptions {
   /** Config after defaults, for the theme directory, base URL and content directory. */
   config: ResolvedConfig;
   /**
-   * The admin's stored settings, which win over `content/_data/site.json` for
-   * the values the settings screen manages. Absent for a renderer built
-   * without an admin store, which then reads the file alone.
-   */
-  settings?: SiteSettingsSource | undefined;
-  /**
    * The public pages, for the ones that put themselves in the site menu. Read
    * per render rather than at boot, because a page saved in the editor should
    * be in the menu on the very next request.
@@ -118,7 +112,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     baseUrl: config.baseUrl,
     noCache: config.watch,
   });
-  const siteData = createSiteDataSource(config, { settings: options.settings });
+  const siteData = createSiteDataSource(config);
   const pages = options.pages ?? ((): readonly Document[] => []);
 
   function render(template: string, context: Record<string, unknown> = {}): string {

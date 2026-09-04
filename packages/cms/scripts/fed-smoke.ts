@@ -65,8 +65,7 @@ import { serve } from '@hono/node-server';
 import { createFederation, generateCryptoKeyPair, MemoryKvStore } from '@fedify/fedify';
 import { Accept, Application, Create, Endpoints, Follow, isActor } from '@fedify/vocab';
 
-import { DEFAULT_SITE_SETTINGS, writeSiteSettings } from '../src/admin/settings.ts';
-import { openAdminStore } from '../src/admin/store.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../src/admin/settings.ts';
 import { createCms } from '../src/index.ts';
 import type { Cms } from '../src/index.ts';
 
@@ -119,24 +118,25 @@ async function main(): Promise<void> {
     });
     await cp(path.join(FIXTURE_DIR, 'content'), contentDir, { recursive: true });
 
-    // The settings are written before the CMS opens the database, so the actor
-    // has its handle and its type from the very first request. `baseUrl` has
-    // to match the port the server is about to bind: it is what every
-    // ActivityStreams id in this run is built from.
-    const seed = openAdminStore({ dataDir });
-    writeSiteSettings(seed, {
-      ...DEFAULT_SITE_SETTINGS,
-      title: 'Federation Smoke',
-      tagline: 'A site that exists for one test',
-      baseUrl,
-      timezone: 'UTC',
-      postsPerPage: 10,
-      author: 'andrew',
-      actorHandle: ACTOR_HANDLE,
-      actorType: 'Person',
-      avatar: '',
+    // The settings are written before the CMS boots, so the actor has its
+    // handle and its type from the very first request. `baseUrl` has to match
+    // the port the server is about to bind: it is what every ActivityStreams
+    // id in this run is built from.
+    await writeSiteJson({
+      contentDir,
+      settings: {
+        ...DEFAULT_SITE_SETTINGS,
+        title: 'Federation Smoke',
+        tagline: 'A site that exists for one test',
+        baseUrl,
+        timezone: 'UTC',
+        postsPerPage: 10,
+        author: 'andrew',
+        actorHandle: ACTOR_HANDLE,
+        actorType: 'Person',
+        avatar: '',
+      },
     });
-    seed.close();
 
     log(`booting the site on ${baseUrl}`);
     const cms: Cms = createCms({

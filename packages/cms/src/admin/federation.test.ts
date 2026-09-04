@@ -214,7 +214,7 @@ describe('the actor summary', () => {
       'avatar',
     );
 
-    const avatar = readSiteSettings(cms.admin).avatar;
+    const avatar = readSiteSettings(cms.config.contentDir).avatar;
     assert.match(
       await federationScreen(agent),
       new RegExp(`<img class="admin-avatar[^"]*" src="${BASE_URL}${avatar}"`),

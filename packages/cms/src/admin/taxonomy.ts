@@ -30,7 +30,7 @@ import {
 import type { Taxonomy, TaxonomyRedirect } from '../web/taxonomy.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { readSiteSettings, storeSiteSettings } from './settings.ts';
+import { readSiteSettings, updateSiteSettings } from './settings.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
@@ -245,7 +245,7 @@ export async function rewriteTerm(
     const saved = await saveDocument({
       contentDir,
       store,
-      timezone: readSiteSettings(c.var.admin).timezone,
+      timezone: readSiteSettings(c.var.config.contentDir).timezone,
       path: indexed.path,
       content: {
         ...documentContent(document),
@@ -309,25 +309,22 @@ function skipped(report: TermRewriteReport): string {
 }
 
 /**
- * Rewrite the recorded archive renames, in SQLite and in
- * `content/_data/site.json`.
+ * Rewrite the recorded archive renames in `content/_data/site.json`.
  *
- * The whole settings object is read and written back, rather than the one key,
- * because that is the one write path the settings screen uses too: the file is
- * a mirror of the settings and rewriting it from anything less would drop
- * whatever else had been saved.
+ * Through the same write path the settings screen uses, so the read of the
+ * file and the write of it are one step: a rename recorded while somebody is
+ * saving the settings form cannot lose either change.
  */
 async function recordRedirects(
   c: Context<GeekityEnv>,
   change: (existing: readonly TaxonomyRedirect[]) => TaxonomyRedirect[],
 ): Promise<void> {
-  const settings = readSiteSettings(c.var.admin);
-  const taxonomyRedirects = change(settings.taxonomyRedirects);
-
-  await storeSiteSettings({
-    admin: c.var.admin,
+  await updateSiteSettings({
     contentDir: c.var.config.contentDir,
-    settings: { ...settings, taxonomyRedirects },
+    change: (settings) => ({
+      ...settings,
+      taxonomyRedirects: change(settings.taxonomyRedirects),
+    }),
   });
 }
 
