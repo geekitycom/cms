@@ -3,7 +3,7 @@ id: doc-1
 title: Architecture Overview
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 17:11'
+updated_date: '2026-09-04 18:09'
 ---
 # Architecture Overview
 
@@ -29,7 +29,9 @@ pnpm workspace with one publishable package and one private demo app.
 packages/cms/                 published as @geekity/cms
   src/
     index.ts                  public API: createCms(config) and types
-    cli.ts                    bin: geekity serve | init | sync | user add
+    cache.ts                  the SQLite file: its name, its migration ledgers, and what
+                              happens to one this version cannot use
+    cli.ts                    bin: geekity serve | init | sync | rebuild | user add
     config.ts                 config schema and defaults
     content/
       parser.ts               front matter + markdown -> Document
@@ -59,7 +61,8 @@ server.ts                     import { createCms } from '@geekity/cms'; createCm
 geekity.config.ts             content dir, data dir, theme dir, base URL, port
 content/                      posts, pages, uploads, _data (see doc-2)
 theme/                        optional overrides, resolved before the default theme
-data/                         SQLite database, gitignored
+data/                         users.json and keys/ (back these up), the SQLite
+                              cache and the derived images (delete freely); gitignored
 .env                          secrets (session secret), gitignored
 ```
 
@@ -81,7 +84,7 @@ The `geekity` CLI also runs without an entry file (`geekity serve` reads `geekit
 
 ## Sync model
 
-- **Boot:** walk `content/`, parse every `.md`, upsert into the index, delete index rows whose file is gone.
+- **Boot:** walk `content/`, parse every `.md`, upsert into the index, delete index rows whose file is gone. A missing database is created and filled by the same scan, so deleting it is a supported thing to do.
 - **Watch:** chokidar emits add/change/unlink. Changes are debounced per path (about 100 ms) and re-parsed. A content hash skips no-op writes.
 - **Admin writes:** the writer serialises front matter and body, writes the file atomically (temp file + rename), then upserts the index directly so the response does not wait for the watcher. The watcher event that follows is a no-op because the hash matches.
 - **Conflicts:** files win. If the admin edits a document whose on-disk hash changed since the form loaded, the save is refused with a diff-style warning rather than silently overwriting.
@@ -94,9 +97,14 @@ Files are the source of truth for everything a site cannot afford to lose; the d
 - `content/_data/federation/followers.json` and `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`: ActivityPub followers, one object per follower, and the inbound activity log, one compact JSON-LD activity per line with the time it arrived in front of it. Public, in git, exposed to Eleventy as `federation.followers` and `federation.inbox`. Every write updates the `followers` and `ap_inbox` indexes inside the same lock on the file, and both indexes are emptied and read back from the files on every boot.
 - `data/keys/`: the actor's key pairs as JWK files. Private, backed up, never in git.
 - `data/users.json`: usernames and password hashes. Private, backed up, never in git.
-- `data/geekity.db`: the content index, sessions, the followers and inbox indexes, delivery outcomes, and later the search index. Disposable.
+- `data/geekity.db`: the content index, the followers and inbox indexes, sessions, delivery outcomes, the relay handshake state, the scheduler's watermark, and later the search index. Disposable.
+- `data/images/`: image variants derived from `content/uploads/` with an `image.json` sidecar each (decision-10). Disposable; a request for a variant that is not there derives it.
 
-Database migrations still ship inside the package and run on boot, so a site upgrade that changes the cache schema needs no manual step; a schema too old to migrate is simply rebuilt.
+No table holds anything that is not either read back from the files on boot or something a site is told it may lose. What a delete actually costs is three things: every login (the accounts are in `users.json` and survive), the relay handshakes (each relay named in `site.json` is sent a fresh `Follow` on the next boot, and a `Reject` reason is lost), and any scheduled post that came due while the process was down — the scheduler treats an absent watermark as "start from here", precisely so a rebuilt database cannot re-announce the archive.
+
+Database migrations ship inside the package and run on boot, so a site upgrade that changes the cache schema needs no manual step. A database older than the oldest migration the package still ships is thrown away and read back from the files without asking. One written by a newer `@geekity/cms`, or one SQLite will not open at all, refuses the boot naming the file: both are decisions for a person, and `geekity rebuild` is the command that acts on them — it deletes the database and rebuilds it exactly as a boot does.
+
+The one capability this design gives up is that a post whose file is gone entirely cannot be tombstoned, because the `activitypub.id` a `Delete` needs was in the file. Trashing a post keeps the file under `_trash/` with its id, so the ordinary way of unpublishing still withdraws it.
 
 ## Quality and release
 

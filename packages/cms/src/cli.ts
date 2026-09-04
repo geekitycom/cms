@@ -3,21 +3,23 @@ import { existsSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { DatabaseSync } from 'node:sqlite';
 import { Writable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 
 import { createUser, DuplicateUsernameError, migrateUsersToFile } from './admin/accounts.ts';
 import { credentialProblem } from './admin/credentials.ts';
 import { openAdminStore } from './admin/store.ts';
+import { databaseFile, discardDatabase } from './cache.ts';
 import { resolveConfig } from './config.ts';
 import { createCms } from './index.ts';
 import type { GeekityConfig } from './config.ts';
 import { initSite, ownManifest } from './init.ts';
 
-export type Command = 'serve' | 'init' | 'sync' | 'user' | 'help' | 'version';
+export type Command = 'serve' | 'init' | 'sync' | 'rebuild' | 'user' | 'help' | 'version';
 
 /** The commands a site can name on the command line, as opposed to the flags. */
-const COMMANDS: readonly Command[] = ['serve', 'init', 'sync', 'user'];
+const COMMANDS: readonly Command[] = ['serve', 'init', 'sync', 'rebuild', 'user'];
 
 export interface ParsedArgs {
   command: Command;
@@ -44,12 +46,16 @@ Usage:
   geekity [serve] [--config <file>]
   geekity init <directory>
   geekity sync [--config <file>]
+  geekity rebuild [--config <file>]
   geekity user add <username> [--password <pw>] [--config <file>]
 
 Commands:
   serve            Start the CMS (the default when no command is given).
   init             Create a new site in <directory>.
   sync             Rebuild the content index once and exit.
+  rebuild          Delete data/geekity.db and build it again from the files.
+                   Everything in it is derived, so this is always safe with the
+                   site stopped; sessions and delivery outcomes start empty.
   user add         Create an admin user, so a site can get its first login
                    without the setup screen.
 
@@ -271,6 +277,7 @@ async function main(argv: readonly string[]): Promise<number> {
   if (command === 'init') return init(args);
   if (command === 'user') return userCommand(args, configPath, password);
   if (command === 'sync') return syncCommand(configPath);
+  if (command === 'rebuild') return rebuildCommand(configPath);
 
   return serveCommand(configPath);
 }
@@ -330,6 +337,115 @@ async function syncCommand(configPath: string | undefined): Promise<number> {
     await cms.close();
   }
 }
+
+/**
+ * `geekity rebuild`: throw the database away and read it back out of the files.
+ *
+ * Nothing in `data/geekity.db` is anything but a reading of `content/` and
+ * `data/` (decision-9), so this is a command with no undo and no loss: the
+ * content index, the followers and the inbox log come back exactly as they
+ * were, and what does not — sessions, the cached delivery outcomes, the relay
+ * handshake — is what a site is told it may lose. It is the way past a
+ * database this version refuses to open, which is the other reason it exists.
+ *
+ * The rebuild is the boot: after the file is gone, `createCms` applies the same
+ * migrations and runs the same {@link rebuildFederationIndexes}, and `sync()`
+ * is the same scan `serve()` does. Nothing here knows how to build an index,
+ * which is what keeps a rebuilt database identical to a booted one.
+ *
+ * Watching is forced off for the reason `sync` forces it off: a one-shot
+ * command that sat in a watcher would never exit.
+ */
+async function rebuildCommand(configPath: string | undefined): Promise<number> {
+  const loaded = await loadConfig(process.cwd(), configPath);
+  const config = resolveConfig(loaded);
+  const file = databaseFile(config.dataDir);
+
+  if (databaseInUse(config.dataDir)) {
+    process.stderr.write(
+      `${file} is in use: something else has it open, most likely the site itself. Stop the ` +
+        'server and run this again — deleting the database under a running one would leave it ' +
+        'writing to a file nothing can find.\n',
+    );
+    return 1;
+  }
+
+  discardDatabase(config.dataDir);
+
+  const cms = createCms({ ...loaded, watch: false });
+  try {
+    const result = await cms.sync();
+    process.stdout.write(
+      `Rebuilt ${file} from the files.\n` +
+        `Scanned ${String(result.scanned)}: ${String(result.created)} created, ` +
+        `${String(result.updated)} updated, ${String(result.removed)} removed, ` +
+        `${String(result.unchanged)} unchanged, ${String(result.failed)} failed\n` +
+        `Indexed ${count(cms.admin.countFollowers(), 'follower')} and ` +
+        `${count(cms.admin.countInboxActivities(), 'inbox activity', 'inbox activities')}.\n`,
+    );
+
+    if (result.failed > 0) {
+      process.stderr.write(
+        `${String(result.failed)} file${result.failed === 1 ? '' : 's'} could not be parsed and ` +
+          `${result.failed === 1 ? 'was' : 'were'} left out of the index; the warnings above name ` +
+          `${result.failed === 1 ? 'it' : 'them'}.\n`,
+      );
+      return 1;
+    }
+    return 0;
+  } finally {
+    await cms.close();
+  }
+}
+
+/** "1 follower", "2 followers". The plural is the singular plus s unless told. */
+function count(howMany: number, singular: string, plural = `${singular}s`): string {
+  return `${String(howMany)} ${howMany === 1 ? singular : plural}`;
+}
+
+/**
+ * Whether something else has the database open.
+ *
+ * SQLite in WAL mode keeps a shared-memory file that every connection takes a
+ * lock in, and asking for `locking_mode = EXCLUSIVE` means asking to be the
+ * only one there — so a write transaction under it comes back
+ * {@link SQLITE_BUSY} exactly when somebody else is attached. That is a cheap
+ * and honest answer to "is the site running?", where a lock file of our own
+ * would have to be cleaned up after a crash and a check of the `-wal` file
+ * would say yes to a database nobody has open. The probe's own connection is
+ * closed either way, which is what releases the lock it may have taken.
+ *
+ * Only busy is in use. A database that is not there, and one that will not
+ * open or read at all, are both the case this command exists for, so they
+ * answer no and let the rebuild get on with it.
+ */
+function databaseInUse(dataDir: string): boolean {
+  const file = databaseFile(dataDir);
+  if (!existsSync(file)) return false;
+
+  let db: DatabaseSync;
+  try {
+    db = new DatabaseSync(file);
+  } catch {
+    return false;
+  }
+
+  try {
+    db.exec('PRAGMA locking_mode = EXCLUSIVE');
+    db.exec('BEGIN IMMEDIATE');
+    db.exec('COMMIT');
+    return false;
+  } catch (error) {
+    const code = (error as { errcode?: unknown } | null)?.errcode;
+    return code === SQLITE_BUSY || code === SQLITE_LOCKED;
+  } finally {
+    db.close();
+  }
+}
+
+/** SQLite's result codes for "somebody else has it", the only ones that mean in use. */
+const SQLITE_BUSY = 5;
+const SQLITE_LOCKED = 6;
 
 /** `geekity serve`: the default. Runs until it is signalled. */
 async function serveCommand(configPath: string | undefined): Promise<number> {

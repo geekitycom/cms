@@ -78,11 +78,12 @@ site (or `npx geekity`, or a `package.json` script, which is how the generated
 | `geekity serve`           | Boot from the config file and listen. The default when no command is given.              |
 | `geekity init <dir>`      | Create a new site in `<dir>`. Refuses a directory that is not empty.                     |
 | `geekity sync`            | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed. |
+| `geekity rebuild`         | Delete `data/geekity.db` and build it again from the files.                              |
 | `geekity user add <name>` | Create an admin account, so a site can get its first login without the setup screen.     |
 | `geekity --help`, `-h`    | The same table, on the terminal.                                                         |
 | `geekity --version`       | The installed version.                                                                   |
 
-`serve`, `sync` and `user add` take `--config <file>`; without it they look for
+`serve`, `sync`, `rebuild` and `user add` take `--config <file>`; without it they look for
 `geekity.config.ts`, then `geekity.config.js`, then `geekity.config.mjs` in the
 working directory, and run on defaults if there is none.
 
@@ -98,9 +99,33 @@ A file that will not parse is logged, left out of the index and counted in
 `failed`; the command then exits `1` so a deploy step notices. Everything else
 in the directory is still indexed.
 
+### Starting the database again
+
+`geekity rebuild` deletes `data/geekity.db` (with its `-wal` and `-shm`) and
+builds a new one exactly as a boot does — the same migrations, the same scan of
+`content/`, the same read of `content/_data/federation/` — then says what it
+indexed:
+
+```sh
+$ geekity rebuild
+Rebuilt /srv/blog/data/geekity.db from the files.
+Scanned 214: 214 created, 0 updated, 0 removed, 0 unchanged, 0 failed
+Indexed 37 followers and 1,204 inbox activities.
+```
+
+Nothing in the database is anything but a reading of `content/` and `data/`, so
+this is a command with no undo and nothing to lose; [what a rebuild does cost
+is listed below](#two-directories-content-and-data). It is also the way past a
+database this version refuses to open — a damaged one, or one written by a newer
+`@geekity/cms`.
+
+It refuses while the site is running, because deleting the file under a live
+server would leave it writing to a database nothing can find. Stop the site
+first. A file that will not parse is reported and exits `1`, as with `sync`.
+
 ### Creating an admin from the command line
 
-`geekity user add <username>` writes a user straight into the site's database,
+`geekity user add <username>` writes a user straight into `data/users.json`,
 which is how a site that cannot reach `/admin/setup` from a browser — a
 headless deploy, a server behind a bastion — gets its first login. It enforces
 exactly the rules the setup form does: a username of 1 to 64 letters, digits,
@@ -223,6 +248,89 @@ Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site. A boolean environment variable
 takes `true`, `1`, `yes` and `on`, or their opposites; anything else is an error
 rather than a silent `false`.
+
+## Two directories: `content/` and `data/`
+
+Everything a site cannot afford to lose is a file, and every one of those files
+is in one of two directories. Nothing else needs backing up, and nothing else
+needs carrying across a deploy.
+
+`content/` is what the site publishes. It belongs in git, an Eleventy build of
+the same directory reads all of it, and everything in it is meant to be public:
+
+| Path                                               | What it holds                                               |
+| -------------------------------------------------- | ----------------------------------------------------------- |
+| `content/posts/`, `content/pages/`                 | The Markdown documents, `_trash/` included.                 |
+| `content/uploads/`                                 | Uploaded files exactly as they arrived.                     |
+| `content/_data/site.json`                          | Every site setting, the actor's handle and type among them. |
+| `content/_data/federation/followers.json`          | Who follows the site.                                       |
+| `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` | Every activity the inbox was handed, one per line.          |
+
+`data/` is private. It is gitignored, and it is the half to copy somewhere safe:
+
+| Path              | What it holds                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| `data/users.json` | Usernames and argon2id password hashes. Mode `0600`.                                 |
+| `data/keys/`      | The actor's key pairs as JWK files. Mode `0600`. **Losing these breaks federation.** |
+
+Two things under `data/` may be deleted whenever the site is stopped, and
+nothing else in either directory may:
+
+| Path              | What it is                                                                               |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `data/geekity.db` | The SQLite cache, with its `-wal` and `-shm`. `geekity rebuild` deletes and rebuilds it. |
+| `data/images/`    | Variants derived from `content/uploads/`, with their `image.json` sidecars. `rm -r` it.  |
+
+The next boot builds the database out of the files with no manual step, and a
+request for a variant that is not there derives it and serves it.
+
+### What is in the database, and what a rebuild costs
+
+No table holds anything that is not either read back from the files or
+something a site is told it may lose:
+
+| Table                                               | Where it comes back from                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------------ |
+| `documents`, `document_tags`, `document_categories` | The boot scan of `content/`.                                             |
+| `followers`, `ap_inbox`                             | `content/_data/federation/`, emptied and read back on every boot.        |
+| `sessions`                                          | Nothing. Everybody signed in is signed out.                              |
+| `ap_deliveries`                                     | Nothing. The federation screen shows its posts with "Nothing recorded."  |
+| `ap_relays`                                         | The relay list in `site.json`: boot sends each of them a fresh `Follow`. |
+| `cms_state`                                         | Nothing. One key, the scheduler's watermark.                             |
+| `migrations`, `admin_migrations`                    | The package. They record which schema versions have run.                 |
+
+So three things are actually lost:
+
+- **Logins.** Everybody signed in has to sign in again. The accounts themselves
+  are in `data/users.json` and are untouched.
+- **Relay handshakes.** A relay named in the settings that the database has
+  never heard of is followed on boot, so a rebuild sends every listed relay a
+  new `Follow` and the reason one gave for rejecting the last is gone.
+- **A scheduled post that came due while the site was down.** The scheduler
+  treats an absent watermark as "start from here", so that a rebuilt database
+  cannot re-announce the archive to every follower. Such a post is public on the
+  next boot but no `Create` is delivered for it; resend it from
+  `/admin/federation` if it should have gone out.
+
+The one thing the file-first design gives up is narrower than any of those: a
+post whose **file is gone entirely** can no longer be withdrawn from followers'
+timelines, because the `activitypub.id` a `Delete` needs was in the file.
+Trashing a post in the admin keeps the file under `_trash/` with its id, so the
+ordinary way of unpublishing still sends the `Delete`.
+
+### A database this version will not open
+
+Two cases refuse the boot rather than being cleaned up behind your back, and
+both name the file and say what to do about it:
+
+- **Written by a newer `@geekity/cms`**, meaning its migration ledger records a
+  schema version this package does not ship. Upgrading the package back is
+  usually what was meant; `geekity rebuild` throws it away if it was not.
+- **Damaged**, meaning SQLite will not open it. `geekity rebuild` is the fix.
+
+A database _older_ than the oldest migration the package still ships is the one
+case thrown away and rebuilt without asking: there is by definition no path
+forward from it, and nothing in it is anything but a reading of the files.
 
 ## Federation
 

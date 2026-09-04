@@ -98,9 +98,9 @@ export function navigationItems(site: SiteData): NavigationItem[] {
  * A `navigation` value as the items it names, ignoring anything that is not
  * one.
  *
- * One spelling for the site data a render reads and the `site.json` a fresh
- * install is seeded from, so the file and the database cannot disagree about
- * what a menu is.
+ * One spelling for the site data a render reads and the `navigation` the
+ * settings screen writes, so a menu means the same thing to the theme and to
+ * the form that edits it.
  */
 export function navigationItemsOf(value: unknown): NavigationItem[] {
   if (!Array.isArray(value)) return [];
