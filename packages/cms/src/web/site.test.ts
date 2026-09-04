@@ -370,15 +370,13 @@ describe('the taxonomy bases', () => {
   it('moves the tag feeds and the links the theme renders', async () => {
     const { cms } = await based({ tagBase: 'topics', categoryBase: 'filed-under' });
 
-    assert.equal((await cms.app.request('/topics/eleventy/feed.xml')).status, 200);
-    assert.equal((await cms.app.request('/topics/eleventy/feed.json')).status, 200);
-    assert.equal((await cms.app.request('/tag/eleventy/feed.xml')).status, 404);
+    assert.equal((await cms.app.request('/topics/eleventy/feed/')).status, 200);
+    assert.equal((await cms.app.request('/topics/eleventy/feed/atom/')).status, 200);
+    assert.equal((await cms.app.request('/topics/eleventy/feed/json/')).status, 200);
+    assert.equal((await cms.app.request('/tag/eleventy/feed/')).status, 404);
 
     const archive = await (await cms.app.request('/topics/eleventy/')).text();
-    assert.ok(
-      archive.includes('href="/topics/eleventy/feed.xml"'),
-      'the archive advertises its feed',
-    );
+    assert.ok(archive.includes('href="/topics/eleventy/feed/"'), 'the archive advertises its feed');
 
     const article = await (await cms.app.request('/notes/')).text();
     assert.ok(article.includes('href="/topics/eleventy/"'), 'the tag link follows the base');

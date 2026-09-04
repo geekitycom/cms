@@ -79,6 +79,7 @@ export {
 export type { AdminSection } from './routes.ts';
 export {
   ACTOR_HANDLE_PATTERN,
+  LANGUAGE_TAG_PATTERN,
   ACTOR_TYPES,
   AVATAR_FIELDS,
   AVATAR_PATH,

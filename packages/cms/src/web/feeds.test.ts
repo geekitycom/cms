@@ -62,6 +62,7 @@ function post(
     permalink: string;
     updated?: string;
     tags?: string[];
+    categories?: string[];
     draft?: boolean;
     description?: string;
     author?: string;
@@ -78,6 +79,9 @@ function post(
   if (options.updated !== undefined) lines.push(`updated: '${options.updated}'`);
   if (options.tags !== undefined) {
     lines.push('tags:', ...options.tags.map((tag) => `  - ${tag}`));
+  }
+  if (options.categories !== undefined) {
+    lines.push('categories:', ...options.categories.map((category) => `  - ${category}`));
   }
   if (options.draft === true) lines.push('draft: true');
   if (options.description !== undefined) {
@@ -235,6 +239,19 @@ function parseXml(source: string): XmlElement {
         continue;
       }
 
+      // A CDATA section is character data taken literally: no entities are
+      // resolved inside it, and it ends at the first `]]>`. A writer that
+      // emitted a `]]>` of its own without splitting it would end the section
+      // early and leave the rest as markup, which the rest of this reader
+      // then rejects.
+      if (source.startsWith('<![CDATA[', at)) {
+        const end = source.indexOf(']]>', at);
+        if (end < 0) fail('unterminated CDATA section');
+        element.text += source.slice(at + '<![CDATA['.length, end);
+        at = end + 3;
+        continue;
+      }
+
       if (source[at] === '<') {
         element.children.push(readElement());
         continue;
@@ -280,6 +297,211 @@ async function atom(cms: Cms, url: string): Promise<{ response: Response; feed: 
   return { response, feed: parseXml(body) };
 }
 
+/**
+ * The RSS feed at a URL: the response, the `<rss>` element and its channel,
+ * with what RSS 2.0 requires of every channel already asserted.
+ */
+async function rss(
+  cms: Cms,
+  url: string,
+): Promise<{ response: Response; body: string; rss: XmlElement; channel: XmlElement }> {
+  const response = await cms.app.request(url);
+  const body = await response.text();
+  const document = parseXml(body);
+
+  // https://www.rssboard.org/rss-specification : the root is <rss version="2.0">
+  // holding one <channel>, and a channel has a title, a link and a description.
+  assert.equal(document.name, 'rss');
+  assert.equal(document.attributes['version'], '2.0');
+  const channel = child(document, 'channel');
+  for (const required of ['title', 'link', 'description']) {
+    assert.ok(child(channel, required).name === required, `the channel has a <${required}>`);
+  }
+
+  return { response, body, rss: document, channel };
+}
+
+describe('the RSS feed', () => {
+  it('serves a well-formed RSS 2.0 channel describing the site', async () => {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({
+        title: 'Geekity Demo',
+        tagline: 'A file-first site',
+        author: 'Andrew Shell',
+        language: 'en-GB',
+        avatar: '/uploads/2026/09/me.png',
+      }),
+      'posts/2026-09-02-hello.md': post('Hello, World!', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/hello/',
+      }),
+    });
+
+    const { response, channel } = await rss(cms, '/feed/');
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'application/rss+xml; charset=utf-8');
+
+    assert.equal(child(channel, 'title').text, 'Geekity Demo');
+    assert.equal(child(channel, 'link').text, 'https://example.com/');
+    assert.equal(child(channel, 'description').text, 'A file-first site');
+    assert.equal(child(channel, 'language').text, 'en-GB');
+    assert.equal(child(channel, 'lastBuildDate').text, 'Wed, 02 Sep 2026 09:00:00 GMT');
+    assert.ok(child(channel, 'generator').text.length > 0, 'the channel names its generator');
+
+    const self = child(channel, 'atom:link');
+    assert.equal(self.attributes['rel'], 'self');
+    assert.equal(self.attributes['type'], 'application/rss+xml');
+    assert.equal(self.attributes['href'], 'https://example.com/feed/');
+
+    const image = child(channel, 'image');
+    assert.equal(child(image, 'url').text, 'https://example.com/uploads/2026/09/me.png');
+    assert.equal(child(image, 'title').text, 'Geekity Demo');
+    assert.equal(child(image, 'link').text, 'https://example.com/');
+  });
+
+  it('carries one item per published post, newest first, with the whole post', async () => {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({ title: 'Geekity Demo', author: 'The Site' }),
+      'posts/2026-09-02-newer.md': post('Newer', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/newer/',
+        tags: ['releases', 'meta'],
+        categories: ['engineering'],
+        description: 'A short summary.',
+        author: 'Andrew Shell',
+        body: 'A *file-first* CMS & proud of it.',
+      }),
+      'posts/2026-08-15-older.md': post('Older', {
+        date: '2026-08-15T09:00:00Z',
+        permalink: '/2026/08/older/',
+      }),
+    });
+
+    const { channel } = await rss(cms, '/feed/');
+    const items = childrenNamed(channel, 'item');
+
+    assert.deepEqual(
+      items.map((item) => child(item, 'title').text),
+      ['Newer', 'Older'],
+    );
+
+    const [newer, older] = items as [XmlElement, XmlElement];
+
+    assert.equal(child(newer, 'link').text, 'https://example.com/2026/09/newer/');
+    assert.equal(child(newer, 'pubDate').text, 'Wed, 02 Sep 2026 09:00:00 GMT');
+    assert.equal(child(newer, 'dc:creator').text, 'Andrew Shell');
+
+    // The guid is a name, not an address: the ActivityStreams object id, which
+    // is minted from the slug and so survives the post being moved.
+    const guid = child(newer, 'guid');
+    assert.equal(guid.attributes['isPermaLink'], 'false');
+    assert.equal(guid.text, 'https://example.com/ap/posts/newer');
+
+    // Both taxonomies become categories, categories before tags.
+    assert.deepEqual(
+      childrenNamed(newer, 'category').map((category) => category.text),
+      ['engineering', 'releases', 'meta'],
+    );
+
+    assert.equal(child(newer, 'description').text, 'A short summary.');
+    assert.equal(
+      child(newer, 'content:encoded').text.trim(),
+      '<p>A <em>file-first</em> CMS &amp; proud of it.</p>',
+    );
+    assert.equal(child(newer, 'source:markdown').text, 'A *file-first* CMS & proud of it.');
+
+    // A post that names no author falls back to the site's.
+    assert.equal(child(older, 'dc:creator').text, 'The Site');
+  });
+
+  it('summarises a post that carries no description with its first paragraph', async () => {
+    const words = Array.from({ length: 70 }, (_, index) => `word${String(index + 1)}`);
+    const { cms } = await site({
+      'posts/2026-09-02-long.md': post('Long', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/long/',
+        body: `${words.join(' ')}\n\nA second paragraph nobody should see.`,
+      }),
+    });
+
+    const { channel } = await rss(cms, '/feed/');
+    const description = child(child(channel, 'item'), 'description').text;
+
+    assert.equal(description, `${words.slice(0, 55).join(' ')} …`);
+    assert.ok(!description.includes('second paragraph'), 'only the first paragraph is summarised');
+    assert.ok(!description.includes('<'), 'the summary is plain text');
+  });
+
+  it('keeps the whole post out of an item that has to be escaped', async () => {
+    const { cms } = await site({
+      'posts/2026-09-02-hostile.md': post('"Angle < brackets" & ampersands', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/hostile/',
+        tags: ['<script>'],
+        body: 'Fish & chips <span>now</span>, and a stray ]]> in the text.',
+      }),
+    });
+
+    // Parsing is the assertion: the reader rejects a bare `<` or `&` outside a
+    // CDATA section, and a `]]>` that was not split would end the section
+    // early and leave the rest as markup.
+    const { channel, body } = await rss(cms, '/feed/');
+    const item = child(channel, 'item');
+
+    assert.equal(child(item, 'title').text, '"Angle < brackets" & ampersands');
+    assert.equal(child(item, 'category').text, '<script>');
+    assert.equal(child(item, 'description').text, 'Fish & chips now, and a stray ]]> in the text.');
+    assert.ok(
+      child(item, 'source:markdown').text.includes('a stray ]]> in the text'),
+      'the Markdown survives the CDATA split',
+    );
+    assert.ok(!body.includes('<script>'), 'no unescaped markup reaches the document');
+  });
+
+  it('leaves out drafts, trashed documents and pages, and stops at the feed size', async () => {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({ title: 'Short', feedSize: 2 }),
+      'posts/2026-09-03-one.md': post('One', { date: '2026-09-03T09:00:00Z', permalink: '/one/' }),
+      'posts/2026-09-02-two.md': post('Two', { date: '2026-09-02T09:00:00Z', permalink: '/two/' }),
+      'posts/2026-09-01-three.md': post('Three', {
+        date: '2026-09-01T09:00:00Z',
+        permalink: '/three/',
+      }),
+      'posts/2026-09-04-draft.md': post('Secret Draft', {
+        date: '2026-09-04T09:00:00Z',
+        permalink: '/draft/',
+        draft: true,
+      }),
+      '_trash/posts/2026-09-05-gone.md': post('Thrown Away', {
+        date: '2026-09-05T09:00:00Z',
+        permalink: '/gone/',
+      }),
+      'pages/about.md': `---\ntitle: About\npermalink: /about/\n---\n\nA page.\n`,
+    });
+
+    const { channel } = await rss(cms, '/feed/');
+
+    assert.deepEqual(
+      childrenNamed(channel, 'item').map((item) => child(item, 'title').text),
+      ['One', 'Two'],
+    );
+  });
+
+  it('leaves out the image when the site has no avatar', async () => {
+    const { cms } = await site({
+      'posts/2026-09-02-one.md': post('One', { date: '2026-09-02T09:00:00Z', permalink: '/one/' }),
+    });
+
+    const { channel } = await rss(cms, '/feed/');
+
+    assert.equal(childrenNamed(channel, 'image').length, 0);
+    // The channel still has a description, empty, because RSS requires one.
+    assert.equal(child(channel, 'description').text, '');
+    assert.equal(child(channel, 'language').text, 'en');
+  });
+});
+
 describe('the Atom feed', () => {
   it('serves a well-formed Atom document describing the site', async () => {
     const { cms } = await site({
@@ -294,7 +516,7 @@ describe('the Atom feed', () => {
       }),
     });
 
-    const { response, feed } = await atom(cms, '/feed.xml');
+    const { response, feed } = await atom(cms, '/feed/atom/');
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'application/atom+xml; charset=utf-8');
@@ -306,7 +528,7 @@ describe('the Atom feed', () => {
     assert.equal(child(feed, 'subtitle').text, 'A file-first site');
     assert.equal(child(feed, 'updated').text, '2026-09-02T09:00:00.000Z');
     assert.equal(child(child(feed, 'author'), 'name').text, 'Andrew Shell');
-    assert.equal(linkWithRel(feed, 'self').attributes['href'], 'https://example.com/feed.xml');
+    assert.equal(linkWithRel(feed, 'self').attributes['href'], 'https://example.com/feed/atom/');
     assert.equal(linkWithRel(feed, 'self').attributes['type'], 'application/atom+xml');
     assert.equal(linkWithRel(feed, 'alternate').attributes['href'], 'https://example.com/');
     assert.equal(linkWithRel(feed, 'alternate').attributes['type'], 'text/html');
@@ -330,7 +552,7 @@ describe('the Atom feed', () => {
       }),
     });
 
-    const { feed } = await atom(cms, '/feed.xml');
+    const { feed } = await atom(cms, '/feed/atom/');
     const entries = childrenNamed(feed, 'entry');
 
     assert.equal(entries.length, 2);
@@ -384,7 +606,7 @@ describe('the Atom feed', () => {
       'pages/about.md': `---\ntitle: About This Site\npermalink: /about/\n---\n\nA page.\n`,
     });
 
-    const { feed } = await atom(cms, '/feed.xml');
+    const { feed } = await atom(cms, '/feed/atom/');
     const titles = childrenNamed(feed, 'entry').map((entry) => child(entry, 'title').text);
 
     assert.deepEqual(titles, ['Live']);
@@ -398,7 +620,7 @@ describe('the Atom feed', () => {
       'posts/three.md': post('Three', { date: '2026-09-01T09:00:00Z', permalink: '/three/' }),
     });
 
-    const { feed } = await atom(cms, '/feed.xml');
+    const { feed } = await atom(cms, '/feed/atom/');
     const titles = childrenNamed(feed, 'entry').map((entry) => child(entry, 'title').text);
 
     // `feedSize` wins over `postsPerPage`: a feed is not an archive page.
@@ -416,7 +638,7 @@ describe('the Atom feed', () => {
       }),
     });
 
-    const response = await cms.app.request('/feed.xml');
+    const response = await cms.app.request('/feed/atom/');
     const body = await response.text();
 
     // Parsing is the assertion: the reader below rejects a bare `<` or `&`.
@@ -480,14 +702,14 @@ describe('the JSON feed', () => {
       }),
     });
 
-    const { response, feed } = await jsonFeedAt(cms, '/feed.json');
+    const { response, feed } = await jsonFeedAt(cms, '/feed/json/');
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'application/feed+json; charset=utf-8');
 
     assert.equal(feed['title'], 'Geekity Demo');
     assert.equal(feed['home_page_url'], 'https://example.com/');
-    assert.equal(feed['feed_url'], 'https://example.com/feed.json');
+    assert.equal(feed['feed_url'], 'https://example.com/feed/json/');
     assert.equal(feed['description'], 'A file-first site');
     assert.deepEqual(feed['authors'], [{ name: 'Andrew Shell' }]);
   });
@@ -515,8 +737,8 @@ describe('the JSON feed', () => {
     };
 
     const { cms } = await site(files);
-    const { items } = await jsonFeedAt(cms, '/feed.json');
-    const { feed: atomDocument } = await atom(cms, '/feed.xml');
+    const { items } = await jsonFeedAt(cms, '/feed/json/');
+    const { feed: atomDocument } = await atom(cms, '/feed/atom/');
 
     assert.deepEqual(
       items.map((item) => item['title']),
@@ -549,6 +771,142 @@ describe('the JSON feed', () => {
   });
 });
 
+describe('the taxonomy feeds', () => {
+  const filed = {
+    'posts/2026-09-02-one.md': post('Tagged and Filed', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/one/',
+      tags: ['releases'],
+      categories: ['engineering'],
+    }),
+    'posts/2026-09-01-two.md': post('Neither', {
+      date: '2026-09-01T09:00:00Z',
+      permalink: '/two/',
+    }),
+  };
+
+  it('serve every archive in all three formats under the configured bases', async () => {
+    const { cms } = await site({
+      ...filed,
+      '_data/site.json': JSON.stringify({
+        title: 'Bases',
+        tagBase: 'topics',
+        categoryBase: 'filed-under',
+      }),
+    });
+
+    for (const root of ['/topics/releases/', '/filed-under/engineering/']) {
+      const { response, channel } = await rss(cms, `${root}feed/`);
+      assert.equal(response.status, 200, `${root}feed/`);
+      assert.equal(child(channel, 'link').text, `https://example.com${root}`);
+      assert.equal(
+        child(channel, 'atom:link').attributes['href'],
+        `https://example.com${root}feed/`,
+      );
+      assert.deepEqual(
+        childrenNamed(channel, 'item').map((item) => child(item, 'title').text),
+        ['Tagged and Filed'],
+      );
+
+      const { response: atomResponse, feed } = await atom(cms, `${root}feed/atom/`);
+      assert.equal(atomResponse.status, 200, `${root}feed/atom/`);
+      assert.equal(
+        linkWithRel(feed, 'self').attributes['href'],
+        `https://example.com${root}feed/atom/`,
+      );
+
+      const { response: jsonResponse, feed: jsonDocument } = await jsonFeedAt(
+        cms,
+        `${root}feed/json/`,
+      );
+      assert.equal(jsonResponse.status, 200, `${root}feed/json/`);
+      assert.equal(jsonDocument['feed_url'], `https://example.com${root}feed/json/`);
+    }
+  });
+
+  it('404 a term nothing published carries, in every format', async () => {
+    const { cms } = await site(filed);
+
+    for (const url of [
+      '/tag/nothing/feed/',
+      '/tag/nothing/feed/atom/',
+      '/category/nothing/feed/json/',
+      '/category/releases/feed/',
+    ]) {
+      assert.equal((await cms.app.request(url)).status, 404, url);
+    }
+  });
+});
+
+describe('the WordPress feed URLs', () => {
+  const files = {
+    'posts/2026-09-02-one.md': post('One', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/one/',
+      tags: ['releases'],
+      categories: ['engineering'],
+    }),
+  };
+
+  /** Where a URL redirects to, asserting that it is a permanent redirect. */
+  async function movedTo(cms: Cms, url: string): Promise<string | null> {
+    const response = await cms.app.request(url);
+    assert.equal(response.status, 301, url);
+    return response.headers.get('location');
+  }
+
+  it('redirect the unslashed forms to their canonical slashed ones', async () => {
+    const { cms } = await site(files);
+
+    assert.equal(await movedTo(cms, '/feed'), '/feed/');
+    assert.equal(await movedTo(cms, '/feed/atom'), '/feed/atom/');
+    assert.equal(await movedTo(cms, '/feed/json'), '/feed/json/');
+    assert.equal(await movedTo(cms, '/tag/releases/feed'), '/tag/releases/feed/');
+    assert.equal(
+      await movedTo(cms, '/category/engineering/feed/json'),
+      '/category/engineering/feed/json/',
+    );
+  });
+
+  it('redirect the older spellings WordPress also served', async () => {
+    const { cms } = await site(files);
+
+    // `/feed/rss/` was WordPress's RSS 0.92; this site answers RSS 2.0 there.
+    assert.equal(await movedTo(cms, '/feed/rss/'), '/feed/');
+    assert.equal(await movedTo(cms, '/feed/rss'), '/feed/');
+    assert.equal(await movedTo(cms, '/tag/releases/feed/rss/'), '/tag/releases/feed/');
+  });
+
+  it('redirect the query forms that predate the pretty URLs', async () => {
+    const { cms } = await site(files);
+
+    assert.equal(await movedTo(cms, '/?feed=rss2'), '/feed/');
+    assert.equal(await movedTo(cms, '/?feed=rss'), '/feed/');
+    assert.equal(await movedTo(cms, '/?feed=atom'), '/feed/atom/');
+    assert.equal(await movedTo(cms, '/?feed=json'), '/feed/json/');
+    assert.equal(await movedTo(cms, '/tag/releases/?feed=rss2'), '/tag/releases/feed/');
+    assert.equal(
+      await movedTo(cms, '/category/engineering/?feed=atom'),
+      '/category/engineering/feed/atom/',
+    );
+  });
+
+  it('404 the paths the old feeds used to answer on', async () => {
+    const { cms } = await site(files);
+
+    for (const url of ['/feed.xml', '/feed.json', '/tag/releases/feed.xml']) {
+      assert.equal((await cms.app.request(url)).status, 404, url);
+    }
+  });
+
+  it('do not redirect a feed for a term nothing published carries', async () => {
+    const { cms } = await site(files);
+
+    // One 404, not a redirect and then a 404.
+    assert.equal((await cms.app.request('/tag/nothing/feed')).status, 404);
+  });
+});
+
 describe('a tag feed', () => {
   const tagged = {
     'posts/2026-09-02-one.md': post('Tagged One', {
@@ -571,14 +929,14 @@ describe('a tag feed', () => {
   it('holds only what carries the tag, in Atom', async () => {
     const { cms } = await site(tagged, { baseUrl: 'https://example.com' });
 
-    const { response, feed } = await atom(cms, '/tag/releases/feed.xml');
+    const { response, feed } = await atom(cms, '/tag/releases/feed/atom/');
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'application/atom+xml; charset=utf-8');
     assert.equal(child(feed, 'id').text, 'https://example.com/tag/releases/');
     assert.equal(
       linkWithRel(feed, 'self').attributes['href'],
-      'https://example.com/tag/releases/feed.xml',
+      'https://example.com/tag/releases/feed/atom/',
     );
     assert.equal(
       linkWithRel(feed, 'alternate').attributes['href'],
@@ -595,12 +953,12 @@ describe('a tag feed', () => {
   it('holds only what carries the tag, in JSON', async () => {
     const { cms } = await site(tagged);
 
-    const { response, feed, items } = await jsonFeedAt(cms, '/tag/releases/feed.json');
+    const { response, feed, items } = await jsonFeedAt(cms, '/tag/releases/feed/json/');
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'application/feed+json; charset=utf-8');
     assert.equal(feed['home_page_url'], 'https://example.com/tag/releases/');
-    assert.equal(feed['feed_url'], 'https://example.com/tag/releases/feed.json');
+    assert.equal(feed['feed_url'], 'https://example.com/tag/releases/feed/json/');
     assert.deepEqual(
       items.map((item) => item['title']),
       ['Tagged One'],
@@ -610,13 +968,13 @@ describe('a tag feed', () => {
   it('404s a tag nothing published carries', async () => {
     const { cms } = await site(tagged);
 
-    for (const url of ['/tag/nothing/feed.xml', '/tag/nothing/feed.json']) {
+    for (const url of ['/tag/nothing/feed/atom/', '/tag/nothing/feed/json/']) {
       const response = await cms.app.request(url);
       assert.equal(response.status, 404, url);
     }
 
     // A tag only a draft carries is a tag the public site does not have.
-    const draftOnly = await cms.app.request('/tag/releases/feed.xml');
+    const draftOnly = await cms.app.request('/tag/releases/feed/atom/');
     assert.equal(draftOnly.status, 200);
   });
 
@@ -629,12 +987,12 @@ describe('a tag feed', () => {
       }),
     });
 
-    const { response, feed } = await atom(cms, '/tag/book%20notes/feed.xml');
+    const { response, feed } = await atom(cms, '/tag/book%20notes/feed/atom/');
 
     assert.equal(response.status, 200);
     assert.equal(
       linkWithRel(feed, 'self').attributes['href'],
-      'https://example.com/tag/book%20notes/feed.xml',
+      'https://example.com/tag/book%20notes/feed/atom/',
     );
     assert.deepEqual(
       childrenNamed(feed, 'entry').map((entry) => child(entry, 'title').text),
@@ -655,7 +1013,7 @@ describe('feed caching', () => {
   it('answers a matching If-None-Match with 304 and no body', async () => {
     const { cms } = await site(files);
 
-    for (const url of ['/feed.xml', '/feed.json', '/tag/releases/feed.xml']) {
+    for (const url of ['/feed/atom/', '/feed/json/', '/tag/releases/feed/atom/']) {
       const first = await cms.app.request(url);
       const etag = first.headers.get('etag');
 
@@ -674,7 +1032,7 @@ describe('feed caching', () => {
   it('answers a fresh If-Modified-Since with 304', async () => {
     const { cms } = await site(files);
 
-    const response = await cms.app.request('/feed.json', {
+    const response = await cms.app.request('/feed/json/', {
       headers: { 'if-modified-since': 'Wed, 02 Sep 2026 09:00:00 GMT' },
     });
 
@@ -685,7 +1043,7 @@ describe('feed caching', () => {
     const { cms } = await site(files);
 
     const etags = await Promise.all(
-      ['/feed.xml', '/feed.json', '/tag/releases/feed.xml', '/tag/releases/feed.json'].map(
+      ['/feed/atom/', '/feed/json/', '/tag/releases/feed/atom/', '/tag/releases/feed/json/'].map(
         async (url) => (await cms.app.request(url)).headers.get('etag'),
       ),
     );
@@ -696,7 +1054,7 @@ describe('feed caching', () => {
   it('changes the validator when the content changes', async () => {
     const { cms, contentDir } = await site(files);
 
-    const before = (await cms.app.request('/feed.xml')).headers.get('etag');
+    const before = (await cms.app.request('/feed/atom/')).headers.get('etag');
 
     await writeTree(contentDir, {
       'posts/2026-09-03-two.md': post('Two', {
@@ -706,7 +1064,7 @@ describe('feed caching', () => {
     });
     await cms.sync();
 
-    const after = await cms.app.request('/feed.xml');
+    const after = await cms.app.request('/feed/atom/');
 
     assert.notEqual(after.headers.get('etag'), before);
     assert.equal(after.status, 200);
@@ -723,35 +1081,73 @@ describe('the HTML pages', () => {
     'pages/about.md': `---\ntitle: About\npermalink: /about/\n---\n\nA page.\n`,
   };
 
-  it('advertise both feeds with link rel=alternate', async () => {
-    const { cms } = await site(files);
+  it('advertise all three feeds with link rel=alternate, RSS first', async () => {
+    const { cms } = await site({
+      ...files,
+      'posts/2026-09-01-filed.md': post('Filed', {
+        date: '2026-09-01T09:00:00Z',
+        permalink: '/filed/',
+        categories: ['engineering'],
+      }),
+    });
 
-    for (const url of ['/', '/one/', '/about/', '/tag/releases/']) {
+    for (const url of ['/', '/one/', '/about/', '/tag/releases/', '/category/engineering/']) {
       const html = await (await cms.app.request(url)).text();
       const head = html.slice(0, html.indexOf('</head>'));
 
+      const rssAt = head.indexOf('type="application/rss+xml"');
+      const atomAt = head.indexOf('type="application/atom+xml"');
+      const jsonAt = head.indexOf('type="application/feed+json"');
+
+      assert.ok(rssAt >= 0 && head.includes('href="/feed/"'), `${url} advertises the RSS feed`);
       assert.ok(
-        head.includes('<link rel="alternate" type="application/atom+xml"') &&
-          head.includes('href="/feed.xml"'),
+        atomAt >= 0 && head.includes('href="/feed/atom/"'),
         `${url} advertises the Atom feed`,
       );
       assert.ok(
-        head.includes('<link rel="alternate" type="application/feed+json"') &&
-          head.includes('href="/feed.json"'),
+        jsonAt >= 0 && head.includes('href="/feed/json/"'),
         `${url} advertises the JSON feed`,
       );
+      assert.ok(rssAt < atomAt && atomAt < jsonAt, `${url} lists RSS first`);
     }
   });
 
-  it('advertise the tag feeds on a tag archive as well as the site ones', async () => {
+  it('keep the ActivityStreams alternate on a post page', async () => {
     const { cms } = await site(files);
 
-    const html = await (await cms.app.request('/tag/releases/')).text();
+    const html = await (await cms.app.request('/one/')).text();
     const head = html.slice(0, html.indexOf('</head>'));
 
-    assert.ok(head.includes('href="/tag/releases/feed.xml"'), 'the tag Atom feed');
-    assert.ok(head.includes('href="/tag/releases/feed.json"'), 'the tag JSON feed');
-    assert.ok(head.includes('href="/feed.xml"'), 'and the whole-site Atom feed');
+    assert.ok(
+      head.includes(
+        '<link rel="alternate" type="application/activity+json" href="https://example.com/ap/posts/one">',
+      ),
+      'the post still advertises its ActivityStreams object',
+    );
+  });
+
+  it("advertise an archive's own feeds as well as the site's", async () => {
+    const { cms } = await site({
+      ...files,
+      'posts/2026-09-01-filed.md': post('Filed', {
+        date: '2026-09-01T09:00:00Z',
+        permalink: '/filed/',
+        categories: ['engineering'],
+      }),
+    });
+
+    for (const [archive, root] of [
+      ['/tag/releases/', '/tag/releases/'],
+      ['/category/engineering/', '/category/engineering/'],
+    ] as const) {
+      const html = await (await cms.app.request(archive)).text();
+      const head = html.slice(0, html.indexOf('</head>'));
+
+      for (const suffix of ['feed/', 'feed/atom/', 'feed/json/']) {
+        assert.ok(head.includes(`href="${root}${suffix}"`), `${archive} advertises ${suffix}`);
+      }
+      assert.ok(head.includes('href="/feed/"'), `${archive} keeps the whole-site RSS feed`);
+    }
   });
 
   it('prefix the feed links with the base path when the site lives in a subdirectory', async () => {
@@ -759,7 +1155,8 @@ describe('the HTML pages', () => {
 
     const html = await (await cms.app.request('/')).text();
 
-    assert.ok(html.includes('href="/blog/feed.xml"'), 'the Atom link carries the base path');
-    assert.ok(html.includes('href="/blog/feed.json"'), 'the JSON link carries the base path');
+    assert.ok(html.includes('href="/blog/feed/"'), 'the RSS link carries the base path');
+    assert.ok(html.includes('href="/blog/feed/atom/"'), 'the Atom link carries the base path');
+    assert.ok(html.includes('href="/blog/feed/json/"'), 'the JSON link carries the base path');
   });
 });

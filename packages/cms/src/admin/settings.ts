@@ -52,6 +52,19 @@ export const ACTOR_TYPES: readonly string[] = [
 export const ACTOR_HANDLE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
+ * What a language tag may look like: BCP 47's shape rather than its registry —
+ * a two or three letter primary subtag followed by dash-separated subtags of
+ * letters and digits.
+ *
+ * Checking the shape and not the registry is deliberate. The value ends up in
+ * `<html lang>`, an RSS `<language>` and an Atom `xml:lang`, where a
+ * well-formed tag a reader has never heard of is harmless and a malformed one
+ * is not; refusing a valid tag because this CMS shipped before it was
+ * registered would be worse than accepting one nobody uses.
+ */
+export const LANGUAGE_TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,4}$/;
+
+/**
  * The settings the admin owns, doc-1's "data that lives only in SQLite".
  *
  * They are the source of truth once a site has booted once. The public subset
@@ -70,6 +83,12 @@ export interface SiteSettings {
   baseUrl: string;
   /** An IANA zone name, e.g. `Europe/London`. */
   timezone: string;
+  /**
+   * The site's language as a BCP 47 tag, `en` by default. It is the
+   * `<html lang>` the theme writes, the RSS channel's `<language>` and the
+   * Atom feed's `xml:lang`.
+   */
+  language: string;
   /** How many posts a listing page holds. A positive integer. */
   postsPerPage: number;
   /** Site author, used as the feed author. May be empty. */
@@ -117,6 +136,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   tagline: '',
   baseUrl: '',
   timezone: 'UTC',
+  language: 'en',
   postsPerPage: 10,
   author: '',
   actorHandle: 'blog',
@@ -132,6 +152,7 @@ export const SETTINGS_FIELDS = {
   tagline: 'tagline',
   baseUrl: 'base_url',
   timezone: 'timezone',
+  language: 'language',
   postsPerPage: 'posts_per_page',
   author: 'author',
   actorHandle: 'actor_handle',
@@ -156,6 +177,7 @@ export function readSiteSettings(store: AdminStore): SiteSettings {
     tagline: stored['tagline'] ?? DEFAULT_SITE_SETTINGS.tagline,
     baseUrl: stored['baseUrl'] ?? DEFAULT_SITE_SETTINGS.baseUrl,
     timezone: stored['timezone'] ?? DEFAULT_SITE_SETTINGS.timezone,
+    language: stored['language'] ?? DEFAULT_SITE_SETTINGS.language,
     postsPerPage:
       Number.isInteger(postsPerPage) && postsPerPage > 0
         ? postsPerPage
@@ -183,6 +205,7 @@ export function writeSiteSettings(store: AdminStore, settings: SiteSettings): vo
     tagline: settings.tagline,
     baseUrl: settings.baseUrl,
     timezone: settings.timezone,
+    language: settings.language,
     postsPerPage: String(settings.postsPerPage),
     author: settings.author,
     actorHandle: settings.actorHandle,
@@ -207,6 +230,7 @@ export function settingsSiteData(settings: SiteSettings): Partial<SiteData> {
     ...(settings.baseUrl === '' ? {} : { url: settings.baseUrl }),
     ...(settings.author === '' ? {} : { author: settings.author }),
     ...(settings.timezone === '' ? {} : { timezone: settings.timezone }),
+    ...(settings.language === '' ? {} : { language: settings.language }),
     ...(settings.avatar === '' ? {} : { avatar: settings.avatar }),
     postsPerPage: settings.postsPerPage,
     tagBase: settings.tagBase,
@@ -235,6 +259,7 @@ export function siteJsonFor(
     author: settings.author,
     postsPerPage: settings.postsPerPage,
     timezone: settings.timezone,
+    language: settings.language,
     avatar: settings.avatar,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
@@ -305,6 +330,9 @@ export function seedSiteSettings(options: {
     ...(typeof file['timezone'] === 'string' && file['timezone'] !== ''
       ? { timezone: file['timezone'] }
       : {}),
+    ...(typeof file['language'] === 'string' && file['language'] !== ''
+      ? { language: file['language'] }
+      : {}),
     ...(typeof file['avatar'] === 'string' ? { avatar: file['avatar'] } : {}),
     ...(typeof file['tagBase'] === 'string' && file['tagBase'] !== ''
       ? { tagBase: file['tagBase'] }
@@ -362,6 +390,10 @@ export function settingsProblems(form: SettingsForm): SettingsProblems {
     problems.timezone = 'That is not an IANA time zone name, such as Europe/London.';
   }
 
+  if (!LANGUAGE_TAG_PATTERN.test(form.language.trim())) {
+    problems.language = 'That is not a language tag, such as en, en-GB or pt-BR.';
+  }
+
   if (!ACTOR_HANDLE_PATTERN.test(form.actorHandle)) {
     problems.actorHandle =
       'An actor handle is 1 to 64 letters, digits, dashes or underscores, with no @ and no dots.';
@@ -399,6 +431,7 @@ export function settingsFromForm(
     tagline: form.tagline.trim(),
     baseUrl: normalizeBaseUrl(form.baseUrl) ?? '',
     timezone: form.timezone.trim(),
+    language: form.language.trim(),
     postsPerPage: Number(form.postsPerPage),
     author: form.author.trim(),
     actorHandle: form.actorHandle.trim(),
@@ -415,6 +448,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     tagline: settings.tagline,
     baseUrl: settings.baseUrl,
     timezone: settings.timezone,
+    language: settings.language,
     postsPerPage: String(settings.postsPerPage),
     author: settings.author,
     actorHandle: settings.actorHandle,
@@ -459,6 +493,7 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
             ? c.var.config.baseUrl
             : stored.baseUrl,
       timezone: field(body[SETTINGS_FIELDS.timezone]),
+      language: field(body[SETTINGS_FIELDS.language]),
       postsPerPage: field(body[SETTINGS_FIELDS.postsPerPage]),
       author: field(body[SETTINGS_FIELDS.author]),
       actorHandle: field(body[SETTINGS_FIELDS.actorHandle]),

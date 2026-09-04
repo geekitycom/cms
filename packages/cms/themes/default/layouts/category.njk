@@ -2,6 +2,13 @@
 
 {% block title %}Filed under &ldquo;{{ category }}&rdquo;{% if pagination.pageNumber > 0 %}, page {{ pagination.pageNumber + 1 }}{% endif %} &middot; {{ site.title }}{% endblock %}
 
+{% import "partials/feeds.njk" as feeds %}
+{% set categoryRoot = "/" + (site.categoryBase or "category") + "/" + (category | urlencode) + "/" %}
+{% block alternates %}
+{{ super() }}
+{{ feeds.feedLinks(categoryRoot, site.title + ": " + category) }}
+{% endblock %}
+
 {% block content %}
 <h1 class="page-title">Filed under &ldquo;{{ category }}&rdquo;</h1>
 <p class="tag-count">

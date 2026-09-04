@@ -29,6 +29,12 @@ export interface SiteData {
   /** Site author. */
   author?: string | undefined;
   /**
+   * The site's language as a BCP 47 tag, `en` unless the site says otherwise.
+   * It is the `<html lang>`, the RSS channel's `<language>` and the Atom
+   * feed's `xml:lang`.
+   */
+  language?: string | undefined;
+  /**
    * The site's avatar, as the public path it is served at. Empty until one has
    * been uploaded on the settings screen; the ActivityPub actor's `icon`.
    */

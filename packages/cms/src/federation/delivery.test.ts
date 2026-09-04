@@ -683,6 +683,7 @@ describe('the site’s own profile', () => {
       tagline: 'A file-first CMS',
       base_url: BASE_URL,
       timezone: 'UTC',
+      language: 'en',
       posts_per_page: '10',
       author: 'Ada',
       actor_handle: 'blog',

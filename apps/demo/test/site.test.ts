@@ -136,8 +136,14 @@ describe('the demo content', () => {
   });
 
   it('publishes a feed holding the published posts', async () => {
-    const feed = (await (await get('/feed.json')).json()) as { items: { title: string }[] };
+    const feed = (await (await get('/feed/json/')).json()) as { items: { title: string }[] };
     assert.ok(feed.items.length >= 5, `the feed holds only ${String(feed.items.length)} items`);
     assert.ok(!feed.items.some((item) => item.title === 'A draft nobody can see'));
+
+    // The RSS feed at `/feed/` is what a subscriber of a WordPress site holds.
+    const rss = await (await get('/feed/')).text();
+    assert.match(rss, /^<\?xml version="1\.0" encoding="utf-8"\?>\n<rss version="2\.0"/);
+    assert.equal((rss.match(/<item>/g) ?? []).length, feed.items.length);
+    assert.ok(!rss.includes('A draft nobody can see'));
   });
 });
