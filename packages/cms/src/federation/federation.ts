@@ -2,7 +2,17 @@ import { createRequire } from 'node:module';
 
 import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/fedify';
 import type { Federation, FederationOptions, PageItems, RequestContext } from '@fedify/fedify';
-import { Announce, Article, Create, Delete, Follow, Like, Undo } from '@fedify/vocab';
+import {
+  Accept,
+  Announce,
+  Article,
+  Create,
+  Delete,
+  Follow,
+  Like,
+  Reject,
+  Undo,
+} from '@fedify/vocab';
 
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore } from '../admin/store.ts';
@@ -12,7 +22,14 @@ import type { ContentStore } from '../content/store.ts';
 import { siteActor } from './actor.ts';
 import { isFederatedDocument, postArticle, postCreateActivity } from './article.ts';
 import { followersPage, lastFollowersCursor } from './followers.ts';
-import { handleDelete, handleFollow, handleLoggedActivity, handleUndo } from './inbox.ts';
+import {
+  handleAccept,
+  handleDelete,
+  handleFollow,
+  handleLoggedActivity,
+  handleReject,
+  handleUndo,
+} from './inbox.ts';
 import { loadActorKeyPairs, SITE_ACTOR_IDENTIFIER } from './keys.ts';
 import {
   ACTOR_PATH,
@@ -160,7 +177,9 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
         ? lastFollowersCursor(context.data.admin.countFollowers())
         : null,
     );
-  // Always empty, and always will be: doc-4 says the site follows nobody.
+  // Always empty: doc-4 says the site follows nobody, and the one thing it
+  // does follow — a relay (FEP-ae0c) — is a subscription rather than a
+  // relationship anybody reads this collection to learn about.
   federation.setFollowingDispatcher(FOLLOWING_PATH, (_context, identifier) =>
     identifier === SITE_ACTOR_IDENTIFIER ? { items: [] } : null,
   );
@@ -173,6 +192,8 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
   federation
     .setInboxListeners(INBOX_PATH, SHARED_INBOX_PATH)
     .on(Follow, handleFollow)
+    .on(Accept, handleAccept)
+    .on(Reject, handleReject)
     .on(Undo, handleUndo)
     .on(Delete, handleDelete)
     .on(Like, handleLoggedActivity)

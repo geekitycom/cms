@@ -79,6 +79,74 @@
   </section>
 
   <section class="admin-panel">
+    <h2>Relays</h2>
+    {% if relays.length %}
+      <table class="admin-list">
+        <thead>
+          <tr>
+            <th scope="col">Relay</th>
+            <th scope="col">State</th>
+            <th scope="col">Since</th>
+            <th scope="col">Last delivery</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for relay in relays %}
+            <tr>
+              <td>
+                {% if relay.actorId %}
+                  <a href="{{ relay.actorId }}">{{ relay.inboxId }}</a>
+                {% else %}
+                  {{ relay.inboxId }}
+                {% endif %}
+                {% if relay.reason %}
+                  <p class="admin-hint">{{ relay.reason }}</p>
+                {% endif %}
+              </td>
+              <td>
+                {% if relay.state == 'rejected' %}
+                  <span class="admin-status admin-status-failed">{{ relay.stateLabel }}</span>
+                {% else %}
+                  {{ relay.stateLabel }}
+                {% endif %}
+              </td>
+              <td>{{ relay.updatedAt | date('html') }}</td>
+              <td>
+                {% if relay.lastDelivery %}
+                  {{ relay.lastDelivery.activityType }} {{ relay.lastDelivery.status }}
+                  <span class="admin-inbox-when">{{ relay.lastDelivery.attemptedAt | date('html') }}</span>
+                  {% if relay.lastDelivery.error %}
+                    <p class="admin-hint">{{ relay.lastDelivery.error }}</p>
+                  {% endif %}
+                {% else %}
+                  <span class="admin-empty">Nothing yet.</span>
+                {% endif %}
+              </td>
+              <td class="admin-actions">
+                {% if relay.retriable %}
+                  <form method="post" action="{{ relayRetryUrl }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                    <input type="hidden" name="{{ fields.relay }}" value="{{ relay.inboxId }}" />
+                    <button type="submit">Retry</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="admin-hint">
+        A relay boosts every public post it is sent on to instances nobody here
+        follows. The list lives on the Settings screen; Retry sends the follow
+        again to one that is still waiting.
+      </p>
+    {% else %}
+      <p class="admin-empty">The site subscribes to no relay. Add one on the Settings screen.</p>
+    {% endif %}
+  </section>
+
+  <section class="admin-panel">
     <h2>Recent activity</h2>
     {% if inbox.length %}
       <ul class="admin-inbox">

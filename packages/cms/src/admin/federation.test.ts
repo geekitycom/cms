@@ -345,7 +345,7 @@ describe('redelivering a post', () => {
     assert.equal(deliveries[1]?.body['id'], activityId, 'and it was the same activity');
 
     const after = await federationScreen(agent);
-    assert.match(after, /Redelivered Create to 1 follower: 1 sent, 0 failed/);
+    assert.match(after, /Redelivered Create to 1 recipient: 1 sent, 0 failed/);
     assert.match(after, /1 sent/, 'and the row now counts the delivery');
   });
 
@@ -423,3 +423,118 @@ function logReply(cms: Cms): void {
 function png(): Uint8Array {
   return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 }
+
+describe('the relays panel', () => {
+  const RELAY_INBOX = `${REMOTE_ORIGIN}/user/_____relay_____/inbox`;
+  const RELAY_ACTOR = `${REMOTE_ORIGIN}/actor`;
+
+  it('says nothing is subscribed to when the site has no relays', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+
+    const html = await federationScreen(agent);
+
+    assert.match(html, /Relays/);
+    assert.match(html, /The site subscribes to no relay/);
+  });
+
+  it('lists each relay with its state and its last outcome (AC #5)', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    cms.admin.putRelay({
+      inboxId: RELAY_INBOX,
+      actorId: RELAY_ACTOR,
+      state: 'accepted',
+      reason: null,
+      followId: `${BASE_URL}/ap/actor#relay-follow/1`,
+    });
+    cms.admin.putOutboundActivity({
+      activityId: `${BASE_URL}/ap/posts/hello#create`,
+      activityType: 'Create',
+      objectId: `${BASE_URL}/ap/posts/hello`,
+      slug: 'hello',
+      json: '{"type":"Create"}',
+    });
+    cms.admin.recordDelivery({
+      activityId: `${BASE_URL}/ap/posts/hello#create`,
+      actorId: RELAY_ACTOR,
+      inboxId: RELAY_INBOX,
+      status: 'sent',
+      error: null,
+    });
+
+    const html = await federationScreen(agent);
+
+    assert.match(html, new RegExp(RELAY_INBOX.replace(/[/.]/g, '\\$&')));
+    assert.match(html, /Accepted/);
+    assert.match(html, /Create sent/, 'the last thing that went there, and how it went');
+  });
+
+  it('shows why a rejected relay refused (AC #2, AC #5)', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    cms.admin.putRelay({
+      inboxId: RELAY_INBOX,
+      actorId: RELAY_ACTOR,
+      state: 'rejected',
+      reason: 'This relay is invitation only.',
+      followId: `${BASE_URL}/ap/actor#relay-follow/1`,
+    });
+
+    const html = await federationScreen(agent);
+
+    assert.match(html, /Rejected/);
+    assert.match(html, /This relay is invitation only\./);
+  });
+
+  it('offers Retry for a pending relay, which sends the follow again (AC #5)', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    cms.admin.putRelay({
+      inboxId: RELAY_INBOX,
+      actorId: null,
+      state: 'pending',
+      reason: null,
+      followId: `${BASE_URL}/ap/actor#relay-follow/1`,
+    });
+
+    const { html, token } = await federationForm(agent);
+    assert.match(html, /Waiting/);
+    assert.match(html, /Retry/);
+
+    const response = await agent.post('/admin/federation/relays/retry', {
+      csrf_token: token,
+      relay: RELAY_INBOX,
+    });
+    assert.equal(response.status, 303);
+    await cms.relays.settled();
+
+    const follows = deliveries.filter((one) => one.body['type'] === 'Follow');
+    assert.equal(follows.length, 1, `expected one Follow, saw ${JSON.stringify(deliveries)}`);
+    assert.equal(follows[0]?.url, RELAY_INBOX);
+    assert.equal(
+      follows[0]?.body['object'],
+      'https://www.w3.org/ns/activitystreams#Public',
+      'a relay follow names the Public collection',
+    );
+    assert.notEqual(
+      cms.admin.getRelay(RELAY_INBOX)?.followId,
+      `${BASE_URL}/ap/actor#relay-follow/1`,
+      'and the retry is a follow of its own',
+    );
+  });
+
+  it('says so when Retry names a relay the site does not subscribe to', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    const { token } = await federationForm(agent);
+
+    const response = await agent.post('/admin/federation/relays/retry', {
+      csrf_token: token,
+      relay: 'https://nowhere.example/inbox',
+    });
+
+    assert.equal(response.status, 303);
+    assert.match(await federationScreen(agent), /does not subscribe to that relay/);
+  });
+});

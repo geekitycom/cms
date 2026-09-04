@@ -2,11 +2,22 @@ import { randomUUID } from 'node:crypto';
 
 import type { InboxContext } from '@fedify/fedify';
 import { Accept, Follow, getTypeId } from '@fedify/vocab';
-import type { Activity, Actor, Announce, Create, Delete, Like, Link, Undo } from '@fedify/vocab';
+import type {
+  Activity,
+  Actor,
+  Announce,
+  Create,
+  Delete,
+  Like,
+  Link,
+  Reject,
+  Undo,
+} from '@fedify/vocab';
 
 import type { NewFollower } from '../admin/store.ts';
 import type { FederationContextData } from './federation.ts';
 import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
+import { acceptRelay, rejectRelay } from './relays.ts';
 
 /** What an inbox handler is handed: a Fedify context over the CMS's stores. */
 export type SiteInboxContext = InboxContext<FederationContextData>;
@@ -91,6 +102,28 @@ export async function handleDelete(context: SiteInboxContext, activity: Delete):
   if (actor === null || object === null || actor.href !== object.href) return;
 
   context.data.admin.deleteFollower(object.href);
+}
+
+/**
+ * Handle an `Accept`: a relay agreeing to the subscription the site asked for.
+ *
+ * The site follows nothing but relays (doc-4 keeps its `following` collection
+ * empty), so an `Accept` addressed to it is an answer to one of the `Follow`
+ * activities TASK-40 sends — or a stray, which {@link acceptRelay} recognises
+ * as one and leaves alone.
+ */
+export async function handleAccept(context: SiteInboxContext, accept: Accept): Promise<void> {
+  await logActivity(context, accept);
+  acceptRelay(context.data.admin, accept);
+}
+
+/**
+ * Handle a `Reject`: a relay refusing the subscription, with whatever it said
+ * about why, which the federation screen shows beside the relay.
+ */
+export async function handleReject(context: SiteInboxContext, reject: Reject): Promise<void> {
+  await logActivity(context, reject);
+  rejectRelay(context.data.admin, reject);
 }
 
 /**
