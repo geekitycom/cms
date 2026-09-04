@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-04 01:35'
-updated_date: '2026-09-04 01:35'
+updated_date: '2026-09-04 01:37'
 labels:
   - web
   - admin
@@ -29,7 +29,7 @@ ordinal: 40500
 <!-- SECTION:DESCRIPTION:BEGIN -->
 WordPress lets a reader leave a comment on the page; the CMS only has fediverse replies. Add native comments that join the same thread. A comment form under an open post takes name, optional website, optional email (never shown, kept for the moderator), and the comment as Markdown rendered with a restricted profile (no raw HTML, links marked `rel="nofollow ugc"`). Comments are files, per decision-9: one JSON file per post under `content/_data/comments/`, published with the site so an Eleventy build sees them, appended atomically; SQLite indexes them. Each comment carries id, author, content (Markdown and rendered HTML), submitted time, client address hash, status (`pending`, `approved`, `spam`) and `inReplyTo` for threading. New comments are held for moderation unless the same name and email were approved before (WordPress's rule); spam defences are a honeypot field, a minimum time between form load and submit, and a per-address rate limit, with room for a third-party checker later. An admin Comments screen lists pending, approved and spam with approve, spam, delete and reply actions, and the dashboard shows the pending count.
 
-Closing rules: a global setting turns comments on or off for the site; `commentsCloseAfterDays` (default 14, 0 for never) closes the form on posts older than that, counted from `date`; front matter `comments: false` or `comments: true` on a post overrides both ways, exposed as a checkbox in the editor; pages default to closed. A closed post shows the approved thread with no form and refuses submissions. Fediverse replies keep arriving regardless of closing (nothing can stop a remote server sending them) and are shown alongside native comments while the post is open; after closing, new ones are still recorded and shown only in the admin. Native comments appear in the per-post and site-wide comments feeds from TASK-39 and count toward `source:comments`. No email notifications; the admin screen is the notification.
+Closing rules: a global setting turns comments on or off for the site; `commentsCloseAfterDays` (default 14, 0 for never) closes the form on posts older than that, counted from `date`; front matter `comments: false` or `comments: true` on a post overrides both ways, exposed as a checkbox in the editor; pages default to closed. A closed post shows the approved thread with no form and refuses submissions. Closing affects native comments only. Fediverse replies keep arriving regardless (nothing can stop a remote server sending them) and keep being shown in the thread whether the post is open or closed. Native comments appear in the per-post and site-wide comments feeds from TASK-39 and count toward `source:comments`. No email notifications; the admin screen is the notification.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
