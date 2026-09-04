@@ -1,0 +1,95 @@
+{# /admin/tags and /admin/categories: every term in use, what carries it, and
+   the three things that can be done to it — rename, merge and delete. One
+   template for both taxonomies; `kind` says which. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1>{{ heading }}</h1>
+
+  {# Above the table rather than under the field it came from: a refusal may be
+     about a term the table no longer has a row for. #}
+  {% if problems.to %}
+    <p class="admin-error">{{ problems.to }}</p>
+  {% endif %}
+
+  {% if confirm %}
+    <form class="admin-settings" method="post" action="{{ renameUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+      <input type="hidden" name="{{ fields.term }}" value="{{ confirm.term }}" />
+      <input type="hidden" name="{{ fields.to }}" value="{{ confirm.to }}" />
+      <input type="hidden" name="{{ fields.confirm }}" value="1" />
+
+      <h2>Merge “{{ confirm.term }}” into “{{ confirm.to }}”?</h2>
+
+      <p>
+        There is already a {{ label }} called “{{ confirm.to }}”, on
+        {{ confirm.targetFiles }} {% if confirm.targetFiles == 1 %}file{% else %}files{% endif %}.
+        Renaming “{{ confirm.term }}” merges the
+        {{ confirm.files }} {% if confirm.files == 1 %}file{% else %}files{% endif %} carrying it
+        into that one. A file that already carries both keeps it once.
+      </p>
+
+      <p class="admin-settings-buttons">
+        <button type="submit">Merge them</button>
+        <a href="{{ listUrl }}">Cancel</a>
+      </p>
+    </form>
+  {% endif %}
+
+  {% if terms.length == 0 %}
+    <p>Nothing carries a {{ label }} yet.</p>
+  {% else %}
+    <table class="admin-list">
+      <thead>
+        <tr>
+          <th scope="col">{{ kind.singular | capitalize }}</th>
+          <th scope="col">Posts</th>
+          <th scope="col">Files</th>
+          <th scope="col">Rename</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in terms %}
+          <tr>
+            <td><a href="{{ entry.archiveUrl }}">{{ entry.term }}</a></td>
+            <td>{{ entry.published }}</td>
+            <td>{{ entry.total }}</td>
+            <td>
+              <form class="admin-inline" method="post" action="{{ renameUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.term }}" value="{{ entry.term }}" />
+                <label class="admin-visually-hidden" for="rename-{{ loop.index }}">
+                  Rename {{ entry.term }} to
+                </label>
+                <input
+                  id="rename-{{ loop.index }}"
+                  name="{{ fields.to }}"
+                  type="text"
+                  value="{% if form.term == entry.term %}{{ form.to }}{% endif %}"
+                  required
+                />
+                <button type="submit">Rename</button>
+              </form>
+            </td>
+            <td class="admin-actions">
+              <form method="post" action="{{ deleteUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.term }}" value="{{ entry.term }}" />
+                <button type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <p class="admin-hint">
+      Renaming, merging and deleting rewrite the front matter of every file carrying the
+      {{ label }} — drafts, scheduled posts and the trash included — and tell the feeds and the
+      fediverse about each published post that changed. The Files column is how many that is.
+    </p>
+  {% endif %}
+{% endblock %}

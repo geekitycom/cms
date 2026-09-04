@@ -3,8 +3,8 @@ import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { DEFAULT_TAXONOMY_BASES, taxonomyBasesOrDefault } from './taxonomy.ts';
-import type { TaxonomyBases } from './taxonomy.ts';
+import { DEFAULT_TAXONOMY_BASES, taxonomyBasesOrDefault, taxonomyRedirectsOf } from './taxonomy.ts';
+import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 
 /** Where the site-wide data file lives, relative to the content directory. */
 export const SITE_DATA_FILE = '_data/site.json';
@@ -59,6 +59,13 @@ export interface SiteData {
    * database rather than here.
    */
   relays?: readonly string[] | undefined;
+  /**
+   * The taxonomy archives that have moved, as `{ taxonomy, from, to }`: what
+   * lets the URL a renamed archive used to live at point at the one it lives
+   * at now. Written by the taxonomy screens; an Eleventy build of the same
+   * content can publish the same redirects from it.
+   */
+  taxonomyRedirects?: readonly TaxonomyRedirect[] | undefined;
   [key: string]: unknown;
 }
 
@@ -257,6 +264,17 @@ export function postsPerPage(site: SiteData): number {
  */
 export function taxonomyBases(site: SiteData): TaxonomyBases {
   return taxonomyBasesOrDefault({ tag: site['tagBase'], category: site['categoryBase'] });
+}
+
+/**
+ * The archive renames this site records, from the site data.
+ *
+ * Read as tolerantly as everything else out of `site.json`: an entry that is
+ * not a rename is dropped rather than taking the archives down, because a site
+ * may have written the key by hand.
+ */
+export function termRedirects(site: SiteData): TaxonomyRedirect[] {
+  return taxonomyRedirectsOf(site['taxonomyRedirects']);
 }
 
 function toDate(value: string | undefined): Date | undefined {

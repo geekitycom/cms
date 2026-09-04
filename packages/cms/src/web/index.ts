@@ -23,6 +23,7 @@ export {
   postsPerPage,
   SITE_DATA_FILE,
   taxonomyBases,
+  termRedirects,
 } from './context.ts';
 export type {
   CreateSiteDataSourceOptions,
@@ -160,7 +161,10 @@ export type { SitemapResponseOptions, SitemapUrl } from './sitemap.ts';
 export {
   categoryHref,
   DEFAULT_TAXONOMY_BASES,
+  forgetTerm,
   PAGE_SEGMENT,
+  recordTermRename,
+  redirectedTerm,
   RESERVED_TOP_LEVEL_PATHS,
   tagHref,
   TAXONOMIES,
@@ -169,8 +173,15 @@ export {
   taxonomyBaseProblems,
   taxonomyBasesOrDefault,
   taxonomyForSegment,
+  taxonomyRedirectsOf,
   termHref,
 } from './taxonomy.ts';
-export type { Taxonomy, TaxonomyBaseProblems, TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
+export type {
+  Taxonomy,
+  TaxonomyBaseProblems,
+  TaxonomyBases,
+  TaxonomyRedirect,
+  TaxonomyTerm,
+} from './taxonomy.ts';
 export { createTemplateEnvironment, formatDate, PACKAGED_THEME_DIR } from './templates.ts';
 export type { CreateTemplateEnvironmentOptions, DateFormat } from './templates.ts';

@@ -24,6 +24,7 @@ export const ADMIN_TEMPLATES = {
   documentList: 'layouts/document-list.njk',
   documentEditor: 'layouts/document-editor.njk',
   documentConflict: 'layouts/document-conflict.njk',
+  taxonomy: 'layouts/taxonomy.njk',
   settings: 'layouts/settings.njk',
   users: 'layouts/users.njk',
   federation: 'layouts/federation.njk',

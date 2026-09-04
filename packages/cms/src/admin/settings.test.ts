@@ -5,7 +5,7 @@ import { after, before, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
-import { readSiteSettings } from './settings.ts';
+import { readSiteSettings, writeSiteSettings } from './settings.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -133,6 +133,7 @@ describe('content/_data/site.json', () => {
       notifyServer: 'https://rpc.rsscloud.io',
       relays: [],
       navigation: [],
+      taxonomyRedirects: [],
     });
   });
 
@@ -919,5 +920,45 @@ describe('the navigation setting', () => {
 
     const before = await box.site({ contentDir: older });
     assert.deepEqual(readSiteSettings(before.admin).navigation, []);
+  });
+});
+
+describe('the recorded archive renames', () => {
+  it('are seeded from an existing site.json, so a restored site keeps its redirects', async () => {
+    const contentDir = await box.dir('geekity-redirects-seed-');
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({
+        title: 'Old Site',
+        taxonomyRedirects: [
+          { taxonomy: 'tag', from: 'eleventy', to: '11ty' },
+          { taxonomy: 'tag', from: 'bad' },
+        ],
+      }),
+      'utf8',
+    );
+
+    const cms = await box.site({ contentDir });
+
+    assert.deepEqual(readSiteSettings(cms.admin).taxonomyRedirects, [
+      { taxonomy: 'tag', from: 'eleventy', to: '11ty' },
+    ]);
+  });
+
+  it('survive a save of the settings form, which has no field for them', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    writeSiteSettings(cms.admin, {
+      ...readSiteSettings(cms.admin),
+      taxonomyRedirects: [{ taxonomy: 'category', from: 'misc', to: 'general' }],
+    });
+
+    await saveSettings(agent, { title: 'Renamed by the form' });
+
+    assert.deepEqual(readSiteSettings(cms.admin).taxonomyRedirects, [
+      { taxonomy: 'category', from: 'misc', to: 'general' },
+    ]);
   });
 });

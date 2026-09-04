@@ -56,7 +56,7 @@ import {
   SITEMAP_PATH,
 } from './sitemap.ts';
 import type { SitemapUrl } from './sitemap.ts';
-import { PAGE_SEGMENT, taxonomyForSegment, termHref } from './taxonomy.ts';
+import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
 /**
@@ -190,12 +190,30 @@ function taxonomyArchive(
   const request = parseListingPath(pathname, bases);
   if (request?.term === undefined) return undefined;
 
+  // An archive that answers is served; only once nothing carries the term is
+  // the record of renames consulted, so a term that comes back into use — or
+  // one that was merged into and then recreated — beats what it used to be
+  // called. One hop: the list is stored with its chains already collapsed.
+  if (countListing(c.var.store, request.term) === 0) {
+    const moved = movedTerm(c, request.term);
+    if (moved !== undefined) return c.redirect(termHref(moved, request.pageNumber, bases), 301);
+  }
+
   const canonical = termHref(request.term, request.pageNumber, bases);
   if (canonical !== encodePath(pathname)) {
     return countListing(c.var.store, request.term) === 0 ? notFound(c) : c.redirect(canonical, 301);
   }
 
   return listing(c, request);
+}
+
+/**
+ * Where a term with nothing left under it went, or `undefined` when the site
+ * records no such rename.
+ */
+function movedTerm(c: Context<GeekityEnv>, term: TaxonomyTerm): TaxonomyTerm | undefined {
+  const moved = redirectedTerm(c.var.renderer.termRedirects(), term);
+  return moved === undefined ? undefined : { taxonomy: term.taxonomy, term: moved };
 }
 
 /** What a feed URL syndicates. */
@@ -579,7 +597,13 @@ function feed(
   const site = renderer.site();
   const bases = renderer.taxonomyBases();
 
-  if (term !== undefined && countListing(store, term) === 0) return notFound(c);
+  if (term !== undefined && countListing(store, term) === 0) {
+    // A subscriber to a renamed archive's feed follows it to the new one
+    // rather than being dropped, exactly as a reader of the archive does.
+    const moved = movedTerm(c, term);
+    if (moved === undefined) return notFound(c);
+    return c.redirect(feedHref(moved, format, bases), 301);
+  }
 
   const documents = listListing(store, term, { limit: feedSize(site) });
   const href = listingHref(term, 0, bases);

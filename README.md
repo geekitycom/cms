@@ -549,6 +549,28 @@ upload landed at, which is what `content/_data/site.json` mirrors as `avatar`
 and what the ActivityPub actor carries as its `icon`; saving or removing it
 sends an `Update` of the actor to every follower.
 
+## Tags and categories
+
+`/admin/tags` and `/admin/categories` list every term in use with two counts —
+what the public site lists under it, and every file carrying it including
+drafts, scheduled posts and the trash — and a link to its archive. A term can be
+renamed, merged into another, or deleted, and all three are the same rewrite:
+the front matter of every file carrying it is re-read from disk (the files are
+the truth, decision-1), rewritten through the document writer, and announced,
+so the index, the feeds and one `Update(Article)` per affected published post
+all follow. Each action says how many files it wrote.
+
+Renaming onto a term that already exists is offered as a merge rather than done
+quietly, with both counts on the screen; a file that carried both keeps the
+target once, where it already stood. A rename is recorded as a
+`taxonomyRedirects` entry in the settings and in `content/_data/site.json`, so
+the old archive URL and its feed answer `301` at the new one for as long as the
+site keeps the record. Chains are collapsed as they are written, a term that
+comes back into use is served rather than redirected, and deleting a term drops
+every record pointing at it.
+[The package README](packages/cms/README.md#managing-tags-and-categories) has
+the detail.
+
 ## Users
 
 `/admin/users` is who may sign in. There is one role — doc-5 puts anything

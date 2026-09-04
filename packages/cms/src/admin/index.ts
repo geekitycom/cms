@@ -40,6 +40,24 @@ export type {
   MountDocumentScreensOptions,
 } from './documents.ts';
 export {
+  applyTermChange,
+  CATEGORY_KIND,
+  deletePath,
+  mountTaxonomyScreens,
+  renamePath,
+  renameProblem,
+  rewriteTerm,
+  TAG_KIND,
+  TAXONOMY_FIELDS,
+  TAXONOMY_KINDS,
+} from './taxonomy.ts';
+export type {
+  MountTaxonomyScreensOptions,
+  TaxonomyKind,
+  TermRewriteReport,
+  TermRow,
+} from './taxonomy.ts';
+export {
   actorSummary,
   deliveryRows,
   FEDERATION_FIELDS,
@@ -122,6 +140,7 @@ export {
   normalizeRelayInbox,
   relayList,
   siteJsonFor,
+  storeSiteSettings,
   writeSiteJson,
   writeSiteSettings,
 } from './settings.ts';

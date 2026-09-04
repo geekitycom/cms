@@ -13,8 +13,12 @@ import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
 import type { SiteData } from '../web/context.ts';
 import { navigationItemsOf } from '../web/navigation.ts';
 import type { NavigationItem } from '../web/navigation.ts';
-import { DEFAULT_TAXONOMY_BASES, taxonomyBaseProblems } from '../web/taxonomy.ts';
-import type { TaxonomyBases } from '../web/taxonomy.ts';
+import {
+  DEFAULT_TAXONOMY_BASES,
+  taxonomyBaseProblems,
+  taxonomyRedirectsOf,
+} from '../web/taxonomy.ts';
+import type { TaxonomyBases, TaxonomyRedirect } from '../web/taxonomy.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
@@ -147,15 +151,27 @@ export interface SiteSettings {
    * body and because a save of the other fields must not silently drop it.
    */
   avatar: string;
+  /**
+   * The taxonomy archives that have moved: one `{ taxonomy, from, to }` per
+   * term the taxonomy screens renamed or merged away, so the URL it used to
+   * live at can point at the one it lives at now.
+   *
+   * Not a field of the settings form either, and for a stronger reason than
+   * the avatar: it is a record of what happened rather than a preference, and
+   * the taxonomy screens are what write it. Chains are collapsed as they are
+   * recorded, so the list answers every old URL in one hop.
+   */
+  taxonomyRedirects: readonly TaxonomyRedirect[];
 }
 
 /**
  * The settings the form on the settings screen carries.
  *
- * Every setting but the avatar, which is a file rather than a field; see
- * {@link SiteSettings.avatar}.
+ * Every setting but the avatar, which is a file rather than a field, and the
+ * recorded archive renames, which the taxonomy screens write; see
+ * {@link SiteSettings.avatar} and {@link SiteSettings.taxonomyRedirects}.
  */
-export type SettingsField = Exclude<keyof SiteSettings, 'avatar'>;
+export type SettingsField = Exclude<keyof SiteSettings, 'avatar' | 'taxonomyRedirects'>;
 
 /**
  * What a site is worth before anybody has said otherwise.
@@ -179,6 +195,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   notifyServer: DEFAULT_NOTIFY_SERVER,
   relays: [],
   navigation: [],
+  taxonomyRedirects: [],
 };
 
 /** The form field each setting is submitted under. */
@@ -231,6 +248,7 @@ export function readSiteSettings(store: AdminStore): SiteSettings {
     notifyServer: stored['notifyServer'] ?? DEFAULT_SITE_SETTINGS.notifyServer,
     relays: relayList(stored['relays'] ?? ''),
     navigation: navigationList(stored['navigation'] ?? ''),
+    taxonomyRedirects: redirectList(stored['taxonomyRedirects'] ?? ''),
   };
 }
 
@@ -264,6 +282,10 @@ export function writeSiteSettings(store: AdminStore, settings: SiteSettings): vo
     // strings, and a value that reads back through the parser the form went
     // through cannot mean something different in the two places.
     navigation: navigationText(settings.navigation),
+    // One `taxonomy|from|to` line per rename, for the reason the menu is
+    // lines: the settings table holds strings, and a value that reads back
+    // through the parser it was written with cannot mean two things.
+    taxonomyRedirects: redirectText(settings.taxonomyRedirects),
   });
 }
 
@@ -292,6 +314,7 @@ export function settingsSiteData(settings: SiteSettings): Partial<SiteData> {
     notifyServer: settings.notifyServer,
     relays: [...settings.relays],
     navigation: settings.navigation.map((item) => ({ ...item })),
+    taxonomyRedirects: settings.taxonomyRedirects.map((entry) => ({ ...entry })),
   };
 }
 
@@ -323,6 +346,7 @@ export function siteJsonFor(
     notifyServer: settings.notifyServer,
     relays: [...settings.relays],
     navigation: settings.navigation.map((item) => ({ ...item })),
+    taxonomyRedirects: settings.taxonomyRedirects.map((entry) => ({ ...entry })),
   };
 }
 
@@ -416,6 +440,12 @@ export function seedSiteSettings(options: {
     // than stored and mirrored back out.
     ...(Array.isArray(file['navigation'])
       ? { navigation: navigationItemsOf(file['navigation']) }
+      : {}),
+    // The renames a site already published redirects for. They are facts about
+    // its URLs rather than preferences, so a content directory restored on its
+    // own keeps answering the archive URLs it used to.
+    ...(Array.isArray(file['taxonomyRedirects'])
+      ? { taxonomyRedirects: taxonomyRedirectsOf(file['taxonomyRedirects']) }
       : {}),
     ...(Number.isInteger(postsPerPage) && postsPerPage > 0 ? { postsPerPage } : {}),
     // The file's `url` only becomes the setting when the deployment has not
@@ -524,16 +554,19 @@ export function settingsProblems(form: SettingsForm): SettingsProblems {
  * A validated form as settings. Only call it on a form
  * {@link settingsProblems} found nothing wrong with.
  *
- * The avatar is carried in rather than read off the form, because it is not on
- * it: the image is uploaded and removed through {@link AVATAR_PATH}, and a
- * save of the other fields keeps whatever is stored.
+ * The avatar and the recorded archive renames are carried in rather than read
+ * off the form, because neither is on it: the image is uploaded and removed
+ * through {@link AVATAR_PATH}, the renames are written by the taxonomy
+ * screens, and a save of the other fields keeps whatever is stored.
  */
 export function settingsFromForm(
   form: SettingsForm,
   avatar: string = DEFAULT_SITE_SETTINGS.avatar,
+  taxonomyRedirects: readonly TaxonomyRedirect[] = DEFAULT_SITE_SETTINGS.taxonomyRedirects,
 ): SiteSettings {
   return {
     avatar,
+    taxonomyRedirects,
     title: form.title.trim(),
     tagline: form.tagline.trim(),
     baseUrl: normalizeBaseUrl(form.baseUrl) ?? '',
@@ -628,7 +661,7 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       });
     }
 
-    const settings = settingsFromForm(submitted, stored.avatar);
+    const settings = settingsFromForm(submitted, stored.avatar, stored.taxonomyRedirects);
     await store(c, settings);
 
     // The name, the summary and the handle are the actor's profile as much as
@@ -694,9 +727,58 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
    * file.
    */
   async function store(c: Context<GeekityEnv>, settings: SiteSettings): Promise<void> {
-    writeSiteSettings(c.var.admin, settings);
-    await writeSiteJson({ contentDir: c.var.config.contentDir, settings });
+    await storeSiteSettings({
+      admin: c.var.admin,
+      contentDir: c.var.config.contentDir,
+      settings,
+    });
   }
+}
+
+/**
+ * Write settings to SQLite and then to `content/_data/site.json`, in that
+ * order, so the store — which is what the theme reads — is never behind the
+ * file.
+ *
+ * Exported because the settings screen is no longer the only thing that writes
+ * a setting: the taxonomy screens record a renamed archive, and the two have
+ * to write it the same way or the file and the database would drift.
+ */
+export async function storeSiteSettings(options: {
+  admin: AdminStore;
+  contentDir: string;
+  settings: SiteSettings;
+}): Promise<void> {
+  writeSiteSettings(options.admin, options.settings);
+  await writeSiteJson({ contentDir: options.contentDir, settings: options.settings });
+}
+
+/**
+ * A stored `taxonomy|from|to` block as the renames it names.
+ *
+ * The same tolerance the rest of this file reads its lists with: a line that
+ * is not three non-empty parts naming a real taxonomy is dropped rather than
+ * failing the read.
+ */
+function redirectList(value: string): TaxonomyRedirect[] {
+  const entries: Record<string, unknown>[] = [];
+  for (const line of value.split('\n')) {
+    const parts = line.split('|');
+    if (parts.length !== 3) continue;
+    entries.push({
+      taxonomy: (parts[0] ?? '').trim(),
+      from: (parts[1] ?? '').trim(),
+      to: (parts[2] ?? '').trim(),
+    });
+  }
+  // Through the same reader `site.json` goes through, so the two spellings of
+  // the list cannot mean different things.
+  return taxonomyRedirectsOf(entries);
+}
+
+/** The renames as the settings table holds them, one per line. */
+function redirectText(redirects: readonly TaxonomyRedirect[]): string {
+  return redirects.map((entry) => `${entry.taxonomy}|${entry.from}|${entry.to}`).join('\n');
 }
 
 /**
