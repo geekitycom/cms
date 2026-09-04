@@ -1160,3 +1160,423 @@ describe('the HTML pages', () => {
     assert.ok(html.includes('href="/blog/feed/json/"'), 'the JSON link carries the base path');
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Comments: the replies the inbox logged, as feeds.                          */
+/* -------------------------------------------------------------------------- */
+
+/** What a reply looks like when the inbox has finished with it. */
+interface ReplyOptions {
+  /** The post's ActivityStreams object id, which the note answers. */
+  inReplyTo: string;
+  /** The note's own id, and the activity's by extension. */
+  id?: string;
+  /** Who wrote it. */
+  actor?: string;
+  /** The note's content, as the remote server rendered it. */
+  content?: string;
+  /** When the note says it was published. */
+  published?: string;
+  /** Where the note can be read on its own server. */
+  url?: string;
+}
+
+/**
+ * Log one reply the way the inbox logs one: a compacted `Create` of a `Note`.
+ *
+ * The bytes are the shape Fedify writes — checked against a round trip through
+ * `Create#toJsonLd({ format: 'compact' })` — so the feeds are read out of what
+ * a real delivery leaves behind rather than out of a shape invented here.
+ */
+function reply(cms: Cms, options: ReplyOptions): void {
+  const id = options.id ?? 'https://remote.example/notes/1';
+  const actor = options.actor ?? 'https://remote.example/users/ada';
+  const object: Record<string, unknown> = {
+    id,
+    type: 'Note',
+    attributedTo: actor,
+    content: options.content ?? '<p>Good post.</p>',
+    inReplyTo: options.inReplyTo,
+    ...(options.published === undefined ? {} : { published: options.published }),
+    ...(options.url === undefined ? {} : { url: options.url }),
+  };
+
+  cms.admin.logInboxActivity({
+    activityId: `${id}/activity`,
+    activityType: 'Create',
+    actorId: actor,
+    objectId: id,
+    json: JSON.stringify({
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      id: `${id}/activity`,
+      type: 'Create',
+      actor,
+      object,
+    }),
+  });
+}
+
+describe('a post’s comments feed', () => {
+  const files = {
+    '_data/site.json': JSON.stringify({ title: 'Geekity Demo', tagline: 'A file-first site' }),
+    'posts/2026-09-02-hello.md': post('Hello, World!', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/2026/09/hello/',
+    }),
+  };
+
+  const HELLO = 'https://example.com/ap/posts/hello';
+
+  it('serves the replies the inbox logged, newest first', async () => {
+    const { cms } = await site(files);
+    reply(cms, {
+      inReplyTo: HELLO,
+      id: 'https://remote.example/notes/1',
+      content: '<p>Good post.</p>',
+      published: '2026-09-02T10:00:00Z',
+      url: 'https://remote.example/@ada/1',
+    });
+    reply(cms, {
+      inReplyTo: HELLO,
+      id: 'https://remote.example/notes/2',
+      actor: 'https://remote.example/users/bob',
+      content: '<p>Agreed.</p>',
+      published: '2026-09-02T11:00:00Z',
+    });
+
+    const { response, channel } = await rss(cms, '/2026/09/hello/feed/');
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'application/rss+xml; charset=utf-8');
+    assert.equal(child(channel, 'title').text, 'Comments on: Hello, World!');
+    assert.equal(child(channel, 'link').text, 'https://example.com/2026/09/hello/');
+    assert.equal(child(channel, 'description').text, 'A file-first site');
+    assert.equal(
+      child(channel, 'atom:link').attributes['href'],
+      'https://example.com/2026/09/hello/feed/',
+    );
+
+    const items = childrenNamed(channel, 'item');
+    assert.equal(items.length, 2);
+    const [newest, oldest] = items as [XmlElement, XmlElement];
+
+    // Newest first, and the name comes from the actor's URL when nothing else
+    // is known about them.
+    assert.equal(child(newest, 'title').text, '@bob@remote.example');
+    assert.equal(child(newest, 'dc:creator').text, '@bob@remote.example');
+    // No `url` on the note, so the note's own id is where it can be read.
+    assert.equal(child(newest, 'link').text, 'https://remote.example/notes/2');
+    assert.equal(child(newest, 'guid').text, 'https://remote.example/notes/2');
+    assert.equal(child(newest, 'guid').attributes['isPermaLink'], 'false');
+    assert.equal(child(newest, 'pubDate').text, 'Wed, 02 Sep 2026 11:00:00 GMT');
+
+    assert.equal(child(oldest, 'title').text, '@ada@remote.example');
+    assert.equal(child(oldest, 'link').text, 'https://remote.example/@ada/1');
+    assert.equal(child(oldest, 'description').text, 'Good post.');
+    assert.equal(child(oldest, 'content:encoded').text, '<p>Good post.</p>');
+  });
+
+  it('answers empty rather than 404 when nobody has replied', async () => {
+    const { cms } = await site(files);
+
+    const { response, channel } = await rss(cms, '/2026/09/hello/feed/');
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(childrenNamed(channel, 'item'), []);
+  });
+
+  it('is a 404 for a URL that is no published post', async () => {
+    const { cms } = await site({
+      ...files,
+      'posts/2026-09-01-draft.md': post('Draft', {
+        date: '2026-09-01T09:00:00Z',
+        permalink: '/2026/09/draft/',
+        draft: true,
+      }),
+      'pages/about.md': `---\ntitle: About\npermalink: /about/\n---\n\nA page.\n`,
+    });
+
+    for (const url of ['/2026/09/nothing/feed/', '/2026/09/draft/feed/', '/about/feed/']) {
+      assert.equal((await cms.app.request(url)).status, 404, url);
+    }
+  });
+
+  it('names the reply’s author by the follower it knows, when it knows one', async () => {
+    const { cms } = await site(files);
+    cms.admin.putFollower({
+      actorId: 'https://remote.example/users/ada',
+      inboxId: 'https://remote.example/users/ada/inbox',
+      sharedInboxId: null,
+      handle: '@ada@remote.example',
+      name: 'Ada Lovelace',
+      iconUrl: null,
+      url: null,
+    });
+    reply(cms, { inReplyTo: HELLO });
+
+    const { channel } = await rss(cms, '/2026/09/hello/feed/');
+
+    assert.equal(child(child(channel, 'item'), 'title').text, 'Ada Lovelace');
+  });
+
+  it('sanitises the note before it goes anywhere near a reader', async () => {
+    const { cms } = await site(files);
+    reply(cms, {
+      inReplyTo: HELLO,
+      content:
+        '<p onclick="steal()">Careful</p><script>alert(1)</script>' +
+        '<p><a href="javascript:alert(2)">no</a> <a href="https://ok.test">yes</a></p>',
+    });
+
+    const { channel } = await rss(cms, '/2026/09/hello/feed/');
+    const encoded = child(child(channel, 'item'), 'content:encoded').text;
+
+    assert.equal(
+      encoded,
+      '<p>Careful</p><p>no <a href="https://ok.test" rel="nofollow noopener noreferrer">yes</a></p>',
+    );
+  });
+});
+
+describe('the site-wide comments feed', () => {
+  const files = {
+    '_data/site.json': JSON.stringify({ title: 'Geekity Demo', tagline: 'A file-first site' }),
+    'posts/2026-09-02-hello.md': post('Hello, World!', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/2026/09/hello/',
+    }),
+    'posts/2026-09-01-second.md': post('Second Post', {
+      date: '2026-09-01T09:00:00Z',
+      permalink: '/2026/09/second/',
+    }),
+  };
+
+  const HELLO = 'https://example.com/ap/posts/hello';
+  const SECOND = 'https://example.com/ap/posts/second';
+
+  it('lists the replies to every post, newest first, each naming its post', async () => {
+    const { cms } = await site(files);
+    reply(cms, {
+      inReplyTo: HELLO,
+      id: 'https://remote.example/notes/1',
+      published: '2026-09-02T10:00:00Z',
+    });
+    reply(cms, {
+      inReplyTo: SECOND,
+      id: 'https://remote.example/notes/2',
+      actor: 'https://remote.example/users/bob',
+      content: '<p>On the other one.</p>',
+      published: '2026-09-02T12:00:00Z',
+    });
+
+    const { response, channel } = await rss(cms, '/comments/feed/');
+
+    assert.equal(response.status, 200);
+    assert.equal(child(channel, 'title').text, 'Geekity Demo: comments');
+    assert.equal(child(channel, 'link').text, 'https://example.com/');
+    assert.equal(
+      child(channel, 'atom:link').attributes['href'],
+      'https://example.com/comments/feed/',
+    );
+
+    assert.deepEqual(
+      childrenNamed(channel, 'item').map((item) => child(item, 'title').text),
+      ['@bob@remote.example on Second Post', '@ada@remote.example on Hello, World!'],
+    );
+  });
+
+  it('forgets a reply once its post is a draft or in the trash', async () => {
+    const { cms } = await site({
+      ...files,
+      'posts/2026-08-30-hidden.md': post('Hidden', {
+        date: '2026-08-30T09:00:00Z',
+        permalink: '/2026/08/hidden/',
+        draft: true,
+      }),
+      '_trash/posts/2026-08-29-gone.md': post('Thrown Away', {
+        date: '2026-08-29T09:00:00Z',
+        permalink: '/2026/08/gone/',
+      }),
+    });
+    reply(cms, { inReplyTo: HELLO, id: 'https://remote.example/notes/1' });
+    reply(cms, {
+      inReplyTo: 'https://example.com/ap/posts/hidden',
+      id: 'https://remote.example/notes/2',
+    });
+    reply(cms, {
+      inReplyTo: 'https://example.com/ap/posts/gone',
+      id: 'https://remote.example/notes/3',
+    });
+
+    const { channel } = await rss(cms, '/comments/feed/');
+
+    assert.deepEqual(
+      childrenNamed(channel, 'item').map((item) => child(item, 'guid').text),
+      ['https://remote.example/notes/1'],
+    );
+    assert.equal((await cms.app.request('/2026/08/hidden/feed/')).status, 404);
+    assert.equal((await cms.app.request('/2026/08/gone/feed/')).status, 404);
+  });
+
+  it('ignores a reply to something this site never published', async () => {
+    const { cms } = await site(files);
+    reply(cms, { inReplyTo: 'https://elsewhere.example/ap/posts/hello' });
+    reply(cms, { inReplyTo: 'https://example.com/ap/posts/never', id: 'https://x.test/notes/2' });
+
+    const { channel } = await rss(cms, '/comments/feed/');
+
+    assert.deepEqual(childrenNamed(channel, 'item'), []);
+  });
+
+  it('honours feedSize on both comments feeds', async () => {
+    const { cms } = await site({
+      ...files,
+      '_data/site.json': JSON.stringify({ title: 'Geekity Demo', feedSize: 2 }),
+    });
+    for (const index of [1, 2, 3, 4]) {
+      reply(cms, {
+        inReplyTo: HELLO,
+        id: `https://remote.example/notes/${String(index)}`,
+        published: `2026-09-0${String(index)}T10:00:00Z`,
+      });
+    }
+
+    assert.equal(childrenNamed((await rss(cms, '/comments/feed/')).channel, 'item').length, 2);
+    assert.equal(childrenNamed((await rss(cms, '/2026/09/hello/feed/')).channel, 'item').length, 2);
+  });
+
+  it('redirects the unslashed and the WordPress spellings in one hop', async () => {
+    const { cms } = await site(files);
+
+    for (const [from, to] of [
+      ['/comments/feed', '/comments/feed/'],
+      ['/comments/feed/rss/', '/comments/feed/'],
+      ['/comments/feed/rss', '/comments/feed/'],
+      ['/2026/09/hello/feed', '/2026/09/hello/feed/'],
+      ['/2026/09/hello/feed/rss/', '/2026/09/hello/feed/'],
+      ['/2026/09/hello/?feed=rss2', '/2026/09/hello/feed/'],
+    ] as const) {
+      const response = await cms.app.request(from);
+      assert.equal(response.status, 301, from);
+      assert.equal(response.headers.get('location'), to, from);
+    }
+  });
+
+  it('has no Atom or JSON spelling, at either root', async () => {
+    const { cms } = await site(files);
+
+    for (const url of [
+      '/comments/feed/atom/',
+      '/comments/feed/json/',
+      '/comments/',
+      '/2026/09/hello/feed/atom/',
+      '/2026/09/hello/feed/json/',
+    ]) {
+      assert.equal((await cms.app.request(url)).status, 404, url);
+    }
+  });
+});
+
+describe('the comment pointers on a post feed', () => {
+  const files = {
+    '_data/site.json': JSON.stringify({ title: 'Geekity Demo' }),
+    'posts/2026-09-02-hello.md': post('Hello, World!', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/2026/09/hello/',
+      tags: ['releases'],
+    }),
+    'posts/2026-09-01-quiet.md': post('Quiet', {
+      date: '2026-09-01T09:00:00Z',
+      permalink: '/2026/09/quiet/',
+      tags: ['releases'],
+    }),
+  };
+
+  const HELLO = 'https://example.com/ap/posts/hello';
+
+  it('points every item at its own comments, counted', async () => {
+    const { cms } = await site(files);
+    reply(cms, { inReplyTo: HELLO, id: 'https://remote.example/notes/1' });
+    reply(cms, { inReplyTo: HELLO, id: 'https://remote.example/notes/2' });
+
+    const { rss: document, channel } = await rss(cms, '/feed/');
+
+    assert.equal(document.attributes['xmlns:wfw'], 'http://wellformedweb.org/CommentAPI/');
+
+    const [hello, quiet] = childrenNamed(channel, 'item') as [XmlElement, XmlElement];
+
+    // WordPress's two, for a reader that already understands its feeds.
+    assert.equal(child(hello, 'comments').text, 'https://example.com/2026/09/hello/#comments');
+    assert.equal(child(hello, 'wfw:commentRss').text, 'https://example.com/2026/09/hello/feed/');
+
+    // And Dave Winer's, which carries the count as well as the URL.
+    const pointer = child(hello, 'source:comments');
+    assert.equal(pointer.attributes['count'], '2');
+    assert.equal(pointer.attributes['feedUrl'], 'https://example.com/2026/09/hello/feed/');
+
+    // A post nobody answered still says where its comments would be.
+    assert.equal(child(quiet, 'source:comments').attributes['count'], '0');
+    assert.equal(
+      child(quiet, 'source:comments').attributes['feedUrl'],
+      'https://example.com/2026/09/quiet/feed/',
+    );
+  });
+
+  it('counts them on an archive feed too', async () => {
+    const { cms } = await site(files);
+    reply(cms, { inReplyTo: HELLO });
+
+    const { channel } = await rss(cms, '/tag/releases/feed/');
+
+    assert.equal(
+      child(childrenNamed(channel, 'item')[0] as XmlElement, 'source:comments').attributes['count'],
+      '1',
+    );
+  });
+
+  it('changes the feed’s ETag when a reply arrives', async () => {
+    const { cms } = await site(files);
+    const before = (await cms.app.request('/feed/')).headers.get('etag');
+
+    reply(cms, { inReplyTo: HELLO });
+
+    const after = (await cms.app.request('/feed/')).headers.get('etag');
+    assert.notEqual(after, before, 'a new comment count is a new feed');
+  });
+});
+
+describe('the comments feeds on an HTML page', () => {
+  const files = {
+    '_data/site.json': JSON.stringify({ title: 'Geekity Demo' }),
+    'posts/2026-09-02-hello.md': post('Hello, World!', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/2026/09/hello/',
+    }),
+    'pages/about.md': `---\ntitle: About\npermalink: /about/\n---\n\nA page.\n`,
+  };
+
+  it('advertises the site’s comments feed everywhere', async () => {
+    const { cms } = await site(files);
+
+    for (const url of ['/', '/2026/09/hello/', '/about/']) {
+      const head = (await (await cms.app.request(url)).text()).split('</head>')[0] ?? '';
+      assert.ok(head.includes('href="/comments/feed/"'), `${url} advertises the comments feed`);
+    }
+  });
+
+  it('advertises a post’s own comments feed, and only a post’s', async () => {
+    const { cms } = await site(files);
+
+    const post =
+      (await (await cms.app.request('/2026/09/hello/')).text()).split('</head>')[0] ?? '';
+    assert.ok(
+      post.includes(
+        '<link rel="alternate" type="application/rss+xml" title="Comments on: Hello, World!" href="/2026/09/hello/feed/">',
+      ),
+      post,
+    );
+
+    const page = (await (await cms.app.request('/about/')).text()).split('</head>')[0] ?? '';
+    assert.ok(!page.includes('/about/feed/'), 'a page has no comments feed to advertise');
+  });
+});

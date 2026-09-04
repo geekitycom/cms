@@ -8,6 +8,17 @@
   Import it with `{% import "partials/feeds.njk" as feeds %}`; the arguments
   carry everything, so it needs no context.
 #}
+{#
+  The `rel="alternate"` link for one comments feed.
+
+  `feed` is the feed's own URL — `/comments/feed/`, or a post's — because a
+  comments feed is RSS 2.0 and nothing else, so there is no set of three to
+  build from a root.
+#}
+{% macro commentsFeedLink(feed, title) %}
+    <link rel="alternate" type="application/rss+xml" title="{{ title }}" href="{{ feed | url }}">
+{%- endmacro %}
+
 {% macro feedLinks(root, title) %}
     <link rel="alternate" type="application/rss+xml" title="{{ title }}" href="{{ (root + "feed/") | url }}">
     <link rel="alternate" type="application/atom+xml" title="{{ title }}" href="{{ (root + "feed/atom/") | url }}">

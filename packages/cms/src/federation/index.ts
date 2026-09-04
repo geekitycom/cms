@@ -63,3 +63,5 @@ export {
   SHARED_INBOX_PATH,
   updateActivityId,
 } from './paths.ts';
+export { actorHandle, replyFrom, replyTargetOf, REPLY_ACTIVITY_TYPE } from './replies.ts';
+export type { Reply } from './replies.ts';

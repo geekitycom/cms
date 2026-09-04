@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 00:18'
+updated_date: '2026-09-04 03:13'
 ---
 # ActivityPub Federation
 
@@ -50,7 +50,7 @@ Handled in phase one:
 - `Undo(Follow)`: remove follower.
 - `Delete` of an actor: remove follower.
 
-Logged but not acted on: `Like`, `Announce`, `Create(Note)` replies. These are stored in an `ap_inbox` table so a later phase can surface likes, boosts, and comments.
+Logged but not acted on: `Like`, `Announce`, `Create(Note)` replies. These are stored in an `ap_inbox` table so a later phase can surface likes, boosts, and comments. A `Create` that named an `inReplyTo` is also indexed by it, in an `in_reply_to` column derived from the stored activity rather than supplied — that index is what the comments feeds (doc-3) read, and deriving it is what keeps it correct when the database is rebuilt from the log files.
 
 ## Collections
 

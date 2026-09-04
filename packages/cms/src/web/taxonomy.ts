@@ -59,14 +59,16 @@ export const TAXONOMY_BASE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 /**
  * Top-level paths the site already answers on, which a base may not take over.
  *
- * `feed` is here before anything serves it: TASK-37 puts the feeds at `/feed/`,
+ * `feed` was here before anything served it: TASK-37 put the feeds at `/feed/`,
  * and a site that had taken the word would find its archives shadowed by an
- * upgrade. `taxonomy.test.ts` pins this list against the prefixes those routes
+ * upgrade. `comments` is the site-wide comments feed's root, for the same
+ * reason. `taxonomy.test.ts` pins this list against the prefixes those routes
  * are actually registered under, so it cannot fall behind them.
  */
 export const RESERVED_TOP_LEVEL_PATHS: readonly string[] = [
   PAGE_SEGMENT,
   'feed',
+  'comments',
   'admin',
   'ap',
   'theme',

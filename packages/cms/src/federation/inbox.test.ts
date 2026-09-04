@@ -408,6 +408,30 @@ describe('the inbound activity log', () => {
     assert.equal(logged.actorId, REMOTE_ACTOR);
     assert.equal(logged.objectId, `${REMOTE_ORIGIN}/notes/1`);
     assert.match(logged.json, /Good post\./);
+
+    // And it is indexed as a reply to that post, which is what makes the
+    // comments feeds possible without reading every activity ever received.
+    assert.equal(logged.inReplyTo, `${BASE_URL}/ap/posts/hello`);
+    assert.equal(instance.admin.countRepliesTo(`${BASE_URL}/ap/posts/hello`), 1);
+    assert.deepEqual(
+      instance.admin.listReplies().map((entry) => entry.objectId),
+      [`${REMOTE_ORIGIN}/notes/1`],
+    );
+  });
+
+  it('indexes a Like as no reply at all', async () => {
+    const instance = await site();
+
+    await deliver(
+      instance,
+      new Like({
+        id: new URL(`${REMOTE_ORIGIN}/likes/3`),
+        actor: new URL(REMOTE_ACTOR),
+        object: new URL(`${BASE_URL}/ap/posts/hello`),
+      }),
+    );
+
+    assert.equal(instance.admin.countReplies(), 0);
   });
 
   it('acts on none of them: a Like is not a follow and gets no reply', async () => {

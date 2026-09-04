@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import { ADMIN_PREFIX } from '../admin/session.ts';
 import { FEDERATION_PREFIX } from '../federation/paths.ts';
 import { THEME_ASSET_PREFIX, UPLOAD_ASSET_PREFIX } from './assets.ts';
+import { COMMENTS_ROOT } from './feeds.ts';
 import {
   DEFAULT_TAXONOMY_BASES,
   PAGE_SEGMENT,
@@ -88,6 +89,7 @@ describe('the reserved list', () => {
       FEDERATION_PREFIX,
       THEME_ASSET_PREFIX,
       UPLOAD_ASSET_PREFIX,
+      COMMENTS_ROOT,
     ].map((prefix) => prefix.replaceAll('/', ''));
 
     for (const segment of registered) {

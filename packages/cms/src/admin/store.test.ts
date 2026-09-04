@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { DuplicateUsernameError, openAdminStore } from './store.ts';
@@ -549,6 +550,137 @@ describe('the inbound activity log', () => {
       admin.listInboxActivities({ limit: 1, offset: 2 }).map((entry) => entry.activityId),
       ['https://remote.example/likes/0'],
     );
+  });
+});
+
+describe('the reply index', () => {
+  const POST = 'https://blog.example/ap/posts/hello';
+
+  /** A `Create` of a `Note` replying to a post, as the inbox compacts one. */
+  function reply(
+    overrides: Partial<NewInboxActivity> = {},
+    note: Record<string, unknown> = {},
+  ): NewInboxActivity {
+    return {
+      activityId: 'https://remote.example/creates/1',
+      activityType: 'Create',
+      actorId: 'https://remote.example/users/ada',
+      objectId: 'https://remote.example/notes/1',
+      json: JSON.stringify({
+        id: 'https://remote.example/creates/1',
+        type: 'Create',
+        actor: 'https://remote.example/users/ada',
+        object: {
+          id: 'https://remote.example/notes/1',
+          type: 'Note',
+          content: '<p>Good post.</p>',
+          inReplyTo: POST,
+          ...note,
+        },
+      }),
+      ...overrides,
+    };
+  }
+
+  it('derives what a reply replies to from the activity it stored', async () => {
+    const admin = await store();
+
+    const logged = admin.logInboxActivity(reply());
+
+    assert.equal(logged.inReplyTo, POST);
+    assert.equal(admin.countRepliesTo(POST), 1);
+    assert.deepEqual(admin.listRepliesTo(POST), [logged]);
+  });
+
+  it('reads an inReplyTo that arrived as a list, which JSON-LD allows', async () => {
+    const admin = await store();
+
+    const logged = admin.logInboxActivity(reply({}, { inReplyTo: [POST] }));
+
+    assert.equal(logged.inReplyTo, POST);
+  });
+
+  it('counts a like or a boost as no reply at all', async () => {
+    const admin = await store();
+
+    const like = admin.logInboxActivity({
+      activityId: 'https://remote.example/likes/1',
+      activityType: 'Like',
+      actorId: 'https://remote.example/users/ada',
+      objectId: POST,
+      json: JSON.stringify({ type: 'Like', object: POST }),
+    });
+
+    assert.equal(like.inReplyTo, null);
+    assert.equal(admin.countRepliesTo(POST), 0);
+    assert.equal(admin.countReplies(), 0);
+  });
+
+  it('keeps a top-level note out of the index: it answers nothing', async () => {
+    const admin = await store();
+
+    const logged = admin.logInboxActivity(reply({}, { inReplyTo: undefined }));
+
+    assert.equal(logged.inReplyTo, null);
+    assert.equal(admin.countReplies(), 0);
+  });
+
+  it('lists every reply newest first, and one post’s on its own', async () => {
+    const admin = await store();
+    const elsewhere = 'https://blog.example/ap/posts/other';
+    for (const [index, target] of [POST, elsewhere, POST].entries()) {
+      admin.logInboxActivity(
+        reply(
+          {
+            activityId: `https://remote.example/creates/${String(index)}`,
+            objectId: `https://remote.example/notes/${String(index)}`,
+          },
+          { inReplyTo: target },
+        ),
+      );
+    }
+
+    assert.equal(admin.countReplies(), 3);
+    assert.deepEqual(
+      admin.listReplies().map((entry) => entry.activityId),
+      [
+        'https://remote.example/creates/2',
+        'https://remote.example/creates/1',
+        'https://remote.example/creates/0',
+      ],
+    );
+    assert.deepEqual(
+      admin.listRepliesTo(POST).map((entry) => entry.activityId),
+      ['https://remote.example/creates/2', 'https://remote.example/creates/0'],
+    );
+    assert.deepEqual(
+      admin.listReplies({ limit: 1, offset: 1 }).map((entry) => entry.activityId),
+      ['https://remote.example/creates/1'],
+    );
+    assert.equal(admin.countRepliesTo(POST), 2);
+  });
+
+  it('backfills the index for activities logged before the column existed', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'geekity-admin-'));
+    temporaryDirs.push(dir);
+
+    const before = openAdminStore({ dataDir: dir });
+    before.logInboxActivity(reply());
+    before.close();
+
+    // Put the database back the way version 7 left it: the column gone, and
+    // the migration unrecorded, so opening it again has to fill the column
+    // from the activity that was stored without it.
+    const raw = new DatabaseSync(path.join(dir, 'geekity.db'));
+    raw.exec('DROP INDEX ap_inbox_in_reply_to');
+    raw.exec('ALTER TABLE ap_inbox DROP COLUMN in_reply_to');
+    raw.exec('DELETE FROM admin_migrations WHERE version = 8');
+    raw.close();
+
+    const after = openAdminStore({ dataDir: dir });
+    openStores.push(after);
+    assert.equal(after.listInboxActivities()[0]?.inReplyTo, POST);
+    assert.equal(after.countRepliesTo(POST), 1);
   });
 });
 

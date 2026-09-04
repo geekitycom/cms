@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 02:43'
+updated_date: '2026-09-04 03:12'
 ---
 # Content Negotiation
 
@@ -47,10 +47,20 @@ Feeds are routes, not representations, because feed readers do not send useful `
 | `/feed/atom/` | Atom 1.0 (`application/atom+xml`) |
 | `/feed/json/` | JSON Feed 1.1 (`application/feed+json`) |
 | `/{tagBase}/{tag}/feed/`, `/{categoryBase}/{name}/feed/` | The same three over one archive |
+| `/comments/feed/` | Every reply the inbox has been sent, as RSS 2.0 |
+| `{permalink}feed/` | One post's replies, the same way |
 
 `/feed/` is RSS because that is the format nearly every existing subscriber holds. The site's three are registered routes; the per-archive ones are resolved in the not-found handler, because the two bases are a setting and a route table is fixed when the app is built.
 
-WordPress's older spellings redirect 301 rather than 404: `/feed/rss/` to `/feed/`, and `?feed=rss2`, `?feed=rss`, `?feed=atom` and `?feed=json` on any listing to that listing's feed. A feed URL without its trailing slash redirects to the canonical one in a single hop, exactly as any other listing URL does.
+WordPress's older spellings redirect 301 rather than 404: `/feed/rss/` at any of those roots to that root's RSS feed, `?feed=rss2`, `?feed=rss`, `?feed=atom` and `?feed=json` on any listing to that listing's feed, and `?feed=rss2` or `?feed=rss` on a post's permalink to that post's comments feed. A feed URL without its trailing slash redirects to the canonical one in a single hop, exactly as any other listing URL does.
+
+## Comments
+
+The two comments feeds carry the fediverse replies the inbox has logged: a `Create` of a `Note` whose `inReplyTo` names a post's ActivityStreams object id. They are RSS 2.0 and nothing else — `{permalink}feed/atom/` 404s — because a comments feed is what WordPress served in that one format and nothing subscribes to it in another.
+
+A published post always has one, empty when nobody has answered: it exists, and a reader that subscribed early should keep polling. A permalink that is no published post 404s, and so does a page's, because only posts federate. A reply whose post is later unpublished or trashed leaves `/comments/feed/` with it.
+
+Each RSS post item points at its own comments three ways: `<comments>` (the page), `<wfw:commentRss>` (the feed) and `<source:comments count feedUrl>` (the feed and how many). The reply HTML is sanitised against an allowlist before it is published: it is markup a stranger wrote.
 
 ## Caching
 

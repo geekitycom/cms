@@ -22,6 +22,10 @@
     <link rel="stylesheet" href="{{ "/theme/style.css" | url }}">
     {% block alternates %}
     {{ feeds.feedLinks("/", site.title) }}
+    {{ feeds.commentsFeedLink("/comments/feed/", site.title + " comments") }}
+    {% if commentsFeed %}
+    {{ feeds.commentsFeedLink(commentsFeed, "Comments on: " + title) }}
+    {% endif %}
     {% if activityStreams %}
     <link rel="alternate" type="application/activity+json" href="{{ activityStreams }}">
     {% endif %}

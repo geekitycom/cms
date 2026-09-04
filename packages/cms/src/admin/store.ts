@@ -4,7 +4,15 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { DATABASE_FILE } from '../content/store.ts';
+import { REPLY_ACTIVITY_TYPE, replyTargetOf } from '../federation/replies.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
+
+/**
+ * Which rows of the inbox log are replies: a `Create` that named something it
+ * answers. Spelled once, because a count and a listing that disagreed about it
+ * would show a post a number no page of comments could produce.
+ */
+const IS_REPLY = `activity_type = '${REPLY_ACTIVITY_TYPE}' AND in_reply_to IS NOT NULL`;
 
 /** Where {@link openAdminStore} puts, and finds, its tables. */
 export interface OpenAdminStoreOptions {
@@ -190,14 +198,27 @@ export interface InboxActivity {
   readonly actorId: string;
   /** What it was about — the post that was liked, the note replied to — or `null`. */
   readonly objectId: string | null;
+  /**
+   * The object this activity answers, for a `Create` that carried an
+   * `inReplyTo`, and `null` for everything else.
+   *
+   * Derived from {@link InboxActivity.json} by {@link replyTargetOf} rather
+   * than supplied, so an index rebuilt from the inbox log holds exactly what
+   * the live one holds. It is a column so a post's replies can be counted
+   * without reading every activity the site was ever sent.
+   */
+  readonly inReplyTo: string | null;
   /** When it arrived, as an ISO 8601 instant. */
   readonly receivedAt: string;
   /** The activity as compacted JSON-LD, exactly as it was received. */
   readonly json: string;
 }
 
-/** An {@link InboxActivity} before the store has given it a row and a time. */
-export type NewInboxActivity = Omit<InboxActivity, 'id' | 'receivedAt'>;
+/**
+ * An {@link InboxActivity} before the store has given it a row, a time and the
+ * reply target it derives.
+ */
+export type NewInboxActivity = Omit<InboxActivity, 'id' | 'receivedAt' | 'inReplyTo'>;
 
 /**
  * One activity this site sent, kept whole so it can be sent again.
@@ -383,6 +404,14 @@ export interface AdminStore {
    * against.
    */
   logInboxActivity(activity: NewInboxActivity): InboxActivity;
+  /** How many logged activities are replies to anything at all. */
+  countReplies(): number;
+  /** Every logged reply, newest first, optionally one page of them. */
+  listReplies(options?: ListPageOptions): InboxActivity[];
+  /** How many replies one object — a post's ActivityStreams id — has. */
+  countRepliesTo(objectId: string): number;
+  /** One object's replies, newest first, optionally one page of them. */
+  listRepliesTo(objectId: string, options?: ListPageOptions): InboxActivity[];
   /** How many activities this site has sent. */
   countOutboundActivities(): number;
   /** Activities this site sent, newest first, optionally one page of them. */
@@ -510,15 +539,31 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       LIMIT ? OFFSET ?
     `),
     logInboxActivity: db.prepare(`
-      INSERT INTO ap_inbox (activity_id, activity_type, actor_id, object_id, received_at, json)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO ap_inbox (
+        activity_id, activity_type, actor_id, object_id, in_reply_to, received_at, json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (activity_id) DO UPDATE SET
         activity_type = excluded.activity_type,
         actor_id = excluded.actor_id,
         object_id = excluded.object_id,
+        in_reply_to = excluded.in_reply_to,
         received_at = excluded.received_at,
         json = excluded.json
       RETURNING *
+    `),
+    countReplies: db.prepare(`SELECT COUNT(*) AS count FROM ap_inbox WHERE ${IS_REPLY}`),
+    listReplies: db.prepare(`
+      SELECT * FROM ap_inbox WHERE ${IS_REPLY}
+      ORDER BY received_at DESC, id DESC
+      LIMIT ? OFFSET ?
+    `),
+    countRepliesTo: db.prepare(`
+      SELECT COUNT(*) AS count FROM ap_inbox WHERE ${IS_REPLY} AND in_reply_to = ?
+    `),
+    listRepliesTo: db.prepare(`
+      SELECT * FROM ap_inbox WHERE ${IS_REPLY} AND in_reply_to = ?
+      ORDER BY received_at DESC, id DESC
+      LIMIT ? OFFSET ?
     `),
     countOutboundActivities: db.prepare('SELECT COUNT(*) AS count FROM ap_outbound'),
     listOutboundActivities: db.prepare(`
@@ -793,6 +838,9 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         activity.activityType,
         activity.actorId,
         activity.objectId,
+        // Derived here rather than passed in, so the column cannot say
+        // something the stored activity does not.
+        replyTargetOf(activity.json),
         new Date().toISOString(),
         activity.json,
       ) as Record<string, unknown> | undefined;
@@ -800,6 +848,33 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         throw new Error(`The activity "${activity.activityType}" was not written to the log.`);
       }
       return toInboxActivity(row);
+    },
+
+    countReplies() {
+      const row = statements.countReplies.get() as Record<string, unknown> | undefined;
+      return Number(row?.['count'] ?? 0);
+    },
+
+    listReplies(options = {}) {
+      const rows = statements.listReplies.all(
+        options.limit ?? NO_LIMIT,
+        options.offset ?? 0,
+      ) as Record<string, unknown>[];
+      return rows.map(toInboxActivity);
+    },
+
+    countRepliesTo(objectId) {
+      const row = statements.countRepliesTo.get(objectId) as Record<string, unknown> | undefined;
+      return Number(row?.['count'] ?? 0);
+    },
+
+    listRepliesTo(objectId, options = {}) {
+      const rows = statements.listRepliesTo.all(
+        objectId,
+        options.limit ?? NO_LIMIT,
+        options.offset ?? 0,
+      ) as Record<string, unknown>[];
+      return rows.map(toInboxActivity);
     },
 
     countOutboundActivities() {
@@ -978,6 +1053,7 @@ function toInboxActivity(row: Record<string, unknown>): InboxActivity {
     activityType: String(row['activity_type']),
     actorId: String(row['actor_id']),
     objectId: nullableText(row['object_id']),
+    inReplyTo: nullableText(row['in_reply_to']),
     receivedAt: String(row['received_at']),
     json: String(row['json']),
   };
@@ -1036,13 +1112,30 @@ function isUniqueViolation(error: unknown): boolean {
   return error instanceof Error && /UNIQUE constraint failed/i.test(error.message);
 }
 
+/** One schema version: the statements it runs, and any backfill they need. */
+interface Migration {
+  /** Its place in the order, and its entry in the ledger. */
+  version: number;
+  /** The schema change itself. */
+  sql: string;
+  /**
+   * A backfill, run in the same transaction once {@link Migration.sql} has.
+   *
+   * For a column derived from something already stored: SQL can add the column
+   * and JavaScript can then fill it with exactly what the writer will put
+   * there, rather than with a second, subtly different expression of the same
+   * rule.
+   */
+  run?: (db: DatabaseSync) => void;
+}
+
 /**
  * Schema versions for the admin tables, applied in order. They keep their own
  * ledger so their numbering never collides with the content index's.
  *
  * Never edit a migration that has shipped; append a new one.
  */
-const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
+const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
     sql: `
@@ -1192,6 +1285,26 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
       CREATE INDEX ap_deliveries_status ON ap_deliveries (status);
     `,
   },
+  {
+    // What a logged reply answers, so a post's comments can be counted and
+    // listed without reading every activity the site was ever sent.
+    //
+    // It is an index of the JSON beside it rather than a fact of its own: the
+    // backfill runs the very function the writer runs, so a database rebuilt
+    // from the inbox log (TASK-32) holds what this one holds.
+    version: 8,
+    sql: `
+      ALTER TABLE ap_inbox ADD COLUMN in_reply_to TEXT;
+      CREATE INDEX ap_inbox_in_reply_to ON ap_inbox (in_reply_to);
+    `,
+    run(db) {
+      const rows = db.prepare('SELECT id, json FROM ap_inbox').all();
+      const update = db.prepare('UPDATE ap_inbox SET in_reply_to = ? WHERE id = ?');
+      for (const row of rows) {
+        update.run(replyTargetOf(String(row['json'])), Number(row['id']));
+      }
+    },
+  },
 ];
 
 function migrate(db: DatabaseSync): void {
@@ -1217,6 +1330,7 @@ function migrate(db: DatabaseSync): void {
     db.exec('BEGIN');
     try {
       db.exec(migration.sql);
+      migration.run?.(db);
       record.run(migration.version, new Date().toISOString());
       db.exec('COMMIT');
     } catch (error) {
