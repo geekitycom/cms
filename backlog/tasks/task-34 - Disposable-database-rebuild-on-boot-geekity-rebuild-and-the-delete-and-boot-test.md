@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-04 00:19'
+updated_date: '2026-09-04 01:14'
 labels:
   - cms
 milestone: m-4
@@ -37,4 +38,5 @@ Close the loop on decision-9. Boot treats a missing database, or one whose cache
 - [ ] #3 An integration test boots a fully populated federated site, deletes the database, boots again, and asserts the actor document, followers collection, outbox, settings screen and a login are identical
 - [ ] #4 No table in the database holds state that cannot be rebuilt from files, other than sessions and delivery outcomes, and the README says so
 - [ ] #5 The README documents what lives in content/, what lives in data/, what to back up, and that data/geekity.db may be deleted
+- [ ] #6 The image variant directory from decision-10 is treated as derived state: deleting it together with the database and booting regenerates variants on demand and the site renders
 <!-- AC:END -->
