@@ -28,4 +28,9 @@
   </footer>
   {% endif %}
 </article>
+
+{# Only a post that has been replied to, liked or boosted has one of these. #}
+{% if conversation %}
+{% include "partials/conversation.njk" %}
+{% endif %}
 {% endblock %}

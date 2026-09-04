@@ -14,9 +14,11 @@ themes/default/
     category.njk a category archive, paginated
     404.njk      nothing at this URL
   partials/
-    post-list.njk   a list of documents
-    pagination.njk  previous/next pager
-    tags.njk        macros for tag and category links
+    post-list.njk     a list of documents
+    pagination.njk    previous/next pager
+    tags.njk          macros for tag and category links
+    feeds.njk         macros for the feed links in <head>
+    conversation.njk  the replies, likes and boosts under a post
   static/
     style.css    served at /theme/style.css
 ```
@@ -68,23 +70,24 @@ Every template gets:
 
 A document — one post, one page, or one entry of a listing — adds:
 
-| Key                                                   | What it holds                                                                                           |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `title`                                               | Display title.                                                                                          |
-| `date`                                                | Publish date, a JavaScript `Date` at the UTC instant the file holds. Absent when the document has none. |
-| `updated`                                             | Last modified date, a `Date`, when the front matter has one.                                            |
-| `tags`                                                | The document's tags, in file order.                                                                     |
-| `categories`                                          | The document's categories, in file order.                                                               |
-| `content`                                             | The Markdown body rendered to HTML. Print it with `\| safe`.                                            |
-| `url`                                                 | The document's URL path, the same value as `page.url`.                                                  |
-| `page.url`                                            | The document's URL path. Always ends in `/`.                                                            |
-| `page.date`                                           | The same `Date` as `date`.                                                                              |
-| `page.fileSlug`                                       | The permalink's last segment.                                                                           |
-| `page.inputPath`                                      | The source file, relative to the content directory.                                                     |
-| `type`                                                | `post` or `page`.                                                                                       |
-| `permalink`, `slug`, `draft`, `description`, `author` | Straight from the front matter.                                                                         |
-| `activityStreams`                                     | The post's ActivityPub object id, absolute. Only on a rendered published post.                          |
-| everything else                                       | Any front matter key the CMS does not model is on the context under its own name.                       |
+| Key                                                   | What it holds                                                                                                     |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `title`                                               | Display title.                                                                                                    |
+| `date`                                                | Publish date, a JavaScript `Date` at the UTC instant the file holds. Absent when the document has none.           |
+| `updated`                                             | Last modified date, a `Date`, when the front matter has one.                                                      |
+| `tags`                                                | The document's tags, in file order.                                                                               |
+| `categories`                                          | The document's categories, in file order.                                                                         |
+| `content`                                             | The Markdown body rendered to HTML. Print it with `\| safe`.                                                      |
+| `url`                                                 | The document's URL path, the same value as `page.url`.                                                            |
+| `page.url`                                            | The document's URL path. Always ends in `/`.                                                                      |
+| `page.date`                                           | The same `Date` as `date`.                                                                                        |
+| `page.fileSlug`                                       | The permalink's last segment.                                                                                     |
+| `page.inputPath`                                      | The source file, relative to the content directory.                                                               |
+| `type`                                                | `post` or `page`.                                                                                                 |
+| `permalink`, `slug`, `draft`, `description`, `author` | Straight from the front matter.                                                                                   |
+| `activityStreams`                                     | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
+| `conversation`                                        | The replies, likes and boosts under the post. Only when there are any. See [The conversation](#the-conversation). |
+| everything else                                       | Any front matter key the CMS does not model is on the context under its own name.                                 |
 
 A listing — the home page, a tag archive or a category archive — adds:
 
@@ -206,6 +209,89 @@ feeds are generated by the CMS, not by a template, so nothing here decides what
 goes in them.
 
 Category archives get their own three the same way.
+
+## The conversation
+
+`conversation` is what has been said about a post: the fediverse replies, likes
+and boosts its inbox was sent. It is on the context of a rendered post **only
+when there is something in it**, so a post nobody has answered renders no empty
+section and a layout can simply ask:
+
+```njk
+{% if conversation %}
+{% include "partials/conversation.njk" %}
+{% endif %}
+```
+
+That is what `layouts/post.njk` does. `partials/conversation.njk` is the whole
+section — the reply thread, and the likes and boosts as counts with the actors
+behind them inside a `<details>` — and a site replaces it by shipping
+`theme/partials/conversation.njk` of its own, exactly as it replaces any other
+template. It defines two macros, `comment(reply)` and
+`reactions(actors, one, many)`, and a layout that wants to place the pieces
+itself can import them:
+
+```njk
+{% import "partials/conversation.njk" as thread with context %}
+{{ thread.reactions(conversation.likes, "like", "likes") }}
+```
+
+### The shape
+
+The conversation is deliberately **not** spelled in ActivityPub's vocabulary.
+Native comments and webmentions land in the same thread, so every entry says
+where it came from and what it is, and nothing else about it changes with the
+source.
+
+| Key                             | What it holds                                                                               |
+| ------------------------------- | ------------------------------------------------------------------------------------------- |
+| `replies`                       | The replies to the post, oldest first, each carrying its own `replies`. See below.          |
+| `likes`                         | The likes, oldest first, in the same shape.                                                 |
+| `boosts`                        | The boosts, oldest first, in the same shape.                                                |
+| `counts.replies`                | How many replies, counted through the whole thread rather than the top of it.               |
+| `counts.likes`, `counts.boosts` | How many of each.                                                                           |
+| `counts.total`                  | All three added up. Zero never reaches a template: there would be no `conversation` at all. |
+
+Each entry — a reply, a like or a boost — is:
+
+| Key              | What it holds                                                                                             |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| `id`             | What it is called: a reply's own note id, which is what an answer to it names.                            |
+| `source`         | Where it came from. `"activitypub"` today; native comments and webmentions add their own.                 |
+| `kind`           | `"reply"`, `"like"` or `"boost"`.                                                                         |
+| `author.name`    | The best name available: their display name, else their handle, else their id.                            |
+| `author.handle`  | `@user@host`, or `null`. Taken from the follower profile the site holds, else guessed from the actor URL. |
+| `author.url`     | Their profile page, for a reader following the link.                                                      |
+| `author.avatar`  | Their avatar, or `null`. The site only knows one for an actor that follows it.                            |
+| `author.actorId` | Their id, which is what identifies them however they are named.                                           |
+| `url`            | Where it can be read on its own server: the note's `url`, else its id. A reaction points at the actor.    |
+| `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.             |
+| `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.             |
+| `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.              |
+| `status`         | `"published"`. On the record for the sources that moderate.                                               |
+| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                               |
+
+Three rules decide what is in the thread, and they are the CMS's rather than a
+theme's: a reply whose author deleted it is gone, and its own answers move up to
+whatever it was answering; a like is counted once per actor and disappears when
+that actor undoes it; and a note answering something this post has nothing to do
+with is left out.
+
+`content` is HTML somebody else's server composed, rebuilt from an allowlist —
+`a`, `p`, `br`, lists, `blockquote`, `pre`, `code` and the inline emphasis tags,
+with every link carrying `rel="nofollow noopener noreferrer"`. Nothing else
+survives, so a theme may print it directly.
+
+An Eleventy build of the same content gets the same thing from the same files:
+`docs/eleventy.config.example.js` adds a `conversation` filter over
+`federation.inbox` and puts the post's ActivityPub id on the context as
+`activityStreams`, so a layout reads
+
+```njk
+{% set conversation = federation.inbox | conversation(activityStreams) %}
+```
+
+and then loops over exactly the keys above.
 
 ## Taxonomy macros
 

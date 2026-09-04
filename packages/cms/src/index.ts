@@ -37,7 +37,7 @@ import {
 import type { DeliveryService, RelayService, SiteFederation } from './federation/index.ts';
 import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
-import { createRenderer, mountPublicSite } from './web/index.ts';
+import { createRenderer, mountPublicSite, postConversation } from './web/index.ts';
 
 export { createFeedNotifier, NOTIFY_TIMEOUT_MS } from './notify.ts';
 export type {
@@ -612,6 +612,7 @@ export {
   paginate,
   parseAccept,
   postComments,
+  postConversation,
   postsPerPage,
   prefersActivityStreams,
   publicDocumentAt,
@@ -676,6 +677,8 @@ export type {
   Comment,
   CommentContext,
   CommentFeedSource,
+  Conversation,
+  ConversationContext,
   CreateTemplateEnvironmentOptions,
   DateFormat,
   DocumentContext,
@@ -690,6 +693,12 @@ export type {
   JsonFeed,
   JsonFeedAuthor,
   JsonFeedHub,
+  Interaction,
+  InteractionAuthor,
+  InteractionCounts,
+  InteractionKind,
+  InteractionSource,
+  InteractionStatus,
   JsonFeedItem,
   NotifyServer,
   Listing,
@@ -933,6 +942,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // same one the listing index already serves, and doing it per render is
     // what makes a page flagged in the editor appear in the menu at once.
     pages: () => store.listAll({ type: 'page', draft: false, trashed: false, scheduled: false }),
+    // What the fediverse said about a post, read per render for the same
+    // reason: a reply logged a second ago is on the page the next request
+    // draws (TASK-49).
+    conversation: (document) => postConversation({ admin, baseUrl: resolved.baseUrl }, document),
   });
   const federation = createSiteFederation({ baseUrl: resolved.baseUrl, ...resolved.federation });
 

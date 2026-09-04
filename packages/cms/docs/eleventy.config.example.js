@@ -17,6 +17,8 @@
  * 7. The site menu becomes `collections.menu`.
  * 8. A `date` filter that reads a UTC instant through `site.timezone`.
  * 9. `content/_data/federation/` — the followers and the inbox log — is data.
+ * 10. A `conversation` filter that builds a post's replies, likes and boosts
+ *     out of that log, sanitised and nested, as the CMS's own theme gets them.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
  * says `"layout": "post"`, `pages.json` says `"layout": "page"` — so
@@ -161,6 +163,382 @@ function defaultPermalink(data) {
   return `/${filed.year}/${filed.month}/${slug}/`;
 }
 
+/**
+ * The slug that names a post in the fediverse: its permalink's last segment,
+ * or — for a file that has neither a permalink nor one computed above — the
+ * slug of its title. Mirrors the CMS's own rule.
+ */
+function slugOf(data) {
+  const permalink = typeof data.permalink === 'string' ? data.permalink : '';
+  const last = permalink
+    .split('/')
+    .filter((segment) => segment !== '')
+    .pop();
+  if (last !== undefined && last !== '') return last.replace(/\.[^.]+$/, '');
+
+  return slugify(data.title ?? '') || data.page?.fileSlug || undefined;
+}
+
+/**
+ * The origin a site federates under: its scheme and host, with any path
+ * dropped. A site at `https://example.com/blog` keeps its pages under that
+ * directory, but its ActivityPub ids are host-rooted.
+ */
+function originOf(url) {
+  try {
+    return new URL(String(url)).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A JSON-LD value as the one absolute URI it names, or undefined. */
+function uriOf(value) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = uriOf(item);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  // A node object names its subject with `id`; a Link names its target with
+  // `href`, which is how a note usually spells its `url`.
+  if (value && typeof value === 'object') return uriOf(value.id ?? value['@id'] ?? value.href);
+  if (typeof value !== 'string') return undefined;
+
+  try {
+    return new URL(value).href;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A JSON-LD value as the one string it holds, or undefined. */
+function textOf(value) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = textOf(item);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  if (value && typeof value === 'object') return textOf(value['@value']);
+  return typeof value === 'string' ? value : undefined;
+}
+
+/** `@user@host` for an actor URL, the way the CMS guesses one. */
+function handleOf(actorId) {
+  try {
+    const url = new URL(actorId);
+    const last = url.pathname
+      .split('/')
+      .filter((segment) => segment !== '')
+      .pop();
+    return last === undefined ? undefined : `@${last.replace(/^@/, '')}@${url.host}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Every activity in the log, oldest month first and in arrival order. */
+function activitiesIn(inbox) {
+  const months = Object.keys(inbox ?? {}).sort();
+  return months.flatMap((month) => (Array.isArray(inbox[month]) ? inbox[month] : []));
+}
+
+/**
+ * The conversation under one post, as the CMS builds it.
+ *
+ * A reply is a `Create` whose object names what it answers; a like and a boost
+ * are a `Like` and an `Announce` of the post itself, counted once per actor. A
+ * `Delete` of a note or an `Undo` of a like takes it back, but only when the
+ * actor sending it is the one who did it in the first place — otherwise anyone
+ * could delete anybody's comment off the page. Replies are nested by
+ * `inReplyTo`, and one whose target was deleted moves up to whatever that was
+ * answering rather than disappearing with it.
+ */
+function conversationIn(inbox, objectId) {
+  const empty = {
+    replies: [],
+    likes: [],
+    boosts: [],
+    counts: { replies: 0, likes: 0, boosts: 0, total: 0 },
+  };
+  if (typeof objectId !== 'string' || objectId === '') return empty;
+
+  const activities = activitiesIn(inbox);
+  const owners = new Map();
+  const withdrawn = new Set();
+  const notes = [];
+  const likes = [];
+  const boosts = [];
+  const reacted = new Set();
+
+  const author = (actorId) => {
+    const handle = handleOf(actorId);
+    return { name: handle ?? actorId, handle: handle ?? null, url: actorId, avatar: null, actorId };
+  };
+
+  for (const activity of activities) {
+    const actorId = uriOf(activity.actor);
+    if (actorId === undefined) continue;
+    const type = activity.type;
+    const target = uriOf(activity.object);
+    if (target !== undefined) owners.set(target, actorId);
+    const own = uriOf(activity.id);
+    if (own !== undefined) owners.set(own, actorId);
+
+    if (type === 'Create' && activity.object && typeof activity.object === 'object') {
+      const note = activity.object;
+      const id = uriOf(note.id);
+      const inReplyTo = uriOf(note.inReplyTo);
+      if (id === undefined || inReplyTo === undefined) continue;
+      notes.push({
+        id,
+        source: 'activitypub',
+        kind: 'reply',
+        author: author(actorId),
+        url: uriOf(note.url) ?? id,
+        content: sanitizeComment(textOf(note.content) ?? ''),
+        published: textOf(note.published) ?? activity.receivedAt ?? '',
+        inReplyTo,
+        status: 'published',
+        replies: [],
+      });
+      continue;
+    }
+
+    if ((type === 'Like' || type === 'Announce') && target === objectId) {
+      const kind = type === 'Like' ? 'like' : 'boost';
+      const key = `${kind} ${actorId}`;
+      if (reacted.has(key)) continue;
+      reacted.add(key);
+      (kind === 'like' ? likes : boosts).push({
+        id: own ?? `${actorId}#${kind}`,
+        source: 'activitypub',
+        kind,
+        author: author(actorId),
+        url: actorId,
+        content: '',
+        published: activity.receivedAt ?? '',
+        inReplyTo: null,
+        status: 'published',
+        replies: [],
+      });
+    }
+  }
+
+  // A second pass, because a `Delete` may arrive before this walk has seen the
+  // thing it deletes.
+  for (const activity of activities) {
+    if (activity.type !== 'Delete' && activity.type !== 'Undo') continue;
+    const actorId = uriOf(activity.actor);
+    const target = uriOf(activity.object);
+    if (target === undefined || owners.get(target) !== actorId) continue;
+    withdrawn.add(target);
+  }
+
+  const live = notes.filter((note) => !withdrawn.has(note.id));
+  const byId = new Map(live.map((note) => [note.id, note]));
+  const targets = new Map(notes.map((note) => [note.id, note.inReplyTo]));
+  const top = [];
+
+  for (const note of live) {
+    let target = targets.get(note.id);
+    for (let step = 0; step <= targets.size; step += 1) {
+      if (target === undefined) break;
+      if (target === objectId) {
+        top.push(note);
+        break;
+      }
+      const parent = byId.get(target);
+      if (parent !== undefined) {
+        if (parent !== note) parent.replies.push(note);
+        break;
+      }
+      target = targets.get(target);
+    }
+  }
+
+  const kept = countReplies(top);
+  const heldLikes = likes.filter((like) => !withdrawn.has(like.id));
+  const heldBoosts = boosts.filter((boost) => !withdrawn.has(boost.id));
+
+  return {
+    replies: top,
+    likes: heldLikes,
+    boosts: heldBoosts,
+    counts: {
+      replies: kept,
+      likes: heldLikes.length,
+      boosts: heldBoosts.length,
+      total: kept + heldLikes.length + heldBoosts.length,
+    },
+  };
+}
+
+/** How many replies a thread holds, counting all the way down. */
+function countReplies(replies) {
+  let total = 0;
+  for (const reply of replies) total += 1 + countReplies(reply.replies);
+  return total;
+}
+
+/** Elements a comment may keep, and nothing else. */
+const COMMENT_ELEMENTS = [
+  'a',
+  'b',
+  'blockquote',
+  'br',
+  'code',
+  'del',
+  'em',
+  'i',
+  'li',
+  'ol',
+  'p',
+  'pre',
+  's',
+  'strong',
+  'u',
+  'ul',
+];
+
+/** URL schemes a link in a comment may use. An allowlist, not a denylist. */
+const COMMENT_SCHEMES = ['http://', 'https://', 'mailto:'];
+
+/**
+ * A stranger's HTML, reduced to markup this site is willing to republish.
+ *
+ * A shorter version of the CMS's own `sanitizeCommentHtml`: the input is
+ * tokenised and the output rebuilt from the allowlist above, so a tag or an
+ * attribute this does not name cannot reach a reader however it was spelled.
+ * An element that is not on the list is unwrapped rather than deleted, except
+ * `script` and `style`, whose contents are a program rather than words. Where
+ * this and the CMS's version differ, it is that this one gives up on a
+ * malformed tag sooner and escapes it as text: erring toward showing the
+ * markup, never toward running it.
+ *
+ * Swap in `sanitize-html` if you would rather depend on one; this file keeps
+ * its promise of no dependencies beyond Eleventy.
+ */
+function sanitizeComment(html) {
+  const out = [];
+  const open = [];
+  let at = 0;
+
+  const closeThrough = (name) => {
+    const index = open.lastIndexOf(name);
+    if (index < 0) return;
+    while (open.length > index) out.push(`</${open.pop()}>`);
+  };
+
+  while (at < html.length) {
+    const next = html.indexOf('<', at);
+    if (next < 0) {
+      out.push(escapeComment(html.slice(at)));
+      break;
+    }
+    if (next > at) out.push(escapeComment(html.slice(at, next)));
+    at = next;
+
+    if (html.startsWith('<!--', at)) {
+      const end = html.indexOf('-->', at);
+      at = end < 0 ? html.length : end + 3;
+      continue;
+    }
+    if (html.startsWith('<!', at) || html.startsWith('<?', at)) {
+      const end = html.indexOf('>', at);
+      at = end < 0 ? html.length : end + 1;
+      continue;
+    }
+
+    const tag = /^<(\/?)([A-Za-z][A-Za-z0-9]*)([^>]*)>/.exec(html.slice(at));
+    if (tag === null) {
+      // A `<` that begins no tag is a character somebody typed.
+      out.push('&lt;');
+      at += 1;
+      continue;
+    }
+    at += tag[0].length;
+    const name = tag[2].toLowerCase();
+
+    if (tag[1] === '/') {
+      closeThrough(name);
+      continue;
+    }
+    if (name === 'script' || name === 'style') {
+      const end = new RegExp(`</${name}\\s*>`, 'i').exec(html.slice(at));
+      at = end === null ? html.length : at + end.index + end[0].length;
+      continue;
+    }
+    if (!COMMENT_ELEMENTS.includes(name)) continue; // Unwrapped: its words stay.
+    if (name === 'br') {
+      out.push('<br>');
+      continue;
+    }
+    if (name === 'a') {
+      const href = commentHref(tag[3]);
+      if (href === undefined) continue;
+      out.push(`<a href="${escapeComment(href)}" rel="nofollow noopener noreferrer">`);
+    } else {
+      // `<p>one<p>two` is two paragraphs, not a nested one.
+      if (name === 'p' || name === 'li') closeThrough(name);
+      out.push(`<${name}>`);
+    }
+    open.push(name);
+  }
+
+  while (open.length > 0) out.push(`</${open.pop()}>`);
+  return out.join('');
+}
+
+/** A link's target, or undefined when it is not one to publish. */
+function commentHref(attributes) {
+  const match = /href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attributes ?? '');
+  if (match === null) return undefined;
+
+  // Control characters go and the ends are trimmed before the scheme is read,
+  // because that is what a browser's URL parser does: `java&#10;script:` is a
+  // script URL to everything that will render this.
+  const href = [...decodeComment(match[2] ?? match[3] ?? match[4] ?? '')]
+    .filter((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code >= 0x20 && code !== 0x7f;
+    })
+    .join('')
+    .trim();
+  const lowered = href.toLowerCase();
+  return COMMENT_SCHEMES.some((scheme) => lowered.startsWith(scheme)) ? href : undefined;
+}
+
+const COMMENT_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+/** Character references resolved, so escaping them again cannot double up. */
+function decodeComment(value) {
+  return value.replace(/&(#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);/g, (whole, body) => {
+    try {
+      if (body.startsWith('#x') || body.startsWith('#X')) {
+        return String.fromCodePoint(Number.parseInt(body.slice(2), 16));
+      }
+      if (body.startsWith('#')) return String.fromCodePoint(Number.parseInt(body.slice(1), 10));
+    } catch {
+      return whole;
+    }
+    return COMMENT_ENTITIES[body] ?? whole;
+  });
+}
+
+/** Text as markup: decoded, then escaped. */
+function escapeComment(value) {
+  return decodeComment(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 export default function (eleventyConfig) {
   // The CMS's `date` filter, in Eleventy's terms: `readable` (the default),
   // `html` and `year` are the calendar the site's own zone is on, and `iso` is
@@ -238,6 +616,41 @@ export default function (eleventyConfig) {
     const permalink = defaultPermalink(data);
     if (permalink !== undefined) data.permalink = permalink;
   });
+
+  // The post's name in the fediverse, which is what a reply, a like or a boost
+  // in the inbox log points at. The CMS puts it on the template context as
+  // `activityStreams`, and this does the same, so a layout can hand it to the
+  // `conversation` filter below. It runs after the permalink preprocessor
+  // because the slug is the permalink's last segment, exactly as the CMS
+  // derives it — a post moved to a new URL keeps the id it was delivered
+  // under, so `activitypub.id` in the front matter always wins.
+  eleventyConfig.addPreprocessor('geekity-activitypub', 'md', (data) => {
+    if (!isPost(data.page?.inputPath ?? '')) return;
+
+    const stored = data.activitypub?.id;
+    if (typeof stored === 'string' && stored !== '') {
+      data.activityStreams = stored;
+      return;
+    }
+
+    const slug = slugOf(data);
+    const origin = originOf(data.site?.url);
+    if (slug === undefined || origin === undefined) return;
+    data.activityStreams = `${origin}/ap/posts/${encodeURIComponent(slug)}`;
+  });
+
+  // The conversation under a post: the replies, likes and boosts the inbox log
+  // holds about it, in the shape the CMS hands its own theme (TASK-49). The
+  // whole log is in memory as `federation.inbox`, so this is a filter rather
+  // than a collection:
+  //
+  //     {% set conversation = federation.inbox | conversation(activityStreams) %}
+  //     {% for reply in conversation.replies %}…{% endfor %}
+  //
+  // What comes back is `{ replies, likes, boosts, counts }`, with `replies`
+  // nested by `inReplyTo` and every `content` already sanitised. The theme
+  // README documents the whole shape under "The conversation".
+  eleventyConfig.addFilter('conversation', (inbox, objectId) => conversationIn(inbox, objectId));
 
   // Eleventy builds a collection from every value of `tags` by itself. The
   // CMS's second taxonomy, `categories`, is an ordinary data key to Eleventy,

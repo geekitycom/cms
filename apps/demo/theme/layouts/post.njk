@@ -47,4 +47,13 @@
   </footer>
   {% endif %}
 </article>
+
+{#
+  The replies, likes and boosts, from the packaged partial: a layout that
+  overrides this file keeps the conversation by including it, and `conversation`
+  is only on the context when there is one.
+#}
+{% if conversation %}
+{% include "partials/conversation.njk" %}
+{% endif %}
 {% endblock %}
