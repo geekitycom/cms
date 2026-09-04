@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-04 00:31'
-updated_date: '2026-09-04 00:31'
+updated_date: '2026-09-04 00:51'
 labels:
   - web
 milestone: m-5
@@ -26,6 +26,8 @@ ordinal: 27000
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Replace the `/feed.xml` and `/feed.json` routes with the WordPress layout that https://andrewshell.org/ serves, so subscribers of a migrated site keep working. `/feed/` is RSS 2.0, the format nearly every existing subscriber holds: channel `title`, `link`, `description` (tagline), `language`, `lastBuildDate`, `generator`, `atom:link rel="self"`, and an `image` from the avatar setting when one is set; each item carries `title`, `link`, `guid isPermaLink="false"` (the post's ActivityStreams object id, which is stable across renames), RFC 822 `pubDate`, `dc:creator` from the author setting, one `category` per category and per tag, `description` holding an excerpt (the `description` front matter, else the first paragraph of the rendered text, plain, truncated) and `content:encoded` holding the full HTML. `/feed/atom/` and `/feed/json/` serve what the two old routes serve now. Per-taxonomy feeds follow: `/{tagBase}/{tag}/feed/`, `/feed/atom/`, `/feed/json/` and the same under `/{categoryBase}/{slug}/`. The trailing-slash canonical redirect covers `/feed` and friends. WordPress's query forms redirect permanently the way the reference site does: `/?feed=rss2` and `/?feed=rss` to `/feed/`, `/?feed=atom` to `/feed/atom/`, and `/feed/rss/` to `/feed/`. A `language` setting (default `en`) feeds the channel and the Atom `xml:lang`; the feeds keep honouring `feedSize`. The base layout advertises all three with `rel="alternate"`, RSS first. There are no production deployments, so the old `/feed.xml` and `/feed.json` are dropped without redirects. Update doc-3's feeds section, the theme README and the package README.
+
+Every RSS 2.0 feed also declares the `source` namespace (`xmlns:source="https://source.scripting.com/"`, which TASK-38 reuses for `source:cloud`) and each item carries `<source:markdown>` holding the post's Markdown body, the source of the item per the namespace: a reader that understands Markdown should render from it rather than from `content:encoded`. It is the same text the ActivityStreams Article exposes as `source`.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -36,4 +38,5 @@ Replace the `/feed.xml` and `/feed.json` routes with the WordPress layout that h
 - [ ] #4 /feed, /feed/atom and /feed/json redirect 301 to their slashed forms, and /?feed=rss2, /?feed=rss, /?feed=atom and /feed/rss/ redirect 301 to the matching new feed
 - [ ] #5 The HTML layout advertises RSS, Atom and JSON Feed with link rel=alternate, RSS first, and a post page keeps its ActivityStreams alternate
 - [ ] #6 Drafts and trashed posts never appear in any feed and feedSize still caps every feed
+- [ ] #7 Every RSS item carries source:markdown holding the post's Markdown body verbatim (CDATA or escaped), with the source namespace declared on the rss element
 <!-- AC:END -->
