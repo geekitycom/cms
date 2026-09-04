@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-04 23:09'
+updated_date: '2026-09-04 23:31'
 ---
 # Native comments
 
@@ -245,6 +245,57 @@ called from the moderation screen when a human disagrees: `reportSpam` when an
 approved or pending comment is filed as spam, `reportHam` when one is let out
 of the spam list. Approving something that was merely waiting reports nothing —
 a service charged per call should not be told what it already assumed.
+
+## Akismet
+
+The one checker this package ships, and the only one a site turns on without
+writing code. Off until there is a key.
+
+- **The key is a credential**, so it lives in `data/akismet.json` at mode
+  `0600`, beside the password hashes and the actor's private keys — never in
+  `content/_data/site.json`, which is public, in git and published with the
+  site. The file holds `key`, `status` and `checkedAt`, where `status` is what
+  `verify-key` said when it was saved: `valid`, `invalid` or `unchecked`.
+- **The settings screen** has a Spam checking panel. A pasted key is checked
+  with `verify-key` before it is stored, and the panel then reads Connected,
+  "Akismet does not recognise this key", "Akismet could not be reached", or Not
+  connected. The key is never printed back; the last four characters are, so
+  somebody can tell which key is in there. Remove key turns Akismet off.
+- **The file is read on every call**, so a key saved on that screen filters the
+  next comment and a removed one stops filtering at once. Neither needs a
+  restart, which is the point of reading rather than caching it.
+- **Precedence.** A `commentChecker` in `geekity.config.ts` wins outright: the
+  Akismet checker is built only when the site named none, because a site that
+  wrote a checker meant it.
+
+Every comment and every incoming webmention that gets past the three defences
+goes to `comment-check` with `blog`, `user_ip`, `user_agent`, `referrer`,
+`permalink`, `comment_type`, `comment_author`, `comment_author_email`,
+`comment_author_url`, `comment_content`, `comment_date_gmt`, `blog_lang` (the
+language setting's primary subtag, which is what Akismet documents),
+`blog_charset` and — for a form submission — `honeypot_field_name`.
+`comment_type` is `comment` for a native comment and `webmention` for a
+webmention. Fediverse replies are never sent, because they never reach the seam
+at all: a remote server delivering a `Create` is not something this site is
+deciding whether to accept.
+
+| Akismet says | Verdict | What happens |
+| --- | --- | --- |
+| `true` | `spam` | Filed as spam, where a moderator can still see it. |
+| `true` with `X-akismet-pro-tip: discard` | `discard` | Dropped without a queue entry. |
+| `false` | `unknown` | The site's own rules decide: approved for a name and email approved before, pending otherwise. |
+| `invalid`, a non-200, a timeout, an unreachable host | `unknown` | The same, and the failure is logged with whatever Akismet said was wrong. |
+
+`false` is deliberately not `ham`. `ham` approves a comment outright, and
+Akismet seeing nothing wrong is not the same as saying a stranger's first
+comment should skip the queue. Nothing Akismet does can lose a comment: every
+failure is no opinion, no opinion is the queue, and a call is abandoned after
+ten seconds.
+
+Marking something spam or not spam on the moderation screen posts `submit-spam`
+or `submit-ham` with the same fields, minus the three a stored comment no longer
+has — `user_ip`, `user_agent` and `referrer` — because the file keeps a salted
+hash of the address and nothing else.
 
 ## The admin screen
 

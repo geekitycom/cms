@@ -275,6 +275,7 @@ the same directory reads all of it, and everything in it is meant to be public:
 | `data/users.json`   | Usernames and argon2id password hashes. Mode `0600`.                                 |
 | `data/keys/`        | The actor's key pairs as JWK files. Mode `0600`. **Losing these breaks federation.** |
 | `data/comment-salt` | What hides commenters' addresses in the published comment files. Mode `0600`.        |
+| `data/akismet.json` | The Akismet key, and what `verify-key` last said about it. Mode `0600`.              |
 
 Two things under `data/` may be deleted whenever the site is stopped, and
 nothing else in either directory may:
@@ -639,6 +640,49 @@ that is down never stops a site taking comments. `/admin/comments` is the
 moderation queue and the dashboard carries the number waiting; there is no
 email in this version, so the screen is the notification.
 
+### Akismet
+
+The one checker the package ships. It is off until a site has a key, and the
+key is a credential rather than a setting: it lives in `data/akismet.json` at
+mode `0600` beside the password hashes and the actor's private keys, never in
+`content/_data/site.json`, which is public, in git and published with the site.
+
+Paste it into **Spam checking** on `/admin/settings`. It is checked with
+Akismet's `verify-key` before it is stored, and the panel then reads Connected,
+"Akismet does not recognise this key", "Akismet could not be reached", or Not
+connected. The key is never printed back — the last four characters are, so it
+is possible to tell which key is in there. A **Remove key** button turns Akismet
+off again.
+
+The file is read on every call, so a key saved on that screen filters the next
+comment and a removed one stops filtering at once. Neither needs a restart.
+
+A `commentChecker` in the config wins outright: the Akismet checker is built
+only when the site named none.
+
+Every comment and every incoming webmention that gets past the honeypot, the
+form's age and the rate limit goes to `comment-check` with `blog`, `user_ip`,
+`user_agent`, `referrer`, `permalink`, `comment_type` (`comment` or
+`webmention`), `comment_author`, `comment_author_email`, `comment_author_url`,
+`comment_content`, `comment_date_gmt`, `blog_lang`, `blog_charset` and, for a
+form submission, `honeypot_field_name`. Fediverse replies are never sent: they
+do not reach the checker seam at all.
+
+| Akismet says                              | What happens                                                                                   |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `true`                                    | Filed as spam, where a moderator can still see it and change its mind.                         |
+| `true` with `X-akismet-pro-tip: discard`  | Dropped without a queue entry.                                                                 |
+| `false`                                   | The site's own rules decide: approved for a name and email approved before, pending otherwise. |
+| `invalid`, a non-200, a timeout, no route | The same as `false`, and the failure is logged with whatever Akismet said was wrong.           |
+
+`false` is deliberately not a positive opinion. Nothing Akismet does can lose a
+comment: every failure is no opinion, no opinion is the queue, and a call is
+abandoned after ten seconds.
+
+Marking something spam or not spam on `/admin/comments` posts `submit-spam` or
+`submit-ham` with the same fields, minus `user_ip`, `user_agent` and `referrer`
+— a stored comment keeps a salted hash of the address and nothing else.
+
 ## Webmentions
 
 The open web's version of what ActivityPub does: one page telling another that
@@ -669,7 +713,8 @@ its microformats (`h-entry`, `h-card`, and whether it is a reply, a like, a
 repost or a plain mention), and files the result as a **pending comment** with
 `source: "webmention"` in the same file, the same thread and the same moderation
 queue as everything else — through the same `commentChecker` seam, so a checker
-can tell one from a form submission by its `source`.
+can tell one from a form submission by its `source`. Akismet is told it is a
+`webmention` rather than a `comment`.
 
 The source URL is its identity. A page that sends its webmention again updates
 what it left rather than adding a second, and one whose link has gone — or which

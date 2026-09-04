@@ -3,7 +3,7 @@ id: doc-7
 title: Webmentions
 type: specification
 created_date: '2026-09-04 23:08'
-updated_date: '2026-09-04 23:09'
+updated_date: '2026-09-04 23:31'
 ---
 # Webmentions
 
@@ -158,7 +158,10 @@ A comment in the post's file, `source: "webmention"`, `status: "pending"` — se
 doc-6 for the shape and the two keys a webmention fills in that a form does not.
 It goes through the same `CommentChecker` seam a native comment does, so a
 checker sees `comment.source === 'webmention'` and can tell Akismet it is a
-webmention rather than a comment.
+webmention rather than a comment. The shipped Akismet checker does exactly
+that: with a key in `data/akismet.json` an incoming webmention is sent to
+`comment-check` with `comment_type: webmention`, and a `true` answer files it
+as spam or drops it entirely (doc-6).
 
 What it is *not* held by is the closing rules. `commentsOpen` is asked by the
 form and by the form's endpoint and nowhere else: a post that stopped taking

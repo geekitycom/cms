@@ -172,6 +172,11 @@ export interface GeekityConfig {
    * say; a checker that throws is treated as having no opinion, so a service
    * that is down never stops a site taking comments. The moderation screen
    * tells it when a human disagrees.
+   *
+   * Naming one here wins outright over the Akismet checker the package ships
+   * (TASK-52): `createCms` builds that only when this is not set, so a site
+   * that wrote a checker gets the checker it wrote whether or not there is a
+   * key in `data/akismet.json`.
    */
   commentChecker?: CommentChecker;
   /**
@@ -226,7 +231,14 @@ export interface ResolvedConfig {
   trustProxy: boolean;
   onDocumentChange: DocumentChangeHook | undefined;
   onPublish: DocumentChangeHook | undefined;
-  /** The comment checker, when the site named one. */
+  /**
+   * The comment checker, when the site named one.
+   *
+   * `undefined` as this leaves {@link resolveConfig}. `createCms` fills it in
+   * with the Akismet checker (TASK-52) when the site named none, so by the
+   * time a request reads it off the context there is one — and with no key in
+   * `data/akismet.json` that one sends nothing anywhere.
+   */
   commentChecker: CommentChecker | undefined;
   /** The clock the index and the scheduler read. */
   now: Clock;

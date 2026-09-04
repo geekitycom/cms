@@ -168,6 +168,62 @@
     </p>
   </form>
 
+  {# Akismet is its own pair of forms for the reason the avatar is: the key is
+     a credential in data/akismet.json rather than a setting in site.json, and
+     a key Akismet will not take must not lose an edit to the title. #}
+  <section class="admin-settings admin-akismet-panel">
+    <h2>Spam checking</h2>
+
+    <p class="admin-akismet-state admin-akismet-{{ akismetState }}">
+      {% if akismetState == 'valid' %}
+        <strong>Connected</strong> &mdash; key {{ akismetKeyHint }}, checked {{ akismetCheckedAt }}.
+      {% elif akismetState == 'invalid' %}
+        <strong>Akismet does not recognise this key</strong> &mdash; key {{ akismetKeyHint }}, checked {{ akismetCheckedAt }}.
+      {% elif akismetState == 'unchecked' %}
+        <strong>Akismet could not be reached</strong> to check key {{ akismetKeyHint }}.
+      {% else %}
+        <strong>Not connected</strong> &mdash; this site has no key.
+      {% endif %}
+    </p>
+    <p class="admin-hint">{{ akismetHint }}</p>
+
+    <form method="post" action="{{ akismetUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+      <label for="settings-akismet-key">Akismet API key</label>
+      <input
+        id="settings-akismet-key"
+        name="{{ akismetFields.key }}"
+        type="password"
+        value=""
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="{% if akismetPresent %}Replace the stored key{% else %}Paste your key{% endif %}"
+      />
+      <p class="admin-settings-buttons">
+        <button type="submit">{% if akismetPresent %}Replace key{% else %}Save key{% endif %}</button>
+      </p>
+    </form>
+
+    {% if akismetPresent %}
+      <form method="post" action="{{ akismetUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ akismetFields.action }}" value="{{ akismetRemove }}" />
+        <p class="admin-settings-buttons">
+          <button type="submit">Remove key</button>
+        </p>
+      </form>
+    {% endif %}
+
+    <p class="admin-hint">
+      A key from <a href="https://akismet.com/">akismet.com</a> turns on spam
+      checking for native comments and incoming webmentions. It is checked with
+      Akismet when it is saved and kept in <code>data/akismet.json</code>, never
+      in <code>site.json</code> and never on the public site. Marking something
+      spam or not spam on the Comments screen tells Akismet, which is the only
+      way it learns. Fediverse replies are never sent to it.
+    </p>
+  </section>
+
   {# The avatar is its own pair of forms: a file cannot travel in the
      urlencoded body the settings form posts, and a rejected image must not
      take an edit to the title down with it. #}
