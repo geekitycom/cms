@@ -96,6 +96,20 @@
         <label for="editor-draft">Draft</label>
       </p>
 
+      {# What this document says about comments, if anything. Three answers
+         rather than two: the site's own rules, always open, always closed. #}
+      <label for="editor-comments">Comments</label>
+      <select id="editor-comments" name="comments">
+        <option value="{{ commentSettings.site }}"{% if form.comments == commentSettings.site %} selected{% endif %}>Follow the site settings</option>
+        <option value="{{ commentSettings.open }}"{% if form.comments == commentSettings.open %} selected{% endif %}>Open</option>
+        <option value="{{ commentSettings.closed }}"{% if form.comments == commentSettings.closed %} selected{% endif %}>Closed</option>
+      </select>
+      <p class="admin-hint">
+        Writes <code>comments: true</code> or <code>comments: false</code> into the front matter,
+        which beats the site's switch and its closing window in both directions. Fediverse replies
+        are shown either way.
+      </p>
+
       {% if kind.excludable %}
         {# doc-2's eleventyExcludeFromCollections: still published and still at
            its URL, but out of every collection a template lists from. #}

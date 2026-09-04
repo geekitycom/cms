@@ -18,6 +18,8 @@ import {
   UPLOAD_ASSET_MAX_AGE,
   UPLOAD_ASSET_PREFIX,
 } from './assets.ts';
+import { COMMENT_NOTICE_PARAM, COMMENT_REPLY_PARAM } from '../comments/form.ts';
+import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments/routes.ts';
 import { commentCounts, postComments, siteComments } from './comments.ts';
 import { isPublicDocument, publicDocumentAt } from './documents.ts';
 import {
@@ -75,6 +77,11 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // is not under `content/uploads/` at all.
   app.get(`${VARIANT_ASSET_PREFIX}*`, imageVariant);
   app.get(`${UPLOAD_ASSET_PREFIX}*`, upload);
+
+  // Where the comment form under a post posts to (TASK-50). A POST at a fixed
+  // path of the CMS's own, so no permalink can ever shadow it and the route
+  // table does not grow with the site.
+  mountComments(app);
 
   app.get('/', (c) => listing(c, { term: undefined, pageNumber: 0 }));
 
@@ -300,6 +307,29 @@ function queryFeedFormat(c: Context<GeekityEnv>): FeedFormat | undefined {
   return FEED_FORMATS.find((format) => FEED_SEGMENTS[format] === asked);
 }
 
+/**
+ * What the query string puts on a rendered post, if anything.
+ *
+ * A reader has no session, so the message after a submission travels in the
+ * URL and is read back here. An unknown value says nothing at all rather than
+ * being printed, so the query cannot be used to put words on somebody's post.
+ */
+function commentNotice(c: Context<GeekityEnv>, document: Document): Record<string, unknown> {
+  const notice = commentNoticeFor(c.req.query(COMMENT_NOTICE_PARAM));
+
+  return {
+    ...(notice === undefined ? {} : { commentNotice: notice }),
+    // And who a Reply link says the form is answering, which travels the same
+    // way and for the same reason: a reader has no session, and threading
+    // should not need a line of JavaScript.
+    ...commentReplyTarget({
+      admin: c.var.admin,
+      document,
+      id: c.req.query(COMMENT_REPLY_PARAM),
+    }),
+  };
+}
+
 /** The representation an `Accept` header asked for, or `undefined` for a 406. */
 function selectFromAccept(
   c: Context<GeekityEnv>,
@@ -323,7 +353,10 @@ function negotiateDocument(
       ? serializeDocument(document)
       : representation === 'json'
         ? documentJson(document, { baseUrl: c.var.config.baseUrl })
-        : c.var.renderer.renderDocument(document);
+        : // The thank-you after a comment was posted, which the redirect
+          // carried back as a query. It is the only thing about a document's
+          // HTML that the URL rather than the file decides.
+          c.var.renderer.renderDocument(document, commentNotice(c, document));
 
   // The theme can change without the document changing, and only the document
   // is hashed. While the watcher is on — a development server, where a template

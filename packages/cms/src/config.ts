@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import type { KvStore, MessageQueue } from '@fedify/fedify';
 
+import type { CommentChecker } from './comments/submission.ts';
 import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './content/media.ts';
 import { systemClock } from './content/store.ts';
 import type { Clock } from './content/store.ts';
@@ -162,6 +163,18 @@ export interface GeekityConfig {
    */
   onPublish?: DocumentChangeHook;
   /**
+   * A third-party opinion on native comments: Akismet, or anything else that
+   * answers the same three questions (TASK-50).
+   *
+   * The whole of the CMS's knowledge of such a service. It is asked about
+   * every comment that gets past the honeypot, the form's age and the rate
+   * limit, and its `spam`, `discard` and `ham` are the three things it can
+   * say; a checker that throws is treated as having no opinion, so a service
+   * that is down never stops a site taking comments. The moderation screen
+   * tells it when a human disagrees.
+   */
+  commentChecker?: CommentChecker;
+  /**
    * What the CMS reads the time from.
    *
    * A post's date decides whether it is public yet (TASK-44), so the index and
@@ -213,6 +226,8 @@ export interface ResolvedConfig {
   trustProxy: boolean;
   onDocumentChange: DocumentChangeHook | undefined;
   onPublish: DocumentChangeHook | undefined;
+  /** The comment checker, when the site named one. */
+  commentChecker: CommentChecker | undefined;
   /** The clock the index and the scheduler read. */
   now: Clock;
   /** Federation stores and guards, empty when the site named none. */
@@ -334,6 +349,7 @@ export function resolveConfig(
     ),
     onDocumentChange: config.onDocumentChange,
     onPublish: config.onPublish,
+    commentChecker: config.commentChecker,
     now: config.now ?? systemClock,
     federation: config.federation ?? {},
   };

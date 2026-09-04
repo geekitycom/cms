@@ -20,6 +20,7 @@ import {
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { isPublicDocument } from '../web/documents.ts';
+import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
 import { NAVIGATION_KEY, NAVIGATION_ORDER_KEY, navigationOrder } from '../web/navigation.ts';
 import { findUserById } from './accounts.ts';
 import { flash } from './flash.ts';
@@ -77,6 +78,30 @@ export interface DocumentKind {
  * there, alongside every other key somebody added by hand.
  */
 export const EXCLUDE_KEY = 'eleventyExcludeFromCollections';
+
+/**
+ * What the editor's Comments field can say: leave it to the site's rules, hold
+ * this document open, or close it.
+ *
+ * The values are the strings the form submits and the template renders as
+ * options, spelled once so the two cannot drift.
+ */
+export const COMMENT_SETTINGS = { site: '', open: 'open', closed: 'closed' } as const;
+
+/** A submitted Comments field, or the site default for anything else. */
+function commentSetting(value: string): string {
+  return value === COMMENT_SETTINGS.open || value === COMMENT_SETTINGS.closed
+    ? value
+    : COMMENT_SETTINGS.site;
+}
+
+/** What a document's front matter already says about comments. */
+function commentSettingOf(document: Document): string {
+  const own = document.extra[COMMENTS_FRONT_MATTER_KEY];
+  if (own === true) return COMMENT_SETTINGS.open;
+  if (own === false) return COMMENT_SETTINGS.closed;
+  return COMMENT_SETTINGS.site;
+}
 
 /** The posts screens: dated, tagged, categorised, filed under `posts/`. */
 export const POST_KIND: DocumentKind = {
@@ -287,6 +312,7 @@ async function saveFromForm(
     exclude: body['exclude'] !== undefined,
     navigation: body['navigation'] !== undefined,
     navigationOrder: text(body['navigation_order']).trim(),
+    comments: commentSetting(text(body['comments'])),
     body: normalizeBody(text(body['body'])),
     hash: text(body['hash']),
   };
@@ -564,9 +590,17 @@ function normalizePermalink(value: string): string | undefined {
 function resolveExtra(
   kind: DocumentKind,
   document: Document | undefined,
-  form: Pick<EditorForm, 'exclude' | 'navigation' | 'navigationOrder'>,
+  form: Pick<EditorForm, 'exclude' | 'navigation' | 'navigationOrder' | 'comments'>,
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
+
+  // The post's own answer about comments, or none at all: "site default" is
+  // the absence of the key rather than a value, because that is what every
+  // reader of it — the CMS, an Eleventy build, a person looking at the file —
+  // already understands, and writing `comments: null` would say nothing new.
+  if (form.comments === COMMENT_SETTINGS.open) extra[COMMENTS_FRONT_MATTER_KEY] = true;
+  else if (form.comments === COMMENT_SETTINGS.closed) extra[COMMENTS_FRONT_MATTER_KEY] = false;
+  else delete extra[COMMENTS_FRONT_MATTER_KEY];
 
   if (kind.excludable) {
     if (form.exclude) extra[EXCLUDE_KEY] = true;
@@ -827,6 +861,15 @@ export interface EditorForm {
   navigation: boolean;
   /** Where in the menu it goes, as typed. Empty for "after the ordered ones". */
   navigationOrder: string;
+  /**
+   * What the document says about comments: one of {@link COMMENT_SETTINGS}.
+   *
+   * Three values rather than a checkbox, because there are three answers: the
+   * site's rules decide (the front matter says nothing), always open, always
+   * closed. A checkbox could only ever spell two of them, and the one it would
+   * lose is the default every document starts at.
+   */
+  comments: string;
   body: string;
   /** The hash of the file the form was filled in from; empty for a new one. */
   hash: string;
@@ -856,6 +899,7 @@ export function blankForm(
     exclude: false,
     navigation: false,
     navigationOrder: '',
+    comments: COMMENT_SETTINGS.site,
     body: '',
     hash: '',
   };
@@ -882,6 +926,7 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     exclude: document.extra[EXCLUDE_KEY] === true,
     navigation: document.extra[NAVIGATION_KEY] === true,
     navigationOrder: navigationOrder(document)?.toString() ?? '',
+    comments: commentSettingOf(document),
     body: document.body,
     hash: document.hash,
   };
@@ -942,6 +987,7 @@ function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Res
     form,
     actions,
     trashed,
+    commentSettings: COMMENT_SETTINGS,
     heading:
       document === undefined ? `Add ${kind.singular}` : `Edit ${kind.singular}: ${document.title}`,
     saveUrl: document === undefined ? newEditorPath(kind) : editorPath(kind, document.slug),

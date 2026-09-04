@@ -33,4 +33,9 @@
 {% if conversation %}
 {% include "partials/conversation.njk" %}
 {% endif %}
+
+{# And only one that is still taking comments has a form (TASK-50). #}
+{% if commentForm %}
+{% include "partials/comment-form.njk" %}
+{% endif %}
 {% endblock %}

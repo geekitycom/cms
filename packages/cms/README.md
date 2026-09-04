@@ -35,6 +35,7 @@ content/
   pages/              Markdown pages, plus pages.json
   _data/site.json     the settings: title, tagline, author, page and feed sizes
   _data/federation/   once the site federates: followers.json and the inbox log
+  _data/comments/     once somebody comments: one JSON file per post
 .gitignore            node_modules, data and .env
 ```
 
@@ -258,20 +259,22 @@ needs carrying across a deploy.
 `content/` is what the site publishes. It belongs in git, an Eleventy build of
 the same directory reads all of it, and everything in it is meant to be public:
 
-| Path                                               | What it holds                                               |
-| -------------------------------------------------- | ----------------------------------------------------------- |
-| `content/posts/`, `content/pages/`                 | The Markdown documents, `_trash/` included.                 |
-| `content/uploads/`                                 | Uploaded files exactly as they arrived.                     |
-| `content/_data/site.json`                          | Every site setting, the actor's handle and type among them. |
-| `content/_data/federation/followers.json`          | Who follows the site.                                       |
-| `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` | Every activity the inbox was handed, one per line.          |
+| Path                                               | What it holds                                                            |
+| -------------------------------------------------- | ------------------------------------------------------------------------ |
+| `content/posts/`, `content/pages/`                 | The Markdown documents, `_trash/` included.                              |
+| `content/uploads/`                                 | Uploaded files exactly as they arrived.                                  |
+| `content/_data/site.json`                          | Every site setting, the actor's handle and type among them.              |
+| `content/_data/federation/followers.json`          | Who follows the site.                                                    |
+| `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` | Every activity the inbox was handed, one per line.                       |
+| `content/_data/comments/{slug}.json`               | The comments left on that post, whatever a moderator has done with them. |
 
 `data/` is private. It is gitignored, and it is the half to copy somewhere safe:
 
-| Path              | What it holds                                                                        |
-| ----------------- | ------------------------------------------------------------------------------------ |
-| `data/users.json` | Usernames and argon2id password hashes. Mode `0600`.                                 |
-| `data/keys/`      | The actor's key pairs as JWK files. Mode `0600`. **Losing these breaks federation.** |
+| Path                | What it holds                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `data/users.json`   | Usernames and argon2id password hashes. Mode `0600`.                                 |
+| `data/keys/`        | The actor's key pairs as JWK files. Mode `0600`. **Losing these breaks federation.** |
+| `data/comment-salt` | What hides commenters' addresses in the published comment files. Mode `0600`.        |
 
 Two things under `data/` may be deleted whenever the site is stopped, and
 nothing else in either directory may:
@@ -293,6 +296,7 @@ something a site is told it may lose:
 | --------------------------------------------------- | ------------------------------------------------------------------------ |
 | `documents`, `document_tags`, `document_categories` | The boot scan of `content/`.                                             |
 | `followers`, `ap_inbox`                             | `content/_data/federation/`, emptied and read back on every boot.        |
+| `comments`                                          | `content/_data/comments/`, emptied and read back on every boot.          |
 | `sessions`                                          | Nothing. Everybody signed in is signed out.                              |
 | `ap_deliveries`                                     | Nothing. The federation screen shows its posts with "Nothing recorded."  |
 | `ap_relays`                                         | The relay list in `site.json`: boot sends each of them a fresh `Follow`. |
@@ -582,6 +586,59 @@ half is sent by a peer built in the script rather than by `fedify inbox`.
 [Fedify]: https://fedify.dev/
 [`fedify tunnel`]: https://fedify.dev/cli
 
+## Comments
+
+A reader can answer a post on the page, and what they leave joins the same
+thread as the fediverse replies rather than sitting in a section of its own.
+
+A comment is a file. `content/_data/comments/{slug}.json` holds one post's
+comments — id, source, kind, status, author, the Markdown and the HTML it
+rendered to, when it was submitted, a salted hash of the address, and what it
+answers — so they are in git beside the posts, an Eleventy build of the same
+directory shows them, and the `comments` table is an index emptied and read
+back on every boot.
+
+Three settings and one front-matter key decide whether a post is still taking
+them, and they are read in one place so the form and the endpoint can never
+disagree:
+
+| Where                                      | What it says                                                                       |
+| ------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `comments` in `site.json`                  | Whether the site takes comments at all. On by default; off is off everywhere.      |
+| `commentsCloseAfterDays` in `site.json`    | Days after a post's `date` that it closes. `14` by default; `0` never closes.      |
+| `comments: true` / `false` in front matter | The post's own answer, which beats both, in both directions. The editor offers it. |
+| The document's type                        | A page is closed unless it says otherwise.                                         |
+
+None of it touches the fediverse: a reply, a like or a boost arrives because a
+remote server sent it, and a closed post shows every one of them.
+
+A comment is held for a moderator unless the same **name and email** have had
+one approved before — WordPress's rule. In front of that are a honeypot field,
+a minimum time between the form being rendered and submitted, and a per-address
+rate limit. Comments are rendered from Markdown with raw HTML off, images
+unembedded and every link marked `rel="nofollow ugc"`.
+
+A site can hand the whole thing to a service:
+
+```ts
+export default defineConfig({
+  commentChecker: {
+    async check(submission) {
+      // submission carries the comment, the post's URL, and the commenter's
+      // address, user agent and referrer — everything Akismet asks for.
+      return 'spam' | 'discard' | 'ham' | 'unknown';
+    },
+    async reportSpam(report) {}, // a moderator filed something as spam
+    async reportHam(report) {}, // …or let something out of the spam list
+  },
+});
+```
+
+A checker that throws is treated as having no opinion and logged, so a service
+that is down never stops a site taking comments. `/admin/comments` is the
+moderation queue and the dashboard carries the number waiting; there is no
+email in this version, so the screen is the notification.
+
 ## Keeping the index in step
 
 Booting scans `contentDir`, indexes every Markdown file under `posts/` and
@@ -752,6 +809,9 @@ shadow the login form.
 | `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it. |
 | `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.          |
 | `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.      |
+| `/admin/comments`                                | Pending, approved and spam, with approve, spam, delete and reply.                |
+| `/admin/comments/moderate`                       | `POST` only. Approves one comment, files it as spam, or deletes it.              |
+| `/admin/comments/reply`                          | `POST` only. Posts an approved reply under the comment it answers.               |
 | `/admin/settings`                                | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor.    |
 | `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                           |
 | `/admin/users`                                   | Who may sign in. `POST` adds one.                                                |
@@ -1672,15 +1732,16 @@ npx @11ty/eleventy
 It is a plain ESM config with no dependency on this package, and it writes out
 the rules the CMS follows that Eleventy does not know about on its own:
 
-| Rule                                            | How the config does it                                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `draft: true` hides a document                  | An `addPreprocessor` that returns `false` for it. `BUILD_DRAFTS=1` builds drafts anyway, for a local preview.                                                                                                                                                                                                                                                                                           |
-| A file with no `permalink` gets the CMS default | An `addPreprocessor` that fills in `/{yyyy}/{mm}/{slug}/` for a post and `/{slug}/` for a page, slugifying the title exactly as the CMS does. Front matter always wins; the CMS writes `permalink` into every file it saves, so this only matters for hand-authored files.                                                                                                                              |
-| `content/uploads/` is served at `/uploads/`     | `addPassthroughCopy({ 'content/uploads': 'uploads' })`, plus an `ignores` entry for the same path. Without the ignore, an upload that happens to be Markdown would be copied _and_ rendered as a page; the CMS only ever indexes `posts/` and `pages/`.                                                                                                                                                 |
-| `content/_data/federation/` is data             | `followers.json` is an ordinary data file in a namespaced `_data` subdirectory, so Eleventy hands it over as `federation.followers` without being told. The monthly inbox logs are JSON Lines, which Eleventy has no reader for, so the config registers one with `addDataExtension('jsonl', …)`: each month becomes an entry of `federation.inbox`, keyed by its `{yyyy}-{mm}` name.                   |
-| `content/_trash/` is not published              | `ignores.add('content/_trash/**')`. Eleventy skips `_includes` and `_data` because they are configured directories, not because of the underscore, so the trash has to be named.                                                                                                                                                                                                                        |
-| Dates are shown in the site's `timezone`        | A `date` filter with the CMS's four formats: `readable`, `html` and `year` are the calendar the site's zone was on at the instant, `iso` is the instant in UTC. The zone is read from `content/_data/site.json`, which the settings screen writes, so a zone changed in the CMS changes the built pages too.                                                                                            |
-| A future `date` holds a post back               | An `addPreprocessor` that returns `false` for it. This is the one rule that cannot be exactly the same in both places: a build has no clock, only a moment. A scheduled post is left out of the build that runs before its date and is in the next build after it, so a scheduled site needs a build on a schedule; the CMS publishes it on the date by itself. `BUILD_SCHEDULED=1` builds them anyway. |
+| Rule                                            | How the config does it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `draft: true` hides a document                  | An `addPreprocessor` that returns `false` for it. `BUILD_DRAFTS=1` builds drafts anyway, for a local preview.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| A file with no `permalink` gets the CMS default | An `addPreprocessor` that fills in `/{yyyy}/{mm}/{slug}/` for a post and `/{slug}/` for a page, slugifying the title exactly as the CMS does. Front matter always wins; the CMS writes `permalink` into every file it saves, so this only matters for hand-authored files.                                                                                                                                                                                                                                          |
+| `content/uploads/` is served at `/uploads/`     | `addPassthroughCopy({ 'content/uploads': 'uploads' })`, plus an `ignores` entry for the same path. Without the ignore, an upload that happens to be Markdown would be copied _and_ rendered as a page; the CMS only ever indexes `posts/` and `pages/`.                                                                                                                                                                                                                                                             |
+| `content/_data/federation/` is data             | `followers.json` is an ordinary data file in a namespaced `_data` subdirectory, so Eleventy hands it over as `federation.followers` without being told. The monthly inbox logs are JSON Lines, which Eleventy has no reader for, so the config registers one with `addDataExtension('jsonl', …)`: each month becomes an entry of `federation.inbox`, keyed by its `{yyyy}-{mm}` name.                                                                                                                               |
+| `content/_data/comments/` is the same thread    | The conversation under a post is not only the inbox log: the approved comments in `content/_data/comments/{slug}.json` thread with it. The `conversation` filter takes the post's slug as a second argument and reads that file directly, rather than through the data cascade — a namespaced `_data/comments/` directory would arrive as a global called `comments`, and `comments: true` in a post's front matter would shadow it on exactly the pages that need it. The slug is on the context as `geekitySlug`. |
+| `content/_trash/` is not published              | `ignores.add('content/_trash/**')`. Eleventy skips `_includes` and `_data` because they are configured directories, not because of the underscore, so the trash has to be named.                                                                                                                                                                                                                                                                                                                                    |
+| Dates are shown in the site's `timezone`        | A `date` filter with the CMS's four formats: `readable`, `html` and `year` are the calendar the site's zone was on at the instant, `iso` is the instant in UTC. The zone is read from `content/_data/site.json`, which the settings screen writes, so a zone changed in the CMS changes the built pages too.                                                                                                                                                                                                        |
+| A future `date` holds a post back               | An `addPreprocessor` that returns `false` for it. This is the one rule that cannot be exactly the same in both places: a build has no clock, only a moment. A scheduled post is left out of the build that runs before its date and is in the next build after it, so a scheduled site needs a build on a schedule; the CMS publishes it on the date by itself. `BUILD_SCHEDULED=1` builds them anyway.                                                                                                             |
 
 It also builds two collections Eleventy has no notion of. `collections.categories`
 is the second taxonomy, one entry of `{ name, posts }` per category in use, for

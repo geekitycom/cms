@@ -1,0 +1,37 @@
+{
+  "post": "/2026/09/hello-world/",
+  "comments": [
+    {
+      "id": "01994c7a-0000-7000-8000-00000000ada0",
+      "source": "comment",
+      "kind": "reply",
+      "status": "approved",
+      "author": {
+        "name": "Ada Lovelace",
+        "url": "https://ada.example/",
+        "email": "ada@example.com"
+      },
+      "content": {
+        "markdown": "Left on the page itself.",
+        "html": "<p>Left on the page itself.</p>\n"
+      },
+      "submitted": "2026-09-05T10:00:00.000Z",
+      "addressHash": "0123456789abcdef0123456789abcdef",
+      "inReplyTo": null
+    },
+    {
+      "id": "01994c7a-0000-7000-8000-0000000ffff0",
+      "source": "comment",
+      "kind": "reply",
+      "status": "pending",
+      "author": { "name": "Nobody", "url": null, "email": null },
+      "content": {
+        "markdown": "Still waiting for a moderator.",
+        "html": "<p>Still waiting for a moderator.</p>\n"
+      },
+      "submitted": "2026-09-06T10:00:00.000Z",
+      "addressHash": null,
+      "inReplyTo": null
+    }
+  ]
+}

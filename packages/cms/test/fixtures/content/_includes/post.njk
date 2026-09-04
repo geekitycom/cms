@@ -9,7 +9,7 @@
   `themes/default/partials/conversation.njk`; this is the Eleventy half of the
   same promise, and `test/eleventy.test.ts` compares them.
 #}
-{% set conversation = federation.inbox | conversation(activityStreams) %}
+{% set conversation = federation.inbox | conversation(activityStreams, geekitySlug) %}
 {% if conversation.counts.total %}
 <section class="conversation">
   <p class="conversation-counts">
@@ -19,7 +19,7 @@
   </p>
   <ol class="comment-list">
     {% for reply in conversation.replies %}
-    <li class="comment">
+    <li class="comment comment-{{ reply.source }}" id="comment-{{ reply.id }}">
       <a class="comment-author" href="{{ reply.author.url }}">{{ reply.author.name }}</a>
       <a class="comment-permalink" href="{{ reply.url }}">
         <time datetime="{{ reply.published }}">{{ reply.published }}</time>

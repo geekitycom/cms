@@ -17,6 +17,12 @@ import { editorPath, mountDocumentScreens, PAGE_KIND, POST_KIND } from './docume
 import { FEDERATION_PATH, mountFederationScreen } from './federation.ts';
 import { takeFlash } from './flash.ts';
 import { adminSecurityHeaders } from './headers.ts';
+import {
+  COMMENTS_PATH,
+  COMMENTS_SECTION,
+  mountCommentsScreen,
+  pendingComments,
+} from './comments.ts';
 import { MEDIA_PATH, MEDIA_SECTION, MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
 import { mountPreview } from './preview.ts';
 import { AVATAR_PATH, mountSettings } from './settings.ts';
@@ -67,6 +73,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   { section: TAG_KIND.section, label: TAG_KIND.plural, url: TAG_KIND.basePath },
   { section: CATEGORY_KIND.section, label: CATEGORY_KIND.plural, url: CATEGORY_KIND.basePath },
   { section: MEDIA_SECTION, label: 'Media', url: MEDIA_PATH },
+  { section: COMMENTS_SECTION, label: 'Comments', url: COMMENTS_PATH },
   { section: 'settings', label: 'Settings', url: `${ADMIN_PREFIX}/settings` },
   { section: 'users', label: 'Users', url: `${ADMIN_PREFIX}/users` },
   { section: 'federation', label: 'Federation', url: `${ADMIN_PREFIX}/federation` },
@@ -285,6 +292,11 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       // directory: it is what says whether publishing is reaching anybody.
       followers: c.var.admin.countFollowers(),
       federationUrl: FEDERATION_PATH,
+      // The other number that is not about the content directory: with no
+      // email in this milestone, the dashboard is how a moderator finds out
+      // that somebody is waiting (TASK-50).
+      pendingComments: pendingComments(c.var.admin),
+      commentsUrl: COMMENTS_PATH,
     });
   });
 
@@ -308,6 +320,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // the upload form that stores a file by the same rules the editor does.
   mountMediaScreen(app, { render });
 
+  // What people have left on the site, and the four things that can be done
+  // about it: approve, spam, delete, reply.
+  mountCommentsScreen(app, { render });
+
   // The site's own settings, which are content/_data/site.json itself: the
   // screen reads that file and writes it back (decision-9).
   mountSettings(app, { render });
@@ -326,6 +342,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     TAG_KIND.section,
     CATEGORY_KIND.section,
     MEDIA_SECTION,
+    COMMENTS_SECTION,
     'dashboard',
     'settings',
     'users',

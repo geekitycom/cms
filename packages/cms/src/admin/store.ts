@@ -274,6 +274,115 @@ export type NewRelay = Omit<Relay, 'createdAt' | 'updatedAt'> & {
   createdAt?: string | undefined;
 };
 
+/** Where a comment came from. */
+export const COMMENT_SOURCES = ['comment', 'webmention'] as const;
+
+/**
+ * One of {@link COMMENT_SOURCES}.
+ *
+ * `comment` is the form under the post. `webmention` is another site's post
+ * pointing at this one (TASK-51), which lands in the same file with the same
+ * shape and is told apart only by this.
+ */
+export type CommentSource = (typeof COMMENT_SOURCES)[number];
+
+/** What a comment is: something written, or a wordless pointer at the post. */
+export const COMMENT_KINDS = ['reply', 'like', 'boost'] as const;
+
+/** One of {@link COMMENT_KINDS}. The same three a conversation knows. */
+export type CommentKind = (typeof COMMENT_KINDS)[number];
+
+/** Where a comment stands with the moderator. */
+export const COMMENT_STATUSES = ['pending', 'approved', 'spam'] as const;
+
+/**
+ * One of {@link COMMENT_STATUSES}.
+ *
+ * `pending` is waiting for somebody to look at it, and is the state almost
+ * every comment starts in; `approved` is on the page and in the feeds; `spam`
+ * is kept rather than deleted, so a checker can be told it was wrong and so a
+ * mistake can be undone.
+ */
+export type CommentStatus = (typeof COMMENT_STATUSES)[number];
+
+/** Who wrote a comment, as much as the site knows. */
+export interface CommentAuthor {
+  /** The name they gave, which is what the page shows. */
+  name: string;
+  /** Their website, or `null`. Shown, and marked `nofollow ugc` like any link. */
+  url: string | null;
+  /**
+   * Their email, or `null`. **Never shown**: it is here for the moderator, for
+   * the auto-approval rule, and for the spam checker.
+   */
+  email: string | null;
+}
+
+/** What a comment says, in both the forms the site keeps. */
+export interface CommentContent {
+  /** What was typed, which is what a person wrote and the source of truth. */
+  markdown: string;
+  /** {@link CommentContent.markdown} through the restricted profile. */
+  html: string;
+}
+
+/**
+ * One comment, as its post's file under `content/_data/comments/` holds it.
+ *
+ * The shape is deliberately wider than a form submission. A webmention
+ * (TASK-51) is somebody else's post pointing at this one: it has a `url` and no
+ * email, it may be a like rather than a reply, and it belongs in the same file
+ * and the same thread. So every entry says its `source` and its `kind`, and
+ * nothing assumes a person filled in a form.
+ */
+export interface CommentRecord {
+  /** Its name, unique across the site, and what a reply puts in `inReplyTo`. */
+  id: string;
+  /** Where it came from. */
+  source: CommentSource;
+  /** What it is. */
+  kind: CommentKind;
+  /** Where it stands with the moderator. */
+  status: CommentStatus;
+  /** Who wrote it. */
+  author: CommentAuthor;
+  /** What it says. */
+  content: CommentContent;
+  /** When it was submitted, as an ISO 8601 instant. */
+  submitted: string;
+  /**
+   * A salted hash of the address it came from, or `null`.
+   *
+   * The address itself is not kept: the file is published with the site and
+   * goes into git, and an IP address there would be a reader's home written
+   * into a public repository. The hash is enough to see that two comments came
+   * from one place, which is what a moderator is actually asking.
+   */
+  addressHash: string | null;
+  /** The comment it answers, or `null` for one answering the post itself. */
+  inReplyTo: string | null;
+}
+
+/**
+ * A {@link CommentRecord} with the post it is on.
+ *
+ * The file it lives in is named after the post's slug and records the post's
+ * permalink, so both are facts of the file rather than of the entry; the index
+ * carries them on the row because a query by id has no file to read them from.
+ */
+export interface PostComment extends CommentRecord {
+  /** The post's slug, which names the file the comment lives in. */
+  slug: string;
+  /** That post's permalink, for the moderation screen and the feeds. */
+  permalink: string;
+}
+
+/** How {@link AdminStore.listComments} narrows and pages. */
+export interface ListCommentsOptions extends ListPageOptions {
+  /** Only comments at this status. Every status when it is not given. */
+  status?: CommentStatus | undefined;
+}
+
 /**
  * Everything the database holds that is not the content index: the sessions,
  * the followers and inbox indexes, the delivery outcomes, the relay handshake
@@ -437,6 +546,46 @@ export interface AdminStore {
    * nothing rather than everything.
    */
   listActivitiesAbout(objectIds: readonly string[]): InboxActivity[];
+  /** One post's comments, oldest first, whatever status they are at. */
+  listCommentsFor(slug: string): PostComment[];
+  /**
+   * How many of one post's comments stand at one status.
+   *
+   * A count rather than a list because that is what the feeds want: the RSS
+   * `source:comments` element carries a number per item, and reading every
+   * comment on every post of a feed page to arrive at it would be a page of
+   * text for a page of integers.
+   */
+  countCommentsFor(slug: string, status: CommentStatus): number;
+  /**
+   * Comments across the site, newest first, optionally of one status and one
+   * page of them. What the moderation screen and the site-wide feed read.
+   */
+  listComments(options: ListCommentsOptions): PostComment[];
+  /** One comment by id, or `undefined`. */
+  getComment(id: string): PostComment | undefined;
+  /** How many comments stand at each status. What the dashboard shows. */
+  countCommentsByStatus(): Record<CommentStatus, number>;
+  /**
+   * Whether this name and email have had a comment approved before.
+   *
+   * WordPress's rule, and the whole of the auto-approval decision: somebody a
+   * moderator has already let through does not queue again. Both have to
+   * match, so a stranger typing a regular's name is still held.
+   */
+  hasApprovedAuthor(name: string, email: string | null): boolean;
+  /** Store a comment, replacing whatever was known about that id. */
+  putComment(comment: PostComment): PostComment;
+  /** Forget a comment. Returns `false` when there was nothing to forget. */
+  deleteComment(id: string): boolean;
+  /**
+   * Make the comment index say exactly this, in one transaction.
+   *
+   * What a rebuild from `content/_data/comments/` calls (decision-9): the
+   * files are the source, so a row they do not carry is a comment that should
+   * not be on the page. Nothing outside a rebuild should reach for it.
+   */
+  replaceComments(comments: readonly PostComment[]): void;
   /**
    * Record how one delivery to one follower ended, replacing the previous
    * outcome for that pair: the table answers "where does this activity stand
@@ -586,6 +735,44 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       ORDER BY received_at DESC, id DESC
       LIMIT ? OFFSET ?
     `),
+    listCommentsFor: db.prepare(`
+      SELECT * FROM comments WHERE slug = ? ORDER BY submitted_at, id
+    `),
+    commentById: db.prepare('SELECT * FROM comments WHERE id = ?'),
+    countCommentsFor: db.prepare(
+      'SELECT COUNT(*) AS count FROM comments WHERE slug = ? AND status = ?',
+    ),
+    countCommentsByStatus: db.prepare(
+      'SELECT status, COUNT(*) AS count FROM comments GROUP BY status',
+    ),
+    hasApprovedAuthor: db.prepare(`
+      SELECT 1 FROM comments
+      WHERE status = 'approved' AND author_name = ? AND author_email IS ?
+      LIMIT 1
+    `),
+    putComment: db.prepare(`
+      INSERT INTO comments (
+        id, slug, permalink, source, kind, status,
+        author_name, author_url, author_email,
+        markdown, html, submitted_at, address_hash, in_reply_to
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (id) DO UPDATE SET
+        slug = excluded.slug,
+        permalink = excluded.permalink,
+        source = excluded.source,
+        kind = excluded.kind,
+        status = excluded.status,
+        author_name = excluded.author_name,
+        author_url = excluded.author_url,
+        author_email = excluded.author_email,
+        markdown = excluded.markdown,
+        html = excluded.html,
+        submitted_at = excluded.submitted_at,
+        address_hash = excluded.address_hash,
+        in_reply_to = excluded.in_reply_to
+    `),
+    deleteComment: db.prepare('DELETE FROM comments WHERE id = ?'),
+    clearComments: db.prepare('DELETE FROM comments'),
     recordDelivery: db.prepare(`
       INSERT INTO ap_deliveries (
         activity_id, activity_type, object_id, slug,
@@ -877,6 +1064,102 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return rows.map(toInboxActivity);
     },
 
+    listCommentsFor(slug) {
+      return (statements.listCommentsFor.all(slug) as Record<string, unknown>[]).map(toComment);
+    },
+
+    listComments(options = {}) {
+      // Prepared here rather than beside the others because the `WHERE` is not
+      // fixed: the screen asks for one status and the site-wide feed asks for
+      // approved comments across every post.
+      const where = options.status === undefined ? '' : 'WHERE status = ?';
+      const parameters = options.status === undefined ? [] : [options.status];
+      const rows = db
+        .prepare(
+          `SELECT * FROM comments ${where}
+           ORDER BY submitted_at DESC, id DESC
+           LIMIT ? OFFSET ?`,
+        )
+        .all(...parameters, options.limit ?? NO_LIMIT, options.offset ?? 0) as Record<
+        string,
+        unknown
+      >[];
+      return rows.map(toComment);
+    },
+
+    countCommentsFor(slug, status) {
+      const row = statements.countCommentsFor.get(slug, status) as
+        Record<string, unknown> | undefined;
+      return Number(row?.['count'] ?? 0);
+    },
+
+    getComment(id) {
+      const row = statements.commentById.get(id) as Record<string, unknown> | undefined;
+      return row === undefined ? undefined : toComment(row);
+    },
+
+    countCommentsByStatus() {
+      const counts: Record<CommentStatus, number> = { pending: 0, approved: 0, spam: 0 };
+      for (const row of statements.countCommentsByStatus.all() as Record<string, unknown>[]) {
+        counts[commentStatus(row['status'])] += Number(row['count'] ?? 0);
+      }
+      return counts;
+    },
+
+    hasApprovedAuthor(name, email) {
+      // `IS` rather than `=`, so an author who gave no email is matched by the
+      // rows that gave none either instead of matching nothing.
+      return statements.hasApprovedAuthor.get(name, email) !== undefined;
+    },
+
+    putComment(comment) {
+      statements.putComment.run(
+        comment.id,
+        comment.slug,
+        comment.permalink,
+        comment.source,
+        comment.kind,
+        comment.status,
+        comment.author.name,
+        comment.author.url,
+        comment.author.email,
+        comment.content.markdown,
+        comment.content.html,
+        comment.submitted,
+        comment.addressHash,
+        comment.inReplyTo,
+      );
+      return comment;
+    },
+
+    deleteComment(id) {
+      return statements.deleteComment.run(id).changes > 0;
+    },
+
+    replaceComments(comments) {
+      inTransaction(() => {
+        statements.clearComments.run();
+        for (const comment of comments) {
+          statements.putComment.run(
+            comment.id,
+            comment.slug,
+            comment.permalink,
+            comment.source,
+            comment.kind,
+            comment.status,
+            comment.author.name,
+            comment.author.url,
+            comment.author.email,
+            comment.content.markdown,
+            comment.content.html,
+            comment.submitted,
+            comment.addressHash,
+            comment.inReplyTo,
+          );
+        }
+      });
+    },
+
     recordDelivery(delivery) {
       const row = statements.recordDelivery.get(
         delivery.activityId,
@@ -1116,6 +1399,42 @@ function toDelivery(row: Record<string, unknown>): Delivery {
     error: nullableText(row['error']),
     attemptedAt: String(row['attempted_at']),
   };
+}
+
+function toComment(row: Record<string, unknown>): PostComment {
+  return {
+    id: String(row['id']),
+    slug: String(row['slug']),
+    permalink: String(row['permalink']),
+    source: oneOf(row['source'], COMMENT_SOURCES, 'comment'),
+    kind: oneOf(row['kind'], COMMENT_KINDS, 'reply'),
+    status: commentStatus(row['status']),
+    author: {
+      name: String(row['author_name']),
+      url: nullableText(row['author_url']),
+      email: nullableText(row['author_email']),
+    },
+    content: { markdown: String(row['markdown']), html: String(row['html']) },
+    submitted: String(row['submitted_at']),
+    addressHash: nullableText(row['address_hash']),
+    inReplyTo: nullableText(row['in_reply_to']),
+  };
+}
+
+/**
+ * A stored comment status, or `pending` for one this version does not know.
+ *
+ * Pending is the safe reading: showing a comment nobody approved is the one
+ * mistake a moderation queue cannot make, and the screen is right there for
+ * the row.
+ */
+function commentStatus(value: unknown): CommentStatus {
+  return oneOf(value, COMMENT_STATUSES, 'pending');
+}
+
+/** A stored enumeration value, or the fallback for one this version does not know. */
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
 function toRelay(row: Record<string, unknown>): Relay {
@@ -1562,6 +1881,41 @@ const MIGRATIONS: readonly Migration[] = [
     version: 13,
     sql: `
       CREATE INDEX ap_inbox_object_id ON ap_inbox (object_id);
+    `,
+  },
+  {
+    // Native comments (TASK-50), which are files under
+    // `content/_data/comments/` and nothing else: this table is an index of
+    // them, emptied and read back on every boot exactly as `followers` and
+    // `ap_inbox` are. Nothing here is a fact the files do not carry.
+    //
+    // The id is the comment's own name rather than a row number, because it is
+    // what a reply names, what a moderation form posts and what the page
+    // anchors on — all three have to survive a rebuilt index. The author's
+    // name and email are indexed together because that pair is the whole of
+    // WordPress's auto-approval rule.
+    version: 14,
+    sql: `
+      CREATE TABLE comments (
+        id           TEXT PRIMARY KEY,
+        slug         TEXT NOT NULL,
+        permalink    TEXT NOT NULL,
+        source       TEXT NOT NULL,
+        kind         TEXT NOT NULL,
+        status       TEXT NOT NULL,
+        author_name  TEXT NOT NULL,
+        author_url   TEXT,
+        author_email TEXT,
+        markdown     TEXT NOT NULL,
+        html         TEXT NOT NULL,
+        submitted_at TEXT NOT NULL,
+        address_hash TEXT,
+        in_reply_to  TEXT
+      );
+
+      CREATE INDEX comments_slug ON comments (slug, submitted_at);
+      CREATE INDEX comments_status ON comments (status, submitted_at);
+      CREATE INDEX comments_author ON comments (author_name, author_email, status);
     `,
   },
 ];

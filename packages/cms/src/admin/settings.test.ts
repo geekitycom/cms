@@ -31,6 +31,8 @@ const DEFAULT_FORM: Record<string, string> = {
   actor_type: 'Person',
   tag_base: 'tag',
   category_base: 'category',
+  comments: '1',
+  comments_close_after_days: '14',
   notify_server: 'https://rpc.rsscloud.io',
 };
 
@@ -157,6 +159,8 @@ describe('content/_data/site.json', () => {
       actorType: 'Person',
       tagBase: 'tag',
       categoryBase: 'category',
+      comments: true,
+      commentsCloseAfterDays: 14,
       notifyServer: 'https://rpc.rsscloud.io',
       relays: [],
       navigation: [],

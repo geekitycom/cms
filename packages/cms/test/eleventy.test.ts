@@ -334,6 +334,30 @@ describe('the fixtures content directory under Eleventy', () => {
     assert.ok(!html.includes('javascript:'), 'and so is the script URL');
   });
 
+  it('threads a native comment from _data/comments into the same conversation', async () => {
+    const html = await readFile(
+      path.join(buildDir, '_site', '2026/09/hello-world/index.html'),
+      'utf8',
+    );
+
+    // The approved comment from `content/_data/comments/hello-world.json` is
+    // in the same list as the fediverse reply, marked with its own source, so
+    // a static build shows what the CMS shows (TASK-50).
+    assert.ok(
+      html.includes('<p>Left on the page itself.</p>'),
+      `the comment is on the page: ${html}`,
+    );
+    assert.ok(html.includes('class="comment comment-comment"'), 'it says where it came from');
+    assert.ok(html.includes('Ada Lovelace'), 'the commenter is named');
+
+    // Two answers now: the fediverse reply and the comment.
+    assert.ok(html.includes('2 replies'), `both are counted: ${html}`);
+
+    // Nothing a moderator has not approved, and no email anywhere near it.
+    assert.ok(!html.includes('Still waiting for a moderator.'), 'a pending comment is not built');
+    assert.ok(!html.includes('ada@example.com'), 'the email is never published');
+  });
+
   it('renders no conversation under a post nobody has answered', async () => {
     const html = await readFile(path.join(buildDir, '_site', 'notes/renamed/index.html'), 'utf8');
 

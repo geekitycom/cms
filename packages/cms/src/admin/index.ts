@@ -101,6 +101,20 @@ export type {
   MountFederationScreenOptions,
   RelayRow,
 } from './federation.ts';
+export {
+  COMMENT_ACTIONS,
+  COMMENT_ADMIN_FIELDS,
+  COMMENT_TABS,
+  COMMENTS_MODERATE_PATH,
+  COMMENTS_PATH,
+  COMMENTS_PER_PAGE,
+  COMMENTS_REPLY_PATH,
+  COMMENTS_SECTION,
+  listUrl as commentListUrl,
+  mountCommentsScreen,
+  pendingComments,
+} from './comments.ts';
+export type { CommentAction, CommentRow, MountCommentsScreenOptions } from './comments.ts';
 export { flash, takeFlash } from './flash.ts';
 export {
   deleteUpload,
@@ -213,9 +227,25 @@ export {
   setSessionCookie,
   usesSecureCookies,
 } from './session.ts';
-export { DELIVERY_STATUSES, openAdminStore, RELAY_STATES, SESSION_ID_BYTES } from './store.ts';
+export {
+  COMMENT_KINDS,
+  COMMENT_SOURCES,
+  COMMENT_STATUSES,
+  DELIVERY_STATUSES,
+  openAdminStore,
+  RELAY_STATES,
+  SESSION_ID_BYTES,
+} from './store.ts';
 export type {
   AdminStore,
+  CommentAuthor,
+  CommentContent,
+  CommentKind,
+  CommentRecord,
+  CommentSource,
+  CommentStatus,
+  ListCommentsOptions,
+  PostComment,
   CreateSessionInput,
   Delivery,
   DeliveryStatus,

@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { createUser, DuplicateUsernameError, migrateUsersToFile } from './admin/accounts.ts';
 import { credentialProblem } from './admin/credentials.ts';
 import { openAdminStore } from './admin/store.ts';
+import type { AdminStore } from './admin/store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
 import { resolveConfig } from './config.ts';
 import { createCms } from './index.ts';
@@ -343,13 +344,14 @@ async function syncCommand(configPath: string | undefined): Promise<number> {
  *
  * Nothing in `data/geekity.db` is anything but a reading of `content/` and
  * `data/` (decision-9), so this is a command with no undo and no loss: the
- * content index, the followers and the inbox log come back exactly as they
- * were, and what does not — sessions, the cached delivery outcomes, the relay
- * handshake — is what a site is told it may lose. It is the way past a
- * database this version refuses to open, which is the other reason it exists.
+ * content index, the followers, the inbox log and the comments come back
+ * exactly as they were, and what does not — sessions, the cached delivery
+ * outcomes, the relay handshake — is what a site is told it may lose. It is the
+ * way past a database this version refuses to open, which is the other reason
+ * it exists.
  *
  * The rebuild is the boot: after the file is gone, `createCms` applies the same
- * migrations and runs the same {@link rebuildFederationIndexes}, and `sync()`
+ * migrations and runs the same rebuilds boot runs, and `sync()`
  * is the same scan `serve()` does. Nothing here knows how to build an index,
  * which is what keeps a rebuilt database identical to a booted one.
  *
@@ -380,8 +382,9 @@ async function rebuildCommand(configPath: string | undefined): Promise<number> {
         `Scanned ${String(result.scanned)}: ${String(result.created)} created, ` +
         `${String(result.updated)} updated, ${String(result.removed)} removed, ` +
         `${String(result.unchanged)} unchanged, ${String(result.failed)} failed\n` +
-        `Indexed ${count(cms.admin.countFollowers(), 'follower')} and ` +
-        `${count(cms.admin.countInboxActivities(), 'inbox activity', 'inbox activities')}.\n`,
+        `Indexed ${count(cms.admin.countFollowers(), 'follower')}, ` +
+        `${count(cms.admin.countInboxActivities(), 'inbox activity', 'inbox activities')} and ` +
+        `${count(totalComments(cms.admin), 'comment')}.\n`,
     );
 
     if (result.failed > 0) {
@@ -399,6 +402,12 @@ async function rebuildCommand(configPath: string | undefined): Promise<number> {
 }
 
 /** "1 follower", "2 followers". The plural is the singular plus s unless told. */
+/** How many comments the files hold, whatever a moderator has done with them. */
+function totalComments(admin: AdminStore): number {
+  const counts = admin.countCommentsByStatus();
+  return counts.pending + counts.approved + counts.spam;
+}
+
 function count(howMany: number, singular: string, plural = `${singular}s`): string {
   return `${String(howMany)} ${howMany === 1 ? singular : plural}`;
 }
