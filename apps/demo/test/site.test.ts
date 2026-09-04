@@ -108,6 +108,18 @@ describe('the demo content', () => {
     assert.equal((await get('/2026/09/a-draft-nobody-can-see/')).status, 404);
     assert.doesNotMatch(await text('/'), /A draft nobody can see/);
     assert.doesNotMatch(await text('/tags/theme/'), /A draft nobody can see/);
+    assert.doesNotMatch(await text('/category/general/'), /A draft nobody can see/);
+  });
+
+  it('files its posts under categories, with an archive at /category/{slug}/', async () => {
+    const post = await text('/2026/08/markdown-on-disk/');
+    assert.match(post, /href="\/category\/engineering\/"/, 'the post links its category');
+
+    const archive = await text('/category/engineering/');
+    assert.match(archive, /Markdown on disk/);
+    assert.doesNotMatch(archive, /The theme is just templates/, 'filed elsewhere');
+
+    assert.equal((await get('/category/nothing-is-filed-here/')).status, 404);
   });
 
   it('offers the same document as Markdown and as JSON', async () => {

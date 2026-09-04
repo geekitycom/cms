@@ -14,7 +14,7 @@ import { Temporal as TemporalPolyfill } from '@js-temporal/polyfill';
 import type { Document } from '../content/document.ts';
 import { isPublicDocument } from '../web/documents.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
-import { tagHref } from '../web/routes.ts';
+import { categoryHref, tagHref } from '../web/routes.ts';
 import type { FederationContextData } from './federation.ts';
 import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
 import { createActivityId, deleteActivityId, updateActivityId } from './paths.ts';
@@ -62,14 +62,21 @@ export function postArticle(context: Context<FederationContextData>, document: D
     // follower is told about it.
     to: PUBLIC_COLLECTION,
     cc: context.getFollowersUri(SITE_ACTOR_IDENTIFIER),
-    tags: document.tags.map(
-      (tag) =>
-        new Hashtag({
-          name: `#${tag}`,
-          href: new URL(absoluteUrl(tagHref(tag, 0), baseUrl)),
-        }),
-    ),
+    // Both taxonomies become hashtags: a relay or a search that keys on a
+    // hashtag has no reason to care which of the two a term came from, and
+    // each one points at the archive the site serves for it.
+    tags: [
+      ...document.tags.map((tag) => hashtag(tag, tagHref(tag, 0), baseUrl)),
+      ...document.categories.map((category) =>
+        hashtag(category, categoryHref(category, 0), baseUrl),
+      ),
+    ],
   });
+}
+
+/** One taxonomy term as a `Hashtag` pointing at its archive. */
+function hashtag(term: string, href: string, baseUrl: string): Hashtag {
+  return new Hashtag({ name: `#${term}`, href: new URL(absoluteUrl(href, baseUrl)) });
 }
 
 /**

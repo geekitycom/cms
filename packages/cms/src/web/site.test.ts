@@ -51,12 +51,23 @@ async function site(
 /** A post file. */
 function post(
   title: string,
-  options: { date: string; permalink: string; tags?: string[]; draft?: boolean; body?: string },
+  options: {
+    date: string;
+    permalink: string;
+    tags?: string[];
+    categories?: string[];
+    draft?: boolean;
+    body?: string;
+  },
 ): string {
   const tags =
     options.tags === undefined ? '' : `tags:\n${options.tags.map((t) => `  - ${t}`).join('\n')}\n`;
+  const categories =
+    options.categories === undefined
+      ? ''
+      : `categories:\n${options.categories.map((c) => `  - ${c}`).join('\n')}\n`;
   const draft = options.draft === true ? 'draft: true\n' : '';
-  return `---\ntitle: ${title}\ndate: '${options.date}'\npermalink: ${options.permalink}\n${tags}${draft}---\n\n${options.body ?? 'Body.'}\n`;
+  return `---\ntitle: ${title}\ndate: '${options.date}'\npermalink: ${options.permalink}\n${tags}${categories}${draft}---\n\n${options.body ?? 'Body.'}\n`;
 }
 
 /** A page file. */
@@ -290,6 +301,127 @@ describe('a tag archive', () => {
     const { cms } = await site(tagged);
 
     assert.equal((await cms.app.request('/tags/nobody-uses-this/')).status, 404);
+  });
+});
+
+describe('a category archive', () => {
+  const filed = {
+    'posts/notes.md': post('Notes', {
+      date: '2026-09-03T09:00:00Z',
+      permalink: '/notes/',
+      tags: ['eleventy'],
+      categories: ['general', 'meta'],
+    }),
+    'posts/more-notes.md': post('More notes', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/more-notes/',
+      categories: ['general'],
+    }),
+    'posts/unrelated.md': post('Unrelated', {
+      date: '2026-09-01T09:00:00Z',
+      permalink: '/unrelated/',
+      categories: ['other'],
+    }),
+  };
+
+  it('lists the posts filed under that category and nothing else', async () => {
+    const { cms } = await site(filed);
+
+    const response = await cms.app.request('/category/general/');
+    const html = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.ok(html.includes('href="/notes/"'), 'a filed post is listed');
+    assert.ok(html.includes('href="/more-notes/"'), 'the other filed post is listed');
+    assert.ok(!html.includes('href="/unrelated/"'), 'a post filed elsewhere is not');
+    assert.ok(html.includes('general'), 'the category names the archive');
+  });
+
+  it('is a different archive from the tag of the same name', async () => {
+    const { cms } = await site(filed);
+
+    assert.equal((await cms.app.request('/tags/general/')).status, 404);
+    assert.equal((await cms.app.request('/category/eleventy/')).status, 404);
+  });
+
+  it('leaves drafts and the trash out of the archive', async () => {
+    const { cms } = await site({
+      ...filed,
+      'posts/hidden.md': post('Hidden', {
+        date: '2026-09-04T09:00:00Z',
+        permalink: '/hidden/',
+        categories: ['general'],
+        draft: true,
+      }),
+      '_trash/posts/gone.md': post('Gone', {
+        date: '2026-09-05T09:00:00Z',
+        permalink: '/gone/',
+        categories: ['general'],
+      }),
+    });
+
+    const html = await (await cms.app.request('/category/general/')).text();
+
+    assert.ok(!html.includes('href="/hidden/"'), 'the draft is not listed');
+    assert.ok(!html.includes('href="/gone/"'), 'the trashed post is not listed');
+    assert.ok(!html.includes('Hidden'), 'the draft title does not leak');
+    assert.ok(!html.includes('Gone'), 'the trashed title does not leak');
+  });
+
+  it('paginates, at /category/{slug}/page/N/', async () => {
+    const { cms } = await site({
+      ...filed,
+      '_data/site.json': JSON.stringify({ title: 'Paged', postsPerPage: 1 }),
+    });
+
+    const first = await (await cms.app.request('/category/general/')).text();
+    assert.ok(first.includes('href="/category/general/page/2/"'), 'page one links to page two');
+
+    const second = await cms.app.request('/category/general/page/2/');
+    assert.equal(second.status, 200);
+    assert.ok(
+      (await second.text()).includes('href="/more-notes/"'),
+      'page two holds the older post',
+    );
+  });
+
+  it('301s the archive URL that arrived without its trailing slash', async () => {
+    const { cms } = await site(filed);
+
+    const response = await cms.app.request('/category/general');
+
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), '/category/general/');
+  });
+
+  it('404s a category nothing is filed under', async () => {
+    const { cms } = await site(filed);
+
+    assert.equal((await cms.app.request('/category/nobody-files-here/')).status, 404);
+    assert.equal((await cms.app.request('/category/nobody-files-here/page/2/')).status, 404);
+  });
+
+  it('serves the archive as JSON at /category/{slug}/index.json', async () => {
+    const { cms } = await site(filed);
+
+    const response = await cms.app.request('/category/general/index.json');
+    const body = (await response.json()) as { url: string }[];
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /application\/json/);
+    assert.deepEqual(
+      body.map((entry) => entry.url),
+      ['http://localhost:3000/notes/', 'http://localhost:3000/more-notes/'],
+    );
+  });
+
+  it('links a post to every category it is filed under', async () => {
+    const { cms } = await site(filed);
+
+    const html = await (await cms.app.request('/notes/')).text();
+
+    assert.ok(html.includes('/category/general/'), 'the first category links to its archive');
+    assert.ok(html.includes('/category/meta/'), 'the second category links to its archive');
   });
 });
 

@@ -5,6 +5,8 @@ permalink: /2026/09/the-theme-is-just-templates/
 tags:
   - web
   - theme
+categories:
+  - general
 description: How a site overrides one layout and keeps the rest.
 author: Andrew Shell
 ---

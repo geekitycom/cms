@@ -19,7 +19,7 @@ import { after, before, describe, it } from 'node:test';
 
 import Eleventy from '@11ty/eleventy';
 
-import { isTrashedPath, parseDocument } from '../src/index.ts';
+import { categoryHref, isTrashedPath, parseDocument } from '../src/index.ts';
 import type { Document } from '../src/index.ts';
 
 /** Where a site's Eleventy build would be run from: the fixtures project root. */
@@ -149,11 +149,12 @@ describe('the fixtures content directory under Eleventy', () => {
   });
 
   it('writes nothing the CMS would not serve at that URL', () => {
-    const expected = new Set(
-      documents
-        .filter((document) => !document.draft && !isTrashedPath(document.path))
-        .map((document) => outputPathFor(document.permalink)),
-    );
+    const expected = new Set([
+      ...publishedDocuments().map((document) => outputPathFor(document.permalink)),
+      // The category archives the CMS serves at the same URLs; the test below
+      // is what proves those URLs are the ones it serves.
+      ...publishedCategories().map((category) => outputPathFor(categoryHref(category, 0))),
+    ]);
 
     const unexplained = written.filter(
       (file) => !expected.has(file) && !FEED_PATTERN.test(file) && !file.startsWith('uploads/'),
@@ -161,6 +162,69 @@ describe('the fixtures content directory under Eleventy', () => {
 
     assert.deepEqual(unexplained, []);
   });
+
+  it('builds a category archive per category, at the URL the CMS serves it from', () => {
+    const categories = publishedCategories();
+    assert.ok(categories.length >= 2, 'the fixtures do not exercise enough categories');
+
+    for (const category of categories) {
+      assert.ok(
+        written.includes(outputPathFor(categoryHref(category, 0))),
+        `the CMS serves ${category} at ${categoryHref(category, 0)}, so Eleventy should have ` +
+          `written ${outputPathFor(categoryHref(category, 0))}; it wrote ${written.join(', ')}`,
+      );
+    }
+  });
+
+  it('lists a category’s posts on its archive and nothing else', async () => {
+    const html = await readFile(
+      path.join(buildDir, '_site', outputPathFor(categoryHref('general', 0))),
+      'utf8',
+    );
+
+    const filed = publishedDocuments().filter((document) =>
+      document.categories.includes('general'),
+    );
+    assert.ok(filed.length >= 2, 'the fixtures do not exercise a shared category');
+
+    for (const document of filed) {
+      assert.ok(html.includes(document.title), `${document.title} is on the general archive`);
+    }
+    for (const document of publishedDocuments()) {
+      if (document.categories.includes('general')) continue;
+      assert.ok(
+        !html.includes(document.title),
+        `${document.title} is not filed under general and must not be listed`,
+      );
+    }
+  });
+
+  it('keeps drafts and the trash out of the category archives', () => {
+    const hidden = documents.filter(
+      (document) =>
+        (document.draft || isTrashedPath(document.path)) && document.categories.length > 0,
+    );
+
+    for (const document of hidden) {
+      for (const category of document.categories) {
+        if (publishedCategories().includes(category)) continue;
+        assert.ok(
+          !written.includes(outputPathFor(categoryHref(category, 0))),
+          `${category} is only carried by hidden documents, so it should have no archive`,
+        );
+      }
+    }
+  });
+
+  /** Every document the public site would serve. */
+  function publishedDocuments(): Document[] {
+    return documents.filter((document) => !document.draft && !isTrashedPath(document.path));
+  }
+
+  /** Every category the CMS's own archive would exist for. */
+  function publishedCategories(): string[] {
+    return [...new Set(publishedDocuments().flatMap((document) => document.categories))];
+  }
 
   it('leaves drafts out of the build', () => {
     const drafts = documents.filter((document) => document.draft);

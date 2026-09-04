@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 
@@ -136,6 +137,49 @@ describe('parseDocument', () => {
     const document = parseDocument(source, { path: 'pages/one-tag.md' });
 
     assert.deepEqual(document.tags, ['notes']);
+  });
+
+  it('reads categories as a second taxonomy beside the tags', () => {
+    const source =
+      '---\ntitle: Filed\npermalink: /filed/\ntags:\n  - notes\ncategories:\n  - general\n  - meta\n---\n\nBody.\n';
+
+    const document = parseDocument(source, { path: 'posts/filed.md' });
+
+    assert.deepEqual(document.categories, ['general', 'meta']);
+    assert.deepEqual(document.tags, ['notes']);
+  });
+
+  it('accepts a single category written as a string', () => {
+    const source =
+      '---\ntitle: One Category\npermalink: /one-category/\ncategories: general\n---\n\nBody.\n';
+
+    const document = parseDocument(source, { path: 'posts/one-category.md' });
+
+    assert.deepEqual(document.categories, ['general']);
+  });
+
+  it('gives a document with no categories key an empty list, not an extra key', () => {
+    const source = '---\ntitle: Uncategorised\npermalink: /uncategorised/\n---\n\nBody.\n';
+
+    const document = parseDocument(source, { path: 'posts/uncategorised.md' });
+
+    assert.deepEqual(document.categories, []);
+    assert.deepEqual(document.extra, {});
+  });
+
+  it('hashes a document with no categories exactly as it did before they existed', () => {
+    const document = parseDocument('---\ntitle: A\npermalink: /a/\n---\n\nBody.\n', {
+      path: 'pages/a.md',
+    });
+
+    // The literal is the hash the fixtures shipped with, so adding the key to
+    // the model cannot silently invalidate every indexed row.
+    assert.equal(
+      document.hash,
+      createHash('sha256')
+        .update('---\ntitle: A\npermalink: /a/\n---\n\nBody.\n', 'utf8')
+        .digest('hex'),
+    );
   });
 
   it('normalises CRLF line endings', () => {

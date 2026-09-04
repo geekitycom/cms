@@ -14,6 +14,7 @@ export const TEMPLATES = {
   post: 'layouts/post.njk',
   page: 'layouts/page.njk',
   tag: 'layouts/tag.njk',
+  category: 'layouts/category.njk',
   notFound: 'layouts/404.njk',
 } as const;
 
@@ -29,6 +30,8 @@ export interface Listing {
   pagination: Pagination;
   /** The tag, on a tag archive. Absent on the home page. */
   tag?: string | undefined;
+  /** The category, on a category archive. Absent on the home page. */
+  category?: string | undefined;
   /** Which template to use. Defaults to the home layout. */
   template?: string | undefined;
 }
@@ -48,7 +51,7 @@ export interface Renderer {
   pageSize(): number;
   /** One document through its type's layout. */
   renderDocument(document: Document): string;
-  /** A listing through the home or tag layout. */
+  /** A listing through the home, tag or category layout. */
   renderListing(listing: Listing): string;
   /** The 404 page, for a path that resolved to nothing. */
   renderNotFound(url: string): string;
@@ -126,6 +129,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         posts: items,
         pagination: { ...listing.pagination, items },
         ...(listing.tag === undefined ? {} : { tag: listing.tag }),
+        ...(listing.category === undefined ? {} : { category: listing.category }),
       });
     },
 

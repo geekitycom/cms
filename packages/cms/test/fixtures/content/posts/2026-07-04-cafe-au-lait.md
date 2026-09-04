@@ -1,6 +1,8 @@
 ---
 title: Café au Lait
 date: '2026-07-04T08:15:00-04:00'
+categories:
+  - notes
 description: A hand-authored post with no permalink, so both systems compute one.
 author: andrew
 ---

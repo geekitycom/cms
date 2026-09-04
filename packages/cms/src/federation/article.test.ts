@@ -95,6 +95,7 @@ function post(
     permalink: string;
     updated?: string;
     tags?: string[];
+    categories?: string[];
     draft?: boolean;
     body?: string;
   },
@@ -108,6 +109,9 @@ function post(
   if (options.tags !== undefined) {
     lines.push('tags:', ...options.tags.map((tag) => `  - ${tag}`));
   }
+  if (options.categories !== undefined) {
+    lines.push('categories:', ...options.categories.map((category) => `  - ${category}`));
+  }
   if (options.draft === true) lines.push('draft: true');
 
   return `---\n${lines.join('\n')}\n---\n\n${options.body ?? 'Body.'}\n`;
@@ -115,13 +119,14 @@ function post(
 
 const HELLO_BODY = 'A *first* post, with a [link](https://example.org/).';
 
-/** One published post, at `/2026/09/hello/`, tagged. */
+/** One published post, at `/2026/09/hello/`, tagged and filed. */
 const HELLO = {
   'posts/2026-09-02-hello.md': post('Hello, World!', {
     date: '2026-09-02T09:00:00Z',
     updated: '2026-09-03T10:30:00Z',
     permalink: '/2026/09/hello/',
     tags: ['notes', 'meta'],
+    categories: ['general'],
     body: HELLO_BODY,
   }),
 };
@@ -163,7 +168,7 @@ describe('the post object', () => {
     assert.equal(article['cc'], `${BASE_URL}/ap/actor/followers`);
   });
 
-  it('publishes one Hashtag per tag, pointing at the tag archive', async () => {
+  it('publishes one Hashtag per tag and per category, pointing at their archives', async () => {
     const instance = await site(HELLO);
 
     const article = (await (
@@ -181,6 +186,7 @@ describe('the post object', () => {
       [
         ['Hashtag', '#notes', `${BASE_URL}/tags/notes/`],
         ['Hashtag', '#meta', `${BASE_URL}/tags/meta/`],
+        ['Hashtag', '#general', `${BASE_URL}/category/general/`],
       ],
     );
   });

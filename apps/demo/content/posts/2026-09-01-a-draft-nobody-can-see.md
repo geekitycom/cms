@@ -4,6 +4,8 @@ date: '2026-09-01T08:00:00-05:00'
 permalink: /2026/09/a-draft-nobody-can-see/
 tags:
   - theme
+categories:
+  - general
 draft: true
 description: Here so the demo proves that drafts stay off the public site.
 author: Andrew Shell

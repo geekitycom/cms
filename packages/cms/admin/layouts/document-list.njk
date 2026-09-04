@@ -1,5 +1,6 @@
 {# The listing behind /admin/posts and /admin/pages. One template for both:
-   `kind` says which, and whether the table has a date column and a tag one. #}
+   `kind` says which, and whether the table has a date column and taxonomy
+   ones. #}
 {% extends "layouts/shell.njk" %}
 
 {% block title %}{{ kind.plural }}{% endblock %}
@@ -24,6 +25,9 @@
           {% if kind.tagged %}
             <th scope="col">Tags</th>
           {% endif %}
+          {% if kind.categorised %}
+            <th scope="col">Categories</th>
+          {% endif %}
           {% if kind.dated %}
             <th scope="col">Date</th>
           {% else %}
@@ -40,6 +44,9 @@
             <td>{{ document.author }}</td>
             {% if kind.tagged %}
               <td>{{ document.tags }}</td>
+            {% endif %}
+            {% if kind.categorised %}
+              <td>{{ document.categories }}</td>
             {% endif %}
             {% if kind.dated %}
               <td>{{ document.date | date('html') }}</td>

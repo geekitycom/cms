@@ -40,8 +40,9 @@
     {{ content | safe }}
   </div>
 
-  {% if tags.length %}
+  {% if tags.length or categories.length %}
   <footer class="post-footer">
+    {{ taxonomy.categories(categories) }}
     {{ taxonomy.list(tags) }}
   </footer>
   {% endif %}

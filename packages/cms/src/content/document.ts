@@ -40,6 +40,11 @@ export interface Document {
   updated?: string | undefined;
   /** Taxonomy. The `post` tag comes from `posts.json`, not from the file. */
   tags: string[];
+  /**
+   * The second taxonomy: what the document is filed under, as WordPress files
+   * a post under a category. Eleventy reads it as an ordinary data key.
+   */
+  categories: string[];
   /** `true` hides the document from the public site and the feeds. */
   draft: boolean;
   /** Meta description and excerpt fallback. */
@@ -70,6 +75,7 @@ export type DocumentContent = Pick<
   | 'updated'
   | 'permalink'
   | 'tags'
+  | 'categories'
   | 'draft'
   | 'description'
   | 'author'
@@ -85,6 +91,7 @@ export const KNOWN_FRONT_MATTER_KEYS = [
   'updated',
   'permalink',
   'tags',
+  'categories',
   'draft',
   'description',
   'author',

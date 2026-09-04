@@ -12,6 +12,7 @@
  *    `/{yyyy}/{mm}/{slug}/` for posts, `/{slug}/` for pages.
  * 3. `content/uploads/` is copied through to `/uploads/`.
  * 4. `content/_trash/` is not built.
+ * 5. `categories`, the CMS's second taxonomy, becomes `collections.categories`.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
  * says `"layout": "post"`, `pages.json` says `"layout": "page"` — so
@@ -77,6 +78,14 @@ function yearAndMonth(date) {
   };
 }
 
+/** One document's `categories`, which Eleventy hands over as written. */
+function categoriesOf(data) {
+  const value = data?.categories;
+  if (typeof value === 'string') return value === '' ? [] : [value];
+  if (!Array.isArray(value)) return [];
+  return value.filter((category) => typeof category === 'string' && category !== '');
+}
+
 /** Whether a content-relative input path is a post rather than a page. */
 function isPost(inputPath) {
   return String(inputPath).split('/').includes(POSTS_DIRECTORY);
@@ -114,6 +123,42 @@ export default function (eleventyConfig) {
 
     const permalink = defaultPermalink(data);
     if (permalink !== undefined) data.permalink = permalink;
+  });
+
+  // Eleventy builds a collection from every value of `tags` by itself. The
+  // CMS's second taxonomy, `categories`, is an ordinary data key to Eleventy,
+  // so this exposes it: `collections.categories` holds one entry per category
+  // in use, `{ name, posts }`, sorted by name with each category's documents
+  // newest first — the order the CMS's own archive at `/category/{name}/`
+  // serves them in.
+  //
+  // Paginate it to build those archives:
+  //
+  //     ---
+  //     pagination:
+  //       data: collections.categories
+  //       size: 1
+  //       alias: category
+  //     permalink: "/category/{{ category.name | urlencode }}/"
+  //     ---
+  //     {% for post in category.posts %}…{% endfor %}
+  eleventyConfig.addCollection('categories', (collectionApi) => {
+    const byCategory = new Map();
+
+    for (const item of collectionApi.getAll()) {
+      for (const category of categoriesOf(item.data)) {
+        const posts = byCategory.get(category) ?? [];
+        posts.push(item);
+        byCategory.set(category, posts);
+      }
+    }
+
+    return [...byCategory.keys()].sort().map((name) => ({
+      name,
+      posts: (byCategory.get(name) ?? [])
+        .slice()
+        .sort((a, b) => Number(b.date ?? 0) - Number(a.date ?? 0)),
+    }));
   });
 
   // Documents are Markdown; Nunjucks and HTML are here for the layouts and for

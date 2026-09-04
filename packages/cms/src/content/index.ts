@@ -29,6 +29,7 @@ export {
   TRASH_DIRECTORY,
 } from './store.ts';
 export type {
+  CategoryCount,
   ContentCounts,
   ContentStore,
   ListAllOptions,

@@ -239,6 +239,7 @@ cms.store.upsert(parseDocument(source, { path: 'posts/2026-09-02-hello.md' }));
 cms.store.getByPermalink('/2026/09/hello/'); // the same Document back
 cms.store.listPosts({ limit: 10, offset: 0 }); // published, newest first
 cms.store.listByTag('eleventy', { type: 'post' });
+cms.store.listByCategory('general'); // the second taxonomy, same shape
 cms.store.listAll({ draft: true }); // the admin's view
 cms.store.counts(); // { total, posts, pages, drafts, trashed }
 ```
@@ -255,7 +256,8 @@ A few rules worth knowing:
   A document with no date sorts last; ties break on path, descending.
 - **Trash.** A document under a `_trash/` directory is trashed. The flag comes
   from the path, not from the front matter, so moving a file in or out of the
-  trash is all it takes. `listPosts` and `listByTag` exclude drafts and trash;
+  trash is all it takes. `listPosts`, `listByTag` and `listByCategory` exclude
+  drafts and trash;
   `listAll` shows drafts but hides trash unless asked with `{ trashed: true }`.
 - **Permalinks** are unique and indexed. Indexing a second document at a URL
   another file already claims throws `DuplicatePermalinkError`, which names
@@ -332,6 +334,7 @@ Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
 | `/page/2/` and up      | Later pages of the same archive.                                              |
 | a document's permalink | The post or the page, through the theme.                                      |
 | `/tags/{tag}/`         | Everything published carrying that tag, paginated at `/tags/{tag}/page/2/`.   |
+| `/category/{name}/`    | The second taxonomy, paginated the same way at `/category/{name}/page/2/`.    |
 | `/theme/…`             | The theme's own files, from its `static/` directory, cacheable and validated. |
 | `/uploads/…`           | Files under `content/uploads/`, at the URLs an Eleventy build copies them to. |
 | anything else          | The theme's 404.                                                              |
@@ -492,7 +495,7 @@ theme second, one file at a time, so a site that ships only
 to every other template. Assets under `/theme/` resolve in the same order.
 
 The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`,
-`content`, `page.url`, and every front matter key the file carried — so a
+`categories`, `content`, `page.url`, and every front matter key the file carried — so a
 layout can move between an Eleventy build and the CMS with few edits. The
 context, the blocks and the filter set (`date`, `url`, `absoluteUrl`) are part
 of the semver contract; they are documented in

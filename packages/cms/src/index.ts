@@ -236,6 +236,7 @@ export {
 } from './content/index.ts';
 export type {
   ActivityPubMetadata,
+  CategoryCount,
   ChangeOrigin,
   ContentCounts,
   ContentFilePathInput,
@@ -336,6 +337,8 @@ export {
   assetNotModified,
   assetResponse,
   atomFeed,
+  categoryHref,
+  CATEGORY_SEGMENT,
   contentEtag,
   createRenderer,
   createSiteDataSource,
@@ -388,6 +391,7 @@ export {
   TAG_SEGMENT,
   tagHref,
   TEMPLATES,
+  termHref,
   themeAssetNotModified,
   themeAssetResponse,
   THEME_ASSET_MAX_AGE,
@@ -427,6 +431,8 @@ export type {
   SiteDataSource,
   SiteSettingsSource,
   StaticAsset,
+  Taxonomy,
+  TaxonomyTerm,
   ThemeAsset,
 } from './web/index.ts';
 

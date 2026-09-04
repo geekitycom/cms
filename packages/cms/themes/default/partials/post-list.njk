@@ -14,6 +14,7 @@
       {% if post.description %}
       <p class="post-summary-description">{{ post.description }}</p>
       {% endif %}
+      {{ taxonomy.categories(post.categories) }}
       {{ taxonomy.list(post.tags) }}
     </article>
   </li>

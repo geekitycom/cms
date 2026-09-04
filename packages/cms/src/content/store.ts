@@ -28,7 +28,8 @@ export interface ContentStore {
   /** Absolute path of the SQLite file. */
   readonly file: string;
   /**
-   * Insert or replace the row for `document.path`, tags included.
+   * Insert or replace the row for `document.path`, tags and categories
+   * included.
    *
    * Throws {@link DuplicatePermalinkError} when another path already claims
    * the same permalink.
@@ -51,6 +52,8 @@ export interface ContentStore {
   listPosts(options?: ListOptions): Document[];
   /** Published, untrashed documents carrying a tag, newest first. */
   listByTag(tag: string, options?: ListByTagOptions): Document[];
+  /** Published, untrashed documents filed under a category, newest first. */
+  listByCategory(category: string, options?: ListByTagOptions): Document[];
   /** Everything the admin may see, trash and drafts included unless filtered. */
   listAll(options?: ListAllOptions): Document[];
   /** Every indexed path, sorted. What a sync compares the content tree against. */
@@ -61,6 +64,10 @@ export interface ContentStore {
   countByTag(tag: string, options?: ListByTagOptions): number;
   /** Every tag in use on published, untrashed documents, with its count. */
   listTags(): TagCount[];
+  /** How many published, untrashed documents are filed under a category. */
+  countByCategory(category: string, options?: ListByTagOptions): number;
+  /** Every category in use on published, untrashed documents, with its count. */
+  listCategories(): CategoryCount[];
   /** Close the database. Safe to call twice. */
   close(): void;
 }
@@ -73,7 +80,7 @@ export interface ListOptions {
   offset?: number | undefined;
 }
 
-/** Paging plus the type filter the tag archives need. */
+/** Paging plus the type filter the taxonomy archives need. */
 export interface ListByTagOptions extends ListOptions {
   /** Restrict to posts or pages. Defaults to both. */
   type?: DocumentType | undefined;
@@ -89,6 +96,8 @@ export interface ListAllOptions extends ListOptions {
   trashed?: boolean | undefined;
   /** Restrict to documents carrying this tag. */
   tag?: string | undefined;
+  /** Restrict to documents filed under this category. */
+  category?: string | undefined;
 }
 
 /** What {@link ContentStore.counts} reports. */
@@ -108,6 +117,12 @@ export interface ContentCounts {
 /** One tag and how many published documents carry it. */
 export interface TagCount {
   tag: string;
+  count: number;
+}
+
+/** One category and how many published documents are filed under it. */
+export interface CategoryCount {
+  category: string;
   count: number;
 }
 
@@ -201,6 +216,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     `),
     deleteTags: db.prepare('DELETE FROM document_tags WHERE path = ?'),
     insertTag: db.prepare('INSERT INTO document_tags (path, tag, position) VALUES (?, ?, ?)'),
+    deleteCategories: db.prepare('DELETE FROM document_categories WHERE path = ?'),
+    insertCategory: db.prepare(
+      'INSERT INTO document_categories (path, category, position) VALUES (?, ?, ?)',
+    ),
     pathForPermalink: db.prepare('SELECT path FROM documents WHERE permalink = ?'),
     remove: db.prepare('DELETE FROM documents WHERE path = ?'),
     byPath: db.prepare('SELECT * FROM documents WHERE path = ?'),
@@ -209,6 +228,9 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       `SELECT * FROM documents WHERE slug = ? ORDER BY date_sort DESC, path DESC LIMIT 1`,
     ),
     tagsFor: db.prepare('SELECT tag FROM document_tags WHERE path = ? ORDER BY position'),
+    categoriesFor: db.prepare(
+      'SELECT category FROM document_categories WHERE path = ? ORDER BY position',
+    ),
     paths: db.prepare('SELECT path FROM documents ORDER BY path'),
     counts: db.prepare(`
       SELECT
@@ -227,6 +249,14 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       GROUP BY document_tags.tag
       ORDER BY count DESC, tag ASC
     `),
+    categoryCounts: db.prepare(`
+      SELECT document_categories.category AS category, COUNT(*) AS count
+      FROM document_categories
+      JOIN documents ON documents.path = document_categories.path
+      WHERE documents.draft = 0 AND documents.trashed = 0
+      GROUP BY document_categories.category
+      ORDER BY count DESC, category ASC
+    `),
   };
 
   let open = true;
@@ -235,13 +265,22 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     return statements.tagsFor.all(contentPath).map((row) => String(row['tag']));
   }
 
+  function categoriesOf(contentPath: string): string[] {
+    return statements.categoriesFor.all(contentPath).map((row) => String(row['category']));
+  }
+
   function hydrate(row: Record<string, unknown> | undefined): Document | undefined {
     if (row === undefined) return undefined;
-    return toDocument(row, tagsOf(String(row['path'])));
+    return hydrateOne(row);
+  }
+
+  function hydrateOne(row: Record<string, unknown>): Document {
+    const contentPath = String(row['path']);
+    return toDocument(row, tagsOf(contentPath), categoriesOf(contentPath));
   }
 
   function hydrateAll(rows: Record<string, unknown>[]): Document[] {
-    return rows.map((row) => toDocument(row, tagsOf(String(row['path']))));
+    return rows.map(hydrateOne);
   }
 
   function writeOne(document: Document): void {
@@ -255,6 +294,57 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     document.tags.forEach((tag, position) => {
       statements.insertTag.run(contentPath, tag, position);
     });
+    statements.deleteCategories.run(contentPath);
+    document.categories.forEach((category, position) => {
+      statements.insertCategory.run(contentPath, category, position);
+    });
+  }
+
+  /**
+   * One taxonomy archive: the published, untrashed documents whose term list
+   * holds `term`, newest first. Tags and categories are the same query over two
+   * tables, so neither can drift from the other.
+   */
+  function selectByTerm(
+    table: 'document_tags' | 'document_categories',
+    column: 'tag' | 'category',
+    term: string,
+    options: ListByTagOptions,
+  ): Document[] {
+    const where = [
+      'draft = 0',
+      'trashed = 0',
+      `path IN (SELECT path FROM ${table} WHERE ${column} = ?)`,
+    ];
+    const params: unknown[] = [term];
+    if (options.type !== undefined) {
+      where.unshift('type = ?');
+      params.unshift(options.type);
+    }
+    return select(where, params, options);
+  }
+
+  /** {@link selectByTerm}'s total, for the pager and the archive's existence. */
+  function countByTerm(
+    table: 'document_tags' | 'document_categories',
+    column: 'tag' | 'category',
+    term: string,
+    options: ListByTagOptions,
+  ): number {
+    const where = ['documents.draft = 0', 'documents.trashed = 0', `${table}.${column} = ?`];
+    const params: unknown[] = [term];
+    if (options.type !== undefined) {
+      where.push('documents.type = ?');
+      params.push(options.type);
+    }
+    const row = db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM ${table}
+         JOIN documents ON documents.path = ${table}.path
+         WHERE ${where.join(' AND ')}`,
+      )
+      .get(...(params as never[])) as Record<string, unknown>;
+    return Number(row['count']);
   }
 
   function select(where: string[], params: unknown[], options: ListOptions): Document[] {
@@ -306,17 +396,11 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     listByTag(tag, options = {}) {
-      const where = [
-        'draft = 0',
-        'trashed = 0',
-        'path IN (SELECT path FROM document_tags WHERE tag = ?)',
-      ];
-      const params: unknown[] = [tag];
-      if (options.type !== undefined) {
-        where.unshift('type = ?');
-        params.unshift(options.type);
-      }
-      return select(where, params, options);
+      return selectByTerm('document_tags', 'tag', tag, options);
+    },
+
+    listByCategory(category, options = {}) {
+      return selectByTerm('document_categories', 'category', category, options);
     },
 
     listAll(options = {}) {
@@ -338,6 +422,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         where.push('path IN (SELECT path FROM document_tags WHERE tag = ?)');
         params.push(options.tag);
       }
+      if (options.category !== undefined) {
+        where.push('path IN (SELECT path FROM document_categories WHERE category = ?)');
+        params.push(options.category);
+      }
 
       return select(where, params, options);
     },
@@ -358,25 +446,23 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     countByTag(tag, options = {}) {
-      const where = ['documents.draft = 0', 'documents.trashed = 0', 'document_tags.tag = ?'];
-      const params: unknown[] = [tag];
-      if (options.type !== undefined) {
-        where.push('documents.type = ?');
-        params.push(options.type);
-      }
-      const row = db
-        .prepare(
-          `SELECT COUNT(*) AS count FROM document_tags
-           JOIN documents ON documents.path = document_tags.path
-           WHERE ${where.join(' AND ')}`,
-        )
-        .get(...(params as never[])) as Record<string, unknown>;
-      return Number(row['count']);
+      return countByTerm('document_tags', 'tag', tag, options);
+    },
+
+    countByCategory(category, options = {}) {
+      return countByTerm('document_categories', 'category', category, options);
     },
 
     listTags() {
       return statements.tagCounts.all().map((row) => ({
         tag: String(row['tag']),
+        count: Number(row['count']),
+      }));
+    },
+
+    listCategories() {
+      return statements.categoryCounts.all().map((row) => ({
+        category: String(row['category']),
         count: Number(row['count']),
       }));
     },
@@ -428,7 +514,7 @@ function toRow(document: Document): Record<string, string | number | null> {
  * Optional fields are left off entirely when the column is NULL, so a document
  * that went through the index deep-equals the one that was parsed from the file.
  */
-function toDocument(row: Record<string, unknown>, tags: string[]): Document {
+function toDocument(row: Record<string, unknown>, tags: string[], categories: string[]): Document {
   return {
     type: String(row['type']) as DocumentType,
     path: String(row['path']),
@@ -438,6 +524,7 @@ function toDocument(row: Record<string, unknown>, tags: string[]): Document {
     ...optional('date', text(row['date'])),
     ...optional('updated', text(row['updated'])),
     tags,
+    categories,
     draft: row['draft'] === 1,
     ...optional('description', text(row['description'])),
     ...optional('author', text(row['author'])),
@@ -525,6 +612,26 @@ const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
       );
 
       CREATE INDEX document_tags_tag ON document_tags (tag);
+    `,
+  },
+  {
+    version: 2,
+    sql: `
+      CREATE TABLE document_categories (
+        path     TEXT NOT NULL REFERENCES documents (path) ON DELETE CASCADE,
+        category TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY (path, category)
+      );
+
+      CREATE INDEX document_categories_category ON document_categories (category);
+
+      -- A file that already carried categories hashes the same as it did
+      -- before the key was modelled, so a sync would find every row up to date
+      -- and never learn what those files are filed under. Emptying the index
+      -- is what makes the next scan read them all again; the files are the
+      -- source of truth, so nothing is lost (decision-1).
+      DELETE FROM documents;
     `,
   },
 ];

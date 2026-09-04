@@ -6,6 +6,8 @@ permalink: /2026/07/six-tables-and-a-migration/
 tags:
   - sqlite
   - content
+categories:
+  - engineering
 description: What the derived index actually stores, and why deleting it is safe.
 author: Andrew Shell
 ---

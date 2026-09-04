@@ -10,3 +10,15 @@
 </ul>
 {% endif %}
 {% endmacro %}
+
+{# The same for categories, which are the second taxonomy and archive at
+   /category/{name}/. Renders nothing when the list is empty. #}
+{% macro categories(categories) %}
+{% if categories and categories.length %}
+<ul class="category-list">
+  {% for category in categories %}
+  <li><a class="category" href="{{ ("/category/" + (category | urlencode) + "/") | url }}">{{ category }}</a></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endmacro %}
