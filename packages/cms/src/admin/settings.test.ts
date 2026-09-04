@@ -588,7 +588,10 @@ describe('where the values come from', () => {
 
 describe('a database whose settings are still rows', () => {
   /** A `dataDir` holding a database in the shape TASK-14 left behind. */
-  async function legacyDatabase(rows: Record<string, string>): Promise<string> {
+  async function legacyDatabase(
+    rows: Record<string, string>,
+    updatedAt: string = new Date().toISOString(),
+  ): Promise<string> {
     const dataDir = await box.dir('geekity-settings-legacy-data-');
     const database = new DatabaseSync(path.join(dataDir, 'geekity.db'));
 
@@ -610,7 +613,7 @@ describe('a database whose settings are still rows', () => {
       'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)',
     );
     for (const [key, value] of Object.entries(rows)) {
-      insert.run(key, value, new Date().toISOString());
+      insert.run(key, value, updatedAt);
     }
     database.close();
     return dataDir;
@@ -676,16 +679,17 @@ describe('a database whose settings are still rows', () => {
 
   it('keeps a site.json that was edited after the rows were last written (AC #3)', async () => {
     const contentDir = await box.dir('geekity-settings-legacy-file-');
-    const dataDir = await legacyDatabase({
-      title: 'The Rows',
-      actorHandle: 'writer',
-      actorType: 'Service',
-    });
+    // The rows were last saved an hour ago; the file is written now. That is
+    // the site that was edited by hand — or restored from git — since the last
+    // save. The file wins, as it does for a post; the two settings it has never
+    // been able to carry come from the rows. The hour is deliberate: a row and
+    // a file stamped within the same instant is a tie, and a tie goes to the
+    // rows.
+    const dataDir = await legacyDatabase(
+      { title: 'The Rows', actorHandle: 'writer', actorType: 'Service' },
+      new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    );
 
-    // The file is written after the rows, which is the site that was edited by
-    // hand — or restored from git — since the last save. The file wins, as it
-    // does for a post; the two settings it has never been able to carry come
-    // from the rows.
     await mkdir(path.join(contentDir, '_data'), { recursive: true });
     await writeFile(
       path.join(contentDir, '_data', 'site.json'),
