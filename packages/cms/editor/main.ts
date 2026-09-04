@@ -89,14 +89,8 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
     textarea.value = view.state.doc.toString();
   });
 
-  const preview = document.createElement('iframe');
-  preview.className = 'admin-editor-preview';
-  preview.title = 'Preview';
-  preview.hidden = true;
-  // The preview is the site's own HTML, rendered from what is in the editor.
-  // It is framed rather than inlined so the theme's stylesheet cannot reach the
-  // admin's, and sandboxed so a script in a post cannot reach the session.
-  preview.setAttribute('sandbox', '');
+  // Reassigned on every render; see `refresh`.
+  let preview = previewFrame();
   surface.insertAdjacentElement('afterend', preview);
 
   const tabs = tabStrip();
@@ -132,9 +126,18 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
       if (writing) view.focus();
     }
 
-    /** Ask the server what this body looks like, and show what it says. */
+    /**
+     * Ask the server what this body looks like, and show what it says.
+     *
+     * The answer goes into a new iframe rather than the one on the page, and
+     * that iframe is given its `srcdoc` exactly once. Chrome intermittently
+     * leaves a sandboxed `srcdoc` iframe blank when it has been `display:
+     * none` and is then navigated again — the second Preview after a Write
+     * showed nothing, with the document set and the frame laid out — and a
+     * fresh element painted every time it was tried. Replacing the frame
+     * costs nothing visible: the old one stays up until the new one is ready.
+     */
     async function refresh(): Promise<void> {
-      preview.srcdoc = '';
       say('Rendering…');
       textarea.value = view.state.doc.toString();
 
@@ -148,7 +151,11 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
           say(`The preview came back ${String(response.status)}.`);
           return;
         }
-        preview.srcdoc = await response.text();
+        const next = previewFrame();
+        next.hidden = false;
+        next.srcdoc = await response.text();
+        preview.replaceWith(next);
+        preview = next;
         say('');
       } catch {
         say('The preview could not be reached.');
@@ -252,6 +259,22 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   function say(message: string): void {
     status.textContent = message;
   }
+}
+
+/**
+ * A hidden, sandboxed frame for the preview to render into.
+ *
+ * The preview is the site's own HTML, rendered from what is in the editor. It
+ * is framed rather than inlined so the theme's stylesheet cannot reach the
+ * admin's, and sandboxed so a script in a post cannot reach the session.
+ */
+function previewFrame(): HTMLIFrameElement {
+  const frame = document.createElement('iframe');
+  frame.className = 'admin-editor-preview';
+  frame.title = 'Preview';
+  frame.hidden = true;
+  frame.setAttribute('sandbox', '');
+  return frame;
 }
 
 /** One tab in the strip. */
