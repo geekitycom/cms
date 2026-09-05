@@ -63,3 +63,15 @@ docs: explain the theme lookup order
 
 The scope list lives in `commitlint.config.js`; a commit that names anything
 else is rejected.
+
+## Pull request titles
+
+A pull request title follows the same Conventional Commits format as a commit
+subject: `<type>(<scope>): <subject>`, lower case, imperative, no trailing full
+stop, with `!` after the scope when any commit on the branch is breaking. The
+`pr-title` job in `.github/workflows/ci.yml` rejects anything else, because a
+squash merge lands the title as the commit message release-please reads.
+
+A milestone branch is titled after its milestone, for example
+`feat(cms)!: milestone M6 file-first state`. Never use a bare prose title
+such as `M7 Comments: replies on the page`.
