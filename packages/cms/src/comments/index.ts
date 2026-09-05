@@ -29,6 +29,8 @@ export {
 } from './form.ts';
 export type { CommentFormContext } from './form.ts';
 export { renderCommentMarkdown } from './markdown.ts';
+export { isModerationAction, moderateComment, MODERATION_ACTIONS } from './moderate.ts';
+export type { ModerateCommentOptions, ModerationAction, ModerationOutcome } from './moderate.ts';
 export {
   COMMENTS_FRONT_MATTER_KEY,
   commentPolicyOf,

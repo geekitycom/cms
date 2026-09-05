@@ -78,8 +78,21 @@ export interface MailTemplates {
    * sending an empty one would hide it.
    */
   render(name: string, context?: Record<string, unknown>): RenderedMail;
-  /** The Nunjucks environment, for a site that wants to add its own filters. */
+  /**
+   * The Nunjucks environment the HTML half renders through, for a site that
+   * wants to add its own filters.
+   */
   readonly environment: Environment;
+  /**
+   * The twin the subject and the text body render through: the same loader and
+   * the same filters, with autoescaping off.
+   *
+   * A plain text body is not HTML. Escaping it turns the `&` between two query
+   * parameters into `&amp;` — which is what a one-click moderation link is
+   * made of (TASK-55) — and an apostrophe in somebody's name into `&#39;`. A
+   * site adding a filter that both halves should have adds it to both.
+   */
+  readonly plainEnvironment: Environment;
 }
 
 /** Build the mail templates for one site. */
@@ -93,6 +106,16 @@ export function createMailTemplates(options: CreateMailTemplatesOptions): MailTe
     ...(options.noCache === undefined ? {} : { noCache: options.noCache }),
   });
 
+  // The same again with autoescaping off, for the two halves of a message that
+  // are not HTML. Built here rather than by unescaping afterwards, because
+  // there is no way to tell an `&amp;` the template meant from one it did not.
+  const plainEnvironment = createTemplateEnvironment({
+    themeDir: options.themeDir,
+    baseUrl: options.baseUrl,
+    autoescape: false,
+    ...(options.noCache === undefined ? {} : { noCache: options.noCache }),
+  });
+
   const searchPath = [options.themeDir, PACKAGED_THEME_DIR];
 
   /** Whether any directory on the search path has that template. */
@@ -102,6 +125,7 @@ export function createMailTemplates(options: CreateMailTemplatesOptions): MailTe
 
   return {
     environment,
+    plainEnvironment,
 
     render(name, context = {}) {
       const files = mailTemplateFiles(name);
@@ -116,9 +140,9 @@ export function createMailTemplates(options: CreateMailTemplatesOptions): MailTe
         // A subject is a header, and a header is one line: whatever the
         // template did with whitespace, what goes out is a single line.
         subject: present(files.subject)
-          ? environment.render(files.subject, context).replace(/\s+/g, ' ').trim()
+          ? plainEnvironment.render(files.subject, context).replace(/\s+/g, ' ').trim()
           : '',
-        text: environment.render(files.text, context),
+        text: plainEnvironment.render(files.text, context),
         ...(present(files.html) ? { html: environment.render(files.html, context) } : {}),
       };
     },

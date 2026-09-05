@@ -133,8 +133,14 @@ export interface VerifyWebmentionOptions {
 
 /** What became of one verification. */
 export type WebmentionOutcome =
-  /** The source links here and the comment was written or rewritten. */
-  | { readonly kind: 'stored'; readonly comment: PostComment }
+  /**
+   * The source links here and the comment was written or rewritten.
+   *
+   * `created` says which. A page that sends its webmention again every time it
+   * is edited would otherwise put the moderators through a notification each
+   * time (TASK-55), for an entry that has been in the queue all along.
+   */
+  | { readonly kind: 'stored'; readonly comment: PostComment; readonly created: boolean }
   /** The source does not link here any more, and what it left is gone. */
   | { readonly kind: 'deleted' }
   /** The source does not link here, and there was nothing to remove. */
@@ -218,6 +224,8 @@ export async function verifyWebmention(
     // the identity a later webmention is matched against, and the sender is
     // the one who chose it.
     url: incoming.source,
+    // A page has nobody to ask, and no address to ask them at.
+    notify: false,
   };
 
   const verdict = await ask(options, proposed);
@@ -240,14 +248,16 @@ export async function verifyWebmention(
       content: proposed.content,
       submitted: proposed.submitted,
     });
-    return moved === undefined ? { kind: 'ignored' } : { kind: 'stored', comment: moved };
+    return moved === undefined
+      ? { kind: 'ignored' }
+      : { kind: 'stored', comment: moved, created: false };
   }
 
   const stored = await addComment(records, {
     ...proposed,
     status: verdict === 'spam' ? 'spam' : verdict === 'ham' ? 'approved' : proposed.status,
   });
-  return { kind: 'stored', comment: stored };
+  return { kind: 'stored', comment: stored, created: true };
 }
 
 /** The webmention this site already holds from that source, if any. */

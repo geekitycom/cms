@@ -284,13 +284,15 @@ the same directory reads all of it, and everything in it is meant to be public:
 
 `data/` is private. It is gitignored, and it is the half to copy somewhere safe:
 
-| Path                | What it holds                                                                        |
-| ------------------- | ------------------------------------------------------------------------------------ |
-| `data/users.json`   | Usernames and argon2id password hashes. Mode `0600`.                                 |
-| `data/keys/`        | The actor's key pairs as JWK files. Mode `0600`. **Losing these breaks federation.** |
-| `data/comment-salt` | What hides commenters' addresses in the published comment files. Mode `0600`.        |
-| `data/akismet.json` | The Akismet key, and what `verify-key` last said about it. Mode `0600`.              |
-| `data/mail.json`    | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.      |
+| Path                        | What it holds                                                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `data/users.json`           | Usernames and argon2id password hashes. Mode `0600`.                                                                            |
+| `data/keys/`                | The actor's key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                            |
+| `data/comment-salt`         | What hides commenters' addresses in the published comment files. Mode `0600`.                                                   |
+| `data/akismet.json`         | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                         |
+| `data/mail.json`            | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                 |
+| `data/notification-secret`  | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else. |
+| `data/comment-optouts.json` | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                           |
 
 Two things under `data/` may be deleted whenever the site is stopped, and
 nothing else in either directory may:
@@ -308,21 +310,27 @@ request for a variant that is not there derives it and serves it.
 No table holds anything that is not either read back from the files or
 something a site is told it may lose:
 
-| Table                                               | Where it comes back from                                                 |
-| --------------------------------------------------- | ------------------------------------------------------------------------ |
-| `documents`, `document_tags`, `document_categories` | The boot scan of `content/`.                                             |
-| `followers`, `ap_inbox`                             | `content/_data/federation/`, emptied and read back on every boot.        |
-| `comments`                                          | `content/_data/comments/`, emptied and read back on every boot.          |
-| `sessions`                                          | Nothing. Everybody signed in is signed out.                              |
-| `ap_deliveries`                                     | Nothing. The federation screen shows its posts with "Nothing recorded."  |
-| `ap_relays`                                         | The relay list in `site.json`: boot sends each of them a fresh `Follow`. |
-| `cms_state`                                         | Nothing. One key, the scheduler's watermark.                             |
-| `migrations`, `admin_migrations`                    | The package. They record which schema versions have run.                 |
+| Table                                               | Where it comes back from                                                     |
+| --------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `documents`, `document_tags`, `document_categories` | The boot scan of `content/`.                                                 |
+| `followers`, `ap_inbox`                             | `content/_data/federation/`, emptied and read back on every boot.            |
+| `comments`                                          | `content/_data/comments/`, emptied and read back on every boot.              |
+| `sessions`                                          | Nothing. Everybody signed in is signed out.                                  |
+| `ap_deliveries`                                     | Nothing. The federation screen shows its posts with "Nothing recorded."      |
+| `ap_relays`                                         | The relay list in `site.json`: boot sends each of them a fresh `Follow`.     |
+| `password_resets`, `spent_tokens`                   | Nothing. Every reset link and every one-click moderation link stops working. |
+| `cms_state`                                         | Nothing. One key, the scheduler's watermark.                                 |
+| `migrations`, `admin_migrations`                    | The package. They record which schema versions have run.                     |
 
-So three things are actually lost:
+So four things are actually lost:
 
 - **Logins.** Everybody signed in has to sign in again. The accounts themselves
   are in `data/users.json` and are untouched.
+- **Whether a one-click link had been used.** The links themselves are signed
+  rather than stored, so they go on working; a rebuild only forgets which of
+  them had already been spent. Every action they perform is idempotent, so the
+  worst that costs is a moderation link that works a second time. A password
+  reset link, which _is_ stored, stops working altogether.
 - **Relay handshakes.** A relay named in the settings that the database has
   never heard of is followed on boot, so a rebuild sends every listed relay a
   new `Follow` and the reason one gave for rejecting the last is gone.
@@ -652,8 +660,44 @@ export default defineConfig({
 
 A checker that throws is treated as having no opinion and logged, so a service
 that is down never stops a site taking comments. `/admin/comments` is the
-moderation queue and the dashboard carries the number waiting; there is no
-email in this version, so the screen is the notification.
+moderation queue and the dashboard carries the number waiting.
+
+### Being told about one
+
+With mail configured, a comment or a webmention entering the queue emails every
+user who has an address and has not switched the notice off on `/admin/users`.
+The message carries the comment, the post it is on, and three links — approve,
+spam, delete — that work without a login. Nothing is sent about a comment
+Akismet filed as spam or told the site to discard: only what is actually
+waiting for a person.
+
+Each link lands on a small page with a button on it, and only the button acts.
+That is not politeness. Mail readers, spam filters and corporate link scanners
+fetch the URLs in a message as a matter of course, and a link that moderated on
+being opened would mean a mail gateway silently deleting this site's comments.
+A link is signed rather than stored — the secret is `data/notification-secret`,
+so a link goes on working across a `geekity rebuild` — is bound to one action
+on one comment, lasts a week, and is spent the first time it is used.
+
+Commenters get the other half. The form offers "email me when somebody replies
+to this", but only on a site that can actually send mail; ticking it stores
+`notify: true` beside the address that is already in the comment file, and
+nothing about either is ever rendered — not on the page, not in the JSON or
+Markdown representations, and not in the comments feeds. When a reply to that
+comment is **approved**, one message goes out with the reply in it and an
+unsubscribe link at the bottom. Unsubscribing is site-wide by address: the
+address goes into `data/comment-optouts.json` and this site writes to it about
+replies again. The comments themselves are untouched.
+
+With no mail configured, none of this happens and nothing breaks: the box is
+not offered, no notice is sent, and the moderation screen is the notification
+it was before.
+
+Notices are per user and keyed by event name, so a later one — a new follower,
+a digest of failed deliveries — is one entry in the registry in
+`src/notifications/preferences.ts` and a checkbox that appears by itself. An
+event a user has said nothing about is at its default, which is why turning one
+on for a site does not need anybody to visit the users screen.
 
 ### Akismet
 
@@ -1023,6 +1067,8 @@ shadow the login form.
 | `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                           |
 | `/admin/users`                                   | Who may sign in. `POST` adds one.                                                |
 | `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                         |
+| `/admin/users/email`                             | `POST` only. Sets or clears the email address on the row the form names.         |
+| `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the row the form names.              |
 | `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                    |
 | `/admin/federation`                              | The actor, the followers, the inbox log, and per-post delivery.                  |
 | `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.       |
@@ -1073,10 +1119,13 @@ every other browser holding that login and leaves the one you are using alone.
 There is a single role, so an account has nothing else to edit. The last
 remaining user cannot be deleted, and nobody may delete their own account.
 
-An email address is optional on a user and is the one field on a row that can
-be edited — any row, since with one role every user already has every power
-there is. It buys [password recovery](#forgotten-passwords) and nothing else so
-far, and it never appears on the public site.
+An email address is optional on a user and is one of the two things on a row
+that can be edited — any row, since with one role every user already has every
+power there is. It buys [password recovery](#forgotten-passwords) and the
+notices [a comment sets off](#being-told-about-one), and it never appears on
+the public site. The other is which of those notices go to it: one switch per
+event, on by default, stored in `data/users.json` only when somebody turns one
+off.
 
 A site whose database was written by a version that kept the accounts in a
 `users` table has those rows written into `data/users.json` on the first boot
@@ -1376,26 +1425,28 @@ uploads. Four directives say more than that:
 
 Booting mounts the public site on the app. The routes are:
 
-| Route                                   | What it serves                                                             |
-| --------------------------------------- | -------------------------------------------------------------------------- |
-| `/`                                     | Published posts, newest first.                                             |
-| `/page/2/` and up                       | Later pages of the same archive.                                           |
-| a document's permalink                  | The post or the page, through the theme.                                   |
-| `/tag/{tag}/`                           | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`. |
-| `/category/{name}/`                     | The second taxonomy, paginated the same way.                               |
-| `/feed/`, `/feed/atom/`, `/feed/json/`  | The recent posts as RSS 2.0, Atom and JSON Feed.                           |
-| `/tag/{tag}/feed/` and its two siblings | The same, for one tag; `/category/{name}/feed/` likewise.                  |
-| `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                           |
-| `{permalink}feed/`                      | One post's replies, the same way.                                          |
-| `/sitemap.xml`                          | Every public URL, for a search engine.                                     |
-| `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                          |
-| `/robots.txt`                           | What a crawler may have, and where the sitemap is.                         |
-| `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                  |
-| `/_geekity/webmention`                  | `POST` only. Where a webmention is sent; advertised on every document.     |
-| `/theme/…`                              | The theme's own files, from its `static/` directory.                       |
-| `/uploads/…`                            | A file from `content/uploads/`, byte for byte as it was stored.            |
-| `/uploads/_/…`                          | One derived copy of an uploaded image, generated on the spot if missing.   |
-| anything else                           | The theme's 404.                                                           |
+| Route                                   | What it serves                                                                                      |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `/`                                     | Published posts, newest first.                                                                      |
+| `/page/2/` and up                       | Later pages of the same archive.                                                                    |
+| a document's permalink                  | The post or the page, through the theme.                                                            |
+| `/tag/{tag}/`                           | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`.                          |
+| `/category/{name}/`                     | The second taxonomy, paginated the same way.                                                        |
+| `/feed/`, `/feed/atom/`, `/feed/json/`  | The recent posts as RSS 2.0, Atom and JSON Feed.                                                    |
+| `/tag/{tag}/feed/` and its two siblings | The same, for one tag; `/category/{name}/feed/` likewise.                                           |
+| `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                                                    |
+| `{permalink}feed/`                      | One post's replies, the same way.                                                                   |
+| `/sitemap.xml`                          | Every public URL, for a search engine.                                                              |
+| `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                   |
+| `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                  |
+| `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                           |
+| `/_geekity/webmention`                  | `POST` only. Where a webmention is sent; advertised on every document.                              |
+| `/_geekity/moderate`                    | Where an approve, spam or delete link from a notification lands. `GET` shows a button; `POST` acts. |
+| `/_geekity/unsubscribe`                 | Where the unsubscribe link in a reply notice lands. Same two steps.                                 |
+| `/theme/…`                              | The theme's own files, from its `static/` directory.                                                |
+| `/uploads/…`                            | A file from `content/uploads/`, byte for byte as it was stored.                                     |
+| `/uploads/_/…`                          | One derived copy of an uploaded image, generated on the spot if missing.                            |
+| anything else                           | The theme's 404.                                                                                    |
 
 Drafts, documents in the trash and posts whose date has not arrived are not on
 the public site: their URLs 404, and they are in no listing.

@@ -83,6 +83,20 @@
       <span class="comment-hint">Markdown works. Links are marked <code>nofollow ugc</code>; HTML is not.</span>
     </p>
 
+    {#
+      "Tell me about replies". Only on a site that can actually send mail —
+      `notifiable` is false otherwise — because a box that promised a message
+      nothing would ever send would be a lie on a form. The address is the one
+      typed above, is never shown anywhere, and every message it sends carries
+      a one-click unsubscribe link.
+    #}
+    {% if commentForm.notifiable %}
+    <p class="comment-check">
+      <input id="comment-notify" name="{{ commentForm.fields.notify }}" type="checkbox" value="1"{% if commentForm.values.notify %} checked{% endif %} />
+      <label for="comment-notify">Email me when somebody replies to this</label>
+    </p>
+    {% endif %}
+
     <p class="comment-buttons">
       <button type="submit">Post comment</button>
     </p>

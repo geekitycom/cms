@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
-import { countUsers, createUser, findUser, verifyUserPassword } from './accounts.ts';
+import { NOTIFICATION_EVENTS, notificationWanted } from '../notifications/preferences.ts';
+import { countUsers, createUser, findUser, findUserById, verifyUserPassword } from './accounts.ts';
 import {
   browser,
   csrfField,
@@ -145,6 +146,64 @@ describe('a user email address (AC #1)', () => {
     assert.equal(response.status, 303);
     assert.equal(findUser(cms.config.dataDir, 'ada')?.email, undefined);
     assert.match(await (await agent.get('/admin/users')).text(), /email address looks like/i);
+  });
+});
+
+describe('notification preferences (AC #3)', () => {
+  it('offers a switch for every event the registry knows', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    const { html } = await usersScreen(agent);
+
+    for (const event of NOTIFICATION_EVENTS) {
+      assert.match(html, new RegExp(`value="${event.name}"`), `${event.name} has a switch`);
+      assert.match(html, new RegExp(event.label));
+    }
+  });
+
+  it('is on until somebody turns it off, and stays off', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { token } = await usersScreen(agent);
+
+    assert.equal(notificationWanted(findUserById(cms.config.dataDir, ada.id), 'comments'), true);
+
+    const off = await agent.post('/admin/users/notifications', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      event: 'comments',
+    });
+
+    assert.equal(off.status, 303);
+    assert.equal(notificationWanted(findUserById(cms.config.dataDir, ada.id), 'comments'), false);
+
+    await agent.post('/admin/users/notifications', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      event: 'comments',
+      on: '1',
+    });
+    assert.equal(notificationWanted(findUserById(cms.config.dataDir, ada.id), 'comments'), true);
+  });
+
+  it('ignores an event nothing in this version has ever heard of', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { token } = await usersScreen(agent);
+
+    const response = await agent.post('/admin/users/notifications', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      event: 'a-future-event',
+    });
+
+    assert.equal(response.status, 303);
+    assert.deepEqual(findUserById(cms.config.dataDir, ada.id)?.notifications, undefined);
   });
 });
 

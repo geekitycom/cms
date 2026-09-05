@@ -4,11 +4,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
+import { createUser } from '../admin/accounts.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import type { PostComment } from '../admin/store.ts';
 import type { CommentSubmission, CommentVerdict } from '../comments/submission.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { createMemoryMailProvider } from '../mail/memory.ts';
+import type { MemoryMailProvider } from '../mail/memory.ts';
 import { WEBMENTION_PATH } from './routes.ts';
 
 /**
@@ -544,5 +547,54 @@ describe('a webmention on the page', () => {
       'its permalink is the page it was sent from, not an anchor on this one',
     );
     assert.doesNotMatch(after, /reply_to=/, 'and it offers no Reply link, which would go nowhere');
+  });
+});
+
+describe('telling the moderators about it (TASK-55)', () => {
+  /** The site above, with an admin who has an address and mail in a list. */
+  async function siteWithMail(): Promise<{ cms: Cms; provider: MemoryMailProvider }> {
+    const provider = createMemoryMailProvider();
+    const cms = await site({
+      mail: { provider, backoffMs: () => 0, logger: { info: () => {}, warn: () => {} } },
+    });
+    await createUser({
+      dataDir: cms.config.dataDir,
+      username: 'ada',
+      password: 'correct horse battery',
+      email: 'ada@example.com',
+    });
+    return { cms, provider };
+  }
+
+  it('emails them once, when the webmention is first stored', async () => {
+    const { cms, provider } = await siteWithMail();
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a>` +
+          '<div class="e-content"><p>First thought.</p></div>',
+      ),
+    });
+
+    await sendAndSettle(cms, 'https://them.example/note');
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 1);
+    assert.match(provider.sent[0]?.text ?? '', /https:\/\/them\.example\/note/);
+    assert.match(provider.sent[0]?.subject ?? '', /Hello world/);
+  });
+
+  it('says nothing the second time the same page sends one', async () => {
+    const { cms, provider } = await siteWithMail();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+    await cms.mail.settled();
+    provider.clear();
+
+    await sendAndSettle(cms, 'https://them.example/note');
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 0, 'an edited page re-sending is not new news');
   });
 });

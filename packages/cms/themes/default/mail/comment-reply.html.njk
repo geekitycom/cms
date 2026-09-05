@@ -1,0 +1,21 @@
+{# The HTML twin of the reply notice. Deliberately plain, like the rest. #}
+<p>
+  <strong>{{ reply.author }}</strong> has replied to your comment on
+  <a href="{{ post.url }}">{{ post.title }}</a>.
+</p>
+
+<blockquote>{{ reply.html | safe }}</blockquote>
+
+<p><a href="{{ reply.url }}">Read it on the page</a></p>
+
+<p>You wrote:</p>
+
+<blockquote>{{ comment.html | safe }}</blockquote>
+
+<p>
+  You asked to hear about replies when you commented.
+  <a href="{{ unsubscribeUrl }}">Stop these messages</a> &mdash; your comment stays
+  where it is.
+</p>
+
+<p>&mdash; {{ site.title }}</p>

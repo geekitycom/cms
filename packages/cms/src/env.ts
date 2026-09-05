@@ -6,6 +6,7 @@ import type { DocumentChange } from './content/sync.ts';
 import type { DeliveryService } from './federation/delivery.ts';
 import type { RelayService } from './federation/relays.ts';
 import type { MailService } from './mail/service.ts';
+import type { CommentNotifier } from './notifications/comments.ts';
 import type { WebmentionService } from './webmention/service.ts';
 import type { Renderer } from './web/render.ts';
 
@@ -62,6 +63,17 @@ export interface GeekityEnv {
      * no-op that resolves successfully, so a handler never has to ask first.
      */
     mail: MailService;
+    /**
+     * Who to tell about a comment (TASK-55): the moderators when one is
+     * waiting, and the commenter upthread when a reply to them is approved.
+     *
+     * On the context because three different handlers set a comment moving —
+     * the public form, the moderation screen and the one-click links in the
+     * messages themselves — and all three have to tell the same people in the
+     * same way. With no mail configured it is a no-op, like the mail service
+     * behind it.
+     */
+    notifications: CommentNotifier;
     /**
      * The session this request carries, set by the admin guard: a login, the
      * anonymous session that holds a CSRF token before login, or `undefined`

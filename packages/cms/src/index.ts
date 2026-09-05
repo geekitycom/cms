@@ -25,6 +25,8 @@ import type {
 import type { GeekityEnv } from './env.ts';
 import { createMailService } from './mail/index.ts';
 import type { MailService } from './mail/index.ts';
+import { createCommentNotifier } from './notifications/index.ts';
+import type { CommentNotifier } from './notifications/index.ts';
 import {
   assertActorKeysUsable,
   createDeliveryService,
@@ -417,11 +419,14 @@ export {
   deleteComment,
   hashClientAddress,
   interactionOf,
+  isModerationAction,
   MAXIMUM_BODY_LENGTH,
   MAXIMUM_FORM_AGE_SECONDS,
   MAXIMUM_NAME_LENGTH,
   MAXIMUM_URL_LENGTH,
   MINIMUM_SUBMIT_SECONDS,
+  moderateComment,
+  MODERATION_ACTIONS,
   mountComments,
   normalizeWebsite,
   readAkismetKey,
@@ -453,6 +458,9 @@ export type {
   CommentSubmission,
   CommentThrottle,
   CommentVerdict,
+  ModerateCommentOptions,
+  ModerationAction,
+  ModerationOutcome,
   NewComment,
   SubmitCommentOptions,
   VerifyAkismetKeyOptions,
@@ -569,6 +577,47 @@ export type {
 } from './content/index.ts';
 
 export type { GeekityEnv } from './env.ts';
+
+// Notifications: who is told about a comment, the switchboard that decides,
+// and the signed one-click links the messages carry (TASK-55).
+export {
+  addCommentOptOut,
+  COMMENT_OPTOUTS_FILE,
+  COMMENT_PENDING_TEMPLATE,
+  COMMENT_REPLY_TEMPLATE,
+  commentOptOutsFile,
+  COMMENTS_NOTIFICATION,
+  createCommentNotifier,
+  hasOptedOut,
+  MODERATE_PATH,
+  MODERATION_TOKEN_LIFETIME_SECONDS,
+  moderationLink,
+  mountNotificationLinks,
+  NOTIFICATION_EVENTS,
+  NOTIFICATION_FIELDS,
+  NOTIFICATION_SECRET_FILE,
+  notificationEvent,
+  notificationRecipients,
+  notificationSwitches,
+  notificationTokenExpiry,
+  notificationWanted,
+  readCommentOptOuts,
+  readNotificationToken,
+  signNotificationToken,
+  UNSUBSCRIBE_ACTION,
+  UNSUBSCRIBE_PATH,
+  UNSUBSCRIBE_TOKEN_LIFETIME_SECONDS,
+  unsubscribeLink,
+  withNotification,
+} from './notifications/index.ts';
+export type {
+  CommentNotifier,
+  CreateCommentNotifierOptions,
+  LinkContext,
+  NewNotificationToken,
+  NotificationClaim,
+  NotificationEvent,
+} from './notifications/index.ts';
 
 // Email: the one seam a mail service plugs into, the two providers the package
 // ships, the in-memory one a test observes, and the service every feature that
@@ -1030,6 +1079,15 @@ export interface Cms {
    */
   readonly mail: MailService;
   /**
+   * Who is told about comments (TASK-55): the moderators when one is waiting,
+   * and a commenter when a reply to them is approved.
+   *
+   * Here so a site's own code can send the same notice for a comment it
+   * created itself. With no mail configuration it sends nothing, like the mail
+   * service behind it.
+   */
+  readonly notifications: CommentNotifier;
+  /**
    * The publisher of scheduled posts: what holds a future-dated post back and
    * releases it when its date arrives.
    *
@@ -1201,6 +1259,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
     contentDir: resolved.contentDir,
     watch: resolved.watch,
   });
+  // Email. Built whether or not the site has a provider or a credential, for
+  // the reason the Akismet checker is: the settings and `data/mail.json` are
+  // read per send, so a key pasted into the settings screen sends the next
+  // message and one removed stops the message after it, neither needing a
+  // restart. With nothing configured, sending is a line in the log.
+  const mail = createMailService({ config: resolved, ...resolved.mail });
+
   const renderer = createRenderer({
     config: resolved,
     // The pages that put themselves in the site menu are found by asking for
@@ -1229,7 +1294,15 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // render because whether it is depends on the clock: a post that closed an
     // hour ago stops offering one on the very next request.
     commentForm: (document) =>
-      commentFormFor({ document, site: renderer.site(), now: resolved.now() }),
+      commentFormFor({
+        document,
+        site: renderer.site(),
+        now: resolved.now(),
+        // Whether "tell me about replies" is worth offering, asked per render
+        // for the same reason: a credential pasted into the settings screen
+        // puts the box on the next page drawn (TASK-55).
+        notifiable: mail.configured(),
+      }),
   });
   const federation = createSiteFederation({ baseUrl: resolved.baseUrl, ...resolved.federation });
 
@@ -1240,10 +1313,15 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const delivery = createDeliveryService({ federation, admin, store, config: resolved });
   content.events.on('change', (change) => delivery.handle(change));
 
+  // Who hears about a comment (TASK-55). It reads the users file and the mail
+  // settings per message rather than at boot, so an address added on the users
+  // screen is written to by the very next comment.
+  const notifications = createCommentNotifier({ admin, store, mail, config: resolved });
+
   // And so does the webmention sender: telling the pages a post links to is
   // the same news as telling the followers, and it should not matter which
   // door the post came in by (TASK-51).
-  const webmentions = createWebmentionService({ admin, store, config: resolved });
+  const webmentions = createWebmentionService({ admin, store, config: resolved, notifications });
   content.events.on('change', (change) => {
     webmentions.handle(change);
   });
@@ -1252,13 +1330,6 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // on disk changed the same feeds as one saved through the editor.
   const notifier = createFeedNotifier({ config: resolved });
   content.events.on('change', (change) => notifier.handle(change));
-
-  // Email. Built whether or not the site has a provider or a credential, for
-  // the reason the Akismet checker is: the settings and `data/mail.json` are
-  // read per send, so a key pasted into the settings screen sends the next
-  // message and one removed stops the message after it, neither needing a
-  // restart. With nothing configured, sending is a line in the log.
-  const mail = createMailService({ config: resolved, ...resolved.mail });
 
   // A post whose date is in the future is held back (TASK-44), and nothing
   // watches a clock: this is what notices that one has come due and reports it
@@ -1298,6 +1369,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('relays', relays);
     c.set('webmentions', webmentions);
     c.set('mail', mail);
+    c.set('notifications', notifications);
     await next();
   });
 
@@ -1355,6 +1427,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     webmentions,
     notifier,
     mail,
+    notifications,
     scheduler,
     events: content.events,
 

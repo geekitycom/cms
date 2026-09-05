@@ -22,6 +22,7 @@ import {
 import { COMMENT_NOTICE_PARAM, COMMENT_REPLY_PARAM } from '../comments/form.ts';
 import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments/routes.ts';
 import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
+import { mountNotificationLinks } from '../notifications/routes.ts';
 import { commentCounts, postComments, siteComments } from './comments.ts';
 import { isPublicDocument, publicDocumentAt } from './documents.ts';
 import {
@@ -88,6 +89,10 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // And where a webmention is sent (TASK-51), for the same reason and under
   // the same prefix.
   mountWebmentions(app);
+
+  // And where the one-click links in a notification land (TASK-55): the same
+  // prefix again, and no session behind either of them.
+  mountNotificationLinks(app);
 
   app.get('/', (c) => listing(c, { term: undefined, pageNumber: 0 }));
 

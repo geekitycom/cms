@@ -1,0 +1,22 @@
+{# The plain text body of the reply notice. It goes only when the reply has
+   been approved, and only to somebody who ticked the box when they commented.
+   The unsubscribe link is signed, needs no login, and stops every message of
+   this kind to this address. #}
+{{ reply.author }} has replied to your comment on “{{ post.title }}”.
+
+{{ reply.url }}
+
+{{ reply.text | trim }}
+
+You wrote:
+
+{{ comment.text | trim }}
+
+--
+You asked to hear about replies when you commented. To stop, open
+{{ unsubscribeUrl }}
+and press the button. Your comment stays where it is.
+
+--
+{{ site.title }}
+{{ baseUrl }}

@@ -7,6 +7,8 @@ import { addComment } from '../comments/records.ts';
 import type { NewComment } from '../comments/records.ts';
 import type { CommentReport } from '../comments/submission.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { createMemoryMailProvider } from '../mail/memory.ts';
+import type { MemoryMailProvider } from '../mail/memory.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import {
@@ -77,6 +79,7 @@ function comment(overrides: Partial<NewComment> = {}): NewComment {
     content: { markdown: 'Good post.', html: '<p>Good post.</p>\n' },
     submitted: '2026-09-19T10:00:00.000Z',
     addressHash: 'deadbeefcafe',
+    notify: false,
     inReplyTo: null,
     url: null,
     ...overrides,
@@ -346,5 +349,75 @@ describe('the editor’s Comments field', () => {
     );
     // And the editor comes back showing what the file says.
     assert.match((await editing(agent)).html, /<option value="closed" selected>Closed<\/option>/);
+  });
+});
+
+describe('the reply notices this screen sets off (TASK-55)', () => {
+  /** The site above with mail in a list rather than on a wire. */
+  async function withMail(): Promise<{
+    cms: Cms;
+    agent: Browser;
+    token: string;
+    provider: MemoryMailProvider;
+  }> {
+    const provider = createMemoryMailProvider();
+    const site = await moderating({
+      mail: { provider, backoffMs: () => 0, logger: { info: () => {}, warn: () => {} } },
+    });
+    return { ...site, provider };
+  }
+
+  it('tells the commenter when Approve puts a reply on the page', async () => {
+    const { cms, agent, token, provider } = await withMail();
+    const parent = await stored(cms, { status: 'approved', notify: true });
+    const reply = await stored(cms, {
+      author: { name: 'Grace Hopper', url: null, email: 'grace@example.com', avatar: null },
+      content: { markdown: 'And another thing.', html: '<p>And another thing.</p>\n' },
+      inReplyTo: parent,
+    });
+
+    await agent.post(COMMENTS_MODERATE_PATH, {
+      csrf_token: token,
+      [COMMENT_ADMIN_FIELDS.id]: reply,
+      [COMMENT_ADMIN_FIELDS.action]: 'approve',
+    });
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 1);
+    assert.deepEqual(
+      provider.sent[0]?.to.map((to) => to.address),
+      ['ada@example.com'],
+    );
+    assert.match(provider.sent[0]?.text ?? '', /And another thing\./);
+  });
+
+  it('tells them when a moderator answers them from the Reply box', async () => {
+    const { cms, agent, token, provider } = await withMail();
+    const parent = await stored(cms, { status: 'approved', notify: true });
+
+    await agent.post(COMMENTS_REPLY_PATH, {
+      csrf_token: token,
+      [COMMENT_ADMIN_FIELDS.id]: parent,
+      [COMMENT_ADMIN_FIELDS.body]: 'Thank you for reading.',
+    });
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 1);
+    assert.match(provider.sent[0]?.text ?? '', /Thank you for reading\./);
+  });
+
+  it('says nothing when Spam or Delete is what happened', async () => {
+    const { cms, agent, token, provider } = await withMail();
+    const parent = await stored(cms, { status: 'approved', notify: true });
+    const reply = await stored(cms, { inReplyTo: parent });
+
+    await agent.post(COMMENTS_MODERATE_PATH, {
+      csrf_token: token,
+      [COMMENT_ADMIN_FIELDS.id]: reply,
+      [COMMENT_ADMIN_FIELDS.action]: 'spam',
+    });
+    await cms.mail.settled();
+
+    assert.equal(provider.sent.length, 0);
   });
 });

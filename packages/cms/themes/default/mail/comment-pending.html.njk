@@ -1,0 +1,27 @@
+{# The HTML twin of the moderation notice. Deliberately plain: a single column
+   and almost no styling is what survives the widest range of mail readers. #}
+<p>
+  {% if comment.source == 'webmention' %}A page has linked to{% else %}Somebody has commented on{% endif %}
+  <a href="{{ post.url }}">{{ post.title }}</a> and it is waiting for you.
+</p>
+
+<p>
+  <strong>{{ comment.author }}</strong>{% if comment.website %} &mdash; <a href="{{ comment.website }}" rel="nofollow ugc">{{ comment.website }}</a>{% endif %}<br />
+  {% if comment.url %}<a href="{{ comment.url }}" rel="nofollow ugc">{{ comment.url }}</a><br />{% endif %}
+  <span>{{ comment.submitted }}</span>
+</p>
+
+<blockquote>
+  {% if comment.html %}{{ comment.html | safe }}{% else %}<p>(nothing was said &mdash; it is a {{ comment.kind }})</p>{% endif %}
+</blockquote>
+
+<p>
+  {% for choice in actions %}<a href="{{ choice.url }}">{{ choice.label }}</a>{% if not loop.last %} &middot; {% endif %}{% endfor %}
+</p>
+
+<p>
+  Each link works once and lasts a week. After that, the queue is at
+  <a href="{{ queueUrl }}">{{ queueUrl }}</a>.
+</p>
+
+<p>&mdash; {{ site.title }}</p>

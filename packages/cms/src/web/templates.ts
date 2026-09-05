@@ -25,6 +25,13 @@ export interface CreateTemplateEnvironmentOptions {
    * without a restart.
    */
   noCache?: boolean | undefined;
+  /**
+   * Whether `{{ }}` escapes for HTML. On everywhere a page is rendered, and
+   * off for the plain text half of an email (TASK-55): a text body and a
+   * subject line are not HTML, so escaping there turns an ampersand in a URL
+   * into `&amp;` and an apostrophe in a name into `&#39;`.
+   */
+  autoescape?: boolean | undefined;
 }
 
 /**
@@ -41,7 +48,7 @@ export function createTemplateEnvironment(options: CreateTemplateEnvironmentOpti
   });
 
   const environment = new Environment(loader, {
-    autoescape: true,
+    autoescape: options.autoescape ?? true,
     throwOnUndefined: false,
     trimBlocks: true,
     lstripBlocks: true,
