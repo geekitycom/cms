@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-04 23:31'
+updated_date: '2026-09-05 02:47'
 ---
 # Native comments
 
@@ -52,7 +52,8 @@ Eleventy build of the same content directory reads it.
       "submitted": "2026-09-20T10:00:00.000Z",
       "addressHash": "0123456789abcdef0123456789abcdef",
       "inReplyTo": null,
-      "url": null
+      "url": null,
+      "notify": true
     }
   ]
 }
@@ -77,6 +78,7 @@ belong. `comments` is the list, oldest first.
 | `addressHash` | A salted SHA-256 of the address it came from, truncated, or `null`.                               |
 | `inReplyTo`   | The comment it answers, or `null` for one answering the post.                                     |
 | `url`         | Where it lives when it lives somewhere else: a webmention's source page, `null` for one written here. |
+| `notify`      | Whether the commenter asked to be told when somebody answers them. Only ever `true` alongside an `author.email`; an entry that does not say it asked for nothing. |
 
 The shape is deliberately wider than a form submission, because a webmention
 lands in the same file: it has a page of its own and no email, it may be a like
@@ -103,7 +105,8 @@ looks like this, and every rule below applies to it unchanged:
   "submitted": "2026-09-21T09:00:00.000Z",
   "addressHash": "0123456789abcdef0123456789abcdef",
   "inReplyTo": null,
-  "url": "https://grace.example/2026/09/about-that/"
+  "url": "https://grace.example/2026/09/about-that/",
+  "notify": false
 }
 ```
 
@@ -300,10 +303,36 @@ hash of the address and nothing else.
 ## The admin screen
 
 `/admin/comments`, three lists — pending, approved, spam — with approve, spam,
-delete and reply on every row, and the pending count on the dashboard. There is
-no email in this milestone, so the screen is the notification. Spam is kept
-rather than deleted, so a mistake can be undone and so the checker can be told
-it was wrong. See doc-5.
+delete and reply on every row, and the pending count on the dashboard. Spam is
+kept rather than deleted, so a mistake can be undone and so the checker can be
+told it was wrong. See doc-5, and "Being told about a comment" below for the
+same actions done out of an inbox.
+
+## Being told about a comment
+
+Email is what makes moderation timely, and it is off until a site can send it (TASK-53). With no provider or credential nothing here happens and nothing here breaks.
+
+### To the moderators
+
+A comment or a webmention entering the queue emails every user who has an address and has not turned **New comments** off on `/admin/users`. Only `pending`: one Akismet filed as spam is not waiting for anybody, and one it said to discard was never stored. A webmention re-sent by a page somebody edited notifies nobody either — a source that updates its entry is not new news.
+
+The message carries the words themselves, the post, and three links: approve, spam, delete. Each is `/_geekity/moderate?action=…&token=…`, needs no login, and lands on a page with one button on it. **Opening a link does nothing**; only the button acts. Mail readers, spam filters and corporate link scanners fetch the URLs in a message as a matter of course, and a link that moderated on being fetched would be a gateway silently deleting this site's comments.
+
+The token is an HMAC-signed claim, not a stored row. The secret is `data/notification-secret` (mode `0600`, minted on first use, the `comment-salt` pattern), so a link that has been in an inbox for three days goes on working across a restart, a rebuilt cache or a restored backup — all of which decision-9 says a site may do whenever it likes. What *is* stored is the fact that a link has been used: its SHA-256 in `spent_tokens`, swept once the signature has expired. Losing that table forgets which links were spent and costs nothing, because every action a link performs is idempotent. A link is bound to one action on one comment and lasts a week.
+
+`moderateComment` is the single function behind both the screen's buttons and these links, so the two doors cannot drift apart over what an action does or over when `reportSpam` and `reportHam` are called.
+
+### To the commenter
+
+The form offers **"Email me when somebody replies to this"**, but only on a site that can send mail — a box promising a message nothing could deliver would be a lie on a form. Ticking it stores `notify: true` on the entry, beside the `author.email` that is already there. Neither is ever rendered: not in the thread, not in the JSON or Markdown representation of the post, and not in the comments feeds.
+
+One message goes out, and only when a reply to that comment is **approved**. Not when it is submitted: an unapproved reply is not something a stranger should be emailed the text of, and a moderator should be able to delete a nasty one before anybody hears about it. Three things stop it — no address, an address that has unsubscribed, and a reply written by the very person who would be told.
+
+The unsubscribe link at the bottom is signed the same way, lasts a year rather than a week, and is deliberately **not** single use: clicking it twice should say "you are unsubscribed", not "that link is dead". It is **site-wide by address**. Somebody who presses Stop means stop, and a site that then wrote to them about a different post would have read the button as "stop, on this page only". The address goes into `data/comment-optouts.json` (mode `0600`, in `data/` because it is a list of email addresses and `content/` is published). Comment files are untouched: the list is checked at the moment of sending, so nothing has to go back and rewrite entries a site has in git.
+
+### Adding another notice
+
+Preferences are a switchboard keyed by event name, not a field per notice. `src/notifications/preferences.ts` holds the registry; one entry there is a new checkbox on `/admin/users`, a new key in `data/users.json`, and a new answer from `notificationRecipients`. An event a user has said nothing about is at its default, so a notice that ships turned on reaches everybody with an address without anybody visiting that screen.
 
 ## What a reader sees
 

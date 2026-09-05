@@ -56,11 +56,19 @@ export const COMMENT_FIELDS = {
   trap: 'website',
   /** When the form was rendered, in epoch milliseconds. */
   loaded: 'loaded',
+  /**
+   * "Tell me when somebody answers this."
+   *
+   * A checkbox, so any non-empty value is a yes. It only ever means anything
+   * alongside an email address, and the form only offers it when the site can
+   * actually send mail (TASK-55).
+   */
+  notify: 'notify',
 } as const;
 
 /** A submitted comment form, as strings, which is what a form has. */
 export type CommentForm = Record<
-  'post' | 'name' | 'email' | 'url' | 'body' | 'inReplyTo' | 'trap' | 'loaded',
+  'post' | 'name' | 'email' | 'url' | 'body' | 'inReplyTo' | 'trap' | 'loaded' | 'notify',
   string
 >;
 
@@ -238,6 +246,15 @@ export interface SubmitCommentOptions {
   referrer?: string | undefined;
   /** The rate limiter, kept by the mount so it outlives one request. */
   throttle: CommentThrottle;
+  /**
+   * Whether "tell me about replies" is worth recording, which it is when the
+   * site can send mail at all (TASK-55).
+   *
+   * Read per submission rather than assumed, so a site that has just pasted a
+   * mail credential starts honouring the box on the very next comment, and one
+   * that removed the credential stops storing an intention it cannot keep.
+   */
+  notifiable?: boolean | undefined;
   /** The clock. */
   now?: Date | undefined;
 }
@@ -300,6 +317,9 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     // A comment written here lives here: only a webmention has a page of its
     // own somewhere else (TASK-51).
     url: null,
+    // Only ever true when there is an address to send to. A box ticked with
+    // the email field empty is somebody asking to be told at nowhere.
+    notify: options.notifiable === true && form.notify.trim() !== '' && author.email !== null,
   };
 
   const verdict = await ask(options, proposed, now);

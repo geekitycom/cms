@@ -5,6 +5,7 @@ import {
   updateFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
+import { notificationEvent, withNotification } from '../notifications/preferences.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
 import type { AdminStore } from './store.ts';
 
@@ -60,6 +61,17 @@ export interface User {
    * against by the forgot-password form, which answers the same either way.
    */
   readonly email?: string | undefined;
+  /**
+   * Which notices this user has turned off, when they have turned any off
+   * (TASK-55).
+   *
+   * Absent for almost everybody, because it holds only what somebody actually
+   * changed: an event nothing says anything about is at the default
+   * `src/notifications/preferences.ts` gives it, which is what lets a new
+   * notice start working without anybody visiting the users screen. Keyed by
+   * event name, so adding an event adds no field here.
+   */
+  readonly notifications?: Readonly<Record<string, boolean>> | undefined;
   /** When the user was created, as an ISO 8601 instant. */
   readonly createdAt: string;
 }
@@ -255,6 +267,43 @@ export async function setUserEmail(input: {
 }
 
 /**
+ * Turn one notice on or off for one user.
+ *
+ * The map holds only what somebody changed, so this writes through
+ * {@link withNotification} and drops the key altogether when the answer is the
+ * default again. An event this version has never heard of changes nothing:
+ * there would be no switch to reach it with and no sender to read it. Returns
+ * `false` when there is no such user.
+ */
+export async function setUserNotification(input: {
+  /** Which site's users file to write. */
+  dataDir: string;
+  /** Whose preference. */
+  userId: number;
+  /** Which notice, by its name in the registry. */
+  event: string;
+  /** Whether they want it. */
+  on: boolean;
+}): Promise<boolean> {
+  let changed = false;
+
+  await write(input.dataDir, (contents) => {
+    changed = contents.users.some((user) => user.id === input.userId);
+    return {
+      ...contents,
+      users: contents.users.map((user) => {
+        if (user.id !== input.userId) return user;
+        const { notifications: _removed, ...rest } = user;
+        const next = withNotification(user.notifications, input.event, input.on);
+        return next === undefined ? rest : { ...rest, notifications: next };
+      }),
+    };
+  });
+
+  return changed;
+}
+
+/**
  * Take a user out of the file. Returns `false` when there was nothing to take.
  *
  * Their sessions are not ended here: sessions are in the database, and the
@@ -340,6 +389,7 @@ function withoutHash(user: StoredUser): User {
     id: user.id,
     username: user.username,
     ...(user.email === undefined ? {} : { email: user.email }),
+    ...(user.notifications === undefined ? {} : { notifications: user.notifications }),
     createdAt: user.createdAt,
   };
 }
@@ -432,6 +482,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const id = record['id'];
   const username = record['username'];
   const email = record['email'];
+  const preferences = notificationsFrom(record['notifications']);
   const passwordHash = record['passwordHash'];
   const createdAt = record['createdAt'];
 
@@ -453,9 +504,27 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
     // to load over a mistyped address would be a worse failure than the one it
     // is guarding against.
     ...(typeof email === 'string' && email.trim() !== '' ? { email: email.trim() } : {}),
+    // Dropped rather than refused for the reason a bad email is: a preference
+    // is not what anybody signs in with, and an admin that would not load over
+    // a mistyped one would be the worse failure. A key naming an event this
+    // version does not know is left out too, so a file written by a newer
+    // version is read as far as it makes sense.
+    ...(preferences === undefined ? {} : { notifications: preferences }),
     passwordHash,
     createdAt: typeof createdAt === 'string' ? createdAt : '',
   };
+}
+
+/** A stored preference map as this version reads it, or `undefined`. */
+function notificationsFrom(value: unknown): Record<string, boolean> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+
+  const found: Record<string, boolean> = {};
+  for (const [name, wanted] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof wanted === 'boolean' && notificationEvent(name) !== undefined) found[name] = wanted;
+  }
+
+  return Object.keys(found).length === 0 ? undefined : found;
 }
 
 /** What a damaged users file says, and what to do about it. */

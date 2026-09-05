@@ -160,6 +160,10 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     addressHash: optionalText(value['addressHash']),
     inReplyTo: optionalText(value['inReplyTo']),
     url: optionalText(value['url']),
+    // An entry that does not say means one that never asked: a comment file
+    // written before TASK-55 shipped, or edited by hand, has nobody waiting on
+    // it, and defaulting the other way would email people who never opted in.
+    notify: value['notify'] === true,
   };
 }
 
@@ -326,6 +330,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     addressHash: comment.addressHash,
     inReplyTo: comment.inReplyTo,
     url: comment.url,
+    notify: comment.notify,
   };
 }
 
@@ -342,6 +347,7 @@ function entryOf(comment: PostComment): CommentRecord {
     addressHash: comment.addressHash,
     inReplyTo: comment.inReplyTo,
     url: comment.url,
+    notify: comment.notify,
   };
 }
 

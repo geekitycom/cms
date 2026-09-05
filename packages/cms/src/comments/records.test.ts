@@ -57,6 +57,7 @@ function ada(overrides: Partial<NewComment> = {}): NewComment {
     addressHash: 'abc123',
     inReplyTo: null,
     url: null,
+    notify: false,
     ...overrides,
   };
 }
@@ -88,10 +89,34 @@ describe('a comment file', () => {
             addressHash: 'abc123',
             inReplyTo: null,
             url: null,
+            notify: false,
           },
         ],
       },
     );
+  });
+
+  it('records whether the commenter asked to hear about replies', async () => {
+    const site = await records();
+
+    const stored = await addComment(site, ada({ notify: true }));
+
+    assert.equal(readComments(site.contentDir, 'hello-world')[0]?.notify, true);
+    assert.equal(site.admin.getComment(stored.id)?.notify, true);
+  });
+
+  it('reads an entry that predates the flag as one that asked for nothing', async () => {
+    const site = await records();
+    await mkdir(path.dirname(commentsFile(site.contentDir, 'hello-world')), { recursive: true });
+    await writeFile(
+      commentsFile(site.contentDir, 'hello-world'),
+      JSON.stringify({
+        post: '/2026/09/hello-world/',
+        comments: [{ id: 'old', author: { name: 'Ada' } }],
+      }),
+    );
+
+    assert.equal(readComments(site.contentDir, 'hello-world')[0]?.notify, false);
   });
 
   it('is appended to, oldest first, by the next comment on the same post', async () => {

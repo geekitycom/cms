@@ -169,6 +169,7 @@ const COMMENT: Omit<PostComment, 'id'> = {
   addressHash: 'deadbeef',
   inReplyTo: null,
   url: null,
+  notify: false,
 };
 
 const SUBMISSION: CommentSubmission = {

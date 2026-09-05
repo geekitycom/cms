@@ -1,9 +1,9 @@
 import type { Context, Hono } from 'hono';
 
 import { renderCommentMarkdown } from '../comments/markdown.ts';
-import { addComment, deleteComment, updateComment } from '../comments/records.ts';
+import { isModerationAction, moderateComment } from '../comments/moderate.ts';
+import { addComment } from '../comments/records.ts';
 import type { CommentRecords } from '../comments/records.ts';
-import type { CommentChecker, CommentReport } from '../comments/submission.ts';
 import type { GeekityEnv } from '../env.ts';
 import { editorPath, PAGE_KIND, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
@@ -161,34 +161,46 @@ export function mountCommentsScreen(
     }
 
     const action = text(body[COMMENT_ADMIN_FIELDS.action]);
-    const records = recordsOf(c);
-
-    if (action === 'delete') {
-      await deleteComment(records, comment.id);
-      flash(c, 'notice', `Deleted ${comment.author.name}’s comment.`);
-      return c.redirect(back, 303);
-    }
-
-    if (action !== 'approve' && action !== 'spam') {
+    if (!isModerationAction(action)) {
       flash(c, 'error', 'That is not something a comment can be.');
       return c.redirect(back, 303);
     }
 
-    const status: CommentStatus = action === 'approve' ? 'approved' : 'spam';
-    if (comment.status === status) {
-      flash(c, 'notice', `That comment is already ${status}.`);
+    // The same function the one-click links in a notification call, so the two
+    // doors onto moderation can never disagree about what an action does or
+    // about when the spam checker is told (TASK-55).
+    const outcome = await moderateComment({
+      records: recordsOf(c),
+      id: comment.id,
+      action,
+      checker: c.var.config.commentChecker,
+      baseUrl: c.var.config.baseUrl,
+    });
+
+    if (outcome.kind === 'gone') {
+      flash(c, 'error', 'That comment is not here any more.');
       return c.redirect(back, 303);
     }
 
-    const moved = await updateComment(records, comment.id, { status });
-    if (moved !== undefined) await tellChecker(c, moved, comment.status);
+    if (outcome.kind === 'unchanged') {
+      flash(c, 'notice', `That comment is already ${outcome.comment.status}.`);
+      return c.redirect(back, 303);
+    }
+
+    // A reply nobody had approved is now on the page, so whoever it answers
+    // hears about it, if they asked to.
+    if (outcome.kind === 'moved' && outcome.comment.status === 'approved') {
+      c.var.notifications.replyApproved(outcome.comment);
+    }
 
     flash(
       c,
       'notice',
-      status === 'approved'
-        ? `Approved ${comment.author.name}’s comment.`
-        : `Filed ${comment.author.name}’s comment as spam.`,
+      action === 'delete'
+        ? `Deleted ${comment.author.name}’s comment.`
+        : action === 'approve'
+          ? `Approved ${comment.author.name}’s comment.`
+          : `Filed ${comment.author.name}’s comment as spam.`,
     );
     return c.redirect(back, 303);
   });
@@ -212,7 +224,7 @@ export function mountCommentsScreen(
     // the person writing it is the person who would have approved it. It goes
     // in the same file, under the comment it answers, so the thread on the
     // page reads as one conversation.
-    await addComment(recordsOf(c), {
+    const written = await addComment(recordsOf(c), {
       slug: parent.slug,
       permalink: parent.permalink,
       source: 'comment',
@@ -227,39 +239,18 @@ export function mountCommentsScreen(
       addressHash: null,
       inReplyTo: parent.id,
       url: null,
+      // A moderator writing from the admin is already reading the queue;
+      // nothing here is going to email them about their own reply.
+      notify: false,
     });
+
+    // The reply is approved the moment it is written, so the person it
+    // answers hears about it now (TASK-55).
+    c.var.notifications.replyApproved(written);
 
     flash(c, 'notice', `Replied to ${parent.author.name}.`);
     return c.redirect(back, 303);
   });
-
-  /** Tell the checker, when there is one, that a human disagreed with it. */
-  async function tellChecker(
-    c: Context<GeekityEnv>,
-    comment: PostComment,
-    before: CommentStatus,
-  ): Promise<void> {
-    const checker: CommentChecker | undefined = c.var.config.commentChecker;
-    if (checker === undefined) return;
-
-    const report: CommentReport = {
-      comment,
-      url: absolute(comment.permalink, c.var.config.baseUrl),
-      baseUrl: c.var.config.baseUrl,
-    };
-
-    try {
-      // Only a real change of mind is reported. Approving something that was
-      // already pending says nothing a checker did not already assume, and a
-      // service charged per call should not be told it twice.
-      if (comment.status === 'spam') await checker.reportSpam?.(report);
-      else if (before === 'spam') await checker.reportHam?.(report);
-    } catch (error) {
-      // The comment has already moved; a checker that cannot be told is a
-      // worse spam filter tomorrow, not a failed moderation action today.
-      console.warn(`The comment checker would not take the correction: ${messageOf(error)}`);
-    }
-  }
 }
 
 /** How many comments are waiting, which is the number on the dashboard. */
@@ -327,20 +318,7 @@ function moderatorName(c: Context<GeekityEnv>): string {
   return user?.username ?? 'The author';
 }
 
-/** A site-root path as an absolute URL. */
-function absolute(pathname: string, baseUrl: string): string {
-  try {
-    return new URL(pathname, baseUrl).href;
-  } catch {
-    return pathname;
-  }
-}
-
 /** A form field as a string. A file upload, or a missing field, is the empty one. */
 function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

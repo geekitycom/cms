@@ -3,6 +3,7 @@ import { randomInt } from 'node:crypto';
 import type { Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
+import { notificationEvent, notificationSwitches } from '../notifications/preferences.ts';
 import {
   countUsers,
   createUser,
@@ -11,6 +12,7 @@ import {
   findUserById,
   listUsers,
   setUserEmail,
+  setUserNotification,
   setUserPassword,
   verifyUserPassword,
 } from './accounts.ts';
@@ -33,6 +35,9 @@ export const DELETE_USER_PATH = `${USERS_PATH}/delete`;
 /** Where a row's email form posts. */
 export const USER_EMAIL_PATH = `${USERS_PATH}/email`;
 
+/** Where a row's notification switches post. */
+export const USER_NOTIFICATIONS_PATH = `${USERS_PATH}/notifications`;
+
 /** The fields the forms on the screen submit. */
 export const USER_FIELDS = {
   username: 'username',
@@ -43,6 +48,18 @@ export const USER_FIELDS = {
   newPassword: 'new_password',
   newPasswordConfirmation: 'new_password_confirmation',
   userId: 'user_id',
+  /** Which notice a switch is about, by its name in the registry. */
+  event: 'event',
+  /**
+   * Whether that notice is wanted.
+   *
+   * A checkbox, so a form that turns one off submits nothing at all under this
+   * name — which is why the switch is a form of its own per event rather than
+   * one form with a checkbox per event: a browser sends no field for an
+   * unticked box, and one form could not tell "turned this off" from "did not
+   * mention it".
+   */
+  on: 'on',
 } as const;
 
 /** What {@link mountUsers} needs from the admin around it. */
@@ -192,6 +209,48 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       email === ''
         ? `${target.username} has no email address any more.`
         : `${target.username} will be emailed at ${email}.`,
+    );
+    return c.redirect(USERS_PATH, 303);
+  });
+
+  /**
+   * Turn one notice on or off for one row.
+   *
+   * Any row, for the reason the email field is any row: one role, and an admin
+   * who has just given a colleague an address should be able to say what goes
+   * to it. An event nothing in this version knows is a no-op rather than an
+   * error, because the only way to submit one is a form this CMS did not
+   * render.
+   */
+  app.post(USER_NOTIFICATIONS_PATH, async (c) => {
+    const dataDir = c.var.config.dataDir;
+    const body = await c.req.parseBody();
+    const id = Number(field(body[USER_FIELDS.userId]));
+    const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
+
+    if (target === undefined) {
+      flash(c, 'error', 'That user is already gone.');
+      return c.redirect(USERS_PATH, 303);
+    }
+
+    const name = field(body[USER_FIELDS.event]);
+    const event = notificationEvent(name);
+    if (event === undefined) {
+      flash(c, 'error', 'That is not something this site can tell anybody about.');
+      return c.redirect(USERS_PATH, 303);
+    }
+
+    // An unticked checkbox submits no field at all, so its absence is the
+    // answer rather than a missing one.
+    const on = field(body[USER_FIELDS.on]) !== '';
+    await setUserNotification({ dataDir, userId: target.id, event: name, on });
+
+    flash(
+      c,
+      'notice',
+      on
+        ? `${target.username} will be emailed about ${event.label.toLowerCase()}.`
+        : `${target.username} will not be emailed about ${event.label.toLowerCase()}.`,
     );
     return c.redirect(USERS_PATH, 303);
   });
@@ -352,6 +411,7 @@ function screen(
     changePasswordUrl: CHANGE_PASSWORD_PATH,
     deleteUserUrl: DELETE_USER_PATH,
     userEmailUrl: USER_EMAIL_PATH,
+    userNotificationsUrl: USER_NOTIFICATIONS_PATH,
     fields: USER_FIELDS,
     users: users.map((user) => row(user, { signedInAs, total: users.length })),
     addForm: { username: '', email: '', generate: false },
@@ -381,6 +441,9 @@ function row(
     id: user.id,
     username: user.username,
     email: user.email ?? '',
+    // One switch per registered event, so the template loops rather than
+    // naming the notices it happens to know about (TASK-55).
+    notifications: notificationSwitches(user),
     createdAt: user.createdAt,
     you,
     // The button is rendered for everybody the signed-in admin may actually

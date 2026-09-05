@@ -12,6 +12,7 @@
       <tr>
         <th scope="col">Username</th>
         <th scope="col">Email</th>
+        <th scope="col">Email me about</th>
         <th scope="col">Created</th>
         <th scope="col">Actions</th>
       </tr>
@@ -32,6 +33,24 @@
               <button type="submit">Save</button>
             </form>
           </td>
+          <td>
+            {# One form per switch, not one form with a checkbox each: a
+               browser sends no field for an unticked box, so a single form
+               could not tell "turned this off" from "left it alone". Adding a
+               notice is one entry in the registry and no change here. #}
+            {% for notice in entry.notifications %}
+              <form class="admin-inline" method="post" action="{{ userNotificationsUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.userId }}" value="{{ entry.id }}" />
+                <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
+                <input type="hidden" name="{{ fields.on }}" value="{% if notice.on %}{% else %}1{% endif %}" />
+                <span class="admin-status">{{ notice.label }}</span>
+                <button type="submit" title="{{ notice.description }}">
+                  {% if notice.on %}On — turn off{% else %}Off — turn on{% endif %}
+                </button>
+              </form>
+            {% endfor %}
+          </td>
           <td>{{ entry.createdAt | date('html') }}</td>
           <td class="admin-actions">
             {% if entry.deletable %}
@@ -49,7 +68,7 @@
 
   <p class="admin-hint">
     {% if mailConfigured %}
-      An email address is optional. It is what a forgotten password is recovered through, and it is never shown on the public site.
+      An email address is optional. It is what a forgotten password is recovered through and where the notices above go, and it is never shown on the public site. A moderation notice carries approve, spam and delete links that work once and need no login.
     {% else %}
       An email address is optional, and this site sends no mail yet, so nothing will be sent to one. Choose a provider on <a href="{{ adminUrl }}/settings">Settings</a> to turn password recovery on.
     {% endif %}

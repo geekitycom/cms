@@ -1,0 +1,24 @@
+{# The plain text body of the moderation notice. The three links are the point
+   of the whole message: each carries a signed token, works once, and lands on
+   a page with a button rather than acting on being opened, so that a mail
+   scanner following links cannot moderate this site. #}
+{% if comment.source == 'webmention' %}A page has linked to{% else %}Somebody has commented on{% endif %} “{{ post.title }}” and it is waiting for you.
+
+{{ post.url }}
+
+From: {{ comment.author }}{% if comment.website %}
+Site: {{ comment.website }}{% endif %}{% if comment.url %}
+Page: {{ comment.url }}{% endif %}
+When: {{ comment.submitted }}
+
+{{ comment.text | trim if comment.text | trim else '(nothing was said — it is a ' + comment.kind + ')' }}
+
+--
+{% for choice in actions %}{{ choice.label }}: {{ choice.url }}
+{% endfor %}
+Each link works once and lasts a week. After that, the queue is at
+{{ queueUrl }}.
+
+--
+{{ site.title }}
+{{ baseUrl }}

@@ -76,13 +76,29 @@ files:
 A message that has no `.txt.njk` anywhere on the search path is an error rather
 than an empty email, so a typo in a template name is reported instead of sent.
 
-The package ships three messages:
+The package ships five messages:
 
-| Name               | When it goes                        | What `data` carries                                    |
-| ------------------ | ----------------------------------- | ------------------------------------------------------ |
-| `test`             | Send test email, on Settings.       | Nothing.                                               |
-| `password-reset`   | Somebody asked to reset a password. | `username`, `resetUrl`, `expiresAt`, `expiresInHours`. |
-| `password-changed` | A reset link was used.              | `username`, `signedOut` (how many sessions ended).     |
+| Name               | When it goes                                     | What `data` carries                                                                                                         |
+| ------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `test`             | Send test email, on Settings.                    | Nothing.                                                                                                                    |
+| `password-reset`   | Somebody asked to reset a password.              | `username`, `resetUrl`, `expiresAt`, `expiresInHours`.                                                                      |
+| `password-changed` | A reset link was used.                           | `username`, `signedOut` (how many sessions ended).                                                                          |
+| `comment-pending`  | A comment or webmention is waiting for approval. | `comment`, `post` (`title`, `url`), `actions` (one `{ action, label, url }` each for approve, spam and delete), `queueUrl`. |
+| `comment-reply`    | A reply to somebody's comment was approved.      | `reply`, `comment` (the one it answers), `post`, `unsubscribeUrl`.                                                          |
+
+`comment` and `reply` above are the same shape: `author`, `website`, `source`
+(`comment` or `webmention`), `kind`, `text`, `html`, `submitted`, and `url`.
+The commenter's email address is deliberately **not** among them — the message
+goes to a moderator, but it also goes through a mail provider's servers, and
+nothing on that screen needs it.
+
+The links in `actions` and `unsubscribeUrl` each carry a signed token and work
+without a login. Print them; do not try to build one.
+
+The subject and the plain text body render with autoescaping **off**, because
+neither is HTML: `&` between two query parameters stays an `&`, and an
+apostrophe in somebody's name stays an apostrophe. The HTML twin escapes as
+every other template does.
 
 The context is `site` (that is `content/_data/site.json`), `baseUrl`, and
 whatever the feature that sent it passed as `data`. The `date`, `url` and
@@ -382,16 +398,17 @@ still shows the thread — including every fediverse reply, which arrives whethe
 a post is open or not — and simply has no form. A site replaces
 `partials/comment-form.njk` the way it replaces any other template.
 
-| Key                        | What it holds                                                                                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `action`                   | Where the form posts. One fixed path; the post travels as a field.                                                                                     |
-| `fields`                   | The name each field is submitted under: `post`, `name`, `email`, `url`, `body`, `inReplyTo`, `trap`, `loaded`. Use these rather than typing the names. |
-| `post`                     | The post's slug, for the hidden field.                                                                                                                 |
-| `loaded`                   | When this form was rendered, in epoch milliseconds, for the hidden field. A submission that comes back too fast is refused.                            |
-| `values`                   | What is in the fields: empty on a fresh form, what was typed on a refused one.                                                                         |
-| `problems`                 | One message per field a person has to put right — `name`, `email`, `url`, `body`.                                                                      |
-| `error`                    | A message about the submission as a whole, when there is one.                                                                                          |
-| `nameLength`, `bodyLength` | The `maxlength` for the two fields that have one.                                                                                                      |
+| Key                        | What it holds                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `action`                   | Where the form posts. One fixed path; the post travels as a field.                                                                                                        |
+| `fields`                   | The name each field is submitted under: `post`, `name`, `email`, `url`, `body`, `inReplyTo`, `trap`, `loaded`, `notify`. Use these rather than typing the names.          |
+| `post`                     | The post's slug, for the hidden field.                                                                                                                                    |
+| `loaded`                   | When this form was rendered, in epoch milliseconds, for the hidden field. A submission that comes back too fast is refused.                                               |
+| `values`                   | What is in the fields: empty on a fresh form, what was typed on a refused one.                                                                                            |
+| `problems`                 | One message per field a person has to put right — `name`, `email`, `url`, `body`.                                                                                         |
+| `error`                    | A message about the submission as a whole, when there is one.                                                                                                             |
+| `notifiable`               | Whether to offer `fields.notify`, the "email me when somebody replies" box. False on a site that sends no mail, where the box would promise a message nothing could send. |
+| `nameLength`, `bodyLength` | The `maxlength` for the two fields that have one.                                                                                                                         |
 
 `fields.trap` is a honeypot: render it, hide it from sight and from assistive
 technology, and give it `tabindex="-1"` and `autocomplete="off"`. A submission

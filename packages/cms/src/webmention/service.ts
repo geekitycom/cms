@@ -1,5 +1,10 @@
 import { readSiteSettings } from '../admin/settings.ts';
-import type { AdminStore, SentWebmention, WebmentionSendStatus } from '../admin/store.ts';
+import type {
+  AdminStore,
+  PostComment,
+  SentWebmention,
+  WebmentionSendStatus,
+} from '../admin/store.ts';
 import type { CommentRecords } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
@@ -62,6 +67,13 @@ export interface CreateWebmentionServiceOptions {
   config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir' | 'now' | 'commentChecker'>;
   /** Where failures are reported. Defaults to `console`. */
   logger?: WebmentionLogger | undefined;
+  /**
+   * Who to tell when an incoming webmention lands in the queue (TASK-55).
+   *
+   * Optional, because a service built for a test of sending has nobody to
+   * tell; the CMS always hands one in.
+   */
+  notifications?: { pending(comment: PostComment): void } | undefined;
 }
 
 /** Sends a site's webmentions, takes the ones sent to it, and remembers both. */
@@ -231,7 +243,7 @@ export function createWebmentionService(
     receive(incoming) {
       const checked = checking.then(async (): Promise<WebmentionOutcome> => {
         try {
-          return await verifyWebmention({
+          const outcome = await verifyWebmention({
             incoming,
             records,
             dataDir: config.dataDir,
@@ -240,6 +252,16 @@ export function createWebmentionService(
             now: config.now(),
             logger,
           });
+
+          // Only a webmention this site had not already stored is news: a page
+          // that is edited and re-sent updates the entry it made, and putting
+          // the moderators through a message every time it happens would make
+          // the notice worth ignoring.
+          if (outcome.kind === 'stored' && outcome.created) {
+            options.notifications?.pending(outcome.comment);
+          }
+
+          return outcome;
         } catch (thrown) {
           // Nothing is waiting for this: the sender has had its 202, so a
           // failure has nowhere to go but the log, and it must not become an

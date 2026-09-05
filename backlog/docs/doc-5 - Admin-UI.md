@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-05 02:18'
+updated_date: '2026-09-05 02:46'
 ---
 # Admin UI
 
@@ -22,7 +22,7 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 | `/admin/tags`, `/admin/categories` | every term in use with its post and file counts; rename, merge, delete |
 | `/admin/comments` | pending, approved and spam, with approve, spam, delete and reply on every row |
 | `/admin/settings` | site title, tagline, base URL, timezone, posts per page, comments on/off and closing window, actor handle and type, the Akismet key, the mail provider and its credential |
-| `/admin/users` | list, add, set each user's email, change your own password (single role: admin) |
+| `/admin/users` | list, add, set each user's email and which notices go to it, change your own password (single role: admin) |
 | `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
 
 ## Editor
@@ -34,7 +34,7 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 
 ## Comments
 
-- `/admin/comments` is three lists — Pending, Approved, Spam — with the count beside each, opening on Pending. There is no email in this milestone, so this screen is the notification: the dashboard carries the number waiting and links here.
+- `/admin/comments` is three lists — Pending, Approved, Spam — with the count beside each, opening on Pending. The dashboard carries the number waiting and links here. With mail configured it is no longer the only notification: see Notifications below, and the one-click links that do the same four things out of an inbox.
 - Every row shows the commenter's name, their website, **their email** (the one place it is ever shown), the rendered comment, the post it is on with links to edit and to view it, and a short form of the salted address hash so a run of submissions from one machine is visible.
 - Four actions per row: **Approve**, **Spam**, **Delete**, and **Reply** — a Markdown box that posts an approved comment under the one it answers, signed with the site's `author` setting or the moderator's login.
 - Spam is kept rather than deleted, so a mistake can be undone and so a spam checker can be told it was wrong. Marking something spam calls the checker's `reportSpam`; letting something out of the spam list calls `reportHam`. With an Akismet key stored, those are `submit-spam` and `submit-ham`.
@@ -60,6 +60,14 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 - **The link.** A match with an address gets a message from the theme's `password-reset` template carrying `/admin/reset?token=…` — 256 random bits, hex. Only the token's SHA-256 is stored, in the `password_resets` table beside the sessions, so a copy of `geekity.db` is not a stack of working links. It expires an hour out and works once. The token is never rendered into the page of the browser that asked for it.
 - **Setting it.** The reset form holds the new password to the same rules every other door does, then deletes every reset that user had outstanding, signs out every session they had, and sends the theme's `password-changed` confirmation, which carries no link back in. Both screens are unauthenticated and carry the session CSRF token and the admin security headers like every other form.
 - **Without mail.** With no provider or credential, `/admin/forgot` offers no form: it says the site cannot send email and points at `geekity user add`, which is how a site with no way in gets a fresh admin from a shell. Saving a credential on the Settings screen turns the form on for the next visitor, with no restart.
+
+## Notifications
+
+- **The switchboard.** Every user's row on `/admin/users` carries one switch per event this version knows about, beside their email address. The registry is `src/notifications/preferences.ts`: adding an event — a new follower, a digest of failed deliveries — is one entry there, and the checkbox, the storage and the "who wants this" query all follow from it. An event a user has said nothing about is at its default, so a notice that ships turned on reaches everybody with an address without anybody visiting this screen; only turning one off is written down, as `notifications` in `data/users.json`. A key naming an event this version does not know is dropped on the way in, so a file written by a newer version leaves no switch nothing can reach.
+- **New comments**, the one event so far. A comment or a webmention entering the moderation queue emails every user with an address who has not turned it off. Not a comment Akismet filed as spam, and not one it said to discard: the notice is about what is waiting for a person. A webmention re-sent by a page somebody edited sends nothing either — only the first storing of one is news.
+- **The one-click links.** The message carries approve, spam and delete. Each is `/_geekity/moderate?action=…&token=…`, has no session behind it, and lands on a page with a single button; only the button acts. That is not politeness — mail readers and corporate link scanners fetch the URLs in a message as a matter of course, and a link that moderated on being opened would be a mail gateway silently deleting the site's comments. The token is an HMAC-signed claim rather than a stored row, taken with a secret in `data/notification-secret`, so a link in an inbox goes on working across a `geekity rebuild`; it is bound to one action on one comment, lasts a week, and is spent against the `spent_tokens` table the first time it is used. This and the buttons on `/admin/comments` both go through the same `moderateComment`, so the two doors cannot disagree about what an action does or about when the spam checker is told a human disagreed with it.
+- **Reply notices** go to commenters rather than to users; doc-6 has them.
+- **Without mail.** Nothing is sent, no signing secret is ever minted, and every path still works. `/admin/comments` is the notification it was before.
 
 ## Out of scope for phase one
 

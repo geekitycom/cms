@@ -1,0 +1,2 @@
+{# The subject of the message a comment waiting for a moderator sends. One line. #}
+{% if comment.source == 'webmention' %}New webmention{% else %}New comment{% endif %} on “{{ post.title }}”

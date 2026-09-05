@@ -90,11 +90,20 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       userAgent: c.req.header('user-agent'),
       referrer: c.req.header('referer'),
       throttle: throttle(config),
+      // Whether the box on the form meant anything, read per submission so a
+      // credential saved a moment ago is honoured now (TASK-55).
+      notifiable: c.var.mail.configured(),
       now,
     });
 
     if (outcome.kind === 'stored') {
       const stored = outcome.comment;
+      // Whoever moderates this site hears that something is waiting, and, when
+      // the site let it straight through, whoever it answers hears about it.
+      // Neither is awaited: the reader is redirected now and the messages go
+      // out behind them (TASK-55).
+      c.var.notifications.pending(stored);
+      c.var.notifications.replyApproved(stored);
       // A redirect rather than a rendered page, so a refresh does not post the
       // comment a second time. An approved comment is on the page already, so
       // the reader is sent to it; one waiting for a moderator has nothing to
@@ -198,9 +207,11 @@ export function commentFormFor(options: {
   document: Document;
   site: Record<string, unknown>;
   now: Date;
+  /** Whether the site can send mail, which is whether the box is offered. */
+  notifiable?: boolean | undefined;
 }): CommentFormContext | undefined {
   if (!commentsOpen(options.document, commentPolicyOf(options.site), options.now)) return undefined;
-  return commentForm(options.document, options.now);
+  return commentForm(options.document, options.now, options.notifiable ?? false);
 }
 
 /** A submitted body as the form it is, every field a string. */
@@ -214,6 +225,7 @@ function formOf(body: Record<string, unknown>): CommentForm {
     inReplyTo: text(body[COMMENT_FIELDS.inReplyTo]),
     trap: text(body[COMMENT_FIELDS.trap]),
     loaded: text(body[COMMENT_FIELDS.loaded]),
+    notify: text(body[COMMENT_FIELDS.notify]),
   };
 }
 

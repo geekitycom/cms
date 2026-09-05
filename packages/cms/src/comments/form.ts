@@ -23,7 +23,14 @@ export interface CommentFormContext {
    */
   loaded: string;
   /** What is in the fields: empty on a fresh form, what was typed on a refused one. */
-  values: Record<'name' | 'email' | 'url' | 'body' | 'inReplyTo', string>;
+  values: Record<'name' | 'email' | 'url' | 'body' | 'inReplyTo' | 'notify', string>;
+  /**
+   * Whether to offer "tell me about replies" at all (TASK-55).
+   *
+   * False on a site that sends no mail, where the box would be a promise
+   * nothing could keep. A theme asks `{% if commentForm.notifiable %}`.
+   */
+  notifiable: boolean;
   /** One message per field a person has to put right. Empty on a fresh form. */
   problems: CommentProblems;
   /** A message about the submission as a whole, when there is one. */
@@ -62,8 +69,12 @@ export const COMMENT_NOTICES: Readonly<Record<string, string>> = {
 };
 
 /** A fresh, empty form for a post that is taking comments. */
-export function commentForm(document: Document, now: Date = new Date()): CommentFormContext {
-  return refilledCommentForm(document, blankValues(), {}, now);
+export function commentForm(
+  document: Document,
+  now: Date = new Date(),
+  notifiable = false,
+): CommentFormContext {
+  return refilledCommentForm(document, blankValues(), {}, now, undefined, notifiable);
 }
 
 /**
@@ -78,6 +89,7 @@ export function refilledCommentForm(
   problems: CommentProblems,
   now: Date = new Date(),
   error?: string,
+  notifiable = false,
 ): CommentFormContext {
   return {
     action: COMMENT_POST_PATH,
@@ -86,6 +98,7 @@ export function refilledCommentForm(
     loaded: String(now.getTime()),
     values,
     problems,
+    notifiable,
     nameLength: MAXIMUM_NAME_LENGTH,
     bodyLength: MAXIMUM_BODY_LENGTH,
     ...(error === undefined ? {} : { error }),
@@ -94,7 +107,7 @@ export function refilledCommentForm(
 
 /** What a form holds before anybody has typed in it. */
 export function blankValues(): CommentFormContext['values'] {
-  return { name: '', email: '', url: '', body: '', inReplyTo: '' };
+  return { name: '', email: '', url: '', body: '', inReplyTo: '', notify: '' };
 }
 
 /** What a submitted form typed, for putting back in a refused one. */
@@ -105,5 +118,6 @@ export function valuesOf(form: CommentForm): CommentFormContext['values'] {
     url: form.url,
     body: form.body,
     inReplyTo: form.inReplyTo,
+    notify: form.notify,
   };
 }

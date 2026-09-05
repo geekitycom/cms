@@ -470,6 +470,16 @@ export interface CommentRecord {
    * not host.
    */
   url: string | null;
+  /**
+   * Whether whoever wrote it asked to hear about replies to it (TASK-55).
+   *
+   * Only ever true for a comment that carries an `author.email`, because there
+   * would be nowhere to send it otherwise, and only ever set by somebody
+   * ticking the box on the form — a webmention has nobody to ask. What it buys
+   * is one message when a reply to this comment is approved, carrying an
+   * unsubscribe link that needs no login.
+   */
+  notify: boolean;
 }
 
 /**
@@ -548,6 +558,18 @@ export interface AdminStore {
   deletePasswordResetsForUser(userId: number): number;
   /** Delete every expired reset. Returns how many went. */
   prunePasswordResets(now?: Date): number;
+  /**
+   * Spend a one-click link's token, and say whether it had anything left.
+   *
+   * `true` the first time and `false` for ever after, which is what makes a
+   * link in an email single use (TASK-55). Only the token's SHA-256 is kept,
+   * as a password reset's is, so a copy of this file is not a list of the
+   * links a site has sent. `expiresAt` is the moment the token's own signature
+   * stops meaning anything, and is only there so the row can be swept.
+   */
+  spendToken(token: string, expiresAt: string, now?: Date): boolean;
+  /** Delete every spent token that has expired. Returns how many went. */
+  pruneSpentTokens(now?: Date): number;
   /**
    * The rows of the settings table an older version of this CMS wrote, or
    * `undefined` when the table is gone — which it is on every site that has
@@ -825,6 +847,10 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     deletePasswordReset: db.prepare('DELETE FROM password_resets WHERE token_hash = ?'),
     deletePasswordResetsForUser: db.prepare('DELETE FROM password_resets WHERE user_id = ?'),
     prunePasswordResets: db.prepare('DELETE FROM password_resets WHERE expires_at <= ?'),
+    spendToken: db.prepare(`
+      INSERT OR IGNORE INTO spent_tokens (token_hash, spent_at, expires_at) VALUES (?, ?, ?)
+    `),
+    pruneSpentTokens: db.prepare('DELETE FROM spent_tokens WHERE expires_at <= ?'),
     getState: db.prepare('SELECT value FROM cms_state WHERE key = ?'),
     putState: db.prepare(`
       INSERT INTO cms_state (key, value, updated_at) VALUES (?, ?, ?)
@@ -905,8 +931,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       INSERT INTO comments (
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
-        markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -922,7 +948,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         address_hash = excluded.address_hash,
         in_reply_to = excluded.in_reply_to,
         url = excluded.url,
-        author_avatar = excluded.author_avatar
+        author_avatar = excluded.author_avatar,
+        notify = excluded.notify
     `),
     deleteComment: db.prepare('DELETE FROM comments WHERE id = ?'),
     clearComments: db.prepare('DELETE FROM comments'),
@@ -1126,6 +1153,17 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
 
     prunePasswordResets(now = new Date()) {
       return Number(statements.prunePasswordResets.run(now.toISOString()).changes);
+    },
+
+    spendToken(token, expiresAt, now = new Date()) {
+      // `INSERT OR IGNORE` rather than a read then a write: two clicks on the
+      // same link arriving together must not both find nothing and both act.
+      const written = statements.spendToken.run(hashToken(token), now.toISOString(), expiresAt);
+      return Number(written.changes) > 0;
+    },
+
+    pruneSpentTokens(now = new Date()) {
+      return Number(statements.pruneSpentTokens.run(now.toISOString()).changes);
     },
 
     countFollowers() {
@@ -1352,6 +1390,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         comment.inReplyTo,
         comment.url,
         comment.author.avatar,
+        comment.notify ? 1 : 0,
       );
       return comment;
     },
@@ -1381,6 +1420,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             comment.inReplyTo,
             comment.url,
             comment.author.avatar,
+            comment.notify ? 1 : 0,
           );
         }
       });
@@ -1693,6 +1733,7 @@ function toComment(row: Record<string, unknown>): PostComment {
     addressHash: nullableText(row['address_hash']),
     inReplyTo: nullableText(row['in_reply_to']),
     url: nullableText(row['url']),
+    notify: Number(row['notify'] ?? 0) === 1,
   };
 }
 
@@ -2271,6 +2312,36 @@ const MIGRATIONS: readonly Migration[] = [
 
       CREATE INDEX password_resets_expires_at ON password_resets (expires_at);
       CREATE INDEX password_resets_user_id ON password_resets (user_id);
+    `,
+  },
+  {
+    // The two halves of a notification's one-click links (TASK-55).
+    //
+    // `spent_tokens` is what makes such a link single use. The link itself is
+    // not stored — it is an HMAC-signed claim, so that a moderation link in an
+    // inbox goes on working across a rebuilt or restored cache, which is a
+    // thing decision-9 says a site may do whenever it likes. Only the fact
+    // that one has been used is written down, keyed by its SHA-256 for the
+    // reason `password_resets` is, and swept once the signature has expired.
+    // Losing this table forgets which links were spent, and that costs a site
+    // nothing: every action a link performs is idempotent, so doing it a
+    // second time is doing it once.
+    //
+    // `comments.notify` is the commenter's "tell me about replies", which the
+    // file says and this column indexes like every other column of that table.
+    // Nothing backfills it: the rebuild on the next boot does, and a comment
+    // written before this shipped never asked to be told.
+    version: 17,
+    sql: `
+      CREATE TABLE spent_tokens (
+        token_hash TEXT PRIMARY KEY,
+        spent_at   TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+
+      CREATE INDEX spent_tokens_expires_at ON spent_tokens (expires_at);
+
+      ALTER TABLE comments ADD COLUMN notify INTEGER NOT NULL DEFAULT 0;
     `,
   },
 ];

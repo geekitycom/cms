@@ -232,6 +232,40 @@ describe('password reset tokens (AC #3)', () => {
   });
 });
 
+describe('spent one-click tokens (TASK-55)', () => {
+  it('lets a token be spent once and refuses it after that', async () => {
+    const admin = await store();
+    const expires = new Date('2026-09-11T12:00:00Z').toISOString();
+
+    assert.equal(admin.spendToken('a-signed-token', expires), true);
+    assert.equal(admin.spendToken('a-signed-token', expires), false);
+  });
+
+  it('keeps one token clear of another', async () => {
+    const admin = await store();
+    const expires = new Date('2026-09-11T12:00:00Z').toISOString();
+
+    assert.equal(admin.spendToken('approve-this', expires), true);
+
+    assert.equal(admin.spendToken('delete-this', expires), true);
+  });
+
+  it('sweeps the tokens that could not be used again anyway', async () => {
+    const admin = await store();
+    const now = new Date('2026-09-04T12:00:00Z');
+
+    admin.spendToken('short', new Date(now.getTime() + 60_000).toISOString());
+    admin.spendToken('long', new Date(now.getTime() + 3_600_000).toISOString());
+
+    const later = new Date(now.getTime() + 1_800_000);
+    assert.equal(admin.pruneSpentTokens(later), 1);
+    // The swept one is spendable again, which costs nothing: the action it
+    // names has already happened and doing it twice is doing it once.
+    assert.equal(admin.spendToken('short', new Date(later.getTime() + 60_000).toISOString()), true);
+    assert.equal(admin.spendToken('long', new Date(later.getTime() + 60_000).toISOString()), false);
+  });
+});
+
 describe('flash messages', () => {
   it('hands a queued message back once and then forgets it', async () => {
     const admin = await store();

@@ -248,6 +248,7 @@ describe('the Akismet key on the settings screen', () => {
         addressHash: null,
         inReplyTo: null,
         url: null,
+        notify: false,
       },
     );
 
@@ -266,6 +267,7 @@ describe('the Akismet key on the settings screen', () => {
         addressHash: null,
         inReplyTo: null,
         url: null,
+        notify: false,
       },
       post: {
         slug: 'hello-world',
@@ -298,6 +300,7 @@ describe('the corrections the moderation screen sends', () => {
         content: { markdown: 'Buy pills.', html: '<p>Buy pills.</p>' },
         submitted: '2026-09-03T10:00:00.000Z',
         addressHash: 'deadbeef',
+        notify: false,
         inReplyTo: null,
         url: null,
       },
