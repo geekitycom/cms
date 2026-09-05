@@ -10,11 +10,12 @@ import {
   DuplicateUsernameError,
   findUserById,
   listUsers,
+  setUserEmail,
   setUserPassword,
   verifyUserPassword,
 } from './accounts.ts';
 import type { User } from './accounts.ts';
-import { passwordProblem, usernameProblem } from './credentials.ts';
+import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
@@ -29,10 +30,14 @@ export const CHANGE_PASSWORD_PATH = `${USERS_PATH}/password`;
 /** Where a row's delete button posts. */
 export const DELETE_USER_PATH = `${USERS_PATH}/delete`;
 
-/** The fields the three forms on the screen submit. */
+/** Where a row's email form posts. */
+export const USER_EMAIL_PATH = `${USERS_PATH}/email`;
+
+/** The fields the forms on the screen submit. */
 export const USER_FIELDS = {
   username: 'username',
   password: 'password',
+  email: 'email',
   generate: 'generate',
   currentPassword: 'current_password',
   newPassword: 'new_password',
@@ -65,14 +70,15 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     const body = await c.req.parseBody();
     const username = field(body[USER_FIELDS.username]).trim();
     const supplied = field(body[USER_FIELDS.password]);
+    const email = field(body[USER_FIELDS.email]).trim();
     const generate = field(body[USER_FIELDS.generate]) !== '';
 
     const password = generate ? generatePassword() : supplied;
-    const problems = addUserProblems(username, password, generate);
+    const problems = addUserProblems(username, password, generate, email);
 
     if (Object.keys(problems).length === 0) {
       try {
-        await createUser({ dataDir: c.var.config.dataDir, username, password });
+        await createUser({ dataDir: c.var.config.dataDir, username, password, email });
       } catch (error) {
         if (!(error instanceof DuplicateUsernameError)) throw error;
         problems.username = error.message;
@@ -84,7 +90,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       return render(
         c,
         ADMIN_TEMPLATES.users,
-        screen(c, { addForm: { username, generate }, addProblems: problems }),
+        screen(c, { addForm: { username, email, generate }, addProblems: problems }),
       );
     }
 
@@ -142,6 +148,50 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       ended === 0
         ? 'Your password was changed.'
         : `Your password was changed, and ${signedOut(ended)} signed out.`,
+    );
+    return c.redirect(USERS_PATH, 303);
+  });
+
+  /**
+   * Put an email address on a row, or take one off.
+   *
+   * Any row, not only your own. There is one role, so every user already has
+   * every power there is — including deleting somebody and adding them back —
+   * and a screen where an admin could see a colleague's address but not
+   * correct a typo in it would be a rule with nothing behind it. It is also
+   * what makes a site usable: an admin who has just added a colleague can put
+   * their address in without waiting for them to sign in and do it.
+   *
+   * Not a 400 with the form redrawn, unlike the two forms above: what was
+   * typed lives in a row of a table rather than in a form of its own, and a
+   * redraw would have to thread it back through a listing. The refusal is a
+   * flash, and the box goes back to what is stored.
+   */
+  app.post(USER_EMAIL_PATH, async (c) => {
+    const dataDir = c.var.config.dataDir;
+    const body = await c.req.parseBody();
+    const id = Number(field(body[USER_FIELDS.userId]));
+    const email = field(body[USER_FIELDS.email]).trim();
+    const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
+
+    if (target === undefined) {
+      flash(c, 'error', 'That user is already gone.');
+      return c.redirect(USERS_PATH, 303);
+    }
+
+    const problem = emailProblem(email);
+    if (problem !== undefined) {
+      flash(c, 'error', problem);
+      return c.redirect(USERS_PATH, 303);
+    }
+
+    await setUserEmail({ dataDir, userId: target.id, email });
+    flash(
+      c,
+      'notice',
+      email === ''
+        ? `${target.username} has no email address any more.`
+        : `${target.username} will be emailed at ${email}.`,
     );
     return c.redirect(USERS_PATH, 303);
   });
@@ -235,7 +285,7 @@ function signedOut(count: number): string {
 }
 
 /** One message per field of the add form that is wrong. */
-export type AddUserProblems = { username?: string; password?: string };
+export type AddUserProblems = { username?: string; password?: string; email?: string };
 
 /**
  * What is wrong with a proposed user, one message per field.
@@ -244,12 +294,14 @@ export type AddUserProblems = { username?: string; password?: string };
  * `/admin/setup` and `geekity user add` would both have accepted. A generated
  * password is not checked against them — it is made to satisfy them — and the
  * password field is not read at all when the box is ticked, so a stale value
- * left in it cannot be what is refused.
+ * left in it cannot be what is refused. An empty email is not a problem: it is
+ * an optional field, and most users will never have one.
  */
 export function addUserProblems(
   username: string,
   password: string,
   generate = false,
+  email = '',
 ): AddUserProblems {
   const problems: AddUserProblems = {};
 
@@ -260,6 +312,9 @@ export function addUserProblems(
     const secret = passwordProblem(password);
     if (secret !== undefined) problems.password = secret;
   }
+
+  const address = emailProblem(email);
+  if (address !== undefined) problems.email = address;
 
   return problems;
 }
@@ -296,11 +351,17 @@ function screen(
     usersUrl: USERS_PATH,
     changePasswordUrl: CHANGE_PASSWORD_PATH,
     deleteUserUrl: DELETE_USER_PATH,
+    userEmailUrl: USER_EMAIL_PATH,
     fields: USER_FIELDS,
     users: users.map((user) => row(user, { signedInAs, total: users.length })),
-    addForm: { username: '', generate: false },
+    addForm: { username: '', email: '', generate: false },
     addProblems: {},
     passwordProblems: {},
+    // What the screen says about email is different when nothing can be sent:
+    // an address is then a note to a human rather than somewhere the site will
+    // write, and saying so is what keeps a password reset from being promised
+    // by a form that could not deliver one.
+    mailConfigured: c.var.mail.configured(),
     ...extra,
   };
 }
@@ -319,6 +380,7 @@ function row(
   return {
     id: user.id,
     username: user.username,
+    email: user.email ?? '',
     createdAt: user.createdAt,
     you,
     // The button is rendered for everybody the signed-in admin may actually

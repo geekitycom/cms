@@ -747,7 +747,8 @@ button[type='submit']:hover,
 }
 
 /* The taxonomy screens: a table of terms with an inline rename field in each
-   row, so a rename is one field and one button rather than a second screen. */
+   row, so a rename is one field and one button rather than a second screen.
+   The users screen edits an email address the same way, for the same reason. */
 
 .admin-inline {
   display: flex;
@@ -755,7 +756,8 @@ button[type='submit']:hover,
   gap: 0.4rem;
 }
 
-.admin-inline input[type='text'] {
+.admin-inline input[type='text'],
+.admin-inline input[type='email'] {
   width: 12rem;
   margin: 0;
 }

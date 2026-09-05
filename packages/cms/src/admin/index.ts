@@ -12,8 +12,10 @@ export {
   DuplicateUsernameError,
   findUser,
   findUserById,
+  findUserByIdentifier,
   listUsers,
   migrateUsersToFile,
+  setUserEmail,
   setUserPassword,
   USERS_FILE,
   USERS_FILE_MODE,
@@ -23,6 +25,7 @@ export {
 export type { CreateUserInput, StoredUser, User } from './accounts.ts';
 export {
   credentialProblem,
+  emailProblem,
   MAXIMUM_USERNAME_LENGTH,
   MINIMUM_PASSWORD_LENGTH,
   passwordProblem,
@@ -225,10 +228,24 @@ export {
   GENERATED_PASSWORD_ALPHABET,
   GENERATED_PASSWORD_LENGTH,
   mountUsers,
+  USER_EMAIL_PATH,
   USER_FIELDS,
   USERS_PATH,
 } from './users.ts';
 export type { AddUserProblems, ChangePasswordProblems, MountUsersOptions } from './users.ts';
+export {
+  FORGOT_PATH,
+  mountRecovery,
+  newPasswordProblem,
+  PASSWORD_CHANGED_TEMPLATE,
+  RECOVERY_ANSWER,
+  RECOVERY_FIELDS,
+  RESET_PATH,
+  RESET_TEMPLATE,
+  RESET_TOKEN_LIFETIME_SECONDS,
+  resetLink,
+} from './recovery.ts';
+export type { MountRecoveryOptions } from './recovery.ts';
 export {
   ADMIN_PREFIX,
   clearSessionCookie,
@@ -258,6 +275,7 @@ export type {
   CommentStatus,
   ListCommentsOptions,
   PostComment,
+  CreatePasswordResetInput,
   CreateSessionInput,
   Delivery,
   DeliveryStatus,
@@ -273,7 +291,9 @@ export type {
   NewFollower,
   NewInboxActivity,
   NewRelay,
+  IssuedPasswordReset,
   OpenAdminStoreOptions,
+  PasswordReset,
   Relay,
   RelayState,
   Session,

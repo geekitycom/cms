@@ -14,7 +14,7 @@ import type { MailDelivery, MailProvider, OutgoingMail } from './provider.ts';
  *
  * ```ts
  * const provider = createMemoryMailProvider();
- * const cms = createCms({ mailProvider: provider });
+ * const cms = createCms({ mail: { provider } });
  * // …
  * assert.match(provider.sent[0].subject, /Reset your password/);
  * ```

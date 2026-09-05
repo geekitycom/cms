@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-05 01:58'
+updated_date: '2026-09-05 02:18'
 ---
 # Admin UI
 
@@ -13,7 +13,8 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 
 | Route | Purpose |
 | --- | --- |
-| `/admin/login` | username + password form |
+| `/admin/login` | username + password form, with a Forgot password link |
+| `/admin/forgot`, `/admin/reset` | ask for a reset link, and set a new password with one |
 | `/admin` | dashboard: counts, recent posts, follower count |
 | `/admin/posts` | table: title, author, tags, date, status; filters for all/published/draft/trash |
 | `/admin/posts/new`, `/admin/posts/:slug` | editor |
@@ -21,7 +22,7 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 | `/admin/tags`, `/admin/categories` | every term in use with its post and file counts; rename, merge, delete |
 | `/admin/comments` | pending, approved and spam, with approve, spam, delete and reply on every row |
 | `/admin/settings` | site title, tagline, base URL, timezone, posts per page, comments on/off and closing window, actor handle and type, the Akismet key, the mail provider and its credential |
-| `/admin/users` | list, add, change password (single role: admin) |
+| `/admin/users` | list, add, set each user's email, change your own password (single role: admin) |
 | `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
 
 ## Editor
@@ -47,10 +48,18 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 
 ## Auth
 
-- Accounts live in `data/users.json` (decision-9): id, username, argon2id hash, created time, written atomically with 0600 permissions. Passwords hashed with argon2id.
+- Accounts live in `data/users.json` (decision-9): id, username, optional email, argon2id hash, created time, written atomically with 0600 permissions. Passwords hashed with argon2id.
 - Session id in an `HttpOnly; Secure; SameSite=Lax` cookie, stored in SQLite with expiry.
 - CSRF token per session on every mutating form.
 - First run: if no users exist, `/admin` shows a setup form that creates the first admin and writes initial settings.
+
+## User email and password recovery
+
+- **The address.** Every user may have an email address, and most will not: a login is a username and a password, and the address only buys password recovery and, later, the notices TASK-55 sends. It is set on the `/admin/users` table — one inline field per row, any row, since there is one role and every user already has every power — on the add form beside the username, and by `geekity user add <name> --email <address>`. An empty box removes it. It never appears on the public site.
+- **Asking.** `/admin/forgot` takes a username *or* an email address and always answers with the same sentence, whether the name matched, did not match, or matched somebody with no address. That is the whole point of the screen: an answer that varied would be a list of which accounts the site has. Requests are rate limited by username and by address exactly as sign-ins are, on a throttle of its own, so a flood of resets for one person cannot lock them out of logging in.
+- **The link.** A match with an address gets a message from the theme's `password-reset` template carrying `/admin/reset?token=…` — 256 random bits, hex. Only the token's SHA-256 is stored, in the `password_resets` table beside the sessions, so a copy of `geekity.db` is not a stack of working links. It expires an hour out and works once. The token is never rendered into the page of the browser that asked for it.
+- **Setting it.** The reset form holds the new password to the same rules every other door does, then deletes every reset that user had outstanding, signs out every session they had, and sends the theme's `password-changed` confirmation, which carries no link back in. Both screens are unauthenticated and carry the session CSRF token and the admin security headers like every other form.
+- **Without mail.** With no provider or credential, `/admin/forgot` offers no form: it says the site cannot send email and points at `geekity user add`, which is how a site with no way in gets a fresh admin from a shell. Saving a credential on the Settings screen turns the form on for the next visitor, with no restart.
 
 ## Out of scope for phase one
 

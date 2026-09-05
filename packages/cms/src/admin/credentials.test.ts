@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   credentialProblem,
+  emailProblem,
   MINIMUM_PASSWORD_LENGTH,
   passwordProblem,
   usernameProblem,
@@ -43,6 +44,25 @@ describe('passwordProblem', () => {
 
   it('refuses an empty password', () => {
     assert.notEqual(passwordProblem(''), undefined);
+  });
+});
+
+describe('emailProblem', () => {
+  it('is undefined for an empty address, because an email is optional', () => {
+    assert.equal(emailProblem(''), undefined);
+    assert.equal(emailProblem('   '), undefined);
+  });
+
+  it('is undefined for something that looks like an address', () => {
+    for (const address of ['ada@example.com', 'ada+resets@mail.example.co.uk', 'A@b.co']) {
+      assert.equal(emailProblem(address), undefined, address);
+    }
+  });
+
+  it('names the rule for something that is not one', () => {
+    for (const address of ['ada', 'ada@example', 'ada example.com', 'ada@ example.com']) {
+      assert.match(emailProblem(address) ?? '', /email address/, address);
+    }
   });
 });
 

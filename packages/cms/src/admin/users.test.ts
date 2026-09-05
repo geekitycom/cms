@@ -86,6 +86,68 @@ describe('adding a user', () => {
   });
 });
 
+describe('a user email address (AC #1)', () => {
+  it('is taken by the add form and shown in the table', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+
+    await agent.post('/admin/users', {
+      csrf_token: token,
+      username: 'grace',
+      password: 'a password of her own',
+      email: 'grace@example.com',
+    });
+
+    assert.equal(findUser(cms.config.dataDir, 'grace')?.email, 'grace@example.com');
+    assert.match((await usersScreen(agent)).html, /grace@example\.com/);
+  });
+
+  it('is set and cleared on a row, including somebody else’s', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const grace = await createUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    });
+    const { token } = await usersScreen(agent);
+
+    const saved = await agent.post('/admin/users/email', {
+      csrf_token: token,
+      user_id: String(grace.id),
+      email: 'grace@example.com',
+    });
+    assert.equal(saved.status, 303);
+    assert.equal(findUser(cms.config.dataDir, 'grace')?.email, 'grace@example.com');
+
+    await agent.post('/admin/users/email', {
+      csrf_token: token,
+      user_id: String(grace.id),
+      email: '',
+    });
+    assert.equal(findUser(cms.config.dataDir, 'grace')?.email, undefined);
+  });
+
+  it('refuses something that is not an address, and stores nothing', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { token } = await usersScreen(agent);
+
+    const response = await agent.post('/admin/users/email', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      email: 'not-an-address',
+    });
+
+    assert.equal(response.status, 303);
+    assert.equal(findUser(cms.config.dataDir, 'ada')?.email, undefined);
+    assert.match(await (await agent.get('/admin/users')).text(), /email address looks like/i);
+  });
+});
+
 describe('a bad add form', () => {
   it('comes back with a 400, what was typed, and nobody created', async () => {
     const cms = await box.site();

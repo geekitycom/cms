@@ -25,6 +25,7 @@ import {
 } from './comments.ts';
 import { MEDIA_PATH, MEDIA_SECTION, MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
 import { mountPreview } from './preview.ts';
+import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
 import { AVATAR_PATH, mountSettings } from './settings.ts';
 import {
   ADMIN_PREFIX,
@@ -126,6 +127,22 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return throttled;
   }
 
+  // A second throttle, on the same machinery and the same limits, for the
+  // forgot-password form (TASK-54). Deliberately not the login one: sharing it
+  // would let a stranger lock somebody out of signing in by asking for their
+  // password to be reset over and over, which would turn the recovery feature
+  // into a weapon against the person it exists for.
+  let recoveryThrottled: LoginThrottle | undefined;
+
+  function recoveryThrottle(config: ResolvedConfig): LoginThrottle {
+    recoveryThrottled ??= createLoginThrottle({
+      attempts: config.loginAttempts,
+      lockoutSeconds: config.loginLockout,
+      now: config.now,
+    });
+    return recoveryThrottled;
+  }
+
   /**
    * Render one admin template.
    *
@@ -215,8 +232,17 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
   app.get(LOGIN_PATH, (c) => {
     anonymousSession(c);
-    return render(c, ADMIN_TEMPLATES.login, { loginUrl: LOGIN_PATH, username: '' });
+    return render(c, ADMIN_TEMPLATES.login, {
+      loginUrl: LOGIN_PATH,
+      forgotUrl: FORGOT_PATH,
+      username: '',
+    });
   });
+
+  // Forgetting a password. Registered beside the login form, and named in the
+  // guard below, because both of its screens are reached by somebody who by
+  // definition cannot sign in.
+  mountRecovery(app, { render, anonymousSession, throttle: recoveryThrottle });
 
   app.post(LOGIN_PATH, async (c) => {
     const config = c.var.config;
@@ -241,6 +267,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       c.header('Retry-After', String(wait));
       return render(c, ADMIN_TEMPLATES.login, {
         loginUrl: LOGIN_PATH,
+        forgotUrl: FORGOT_PATH,
         username,
         // Says nothing about whether that username exists: an unknown one is
         // counted and locked out exactly as a real one is.
@@ -260,6 +287,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       c.status(401);
       return render(c, ADMIN_TEMPLATES.login, {
         loginUrl: LOGIN_PATH,
+        forgotUrl: FORGOT_PATH,
         username,
         error: 'That username and password do not match.',
       });
@@ -432,7 +460,11 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   c.set('session', session);
 
   const isSetup = pathname === SETUP_PATH;
-  const isLogin = pathname === LOGIN_PATH;
+  // The three screens somebody with no login is allowed to reach: the login
+  // form, and the two halves of forgetting a password (TASK-54). Everything
+  // else under /admin redirects an anonymous visitor to the login form.
+  const isAnonymous =
+    pathname === LOGIN_PATH || pathname === FORGOT_PATH || pathname === RESET_PATH;
 
   if (countUsers(dataDir) === 0) {
     // Nobody can log in yet, so there is exactly one thing to do here.
@@ -440,7 +472,7 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   } else {
     // Setup is over. Offering the form again would be an open door.
     if (isSetup) return c.redirect(session?.userId == null ? LOGIN_PATH : ADMIN_PREFIX, 302);
-    if (!isLogin && (session === undefined || session.userId === null)) {
+    if (!isAnonymous && (session === undefined || session.userId === null)) {
       return c.redirect(LOGIN_PATH, 302);
     }
   }
