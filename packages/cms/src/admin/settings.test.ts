@@ -173,6 +173,7 @@ describe('content/_data/site.json', () => {
       mailFromName: '',
       mailFromAddress: '',
       mailReplyTo: '',
+      contactEmail: '',
       relays: [],
       navigation: [],
       taxonomyRedirects: [],
@@ -199,6 +200,41 @@ describe('content/_data/site.json', () => {
     assert.equal(written['title'], 'New');
     assert.equal(written['feedSize'], 42);
     assert.deepEqual(written['anything'], { at: 'all' });
+  });
+});
+
+describe('the contact address', () => {
+  it('is a field of the form and is written to the file (TASK-56)', async () => {
+    const contentDir = await box.dir('geekity-settings-contact-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    assert.match(
+      await (await agent.get('/admin/settings')).text(),
+      /name="contact_email"/,
+      'the settings form offers it',
+    );
+
+    const saved = await saveSettings(agent, { contact_email: 'hello@example.org' });
+    assert.equal(saved.status, 303);
+
+    const written = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.equal(written['contactEmail'], 'hello@example.org');
+    assert.equal(readSiteSettings(contentDir).contactEmail, 'hello@example.org');
+  });
+
+  it('refuses something that is not an address, and writes nothing (TASK-56)', async () => {
+    const contentDir = await box.dir('geekity-settings-contact-bad-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const refused = await saveSettings(agent, { title: 'Kept', contact_email: 'not-an-address' });
+
+    assert.equal(refused.status, 400);
+    assert.match(await refused.text(), /A contact address is an email address/);
+    assert.equal(readSiteSettings(contentDir).title, 'Geekity', 'nothing at all was written');
   });
 });
 

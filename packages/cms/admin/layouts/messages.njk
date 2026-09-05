@@ -1,0 +1,110 @@
+{# /admin/messages: what the contact form left behind (TASK-56).
+
+   A message is a file under data/contact/ and nothing else, so the two buttons
+   here are a rewrite and an unlink. Every button is a form of its own, so the
+   whole screen works with JavaScript switched off. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1>{{ heading }}</h1>
+
+  <nav class="admin-filters" aria-label="Message status">
+    <ul>
+      {% for tab in tabs %}
+        <li>
+          <a href="{{ tab.url }}"{% if tab.current %} aria-current="page"{% endif %}>
+            {{ tab.label }} ({{ tab.count }})
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </nav>
+
+  {% if rows.length == 0 %}
+    <p class="admin-empty">Nothing here.</p>
+  {% else %}
+    <ul class="admin-comments">
+      {% for row in rows %}
+        <li class="admin-comment{% if not row.read %} admin-comment-unread{% endif %}">
+          <div class="admin-comment-meta">
+            <span class="admin-comment-author">{{ row.author }}</span>
+            <a class="admin-comment-email" href="mailto:{{ row.email }}">{{ row.email }}</a>
+            {% if not row.read %}
+              <span class="admin-status admin-status-pending">unread</span>
+            {% endif %}
+            {% if row.status == 'spam' %}
+              <span class="admin-status admin-status-spam">spam</span>
+            {% endif %}
+          </div>
+
+          <p class="admin-comment-where">
+            <time>{{ row.received }}</time>
+            from
+            {% if row.pageUrl %}
+              <a href="{{ row.pageUrl }}">{{ row.page }}</a>
+            {% else %}
+              {{ row.page }}
+            {% endif %}
+            {% if row.address %}
+              &middot; <code title="A salted hash of the address it came from">{{ row.address }}</code>
+            {% endif %}
+          </p>
+
+          {% if row.subject %}
+            <p class="admin-message-subject"><strong>{{ row.subject }}</strong></p>
+          {% endif %}
+
+          {# Printed, never rendered: a contact message is plain text, and
+             nothing a stranger typed is turned into markup here. #}
+          <div class="admin-comment-body admin-message-body">{{ row.message }}</div>
+
+          <div class="admin-actions">
+            <a class="admin-button admin-button-quiet" href="{{ row.replyUrl }}">Reply</a>
+
+            <form method="post" action="{{ readUrl }}">
+              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+              <input type="hidden" name="{{ fields.id }}" value="{{ row.id }}" />
+              <input type="hidden" name="{{ fields.status }}" value="{{ status }}" />
+              {% if row.read %}
+                <button type="submit" name="{{ fields.read }}" value="">Mark unread</button>
+              {% else %}
+                <button type="submit" name="{{ fields.read }}" value="1">Mark read</button>
+              {% endif %}
+            </form>
+
+            <form method="post" action="{{ deleteUrl }}">
+              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+              <input type="hidden" name="{{ fields.id }}" value="{{ row.id }}" />
+              <input type="hidden" name="{{ fields.status }}" value="{{ status }}" />
+              <button type="submit">Delete</button>
+            </form>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+
+    {% if previousUrl or nextUrl %}
+      <nav class="admin-pagination" aria-label="Pages">
+        {% if previousUrl %}
+          <a rel="prev" href="{{ previousUrl }}">Newer</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ pages }}</span>
+        {% if nextUrl %}
+          <a rel="next" href="{{ nextUrl }}">Older</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  {% endif %}
+
+  <p class="admin-hint">
+    A page carrying <code>contact: true</code> in its front matter offers a contact form, and every
+    message it takes is one JSON file under <code>data/contact/</code> &mdash; written before
+    anything is emailed, so a message survives a mail outage and a site with no mail configured
+    still collects them. They are under <code>data/</code> rather than <code>content/</code>
+    because they carry somebody&rsquo;s address and were never meant to be published. Where a
+    message is sent is the contact address on the Settings screen; deleting one here deletes its
+    file.
+  </p>
+{% endblock %}

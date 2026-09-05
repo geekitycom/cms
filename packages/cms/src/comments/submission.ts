@@ -1,9 +1,13 @@
-import { createHash, randomBytes } from 'node:crypto';
-import path from 'node:path';
-
 import type { PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
-import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.ts';
+import {
+  ADDRESS_SALT_FILE,
+  FORM_LOADED_FIELD,
+  FORM_TRAP_FIELD,
+  formTimingRefusal,
+  hashClientAddress,
+  trapped,
+} from '../forms/protection.ts';
 import { renderCommentMarkdown } from './markdown.ts';
 import { addComment } from './records.ts';
 import type { CommentRecords } from './records.ts';
@@ -12,18 +16,11 @@ import type { CommentRecords } from './records.ts';
  * What happens between somebody pressing Post and a comment existing.
  *
  * Three defences run before anything is written, in the order that costs least
- * and gives away least:
- *
- * 1. **The honeypot.** A field no person can see and no person fills in. A
- *    submission that filled it is dropped without a word, because telling a bot
- *    why it failed is telling it how to succeed.
- * 2. **The minimum age of the form.** A comment posted a heartbeat after the
- *    page loaded was not typed. This is a speed bump rather than a control —
- *    the field is not signed, so anything that can read the form can forge it —
- *    and it is here because the naive half of the traffic does not bother.
- * 3. **The per-address rate limit.** The same limiter the login form uses, over
- *    the commenter's address, so one machine cannot post a hundred comments
- *    while a moderator sleeps.
+ * and gives away least — the honeypot, the age of the form and the per-address
+ * rate limit. The first two are `forms/protection.ts`, shared with the contact
+ * form (TASK-56) so the two public forms cannot drift into different rules; the
+ * third is the same limiter the login form uses, over the commenter's address,
+ * so one machine cannot post a hundred comments while a moderator sleeps.
  *
  * Then, and only then, {@link CommentChecker} — the one seam a third-party
  * service plugs into. Everything Akismet's API asks for is on the submission
@@ -31,6 +28,17 @@ import type { CommentRecords } from './records.ts';
  * TASK-52 is a module that implements this interface and a setting naming a
  * key. Nothing else in the CMS has to know such a service exists.
  */
+
+// Re-exported where they have always been, so a site that imported them from
+// the package, and the modules in here that did, are unaffected by the move.
+export {
+  hashClientAddress,
+  MAXIMUM_FORM_AGE_SECONDS,
+  MINIMUM_SUBMIT_SECONDS,
+} from '../forms/protection.ts';
+
+/** Where the salt that hides commenters' addresses lives, under `dataDir`. */
+export const COMMENT_SALT_FILE = ADDRESS_SALT_FILE;
 
 /** The fields the comment form submits. */
 export const COMMENT_FIELDS = {
@@ -46,16 +54,10 @@ export const COMMENT_FIELDS = {
   body: 'body',
   /** The comment being answered, or empty for one answering the post. */
   inReplyTo: 'in_reply_to',
-  /**
-   * The honeypot.
-   *
-   * Named as something a form-filling robot expects to find and a person never
-   * sees: the field is hidden from sight and from assistive technology, and
-   * carries `autocomplete="off"` so a browser does not helpfully fill it in.
-   */
-  trap: 'website',
+  /** The honeypot, which every public form here spells the same way. */
+  trap: FORM_TRAP_FIELD,
   /** When the form was rendered, in epoch milliseconds. */
-  loaded: 'loaded',
+  loaded: FORM_LOADED_FIELD,
   /**
    * "Tell me when somebody answers this."
    *
@@ -71,17 +73,6 @@ export type CommentForm = Record<
   'post' | 'name' | 'email' | 'url' | 'body' | 'inReplyTo' | 'trap' | 'loaded' | 'notify',
   string
 >;
-
-/** How long a form has to have been on screen before it may be submitted. */
-export const MINIMUM_SUBMIT_SECONDS = 3;
-
-/**
- * How long a rendered form stays submittable.
- *
- * A day, so a page left open overnight still works, and a `loaded` from last
- * year — which is what a replayed body looks like — does not.
- */
-export const MAXIMUM_FORM_AGE_SECONDS = 24 * 60 * 60;
 
 /** How many comments one address may post before it has to wait. */
 export const COMMENT_RATE_LIMIT = 5;
@@ -137,10 +128,36 @@ export function commentProblems(form: CommentForm): CommentProblems {
   return problems;
 }
 
+/**
+ * What a checker is told a submission is.
+ *
+ * Akismet's `comment_type`, which is an open vocabulary with a handful of
+ * documented values. A checker is free to ignore it; the three here are the
+ * three this CMS can produce.
+ */
+export type SubmissionType =
+  /** Somebody filled in the comment form under a post. */
+  | 'comment'
+  /** Another site's page said it links here (TASK-51). */
+  | 'webmention'
+  /** Somebody filled in the contact form on a page (TASK-56). */
+  | 'contact-form';
+
 /** Everything a checker is told about a comment on its way in. */
 export interface CommentSubmission {
   /** The comment as it would be stored, before anything has judged it. */
   comment: Omit<PostComment, 'id'>;
+  /**
+   * What this is, when it is not what the comment's `source` would say.
+   *
+   * A contact message is judged through this same seam — the rules, the fields
+   * and the answers are the ones a comment gets, and a site that named a
+   * `commentChecker` of its own meant that checker to see everything the
+   * public can post at it. But it is not a comment on a post, and Akismet has
+   * a word for what it is, so the caller names it. Absent means the comment
+   * speaks for itself: `webmention` for one, `comment` for everything else.
+   */
+  type?: SubmissionType | undefined;
   /** The post it is on. */
   post: {
     /** Its slug. */
@@ -280,14 +297,13 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
 
   // The honeypot first, because it costs one comparison and because a
   // submission that tripped it should not reach anything that could tell it so.
-  if (form.trap.trim() !== '') return refused({ kind: 'discarded' });
+  if (trapped(form.trap)) return refused({ kind: 'discarded' });
 
   const problems = commentProblems(form);
   if (Object.keys(problems).length > 0) return refused({ kind: 'invalid', problems });
 
-  const age = formAgeSeconds(form.loaded, now);
-  if (age === undefined || age > MAXIMUM_FORM_AGE_SECONDS) return refused({ kind: 'stale' });
-  if (age < MINIMUM_SUBMIT_SECONDS) return refused({ kind: 'too-quick' });
+  const timing = formTimingRefusal(form.loaded, now);
+  if (timing !== undefined) return refused({ kind: timing });
 
   const keys = commentKeys(options.address);
   const wait = throttle.retryAfter(keys);
@@ -389,54 +405,6 @@ function parentOf(submitted: string, slug: string, records: CommentRecords): str
 /** The keys a submission is rate limited against. */
 export function commentKeys(address: string | undefined): string[] {
   return address === undefined ? [] : [`comment:${address}`];
-}
-
-/** How long ago the form was rendered, or `undefined` when it did not say. */
-function formAgeSeconds(loaded: string, now: Date): number | undefined {
-  const at = Number(loaded);
-  if (!Number.isFinite(at) || at <= 0) return undefined;
-
-  const seconds = (now.getTime() - at) / 1000;
-  // A form stamped in the future is one somebody wrote by hand, or a clock
-  // that moved; either way it is not a form this site rendered a moment ago.
-  return seconds < 0 ? undefined : seconds;
-}
-
-/** Where the salt that hides commenters' addresses lives, under `dataDir`. */
-export const COMMENT_SALT_FILE = 'comment-salt';
-
-/**
- * A commenter's address as the hash the file keeps, or `null` when the site
- * could not tell where the request came from.
- *
- * Salted, and the salt is a file under `data/` rather than a constant, because
- * an unsalted hash of an IPv4 address is the address: there are four billion
- * of them and a laptop tries them all in seconds. The comment files are
- * published with the site and go into git, so an address in one would be a
- * reader's home written into a public repository.
- *
- * Losing the salt costs a site the ability to compare old hashes with new
- * ones, and nothing else — which is why it lives beside the keys rather than
- * in the content directory.
- */
-export function hashClientAddress(dataDir: string, address: string | undefined): string | null {
-  if (address === undefined || address === '') return null;
-
-  return createHash('sha256')
-    .update(`${commentSalt(dataDir)}:${address}`)
-    .digest('hex')
-    .slice(0, 32);
-}
-
-/** The site's address salt, minted on first use. */
-function commentSalt(dataDir: string): string {
-  const file = path.join(dataDir, COMMENT_SALT_FILE);
-  const held = readFileIfPresentSync(file)?.trim();
-  if (held !== undefined && held !== '') return held;
-
-  const minted = randomBytes(32).toString('hex');
-  writeFileAtomicallySync(file, `${minted}\n`, { mode: 0o600 });
-  return minted;
 }
 
 /**

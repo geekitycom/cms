@@ -10,6 +10,7 @@ import {
   termRedirects,
 } from './context.ts';
 import type { CommentFormContext } from '../comments/form.ts';
+import type { ContactFormContext } from '../contact/form.ts';
 import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
@@ -126,6 +127,16 @@ export interface CreateRendererOptions {
    * hour ago. A renderer built without it renders no form at all.
    */
   commentForm?: ((document: Document) => CommentFormContext | undefined) | undefined;
+  /**
+   * The contact form for a page whose front matter asks for one, and
+   * `undefined` for every other document (TASK-56).
+   *
+   * Injected for the same reason the comment form is, and asked per render for
+   * the same one: a `contact: true` saved in the editor a moment ago puts a
+   * form on the page the next request draws. A renderer built without it
+   * renders no contact form at all.
+   */
+  contactForm?: ((document: Document) => ContactFormContext | undefined) | undefined;
 }
 
 /**
@@ -196,6 +207,11 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // theme asks `{% if commentForm %}` rather than working the rules out
       // for itself — and a closed post shows the thread with no form.
       const form = options.commentForm?.(document);
+      // And the contact form, when the page's front matter asked for one
+      // (TASK-56). Nothing about where a message would go is on the context:
+      // the address is read when a submission arrives, so a theme cannot
+      // print it however it is written.
+      const contact = options.contactForm?.(document);
       // Where a webmention about this page is sent (TASK-51). On the context
       // only when the site takes them, so a theme asks `{% if webmention %}`
       // and a site that has turned them off advertises nothing.
@@ -211,6 +227,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
             }),
         ...(said === undefined || said.counts.total === 0 ? {} : { conversation: said }),
         ...(form === undefined ? {} : { commentForm: form }),
+        ...(contact === undefined ? {} : { contactForm: contact }),
         ...(webmention === undefined ? {} : { webmention }),
         ...extra,
       });

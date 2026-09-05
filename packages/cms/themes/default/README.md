@@ -19,10 +19,15 @@ themes/default/
     tags.njk          macros for tag and category links
     feeds.njk         macros for the feed links in <head>
     conversation.njk  the replies, likes and boosts under a post
+    comment-form.njk  the form under a post that is taking comments
+    contact-form.njk  the form on a page whose front matter says contact: true
   mail/
     test.*.njk              the Send test email message
     password-reset.*.njk    the forgot-password link
     password-changed.*.njk  the notice sent once a password has been set
+    comment-pending.*.njk   the moderation notice
+    comment-reply.*.njk     the notice a commenter gets about a reply
+    contact-message.*.njk   a message from a page's contact form
   static/
     style.css    served at /theme/style.css
 ```
@@ -76,15 +81,16 @@ files:
 A message that has no `.txt.njk` anywhere on the search path is an error rather
 than an empty email, so a typo in a template name is reported instead of sent.
 
-The package ships five messages:
+The package ships six messages:
 
-| Name               | When it goes                                     | What `data` carries                                                                                                         |
-| ------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `test`             | Send test email, on Settings.                    | Nothing.                                                                                                                    |
-| `password-reset`   | Somebody asked to reset a password.              | `username`, `resetUrl`, `expiresAt`, `expiresInHours`.                                                                      |
-| `password-changed` | A reset link was used.                           | `username`, `signedOut` (how many sessions ended).                                                                          |
-| `comment-pending`  | A comment or webmention is waiting for approval. | `comment`, `post` (`title`, `url`), `actions` (one `{ action, label, url }` each for approve, spam and delete), `queueUrl`. |
-| `comment-reply`    | A reply to somebody's comment was approved.      | `reply`, `comment` (the one it answers), `post`, `unsubscribeUrl`.                                                          |
+| Name               | When it goes                                     | What `data` carries                                                                                                                     |
+| ------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `test`             | Send test email, on Settings.                    | Nothing.                                                                                                                                |
+| `password-reset`   | Somebody asked to reset a password.              | `username`, `resetUrl`, `expiresAt`, `expiresInHours`.                                                                                  |
+| `password-changed` | A reset link was used.                           | `username`, `signedOut` (how many sessions ended).                                                                                      |
+| `comment-pending`  | A comment or webmention is waiting for approval. | `comment`, `post` (`title`, `url`), `actions` (one `{ action, label, url }` each for approve, spam and delete), `queueUrl`.             |
+| `comment-reply`    | A reply to somebody's comment was approved.      | `reply`, `comment` (the one it answers), `post`, `unsubscribeUrl`.                                                                      |
+| `contact-message`  | Somebody filled in a page's contact form.        | `message` (`id`, `subject`, `text`, `received`), `from` (`name`, `email`), `page` (`slug`, `permalink`, `title`, `url`), `messagesUrl`. |
 
 `comment` and `reply` above are the same shape: `author`, `website`, `source`
 (`comment` or `webmention`), `kind`, `text`, `html`, `submitted`, and `url`.
@@ -94,6 +100,10 @@ nothing on that screen needs it.
 
 The links in `actions` and `unsubscribeUrl` each carry a signed token and work
 without a login. Print them; do not try to build one.
+
+`contact-message` is sent with reply-to set to the sender, so answering it in a
+mail reader answers the person who wrote it. `message.text` is plain text as it
+was typed — print it, do not render it as Markdown or as HTML.
 
 The subject and the plain text body render with autoescaping **off**, because
 neither is HTML: `&` between two query parameters stays an `&`, and an
@@ -421,6 +431,47 @@ Two more keys travel beside it, both from the URL rather than from the post:
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `commentNotice`                       | The thank-you after a submission, from the `?comment=` the redirect carried.                                                    |
 | `commentReplyTo`, `commentReplyingTo` | The comment a `?reply_to=` link named and the name on it, once the CMS has checked it is an approved comment on this very post. |
+
+## The contact form
+
+`contactForm` is on the context of a rendered document **only when its front
+matter says `contact: true`**, so a layout asks:
+
+```njk
+{% if contactForm %}
+{% include "partials/contact-form.njk" %}
+{% endif %}
+```
+
+That is what `layouts/page.njk` does, after the page's content. The key is
+honoured wherever it is written, so a theme that wants the form under a post as
+well only has to add the same two lines to `layouts/post.njk`; the editor
+offers the checkbox on pages.
+
+| Key                                            | What it holds                                                                                                                                    |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `action`                                       | Where the form posts. One fixed path; the page travels as a field.                                                                               |
+| `fields`                                       | The name each field is submitted under: `page`, `name`, `email`, `subject`, `message`, `trap`, `loaded`. Use these rather than typing the names. |
+| `page`                                         | The page's slug, for the hidden field.                                                                                                           |
+| `loaded`                                       | When this form was rendered, in epoch milliseconds, for the hidden field. A submission that comes back too fast is refused.                      |
+| `values`                                       | What is in the fields: empty on a fresh form, what was typed on a refused one.                                                                   |
+| `problems`                                     | One message per field a person has to put right — `name`, `email`, `subject`, `message`.                                                         |
+| `error`                                        | A message about the submission as a whole, when there is one.                                                                                    |
+| `nameLength`, `subjectLength`, `messageLength` | The `maxlength` for the three fields that have one.                                                                                              |
+
+`fields.trap` is the same honeypot the comment form carries, and the same rules
+apply: render it, hide it, and **do not** remove it from a replacement partial.
+
+One more key travels beside it, from the URL rather than from the page:
+
+| Key             | What it holds                                                                                                                            |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `contactNotice` | The thank-you after a message was sent, from the `?contact=` the redirect carried. The shipped partial shows it **instead of** the form. |
+
+**Where the message goes is never on the context.** The contact address is read
+when a submission arrives, so it cannot end up in the HTML however this partial
+is rewritten. Do not try to print it, and do not put a `mailto:` beside the
+form.
 
 ## Taxonomy macros
 

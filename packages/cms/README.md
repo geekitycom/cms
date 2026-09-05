@@ -797,10 +797,10 @@ emails is a feature that breaks without a mail account.
 Two halves, kept apart for the reason the Akismet key is kept out of
 `site.json`:
 
-| Where                     | What                                                                     |
-| ------------------------- | ------------------------------------------------------------------------ |
-| `content/_data/site.json` | `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`.        |
-| `data/mail.json`          | The Brevo API key, and the SMTP host, port, TLS flag, user and password. |
+| Where                     | What                                                                              |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| `content/_data/site.json` | `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`, `contactEmail`. |
+| `data/mail.json`          | The Brevo API key, and the SMTP host, port, TLS flag, user and password.          |
 
 `site.json` is public, in git and published with the site; `data/mail.json` is
 private, mode `0600`, and sits beside the password hashes and the actor's
@@ -889,6 +889,88 @@ provider.failNext(2); // watch the retry without waiting for it
 
 `mail` also takes `attempts`, `backoffMs` and `logger`, which is how a test
 proves the retry without spending ten seconds on it.
+
+## The contact form
+
+A page carrying `contact: true` in its front matter renders a contact form
+under its content — name, email, subject, message. The editor offers it as a
+**Contact form** checkbox on the pages editor, and the key is honoured wherever
+it is written, so a theme that includes `partials/contact-form.njk` in its post
+layout gets one there too.
+
+It works with JavaScript switched off, and there is no script on it. The form
+posts to `/_geekity/contact`, and a message that is stored redirects back to
+the page with `?contact=sent`, which draws a thank-you where the form was — so
+a refresh sends nothing twice.
+
+**Where the message goes never appears in the HTML.** The contact address is
+read when a submission arrives; it is not on any render context, so no theme
+can print it and no form carries it.
+
+### Where a message goes
+
+| Where                               | What                                                                        |
+| ----------------------------------- | --------------------------------------------------------------------------- |
+| `data/contact/<id>.json`, mode 0600 | Every message, written **before** anything is emailed.                      |
+| The `contactEmail` setting          | Where the `contact-message` email is sent, reply-to the sender.             |
+| `/admin/messages`                   | The inbox: read, mark read, delete. The dashboard carries the unread count. |
+
+`contactEmail` is on the Settings screen under Email. Empty falls back to the
+first admin with an email address, by username, so a fresh site with a mail
+credential takes messages without anybody visiting the field.
+
+The file is written first and the mail goes out behind the redirect, which is
+the whole point of the design: a provider that is down, a key that has expired
+or an address that bounces costs a notification rather than the message. **With
+no mail configured at all, submissions are still stored and still shown on the
+Messages screen** — it is the notification, exactly as `/admin/comments` was
+before there was any email.
+
+Messages live under `data/` rather than `content/` because they carry the
+sender's address and were never meant to be published, and there is no SQLite
+index over them: the screen reads the directory to sort it anyway, and a second
+copy of the truth would only be a second thing to keep true. One JSON file per
+message, named by an id that begins with the instant it arrived, so `ls` is the
+inbox in order. Deleting a message on the screen deletes its file.
+
+### What is in a message file
+
+```json
+{
+  "id": "20260920T120000000Z-1a2b3c4d",
+  "received": "2026-09-20T12:00:00.000Z",
+  "status": "received",
+  "read": false,
+  "page": { "slug": "contact", "permalink": "/contact/", "title": "Say hello" },
+  "from": { "name": "Ada Lovelace", "email": "ada@example.com" },
+  "subject": "About the analytical engine",
+  "message": "It is a lovely machine. Please write back.",
+  "addressHash": "9f2c…"
+}
+```
+
+`addressHash` is the same salted hash a comment keeps — the salt is
+`data/comment-salt` — so a run of submissions from one machine is visible
+across both without a reader's address being written down.
+
+### The defences in front of it
+
+The same four a comment goes through, out of the same modules, so the two
+public forms cannot drift into different rules:
+
+| Defence             | What it refuses                                                                                                   |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| The honeypot        | A hidden field a person never fills in. A submission that filled it gets the thank-you and is dropped in silence. |
+| The form's age      | Submitted under three seconds after the page loaded, or from a form rendered more than a day ago.                 |
+| The rate limit      | Five messages per address per ten minutes, on the same limiter the login form uses. The sixth is a 429.           |
+| The comment checker | The `commentChecker` seam, told `comment_type: contact-form`. With an Akismet key stored, that is Akismet.        |
+
+A checker's `discard` stores nothing at all. Its `spam` **stores the message**,
+on the Spam list of the Messages screen, and does not email it: a false
+positive on a contact form is somebody's message vanishing, which is a worse
+failure than a spam list to glance at. A checker that is down or throwing is no
+opinion, and the message is stored as it would have been before anybody had
+one.
 
 ## Keeping the index in step
 
@@ -1063,6 +1145,9 @@ shadow the login form.
 | `/admin/comments`                                | Pending, approved and spam, with approve, spam, delete and reply.                |
 | `/admin/comments/moderate`                       | `POST` only. Approves one comment, files it as spam, or deletes it.              |
 | `/admin/comments/reply`                          | `POST` only. Posts an approved reply under the comment it answers.               |
+| `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                            |
+| `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                            |
+| `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                          |
 | `/admin/settings`                                | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor.    |
 | `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                           |
 | `/admin/users`                                   | Who may sign in. `POST` adds one.                                                |
@@ -1163,7 +1248,7 @@ The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `timezone`, `language`, `avatar`, `actorHandle`, `actorType`, `tagBase`,
 `categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
-`relays`, `navigation` and `taxonomyRedirects`,
+`contactEmail`, `relays`, `navigation` and `taxonomyRedirects`,
 and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
 type is the default too: a hand-edited `site.json` cannot take the site down.
@@ -1440,6 +1525,7 @@ Booting mounts the public site on the app. The routes are:
 | `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                   |
 | `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                  |
 | `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                           |
+| `/_geekity/contact`                     | `POST` only. Where the contact form on a page submits.                                              |
 | `/_geekity/webmention`                  | `POST` only. Where a webmention is sent; advertised on every document.                              |
 | `/_geekity/moderate`                    | Where an approve, spam or delete link from a notification lands. `GET` shows a button; `POST` acts. |
 | `/_geekity/unsubscribe`                 | Where the unsubscribe link in a reply notice lands. Same two steps.                                 |

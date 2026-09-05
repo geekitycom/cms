@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 12:43'
+updated_date: '2026-09-05 03:14'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -43,6 +43,7 @@ Keys the CMS reads and writes. Eleventy semantics are preserved.
 | `layout` | no | template | not written per file; comes from directory data |
 | `eleventyExcludeFromCollections` | no | hides from collections | mirrored for pages that should not list |
 | `navigation` | no | data | `true` puts a page in the site menu, after the items the settings screen names |
+| `contact` | no | data | `true` renders a contact form under a page: name, email, subject, message. Messages land under `data/contact/` and on `/admin/messages`, and are emailed to the site's `contactEmail`. The destination address is never in the page |
 
 Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 

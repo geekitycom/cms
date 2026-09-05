@@ -47,6 +47,7 @@ import {
   createAkismetChecker,
   rebuildCommentIndexes,
 } from './comments/index.ts';
+import { contactFormFor } from './contact/index.ts';
 import { createRenderer, mountPublicSite, postConversation } from './web/index.ts';
 import { createWebmentionService } from './webmention/index.ts';
 import type { WebmentionService } from './webmention/index.ts';
@@ -78,6 +79,16 @@ export {
   commentListUrl,
   mountCommentsScreen,
   pendingComments,
+  MESSAGE_FIELDS,
+  MESSAGE_TABS,
+  MESSAGES_DELETE_PATH,
+  MESSAGES_PATH,
+  MESSAGES_PER_PAGE,
+  MESSAGES_READ_PATH,
+  MESSAGES_SECTION,
+  messageListUrl,
+  mountMessagesScreen,
+  unreadMessages,
   DELIVERY_STATUSES,
   RELAY_STATES,
   ADMIN_ASSET_MAX_AGE,
@@ -284,6 +295,8 @@ export type {
   CreatePasswordResetInput,
   ListCommentsOptions,
   MountCommentsScreenOptions,
+  MessageRow,
+  MountMessagesScreenOptions,
   PostComment,
   ChangePasswordProblems,
   CreateAdminTemplateEnvironmentOptions,
@@ -462,9 +475,79 @@ export type {
   ModerationAction,
   ModerationOutcome,
   NewComment,
+  SubmissionType,
   SubmitCommentOptions,
   VerifyAkismetKeyOptions,
 } from './comments/index.ts';
+
+// The contact form (TASK-56): the front matter key a page opts in with, the
+// endpoint the form posts to, the files under `data/contact/` that hold what
+// it collected, and the message that carries one on to the site's address.
+export {
+  addContactMessage,
+  blankContactValues,
+  CONTACT_ANCHOR,
+  CONTACT_DATA_DIRECTORY,
+  CONTACT_FIELDS,
+  CONTACT_FRONT_MATTER_KEY,
+  CONTACT_MESSAGE_TEMPLATE,
+  CONTACT_NOTICE_PARAM,
+  CONTACT_NOTICES,
+  CONTACT_POST_PATH,
+  CONTACT_RATE_LIMIT,
+  CONTACT_RATE_WINDOW_SECONDS,
+  contactDirectory,
+  contactForm,
+  contactFormFor,
+  contactKeys,
+  contactMessageFile,
+  contactMessageId,
+  contactNoticeFor,
+  contactOpen,
+  contactProblems,
+  contactRecipient,
+  contactValuesOf,
+  countContactMessagesByStatus,
+  countUnreadContactMessages,
+  deleteContactMessage,
+  listContactMessages,
+  MAXIMUM_CONTACT_EMAIL_LENGTH,
+  MAXIMUM_CONTACT_MESSAGE_LENGTH,
+  MAXIMUM_CONTACT_NAME_LENGTH,
+  MAXIMUM_CONTACT_SUBJECT_LENGTH,
+  mountContact,
+  readContactMessage,
+  refilledContactForm,
+  sendContactMessage,
+  setContactMessageRead,
+  submitContactMessage,
+} from './contact/index.ts';
+export type {
+  ContactForm,
+  ContactFormContext,
+  ContactMessage,
+  ContactOutcome,
+  ContactProblems,
+  ContactRecipientOptions,
+  ContactRefusal,
+  ContactStatus,
+  ContactThrottle,
+  NewContactMessage,
+  SendContactMessageOptions,
+  SubmitContactMessageOptions,
+} from './contact/index.ts';
+
+// The defences every public form here shares (TASK-56): the honeypot, the age
+// of a rendered form, and the salted hash of where a submission came from.
+export {
+  ADDRESS_SALT_FILE,
+  FORM_LOADED_FIELD,
+  FORM_TRAP_FIELD,
+  formAgeSeconds,
+  formTimingRefusal,
+  trapped,
+} from './forms/protection.ts';
+export type { FormTimingRefusal } from './forms/protection.ts';
 
 export {
   readFileIfPresentSync,
@@ -1303,6 +1386,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
         // puts the box on the next page drawn (TASK-55).
         notifiable: mail.configured(),
       }),
+    // And the contact form, for a page whose front matter asks for one. Asked
+    // per render for the same reason: a `contact: true` saved in the editor a
+    // moment ago puts a form on the page the next request draws (TASK-56).
+    contactForm: (document) => contactFormFor({ document, now: resolved.now() }),
   });
   const federation = createSiteFederation({ baseUrl: resolved.baseUrl, ...resolved.federation });
 

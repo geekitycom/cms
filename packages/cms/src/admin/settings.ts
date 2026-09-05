@@ -262,6 +262,15 @@ export interface SiteSettings {
   /** Where a reply to the site's mail should go. Empty means the From address. */
   mailReplyTo: string;
   /**
+   * Where a message from the contact form is sent (TASK-56).
+   *
+   * Empty falls back to the first admin with an email, so a site that has
+   * never visited this field still has somewhere to write. It is read when a
+   * message arrives and is never put on a render context, so it cannot appear
+   * in the HTML of the page the form is on however a theme is written.
+   */
+  contactEmail: string;
+  /**
    * The relay inboxes the site subscribes to (FEP-ae0c): a Mastodon-style
    * relay boosts every public post it is sent, which is how a small site
    * reaches instances nobody on it follows.
@@ -342,6 +351,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   mailFromName: '',
   mailFromAddress: '',
   mailReplyTo: '',
+  contactEmail: '',
   relays: [],
   navigation: [],
   taxonomyRedirects: [],
@@ -369,6 +379,7 @@ export const SETTINGS_FIELDS = {
   mailFromName: 'mail_from_name',
   mailFromAddress: 'mail_from_address',
   mailReplyTo: 'mail_reply_to',
+  contactEmail: 'contact_email',
   relays: 'relays',
   navigation: 'navigation',
 } as const satisfies Record<SettingsField, string>;
@@ -461,6 +472,7 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
       ? { mailFromAddress: file['mailFromAddress'] }
       : {}),
     ...(typeof file['mailReplyTo'] === 'string' ? { mailReplyTo: file['mailReplyTo'] } : {}),
+    ...(typeof file['contactEmail'] === 'string' ? { contactEmail: file['contactEmail'] } : {}),
     // Through the same normaliser a submitted form goes through, so the file
     // and the screen cannot mean different things by the same line.
     ...(Array.isArray(file['relays'])
@@ -527,6 +539,7 @@ export function siteJsonFor(
     mailFromName: settings.mailFromName,
     mailFromAddress: settings.mailFromAddress,
     mailReplyTo: settings.mailReplyTo,
+    contactEmail: settings.contactEmail,
     relays: [...settings.relays],
     navigation: settings.navigation.map((item) => ({ ...item })),
     taxonomyRedirects: settings.taxonomyRedirects.map((entry) => ({ ...entry })),
@@ -756,6 +769,13 @@ export function settingsProblems(form: SettingsForm): SettingsProblems {
       'A reply-to is an email address, such as hello@example.com, or empty to reply to the From address.';
   }
 
+  // Empty is a value here too — it is how a site says "whichever admin has an
+  // address" — so only a non-empty one has to look like one.
+  if (form.contactEmail.trim() !== '' && !EMAIL_PATTERN.test(form.contactEmail.trim())) {
+    problems.contactEmail =
+      'A contact address is an email address, such as hello@example.com, or empty for the first admin with one.';
+  }
+
   // A relay list is checked line by line, and the first bad line is what the
   // field says: a textarea has one message, and pointing at the line somebody
   // has to fix is more use than counting how many are wrong.
@@ -829,6 +849,7 @@ export function settingsFromForm(
     mailFromName: form.mailFromName.trim(),
     mailFromAddress: form.mailFromAddress.trim(),
     mailReplyTo: form.mailReplyTo.trim(),
+    contactEmail: form.contactEmail.trim(),
     relays: relayList(form.relays),
     navigation: navigationList(form.navigation),
   };
@@ -857,6 +878,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     mailFromName: settings.mailFromName,
     mailFromAddress: settings.mailFromAddress,
     mailReplyTo: settings.mailReplyTo,
+    contactEmail: settings.contactEmail,
     relays: settings.relays.join('\n'),
     navigation: navigationText(settings.navigation),
   };
@@ -918,6 +940,7 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       mailFromName: field(body[SETTINGS_FIELDS.mailFromName]),
       mailFromAddress: field(body[SETTINGS_FIELDS.mailFromAddress]),
       mailReplyTo: field(body[SETTINGS_FIELDS.mailReplyTo]),
+      contactEmail: field(body[SETTINGS_FIELDS.contactEmail]),
       relays: field(body[SETTINGS_FIELDS.relays]),
       navigation: field(body[SETTINGS_FIELDS.navigation]),
     };

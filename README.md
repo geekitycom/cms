@@ -696,7 +696,7 @@ once, on the first boot of this one, and the table is dropped.
 The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `timezone`, `language`, `avatar`, `actorHandle`, `actorType`, `tagBase`,
 `categoryBase`, `notifyServer`, `mailProvider`, `mailFromName`,
-`mailFromAddress`, `mailReplyTo`, `relays`, `navigation` and
+`mailFromAddress`, `mailReplyTo`, `contactEmail`, `relays`, `navigation` and
 `taxonomyRedirects`,
 and every other key it already had is kept — a site may put anything in there,
 `feedSize` included, and reach it from its templates. A key it does not carry

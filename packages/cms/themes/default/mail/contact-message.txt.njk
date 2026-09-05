@@ -1,0 +1,20 @@
+{# The plain text body of a message from the contact form.
+
+   Reply-to is the sender, so answering this is a Reply in whatever reads it.
+   The message is quoted as it was typed: it is plain text and is never
+   rendered as anything else. #}
+{{ from.name }} <{{ from.email }}> wrote to you from {{ page.title }}.
+
+{{ page.url }}
+When: {{ message.received }}
+{% if message.subject %}Subject: {{ message.subject }}
+{% endif %}
+{{ message.text }}
+
+--
+Reply to this message and it goes straight back to {{ from.email }}.
+Every message is kept at {{ messagesUrl }}.
+
+--
+{{ site.title }}
+{{ baseUrl }}
