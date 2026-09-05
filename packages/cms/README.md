@@ -284,15 +284,16 @@ the same directory reads all of it, and everything in it is meant to be public:
 
 `data/` is private. It is gitignored, and it is the half to copy somewhere safe:
 
-| Path                        | What it holds                                                                                                                   |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `data/users.json`           | Usernames and argon2id password hashes. Mode `0600`.                                                                            |
-| `data/keys/`                | The actor's key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                            |
-| `data/comment-salt`         | What hides commenters' addresses in the published comment files. Mode `0600`.                                                   |
-| `data/akismet.json`         | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                         |
-| `data/mail.json`            | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                 |
-| `data/notification-secret`  | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else. |
-| `data/comment-optouts.json` | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                           |
+| Path                             | What it holds                                                                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `data/users.json`                | Usernames and argon2id password hashes. Mode `0600`.                                                                            |
+| `data/keys/`                     | The actor's key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                            |
+| `data/comment-salt`              | What hides commenters' addresses in the published comment files. Mode `0600`.                                                   |
+| `data/akismet.json`              | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                         |
+| `data/mail.json`                 | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                 |
+| `data/notification-secret`       | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else. |
+| `data/comment-optouts.json`      | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                           |
+| `data/notification-digests.json` | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                         |
 
 Two things under `data/` may be deleted whenever the site is stopped, and
 nothing else in either directory may:
@@ -689,13 +690,43 @@ unsubscribe link at the bottom. Unsubscribing is site-wide by address: the
 address goes into `data/comment-optouts.json` and this site writes to it about
 replies again. The comments themselves are untouched.
 
+### One message an hour instead of one a comment
+
+Beside each switch on `/admin/users` is how often that notice should arrive: as
+they arrive, an hourly digest, or a daily one. It is per user, and it starts as
+"as they arrive", so nothing changes for anybody who does not touch it.
+
+On a digest, a comment entering the queue sends nothing at all. Instead, once a
+window has passed, one message goes out listing everything **still waiting**,
+each item with its own approve, spam and delete links. A digest is built from
+the queue as it stands rather than from a list of things that happened, so an
+item somebody moderated in the meantime is simply not in it, and there is no
+queue to keep true across a restart. A user with nothing waiting is not written
+to at all, and their window does not start until something is: the promise a
+mode makes is at most one message per window, and a quiet site sends none.
+
+A very long queue — a spam wave Akismet let through — is listed up to a hundred
+items, with the rest counted in a line pointing at `/admin/comments`.
+
+The only thing written down is when each user last had one, in
+`data/notification-digests.json`. It is a file rather than a row because
+decision-9 lets a site delete the database whenever it is stopped, and a
+forgotten timestamp would mean either a window silently skipped or a digest
+sent twice. It is its own file rather than a field in `data/users.json` because
+that file answers "who may sign in", and a timestamp rewritten every hour is
+bookkeeping rather than anything about the person.
+
+Reply notices to commenters are not affected: those are one message about one
+reply, and they go when the reply is approved.
+
 With no mail configured, none of this happens and nothing breaks: the box is
-not offered, no notice is sent, and the moderation screen is the notification
-it was before.
+not offered, no notice is sent, no digest runs, and the moderation screen is
+the notification it was before.
 
 Notices are per user and keyed by event name, so a later one — a new follower,
 a digest of failed deliveries — is one entry in the registry in
-`src/notifications/preferences.ts` and a checkbox that appears by itself. An
+`src/notifications/preferences.ts` and a checkbox that appears by itself; an
+entry that says `batched: true` gets the how-often select beside it too. An
 event a user has said nothing about is at its default, which is why turning one
 on for a site does not need anybody to visit the users screen.
 
@@ -1132,35 +1163,36 @@ that ship inside the package, deliberately outside the theme search path: a
 site's `theme/` may override any public template, and must not be able to
 shadow the login form.
 
-| Route                                            | What it does                                                                     |
-| ------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.           |
-| `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                    |
-| `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                |
-| `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                  |
-| `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                     |
-| `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it. |
-| `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.          |
-| `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.      |
-| `/admin/comments`                                | Pending, approved and spam, with approve, spam, delete and reply.                |
-| `/admin/comments/moderate`                       | `POST` only. Approves one comment, files it as spam, or deletes it.              |
-| `/admin/comments/reply`                          | `POST` only. Posts an approved reply under the comment it answers.               |
-| `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                            |
-| `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                            |
-| `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                          |
-| `/admin/settings`                                | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor.    |
-| `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                           |
-| `/admin/users`                                   | Who may sign in. `POST` adds one.                                                |
-| `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                         |
-| `/admin/users/email`                             | `POST` only. Sets or clears the email address on the row the form names.         |
-| `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the row the form names.              |
-| `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                    |
-| `/admin/federation`                              | The actor, the followers, the inbox log, and per-post delivery.                  |
-| `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.       |
-| `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                   |
-| `/admin/login`                                   | Username and password.                                                           |
-| `/admin/logout`                                  | `POST` only. Deletes the session row.                                            |
-| `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                      |
+| Route                                            | What it does                                                                              |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.                    |
+| `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                             |
+| `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                         |
+| `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                           |
+| `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                              |
+| `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it.          |
+| `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.                   |
+| `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.               |
+| `/admin/comments`                                | Pending, approved and spam, with approve, spam, delete and reply.                         |
+| `/admin/comments/moderate`                       | `POST` only. Approves one comment, files it as spam, or deletes it.                       |
+| `/admin/comments/reply`                          | `POST` only. Posts an approved reply under the comment it answers.                        |
+| `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                                     |
+| `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                                     |
+| `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                                   |
+| `/admin/settings`                                | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor.             |
+| `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                                    |
+| `/admin/users`                                   | Who may sign in. `POST` adds one.                                                         |
+| `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                                  |
+| `/admin/users/email`                             | `POST` only. Sets or clears the email address on the row the form names.                  |
+| `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the row the form names.                       |
+| `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice reaches the row: as they arrive, hourly or daily. |
+| `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                             |
+| `/admin/federation`                              | The actor, the followers, the inbox log, and per-post delivery.                           |
+| `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.                |
+| `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                            |
+| `/admin/login`                                   | Username and password.                                                                    |
+| `/admin/logout`                                  | `POST` only. Deletes the session row.                                                     |
+| `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                               |
 
 The screens behind the login share one layout: a bar across the top with the
 site name and a link to the public site, the sections down the left with the

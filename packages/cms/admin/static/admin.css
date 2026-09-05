@@ -767,6 +767,13 @@ button[type='submit']:hover,
   margin: 0;
 }
 
+/* The how-often select beside a notification switch: narrow, so a row of
+   switches and windows still reads as one column rather than as a form. */
+
+.admin-inline select {
+  margin: 0;
+}
+
 /* A label the screen reader reads and the eye does not: every rename field
    needs its own name, and printing "Rename eleventy to" beside each one would
    say five times over what the column heading says once. */

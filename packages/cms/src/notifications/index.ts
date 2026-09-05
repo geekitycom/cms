@@ -6,6 +6,23 @@ export {
 } from './comments.ts';
 export type { CommentNotifier, CreateCommentNotifierOptions } from './comments.ts';
 export {
+  COMMENT_DIGEST_TEMPLATE,
+  createCommentDigest,
+  DIGEST_MAX_ITEMS,
+  DIGEST_TICK_MS,
+  DIGEST_TIMES_FILE,
+  digestTimesFile,
+  readDigestTimes,
+  recordDigestTimes,
+  systemNotificationTimers,
+} from './digest.ts';
+export type {
+  CommentDigest,
+  CreateCommentDigestOptions,
+  DigestLogger,
+  NotificationTimers,
+} from './digest.ts';
+export {
   MODERATE_PATH,
   MODERATION_TOKEN_LIFETIME_SECONDS,
   moderationLink,
@@ -24,14 +41,26 @@ export {
   readCommentOptOuts,
 } from './optouts.ts';
 export {
+  DEFAULT_DELIVERY_MODE,
+  DELIVERY_MODE_LABELS,
+  DELIVERY_WINDOW_MS,
+  deliveryMode,
+  isBatchedMode,
+  NOTIFICATION_DELIVERY_MODES,
   NOTIFICATION_EVENTS,
   notificationEvent,
+  notificationMode,
   notificationRecipients,
   notificationSwitches,
   notificationWanted,
   withNotification,
+  withNotificationMode,
 } from './preferences.ts';
-export type { NotificationEvent } from './preferences.ts';
+export type {
+  NotificationDeliveryMode,
+  NotificationEvent,
+  NotificationSwitch,
+} from './preferences.ts';
 export { mountNotificationLinks } from './routes.ts';
 export {
   NOTIFICATION_SECRET_FILE,
