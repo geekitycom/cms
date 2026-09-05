@@ -4,10 +4,10 @@ title: Full-text search over posts and pages
 status: To Do
 assignee: []
 created_date: '2026-09-02 13:25'
+updated_date: '2026-09-05 12:41'
 labels:
   - web
   - content
-milestone: m-3
 dependencies:
   - TASK-6
 type: feature
