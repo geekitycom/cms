@@ -49,6 +49,17 @@ export interface User {
   readonly id: number;
   /** Login name, unique and compared case sensitively. */
   readonly username: string;
+  /**
+   * Where the site can reach this person, or `undefined` when nobody has said.
+   *
+   * Optional on purpose (TASK-54): a login is a username and a password, and a
+   * site that never sends email has no use for this. What it buys is a
+   * password that can be recovered without a shell, and, once TASK-55 lands,
+   * somewhere to send the notices an admin would otherwise have to go looking
+   * for. Not unique, and not a second login name: it is only ever matched
+   * against by the forgot-password form, which answers the same either way.
+   */
+  readonly email?: string | undefined;
   /** When the user was created, as an ISO 8601 instant. */
   readonly createdAt: string;
 }
@@ -67,6 +78,8 @@ export interface CreateUserInput {
   username: string;
   /** The plain password. It is hashed on the way in and never stored. */
   password: string;
+  /** Where to reach them. Left off, or empty, is a user with no email. */
+  email?: string | undefined;
 }
 
 /** Thrown when a username is already taken. Usernames are the login key. */
@@ -116,6 +129,31 @@ export function findUserById(dataDir: string, id: number): User | undefined {
 }
 
 /**
+ * The user a forgot-password form named, by either of the two things somebody
+ * might type: their username or their email address.
+ *
+ * The username is compared exactly, because that is how logging in compares it
+ * and a second, looser rule would let one person's name match another's
+ * account. The email is folded to lower case on both sides, because an address
+ * is case-insensitive in practice and nobody remembers how they capitalised
+ * one. A user is matched by username first, so a site where somebody's address
+ * happens to be another person's username still resolves the way logging in
+ * would. The empty string matches nobody, however many users have no email.
+ */
+export function findUserByIdentifier(dataDir: string, identifier: string): User | undefined {
+  const wanted = identifier.trim();
+  if (wanted === '') return undefined;
+
+  const { users } = readUsersFile(dataDir);
+  const folded = wanted.toLowerCase();
+  const found =
+    users.find((user) => user.username === wanted) ??
+    users.find((user) => user.email !== undefined && user.email.toLowerCase() === folded);
+
+  return found === undefined ? undefined : withoutHash(found);
+}
+
+/**
  * Hash the password and add the user to the file.
  *
  * Throws {@link DuplicateUsernameError} when the name is taken. The check is
@@ -126,6 +164,7 @@ export function findUserById(dataDir: string, id: number): User | undefined {
  */
 export async function createUser(input: CreateUserInput): Promise<User> {
   const hash = hashPassword(input.password);
+  const email = (input.email ?? '').trim();
   let created: StoredUser | undefined;
 
   await write(input.dataDir, (contents) => {
@@ -135,6 +174,9 @@ export async function createUser(input: CreateUserInput): Promise<User> {
     created = {
       id: contents.nextId,
       username: input.username,
+      // Absent rather than empty, so a user with no email has no key for one
+      // and the file says only what somebody actually filled in.
+      ...(email === '' ? {} : { email }),
       passwordHash: hash,
       createdAt: new Date().toISOString(),
     };
@@ -171,6 +213,41 @@ export async function setUserPassword(input: {
       users: contents.users.map((user) =>
         user.id === input.userId ? { ...user, passwordHash: hash } : user,
       ),
+    };
+  });
+
+  return changed;
+}
+
+/**
+ * Put an email address on a user, or take the one they had off.
+ *
+ * The empty string is how an address is removed, so one form field can do
+ * both: a box somebody cleared means "I do not want to be emailed", and there
+ * is nothing else it could mean. Returns `false` when there is no such user.
+ * The address is stored as it was typed, capitals and all — it is what a
+ * message is addressed to, and only the matching is case-insensitive.
+ */
+export async function setUserEmail(input: {
+  /** Which site's users file to write. */
+  dataDir: string;
+  /** Whose address. */
+  userId: number;
+  /** The address, or the empty string to remove it. */
+  email: string;
+}): Promise<boolean> {
+  const email = input.email.trim();
+  let changed = false;
+
+  await write(input.dataDir, (contents) => {
+    changed = contents.users.some((user) => user.id === input.userId);
+    return {
+      ...contents,
+      users: contents.users.map((user) => {
+        if (user.id !== input.userId) return user;
+        const { email: _removed, ...rest } = user;
+        return email === '' ? rest : { ...rest, email };
+      }),
     };
   });
 
@@ -259,7 +336,12 @@ export function migrateUsersToFile(options: { admin: AdminStore; dataDir: string
 
 /** A user as a screen may render it: everything but the hash. */
 function withoutHash(user: StoredUser): User {
-  return { id: user.id, username: user.username, createdAt: user.createdAt };
+  return {
+    id: user.id,
+    username: user.username,
+    ...(user.email === undefined ? {} : { email: user.email }),
+    createdAt: user.createdAt,
+  };
 }
 
 /**
@@ -349,6 +431,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const record = entry as Record<string, unknown>;
   const id = record['id'];
   const username = record['username'];
+  const email = record['email'];
   const passwordHash = record['passwordHash'];
   const createdAt = record['createdAt'];
 
@@ -365,6 +448,11 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   return {
     id,
     username,
+    // Unlike the three above, a bad email is dropped rather than refused: it
+    // is not what anybody signs in with, and a site whose whole admin refused
+    // to load over a mistyped address would be a worse failure than the one it
+    // is guarding against.
+    ...(typeof email === 'string' && email.trim() !== '' ? { email: email.trim() } : {}),
     passwordHash,
     createdAt: typeof createdAt === 'string' ? createdAt : '',
   };

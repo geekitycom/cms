@@ -823,12 +823,12 @@ the detail.
 ## Users
 
 `/admin/users` is who may sign in. There is one role — doc-5 puts anything
-beyond admin out of scope for phase one — so an account has no fields to edit
-and the screen is three things: the list, a form that adds somebody, and a form
-that changes your own password.
+beyond admin out of scope for phase one — so the screen is the list, a form
+that adds somebody, a form that changes your own password, and one editable
+field per row: an email address.
 
-**`data/users.json` is the source.** One entry per user — id, username, argon2
-hash, created time — written the way every file this CMS owns is written: to a
+**`data/users.json` is the source.** One entry per user — id, username, an
+optional email address, argon2 hash, created time — written the way every file this CMS owns is written: to a
 temporary file beside it, renamed over the old one, with the read and the write
 as one step nothing else writing that file can get between, and with `0600`
 permissions, so nobody but the account the site runs as can read it. It is in
@@ -873,6 +873,30 @@ refused, and the table only renders a button for rows that are neither:
 A form with a problem comes back with a 400, one message under each field, and
 nothing written. The add form keeps the username that was typed; the password
 forms keep nothing, because a password does not belong in rendered HTML.
+
+**An email address is optional**, on the add form and inline on any row —
+including somebody else's, since with one role every user already has every
+power there is, and an admin who has just added a colleague should be able to
+put their address in without waiting for them. Clearing the box removes it. It
+never appears on the public site. `geekity user add ada --email ada@example.com`
+sets one from a shell.
+
+What the address buys is **getting back in without a shell**. `/admin/login`
+carries a Forgotten your password? link to `/admin/forgot`, which takes a
+username or an address and always answers with the same sentence — whether the
+name matched, did not match, or matched somebody with no address. An answer
+that varied would be a list of which accounts the site has. A match with an
+address gets a message carrying a link to `/admin/reset`, good for an hour and
+for one use; only the link's SHA-256 is stored, beside the sessions, so a copy
+of the database is not a stack of working keys. Using it sets the password
+under the same rules every other door enforces, cancels every other reset that
+user had outstanding, signs out every session they had, and sends a
+confirmation with no link back in. Requests are rate limited exactly as
+sign-ins are, on a counter of its own so a flood of resets cannot lock somebody
+out of logging in. With no mail configured the page says so and points at
+`geekity user add`, which is how a site nobody can reach gets a fresh admin.
+[The package README](packages/cms/README.md#forgotten-passwords) has the
+detail.
 
 ## The theme
 

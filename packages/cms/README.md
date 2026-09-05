@@ -128,9 +128,11 @@ first. A file that will not parse is reported and exits `1`, as with `sync`.
 
 `geekity user add <username>` writes a user straight into `data/users.json`,
 which is how a site that cannot reach `/admin/setup` from a browser — a
-headless deploy, a server behind a bastion — gets its first login. It enforces
-exactly the rules the setup form does: a username of 1 to 64 letters, digits,
-dots, dashes or underscores, and a password of at least 8 characters.
+headless deploy, a server behind a bastion — gets its first login. It is also
+the way back into a site that has locked everybody out and cannot send email.
+It enforces exactly the rules the setup form does: a username of 1 to 64
+letters, digits, dots, dashes or underscores, and a password of at least 8
+characters.
 
 ```sh
 $ geekity user add ada
@@ -150,8 +152,18 @@ printf '%s\n' "$ADMIN_PASSWORD" | geekity user add ada
 three: a password on the command line is visible in the process list and lands
 in shell history.
 
+`--email <address>` puts an address on the new user, which is optional and is
+what [password recovery](#forgotten-passwords) works through:
+
+```sh
+$ geekity user add ada --email ada@example.com
+Password for ada:
+Created admin user ada (ada@example.com). Sign in at /admin/login.
+```
+
 A name that is already taken is refused and nothing is written; so are an
-illegal username and a short password. Every refusal prints why and exits `1`.
+illegal username, a short password and an address that is not one. Every
+refusal prints why and exits `1`.
 
 Once somebody can sign in, the [`/admin/users` screen](#the-admin) is the
 easier door: it adds users, generates passwords, deletes them, and is where an
@@ -1055,11 +1067,16 @@ planted session id cannot become a logged-in one.
 The first admin comes from `/admin/setup` or from
 [`geekity user add`](#creating-an-admin-from-the-command-line). Every one after
 that comes from `/admin/users`, which lists who may sign in, adds a user with a
-password you supply or one it generates and shows once, deletes another user,
-and changes your own password — which signs out every other browser holding
-that login and leaves the one you are using alone. There is a single role, so
-an account has nothing else to edit. The last remaining user cannot be deleted,
-and nobody may delete their own account.
+password you supply or one it generates and shows once, sets each user's email
+address, deletes another user, and changes your own password — which signs out
+every other browser holding that login and leaves the one you are using alone.
+There is a single role, so an account has nothing else to edit. The last
+remaining user cannot be deleted, and nobody may delete their own account.
+
+An email address is optional on a user and is the one field on a row that can
+be edited — any row, since with one role every user already has every power
+there is. It buys [password recovery](#forgotten-passwords) and nothing else so
+far, and it never appears on the public site.
 
 A site whose database was written by a version that kept the accounts in a
 `users` table has those rows written into `data/users.json` on the first boot
@@ -1277,6 +1294,44 @@ it on — and only on — when a reverse proxy in front of the site sets that
 header; the leftmost entry is then used. With neither available, which is what
 happens when the app is driven in process rather than served, the username is
 the only key.
+
+### Forgotten passwords
+
+`/admin/login` carries a **Forgotten your password?** link to `/admin/forgot`,
+which takes a username _or_ an email address and always answers with the same
+sentence — whether the name matched, did not match, or matched somebody who has
+no address on their account. That is the point of the screen: an answer that
+varied with what it found would be a list of which accounts the site has,
+handed to anybody who asked for it.
+
+A match with an address is sent the theme's `password-reset` message, carrying
+a link to `/admin/reset?token=…`. The token is 256 random bits; the database
+keeps only its SHA-256, in a table beside the sessions, so a copy of
+`data/geekity.db` is not a stack of working links, and the token is never
+rendered into the page of the browser that asked for it. It lasts an hour and
+works once.
+
+Setting a password through the link holds it to the same rules every other door
+does, then closes everything else: the link that was used, every other reset
+that user had outstanding, and every session they were signed in on. The
+theme's `password-changed` message goes out afterwards, with no link back in,
+so a reset somebody did not ask for is something they hear about.
+
+Requests are rate limited by username and by address exactly as sign-ins are —
+same limits, same growing lockout, same `429` and `Retry-After` — on a throttle
+of its own. Sharing the login one would let a stranger lock somebody out of
+signing in by asking for their password to be reset over and over.
+
+Reset tokens live in the database, which is a cache: a restart, a
+`geekity rebuild` or a deleted `data/geekity.db` invalidates every link in
+flight, and the cost of that is a second click on Forgot password.
+
+With no mail provider or credential, `/admin/forgot` offers no form at all. It
+says the site cannot send email and points at
+[`geekity user add`](#creating-an-admin-from-the-command-line), which is how a
+site nobody can sign in to gets a fresh admin from a shell. Saving a credential
+under [Settings → Email](#email) turns the form on for the next visitor, with
+no restart.
 
 ### Security headers
 

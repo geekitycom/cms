@@ -20,9 +20,9 @@ themes/default/
     feeds.njk         macros for the feed links in <head>
     conversation.njk  the replies, likes and boosts under a post
   mail/
-    test.subject.njk  the subject of the Send test email message
-    test.txt.njk      its plain text body
-    test.html.njk     its HTML twin
+    test.*.njk              the Send test email message
+    password-reset.*.njk    the forgot-password link
+    password-changed.*.njk  the notice sent once a password has been set
   static/
     style.css    served at /theme/style.css
 ```
@@ -75,6 +75,14 @@ files:
 
 A message that has no `.txt.njk` anywhere on the search path is an error rather
 than an empty email, so a typo in a template name is reported instead of sent.
+
+The package ships three messages:
+
+| Name               | When it goes                        | What `data` carries                                    |
+| ------------------ | ----------------------------------- | ------------------------------------------------------ |
+| `test`             | Send test email, on Settings.       | Nothing.                                               |
+| `password-reset`   | Somebody asked to reset a password. | `username`, `resetUrl`, `expiresAt`, `expiresInHours`. |
+| `password-changed` | A reset link was used.              | `username`, `signedOut` (how many sessions ended).     |
 
 The context is `site` (that is `content/_data/site.json`), `baseUrl`, and
 whatever the feature that sent it passed as `data`. The `date`, `url` and

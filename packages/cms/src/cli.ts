@@ -8,7 +8,7 @@ import { Writable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 
 import { createUser, DuplicateUsernameError, migrateUsersToFile } from './admin/accounts.ts';
-import { credentialProblem } from './admin/credentials.ts';
+import { credentialProblem, emailProblem } from './admin/credentials.ts';
 import { openAdminStore } from './admin/store.ts';
 import type { AdminStore } from './admin/store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
@@ -33,6 +33,12 @@ export interface ParsedArgs {
    */
   password: string | undefined;
   /**
+   * The email address `user add` was given, if any. `undefined` is a user with
+   * no address, which is the ordinary case: an email is optional on a user and
+   * only buys password recovery and the notices TASK-55 sends.
+   */
+  email: string | undefined;
+  /**
    * Positional arguments after the command: the directory for `init`, the
    * subcommand and its arguments for `user`. Flags are never in here.
    */
@@ -48,7 +54,7 @@ Usage:
   geekity init <directory>
   geekity sync [--config <file>]
   geekity rebuild [--config <file>]
-  geekity user add <username> [--password <pw>] [--config <file>]
+  geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
 
 Commands:
   serve            Start the CMS (the default when no command is given).
@@ -67,6 +73,8 @@ Options:
                    echo, or read as one line when standard input is a pipe.
                    A password on the command line is visible in the process
                    list and in shell history, so prefer being asked.
+  --email <addr>   The new user's email address. Optional; it is what a
+                   forgotten password is recovered through.
   -h, --help       Show this help.
   -v, --version    Show the installed version.
 
@@ -80,14 +88,17 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let command: Command | undefined;
   let configPath: string | undefined;
   let password: string | undefined;
+  let email: string | undefined;
   const args: string[] = [];
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i] as string;
 
-    if (arg === '--help' || arg === '-h') return { command: 'help', configPath, password, args };
+    if (arg === '--help' || arg === '-h') {
+      return { command: 'help', configPath, password, email, args };
+    }
     if (arg === '--version' || arg === '-v') {
-      return { command: 'version', configPath, password, args };
+      return { command: 'version', configPath, password, email, args };
     }
 
     if (arg === '--config') {
@@ -127,6 +138,23 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       continue;
     }
 
+    // Read like --config rather than like --password: an email address never
+    // starts with a dash, so a value that does is a missing one.
+    if (arg === '--email') {
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith('-')) {
+        throw new Error('--email needs an address, for example --email ada@example.com');
+      }
+      email = value;
+      i += 1;
+      continue;
+    }
+
+    if (arg.startsWith('--email=')) {
+      email = arg.slice('--email='.length);
+      continue;
+    }
+
     // The first bare word is the command; everything bare after it belongs to
     // that command, so `geekity user add ada` reaches `user` with `add ada`.
     if (command === undefined) {
@@ -140,7 +168,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     args.push(arg);
   }
 
-  return { command: command ?? 'serve', configPath, password, args };
+  return { command: command ?? 'serve', configPath, password, email, args };
 }
 
 function isCommand(value: string): value is Command {
@@ -263,7 +291,7 @@ function isModuleNotFound(error: unknown, candidate: string): boolean {
 
 /** Run one command. Resolves with the exit code the process should use. */
 async function main(argv: readonly string[]): Promise<number> {
-  const { command, configPath, password, args } = parseArgs(argv);
+  const { command, configPath, password, email, args } = parseArgs(argv);
 
   if (command === 'help') {
     process.stdout.write(USAGE);
@@ -276,7 +304,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
 
   if (command === 'init') return init(args);
-  if (command === 'user') return userCommand(args, configPath, password);
+  if (command === 'user') return userCommand(args, configPath, password, email);
   if (command === 'sync') return syncCommand(configPath);
   if (command === 'rebuild') return rebuildCommand(configPath);
 
@@ -489,6 +517,7 @@ async function userCommand(
   args: readonly string[],
   configPath: string | undefined,
   flagPassword: string | undefined,
+  flagEmail: string | undefined,
 ): Promise<number> {
   const subcommand = args[0];
   if (subcommand === undefined) {
@@ -505,7 +534,8 @@ async function userCommand(
 
   const password = flagPassword ?? (await readPassword({ prompt: `Password for ${username}: ` }));
 
-  const problem = credentialProblem(username, password);
+  const email = (flagEmail ?? '').trim();
+  const problem = credentialProblem(username, password) ?? emailProblem(email);
   if (problem !== undefined) {
     process.stderr.write(`${problem}\n`);
     return 1;
@@ -516,8 +546,12 @@ async function userCommand(
   migrateUsersToFile({ admin, dataDir: config.dataDir });
 
   try {
-    const user = await createUser({ dataDir: config.dataDir, username, password });
-    process.stdout.write(`Created admin user ${user.username}. Sign in at ${LOGIN_URL}.\n`);
+    const user = await createUser({ dataDir: config.dataDir, username, password, email });
+    process.stdout.write(
+      `Created admin user ${user.username}${
+        user.email === undefined ? '' : ` (${user.email})`
+      }. Sign in at ${LOGIN_URL}.\n`,
+    );
     return 0;
   } catch (error) {
     if (error instanceof DuplicateUsernameError) {

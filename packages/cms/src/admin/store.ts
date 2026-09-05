@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 import { databaseFile, openDatabase } from '../cache.ts';
@@ -68,6 +68,42 @@ export interface CreateSessionInput {
 
 /** How long a session id is, in bytes. 32 is the 256 bits doc-5 asks for. */
 export const SESSION_ID_BYTES = 32;
+
+/**
+ * One outstanding password reset: the right to set one user's password once,
+ * until it is used or it expires.
+ *
+ * The token is only ever in hand at the moment it is made, because the link is
+ * the only copy: the database keeps its SHA-256, so reading the table tells
+ * somebody that a reset was asked for and nothing more.
+ */
+export interface PasswordReset {
+  /** Whose password this sets. */
+  readonly userId: number;
+  /** When it was asked for, as an ISO 8601 instant. */
+  readonly createdAt: string;
+  /** When it stops working, as an ISO 8601 instant. */
+  readonly expiresAt: string;
+}
+
+/** A {@link PasswordReset} with the one thing the database never keeps. */
+export interface IssuedPasswordReset extends PasswordReset {
+  /**
+   * The token itself, 256 random bits hex encoded, handed back exactly once.
+   * It goes in the link and nowhere else.
+   */
+  readonly token: string;
+}
+
+/** What {@link AdminStore.createPasswordReset} is given. */
+export interface CreatePasswordResetInput {
+  /** Whose password the link will set. */
+  userId: number;
+  /** How long the link lasts, in seconds. */
+  lifetimeSeconds: number;
+  /** The clock, injectable so expiry is testable. Defaults to now. */
+  now?: Date | undefined;
+}
 
 /**
  * A remote actor that follows this site.
@@ -489,6 +525,30 @@ export interface AdminStore {
    */
   deleteSessionsForUser(userId: number, options?: { except?: string }): number;
   /**
+   * Issue a password reset link and hand back its token, which is the only
+   * time the token exists outside the link.
+   */
+  createPasswordReset(input: CreatePasswordResetInput): IssuedPasswordReset;
+  /**
+   * What a token entitles its holder to, or `undefined` when it entitles them
+   * to nothing: no such token, or one that has expired. An expired row is
+   * deleted on the way past, as an expired session's is.
+   */
+  getPasswordReset(token: string, now?: Date): PasswordReset | undefined;
+  /** Spend a token. Returns `false` when there was nothing to spend. */
+  deletePasswordReset(token: string): boolean;
+  /**
+   * Cancel every reset a user has outstanding, and say how many went.
+   *
+   * What a finished reset calls: the link that was used is spent, and so is
+   * every other one asked for in the meantime, because whoever set the
+   * password now owns the account and the others are only ways back in for
+   * somebody who does not.
+   */
+  deletePasswordResetsForUser(userId: number): number;
+  /** Delete every expired reset. Returns how many went. */
+  prunePasswordResets(now?: Date): number;
+  /**
    * The rows of the settings table an older version of this CMS wrote, or
    * `undefined` when the table is gone — which it is on every site that has
    * booted this version once.
@@ -757,6 +817,14 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     pruneSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
     readFlash: db.prepare('SELECT flash FROM sessions WHERE id = ?'),
     writeFlash: db.prepare('UPDATE sessions SET flash = ? WHERE id = ?'),
+    insertPasswordReset: db.prepare(`
+      INSERT INTO password_resets (token_hash, user_id, created_at, expires_at)
+      VALUES (?, ?, ?, ?)
+    `),
+    passwordResetByHash: db.prepare('SELECT * FROM password_resets WHERE token_hash = ?'),
+    deletePasswordReset: db.prepare('DELETE FROM password_resets WHERE token_hash = ?'),
+    deletePasswordResetsForUser: db.prepare('DELETE FROM password_resets WHERE user_id = ?'),
+    prunePasswordResets: db.prepare('DELETE FROM password_resets WHERE expires_at <= ?'),
     getState: db.prepare('SELECT value FROM cms_state WHERE key = ?'),
     putState: db.prepare(`
       INSERT INTO cms_state (key, value, updated_at) VALUES (?, ?, ?)
@@ -1007,6 +1075,57 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       // `IS NOT` rather than `<>`, so a missing `except` compares against NULL
       // and spares nothing instead of matching nothing.
       return Number(statements.deleteSessionsForUser.run(userId, options.except ?? null).changes);
+    },
+
+    createPasswordReset(input) {
+      const now = input.now ?? new Date();
+      const token = randomToken();
+      const reset: IssuedPasswordReset = {
+        token,
+        userId: input.userId,
+        createdAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + input.lifetimeSeconds * 1000).toISOString(),
+      };
+
+      statements.insertPasswordReset.run(
+        hashToken(token),
+        reset.userId,
+        reset.createdAt,
+        reset.expiresAt,
+      );
+      return reset;
+    },
+
+    getPasswordReset(token, now = new Date()) {
+      const hash = hashToken(token);
+      const row = statements.passwordResetByHash.get(hash) as Record<string, unknown> | undefined;
+      if (row === undefined) return undefined;
+
+      const reset: PasswordReset = {
+        userId: Number(row['user_id']),
+        createdAt: String(row['created_at']),
+        expiresAt: String(row['expires_at']),
+      };
+
+      // The same rule the sessions follow: an expired row is deleted rather
+      // than ignored, so a clock that goes backwards cannot revive a link.
+      if (reset.expiresAt <= now.toISOString()) {
+        statements.deletePasswordReset.run(hash);
+        return undefined;
+      }
+      return reset;
+    },
+
+    deletePasswordReset(token) {
+      return statements.deletePasswordReset.run(hashToken(token)).changes > 0;
+    },
+
+    deletePasswordResetsForUser(userId) {
+      return Number(statements.deletePasswordResetsForUser.run(userId).changes);
+    },
+
+    prunePasswordResets(now = new Date()) {
+      return Number(statements.prunePasswordResets.run(now.toISOString()).changes);
     },
 
     countFollowers() {
@@ -1638,9 +1757,26 @@ function toSession(row: Record<string, unknown>): Session {
   };
 }
 
-/** 256 unguessable bits, hex encoded. Session ids and CSRF tokens are both this. */
+/**
+ * 256 unguessable bits, hex encoded. Session ids, CSRF tokens and password
+ * reset tokens are all this.
+ */
 function randomToken(): string {
   return randomBytes(SESSION_ID_BYTES).toString('hex');
+}
+
+/**
+ * A reset token as the database keeps it: its SHA-256, hex encoded.
+ *
+ * Plain SHA-256 rather than argon2 on purpose. What argon2 buys is time
+ * against somebody guessing a password people chose, and there is nothing to
+ * guess here: the token is 256 bits out of `randomBytes`, so the only way to
+ * hold a valid one is to have been sent it. What the hash is for is that a
+ * copy of `geekity.db` — a backup, a stray file — is not a stack of working
+ * reset links.
+ */
+function hashToken(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
 }
 
 /** Whether the database has a table by that name. */
@@ -2107,6 +2243,34 @@ const MIGRATIONS: readonly Migration[] = [
       );
 
       CREATE INDEX webmentions_sent_attempted_at ON webmentions_sent (attempted_at);
+    `,
+  },
+  {
+    // Password reset tokens (TASK-54). They sit beside the sessions, and for
+    // the same reason: a reset link is a second, shorter-lived way of proving
+    // you are somebody, and it is a cache — losing one costs the person
+    // nothing but a second click on Forgot password. So `data/users.json`
+    // stays the whole of what a site must back up, and a restart, a rebuild or
+    // a `geekity rebuild` invalidates every link in flight, which is the safe
+    // direction to fail in.
+    //
+    // The key is the token's SHA-256 rather than the token, so the database
+    // holds nothing a working link could be rebuilt from: somebody who reads
+    // this table — a backup, a stray copy of the file — learns that a reset
+    // was asked for and nothing else. It is a plain hash rather than argon2
+    // because the token is 256 random bits and there is no guess to slow down;
+    // what argon2 buys on a password it cannot buy here.
+    version: 16,
+    sql: `
+      CREATE TABLE password_resets (
+        token_hash TEXT PRIMARY KEY,
+        user_id    INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+
+      CREATE INDEX password_resets_expires_at ON password_resets (expires_at);
+      CREATE INDEX password_resets_user_id ON password_resets (user_id);
     `,
   },
 ];

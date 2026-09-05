@@ -19,6 +19,8 @@ export const PACKAGED_ADMIN_DIR: string = fileURLToPath(new URL('../../admin/', 
 export const ADMIN_TEMPLATES = {
   login: 'layouts/login.njk',
   setup: 'layouts/setup.njk',
+  forgot: 'layouts/forgot.njk',
+  reset: 'layouts/reset.njk',
   dashboard: 'layouts/dashboard.njk',
   placeholder: 'layouts/placeholder.njk',
   documentList: 'layouts/document-list.njk',

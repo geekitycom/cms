@@ -1,0 +1,46 @@
+{# /admin/forgot: ask for a link to set a new password.
+
+   The page has three states and one rule. The rule is that a request never
+   says whether the name matched: the answer below is the same sentence
+   whoever asked and whatever was found, so this form cannot be used to find
+   out which accounts a site has. #}
+{% extends "layouts/base.njk" %}
+
+{% block title %}Forgotten password{% endblock %}
+
+{% block content %}
+  <h1>Forgotten password</h1>
+
+  {% if not configured %}
+    {# No provider and no credential, so there is nothing to send a link with.
+       Saying so beats a form that quietly does nothing. #}
+    <p>This site cannot send email, so a password cannot be reset from here.</p>
+    <p>
+      Whoever runs the server can add an account from a shell with
+      <code>geekity user add &lt;username&gt;</code>, and sign in with that to
+      change anything else. Turning on a mail provider under
+      <strong>Settings &rarr; Email</strong> makes this page work.
+    </p>
+    <p><a href="{{ loginUrl }}">Back to the login form</a></p>
+  {% elif sent %}
+    <p>{{ answer }}</p>
+    <p><a href="{{ loginUrl }}">Back to the login form</a></p>
+  {% else %}
+    <p>Type your username or your email address, and a link to set a new password is sent to the address on your account.</p>
+
+    {% if error %}
+      <p class="error">{{ error }}</p>
+    {% endif %}
+
+    <form method="post" action="{{ forgotUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+      <label for="identifier">Username or email address</label>
+      <input id="identifier" name="{{ fields.identifier }}" type="text" autocomplete="username" required autofocus />
+
+      <button type="submit">Send a reset link</button>
+    </form>
+
+    <p class="admin-hint"><a href="{{ loginUrl }}">Back to the login form</a></p>
+  {% endif %}
+{% endblock %}

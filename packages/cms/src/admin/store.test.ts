@@ -152,6 +152,86 @@ describe('sessions', () => {
   });
 });
 
+describe('password reset tokens (AC #3)', () => {
+  it('hands back a token nobody could guess and stores only its hash', async () => {
+    const admin = await store();
+
+    const reset = admin.createPasswordReset({ userId: ADA, lifetimeSeconds: HOUR });
+
+    // 256 bits, hex encoded, exactly as a session id is.
+    assert.match(reset.token, /^[0-9a-f]{64}$/);
+    assert.equal(admin.getPasswordReset(reset.token)?.userId, ADA);
+
+    // The database never holds anything a link could be rebuilt from.
+    const db = new DatabaseSync(admin.file);
+    try {
+      const rows = db.prepare('SELECT * FROM password_resets').all();
+      assert.equal(rows.length, 1);
+      assert.equal(
+        JSON.stringify(rows[0]).includes(reset.token),
+        false,
+        'the token itself reached the database',
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it('is good once: using it takes it away', async () => {
+    const admin = await store();
+    const reset = admin.createPasswordReset({ userId: ADA, lifetimeSeconds: HOUR });
+
+    assert.equal(admin.deletePasswordReset(reset.token), true);
+    assert.equal(admin.getPasswordReset(reset.token), undefined);
+    assert.equal(admin.deletePasswordReset(reset.token), false);
+  });
+
+  it('stops being valid an hour out, and the row goes with it', async () => {
+    const admin = await store();
+    const now = new Date('2026-09-04T12:00:00Z');
+
+    const reset = admin.createPasswordReset({ userId: ADA, lifetimeSeconds: HOUR, now });
+    assert.equal(reset.expiresAt, '2026-09-04T13:00:00.000Z');
+
+    const stillGood = new Date('2026-09-04T12:59:59Z');
+    assert.equal(admin.getPasswordReset(reset.token, stillGood)?.userId, ADA);
+
+    const past = new Date('2026-09-04T13:00:01Z');
+    assert.equal(admin.getPasswordReset(reset.token, past), undefined);
+    assert.equal(
+      admin.getPasswordReset(reset.token, stillGood),
+      undefined,
+      'the row was pruned, so a clock that goes backwards cannot revive it',
+    );
+  });
+
+  it('drops every token a user has, which is what a finished reset does', async () => {
+    const admin = await store();
+    const one = admin.createPasswordReset({ userId: ADA, lifetimeSeconds: HOUR });
+    const two = admin.createPasswordReset({ userId: ADA, lifetimeSeconds: HOUR });
+    const hers = admin.createPasswordReset({ userId: GRACE, lifetimeSeconds: HOUR });
+
+    assert.equal(admin.deletePasswordResetsForUser(ADA), 2);
+
+    assert.equal(admin.getPasswordReset(one.token), undefined);
+    assert.equal(admin.getPasswordReset(two.token), undefined);
+    assert.equal(admin.getPasswordReset(hers.token)?.userId, GRACE);
+  });
+
+  it('sweeps every expired token at once', async () => {
+    const admin = await store();
+    const now = new Date('2026-09-04T12:00:00Z');
+
+    const short = admin.createPasswordReset({ userId: ADA, lifetimeSeconds: 60, now });
+    const long = admin.createPasswordReset({ userId: ADA, lifetimeSeconds: HOUR, now });
+
+    const later = new Date('2026-09-04T12:30:00Z');
+    assert.equal(admin.prunePasswordResets(later), 1);
+    assert.equal(admin.getPasswordReset(short.token, later), undefined);
+    assert.equal(admin.getPasswordReset(long.token, later)?.userId, ADA);
+  });
+});
+
 describe('flash messages', () => {
   it('hands a queued message back once and then forgets it', async () => {
     const admin = await store();

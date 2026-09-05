@@ -11,6 +11,7 @@
     <thead>
       <tr>
         <th scope="col">Username</th>
+        <th scope="col">Email</th>
         <th scope="col">Created</th>
         <th scope="col">Actions</th>
       </tr>
@@ -19,6 +20,18 @@
       {% for entry in users %}
         <tr>
           <td>{{ entry.username }}{% if entry.you %} <span class="admin-status">(you)</span>{% endif %}</td>
+          <td>
+            {# Any row, not only your own: there is one role, so everybody here
+               already has every power, and TASK-55's notices need somewhere to
+               go for each of them. #}
+            <form class="admin-inline" method="post" action="{{ userEmailUrl }}">
+              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+              <input type="hidden" name="{{ fields.userId }}" value="{{ entry.id }}" />
+              <label class="admin-visually-hidden" for="email-{{ entry.id }}">Email for {{ entry.username }}</label>
+              <input id="email-{{ entry.id }}" name="{{ fields.email }}" type="email" autocomplete="email" value="{{ entry.email }}" placeholder="none" />
+              <button type="submit">Save</button>
+            </form>
+          </td>
           <td>{{ entry.createdAt | date('html') }}</td>
           <td class="admin-actions">
             {% if entry.deletable %}
@@ -34,18 +47,30 @@
     </tbody>
   </table>
 
+  <p class="admin-hint">
+    {% if mailConfigured %}
+      An email address is optional. It is what a forgotten password is recovered through, and it is never shown on the public site.
+    {% else %}
+      An email address is optional, and this site sends no mail yet, so nothing will be sent to one. Choose a provider on <a href="{{ adminUrl }}/settings">Settings</a> to turn password recovery on.
+    {% endif %}
+  </p>
+
   <form class="admin-settings" method="post" action="{{ usersUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
 
     <h2>Add a user</h2>
 
-    {% if addProblems.username or addProblems.password %}
+    {% if addProblems.username or addProblems.password or addProblems.email %}
       <p class="admin-error">Nobody was added. Fix the fields marked below and try again.</p>
     {% endif %}
 
     <label for="add-username">Username</label>
     <input id="add-username" name="{{ fields.username }}" type="text" value="{{ addForm.username }}" required />
     {% if addProblems.username %}<p class="admin-field-error">{{ addProblems.username }}</p>{% endif %}
+
+    <label for="add-email">Email <span class="admin-status">(optional)</span></label>
+    <input id="add-email" name="{{ fields.email }}" type="email" autocomplete="email" value="{{ addForm.email }}" />
+    {% if addProblems.email %}<p class="admin-field-error">{{ addProblems.email }}</p>{% endif %}
 
     <label for="add-password">Password</label>
     <input id="add-password" name="{{ fields.password }}" type="password" autocomplete="new-password" />

@@ -88,6 +88,7 @@ describe('parseArgs', () => {
       command: 'serve',
       configPath: undefined,
       password: undefined,
+      email: undefined,
       args: [],
     });
   });
@@ -97,6 +98,7 @@ describe('parseArgs', () => {
       command: 'serve',
       configPath: undefined,
       password: undefined,
+      email: undefined,
       args: [],
     });
   });
@@ -106,6 +108,7 @@ describe('parseArgs', () => {
       command: 'serve',
       configPath: 'site.config.ts',
       password: undefined,
+      email: undefined,
       args: [],
     });
   });
@@ -115,6 +118,7 @@ describe('parseArgs', () => {
       command: 'serve',
       configPath: 'site.config.ts',
       password: undefined,
+      email: undefined,
       args: [],
     });
   });
@@ -139,6 +143,7 @@ describe('parseArgs', () => {
       command: 'init',
       configPath: undefined,
       password: undefined,
+      email: undefined,
       args: ['my-site'],
     });
   });
@@ -148,6 +153,7 @@ describe('parseArgs', () => {
       command: 'sync',
       configPath: 'site.config.ts',
       password: undefined,
+      email: undefined,
       args: [],
     });
   });
@@ -157,6 +163,7 @@ describe('parseArgs', () => {
       command: 'rebuild',
       configPath: undefined,
       password: undefined,
+      email: undefined,
       args: [],
     });
   });
@@ -166,6 +173,7 @@ describe('parseArgs', () => {
       command: 'user',
       configPath: undefined,
       password: undefined,
+      email: undefined,
       args: ['add', 'ada'],
     });
   });
@@ -175,6 +183,7 @@ describe('parseArgs', () => {
       command: 'user',
       configPath: undefined,
       password: 'hunter22',
+      email: undefined,
       args: ['add', 'ada'],
     });
   });
@@ -189,6 +198,25 @@ describe('parseArgs', () => {
 
   it('rejects --password with nothing after it', () => {
     assert.throws(() => parseArgs(['user', 'add', 'ada', '--password']), /--password/);
+  });
+
+  it('reads an email given as a flag, either way of spelling it', () => {
+    assert.equal(
+      parseArgs(['user', 'add', 'ada', '--email', 'ada@example.com']).email,
+      'ada@example.com',
+    );
+    assert.equal(
+      parseArgs(['user', 'add', 'ada', '--email=ada@example.com']).email,
+      'ada@example.com',
+    );
+    assert.deepEqual(parseArgs(['user', 'add', 'ada', '--email', 'ada@example.com']).args, [
+      'add',
+      'ada',
+    ]);
+  });
+
+  it('rejects --email with nothing after it', () => {
+    assert.throws(() => parseArgs(['user', 'add', 'ada', '--email']), /--email/);
   });
 
   it('keeps the flags of the command it is running out of its positional arguments', () => {
@@ -616,6 +644,31 @@ describe('geekity user add', () => {
     } finally {
       await cms.close();
     }
+  });
+
+  it('stores --email on the user it creates (AC #1)', async () => {
+    const directory = await temporaryDir('geekity-user-email-');
+
+    const run = await runCli(
+      ['user', 'add', 'ada', '--password', 'hunter22', '--email', 'ada@example.com'],
+      directory,
+    );
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.equal(listUsers(path.join(directory, 'data'))[0]?.email, 'ada@example.com');
+  });
+
+  it('refuses an --email that is not an address and adds nobody', async () => {
+    const directory = await temporaryDir('geekity-user-bad-email-');
+
+    const run = await runCli(
+      ['user', 'add', 'ada', '--password', 'hunter22', '--email', 'not-an-address'],
+      directory,
+    );
+
+    assert.equal(run.code, 1);
+    assert.match(run.stderr, /email address/i);
+    assert.deepEqual(usernames(directory), []);
   });
 
   it('reads the password from stdin when the flag is absent', async () => {

@@ -13,7 +13,9 @@ import {
   DuplicateUsernameError,
   findUser,
   findUserById,
+  findUserByIdentifier,
   listUsers,
+  setUserEmail,
   setUserPassword,
   usersFile,
   verifyUserPassword,
@@ -130,6 +132,68 @@ describe('a name that is taken', () => {
     assert.equal(other.username, 'Ada');
     assert.equal(countUsers(dataDir), 2);
     assert.equal(verifyUserPassword(dataDir, 'ada', 'a password of her own'), undefined);
+  });
+});
+
+describe('a user with an email address (AC #1)', () => {
+  it('stores it, lists it, and leaves it off a user who has none', async () => {
+    const dataDir = await temporaryDir();
+
+    const ada = await createUser({
+      dataDir,
+      username: 'ada',
+      password: 'correct horse',
+      email: 'ada@example.com',
+    });
+    const grace = await createUser({ dataDir, username: 'grace', password: 'a password of hers' });
+
+    assert.equal(ada.email, 'ada@example.com');
+    assert.equal(grace.email, undefined);
+    assert.equal(findUserById(dataDir, ada.id)?.email, 'ada@example.com');
+
+    const file = JSON.parse(await readFile(usersFile(dataDir), 'utf8')) as {
+      users: Record<string, unknown>[];
+    };
+    assert.equal(file.users[0]?.['email'], 'ada@example.com');
+    assert.equal(
+      Object.hasOwn(file.users[1] ?? {}, 'email'),
+      false,
+      'a user with no email has no key for one',
+    );
+  });
+
+  it('changes and clears it without touching anything else', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    const hash = findUser(dataDir, 'ada')?.passwordHash;
+
+    assert.equal(await setUserEmail({ dataDir, userId: ada.id, email: 'ada@example.com' }), true);
+    assert.equal(findUserById(dataDir, ada.id)?.email, 'ada@example.com');
+
+    assert.equal(await setUserEmail({ dataDir, userId: ada.id, email: '' }), true);
+    assert.equal(findUserById(dataDir, ada.id)?.email, undefined);
+    assert.equal(findUser(dataDir, 'ada')?.passwordHash, hash, 'the password is untouched');
+
+    assert.equal(await setUserEmail({ dataDir, userId: 404, email: 'nobody@example.com' }), false);
+  });
+
+  it('is found by username exactly and by email whatever the case', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({
+      dataDir,
+      username: 'ada',
+      password: 'correct horse',
+      email: 'Ada@Example.com',
+    });
+    await createUser({ dataDir, username: 'grace', password: 'a password of hers' });
+
+    assert.equal(findUserByIdentifier(dataDir, 'ada')?.id, ada.id);
+    assert.equal(findUserByIdentifier(dataDir, 'ADA'), undefined, 'a username is compared exactly');
+    assert.equal(findUserByIdentifier(dataDir, 'ada@example.com')?.id, ada.id);
+    assert.equal(findUserByIdentifier(dataDir, 'ADA@EXAMPLE.COM')?.id, ada.id);
+    assert.equal(findUserByIdentifier(dataDir, 'grace')?.email, undefined);
+    assert.equal(findUserByIdentifier(dataDir, 'nobody@example.com'), undefined);
+    assert.equal(findUserByIdentifier(dataDir, ''), undefined, 'the empty string matches nobody');
   });
 });
 
