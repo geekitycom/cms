@@ -23,6 +23,8 @@ import type {
   SyncResult,
 } from './content/index.ts';
 import type { GeekityEnv } from './env.ts';
+import { createMailService } from './mail/index.ts';
+import type { MailService } from './mail/index.ts';
 import {
   assertActorKeysUsable,
   createDeliveryService,
@@ -91,6 +93,14 @@ export {
   AKISMET_FIELDS,
   AKISMET_PATH,
   AKISMET_REMOVE,
+  EMAIL_PATTERN,
+  MAIL_FIELDS,
+  MAIL_PATH,
+  MAIL_REMOVE,
+  MAIL_TEST_FIELDS,
+  MAIL_TEST_PATH,
+  MAIL_TEST_TEMPLATE,
+  mailPanel,
   ARGON2_PARAMETERS,
   AVATAR_FIELDS,
   AVATAR_PATH,
@@ -346,6 +356,7 @@ export type {
   DocumentChangeHook,
   FederationOverrides,
   GeekityConfig,
+  MailOverrides,
   ResolvedConfig,
   ResolveConfigContext,
 } from './config.ts';
@@ -540,6 +551,53 @@ export type {
 } from './content/index.ts';
 
 export type { GeekityEnv } from './env.ts';
+
+// Email: the one seam a mail service plugs into, the two providers the package
+// ships, the in-memory one a test observes, and the service every feature that
+// emails goes through.
+export {
+  BREVO_ENDPOINT,
+  BREVO_TIMEOUT_MS,
+  createBrevoProvider,
+  createMailService,
+  createMailTemplates,
+  createMemoryMailProvider,
+  createSmtpProvider,
+  DEFAULT_MAIL_ATTEMPTS,
+  defaultMailBackoffMs,
+  MAIL_CREDENTIALS_FILE,
+  MAIL_PROVIDERS,
+  mailCredentialsPath,
+  mailTemplateFiles,
+  readMailCredentials,
+  removeMailCredentials,
+  SMTP_TIMEOUT_MS,
+  writeMailCredentials,
+} from './mail/index.ts';
+export type {
+  BrevoCredential,
+  BrevoProviderOptions,
+  CreateMailServiceOptions,
+  CreateMailTemplatesOptions,
+  MailAddress,
+  MailCredentials,
+  MailDelivery,
+  MailLogger,
+  MailProvider,
+  MailProviderName,
+  MailRecipient,
+  MailResult,
+  MailService,
+  MailTemplateFiles,
+  MailTemplates,
+  MemoryMailProvider,
+  OutgoingMail,
+  RawMail,
+  RenderedMail,
+  SmtpCredential,
+  SmtpProviderOptions,
+  TemplateMail,
+} from './mail/index.ts';
 
 export {
   acceptedRelays,
@@ -944,6 +1002,16 @@ export interface Cms {
    */
   readonly notifier: FeedNotifier;
   /**
+   * The site's outgoing email (TASK-53): what the settings screen's Send test
+   * email button uses, and what the password resets, moderation notices and
+   * contact messages built on it will.
+   *
+   * A site with no mail configuration still has one. Its `send` logs that the
+   * message was not sent and resolves successfully, so a feature that emails
+   * never has to ask whether the site can.
+   */
+  readonly mail: MailService;
+  /**
    * The publisher of scheduled posts: what holds a future-dated post back and
    * releases it when its date arrives.
    *
@@ -1167,6 +1235,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const notifier = createFeedNotifier({ config: resolved });
   content.events.on('change', (change) => notifier.handle(change));
 
+  // Email. Built whether or not the site has a provider or a credential, for
+  // the reason the Akismet checker is: the settings and `data/mail.json` are
+  // read per send, so a key pasted into the settings screen sends the next
+  // message and one removed stops the message after it, neither needing a
+  // restart. With nothing configured, sending is a line in the log.
+  const mail = createMailService({ config: resolved, ...resolved.mail });
+
   // A post whose date is in the future is held back (TASK-44), and nothing
   // watches a clock: this is what notices that one has come due and reports it
   // as the publish it is, so delivery, the notifier and a site's `onPublish`
@@ -1204,6 +1279,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('delivery', delivery);
     c.set('relays', relays);
     c.set('webmentions', webmentions);
+    c.set('mail', mail);
     await next();
   });
 
@@ -1260,6 +1336,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     relays,
     webmentions,
     notifier,
+    mail,
     scheduler,
     events: content.events,
 
@@ -1311,6 +1388,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       await relays.settled();
       await webmentions.settled();
       await notifier.settled();
+      await mail.settled();
 
       if (running !== undefined) {
         await new Promise<void>((resolve, reject) => {

@@ -34,6 +34,7 @@ const DEFAULT_FORM: Record<string, string> = {
   comments: '1',
   comments_close_after_days: '14',
   notify_server: 'https://rpc.rsscloud.io',
+  mail_provider: 'none',
 };
 
 /** Submit the settings form, filling in whatever the caller did not name. */
@@ -166,6 +167,12 @@ describe('content/_data/site.json', () => {
       webmentionsSend: false,
       webmentionsReceive: false,
       notifyServer: 'https://rpc.rsscloud.io',
+      // The mail settings the file carries. The key and the SMTP password are
+      // not among them: those are credentials and live in `data/mail.json`.
+      mailProvider: 'none',
+      mailFromName: '',
+      mailFromAddress: '',
+      mailReplyTo: '',
       relays: [],
       navigation: [],
       taxonomyRedirects: [],

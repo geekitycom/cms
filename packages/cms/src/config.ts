@@ -7,6 +7,8 @@ import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './content/media.ts';
 import { systemClock } from './content/store.ts';
 import type { Clock } from './content/store.ts';
 import type { DocumentChange } from './content/sync.ts';
+import type { MailProvider } from './mail/provider.ts';
+import type { MailLogger } from './mail/service.ts';
 
 /**
  * Something a site wants to happen when the index changes.
@@ -52,6 +54,37 @@ export interface FederationOverrides {
    * network. Tests that federate two make-believe hosts turn it on.
    */
   allowPrivateAddress?: boolean | undefined;
+}
+
+/**
+ * The mail pieces a site may swap (TASK-53).
+ *
+ * Everything here has a default that is right for a personal blog: the
+ * provider comes from the settings screen and `data/mail.json`, a refused
+ * message is tried three times with a growing wait, and attempts go to the
+ * console. A site names one of these when it has outgrown that, and a test
+ * names them to read back the mail and to not wait for the backoff.
+ */
+export interface MailOverrides {
+  /**
+   * What carries the site's email.
+   *
+   * Naming one wins outright over the provider the settings screen chose and
+   * the credential in `data/mail.json`, exactly as
+   * {@link GeekityConfig.commentChecker} wins over the Akismet key: a site
+   * that wrote a provider meant it. `createMemoryMailProvider()` is what a
+   * test names here to read back the mail a feature would have sent.
+   */
+  provider?: MailProvider | undefined;
+  /** How many times one message is tried. Defaults to three. */
+  attempts?: number | undefined;
+  /**
+   * How long to wait before attempt `n + 1`, in milliseconds. Defaults to two
+   * seconds, then eight, then eighteen. A test hands in `() => 0`.
+   */
+  backoffMs?: ((attempt: number) => number) | undefined;
+  /** Where attempts are logged. Defaults to `console`. */
+  logger?: MailLogger | undefined;
 }
 
 /**
@@ -180,6 +213,11 @@ export interface GeekityConfig {
    */
   commentChecker?: CommentChecker;
   /**
+   * How the site sends email (TASK-53). Every field has a default; see
+   * {@link MailOverrides}.
+   */
+  mail?: MailOverrides;
+  /**
    * What the CMS reads the time from.
    *
    * A post's date decides whether it is public yet (TASK-44), so the index and
@@ -240,6 +278,8 @@ export interface ResolvedConfig {
    * `data/akismet.json` that one sends nothing anywhere.
    */
   commentChecker: CommentChecker | undefined;
+  /** Mail overrides, empty when the site named none. */
+  mail: MailOverrides;
   /** The clock the index and the scheduler read. */
   now: Clock;
   /** Federation stores and guards, empty when the site named none. */
@@ -362,6 +402,7 @@ export function resolveConfig(
     onDocumentChange: config.onDocumentChange,
     onPublish: config.onPublish,
     commentChecker: config.commentChecker,
+    mail: config.mail ?? {},
     now: config.now ?? systemClock,
     federation: config.federation ?? {},
   };

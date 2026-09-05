@@ -1,0 +1,14 @@
+{# The HTML twin of the test message. Deliberately plain: inline styles and a
+   single column are what survives the widest range of mail readers, and a
+   message this simple has nothing to gain from more. #}
+<p>This is a test message from <strong>{{ site.title }}</strong>.</p>
+
+<p>
+  If you are reading it, <a href="{{ baseUrl }}">{{ baseUrl }}</a> can send
+  email, and the password resets, moderation notices and contact messages that
+  go through the same service will arrive as well.
+</p>
+
+<p>Nothing was sent to anybody else, and nothing about this message was stored.</p>
+
+<p>&mdash; {{ site.title }}</p>

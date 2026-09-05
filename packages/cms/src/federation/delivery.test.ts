@@ -955,6 +955,7 @@ describe('the site’s own profile', () => {
       category_base: 'category',
       comments: '1',
       comments_close_after_days: '14',
+      mail_provider: 'none',
     };
 
     assert.equal(
