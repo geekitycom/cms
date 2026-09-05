@@ -1,0 +1,24 @@
+{# The HTML twin of a contact message. Deliberately plain: a single column and
+   almost no styling is what survives the widest range of mail readers. The
+   message itself is printed rather than rendered — it is plain text, and
+   nothing a stranger typed is turned into markup here. #}
+<p>
+  <strong>{{ from.name }}</strong> &lt;<a href="mailto:{{ from.email }}">{{ from.email }}</a>&gt;
+  wrote to you from <a href="{{ page.url }}">{{ page.title }}</a>.
+</p>
+
+<p>
+  <span>{{ message.received }}</span>
+  {% if message.subject %}<br /><strong>{{ message.subject }}</strong>{% endif %}
+</p>
+
+<blockquote>
+  <p style="white-space: pre-wrap;">{{ message.text }}</p>
+</blockquote>
+
+<p>
+  Reply to this message and it goes straight back to {{ from.email }}.
+  Every message is kept at <a href="{{ messagesUrl }}">{{ messagesUrl }}</a>.
+</p>
+
+<p>&mdash; {{ site.title }}</p>

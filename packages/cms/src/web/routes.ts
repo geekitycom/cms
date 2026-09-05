@@ -21,6 +21,8 @@ import {
 } from './assets.ts';
 import { COMMENT_NOTICE_PARAM, COMMENT_REPLY_PARAM } from '../comments/form.ts';
 import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments/routes.ts';
+import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
+import { mountContact } from '../contact/routes.ts';
 import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
 import { mountNotificationLinks } from '../notifications/routes.ts';
 import { commentCounts, postComments, siteComments } from './comments.ts';
@@ -85,6 +87,10 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // path of the CMS's own, so no permalink can ever shadow it and the route
   // table does not grow with the site.
   mountComments(app);
+
+  // And where a contact form's message is sent (TASK-56): the same prefix
+  // again, so the page a form is on can be permalinked anywhere.
+  mountContact(app);
 
   // And where a webmention is sent (TASK-51), for the same reason and under
   // the same prefix.
@@ -338,7 +344,22 @@ function commentNotice(c: Context<GeekityEnv>, document: Document): Record<strin
       document,
       id: c.req.query(COMMENT_REPLY_PARAM),
     }),
+    // And the thank-you after a contact form was sent, which travels the same
+    // way for the same reason (TASK-56).
+    ...contactNotice(c),
   };
+}
+
+/**
+ * The thank-you a contact form's redirect landed on, if the query names one.
+ *
+ * On the context rather than in the form's own state because the redirect is
+ * what makes a refresh harmless: the page is drawn fresh, and the query is the
+ * only thing that says a message went.
+ */
+function contactNotice(c: Context<GeekityEnv>): Record<string, unknown> {
+  const notice = contactNoticeFor(c.req.query(CONTACT_NOTICE_PARAM));
+  return notice === undefined ? {} : { contactNotice: notice };
 }
 
 /** The representation an `Accept` header asked for, or `undefined` for a 406. */

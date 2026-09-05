@@ -133,6 +133,21 @@
         <p class="admin-hint">Puts this {{ kind.singular }} in the site header, after the items on the settings screen. A lower order comes first; leave it empty and it sorts by title after the ordered ones.</p>
       {% endif %}
 
+      {% if kind.contactable %}
+        {# The page offers a contact form under its content (TASK-56). Where a
+           message goes is the contact address on the Settings screen; it is
+           never on this page or in its HTML. #}
+        <p class="admin-check">
+          <input id="editor-contact" name="contact" type="checkbox" value="1"{% if form.contact %} checked{% endif %} />
+          <label for="editor-contact">Contact form</label>
+        </p>
+        <p class="admin-hint">
+          Writes <code>contact: true</code> into the front matter and puts a name, email, subject
+          and message form under this {{ kind.singular }}. Messages arrive on the Messages screen
+          and are emailed to the contact address on Settings.
+        </p>
+      {% endif %}
+
       <p class="admin-editor-buttons">
         {% for button in actions %}
           <button type="submit" name="action" value="{{ button.value }}">{{ button.label }}</button>

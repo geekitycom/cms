@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-05 02:46'
+updated_date: '2026-09-05 03:14'
 ---
 # Admin UI
 
@@ -21,13 +21,14 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 | `/admin/pages`, `/admin/pages/new`, `/admin/pages/:slug` | same as posts, without date prefix or tags |
 | `/admin/tags`, `/admin/categories` | every term in use with its post and file counts; rename, merge, delete |
 | `/admin/comments` | pending, approved and spam, with approve, spam, delete and reply on every row |
-| `/admin/settings` | site title, tagline, base URL, timezone, posts per page, comments on/off and closing window, actor handle and type, the Akismet key, the mail provider and its credential |
+| `/admin/messages` | what the contact form on a page collected: read, mark read, delete |
+| `/admin/settings` | site title, tagline, base URL, timezone, posts per page, comments on/off and closing window, actor handle and type, the Akismet key, the mail provider and its credential, the contact address |
 | `/admin/users` | list, add, set each user's email and which notices go to it, change your own password (single role: admin) |
 | `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
 
 ## Editor
 
-- Fields: title, slug (auto from title until touched), permalink preview, date, tags (comma separated), description, draft checkbox, comments (follow the site settings / open / closed), body.
+- Fields: title, slug (auto from title until touched), permalink preview, date, tags (comma separated), description, draft checkbox, comments (follow the site settings / open / closed), body. A page also carries **Show in navigation** with its menu order, and **Contact form**, which writes `contact: true` and puts a contact form under the page.
 - Body is a plain `<textarea>` enhanced with CodeMirror 6 in markdown mode. A preview tab posts the body to `/admin/preview` and shows rendered HTML in the theme's post template.
 - Save writes the file (see doc-1 sync model). The form carries the file hash it was loaded with; a mismatch on save returns the form with a warning and both versions.
 - Buttons: Save draft, Publish, Update, Move to trash, View.
@@ -40,11 +41,21 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 - Spam is kept rather than deleted, so a mistake can be undone and so a spam checker can be told it was wrong. Marking something spam calls the checker's `reportSpam`; letting something out of the spam list calls `reportHam`. With an Akismet key stored, those are `submit-spam` and `submit-ham`.
 - Every action rewrites the comment's file under `content/_data/comments/` and the index inside the same step. The file is the comment (decision-9); this screen only ever moves it. The whole format, the closing rules and the checker seam are in doc-6.
 
+## Messages
+
+- `/admin/messages` is the contact form's inbox: two lists, **Inbox** and **Spam**, with the count beside each, opening on the Inbox. The dashboard carries the number unread and links here.
+- Every row shows who wrote, **their email address** (this screen and the Comments screen are the only two that ever show one), the subject, the message as plain text, the page the form was on, when it arrived, and a short form of the salted address hash so a run of submissions from one machine is visible.
+- Three actions per row: **Reply**, which is a `mailto:` with `Re:` already on the subject; **Mark read**, which toggles back to Mark unread; and **Delete**, which deletes the file.
+- A message is one JSON file under `data/contact/`, written **before** anything is emailed, so a provider that is down costs a notification rather than the message. There is no SQLite index over them: the screen reads the directory to sort it anyway, and a second copy of the truth would only be a second thing to keep true. They are under `data/` rather than `content/` because they carry the sender's address and were never meant to be published.
+- A message a spam checker called spam is kept, on the Spam list, and is not emailed on: a false positive on a contact form is somebody's message vanishing, which is worse than a list to glance at. One it said to discard, and one that filled the honeypot, was never stored at all.
+- **Without mail.** Submissions are still stored and still listed here. This screen is the notification, exactly as `/admin/comments` was before there was any email.
+
 ## Settings
 
 - Every setting is a field of one form that rewrites `content/_data/site.json` (decision-9), with two exceptions: the avatar, which is an image, and the Akismet key, which is a credential. Both are their own pair of forms — save and remove — because neither can travel in that body, and because a rejected one must not lose an edit to the title.
 - **Spam checking.** The Akismet key lives in `data/akismet.json` at mode `0600` rather than in `site.json`, which is public and in git. Saving one checks it with Akismet's `verify-key` first; the panel then says connected, "does not recognise this key", "could not be reached", or not connected, and shows the last four characters rather than the key. Remove key turns Akismet off. See doc-6.
 - **Email.** How the site sends mail is three settings on the main form — `mailProvider` (`none`, `brevo` or `smtp`), the From name and address, and the reply-to — and one credential below it. The Brevo API key and the SMTP host, port, TLS flag, user and password live in `data/mail.json` at mode `0600`, never in `site.json`, and are its own pair of forms for the reason the Akismet key is. Neither secret is printed back: the panel shows the last four characters of the key and the non-secret half of the SMTP connection, and a blank secret keeps the stored one. **Send test email** takes an address and sends the theme's `test` message through the whole chain, reporting the provider's own answer and its message id on the flash. With no configuration, nothing is sent and every feature that emails still succeeds. See the Email section of the package README.
+- **The contact address.** `contactEmail`, on the same form under Email, is where a message from a page's contact form is sent, with reply-to set to whoever wrote it. Empty falls back to the first admin with an email address, by username, so a fresh site with a mail credential takes messages without anybody visiting the field. It is read when a message arrives and is never put on a render context, so it cannot appear in the HTML of the page the form is on however a theme is written.
 
 ## Auth
 
@@ -67,6 +78,7 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 - **New comments**, the one event so far. A comment or a webmention entering the moderation queue emails every user with an address who has not turned it off. Not a comment Akismet filed as spam, and not one it said to discard: the notice is about what is waiting for a person. A webmention re-sent by a page somebody edited sends nothing either — only the first storing of one is news.
 - **The one-click links.** The message carries approve, spam and delete. Each is `/_geekity/moderate?action=…&token=…`, has no session behind it, and lands on a page with a single button; only the button acts. That is not politeness — mail readers and corporate link scanners fetch the URLs in a message as a matter of course, and a link that moderated on being opened would be a mail gateway silently deleting the site's comments. The token is an HMAC-signed claim rather than a stored row, taken with a secret in `data/notification-secret`, so a link in an inbox goes on working across a `geekity rebuild`; it is bound to one action on one comment, lasts a week, and is spent against the `spent_tokens` table the first time it is used. This and the buttons on `/admin/comments` both go through the same `moderateComment`, so the two doors cannot disagree about what an action does or about when the spam checker is told a human disagreed with it.
 - **Reply notices** go to commenters rather than to users; doc-6 has them.
+- **Contact messages** are not part of this switchboard. They go to one address — the `contactEmail` setting, or the first admin with one — rather than to everybody who wants a notice, because a contact form is a site's inbox rather than an event people subscribe to.
 - **Without mail.** Nothing is sent, no signing secret is ever minted, and every path still works. `/admin/comments` is the notification it was before.
 
 ## Out of scope for phase one

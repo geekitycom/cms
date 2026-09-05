@@ -10,4 +10,9 @@
     {{ content | safe }}
   </div>
 </article>
+
+{# Only a page whose front matter says `contact: true` has one (TASK-56). #}
+{% if contactForm %}
+{% include "partials/contact-form.njk" %}
+{% endif %}
 {% endblock %}

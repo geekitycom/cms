@@ -1,0 +1,5 @@
+{# The subject of a message from the contact form. One line.
+
+   The sender's own subject when they gave one, because that is what the person
+   reading their mail wants to see in a list; their name when they did not. #}
+{% if message.subject %}{{ message.subject }}{% else %}A message from {{ from.name }}{% endif %}

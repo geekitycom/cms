@@ -260,7 +260,10 @@ function checkFields(
   options: AkismetCheckerOptions,
 ): URLSearchParams {
   const { comment } = submission;
-  const webmention = comment.source === 'webmention';
+  // A webmention is a page linking here rather than a form somebody filled in,
+  // so it has no honeypot to name; a contact message is a form like a
+  // comment's, so it does.
+  const formless = (submission.type ?? comment.source) === 'webmention';
 
   return fields({
     api_key: key,
@@ -271,18 +274,18 @@ function checkFields(
     user_agent: submission.userAgent,
     referrer: submission.referrer,
     permalink: submission.post.url,
-    // A webmention is a page linking here rather than a form somebody filled
-    // in, and Akismet takes a type it does not know as a type of its own.
-    comment_type: webmention ? 'webmention' : 'comment',
+    // What the caller says this is, or what the comment says it is: a
+    // webmention is a page linking here rather than a form somebody filled in,
+    // and Akismet takes a type it does not know as a type of its own.
+    comment_type: submission.type ?? (comment.source === 'webmention' ? 'webmention' : 'comment'),
     comment_author: comment.author.name,
     comment_author_email: comment.author.email ?? undefined,
     comment_author_url: comment.author.url ?? undefined,
     comment_content: comment.content.markdown,
     comment_date_gmt: comment.submitted,
     // Naming the honeypot lets Akismet see that a submission left it empty,
-    // which is one more thing it knows about a comment it is judging. A
-    // webmention went through no form, so there is nothing to name.
-    honeypot_field_name: webmention ? undefined : COMMENT_FIELDS.trap,
+    // which is one more thing it knows about a submission it is judging.
+    honeypot_field_name: formless ? undefined : COMMENT_FIELDS.trap,
     is_test: options.isTest === true ? '1' : undefined,
   });
 }

@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-05 02:47'
+updated_date: '2026-09-05 03:14'
 ---
 # Native comments
 
@@ -278,9 +278,12 @@ goes to `comment-check` with `blog`, `user_ip`, `user_agent`, `referrer`,
 language setting's primary subtag, which is what Akismet documents),
 `blog_charset` and — for a form submission — `honeypot_field_name`.
 `comment_type` is `comment` for a native comment and `webmention` for a
-webmention. Fediverse replies are never sent, because they never reach the seam
-at all: a remote server delivering a `Create` is not something this site is
-deciding whether to accept.
+webmention. A submission may also name its own type: the contact form (TASK-56)
+goes through this same seam as `contact-form`, which is a value Akismet
+documents, so a site that named a `commentChecker` of its own sees everything
+the public can post at it and nothing needs a second seam. Fediverse replies are
+never sent, because they never reach the seam at all: a remote server delivering
+a `Create` is not something this site is deciding whether to accept.
 
 | Akismet says | Verdict | What happens |
 | --- | --- | --- |

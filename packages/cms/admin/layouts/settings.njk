@@ -7,7 +7,7 @@
 {% block content %}
   <h1>Settings</h1>
 
-  {% if problems.title or problems.tagline or problems.baseUrl or problems.timezone or problems.postsPerPage or problems.author or problems.actorHandle or problems.actorType or problems.commentsCloseAfterDays or problems.notifyServer or problems.mailProvider or problems.mailFromAddress or problems.mailReplyTo or problems.relays or problems.navigation %}
+  {% if problems.title or problems.tagline or problems.baseUrl or problems.timezone or problems.postsPerPage or problems.author or problems.actorHandle or problems.actorType or problems.commentsCloseAfterDays or problems.notifyServer or problems.mailProvider or problems.mailFromAddress or problems.mailReplyTo or problems.contactEmail or problems.relays or problems.navigation %}
     <p class="admin-error">Nothing was saved. Fix the fields marked below and try again.</p>
   {% endif %}
 
@@ -195,6 +195,15 @@
     <input id="settings-mail-reply-to" name="{{ fields.mailReplyTo }}" type="text" inputmode="email" value="{{ form.mailReplyTo }}" />
     {% if problems.mailReplyTo %}<p class="admin-field-error">{{ problems.mailReplyTo }}</p>{% endif %}
     <p class="admin-hint">Where a reply goes. Empty replies to the From address.</p>
+
+    <label for="settings-contact-email">Contact address</label>
+    <input id="settings-contact-email" name="{{ fields.contactEmail }}" type="text" inputmode="email" value="{{ form.contactEmail }}" />
+    {% if problems.contactEmail %}<p class="admin-field-error">{{ problems.contactEmail }}</p>{% endif %}
+    <p class="admin-hint">
+      Where a message from a page&rsquo;s contact form is sent, with reply-to set to whoever
+      wrote it. Empty writes to the first admin with an email address. It is read when a
+      message arrives and never appears on the public site.
+    </p>
 
     <p class="admin-settings-buttons">
       <button type="submit">Save settings</button>

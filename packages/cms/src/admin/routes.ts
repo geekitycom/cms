@@ -24,6 +24,12 @@ import {
   pendingComments,
 } from './comments.ts';
 import { MEDIA_PATH, MEDIA_SECTION, MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
+import {
+  MESSAGES_PATH,
+  MESSAGES_SECTION,
+  mountMessagesScreen,
+  unreadMessages,
+} from './messages.ts';
 import { mountPreview } from './preview.ts';
 import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
 import { AVATAR_PATH, mountSettings } from './settings.ts';
@@ -75,6 +81,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   { section: CATEGORY_KIND.section, label: CATEGORY_KIND.plural, url: CATEGORY_KIND.basePath },
   { section: MEDIA_SECTION, label: 'Media', url: MEDIA_PATH },
   { section: COMMENTS_SECTION, label: 'Comments', url: COMMENTS_PATH },
+  { section: MESSAGES_SECTION, label: 'Messages', url: MESSAGES_PATH },
   { section: 'settings', label: 'Settings', url: `${ADMIN_PREFIX}/settings` },
   { section: 'users', label: 'Users', url: `${ADMIN_PREFIX}/users` },
   { section: 'federation', label: 'Federation', url: `${ADMIN_PREFIX}/federation` },
@@ -325,6 +332,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       // that somebody is waiting (TASK-50).
       pendingComments: pendingComments(c.var.admin),
       commentsUrl: COMMENTS_PATH,
+      // And what the contact form has left waiting, which is the same kind of
+      // number for the same reason (TASK-56).
+      unreadMessages: unreadMessages(c.var.config.dataDir),
+      messagesUrl: MESSAGES_PATH,
     });
   });
 
@@ -347,6 +358,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // Everything under content/uploads: what is there, what links to it, and
   // the upload form that stores a file by the same rules the editor does.
   mountMediaScreen(app, { render });
+
+  // What the contact form on a page has collected, and the two things that can
+  // be done about one: mark it read, and delete it.
+  mountMessagesScreen(app, { render });
 
   // What people have left on the site, and the four things that can be done
   // about it: approve, spam, delete, reply.
@@ -371,6 +386,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     CATEGORY_KIND.section,
     MEDIA_SECTION,
     COMMENTS_SECTION,
+    MESSAGES_SECTION,
     'dashboard',
     'settings',
     'users',

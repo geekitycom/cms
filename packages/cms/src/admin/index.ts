@@ -118,6 +118,19 @@ export {
   pendingComments,
 } from './comments.ts';
 export type { CommentAction, CommentRow, MountCommentsScreenOptions } from './comments.ts';
+export {
+  MESSAGE_FIELDS,
+  MESSAGE_TABS,
+  MESSAGES_DELETE_PATH,
+  MESSAGES_PATH,
+  MESSAGES_PER_PAGE,
+  MESSAGES_READ_PATH,
+  MESSAGES_SECTION,
+  listUrl as messageListUrl,
+  mountMessagesScreen,
+  unreadMessages,
+} from './messages.ts';
+export type { MessageRow, MountMessagesScreenOptions } from './messages.ts';
 export { flash, takeFlash } from './flash.ts';
 export {
   deleteUpload,

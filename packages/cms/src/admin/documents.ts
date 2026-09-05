@@ -21,6 +21,7 @@ import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { isPublicDocument } from '../web/documents.ts';
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
+import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
 import { NAVIGATION_KEY, NAVIGATION_ORDER_KEY, navigationOrder } from '../web/navigation.ts';
 import { findUserById } from './accounts.ts';
 import { flash } from './flash.ts';
@@ -68,6 +69,16 @@ export interface DocumentKind {
    * not what a menu is for.
    */
   navigable: boolean;
+  /**
+   * Whether the editor offers the contact form (TASK-56). Pages only, for the
+   * reason the menu is: a form for writing to the site belongs on a standing
+   * page rather than under one post out of a thousand.
+   *
+   * The front matter key itself is honoured wherever it is written, so a theme
+   * that includes the partial in its post layout is free to; this only decides
+   * where the checkbox is offered.
+   */
+  contactable: boolean;
 }
 
 /**
@@ -115,6 +126,7 @@ export const POST_KIND: DocumentKind = {
   categorised: true,
   excludable: false,
   navigable: false,
+  contactable: false,
 };
 
 /** The pages screens: standing content, no date prefix and no taxonomy. */
@@ -129,6 +141,7 @@ export const PAGE_KIND: DocumentKind = {
   categorised: false,
   excludable: true,
   navigable: true,
+  contactable: true,
 };
 
 /** The URL of the editor for one document. */
@@ -312,6 +325,7 @@ async function saveFromForm(
     exclude: body['exclude'] !== undefined,
     navigation: body['navigation'] !== undefined,
     navigationOrder: text(body['navigation_order']).trim(),
+    contact: body['contact'] !== undefined,
     comments: commentSetting(text(body['comments'])),
     body: normalizeBody(text(body['body'])),
     hash: text(body['hash']),
@@ -590,7 +604,7 @@ function normalizePermalink(value: string): string | undefined {
 function resolveExtra(
   kind: DocumentKind,
   document: Document | undefined,
-  form: Pick<EditorForm, 'exclude' | 'navigation' | 'navigationOrder' | 'comments'>,
+  form: Pick<EditorForm, 'exclude' | 'navigation' | 'navigationOrder' | 'comments' | 'contact'>,
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
 
@@ -622,6 +636,14 @@ function resolveExtra(
       delete extra[NAVIGATION_KEY];
       delete extra[NAVIGATION_ORDER_KEY];
     }
+  }
+
+  if (kind.contactable) {
+    // Written or removed, never `false`, for the reason the menu keys are: it
+    // is the CMS's own key, and absent and false mean the same thing to
+    // everything that reads it (TASK-56).
+    if (form.contact) extra[CONTACT_FRONT_MATTER_KEY] = true;
+    else delete extra[CONTACT_FRONT_MATTER_KEY];
   }
 
   return extra;
@@ -861,6 +883,8 @@ export interface EditorForm {
   navigation: boolean;
   /** Where in the menu it goes, as typed. Empty for "after the ordered ones". */
   navigationOrder: string;
+  /** Whether the page offers a contact form. Pages only. */
+  contact: boolean;
   /**
    * What the document says about comments: one of {@link COMMENT_SETTINGS}.
    *
@@ -899,6 +923,7 @@ export function blankForm(
     exclude: false,
     navigation: false,
     navigationOrder: '',
+    contact: false,
     comments: COMMENT_SETTINGS.site,
     body: '',
     hash: '',
@@ -926,6 +951,7 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     exclude: document.extra[EXCLUDE_KEY] === true,
     navigation: document.extra[NAVIGATION_KEY] === true,
     navigationOrder: navigationOrder(document)?.toString() ?? '',
+    contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
     comments: commentSettingOf(document),
     body: document.body,
     hash: document.hash,

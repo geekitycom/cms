@@ -74,6 +74,7 @@ export type {
   CommentRefusal,
   CommentReport,
   CommentSubmission,
+  SubmissionType,
   CommentThrottle,
   CommentVerdict,
   SubmitCommentOptions,

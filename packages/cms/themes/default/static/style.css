@@ -533,3 +533,72 @@ a:visited {
   height: 1px;
   overflow: hidden;
 }
+
+/*
+  The contact form on a page that asked for one. Deliberately the same shapes
+  as the comment form above rather than a second set of its own: they are the
+  same kind of form, and a site restyling one should not have to find the other.
+*/
+.contact-form {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.contact-form-title {
+  margin: 0 0 1rem;
+  font-size: 1.2rem;
+}
+
+.contact-notice,
+.contact-error {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-inline-start: 3px solid var(--rule);
+  background: transparent;
+}
+
+.contact-error {
+  border-inline-start-color: #b3261e;
+}
+
+.contact-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0 0 1rem;
+}
+
+.contact-field input,
+.contact-field textarea {
+  padding: 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font: inherit;
+  background: transparent;
+  color: inherit;
+}
+
+.contact-field textarea {
+  resize: vertical;
+}
+
+.contact-optional,
+.contact-hint {
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.contact-field-error {
+  font-size: 0.85rem;
+  color: #b3261e;
+}
+
+/* The honeypot again, hidden the same way and for the same reason. */
+.contact-trap {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}

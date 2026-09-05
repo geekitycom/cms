@@ -369,6 +369,21 @@ describe('asking Akismet about a comment', () => {
     assert.equal(calls[0]?.fields['honeypot_field_name'], undefined);
   });
 
+  it('calls a contact message a contact-form when the caller says so (TASK-56)', async () => {
+    const { fetch: stubbed, calls } = stub(() => new Response('false'));
+    const checker = createAkismetChecker({
+      dataDir: await keyed(),
+      language: () => 'en',
+      fetch: stubbed,
+    });
+
+    await checker.check({ ...SUBMISSION, type: 'contact-form' });
+
+    assert.equal(calls[0]?.fields['comment_type'], 'contact-form');
+    // It went through a form, so the honeypot is still worth naming.
+    assert.equal(calls[0]?.fields['honeypot_field_name'], 'website');
+  });
+
   it('marks a test call as one when it is told to (AC #1)', async () => {
     const { fetch: stubbed, calls } = stub(() => new Response('false'));
     const checker = createAkismetChecker({

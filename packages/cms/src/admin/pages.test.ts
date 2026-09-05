@@ -88,6 +88,7 @@ async function submit(
     ...(checked(html, 'exclude') ? { exclude: '1' } : {}),
     ...(checked(html, 'navigation') ? { navigation: '1' } : {}),
     navigation_order: field(html, 'navigation_order') ?? '',
+    ...(checked(html, 'contact') ? { contact: '1' } : {}),
     action: 'update',
     ...changes,
   };
@@ -96,6 +97,7 @@ async function submit(
   // test that clears one says so with an empty value and it goes the same way.
   if (fields['exclude'] === '') delete fields['exclude'];
   if (fields['navigation'] === '') delete fields['navigation'];
+  if (fields['contact'] === '') delete fields['contact'];
 
   const saveUrl = /<form class="admin-editor" method="post" action="([^"]+)"/.exec(html)?.[1];
   assert.ok(saveUrl !== undefined, 'the editor knew where to post');
@@ -495,5 +497,73 @@ describe('a page in the site menu', () => {
       'utf8',
     );
     assert.ok(!/navigation/.test(written));
+  });
+});
+
+describe('a page with a contact form', () => {
+  it('writes contact when the box is ticked, and brings it back ticked (TASK-56)', async () => {
+    const contentDir = await seeded([]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/pages/new', { title: 'Plain', action: 'publish' });
+    const plain = await readFile(path.join(contentDir, 'pages', 'plain.md'), 'utf8');
+    assert.ok(!/^contact:/m.test(plain), 'an untouched box leaves the key out of the file');
+
+    await submit(agent, '/admin/pages/new', {
+      title: 'Say hello',
+      contact: '1',
+      action: 'publish',
+    });
+
+    const written = await readFile(path.join(contentDir, 'pages', 'say-hello.md'), 'utf8');
+    assert.match(written, /^contact: true$/m);
+    assert.equal(cms.store.getBySlug('say-hello')?.extra['contact'], true);
+
+    const back = await (await agent.get('/admin/pages/say-hello')).text();
+    assert.ok(checked(back, 'contact'), 'the editor comes back with the box ticked');
+
+    const page = await (await cms.app.request('/say-hello/')).text();
+    assert.match(page, /action="\/_geekity\/contact"/, 'and the page offers the form');
+  });
+
+  it('takes the key back out when the box is cleared', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'pages/say-hello.md',
+        title: 'Say hello',
+        permalink: '/say-hello/',
+        extra: ['contact: true', 'hero: /uploads/hero.jpg'],
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/pages/say-hello')).text();
+    assert.ok(checked(html, 'contact'), 'the file said so, so the box is ticked');
+
+    await submit(agent, '/admin/pages/say-hello', { contact: '', action: 'update' });
+
+    const written = await readFile(path.join(contentDir, 'pages', 'say-hello.md'), 'utf8');
+    assert.ok(!/^contact:/m.test(written), 'a page with no form carries no contact key');
+    assert.match(written, /^hero: \/uploads\/hero\.jpg$/m, 'other hand-added keys survive');
+
+    const page = await (await cms.app.request('/say-hello/')).text();
+    assert.ok(!/action="\/_geekity\/contact"/.test(page), 'and the form is gone');
+  });
+
+  it('never offers the box on a post', async () => {
+    const contentDir = await seeded([]);
+    await mkdir(path.join(contentDir, 'posts'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, 'posts', '2026-01-02-published.md'),
+      '---\ntitle: Out in the world\ndate: 2026-01-02\npermalink: /2026/01/published/\n---\n\nBody.\n',
+      'utf8',
+    );
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/posts/published')).text();
+    assert.ok(!/name="contact"/.test(html), 'a post editor has no such checkbox');
   });
 });
