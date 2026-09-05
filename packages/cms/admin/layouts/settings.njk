@@ -7,7 +7,7 @@
 {% block content %}
   <h1>Settings</h1>
 
-  {% if problems.title or problems.tagline or problems.baseUrl or problems.timezone or problems.postsPerPage or problems.author or problems.actorHandle or problems.actorType or problems.commentsCloseAfterDays or problems.notifyServer or problems.relays or problems.navigation %}
+  {% if problems.title or problems.tagline or problems.baseUrl or problems.timezone or problems.postsPerPage or problems.author or problems.actorHandle or problems.actorType or problems.commentsCloseAfterDays or problems.notifyServer or problems.mailProvider or problems.mailFromAddress or problems.mailReplyTo or problems.relays or problems.navigation %}
     <p class="admin-error">Nothing was saved. Fix the fields marked below and try again.</p>
   {% endif %}
 
@@ -163,10 +163,139 @@
       it. Leave it empty for none.
     </p>
 
+    <h2>Email</h2>
+
+    <label for="settings-mail-provider">Provider</label>
+    <select id="settings-mail-provider" name="{{ fields.mailProvider }}">
+      {% for provider in mailProviders %}
+        <option value="{{ provider }}"{% if form.mailProvider == provider %} selected{% endif %}>
+          {% if provider == 'none' %}None &mdash; this site sends no email{% elif provider == 'brevo' %}Brevo (transactional API){% else %}SMTP{% endif %}
+        </option>
+      {% endfor %}
+    </select>
+    {% if problems.mailProvider %}<p class="admin-field-error">{{ problems.mailProvider }}</p>{% endif %}
+    <p class="admin-hint">
+      The key or password each one needs is a credential and is saved below,
+      in <code>data/mail.json</code> rather than in <code>site.json</code>.
+    </p>
+
+    <label for="settings-mail-from-name">From name</label>
+    <input id="settings-mail-from-name" name="{{ fields.mailFromName }}" type="text" value="{{ form.mailFromName }}" />
+    <p class="admin-hint">The name on the From line. Empty uses the site title.</p>
+
+    <label for="settings-mail-from-address">From address</label>
+    <input id="settings-mail-from-address" name="{{ fields.mailFromAddress }}" type="text" inputmode="email" value="{{ form.mailFromAddress }}" />
+    {% if problems.mailFromAddress %}<p class="admin-field-error">{{ problems.mailFromAddress }}</p>{% endif %}
+    <p class="admin-hint">
+      Providers only send from an address they have verified, so this should be
+      one you own. Empty falls back to <code>no-reply@</code> at the site's host.
+    </p>
+
+    <label for="settings-mail-reply-to">Reply-to</label>
+    <input id="settings-mail-reply-to" name="{{ fields.mailReplyTo }}" type="text" inputmode="email" value="{{ form.mailReplyTo }}" />
+    {% if problems.mailReplyTo %}<p class="admin-field-error">{{ problems.mailReplyTo }}</p>{% endif %}
+    <p class="admin-hint">Where a reply goes. Empty replies to the From address.</p>
+
     <p class="admin-settings-buttons">
       <button type="submit">Save settings</button>
     </p>
   </form>
+
+  {# The mail credential is its own pair of forms for the reason the Akismet
+     key is: an API key and an SMTP password belong in data/mail.json, not in
+     the public site.json, and a mistyped one must not lose an edit to the
+     title. #}
+  <section class="admin-settings admin-mail-panel">
+    <h2>Mail credentials</h2>
+
+    <p class="admin-mail-state admin-mail-{{ mailProvider }}">
+      {% if mailConfigured %}
+        <strong>Configured</strong> &mdash; sending through {{ mailProvider }}.
+      {% elif mailProvider == 'none' %}
+        <strong>Not sending</strong> &mdash; no provider is chosen.
+      {% else %}
+        <strong>Not configured</strong> &mdash; {{ mailProvider }} is chosen but has no credential.
+      {% endif %}
+    </p>
+    <p class="admin-hint">{{ mailHint }}</p>
+
+    <form method="post" action="{{ mailUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+      <h3>Brevo</h3>
+      {% if mailBrevoPresent %}
+        <p class="admin-hint">A key is stored, ending {{ mailBrevoKeyHint }}.</p>
+      {% endif %}
+      <label for="settings-mail-brevo-key">API key</label>
+      <input
+        id="settings-mail-brevo-key"
+        name="{{ mailFields.brevoApiKey }}"
+        type="password"
+        value=""
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="{% if mailBrevoPresent %}Leave blank to keep the stored key{% else %}Paste your key{% endif %}"
+      />
+
+      <h3>SMTP</h3>
+      <label for="settings-mail-smtp-host">Host</label>
+      <input id="settings-mail-smtp-host" name="{{ mailFields.smtpHost }}" type="text" value="{{ mailSmtp.host }}" autocomplete="off" />
+
+      <label for="settings-mail-smtp-port">Port</label>
+      <input id="settings-mail-smtp-port" name="{{ mailFields.smtpPort }}" type="text" inputmode="numeric" value="{{ mailSmtp.port if mailSmtp else 587 }}" />
+
+      <label class="admin-checkbox" for="settings-mail-smtp-secure">
+        <input id="settings-mail-smtp-secure" name="{{ mailFields.smtpSecure }}" type="checkbox" value="1"{% if mailSmtp.secure %} checked{% endif %} />
+        TLS from the first byte (port 465)
+      </label>
+      <p class="admin-hint">Leave this off for port 587, which upgrades with STARTTLS.</p>
+
+      <label for="settings-mail-smtp-user">Username</label>
+      <input id="settings-mail-smtp-user" name="{{ mailFields.smtpUser }}" type="text" value="{{ mailSmtp.user }}" autocomplete="off" />
+
+      <label for="settings-mail-smtp-password">Password</label>
+      <input
+        id="settings-mail-smtp-password"
+        name="{{ mailFields.smtpPassword }}"
+        type="password"
+        value=""
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="{% if mailSmtp.hasPassword %}Leave blank to keep the stored password{% else %}The SMTP password{% endif %}"
+      />
+
+      <p class="admin-settings-buttons">
+        <button type="submit">Save credentials</button>
+      </p>
+    </form>
+
+    {% if mailBrevoPresent or mailSmtpPresent %}
+      <form method="post" action="{{ mailUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ mailFields.action }}" value="{{ mailRemove }}" />
+        <p class="admin-settings-buttons">
+          <button type="submit">Remove credentials</button>
+        </p>
+      </form>
+    {% endif %}
+
+    <form method="post" action="{{ mailTestUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+      <label for="settings-mail-test-to">Send a test message to</label>
+      <input id="settings-mail-test-to" name="{{ mailTestFields.to }}" type="text" inputmode="email" value="" placeholder="you@example.com" />
+      <p class="admin-settings-buttons">
+        <button type="submit">Send test email</button>
+      </p>
+    </form>
+
+    <p class="admin-hint">
+      Neither the API key nor the SMTP password is ever printed back into this
+      page. Both are kept in <code>data/mail.json</code> at mode
+      <code>0600</code>, beside the password hashes and the actor's private
+      keys, and never in <code>site.json</code>, which is public and in git.
+      Leaving a secret blank keeps the one already stored.
+    </p>
+  </section>
 
   {# Akismet is its own pair of forms for the reason the avatar is: the key is
      a credential in data/akismet.json rather than a setting in site.json, and

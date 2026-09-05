@@ -20,6 +20,14 @@ import {
 } from '../files/atomic.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
 import type { RelaySyncReport } from '../federation/relays.ts';
+import {
+  readMailCredentials,
+  removeMailCredentials,
+  writeMailCredentials,
+} from '../mail/credentials.ts';
+import type { MailCredentials } from '../mail/credentials.ts';
+import { MAIL_PROVIDERS } from '../mail/provider.ts';
+import type { MailProviderName } from '../mail/provider.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
 import { navigationItemsOf } from '../web/navigation.ts';
@@ -66,6 +74,40 @@ export const AKISMET_FIELDS = { key: 'akismet_key', action: 'action' } as const;
 export const AKISMET_REMOVE = 'remove';
 
 /**
+ * Where the mail credential's form and its Remove button post.
+ *
+ * Its own endpoint for the reason the Akismet key has one: an API key and an
+ * SMTP password are credentials, they live in `data/mail.json` rather than in
+ * `content/_data/site.json`, and a credential typed wrong must not lose an
+ * edit to the title. Which provider is in use and who mail is from are
+ * settings and stay on the main form.
+ */
+export const MAIL_PATH = `${SETTINGS_PATH}/mail`;
+
+/** The fields the credential form and its Remove button submit. */
+export const MAIL_FIELDS = {
+  brevoApiKey: 'brevo_api_key',
+  smtpHost: 'smtp_host',
+  smtpPort: 'smtp_port',
+  smtpSecure: 'smtp_secure',
+  smtpUser: 'smtp_user',
+  smtpPassword: 'smtp_password',
+  action: 'action',
+} as const;
+
+/** The {@link MAIL_FIELDS.action} that forgets every mail credential. */
+export const MAIL_REMOVE = 'remove';
+
+/** Where the Send test email button posts. */
+export const MAIL_TEST_PATH = `${SETTINGS_PATH}/mail/test`;
+
+/** The field that form submits: where to send the test message. */
+export const MAIL_TEST_FIELDS = { to: 'to' } as const;
+
+/** The message the Send test email button sends, as the theme names it. */
+export const MAIL_TEST_TEMPLATE = 'test';
+
+/**
  * The ActivityPub actor types doc-4 allows a site to be.
  *
  * `Person` is first because it is the default: some clients hide `Service`
@@ -98,6 +140,17 @@ export const ACTOR_HANDLE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
  * registered would be worse than accepting one nobody uses.
  */
 export const LANGUAGE_TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,4}$/;
+
+/**
+ * What an email address has to look like before the settings screen will keep
+ * it: something, an `@`, and a dotted host.
+ *
+ * Deliberately loose. The grammar in RFC 5321 allows addresses nobody has ever
+ * typed, and the only test that settles whether an address works is sending to
+ * it — which is what the Send test email button is for. This catches the
+ * typo where a whole field was pasted into the wrong box.
+ */
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
 /**
  * The settings a site holds, as `content/_data/site.json` says them.
@@ -190,6 +243,25 @@ export interface SiteSettings {
    */
   notifyServer: string;
   /**
+   * How the site sends email, or `none` for a site that does not (TASK-53).
+   *
+   * The name of the provider only. The key or the SMTP password that makes it
+   * work is a credential and lives in `data/mail.json`, never here: this file
+   * is public, in git and published with the site.
+   */
+  mailProvider: MailProviderName;
+  /** The display name on the From line. Falls back to the site title. */
+  mailFromName: string;
+  /**
+   * The address on the From line. Empty falls back to `no-reply@` at the base
+   * URL's host, which is what an unconfigured site would have to send as
+   * anyway — but a provider will only accept a sender it has verified, so a
+   * site that sends anything real sets this.
+   */
+  mailFromAddress: string;
+  /** Where a reply to the site's mail should go. Empty means the From address. */
+  mailReplyTo: string;
+  /**
    * The relay inboxes the site subscribes to (FEP-ae0c): a Mastodon-style
    * relay boosts every public post it is sent, which is how a small site
    * reaches instances nobody on it follows.
@@ -266,6 +338,10 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   webmentionsSend: true,
   webmentionsReceive: true,
   notifyServer: DEFAULT_NOTIFY_SERVER,
+  mailProvider: 'none',
+  mailFromName: '',
+  mailFromAddress: '',
+  mailReplyTo: '',
   relays: [],
   navigation: [],
   taxonomyRedirects: [],
@@ -289,6 +365,10 @@ export const SETTINGS_FIELDS = {
   webmentionsSend: 'webmentions_send',
   webmentionsReceive: 'webmentions_receive',
   notifyServer: 'notify_server',
+  mailProvider: 'mail_provider',
+  mailFromName: 'mail_from_name',
+  mailFromAddress: 'mail_from_address',
+  mailReplyTo: 'mail_reply_to',
   relays: 'relays',
   navigation: 'navigation',
 } as const satisfies Record<SettingsField, string>;
@@ -369,6 +449,18 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
       ? { webmentionsReceive: file['webmentionsReceive'] }
       : {}),
     ...(typeof file['notifyServer'] === 'string' ? { notifyServer: file['notifyServer'] } : {}),
+    // Only a provider this version ships, for the reason the actor type is
+    // read that way: a file naming one it has never heard of is a site that
+    // sends no mail rather than a boot that fails.
+    ...(typeof file['mailProvider'] === 'string' &&
+    (MAIL_PROVIDERS as readonly string[]).includes(file['mailProvider'])
+      ? { mailProvider: file['mailProvider'] as MailProviderName }
+      : {}),
+    ...(typeof file['mailFromName'] === 'string' ? { mailFromName: file['mailFromName'] } : {}),
+    ...(typeof file['mailFromAddress'] === 'string'
+      ? { mailFromAddress: file['mailFromAddress'] }
+      : {}),
+    ...(typeof file['mailReplyTo'] === 'string' ? { mailReplyTo: file['mailReplyTo'] } : {}),
     // Through the same normaliser a submitted form goes through, so the file
     // and the screen cannot mean different things by the same line.
     ...(Array.isArray(file['relays'])
@@ -431,6 +523,10 @@ export function siteJsonFor(
     webmentionsSend: settings.webmentionsSend,
     webmentionsReceive: settings.webmentionsReceive,
     notifyServer: settings.notifyServer,
+    mailProvider: settings.mailProvider,
+    mailFromName: settings.mailFromName,
+    mailFromAddress: settings.mailFromAddress,
+    mailReplyTo: settings.mailReplyTo,
     relays: [...settings.relays],
     navigation: settings.navigation.map((item) => ({ ...item })),
     taxonomyRedirects: settings.taxonomyRedirects.map((entry) => ({ ...entry })),
@@ -643,6 +739,23 @@ export function settingsProblems(form: SettingsForm): SettingsProblems {
       'A notify server is an absolute http:// or https:// URL, or empty for none.';
   }
 
+  if (!(MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)) {
+    problems.mailProvider = `A mail provider is one of ${MAIL_PROVIDERS.join(', ')}.`;
+  }
+
+  // Empty is a value for both of these — no From address falls back to
+  // `no-reply@` at the site's host, and no reply-to means replies go to the
+  // From address — so only a non-empty one has to look like an address.
+  if (form.mailFromAddress.trim() !== '' && !EMAIL_PATTERN.test(form.mailFromAddress.trim())) {
+    problems.mailFromAddress =
+      'A From address is an email address, such as blog@example.com, or empty for the default.';
+  }
+
+  if (form.mailReplyTo.trim() !== '' && !EMAIL_PATTERN.test(form.mailReplyTo.trim())) {
+    problems.mailReplyTo =
+      'A reply-to is an email address, such as hello@example.com, or empty to reply to the From address.';
+  }
+
   // A relay list is checked line by line, and the first bad line is what the
   // field says: a textarea has one message, and pointing at the line somebody
   // has to fix is more use than counting how many are wrong.
@@ -710,6 +823,12 @@ export function settingsFromForm(
     webmentionsSend: form.webmentionsSend !== '',
     webmentionsReceive: form.webmentionsReceive !== '',
     notifyServer: normalizeBaseUrl(form.notifyServer) ?? '',
+    mailProvider: (MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)
+      ? (form.mailProvider as MailProviderName)
+      : 'none',
+    mailFromName: form.mailFromName.trim(),
+    mailFromAddress: form.mailFromAddress.trim(),
+    mailReplyTo: form.mailReplyTo.trim(),
     relays: relayList(form.relays),
     navigation: navigationList(form.navigation),
   };
@@ -734,6 +853,10 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     webmentionsSend: settings.webmentionsSend ? '1' : '',
     webmentionsReceive: settings.webmentionsReceive ? '1' : '',
     notifyServer: settings.notifyServer,
+    mailProvider: settings.mailProvider,
+    mailFromName: settings.mailFromName,
+    mailFromAddress: settings.mailFromAddress,
+    mailReplyTo: settings.mailReplyTo,
     relays: settings.relays.join('\n'),
     navigation: navigationText(settings.navigation),
   };
@@ -791,6 +914,10 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
       webmentionsSend: field(body[SETTINGS_FIELDS.webmentionsSend]),
       webmentionsReceive: field(body[SETTINGS_FIELDS.webmentionsReceive]),
       notifyServer: field(body[SETTINGS_FIELDS.notifyServer]),
+      mailProvider: field(body[SETTINGS_FIELDS.mailProvider]),
+      mailFromName: field(body[SETTINGS_FIELDS.mailFromName]),
+      mailFromAddress: field(body[SETTINGS_FIELDS.mailFromAddress]),
+      mailReplyTo: field(body[SETTINGS_FIELDS.mailReplyTo]),
       relays: field(body[SETTINGS_FIELDS.relays]),
       navigation: field(body[SETTINGS_FIELDS.navigation]),
     };
@@ -917,6 +1044,114 @@ export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptio
         : status === 'invalid'
           ? 'The key is stored, but Akismet does not recognise it, so nothing it says will be believed.'
           : 'The key is stored, but Akismet could not be reached to check it. Save it again to try.',
+    );
+    return c.redirect(SETTINGS_PATH, 303);
+  });
+
+  /**
+   * The mail credential: one form saves it, a second forgets it.
+   *
+   * A separate endpoint from the settings form for the reason the Akismet key
+   * has one — an API key and an SMTP password belong in `data/mail.json`, not
+   * in the public `site.json` — and it keeps both providers' credentials at
+   * once, so a site trying SMTP after Brevo can switch the provider back
+   * without pasting the key in again.
+   *
+   * A blank secret keeps the stored one. The form cannot render a password
+   * back into a page, so a blank field has to mean "unchanged" or nobody could
+   * ever edit the SMTP port without retyping the password.
+   */
+  app.post(MAIL_PATH, async (c) => {
+    const body = await c.req.parseBody();
+    const { config } = c.var;
+    const stored = readMailCredentials(config.dataDir);
+
+    if (field(body[MAIL_FIELDS.action]) === MAIL_REMOVE) {
+      await removeMailCredentials(config.dataDir);
+      flash(c, 'notice', 'The mail credentials are gone. No email is sent any more.');
+      return c.redirect(SETTINGS_PATH, 303);
+    }
+
+    const apiKey = field(body[MAIL_FIELDS.brevoApiKey]).trim();
+    const host = field(body[MAIL_FIELDS.smtpHost]).trim();
+    const port = Number(field(body[MAIL_FIELDS.smtpPort]).trim());
+    const password = field(body[MAIL_FIELDS.smtpPassword]);
+
+    if (host !== '' && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+      flash(c, 'error', 'An SMTP port is a whole number between 1 and 65535. Nothing was saved.');
+      return c.redirect(SETTINGS_PATH, 303);
+    }
+
+    const credentials: MailCredentials = {
+      ...(apiKey === ''
+        ? stored.brevo === undefined
+          ? {}
+          : { brevo: stored.brevo }
+        : { brevo: { apiKey } }),
+      ...(host === ''
+        ? stored.smtp === undefined
+          ? {}
+          : { smtp: stored.smtp }
+        : {
+            smtp: {
+              host,
+              port,
+              secure: field(body[MAIL_FIELDS.smtpSecure]) !== '',
+              user: field(body[MAIL_FIELDS.smtpUser]).trim(),
+              // A blank password keeps the stored one, so the port and the
+              // user can be edited without retyping a secret the form was
+              // never allowed to show.
+              password: password === '' ? (stored.smtp?.password ?? '') : password,
+            },
+          }),
+    };
+
+    await writeMailCredentials(config.dataDir, credentials);
+
+    const settings = readSiteSettings(config.contentDir);
+    flash(
+      c,
+      'notice',
+      settings.mailProvider === 'none'
+        ? 'Saved. Choose a provider above and save the settings to start sending.'
+        : 'Saved. Send a test message to prove it reaches you.',
+    );
+    return c.redirect(SETTINGS_PATH, 303);
+  });
+
+  /**
+   * Send test email: the one button that proves the whole chain.
+   *
+   * It goes through the same {@link MailService} every feature will, so what
+   * it proves is not "these credentials parse" but "a message from this site
+   * arrives" — the template, the From line, the provider and the retry
+   * included. Whatever the provider said comes back on the flash, its own
+   * words and all, because a refusal names the field to fix and a summary of
+   * one never does.
+   */
+  app.post(MAIL_TEST_PATH, async (c) => {
+    const body = await c.req.parseBody();
+    const to = field(body[MAIL_TEST_FIELDS.to]).trim();
+
+    if (!EMAIL_PATTERN.test(to)) {
+      flash(c, 'error', 'Type the address to send the test message to.');
+      return c.redirect(SETTINGS_PATH, 303);
+    }
+
+    const result = await c.var.mail.send({ to, template: MAIL_TEST_TEMPLATE });
+
+    flash(
+      c,
+      result.ok && !result.skipped ? 'notice' : 'error',
+      result.skipped
+        ? 'No mail is configured, so nothing was sent. Choose a provider and save a credential first.'
+        : result.ok
+          ? `A test message was sent to ${to} via ${result.provider}${
+              result.messageId === undefined ? '' : ` (${result.messageId})`
+            }. If it does not arrive, look in the spam folder and at the provider's own log.`
+          : `${result.provider} would not send to ${to} after ${String(result.attempts)} ${
+              result.attempts === 1 ? 'attempt' : 'attempts'
+            }: ${result.error ?? 'no reason given'}`,
     );
     return c.redirect(SETTINGS_PATH, 303);
   });
@@ -1055,6 +1290,61 @@ export function akismetPanel(dataDir: string): Record<string, unknown> {
   };
 }
 
+/**
+ * What the screen says about email: which provider is chosen, whether the
+ * credential it needs is there, and enough of it to recognise which one.
+ *
+ * Nothing here ever prints a key or a password. A settings screen that echoed
+ * one would put a credential in every browser cache, every screenshot and
+ * every `view-source`; the last four characters of an API key and the host and
+ * user of an SMTP connection are enough for somebody to tell what is stored
+ * without being handed the means to use it.
+ */
+export function mailPanel(dataDir: string, settings: SiteSettings): Record<string, unknown> {
+  const stored = readMailCredentials(dataDir);
+  const present =
+    settings.mailProvider === 'brevo' ? stored.brevo !== undefined : stored.smtp !== undefined;
+
+  return {
+    mailUrl: MAIL_PATH,
+    mailFields: MAIL_FIELDS,
+    mailRemove: MAIL_REMOVE,
+    mailTestUrl: MAIL_TEST_PATH,
+    mailTestFields: MAIL_TEST_FIELDS,
+    mailProviders: MAIL_PROVIDERS,
+    mailProvider: settings.mailProvider,
+    // Whether the chosen provider has what it needs. A key stored for the
+    // provider that is not chosen is not "configured": nothing would use it.
+    mailConfigured: settings.mailProvider !== 'none' && present,
+    mailBrevoPresent: stored.brevo !== undefined,
+    mailSmtpPresent: stored.smtp !== undefined,
+    ...(stored.brevo === undefined
+      ? {}
+      : { mailBrevoKeyHint: `…${stored.brevo.apiKey.slice(-4)}` }),
+    ...(stored.smtp === undefined
+      ? {}
+      : {
+          mailSmtp: {
+            host: stored.smtp.host,
+            port: stored.smtp.port,
+            secure: stored.smtp.secure,
+            user: stored.smtp.user,
+            // Not the password. Whether there is one at all is all the screen
+            // needs to say.
+            hasPassword: stored.smtp.password !== '',
+          },
+        }),
+    mailHint:
+      settings.mailProvider === 'none'
+        ? 'This site sends no email. Password resets, moderation notices and contact messages are still recorded; they are simply not sent.'
+        : present
+          ? 'Mail is configured. Send a test message to prove it reaches you.'
+          : settings.mailProvider === 'brevo'
+            ? 'Brevo is chosen but there is no API key, so nothing is sent.'
+            : 'SMTP is chosen but there is no server, so nothing is sent.',
+  };
+}
+
 /** Everything the settings template renders, for a given set of settings. */
 function screen(
   config: Pick<ResolvedConfig, 'baseUrl' | 'baseUrlSource' | 'dataDir'>,
@@ -1069,6 +1359,7 @@ function screen(
     fields: SETTINGS_FIELDS,
     actorTypes: ACTOR_TYPES,
     ...akismetPanel(config.dataDir),
+    ...mailPanel(config.dataDir, settings),
     avatar: settings.avatar,
     avatarUrl: AVATAR_PATH,
     avatarFields: AVATAR_FIELDS,

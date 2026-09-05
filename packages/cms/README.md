@@ -244,6 +244,8 @@ directory; absolute ones are used as given.
 | `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                        |
 | `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                      |
 | `federation`       | `{}`                      | —                           | Federation stores and guards. See [Federation](#federation).                                                                                                                        |
+| `commentChecker`   | Akismet                   | —                           | A spam checker of the site's own, which wins over the key in `data/akismet.json`. See [Akismet](#akismet).                                                                          |
+| `mail`             | `{}`                      | —                           | Mail provider, retries, backoff and logger. See [Email](#email).                                                                                                                    |
 
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site. A boolean environment variable
@@ -276,6 +278,7 @@ the same directory reads all of it, and everything in it is meant to be public:
 | `data/keys/`        | The actor's key pairs as JWK files. Mode `0600`. **Losing these breaks federation.** |
 | `data/comment-salt` | What hides commenters' addresses in the published comment files. Mode `0600`.        |
 | `data/akismet.json` | The Akismet key, and what `verify-key` last said about it. Mode `0600`.              |
+| `data/mail.json`    | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.      |
 
 Two things under `data/` may be deleted whenever the site is stopped, and
 nothing else in either directory may:
@@ -722,6 +725,115 @@ answers 404 or 410 — takes it away. Closing rules do not apply: a post that
 stopped taking comments still hears about a page that links to it, exactly as it
 still hears a fediverse reply.
 
+## Email
+
+The CMS sends its mail through one service and one seam. Everything that will
+ever email — the Send test email button, and the password resets, moderation
+notices and contact messages built on it — calls `cms.mail.send()`, and what
+carries the message is decided in one place.
+
+**A site with no mail configuration still works.** `send` writes a line in the
+log saying the message was not sent and resolves successfully, so nothing that
+emails is a feature that breaks without a mail account.
+
+### Configuring it
+
+Two halves, kept apart for the reason the Akismet key is kept out of
+`site.json`:
+
+| Where                     | What                                                                     |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `content/_data/site.json` | `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`.        |
+| `data/mail.json`          | The Brevo API key, and the SMTP host, port, TLS flag, user and password. |
+
+`site.json` is public, in git and published with the site; `data/mail.json` is
+private, mode `0600`, and sits beside the password hashes and the actor's
+private keys. No key or password is ever written to `site.json` and none is
+ever printed back into the settings screen — the panel shows the last four
+characters of an API key and the host and user of an SMTP connection, which is
+enough to tell what is stored and not enough to use it. Leaving a secret field
+blank keeps the one already stored, so the SMTP port can be corrected without
+retyping the password. **Remove credentials** forgets both.
+
+Both files are read on every send, so a credential pasted into the settings
+screen sends the next message and one removed stops the message after it.
+Neither needs a restart.
+
+`mailFromAddress` should be an address the provider has verified; empty falls
+back to `no-reply@` at the site's host, which most providers will refuse.
+
+### The two providers
+
+| `mailProvider` | What it is                                                                            |
+| -------------- | ------------------------------------------------------------------------------------- |
+| `none`         | Nothing is sent. The default.                                                         |
+| `brevo`        | `POST https://api.brevo.com/v3/smtp/email` with an `api-key` header. No open sockets. |
+| `smtp`         | Any SMTP server, through nodemailer — including Brevo's own relay.                    |
+
+### Send test email
+
+The settings screen has an address field and a button that sends the `test`
+message through the whole chain — the template, the From line, the provider and
+the retry — and reports what came back, the provider's own words and its
+message id included. It is the one thing that proves mail works before somebody
+needs it to.
+
+### Queue, retries and the log
+
+Messages go on one queue and are sent one at a time, so a provider that hangs
+delays the next message and nothing else. A refused message is tried three
+times, waiting two seconds, then eight; every attempt is logged with its
+outcome and, when it went, the provider's message id, so a message somebody
+never received can be traced to the attempt that carried it. `send` never
+throws — a failure is a result with `ok: false` and the provider's own words in
+`error`.
+
+### Messages
+
+Messages are Nunjucks templates under `mail/` in the theme, resolved the way
+every other template is: the site's `themeDir` first, the packaged theme
+second, file by file. Each is up to three files — `mail/<name>.subject.njk`,
+`mail/<name>.txt.njk` (required) and `mail/<name>.html.njk` — so a site can
+replace the text of a message and keep the subject the package ships, or add a
+message the package never had. The full table is in
+[`themes/default/README.md`](./themes/default/README.md).
+
+### From an entry file, and from a test
+
+```ts
+const result = await cms.mail.send({
+  to: 'ada@example.com',
+  template: 'test',
+  data: { name: 'Ada' },
+});
+result.ok; // true, whether it went or the site sends no mail
+result.skipped; // true when the site sends no mail
+```
+
+`sendRaw({ to, subject, text, html })` is the same thing for a message the
+caller built itself. Both resolve when the message has been sent, given up on
+or skipped; a caller that does not care drops the promise with `void`.
+
+A test names a provider in the config and reads back what would have gone out.
+It wins outright over the settings and `data/mail.json`, the way a
+`commentChecker` wins over the Akismet key:
+
+```ts
+import { createCms, createMemoryMailProvider } from '@geekity/cms';
+
+const provider = createMemoryMailProvider();
+const cms = createCms({
+  mail: { provider, backoffMs: () => 0 },
+});
+
+// …
+provider.sent[0].subject;
+provider.failNext(2); // watch the retry without waiting for it
+```
+
+`mail` also takes `attempts`, `backoffMs` and `logger`, which is how a test
+proves the retry without spending ten seconds on it.
+
 ## Keeping the index in step
 
 Booting scans `contentDir`, indexes every Markdown file under `posts/` and
@@ -984,6 +1096,7 @@ at once cannot each keep half of what the other kept.
 The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `timezone`, `language`, `avatar`, `actorHandle`, `actorType`, `tagBase`,
 `categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
+`mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
 `relays`, `navigation` and `taxonomyRedirects`,
 and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
@@ -1002,6 +1115,12 @@ and the settings screen renders the field read-only and says which value is in
 effect and why. When neither names one, the file's `url` becomes the base URL
 at boot — at boot rather than on save, so an `https` base URL cannot log out
 the admin who submitted it over `http`.
+
+Two things on that screen are not settings and are not in that file: the
+Akismet key and the mail credential. Both are credentials, both live under
+`data/` at mode `0600`, and each is its own pair of forms — save and remove —
+so a key typed wrong cannot lose an edit to the title. See
+[Akismet](#akismet) and [Email](#email).
 
 A site whose database was written by a version that kept the settings in SQLite
 has those rows written into `site.json` on the first boot of this one, and the
@@ -1753,7 +1872,8 @@ crawler looks.
 A template is looked up in the site's `themeDir` first, then in the theme that
 ships inside this package, file by file. Sites override one template at a time
 and keep receiving updates to the rest. Files under `/theme/` resolve the same
-way, so `theme/static/style.css` replaces the packaged stylesheet.
+way, so `theme/static/style.css` replaces the packaged stylesheet, and the
+[email messages](#messages) under `mail/` resolve the same way too.
 
 `themeDir` need not exist. A site of nothing but `geekity.config.ts` and
 `content/` serves every page, the 404 and the stylesheet out of the packaged

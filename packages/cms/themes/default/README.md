@@ -19,6 +19,10 @@ themes/default/
     tags.njk          macros for tag and category links
     feeds.njk         macros for the feed links in <head>
     conversation.njk  the replies, likes and boosts under a post
+  mail/
+    test.subject.njk  the subject of the Send test email message
+    test.txt.njk      its plain text body
+    test.html.njk     its HTML twin
   static/
     style.css    served at /theme/style.css
 ```
@@ -55,6 +59,30 @@ packaged ones by name:
 
 `layouts/base.njk` defines the blocks `title`, `head`, `alternates`, `header`,
 `content`, `footer` and `scripts`, so most sites never have to copy it.
+
+## Mail templates
+
+The messages the CMS sends live under `mail/` and resolve the same way, so
+`theme/mail/test.txt.njk` replaces the text of the test message and leaves its
+subject and HTML twin coming from the package. Each message is up to three
+files:
+
+| File                      | What it is                                                     |
+| ------------------------- | -------------------------------------------------------------- |
+| `mail/<name>.subject.njk` | The subject. Rendered to a single line. Optional.              |
+| `mail/<name>.txt.njk`     | The plain text body. **Required.**                             |
+| `mail/<name>.html.njk`    | The HTML twin. Optional; without it the message is plain text. |
+
+A message that has no `.txt.njk` anywhere on the search path is an error rather
+than an empty email, so a typo in a template name is reported instead of sent.
+
+The context is `site` (that is `content/_data/site.json`), `baseUrl`, and
+whatever the feature that sent it passed as `data`. The `date`, `url` and
+`absoluteUrl` filters are the same ones a page has, so a message can write a
+link with `{{ "/admin/" | absoluteUrl }}`.
+
+Writing `theme/mail/welcome.txt.njk` is enough to add a message this package
+never shipped; nothing has to be registered.
 
 ## Template context
 

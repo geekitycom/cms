@@ -668,9 +668,9 @@ offered.
 `/admin/settings` holds the values that are a site's own rather than a post's:
 title, tagline, base URL, time zone, language, posts per page, the tag and
 category archive bases, the site menu, the ActivityPub actor handle and type,
-the relays the site subscribes to, the notify server the feeds advertise, and
-the site's avatar. They live in `content/_data/site.json`, which is published
-with the site and in git.
+the relays the site subscribes to, the notify server the feeds advertise, how
+the site sends email, and the site's avatar. They live in
+`content/_data/site.json`, which is published with the site and in git.
 
 The time zone is the one setting that changes what a page says rather than what
 it holds. Every date the CMS writes into a file is a UTC instant ending in `Z`;
@@ -695,7 +695,9 @@ once, on the first boot of this one, and the table is dropped.
 
 The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `timezone`, `language`, `avatar`, `actorHandle`, `actorType`, `tagBase`,
-`categoryBase`, `notifyServer`, `relays`, `navigation` and `taxonomyRedirects`,
+`categoryBase`, `notifyServer`, `mailProvider`, `mailFromName`,
+`mailFromAddress`, `mailReplyTo`, `relays`, `navigation` and
+`taxonomyRedirects`,
 and every other key it already had is kept — a site may put anything in there,
 `feedSize` included, and reach it from its templates. A key it does not carry
 is the default: an absent `notifyServer` is `https://rpc.rsscloud.io`, an empty
@@ -718,6 +720,9 @@ back with a 400 and one message under each field that has one:
 | Actor type     | One of `Person`, `Organization`, `Service`, `Group` or `Application`.              |
 | Relays         | One relay inbox per line, each an absolute `http://` or `https://` URL.            |
 | Notify server  | An absolute `http://` or `https://` URL, or empty for none. See below.             |
+| Mail provider  | `none`, `brevo` or `smtp`. See below.                                              |
+| From address   | An email address, or empty for `no-reply@` at the site's host.                     |
+| Reply-to       | An email address, or empty to reply to the From address.                           |
 
 `Person` is the default actor type because some clients hide `Service` actors
 from timelines.
@@ -766,6 +771,21 @@ take a path the site already answers on: `page`, `feed`, `admin`, `ap`,
 `theme`, `uploads` or `nodeinfo`. Saving one moves the archive, its paging, its
 feeds, every link the theme renders and the `Hashtag` hrefs on the
 ActivityStreams `Article` on the next request; the old base 404s.
+
+How the site sends email is a setting; the key or password that makes it work
+is not. `mailProvider` picks `none`, Brevo's transactional API or any SMTP
+server, and the From name, From address and reply-to go in `site.json` with
+everything else — but the Brevo API key and the SMTP host, port, user and
+password live in `data/mail.json` at mode `0600`, which is private and out of
+git, and they have a pair of forms of their own on the same screen. Neither
+secret is ever printed back into the page: the panel shows the last four
+characters of the key and the host and user of the SMTP connection, and leaving
+a secret blank keeps the one already stored. A **Send test email** button sends
+a message through the whole chain and reports what the provider said, and with
+no configuration at all nothing is sent and every feature that emails carries on
+working. See [Email][email] in the package README.
+
+[email]: packages/cms/README.md#email
 
 The avatar is not one of those fields, because it is a file: it has a pair of
 forms of its own on the same screen, posting to `POST /admin/settings/avatar` —

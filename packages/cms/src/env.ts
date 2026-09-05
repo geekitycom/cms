@@ -5,6 +5,7 @@ import type { ContentStore } from './content/store.ts';
 import type { DocumentChange } from './content/sync.ts';
 import type { DeliveryService } from './federation/delivery.ts';
 import type { RelayService } from './federation/relays.ts';
+import type { MailService } from './mail/service.ts';
 import type { WebmentionService } from './webmention/service.ts';
 import type { Renderer } from './web/render.ts';
 
@@ -52,6 +53,15 @@ export interface GeekityEnv {
      * followers. Everything else about sending happens off the index.
      */
     webmentions: WebmentionService;
+    /**
+     * The site's outgoing email (TASK-53), so a handler can send one: the
+     * settings screen's Send test email button, and the password resets,
+     * moderation notices and contact messages that come after it.
+     *
+     * A site with no mail configuration still has one; its `send` is a logged
+     * no-op that resolves successfully, so a handler never has to ask first.
+     */
+    mail: MailService;
     /**
      * The session this request carries, set by the admin guard: a login, the
      * anonymous session that holds a CSRF token before login, or `undefined`

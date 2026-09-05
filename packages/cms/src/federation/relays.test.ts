@@ -167,6 +167,7 @@ const SETTINGS_FORM: Record<string, string> = {
   comments: '1',
   comments_close_after_days: '14',
   notify_server: '',
+  mail_provider: 'none',
   relays: '',
 };
 
