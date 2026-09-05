@@ -20,6 +20,7 @@
   --admin-link: #2271b1;
   --admin-notice: #00a32a;
   --admin-error: #d63638;
+  --admin-unread: #f0f6fc;
   --admin-nav-width: 11rem;
 }
 
@@ -853,4 +854,199 @@ button[type='submit']:hover,
 .admin-references {
   margin: 0;
   padding-left: 1.1rem;
+}
+
+/* The comments and messages screens. Both are lists of something a stranger
+   wrote, so both are cards rather than table rows: a paragraph is read across,
+   and a column narrow enough for a table is not wide enough to read one in.
+   The two screens share every rule here, because a contact message is a
+   comment nobody can approve and the eye should not have to relearn the shape
+   between them. */
+
+.admin-comments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-comment {
+  padding: 0.9rem 1.1rem 1.1rem;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+}
+
+.admin-comment + .admin-comment {
+  margin-top: 0.75rem;
+}
+
+/* An unread message, marked down its left edge the way a flash notice is and
+   tinted behind, so a run of them is findable down a long list. Mark read
+   drops the class and the row goes back to the card every other row is. */
+
+.admin-comment-unread {
+  background: var(--admin-unread);
+  border-left: 4px solid var(--admin-link);
+}
+
+/* Who wrote, how to reach them, and where it stands: one line that wraps
+   rather than a stack, because none of it is the thing being read. */
+
+.admin-comment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.6rem;
+}
+
+.admin-comment-author {
+  font-weight: 600;
+}
+
+/* A website and an address are both arbitrarily long and neither is worth a
+   line of its own, so they are quiet and they break rather than push the card
+   wider than the screen. */
+
+.admin-comment-site,
+.admin-comment-email {
+  color: var(--admin-muted);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.admin-comment-where {
+  margin: 0.15rem 0 0;
+  color: var(--admin-muted);
+  font-size: 0.9em;
+}
+
+.admin-comment-where code {
+  font-size: 0.9em;
+}
+
+/* The comment itself. Capped at the measure the settings form reads at: a
+   paragraph running the full width of a wide screen is a paragraph nobody
+   finishes. */
+
+.admin-comment-body {
+  max-width: 42rem;
+  margin: 0.6rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-comment-body > :first-child {
+  margin-top: 0;
+}
+
+.admin-comment-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* Somebody else's markup, so it is held inside the card whatever it is. */
+
+.admin-comment-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+.admin-comment-body pre {
+  overflow-x: auto;
+}
+
+.admin-comment-body blockquote {
+  margin-left: 0;
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--admin-border);
+  color: var(--admin-muted);
+}
+
+.admin-message-subject {
+  max-width: 42rem;
+  margin: 0.6rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+/* A comment arrives as Markdown and is rendered; a contact message is plain
+   text and is printed, so the only thing standing between it and one long
+   line is this. */
+
+.admin-message-body {
+  white-space: pre-wrap;
+}
+
+/* Approve, Spam, Delete, Reply, Mark read: the same underlined-link row the
+   listings use, but wrapping, because a card is narrower than a table and the
+   Reply link on the messages screen is a button rather than a form. */
+
+.admin-comment .admin-actions {
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+}
+
+.admin-comment .admin-actions .admin-button {
+  margin: 0;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.9em;
+}
+
+/* The reply box, folded away: most rows are read and moderated without one,
+   and an open textarea under every comment would bury the list. */
+
+.admin-comment-reply {
+  margin-top: 0.6rem;
+}
+
+.admin-comment-reply summary {
+  color: var(--admin-link);
+  cursor: pointer;
+}
+
+.admin-comment-reply form {
+  max-width: 42rem;
+}
+
+.admin-comment-reply textarea {
+  min-height: 6rem;
+}
+
+/* Where a comment stands, and whether a message has been read. Pending is the
+   one waiting for a person, which is why it is the loud one; approved is
+   settled and spam is held back. */
+
+.admin-status-pending {
+  color: var(--admin-link);
+  font-weight: 600;
+}
+
+.admin-status-approved {
+  color: var(--admin-notice);
+}
+
+.admin-status-spam {
+  color: var(--admin-error);
+}
+
+/* The paragraph under each of these lists names a directory, and a path with
+   no spaces in it is one long word: on a narrow screen it has to be allowed to
+   break rather than push the page sideways. Every hint that names a file has
+   the same problem. */
+
+.admin-hint code {
+  overflow-wrap: anywhere;
+}
+
+/* These two screens wrap their filter tabs in a `nav`, for the label a
+   screen reader reads out; the listings put the class straight on the `ul`.
+   Both end up as one row of links. */
+
+.admin-filters,
+.admin-filters ul {
+  flex-wrap: wrap;
+}
+
+.admin-filters ul {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }

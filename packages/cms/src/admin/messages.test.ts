@@ -92,6 +92,27 @@ describe('the Messages screen', () => {
     assert.equal(listContactMessages(cms.config.dataDir)[0]?.read, false);
   });
 
+  it('marks the unread row for the stylesheet, and unmarks it on Mark read', async () => {
+    const { cms, agent } = await siteWith();
+    const whileUnread = await screen(agent);
+    const token = csrfField(whileUnread);
+    assert.ok(token !== undefined);
+
+    assert.match(
+      whileUnread,
+      /class="admin-comment admin-comment-unread"/,
+      'an unread row is marked',
+    );
+
+    const id = listContactMessages(cms.config.dataDir)[0]?.id;
+    assert.ok(id !== undefined);
+    await agent.post(MESSAGES_READ_PATH, { csrf_token: token, id, read: '1' });
+
+    const onceRead = await screen(agent);
+    assert.match(onceRead, /class="admin-comment"/, 'a read row is the plain card again');
+    assert.ok(!onceRead.includes('admin-comment-unread'), 'and carries no unread mark');
+  });
+
   it('deletes a message, taking its file with it (AC #2)', async () => {
     const { cms, agent } = await siteWith();
     const token = csrfField(await screen(agent));
