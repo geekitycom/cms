@@ -3,7 +3,12 @@ import { randomInt } from 'node:crypto';
 import type { Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
-import { notificationEvent, notificationSwitches } from '../notifications/preferences.ts';
+import {
+  DEFAULT_DELIVERY_MODE,
+  deliveryMode,
+  notificationEvent,
+  notificationSwitches,
+} from '../notifications/preferences.ts';
 import {
   countUsers,
   createUser,
@@ -13,6 +18,7 @@ import {
   listUsers,
   setUserEmail,
   setUserNotification,
+  setUserNotificationMode,
   setUserPassword,
   verifyUserPassword,
 } from './accounts.ts';
@@ -38,6 +44,16 @@ export const USER_EMAIL_PATH = `${USERS_PATH}/email`;
 /** Where a row's notification switches post. */
 export const USER_NOTIFICATIONS_PATH = `${USERS_PATH}/notifications`;
 
+/**
+ * Where a row's how-often selects post.
+ *
+ * A path of its own rather than a second field on the switch, because the two
+ * forms answer different questions and a switch is a button while a mode is a
+ * select and a Save: one handler that had to work out which of the two it had
+ * been given would be guessing at something the URL can simply say.
+ */
+export const USER_NOTIFICATION_MODE_PATH = `${USER_NOTIFICATIONS_PATH}/mode`;
+
 /** The fields the forms on the screen submit. */
 export const USER_FIELDS = {
   username: 'username',
@@ -60,6 +76,8 @@ export const USER_FIELDS = {
    * mention it".
    */
   on: 'on',
+  /** How often that notice should arrive, for an event that offers a choice. */
+  mode: 'mode',
 } as const;
 
 /** What {@link mountUsers} needs from the admin around it. */
@@ -255,6 +273,51 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     return c.redirect(USERS_PATH, 303);
   });
 
+  /**
+   * Say how often one notice reaches one row.
+   *
+   * Any row, for the reason the switch beside it is any row. A mode this
+   * version does not know, or an event that offers no choice, changes nothing
+   * and says so: the only way to submit either is a form this CMS did not
+   * render.
+   */
+  app.post(USER_NOTIFICATION_MODE_PATH, async (c) => {
+    const dataDir = c.var.config.dataDir;
+    const body = await c.req.parseBody();
+    const id = Number(field(body[USER_FIELDS.userId]));
+    const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
+
+    if (target === undefined) {
+      flash(c, 'error', 'That user is already gone.');
+      return c.redirect(USERS_PATH, 303);
+    }
+
+    const name = field(body[USER_FIELDS.event]);
+    const event = notificationEvent(name);
+    if (event === undefined || !event.batched) {
+      flash(c, 'error', 'That is not a notice this site can batch up.');
+      return c.redirect(USERS_PATH, 303);
+    }
+
+    const wanted = deliveryMode(field(body[USER_FIELDS.mode]));
+    if (wanted === undefined) {
+      flash(c, 'error', 'That is not one of the choices.');
+      return c.redirect(USERS_PATH, 303);
+    }
+
+    await setUserNotificationMode({ dataDir, userId: target.id, event: name, mode: wanted });
+
+    flash(
+      c,
+      'notice',
+      wanted === DEFAULT_DELIVERY_MODE
+        ? `${target.username} will hear about ${event.label.toLowerCase()} as they arrive.`
+        : `${target.username} will get one ${wanted === 'daily' ? 'daily' : 'hourly'} digest of ` +
+            `${event.label.toLowerCase()}.`,
+    );
+    return c.redirect(USERS_PATH, 303);
+  });
+
   app.post(DELETE_USER_PATH, async (c) => {
     const dataDir = c.var.config.dataDir;
     const body = await c.req.parseBody();
@@ -412,6 +475,7 @@ function screen(
     deleteUserUrl: DELETE_USER_PATH,
     userEmailUrl: USER_EMAIL_PATH,
     userNotificationsUrl: USER_NOTIFICATIONS_PATH,
+    userNotificationModeUrl: USER_NOTIFICATION_MODE_PATH,
     fields: USER_FIELDS,
     users: users.map((user) => row(user, { signedInAs, total: users.length })),
     addForm: { username: '', email: '', generate: false },

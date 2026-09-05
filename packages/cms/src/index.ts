@@ -25,8 +25,8 @@ import type {
 import type { GeekityEnv } from './env.ts';
 import { createMailService } from './mail/index.ts';
 import type { MailService } from './mail/index.ts';
-import { createCommentNotifier } from './notifications/index.ts';
-import type { CommentNotifier } from './notifications/index.ts';
+import { createCommentDigest, createCommentNotifier } from './notifications/index.ts';
+import type { CommentDigest, CommentNotifier } from './notifications/index.ts';
 import {
   assertActorKeysUsable,
   createDeliveryService,
@@ -665,41 +665,64 @@ export type { GeekityEnv } from './env.ts';
 // and the signed one-click links the messages carry (TASK-55).
 export {
   addCommentOptOut,
+  COMMENT_DIGEST_TEMPLATE,
   COMMENT_OPTOUTS_FILE,
   COMMENT_PENDING_TEMPLATE,
   COMMENT_REPLY_TEMPLATE,
   commentOptOutsFile,
   COMMENTS_NOTIFICATION,
+  createCommentDigest,
   createCommentNotifier,
+  DEFAULT_DELIVERY_MODE,
+  DELIVERY_MODE_LABELS,
+  DELIVERY_WINDOW_MS,
+  deliveryMode,
+  DIGEST_MAX_ITEMS,
+  DIGEST_TICK_MS,
+  DIGEST_TIMES_FILE,
+  digestTimesFile,
   hasOptedOut,
+  isBatchedMode,
   MODERATE_PATH,
   MODERATION_TOKEN_LIFETIME_SECONDS,
   moderationLink,
   mountNotificationLinks,
+  NOTIFICATION_DELIVERY_MODES,
   NOTIFICATION_EVENTS,
   NOTIFICATION_FIELDS,
   NOTIFICATION_SECRET_FILE,
   notificationEvent,
+  notificationMode,
   notificationRecipients,
   notificationSwitches,
   notificationTokenExpiry,
   notificationWanted,
   readCommentOptOuts,
+  readDigestTimes,
   readNotificationToken,
+  recordDigestTimes,
   signNotificationToken,
+  systemNotificationTimers,
   UNSUBSCRIBE_ACTION,
   UNSUBSCRIBE_PATH,
   UNSUBSCRIBE_TOKEN_LIFETIME_SECONDS,
   unsubscribeLink,
   withNotification,
+  withNotificationMode,
 } from './notifications/index.ts';
 export type {
+  CommentDigest,
   CommentNotifier,
+  CreateCommentDigestOptions,
   CreateCommentNotifierOptions,
+  DigestLogger,
   LinkContext,
   NewNotificationToken,
   NotificationClaim,
+  NotificationDeliveryMode,
   NotificationEvent,
+  NotificationSwitch,
+  NotificationTimers,
 } from './notifications/index.ts';
 
 // Email: the one seam a mail service plugs into, the two providers the package
@@ -1171,6 +1194,15 @@ export interface Cms {
    */
   readonly notifications: CommentNotifier;
   /**
+   * The batched half of the same notice (TASK-60): what writes to a user who
+   * chose an hourly or a daily digest instead of a message per comment.
+   *
+   * It is started by {@link Cms.serve} and stopped by {@link Cms.close}; a
+   * site reaches for it to send what is due without waiting for the tick,
+   * which is also what a test does.
+   */
+  readonly digests: CommentDigest;
+  /**
    * The publisher of scheduled posts: what holds a future-dated post back and
    * releases it when its date arrives.
    *
@@ -1405,6 +1437,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // screen is written to by the very next comment.
   const notifications = createCommentNotifier({ admin, store, mail, config: resolved });
 
+  // And the other half of it (TASK-60): a user who asked for an hourly or a
+  // daily digest hears nothing above and one message per window from here,
+  // listing whatever is still pending when their window comes up. It reads the
+  // users file and the record of what it has sent per run, for the same
+  // reason: a mode chosen on the users screen takes effect at the next tick.
+  const digests = createCommentDigest({ admin, store, mail, config: resolved });
+
   // And so does the webmention sender: telling the pages a post links to is
   // the same news as telling the followers, and it should not matter which
   // door the post came in by (TASK-51).
@@ -1515,6 +1554,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     notifier,
     mail,
     notifications,
+    digests,
     scheduler,
     events: content.events,
 
@@ -1547,6 +1587,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // date passed while nothing was running is published here, once.
       await scheduler.start();
 
+      // The digests tick from here on. Nothing is caught up first: a digest is
+      // whatever is pending when a window comes up, so a site that was down
+      // over one simply sends the next one, with everything still waiting in it.
+      digests.start();
+
       return new Promise((resolve) => {
         server = serveNode({ fetch: app.fetch, port: resolved.port }, (info) => {
           resolve({ port: info.port });
@@ -1558,8 +1603,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
       const running = server;
       server = undefined;
       scheduler.stop();
+      digests.stop();
       await content.stop();
       await scheduler.settled();
+      await digests.settled();
       // Anything already on its way out is allowed to finish, so closing never
       // leaves a delivery half recorded.
       await delivery.settled();

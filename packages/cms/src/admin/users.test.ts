@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
-import { NOTIFICATION_EVENTS, notificationWanted } from '../notifications/preferences.ts';
+import {
+  NOTIFICATION_EVENTS,
+  notificationMode,
+  notificationWanted,
+} from '../notifications/preferences.ts';
 import { countUsers, createUser, findUser, findUserById, verifyUserPassword } from './accounts.ts';
 import {
   browser,
@@ -204,6 +208,86 @@ describe('notification preferences (AC #3)', () => {
 
     assert.equal(response.status, 303);
     assert.deepEqual(findUserById(cms.config.dataDir, ada.id)?.notifications, undefined);
+  });
+});
+
+describe('how often a notice arrives (AC #1)', () => {
+  it('offers immediately, hourly and daily for an event that can be batched', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    const { html } = await usersScreen(agent);
+
+    for (const event of NOTIFICATION_EVENTS.filter((candidate) => candidate.batched)) {
+      assert.match(html, new RegExp(`value="${event.name}"`), `${event.name} has a mode form`);
+    }
+    for (const mode of ['immediately', 'hourly', 'daily']) {
+      assert.match(html, new RegExp(`value="${mode}"`), `${mode} is offered`);
+    }
+  });
+
+  it('is immediate until somebody chooses otherwise, and stores only the difference', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { token } = await usersScreen(agent);
+
+    assert.equal(
+      notificationMode(findUserById(cms.config.dataDir, ada.id), 'comments'),
+      'immediately',
+    );
+
+    const daily = await agent.post('/admin/users/notifications/mode', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      event: 'comments',
+      mode: 'daily',
+    });
+
+    assert.equal(daily.status, 303);
+    assert.equal(notificationMode(findUserById(cms.config.dataDir, ada.id), 'comments'), 'daily');
+    assert.deepEqual(findUserById(cms.config.dataDir, ada.id)?.notificationModes, {
+      comments: 'daily',
+    });
+
+    await agent.post('/admin/users/notifications/mode', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      event: 'comments',
+      mode: 'immediately',
+    });
+
+    assert.equal(
+      notificationMode(findUserById(cms.config.dataDir, ada.id), 'comments'),
+      'immediately',
+    );
+    assert.deepEqual(
+      findUserById(cms.config.dataDir, ada.id)?.notificationModes,
+      undefined,
+      'the default is not written down',
+    );
+  });
+
+  it('reads a mode this version has never heard of as immediately, and drops it', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { token } = await usersScreen(agent);
+
+    await agent.post('/admin/users/notifications/mode', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      event: 'comments',
+      mode: 'every-third-tuesday',
+    });
+
+    assert.equal(
+      notificationMode(findUserById(cms.config.dataDir, ada.id), 'comments'),
+      'immediately',
+    );
+    assert.deepEqual(findUserById(cms.config.dataDir, ada.id)?.notificationModes, undefined);
   });
 });
 

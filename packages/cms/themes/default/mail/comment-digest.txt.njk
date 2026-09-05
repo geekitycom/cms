@@ -1,0 +1,40 @@
+{# The plain text body of the digest: everything still waiting, each item with
+   its own three links. The links are the point of the message, exactly as they
+   are in comment-pending — each carries a signed token, works once, and lands
+   on a page with a button rather than acting on being opened. #}
+{{ total }} comment{% if total != 1 %}s are{% else %} is{% endif %} waiting for you.
+{% for item in items %}
+
+--
+{{ loop.index }}. {% if item.comment.source == 'webmention' %}A page linked to{% else %}A comment on{% endif %} “{{ item.post.title }}”
+{{ item.post.url }}
+
+From: {{ item.comment.author }}
+{% if item.comment.website %}
+Site: {{ item.comment.website }}
+{% endif %}
+{% if item.comment.url %}
+Page: {{ item.comment.url }}
+{% endif %}
+When: {{ item.comment.submitted }}
+
+{{ item.comment.text | trim if item.comment.text | trim else '(nothing was said — it is a ' + item.comment.kind + ')' }}
+
+{% for choice in item.actions %}
+{{ choice.label }}: {{ choice.url }}
+{% endfor %}
+{% endfor %}
+
+--
+{% if more %}
+And {{ more }} more waiting, which the queue has:
+{{ queueUrl }}
+
+{% endif %}
+Each link works once and lasts a week. After that, the queue is at
+{{ queueUrl }}. This is your {% if mode == 'daily' %}daily{% else %}hourly{% endif %} digest;
+you can change that on the users screen.
+
+--
+{{ site.title }}
+{{ baseUrl }}

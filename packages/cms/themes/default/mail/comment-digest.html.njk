@@ -1,0 +1,37 @@
+{# The HTML twin of the digest. Deliberately plain: a single column and almost
+   no styling is what survives the widest range of mail readers. #}
+<p>{{ total }} comment{% if total != 1 %}s are{% else %} is{% endif %} waiting for you.</p>
+
+{% for item in items %}
+  <hr />
+  <p>
+    {% if item.comment.source == 'webmention' %}A page linked to{% else %}A comment on{% endif %}
+    <a href="{{ item.post.url }}">{{ item.post.title }}</a>
+  </p>
+
+  <p>
+    <strong>{{ item.comment.author }}</strong>{% if item.comment.website %} &mdash; <a href="{{ item.comment.website }}" rel="nofollow ugc">{{ item.comment.website }}</a>{% endif %}<br />
+    {% if item.comment.url %}<a href="{{ item.comment.url }}" rel="nofollow ugc">{{ item.comment.url }}</a><br />{% endif %}
+    <span>{{ item.comment.submitted }}</span>
+  </p>
+
+  <blockquote>
+    {% if item.comment.html %}{{ item.comment.html | safe }}{% else %}<p>(nothing was said &mdash; it is a {{ item.comment.kind }})</p>{% endif %}
+  </blockquote>
+
+  <p>
+    {% for choice in item.actions %}<a href="{{ choice.url }}">{{ choice.label }}</a>{% if not loop.last %} &middot; {% endif %}{% endfor %}
+  </p>
+{% endfor %}
+
+<hr />
+
+{% if more %}<p>And {{ more }} more waiting, which <a href="{{ queueUrl }}">the queue</a> has.</p>{% endif %}
+
+<p>
+  Each link works once and lasts a week. After that, the queue is at
+  <a href="{{ queueUrl }}">{{ queueUrl }}</a>. This is your
+  {% if mode == 'daily' %}daily{% else %}hourly{% endif %} digest; change it on the users screen.
+</p>
+
+<p>&mdash; {{ site.title }}</p>

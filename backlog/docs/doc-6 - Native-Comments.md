@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-05 03:14'
+updated_date: '2026-09-05 11:58'
 ---
 # Native comments
 
@@ -317,13 +317,30 @@ Email is what makes moderation timely, and it is off until a site can send it (T
 
 ### To the moderators
 
-A comment or a webmention entering the queue emails every user who has an address and has not turned **New comments** off on `/admin/users`. Only `pending`: one Akismet filed as spam is not waiting for anybody, and one it said to discard was never stored. A webmention re-sent by a page somebody edited notifies nobody either — a source that updates its entry is not new news.
+A comment or a webmention entering the queue emails every user who has an address and has not turned **New comments** off on `/admin/users`. Only `pending`: one Akismet filed as spam is not waiting for anybody, and one it said to discard was never stored. A webmention re-sent by a page somebody edited notifies nobody either — a source that updates its entry is not new news. And only the users who want it **as it arrives**: one on an hourly or a daily digest hears nothing at this moment, by definition of having chosen a window.
 
 The message carries the words themselves, the post, and three links: approve, spam, delete. Each is `/_geekity/moderate?action=…&token=…`, needs no login, and lands on a page with one button on it. **Opening a link does nothing**; only the button acts. Mail readers, spam filters and corporate link scanners fetch the URLs in a message as a matter of course, and a link that moderated on being fetched would be a gateway silently deleting this site's comments.
 
 The token is an HMAC-signed claim, not a stored row. The secret is `data/notification-secret` (mode `0600`, minted on first use, the `comment-salt` pattern), so a link that has been in an inbox for three days goes on working across a restart, a rebuilt cache or a restored backup — all of which decision-9 says a site may do whenever it likes. What *is* stored is the fact that a link has been used: its SHA-256 in `spent_tokens`, swept once the signature has expired. Losing that table forgets which links were spent and costs nothing, because every action a link performs is idempotent. A link is bound to one action on one comment and lasts a week.
 
 `moderateComment` is the single function behind both the screen's buttons and these links, so the two doors cannot drift apart over what an action does or over when `reportSpam` and `reportHam` are called.
+
+### One message a window: the digest
+
+Beside the **New comments** switch on `/admin/users` is how often it should arrive: **As they arrive** (the default, and what every site did before this existed), **Hourly digest** or **Daily digest**. It is per user. On a spam wave that Akismet let through, the difference is one message an hour rather than fifty.
+
+A digest is **derived, not queued**. When a user's window has passed, the sender asks the index what is still `pending` and puts that in one message, each item with its own approve, spam and delete links, minted for that recipient because a link is spent the first time it is used. So an item somebody moderated in the meantime is simply absent, an item that arrived a minute ago is present, and there is no list of pending sends to keep true across a restart, a crash or a `geekity rebuild`.
+
+Two rules follow from that:
+
+- **Nothing waiting, nothing sent.** A user with an empty queue is not emailed, and their window does not start either — the timestamp only moves when a message actually goes. So the first comment on a quiet site goes out on the next tick rather than waiting out a window that had nothing in it, and the promise a mode makes — at most one message per window — still holds.
+- **A very long queue is capped** at a hundred items, with the rest counted in a line pointing at `/admin/comments`. A message with three thousand entries and nine thousand signed links is one no provider would take and nobody would read.
+
+The only new state is **when each user was last sent one**, in `data/notification-digests.json` (mode `0600`), keyed by event and then by user id. It is a file rather than a row because decision-9 lets a site delete the database whenever it is stopped, and a forgotten timestamp would mean a window silently skipped or a digest sent twice; it is its own file rather than a field in `data/users.json` because that file answers "who may sign in", and a timestamp the sender rewrites every hour is runtime bookkeeping rather than anything about the person.
+
+The job is an in-process timer, the way scheduled posts are (TASK-44): it ticks about once a minute, and each user's own mode decides whether they are due. `createCms` starts it in `serve()` and stops it in `close()`, and the timers are injectable so a test fires a tick rather than waiting a minute. Nothing is caught up on boot: a site that was down over a window simply sends the next one, with everything still waiting in it.
+
+Reply notices to commenters are unaffected and stay immediate — they are one message about one reply, and they go when the reply is approved. With no mail configured, no digest runs and nothing is written down.
 
 ### To the commenter
 
@@ -335,7 +352,7 @@ The unsubscribe link at the bottom is signed the same way, lasts a year rather t
 
 ### Adding another notice
 
-Preferences are a switchboard keyed by event name, not a field per notice. `src/notifications/preferences.ts` holds the registry; one entry there is a new checkbox on `/admin/users`, a new key in `data/users.json`, and a new answer from `notificationRecipients`. An event a user has said nothing about is at its default, so a notice that ships turned on reaches everybody with an address without anybody visiting that screen.
+Preferences are a switchboard keyed by event name, not a field per notice. `src/notifications/preferences.ts` holds the registry; one entry there is a new checkbox on `/admin/users`, a new key in `data/users.json`, and a new answer from `notificationRecipients`. An event a user has said nothing about is at its default, so a notice that ships turned on reaches everybody with an address without anybody visiting that screen. An entry that says `batched: true` gets the how-often select beside its switch as well, and whatever sends it is then responsible for honouring a window; `immediately` is the default there, and a stored mode this version does not know is dropped and read as the default, exactly as an unknown event key is.
 
 ## What a reader sees
 

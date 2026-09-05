@@ -7,7 +7,7 @@ import type { ContentStore } from '../content/store.ts';
 import type { MailService } from '../mail/service.ts';
 import { moderationLink, unsubscribeLink } from './links.ts';
 import { hasOptedOut } from './optouts.ts';
-import { notificationRecipients } from './preferences.ts';
+import { isBatchedMode, notificationMode, notificationRecipients } from './preferences.ts';
 
 /**
  * The two messages a comment sets off, and the rules about who gets them.
@@ -113,7 +113,17 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
       // signing secret it would have no use for.
       if (!mail.configured()) return;
 
-      const recipients = notificationRecipients(listUsers(config.dataDir), COMMENTS_NOTIFICATION);
+      // Everybody who wants the notice as it happens. A user on an hourly or
+      // daily digest is deliberately not written to here: the whole of what
+      // choosing a window means is that this moment is not one of the moments
+      // they hear about (TASK-60), and `createCommentDigest` writes to them
+      // instead, from the queue as it stands when their window comes up.
+      const recipients = notificationRecipients(
+        listUsers(config.dataDir),
+        COMMENTS_NOTIFICATION,
+      ).filter(
+        (recipient) => !isBatchedMode(notificationMode(recipient.user, COMMENTS_NOTIFICATION)),
+      );
       if (recipients.length === 0) return;
 
       const context = { dataDir: config.dataDir, baseUrl: config.baseUrl, now: config.now() };

@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-05 03:14'
+updated_date: '2026-09-05 11:58'
 ---
 # Admin UI
 
@@ -23,7 +23,7 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 | `/admin/comments` | pending, approved and spam, with approve, spam, delete and reply on every row |
 | `/admin/messages` | what the contact form on a page collected: read, mark read, delete |
 | `/admin/settings` | site title, tagline, base URL, timezone, posts per page, comments on/off and closing window, actor handle and type, the Akismet key, the mail provider and its credential, the contact address |
-| `/admin/users` | list, add, set each user's email and which notices go to it, change your own password (single role: admin) |
+| `/admin/users` | list, add, set each user's email, which notices go to it and how often, change your own password (single role: admin) |
 | `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
 
 ## Editor
@@ -75,11 +75,12 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 ## Notifications
 
 - **The switchboard.** Every user's row on `/admin/users` carries one switch per event this version knows about, beside their email address. The registry is `src/notifications/preferences.ts`: adding an event — a new follower, a digest of failed deliveries — is one entry there, and the checkbox, the storage and the "who wants this" query all follow from it. An event a user has said nothing about is at its default, so a notice that ships turned on reaches everybody with an address without anybody visiting this screen; only turning one off is written down, as `notifications` in `data/users.json`. A key naming an event this version does not know is dropped on the way in, so a file written by a newer version leaves no switch nothing can reach.
-- **New comments**, the one event so far. A comment or a webmention entering the moderation queue emails every user with an address who has not turned it off. Not a comment Akismet filed as spam, and not one it said to discard: the notice is about what is waiting for a person. A webmention re-sent by a page somebody edited sends nothing either — only the first storing of one is news.
+- **How often.** An event whose registry entry says `batched: true` carries a second control beside its switch: **As they arrive**, **Hourly digest** or **Daily digest**, posted to `/admin/users/notifications/mode`. The two are separate questions — whether, and how often — so a user who wants none of a notice turns it off and a user who wants it once a day is still a recipient. The same two rules apply: `immediately` is the default and is never written down, and a mode this version does not know is dropped on the way in and read as the default. It is stored as `notificationModes` in `data/users.json`, a second map rather than a widening of `notifications`.
+- **New comments**, the one event so far. A comment or a webmention entering the moderation queue emails every user with an address who has not turned it off. Not a comment Akismet filed as spam, and not one it said to discard: the notice is about what is waiting for a person. A webmention re-sent by a page somebody edited sends nothing either — only the first storing of one is news. A user on an hourly or a daily digest is deliberately not written to at that moment: doc-6 has what they get instead.
 - **The one-click links.** The message carries approve, spam and delete. Each is `/_geekity/moderate?action=…&token=…`, has no session behind it, and lands on a page with a single button; only the button acts. That is not politeness — mail readers and corporate link scanners fetch the URLs in a message as a matter of course, and a link that moderated on being opened would be a mail gateway silently deleting the site's comments. The token is an HMAC-signed claim rather than a stored row, taken with a secret in `data/notification-secret`, so a link in an inbox goes on working across a `geekity rebuild`; it is bound to one action on one comment, lasts a week, and is spent against the `spent_tokens` table the first time it is used. This and the buttons on `/admin/comments` both go through the same `moderateComment`, so the two doors cannot disagree about what an action does or about when the spam checker is told a human disagreed with it.
 - **Reply notices** go to commenters rather than to users; doc-6 has them.
 - **Contact messages** are not part of this switchboard. They go to one address — the `contactEmail` setting, or the first admin with one — rather than to everybody who wants a notice, because a contact form is a site's inbox rather than an event people subscribe to.
-- **Without mail.** Nothing is sent, no signing secret is ever minted, and every path still works. `/admin/comments` is the notification it was before.
+- **Without mail.** Nothing is sent, no signing secret is ever minted, no digest runs, and every path still works. `/admin/comments` is the notification it was before.
 
 ## Out of scope for phase one
 

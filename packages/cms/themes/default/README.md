@@ -26,6 +26,7 @@ themes/default/
     password-reset.*.njk    the forgot-password link
     password-changed.*.njk  the notice sent once a password has been set
     comment-pending.*.njk   the moderation notice
+    comment-digest.*.njk    the hourly or daily digest of what is waiting
     comment-reply.*.njk     the notice a commenter gets about a reply
     contact-message.*.njk   a message from a page's contact form
   static/
@@ -81,16 +82,24 @@ files:
 A message that has no `.txt.njk` anywhere on the search path is an error rather
 than an empty email, so a typo in a template name is reported instead of sent.
 
-The package ships six messages:
+The package ships seven messages:
 
-| Name               | When it goes                                     | What `data` carries                                                                                                                     |
-| ------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `test`             | Send test email, on Settings.                    | Nothing.                                                                                                                                |
-| `password-reset`   | Somebody asked to reset a password.              | `username`, `resetUrl`, `expiresAt`, `expiresInHours`.                                                                                  |
-| `password-changed` | A reset link was used.                           | `username`, `signedOut` (how many sessions ended).                                                                                      |
-| `comment-pending`  | A comment or webmention is waiting for approval. | `comment`, `post` (`title`, `url`), `actions` (one `{ action, label, url }` each for approve, spam and delete), `queueUrl`.             |
-| `comment-reply`    | A reply to somebody's comment was approved.      | `reply`, `comment` (the one it answers), `post`, `unsubscribeUrl`.                                                                      |
-| `contact-message`  | Somebody filled in a page's contact form.        | `message` (`id`, `subject`, `text`, `received`), `from` (`name`, `email`), `page` (`slug`, `permalink`, `title`, `url`), `messagesUrl`. |
+| Name               | When it goes                                     | What `data` carries                                                                                                                        |
+| ------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `test`             | Send test email, on Settings.                    | Nothing.                                                                                                                                   |
+| `password-reset`   | Somebody asked to reset a password.              | `username`, `resetUrl`, `expiresAt`, `expiresInHours`.                                                                                     |
+| `password-changed` | A reset link was used.                           | `username`, `signedOut` (how many sessions ended).                                                                                         |
+| `comment-pending`  | A comment or webmention is waiting for approval. | `comment`, `post` (`title`, `url`), `actions` (one `{ action, label, url }` each for approve, spam and delete), `queueUrl`.                |
+| `comment-digest`   | An hourly or daily digest of what is waiting.    | `items` (one `{ comment, post, actions }` each), `total` waiting, `more` beyond the ones listed, the `mode` that asked for it, `queueUrl`. |
+| `comment-reply`    | A reply to somebody's comment was approved.      | `reply`, `comment` (the one it answers), `post`, `unsubscribeUrl`.                                                                         |
+| `contact-message`  | Somebody filled in a page's contact form.        | `message` (`id`, `subject`, `text`, `received`), `from` (`name`, `email`), `page` (`slug`, `permalink`, `title`, `url`), `messagesUrl`.    |
+
+The `comment` inside each of a digest's `items` is the same shape as
+`comment-pending`'s, and its `actions` are the same three links, minted per
+recipient because each is spent the first time it is used. A digest is built
+from the queue as it stands when it is sent, so an item moderated in the
+meantime is simply not in it, and no digest is sent to somebody with an empty
+queue.
 
 `comment` and `reply` above are the same shape: `author`, `website`, `source`
 (`comment` or `webmention`), `kind`, `text`, `html`, `submitted`, and `url`.

@@ -5,7 +5,12 @@ import {
   updateFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
-import { notificationEvent, withNotification } from '../notifications/preferences.ts';
+import {
+  deliveryMode,
+  notificationEvent,
+  withNotification,
+  withNotificationMode,
+} from '../notifications/preferences.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
 import type { AdminStore } from './store.ts';
 
@@ -72,6 +77,18 @@ export interface User {
    * event name, so adding an event adds no field here.
    */
   readonly notifications?: Readonly<Record<string, boolean>> | undefined;
+  /**
+   * How often each notice arrives, for the events that offer a choice and the
+   * users who have made one (TASK-60).
+   *
+   * A second map beside {@link User.notifications} rather than a widening of
+   * it, because the two answer different questions — whether, and how often —
+   * and a user who wants no notice at all is not a user with a delivery mode.
+   * Absent for almost everybody, on the same rule: `immediately` is the
+   * default and the default is never written down. Keyed by event name, so
+   * adding an event adds no field here either.
+   */
+  readonly notificationModes?: Readonly<Record<string, string>> | undefined;
   /** When the user was created, as an ISO 8601 instant. */
   readonly createdAt: string;
 }
@@ -304,6 +321,44 @@ export async function setUserNotification(input: {
 }
 
 /**
+ * Say how often one notice reaches one user.
+ *
+ * The twin of {@link setUserNotification}, and it writes on the same rule:
+ * through {@link withNotificationMode}, which drops the key when the answer is
+ * the default again, when the mode is one this version does not know, and when
+ * the event does not offer a choice at all. So a form submitting nonsense
+ * leaves the file saying nothing rather than saying something unreachable.
+ * Returns `false` when there is no such user.
+ */
+export async function setUserNotificationMode(input: {
+  /** Which site's users file to write. */
+  dataDir: string;
+  /** Whose preference. */
+  userId: number;
+  /** Which notice, by its name in the registry. */
+  event: string;
+  /** How often they want it. */
+  mode: string;
+}): Promise<boolean> {
+  let changed = false;
+
+  await write(input.dataDir, (contents) => {
+    changed = contents.users.some((user) => user.id === input.userId);
+    return {
+      ...contents,
+      users: contents.users.map((user) => {
+        if (user.id !== input.userId) return user;
+        const { notificationModes: _removed, ...rest } = user;
+        const next = withNotificationMode(user.notificationModes, input.event, input.mode);
+        return next === undefined ? rest : { ...rest, notificationModes: next };
+      }),
+    };
+  });
+
+  return changed;
+}
+
+/**
  * Take a user out of the file. Returns `false` when there was nothing to take.
  *
  * Their sessions are not ended here: sessions are in the database, and the
@@ -390,6 +445,7 @@ function withoutHash(user: StoredUser): User {
     username: user.username,
     ...(user.email === undefined ? {} : { email: user.email }),
     ...(user.notifications === undefined ? {} : { notifications: user.notifications }),
+    ...(user.notificationModes === undefined ? {} : { notificationModes: user.notificationModes }),
     createdAt: user.createdAt,
   };
 }
@@ -483,6 +539,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const username = record['username'];
   const email = record['email'];
   const preferences = notificationsFrom(record['notifications']);
+  const modes = notificationModesFrom(record['notificationModes']);
   const passwordHash = record['passwordHash'];
   const createdAt = record['createdAt'];
 
@@ -510,6 +567,10 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
     // version does not know is left out too, so a file written by a newer
     // version is read as far as it makes sense.
     ...(preferences === undefined ? {} : { notifications: preferences }),
+    // Dropped on the same rule, and once more for a mode this version does not
+    // know: a stored `weekly` from a later version is read as the default
+    // rather than as a window nothing here could wait for.
+    ...(modes === undefined ? {} : { notificationModes: modes }),
     passwordHash,
     createdAt: typeof createdAt === 'string' ? createdAt : '',
   };
@@ -522,6 +583,20 @@ function notificationsFrom(value: unknown): Record<string, boolean> | undefined 
   const found: Record<string, boolean> = {};
   for (const [name, wanted] of Object.entries(value as Record<string, unknown>)) {
     if (typeof wanted === 'boolean' && notificationEvent(name) !== undefined) found[name] = wanted;
+  }
+
+  return Object.keys(found).length === 0 ? undefined : found;
+}
+
+/** A stored map of delivery modes as this version reads it, or `undefined`. */
+function notificationModesFrom(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+
+  const found: Record<string, string> = {};
+  for (const [name, mode] of Object.entries(value as Record<string, unknown>)) {
+    const event = notificationEvent(name);
+    const known = deliveryMode(mode);
+    if (event?.batched === true && known !== undefined) found[name] = known;
   }
 
   return Object.keys(found).length === 0 ? undefined : found;
