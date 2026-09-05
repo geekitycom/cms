@@ -12,6 +12,7 @@
   "language": "en",
   "tagBase": "tag",
   "categoryBase": "category",
+  "contactEmail": "hello@example.com",
   "notifyServer": "https://rpc.rsscloud.io",
   "relays": [],
   "navigation": [],

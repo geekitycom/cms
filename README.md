@@ -927,6 +927,15 @@ HTTP. A stylesheet is the one all-or-nothing override: assets resolve file by
 file the way templates do, so a site's `style.css` is served instead of the
 packaged one, not after it.
 
+`apps/demo/content/pages/contact.md` is the worked example of the other kind of
+opt-in: `contact: true` puts the contact form under the page and
+`navigation: true` puts the page in the menu. Send it a message with the demo
+running and the message is written to `data/contact/` before anything is
+emailed, and is waiting on **Messages** in the admin. Where it is emailed is the
+`contactEmail` setting in `content/_data/site.json`, which is read when the
+submission arrives and reaches no template — `apps/demo/test/site.test.ts`
+asserts that address is in none of the HTML the demo serves.
+
 The demo's content directory also builds with Eleventy.
 `apps/demo/eleventy.config.js` re-exports
 [`packages/cms/docs/eleventy.config.example.js`](packages/cms/docs/eleventy.config.example.js) —

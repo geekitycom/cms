@@ -17,11 +17,15 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-import { createCms } from '@geekity/cms';
+import { CONTACT_FIELDS, CONTACT_POST_PATH, createCms, readSiteSettings } from '@geekity/cms';
 import type { Cms } from '@geekity/cms';
 
 import config from '../geekity.config.ts';
+
+/** The demo's content directory, absolute, for the readers that want a path. */
+const CONTENT_DIR = fileURLToPath(new URL('../content', import.meta.url));
 
 let cms: Cms;
 let origin: string;
@@ -145,5 +149,44 @@ describe('the demo content', () => {
     assert.match(rss, /^<\?xml version="1\.0" encoding="utf-8"\?>\n<rss version="2\.0"/);
     assert.equal((rss.match(/<item>/g) ?? []).length, feed.items.length);
     assert.ok(!rss.includes('A draft nobody can see'));
+  });
+});
+
+/**
+ * The contact page is the demo's only page that asks for a form, and the only
+ * place the demo exercises TASK-56 at all. What is asserted here is what a
+ * visitor can see: the form is under the page, the page is reachable from the
+ * menu, and the address the message goes to is not anywhere in the bytes.
+ */
+describe('the demo contact page', () => {
+  it('renders the contact form under the page content', async () => {
+    const body = await text('/contact/');
+
+    assert.match(body, new RegExp(`action="${CONTACT_POST_PATH}"`), 'the form posts to the CMS');
+    for (const field of [
+      CONTACT_FIELDS.name,
+      CONTACT_FIELDS.email,
+      CONTACT_FIELDS.subject,
+      CONTACT_FIELDS.message,
+    ]) {
+      assert.match(body, new RegExp(`name="${field}"`), `the form has no ${field} field`);
+    }
+  });
+
+  it('puts the contact page in the site navigation', async () => {
+    const body = await text('/');
+
+    assert.match(body, /<nav class="site-nav"/, 'the demo renders no menu at all');
+    assert.match(body, /<a href="\/contact\/"[^>]*>Contact<\/a>/, 'the menu has no contact item');
+  });
+
+  it('keeps the address a message goes to out of the HTML', async () => {
+    const { contactEmail } = readSiteSettings(CONTENT_DIR);
+    assert.notEqual(contactEmail, '', 'the demo configures no contact address to look for');
+
+    // Both what a visitor asks for and what the form itself is rendered into:
+    // the address is read when a submission arrives and reaches no template.
+    assert.doesNotMatch(await text('/contact/'), new RegExp(contactEmail));
+    assert.doesNotMatch(await text('/'), new RegExp(contactEmail));
   });
 });
