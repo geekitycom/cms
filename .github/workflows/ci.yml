@@ -185,6 +185,12 @@ jobs:
             docs
             release
           requireScope: false
+          # Dependabot titles every pull request "Bump …" with a capital B and
+          # offers no way to change that, so its pull requests are exempt from
+          # the subject rules below. `dependabot.yml` still sets the type and
+          # scope, which is the part release-please reads.
+          ignoreLabels: |
+            dependencies
           # Lower case, no trailing full stop — the same subject rules
           # commitlint applies to a commit message.
           subjectPattern: ^(?![A-Z])(?!.*\.$).+$
