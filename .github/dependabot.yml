@@ -1,10 +1,11 @@
 # Weekly dependency updates, grouped so a quiet week is one pull request rather
 # than a dozen.
 #
-# The commit prefixes matter: commitlint and the `pr-title` CI job only accept
-# the scopes listed in `commitlint.config.js`, so Dependabot has to open pull
-# requests titled `chore(deps): …` and `ci(deps): …` or its own pull requests
-# would fail the title check.
+# The commit prefixes matter: release-please reads the squash-merged title, so
+# Dependabot has to open pull requests titled `chore(deps): …` and
+# `ci(deps): …` with a scope from `commitlint.config.js`. The `pr-title` CI job
+# skips pull requests labelled `dependencies`, because Dependabot capitalises
+# "Bump" and offers no way not to.
 version: 2
 
 updates:
