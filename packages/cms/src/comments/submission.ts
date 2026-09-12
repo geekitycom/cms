@@ -5,28 +5,32 @@ import {
   FORM_LOADED_FIELD,
   FORM_TRAP_FIELD,
   formTimingRefusal,
-  hashClientAddress,
   trapped,
 } from '../forms/protection.ts';
 import { renderCommentMarkdown } from './markdown.ts';
-import { addComment } from './records.ts';
-import type { CommentRecords } from './records.ts';
+import { intakeComment } from './records.ts';
+import type { CommentNotices, CommentRecords, ProposedComment } from './records.ts';
 
 /**
- * What happens between somebody pressing Post and a comment existing.
+ * What happens between somebody pressing Post and a proposed comment.
  *
- * Three defences run before anything is written, in the order that costs least
+ * Three defences run before anything is proposed, in the order that costs least
  * and gives away least — the honeypot, the age of the form and the per-address
  * rate limit. The first two are `forms/protection.ts`, shared with the contact
  * form (TASK-56) so the two public forms cannot drift into different rules; the
  * third is the same limiter the login form uses, over the commenter's address,
  * so one machine cannot post a hundred comments while a moderator sleeps.
  *
- * Then, and only then, {@link CommentChecker} — the one seam a third-party
- * service plugs into. Everything Akismet's API asks for is on the submission
- * it is handed, and its three answers are the three this understands, so
- * TASK-52 is a module that implements this interface and a setting naming a
- * key. Nothing else in the CMS has to know such a service exists.
+ * What survives all three is handed to {@link intakeComment}, which is where
+ * every comment on this site is written whatever proposed it: the checker, the
+ * verdict-to-status rule, the file, the index and the notice all live there, so
+ * a form submission and a webmention cannot be treated by two sets of rules.
+ *
+ * The {@link CommentChecker} interface stays here because this is where it
+ * reads: it is the one seam a third-party service plugs into, everything
+ * Akismet's API asks for is on the submission it is handed, and its four
+ * answers are the four the intake understands. Nothing else in the CMS has to
+ * know such a service exists.
  */
 
 // Re-exported where they have always been, so a site that imported them from
@@ -255,6 +259,8 @@ export interface SubmitCommentOptions {
   baseUrl: string;
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
+  /** Who to tell about what lands, handed straight to the intake (TASK-55). */
+  notices?: CommentNotices | undefined;
   /** Where the request came from, as far as the site can tell. */
   address?: string | undefined;
   /** The `User-Agent` header, for the checker. */
@@ -317,18 +323,14 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     // A form asks for no picture: only a webmention brings one (TASK-51).
     avatar: null,
   };
-  const proposed: Omit<PostComment, 'id'> = {
+  const proposed: ProposedComment = {
     slug: document.slug,
     permalink: document.permalink,
     source: 'comment',
     kind: 'reply',
-    // WordPress's rule, and the whole of the auto-approval decision: somebody a
-    // moderator has already let through does not queue again.
-    status: records.admin.hasApprovedAuthor(author.name, author.email) ? 'approved' : 'pending',
     author,
     content: { markdown, html: renderCommentMarkdown(markdown) },
     submitted: now.toISOString(),
-    addressHash: hashClientAddress(options.dataDir, options.address),
     inReplyTo: parentOf(form.inReplyTo, document.slug, records),
     // A comment written here lives here: only a webmention has a page of its
     // own somewhere else (TASK-51).
@@ -338,53 +340,31 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     notify: options.notifiable === true && form.notify.trim() !== '' && author.email !== null,
   };
 
-  const verdict = await ask(options, proposed, now);
-  if (verdict === 'discard') {
-    // Counted against the address even so: a machine posting rubbish should
-    // not get unlimited free attempts because the rubbish was recognised.
-    throttle.fail(keys);
-    return refused({ kind: 'discarded' });
-  }
-
-  const stored = await addComment(records, {
-    ...proposed,
-    status: verdict === 'spam' ? 'spam' : verdict === 'ham' ? 'approved' : proposed.status,
-  });
-
-  throttle.fail(keys);
-  return { kind: 'stored', comment: stored };
-}
-
-/** Ask the checker, if there is one, and treat a broken one as no opinion. */
-async function ask(
-  options: SubmitCommentOptions,
-  comment: Omit<PostComment, 'id'>,
-  _now: Date,
-): Promise<CommentVerdict> {
-  const checker = options.checker;
-  if (checker === undefined) return 'unknown';
-
-  const submission: CommentSubmission = {
-    comment,
+  const outcome = await intakeComment({
+    records,
+    origin: 'form',
+    comment: proposed,
     post: {
-      slug: options.document.slug,
-      title: options.document.title,
-      url: absolute(options.document.permalink, options.baseUrl),
+      title: document.title,
+      url: absolute(document.permalink, options.baseUrl),
     },
+    dataDir: options.dataDir,
+    baseUrl: options.baseUrl,
+    checker: options.checker,
+    notices: options.notices,
     address: options.address,
     userAgent: options.userAgent,
     referrer: options.referrer,
-    baseUrl: options.baseUrl,
-  };
+  });
 
-  try {
-    return await checker.check(submission);
-  } catch (error) {
-    // A checker that is down must not stop a site taking comments; the comment
-    // falls back to whatever the site's own rules said about it.
-    console.warn(`The comment checker refused to answer: ${messageOf(error)}`);
-    return 'unknown';
-  }
+  // Counted against the address whatever became of it: a machine posting
+  // rubbish should not get unlimited free attempts because the rubbish was
+  // recognised.
+  throttle.fail(keys);
+
+  return outcome.kind === 'stored'
+    ? { kind: 'stored', comment: outcome.comment }
+    : refused({ kind: 'discarded' });
 }
 
 /**
@@ -457,8 +437,4 @@ function absolute(pathname: string, baseUrl: string): string {
 
 function refused(refusal: CommentRefusal): CommentOutcome {
   return { kind: 'refused', refusal };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
