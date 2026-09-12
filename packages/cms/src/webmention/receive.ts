@@ -1,8 +1,7 @@
-import type { AdminStore, CommentStatus, PostComment } from '../admin/store.ts';
-import { addComment, deleteComment, updateComment } from '../comments/records.ts';
-import type { CommentRecords } from '../comments/records.ts';
-import { hashClientAddress } from '../comments/submission.ts';
-import type { CommentChecker, CommentSubmission, CommentVerdict } from '../comments/submission.ts';
+import type { PostComment } from '../admin/store.ts';
+import { deleteComment, heldWebmention, intakeComment } from '../comments/records.ts';
+import type { CommentNotices, CommentRecords, ProposedComment } from '../comments/records.ts';
+import type { CommentChecker } from '../comments/submission.ts';
 import type { Document } from '../content/document.ts';
 import { sanitizeCommentHtml } from '../web/sanitize.ts';
 import { readCapped, WEBMENTION_USER_AGENT } from './discovery.ts';
@@ -24,13 +23,18 @@ import { linksTo, sourceEntry } from './microformats.ts';
  * connection open while a stranger's server is fetched — is a way of being
  * held open by a stranger's server.
  *
- * What lands is a comment like any other (doc-6): the same file, the same
- * thread, the same queue, and the same {@link CommentChecker} seam, which is
- * how TASK-52 sends it to Akismet as a `webmention` without this module
- * knowing Akismet exists. What it is not held by is the closing rules: a post
- * that stopped taking comments a year ago still hears about a page that links
- * to it, exactly as it still hears a fediverse reply, because neither is
- * something this site can stop happening.
+ * What lands is a comment like any other (doc-6), and it lands the same way:
+ * this module reads what the source says and hands `intakeComment` a proposed
+ * comment, so the file, the index, the {@link CommentChecker} seam, the
+ * verdict-to-status rule and the notice are the very ones a form submission
+ * gets. That is how TASK-52 sends it to Akismet as a `webmention` without this
+ * module knowing Akismet exists, and how a moderator's decision on a mention
+ * survives the page that sent it being edited and re-sent.
+ *
+ * What it is not held by is the closing rules: a post that stopped taking
+ * comments a year ago still hears about a page that links to it, exactly as it
+ * still hears a fediverse reply, because neither is something this site can
+ * stop happening.
  */
 
 /** How long the source is given to answer before it is abandoned. */
@@ -125,6 +129,8 @@ export interface VerifyWebmentionOptions {
   readonly baseUrl: string;
   /** The checker, when the site named one. */
   readonly checker?: CommentChecker | undefined;
+  /** Who to tell when one lands in the queue, handed to the intake (TASK-55). */
+  readonly notices?: CommentNotices | undefined;
   /** The clock. */
   readonly now: Date;
   /** Where failures are reported. */
@@ -163,7 +169,7 @@ export async function verifyWebmention(
   options: VerifyWebmentionOptions,
 ): Promise<WebmentionOutcome> {
   const { incoming, records, now } = options;
-  const held = storedFrom(records.admin, incoming.document.slug, incoming.source);
+  const held = heldWebmention(records, incoming.document.slug, incoming.source);
 
   const fetched = await readSource(incoming.source);
   if (fetched.kind === 'unreachable') {
@@ -207,18 +213,14 @@ export async function verifyWebmention(
       ? sanitizeCommentHtml(entry.content.html)
       : paragraph(text);
 
-  const proposed: Omit<PostComment, 'id'> = {
+  const proposed: ProposedComment = {
     slug: incoming.document.slug,
     permalink: incoming.document.permalink,
     source: 'webmention',
     kind,
-    // Held like a native comment: a page linking here is as much a stranger's
-    // words as a form submission, and the queue is where a person decides.
-    status: 'pending',
     author,
     content: { markdown: text, html },
     submitted: entry?.published ?? now.toISOString(),
-    addressHash: hashClientAddress(options.dataDir, incoming.address),
     inReplyTo: null,
     // The URL it was sent from rather than the entry's own `u-url`: this is
     // the identity a later webmention is matched against, and the sender is
@@ -228,72 +230,31 @@ export async function verifyWebmention(
     notify: false,
   };
 
-  const verdict = await ask(options, proposed);
-  if (verdict === 'discard') {
-    if (held === undefined) return { kind: 'ignored' };
-    await deleteComment(records, held.id);
-    return { kind: 'deleted' };
-  }
-
-  if (held !== undefined) {
-    // A moderator's decision stands: a source re-sending its webmention must
-    // not take an approved mention back into the queue, and must not quietly
-    // let a spam one out. A checker that has changed its mind to `spam` is the
-    // one thing that moves it, because that is a new fact about the content.
-    const status: CommentStatus = verdict === 'spam' ? 'spam' : held.status;
-    const moved = await updateComment(records, held.id, {
-      kind: proposed.kind,
-      status,
-      author: proposed.author,
-      content: proposed.content,
-      submitted: proposed.submitted,
-    });
-    return moved === undefined
-      ? { kind: 'ignored' }
-      : { kind: 'stored', comment: moved, created: false };
-  }
-
-  const stored = await addComment(records, {
-    ...proposed,
-    status: verdict === 'spam' ? 'spam' : verdict === 'ham' ? 'approved' : proposed.status,
-  });
-  return { kind: 'stored', comment: stored, created: true };
-}
-
-/** The webmention this site already holds from that source, if any. */
-function storedFrom(admin: AdminStore, slug: string, source: string): PostComment | undefined {
-  return admin
-    .listCommentsFor(slug)
-    .find((comment) => comment.source === 'webmention' && comment.url === source);
-}
-
-/** Ask the checker, if there is one, and treat a broken one as no opinion. */
-async function ask(
-  options: VerifyWebmentionOptions,
-  comment: Omit<PostComment, 'id'>,
-): Promise<CommentVerdict> {
-  const checker = options.checker;
-  if (checker === undefined) return 'unknown';
-
-  const submission: CommentSubmission = {
-    comment,
-    post: {
-      slug: options.incoming.document.slug,
-      title: options.incoming.document.title,
-      url: options.incoming.target,
-    },
-    address: options.incoming.address,
-    userAgent: options.incoming.userAgent,
-    referrer: options.incoming.referrer,
+  const outcome = await intakeComment({
+    records,
+    origin: 'webmention',
+    comment: proposed,
+    // The target as its sender named it, rather than this site's own idea of
+    // the permalink: that is the URL the conversation is about.
+    post: { title: incoming.document.title, url: incoming.target },
+    dataDir: options.dataDir,
     baseUrl: options.baseUrl,
-  };
+    checker: options.checker,
+    notices: options.notices,
+    address: incoming.address,
+    userAgent: incoming.userAgent,
+    referrer: incoming.referrer,
+    logger: options.logger,
+  });
 
-  try {
-    return await checker.check(submission);
-  } catch (error) {
-    options.logger.warn(`The comment checker refused to answer: ${messageOf(error)}`);
-    return 'unknown';
+  if (outcome.kind === 'stored') {
+    return { kind: 'stored', comment: outcome.comment, created: outcome.created };
   }
+  // A source nobody was holding anything from leaves nothing behind, and one
+  // whose entry went while this was deciding has already been dealt with.
+  return outcome.kind === 'discarded' && outcome.removed
+    ? { kind: 'deleted' }
+    : { kind: 'ignored' };
 }
 
 /** What reading a source page came to. */

@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-05 11:58'
+updated_date: '2026-09-12 21:02'
 ---
 # Native comments
 
@@ -243,11 +243,68 @@ the site would have held it, and `unknown` leaves the site's own rules to
 decide. A checker that throws is treated as `unknown` and logged, so a service
 that is down never stops a site taking comments.
 
+`check` has exactly one caller — the intake below — so those four answers mean
+the same thing whatever proposed the comment.
+
 The two report methods are the only training such a service gets, and they are
 called from the moderation screen when a human disagrees: `reportSpam` when an
 approved or pending comment is filed as spam, `reportHam` when one is let out
 of the spam list. Approving something that was merely waiting reports nothing —
 a service charged per call should not be told what it already assumed.
+
+## One door in
+
+Three things write a comment — the form under a post, the webmention endpoint
+(doc-7) and a moderator's reply on the admin screen — and all three go through
+one function: `intakeComment`, in `src/comments/records.ts`. It is handed a
+proposed comment and where it came from, and it owns everything between that
+and a comment existing: hashing the address, the auto-approval rule above, the
+`CommentChecker` call, the verdict-to-status rule below, the file and index
+write inside the per-file lock, and the message to whoever was waiting to hear.
+
+What the callers keep is what is really theirs. `src/comments/submission.ts`
+parses the form and runs the three defences; `src/webmention/receive.ts`
+fetches the source, checks that it really links here and reads its
+microformats; `src/admin/comments.ts` knows who is signed in. None of the three
+builds a comment record, asks a checker, maps a verdict onto a status, or sends
+a notice.
+
+### The verdict-to-status rule
+
+One rule, in one place, and this is the whole of it.
+
+| Verdict   | A new comment                              | A webmention this site already holds      |
+| --------- | ------------------------------------------ | ----------------------------------------- |
+| `discard` | Nothing is stored at all.                  | The held entry is deleted.                |
+| `spam`    | Filed as spam.                             | Filed as spam.                            |
+| `ham`     | Approved.                                  | The moderator's decision stands.          |
+| `unknown` | Where the site's own rules put it.         | The moderator's decision stands.          |
+
+"Where the site's own rules put it" is the auto-approval rule for a form
+comment — approved for a name and email approved before, pending otherwise —
+and `pending` for a webmention, which is a stranger's words like any other.
+
+A source re-sending its webmention must not take an approved mention back into
+the queue and must not quietly let a spam one out, which is why only a fresh
+`spam` moves one: that is a new fact about the content rather than a repeat of
+an old one. The entry's id, its post and its source never move, because those
+are what make it the same comment; its kind, author, words and date are
+replaced by what the page says now.
+
+A moderator's reply is never offered to a checker at all, and is approved: the
+person writing it is the person who would have approved it, and a spam service
+has no say in what the owner of the site says.
+
+### Who is told
+
+The intake decides that too, so the rule is written once rather than at each
+writer:
+
+- A **new entry that is waiting** sends the moderation notice, once.
+- A **webmention that was merely rewritten** sends nothing. The moderators
+  heard the first time, and it has been in the queue ever since.
+- An **auto-approved comment** sends no moderation notice — nothing is waiting
+  — and instead tells whoever it answers, if they asked to be told.
 
 ## Akismet
 
@@ -318,6 +375,8 @@ Email is what makes moderation timely, and it is off until a site can send it (T
 ### To the moderators
 
 A comment or a webmention entering the queue emails every user who has an address and has not turned **New comments** off on `/admin/users`. Only `pending`: one Akismet filed as spam is not waiting for anybody, and one it said to discard was never stored. A webmention re-sent by a page somebody edited notifies nobody either — a source that updates its entry is not new news. And only the users who want it **as it arrives**: one on an hourly or a daily digest hears nothing at this moment, by definition of having chosen a window.
+
+Which of those a comment is, is the intake's decision and not the form's or the endpoint's ("Who is told", above); who then gets a message, and whether they get it now or in a window, is this module's.
 
 The message carries the words themselves, the post, and three links: approve, spam, delete. Each is `/_geekity/moderate?action=…&token=…`, needs no login, and lands on a page with one button on it. **Opening a link does nothing**; only the button acts. Mail readers, spam filters and corporate link scanners fetch the URLs in a message as a matter of course, and a link that moderated on being fetched would be a gateway silently deleting this site's comments.
 

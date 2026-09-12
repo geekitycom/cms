@@ -2,7 +2,7 @@ import type { Context, Hono } from 'hono';
 
 import { renderCommentMarkdown } from '../comments/markdown.ts';
 import { isModerationAction, moderateComment } from '../comments/moderate.ts';
-import { addComment } from '../comments/records.ts';
+import { intakeComment } from '../comments/records.ts';
 import type { CommentRecords } from '../comments/records.ts';
 import type { GeekityEnv } from '../env.ts';
 import { editorPath, PAGE_KIND, POST_KIND } from './documents.ts';
@@ -220,33 +220,36 @@ export function mountCommentsScreen(
       return c.redirect(back, 303);
     }
 
-    // The moderator's reply is a comment like any other, and approved because
-    // the person writing it is the person who would have approved it. It goes
-    // in the same file, under the comment it answers, so the thread on the
-    // page reads as one conversation.
-    const written = await addComment(recordsOf(c), {
-      slug: parent.slug,
-      permalink: parent.permalink,
-      source: 'comment',
-      kind: 'reply',
-      status: 'approved',
-      author: { name: moderatorName(c), url: null, email: null, avatar: null },
-      content: { markdown, html: renderCommentMarkdown(markdown) },
-      submitted: c.var.config.now().toISOString(),
+    // The moderator's reply is a comment like any other, so it goes through
+    // the same door as the form and the webmention endpoint. The intake
+    // approves it — the person writing it is the person who would have
+    // approved it — and tells whoever it answers, if they asked to be told
+    // (TASK-55). It lands in the same file, under the comment it answers, so
+    // the thread on the page reads as one conversation.
+    await intakeComment({
+      records: recordsOf(c),
+      origin: 'moderator',
+      comment: {
+        slug: parent.slug,
+        permalink: parent.permalink,
+        source: 'comment',
+        kind: 'reply',
+        author: { name: moderatorName(c), url: null, email: null, avatar: null },
+        content: { markdown, html: renderCommentMarkdown(markdown) },
+        submitted: c.var.config.now().toISOString(),
+        inReplyTo: parent.id,
+        url: null,
+        // A moderator writing from the admin is already reading the queue;
+        // nothing here is going to email them about their own reply.
+        notify: false,
+      },
       // No address is recorded for a reply written in the admin: it came from
       // a signed-in person, and the hash exists to spot a run of anonymous
       // submissions rather than to log the owner of the site.
-      addressHash: null,
-      inReplyTo: parent.id,
-      url: null,
-      // A moderator writing from the admin is already reading the queue;
-      // nothing here is going to email them about their own reply.
-      notify: false,
+      dataDir: c.var.config.dataDir,
+      baseUrl: c.var.config.baseUrl,
+      notices: c.var.notifications,
     });
-
-    // The reply is approved the moment it is written, so the person it
-    // answers hears about it now (TASK-55).
-    c.var.notifications.replyApproved(written);
 
     flash(c, 'notice', `Replied to ${parent.author.name}.`);
     return c.redirect(back, 303);
