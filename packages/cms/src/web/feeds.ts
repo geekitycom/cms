@@ -928,7 +928,7 @@ function commentsFingerprint(source: CommentFeedSource): string {
     notifyServerOf(source.site)?.base ?? '',
     source.baseUrl,
     ...source.comments.map((comment) =>
-      [comment.id, comment.author, comment.published.toISOString(), comment.html].join(' '),
+      [comment.id, comment.author, comment.published.toISOString(), comment.html].join('\0'),
     ),
   ].join('\n');
 }
