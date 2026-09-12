@@ -148,7 +148,7 @@ export function browser(cms: Cms): Browser {
     async upload(url, csrfToken, file, field = 'file') {
       const form = new FormData();
       form.set('csrf_token', csrfToken);
-      form.set(field, new File([file.bytes], file.name, { type: file.type }));
+      form.set(field, new File([new Uint8Array(file.bytes)], file.name, { type: file.type }));
       return remember(
         await cms.app.request(url, { method: 'POST', headers: headers(), body: form }),
       );
