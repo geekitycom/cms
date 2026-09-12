@@ -46,7 +46,7 @@ async function uploaded(
     bytes: new Uint8Array(bytes),
   });
   const body = (await response.json()) as { url?: string; error?: string };
-  assert.equal(response.status, 201, body.error);
+  assert.equal(response.status, 201, body.error ?? 'upload was not created');
   assert.ok(body.url !== undefined);
   return body.url;
 }

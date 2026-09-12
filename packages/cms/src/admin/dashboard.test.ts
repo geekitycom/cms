@@ -80,7 +80,7 @@ describe('the admin shell', () => {
       ['Settings', '/admin/settings'],
       ['Users', '/admin/users'],
       ['Federation', '/admin/federation'],
-    ]) {
+    ] as const) {
       assert.match(html, new RegExp(`<a href="${url}"[^>]*>${label}</a>`), url);
     }
 
