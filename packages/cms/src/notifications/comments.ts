@@ -1,5 +1,5 @@
 import { listUsers } from '../admin/accounts.ts';
-import { commentAnchor } from '../comments/conversation.ts';
+import { commentAnchor } from '../web/conversation.ts';
 import { MODERATION_ACTIONS } from '../comments/moderate.ts';
 import type { AdminStore, PostComment } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';

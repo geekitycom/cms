@@ -25,7 +25,7 @@ import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
 import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
 import { mountNotificationLinks } from '../notifications/routes.ts';
-import { commentCounts, postComments, siteComments } from './comments.ts';
+import { feedComments, spokenIn } from './conversation.ts';
 import { isPublicDocument, publicDocumentAt } from './documents.ts';
 import {
   commentsFeedPath,
@@ -706,14 +706,7 @@ function feed(
     // Only RSS carries the comment pointers; the other two formats have no
     // vocabulary for them, and counting for a feed that cannot say the number
     // would be a query per item for nothing.
-    ...(format === 'rss'
-      ? {
-          commentCounts: commentCounts(
-            { admin: c.var.admin, store, baseUrl: config.baseUrl },
-            documents,
-          ),
-        }
-      : {}),
+    ...(format === 'rss' ? { commentCounts: c.var.conversation.counts(documents) } : {}),
   };
 
   return feedResponse({ format, source, conditional: conditionalHeaders(c) });
@@ -728,15 +721,19 @@ function feed(
  * document lookup rather than anything this feed decides.
  */
 function comments(c: Context<GeekityEnv>, document: Document | undefined): Response {
-  const { store, admin, renderer, config } = c.var;
+  const { conversation, renderer, config } = c.var;
   const site = renderer.site();
-  const context = { admin, store, baseUrl: config.baseUrl };
   const limit = feedSize(site);
 
-  // A post's own feed hands the builder replies with no post attached, and so
-  // its items name no post: there, every item answers the same one.
-  const found: readonly FeedComment[] =
-    document === undefined ? siteComments(context, limit) : postComments(context, document, limit);
+  // The same reading the page is drawn from, which is the point: a subscriber
+  // to a post's comments and a reader who scrolls to the bottom of it are
+  // looking at one conversation. A post's own feed hands the builder entries
+  // with no post attached, and so its items name no post: there, every item
+  // answers the same one.
+  const found: readonly FeedComment[] = feedComments(
+    document === undefined ? conversation.latest(limit) : spokenIn(conversation.thread(document)),
+    { baseUrl: config.baseUrl, limit },
+  );
 
   const source: CommentFeedSource = {
     site,
