@@ -185,18 +185,32 @@ export function createScheduler(options: CreateSchedulerOptions): Scheduler {
 
     const due = store.nextDue();
     waiting = due;
-    if (due === undefined) return;
 
-    const delay = Math.min(
-      MAXIMUM_DELAY_MS,
-      Math.max(1, new Date(due).getTime() - store.now().getTime()),
-    );
+    const delay = delayUntil(due);
+    if (delay === undefined) return;
+
     handle = timers.set(() => {
       handle = undefined;
       // A hop rather than the whole wait: past the maximum delay the timer is
       // re-armed for the rest of it, and `run()` finds nothing due yet.
       running = fire();
     }, delay);
+  }
+
+  /**
+   * How long to wait, or nothing to wait for.
+   *
+   * A document that has come due since the watermark but was never announced
+   * is released on the next tick. That happens to a post whose date was a
+   * moment ahead when it was saved and behind the clock by the time the index
+   * reported the change: it is not "next due" any more, and with nothing else
+   * to wait for it would otherwise sit unannounced until the next restart.
+   */
+  function delayUntil(due: string | undefined): number | undefined {
+    const since = watermark.read();
+    if (since !== undefined && store.listDueSince(since).length > 0) return 1;
+    if (due === undefined) return undefined;
+    return Math.min(MAXIMUM_DELAY_MS, Math.max(1, new Date(due).getTime() - store.now().getTime()));
   }
 
   async function fire(): Promise<void> {

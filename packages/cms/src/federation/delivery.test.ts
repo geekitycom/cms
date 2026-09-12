@@ -478,7 +478,7 @@ describe('a scheduled post', () => {
     const agent = await signedIn(cms);
     await cms.scheduler.start();
 
-    const due = new Date(Date.now() + 150).toISOString();
+    const due = new Date(Date.now() + 1000).toISOString();
     await publishNewPost(agent, { date: due });
     await cms.delivery.settled();
     assert.deepEqual(deliveries, [], 'nothing goes out at the moment of saving');

@@ -220,6 +220,27 @@ describe('the scheduler', () => {
     assert.equal(box.timers.delay(), undefined, 'the timer was cleared');
   });
 
+  it('releases a post whose moment passed while it was being saved, rather than waiting for nothing', async () => {
+    // Nothing scheduled, so after the boot scan the scheduler is not waiting.
+    const box = await harness({ documents: [] });
+    await box.scheduler.start();
+    assert.equal(box.timers.delay(), undefined);
+
+    // A post dated a moment ahead, but the save took longer than that moment:
+    // by the time the index says it changed, its date is already behind the
+    // clock. Nothing is "next due", yet it has never been announced.
+    box.set('2026-09-03T12:00:01Z');
+    box.store.upsert(post({ date: '2026-09-03T12:00:00.500Z' }));
+    box.scheduler.handle(changeFor(box.store));
+
+    assert.equal(box.timers.delay(), 1, 'it is released on the next tick');
+    box.timers.fire();
+    await box.scheduler.settled();
+
+    assert.equal(box.announced.length, 1, 'the post that came due during its save went out');
+    assert.equal(box.timers.delay(), undefined, 'and nothing is waited for after it');
+  });
+
   it('waits in hops rather than overflowing setTimeout on a post dated years out', async () => {
     const box = await harness({ documents: [post({ date: '2099-01-01T00:00:00Z' })] });
 
