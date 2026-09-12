@@ -8,6 +8,7 @@ import type { RelayService } from './federation/relays.ts';
 import type { MailService } from './mail/service.ts';
 import type { CommentNotifier } from './notifications/comments.ts';
 import type { WebmentionService } from './webmention/service.ts';
+import type { ConversationReader } from './web/conversation.ts';
 import type { Renderer } from './web/render.ts';
 
 /**
@@ -24,6 +25,17 @@ export interface GeekityEnv {
     config: ResolvedConfig;
     /** The theme, for handlers that answer with HTML. */
     renderer: Renderer;
+    /**
+     * What has been said about a post, from every source at once: the thread
+     * under it, the counts a feed puts beside it, and the site's latest.
+     *
+     * On the context because the renderer draws the page from it and the
+     * comments feeds are published from it, and the two must be one reading —
+     * a subscriber and a reader of the page are looking at the same
+     * conversation. Nothing else may read the `comments` or `ap_inbox` index
+     * to show one.
+     */
+    conversation: ConversationReader;
     /**
      * Report a write this request made to the content directory.
      *

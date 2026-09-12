@@ -16,7 +16,7 @@ import {
 } from './form.ts';
 import type { CommentFormContext } from './form.ts';
 import { commentPolicyOf, commentsOpen } from './policy.ts';
-import { commentAnchor } from './conversation.ts';
+import { commentAnchor } from '../web/conversation.ts';
 import {
   COMMENT_FIELDS,
   COMMENT_RATE_LIMIT,

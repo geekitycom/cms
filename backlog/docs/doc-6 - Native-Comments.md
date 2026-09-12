@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-12 21:02'
+updated_date: '2026-09-12 21:20'
 ---
 # Native comments
 
@@ -412,6 +412,39 @@ The unsubscribe link at the bottom is signed the same way, lasts a year rather t
 ### Adding another notice
 
 Preferences are a switchboard keyed by event name, not a field per notice. `src/notifications/preferences.ts` holds the registry; one entry there is a new checkbox on `/admin/users`, a new key in `data/users.json`, and a new answer from `notificationRecipients`. An event a user has said nothing about is at its default, so a notice that ships turned on reaches everybody with an address without anybody visiting that screen. An entry that says `batched: true` gets the how-often select beside its switch as well, and whatever sends it is then responsible for honouring a window; `immediately` is the default there, and a stored mode this version does not know is dropped and read as the default, exactly as an unknown event key is.
+
+## One way out: the conversation
+
+One function writes a comment and one module reads one back. `src/web/conversation.ts`
+is that module — doc-4 calls it the conversation on the page — and
+`createConversation({ admin, store, baseUrl })` is the whole of its interface:
+
+- **`thread(document)`** — everything said about one post, threaded: the
+  approved comments merged with the fediverse replies by the same `inReplyTo`
+  rule, and the likes, boosts and mentions beside them. This is what the theme
+  is handed as `conversation`.
+- **`counts(documents)`** — how many answers each of a list of posts has, by
+  permalink. The number `source:comments` puts beside an item of a post feed,
+  counted off the two indexes rather than by threading each post, because it is
+  asked for every item of a page and it goes into that feed's own ETag.
+- **`latest(limit)`** — the site's newest answers, each with the post it
+  answers, for `/comments/feed/`. One about a post that has since been
+  unpublished or trashed is left out: the feed would be showing a conversation
+  about nothing.
+
+A post's own comments feed is `thread` flattened by `spokenIn` — everything
+somebody actually said, at every depth, with the likes and boosts left out
+because a feed item with no words is nothing to publish — and `feedComments`
+turns an entry from either reading into a feed item, so the page, the post's
+feed and the site's feed cannot disagree about what a comment is or where it
+lives. A fediverse reply is unmoderated and always `published`, because a
+remote server published it before this site heard of it; a comment or a
+webmention reaches a reader only at `approved`.
+
+**Nothing outside this module and `intakeComment` reads the `comments` or
+`ap_inbox` index to show a reader a conversation.** The moderation screen and
+the notices read them and are not conversation display: they are about what a
+moderator still has to decide, which is the one thing a reader never sees.
 
 ## What a reader sees
 

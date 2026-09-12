@@ -2017,27 +2017,41 @@ atomFeed(source); // a string
 jsonFeed(source); // a JSON Feed object
 ```
 
-`commentsRssFeed` is the same for comments, and `postComments`, `siteComments`
-and `commentCounts` read the replies out of the inbox log:
+`commentsRssFeed` is the same for comments, and what goes in it comes from the
+conversation reader — the one thing that reads the inbox log and the comment
+index to show somebody what has been said, so a feed and the page under the
+post carry the same entries:
 
 ```ts
-import { commentsRssFeed, siteComments } from '@geekity/cms';
+import {
+  commentsRssFeed,
+  createConversation,
+  feedComments,
+} from '@geekity/cms';
 
-const context = {
+const conversation = createConversation({
   admin: cms.admin,
   store: cms.store,
   baseUrl: cms.config.baseUrl,
-};
+});
 
 commentsRssFeed({
   site,
-  comments: siteComments(context, 20),
+  comments: feedComments(conversation.latest(20), {
+    baseUrl: cms.config.baseUrl,
+    limit: 20,
+  }),
   title: `${site.title}: comments`,
   href: '/',
   feedHref: '/comments/feed/',
   baseUrl: cms.config.baseUrl,
 });
 ```
+
+`conversation.thread(document)` is the same reading for one post — the shape the
+theme's `conversation.njk` is handed — `spokenIn` flattens it into the entries a
+feed carries, and `conversation.counts(documents)` is the number `source:comments`
+puts beside each item of a post feed.
 
 ## Sitemap and robots.txt
 

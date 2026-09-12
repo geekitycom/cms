@@ -16,7 +16,6 @@ export type {
   AkismetKeyStatus,
   VerifyAkismetKeyOptions,
 } from './akismet.ts';
-export { commentAnchor, commentInteractions, interactionOf } from './conversation.ts';
 export {
   blankValues,
   COMMENT_NOTICE_PARAM,

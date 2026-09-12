@@ -26,18 +26,18 @@ export {
   termRedirects,
 } from './context.ts';
 export type { DocumentContext, PageContext, SiteData, SiteDataSource } from './context.ts';
-export { commentCounts, postComments, siteComments } from './comments.ts';
-export type { Comment, CommentContext } from './comments.ts';
-export { postConversation } from './conversation.ts';
+export { commentAnchor, createConversation, feedComments, spokenIn } from './conversation.ts';
 export type {
   Conversation,
   ConversationContext,
+  ConversationReader,
   Interaction,
   InteractionAuthor,
   InteractionCounts,
   InteractionKind,
   InteractionSource,
   InteractionStatus,
+  SiteInteraction,
 } from './conversation.ts';
 export { activityStreamsId, isPublicDocument, publicDocumentAt } from './documents.ts';
 export {
