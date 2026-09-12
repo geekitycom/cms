@@ -3,7 +3,7 @@ id: doc-1
 title: Architecture Overview
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 18:09'
+updated_date: '2026-09-12 21:02'
 ---
 # Architecture Overview
 
@@ -40,6 +40,13 @@ packages/cms/                 published as @geekity/cms
       writer.ts               Document -> markdown file (used by admin)
     web/                      public routes, content negotiation, theme rendering
     admin/                    auth, session, posts/pages/settings screens
+    comments/                 the comment form, its restricted Markdown, the spam checker
+                              seam and whether a post is still taking comments
+      records.ts              content/_data/comments, and intakeComment: the one door
+                              every comment enters by, whether the form, the webmention
+                              endpoint or a moderator's reply proposed it (doc-6)
+    webmention/               sending a post's webmentions, and verifying the ones sent
+                              here before handing them to the intake (doc-7)
     federation/               Fedify setup, actor, inbox handlers, outbox delivery
       records.ts              content/_data/federation: followers.json + the inbox log
   themes/default/             default theme, shipped in the package

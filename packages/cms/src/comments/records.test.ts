@@ -4,20 +4,35 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { createUser } from '../admin/accounts.ts';
 import { openAdminStore } from '../admin/store.ts';
-import type { AdminStore } from '../admin/store.ts';
+import type { AdminStore, PostComment } from '../admin/store.ts';
+import { openContentStore } from '../content/store.ts';
+import type { ContentStore } from '../content/store.ts';
+import { createMemoryMailProvider } from '../mail/memory.ts';
+import type { MemoryMailProvider } from '../mail/memory.ts';
+import { createMailService } from '../mail/service.ts';
+import { createCommentNotifier } from '../notifications/comments.ts';
 import {
   addComment,
   commentsFile,
   deleteComment,
+  intakeComment,
   readComments,
   rebuildCommentIndexes,
   updateComment,
 } from './records.ts';
-import type { CommentRecords, NewComment } from './records.ts';
+import type {
+  CommentIntakeOutcome,
+  CommentRecords,
+  IntakeCommentOptions,
+  NewComment,
+  ProposedComment,
+} from './records.ts';
+import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
 
 const temporaryDirs: string[] = [];
-const openStores: AdminStore[] = [];
+const openStores: (AdminStore | ContentStore)[] = [];
 
 after(async () => {
   for (const opened of openStores) opened.close();
@@ -271,5 +286,397 @@ describe('a comment file somebody edited by hand', () => {
     assert.equal(held[0]?.kind, 'reply');
     assert.equal(held[0]?.author.email, null);
     assert.equal(held[0]?.content.html, '');
+  });
+});
+
+/**
+ * The intake, driven through its own interface.
+ *
+ * Everything below hands {@link intakeComment} a proposed comment and reads
+ * what became of it: the file, the index, and the messages a memory mail
+ * provider was given. No HTTP, no form parsing and no webmention fetching —
+ * those are the callers' half, and they have site-level tests of their own.
+ */
+
+/** A checker that answers whatever this test told it to, and remembers. */
+interface RememberingChecker extends CommentChecker {
+  /** Every submission it was shown, in order. */
+  readonly seen: CommentSubmission[];
+}
+
+/** One that always says the same thing, or always throws. */
+function checkerSaying(answer: CommentVerdict | Error): RememberingChecker {
+  const seen: CommentSubmission[] = [];
+  return {
+    seen,
+    check(submission) {
+      seen.push(submission);
+      if (answer instanceof Error) throw answer;
+      return answer;
+    },
+  };
+}
+
+/** What one intake is handed, on top of the defaults below. */
+interface Taking {
+  /** Where the comment came from. */
+  origin?: IntakeCommentOptions['origin'] | undefined;
+  /** What is different about the comment itself. */
+  comment?: Partial<ProposedComment> | undefined;
+  /** The checker, when this test has one. */
+  checker?: CommentChecker | undefined;
+  /** Where the submission came from, unhashed. */
+  address?: string | undefined;
+}
+
+/** A site the intake can be driven against. */
+interface IntakeSite extends CommentRecords {
+  /** Where the salt, the signing secret and the users live. */
+  dataDir: string;
+  /** Every message the notices actually produced. */
+  provider: MemoryMailProvider;
+  /** Take one comment, and wait for whatever mail it set off. */
+  take(taking?: Taking): Promise<CommentIntakeOutcome>;
+}
+
+/** A comment on `hello-world` as a caller proposes it, judged by nobody yet. */
+function proposal(overrides: Partial<ProposedComment> = {}): ProposedComment {
+  return {
+    slug: 'hello-world',
+    permalink: '/2026/09/hello-world/',
+    source: 'comment',
+    kind: 'reply',
+    author: {
+      name: 'Ada Lovelace',
+      url: 'https://ada.example/',
+      email: 'ada@example.com',
+      avatar: null,
+    },
+    content: { markdown: 'Good post.', html: '<p>Good post.</p>\n' },
+    submitted: '2026-09-04T10:00:00.000Z',
+    inReplyTo: null,
+    url: null,
+    notify: false,
+    ...overrides,
+  };
+}
+
+/** The same, as a page that links here would propose it. */
+function mention(overrides: Partial<ProposedComment> = {}): ProposedComment {
+  return proposal({
+    source: 'webmention',
+    kind: 'mention',
+    author: { name: 'Grace Hopper', url: 'https://grace.example/', email: null, avatar: null },
+    content: { markdown: 'Somebody wrote about this', html: '<p>Somebody wrote about this</p>' },
+    url: 'https://grace.example/2026/09/about-that/',
+    ...overrides,
+  });
+}
+
+/** The files, the index, one moderator with an address, and mail in a list. */
+async function intakeSite(): Promise<IntakeSite> {
+  const dataDir = await temporaryDir();
+  const contentDir = await temporaryDir();
+  const admin = openAdminStore({ dataDir });
+  const store = openContentStore({ dataDir });
+  openStores.push(admin, store);
+
+  const provider = createMemoryMailProvider();
+  const mail = createMailService({
+    config: {
+      baseUrl: BASE_URL,
+      contentDir,
+      dataDir,
+      themeDir: path.join(contentDir, 'theme'),
+      watch: false,
+    },
+    provider,
+    backoffMs: () => 0,
+    logger: { info: () => {}, warn: () => {} },
+  });
+  const notices = createCommentNotifier({
+    admin,
+    store,
+    mail,
+    config: { baseUrl: BASE_URL, dataDir, now: () => new Date('2026-09-04T12:00:00.000Z') },
+  });
+
+  await createUser({
+    dataDir,
+    username: 'moderator',
+    password: 'correct horse battery',
+    email: 'moderator@example.com',
+  });
+
+  const records: CommentRecords = { admin, contentDir };
+
+  return {
+    admin,
+    contentDir,
+    dataDir,
+    provider,
+    async take(taking: Taking = {}) {
+      const outcome = await intakeComment({
+        records,
+        origin: taking.origin ?? 'form',
+        comment: proposal(taking.comment),
+        post: { title: 'Hello world', url: `${BASE_URL}/2026/09/hello-world/` },
+        dataDir,
+        baseUrl: BASE_URL,
+        notices,
+        ...(taking.checker === undefined ? {} : { checker: taking.checker }),
+        ...(taking.address === undefined ? {} : { address: taking.address }),
+        logger: { warn: () => {} },
+      });
+      await mail.settled();
+      return outcome;
+    },
+  };
+}
+
+/** Where the site in these tests is. */
+const BASE_URL = 'https://blog.example';
+
+/** The one comment that was stored, or a failed assertion saying none was. */
+function onlyStored(outcome: CommentIntakeOutcome): PostComment {
+  assert.equal(outcome.kind, 'stored');
+  assert.ok(outcome.kind === 'stored');
+  return outcome.comment;
+}
+
+describe('the comment intake', () => {
+  it('holds a stranger’s comment and tells the moderators once', async () => {
+    const site = await intakeSite();
+
+    const stored = onlyStored(await site.take());
+
+    assert.equal(stored.status, 'pending');
+    assert.equal(readComments(site.contentDir, 'hello-world')[0]?.status, 'pending');
+    assert.equal(site.admin.getComment(stored.id)?.status, 'pending');
+    assert.equal(site.provider.sent.length, 1);
+    assert.deepEqual(
+      site.provider.sent[0]?.to.map((recipient) => recipient.address),
+      ['moderator@example.com'],
+    );
+  });
+
+  it('approves an author a moderator has let through before, and says nothing', async () => {
+    const site = await intakeSite();
+    await addComment(site, ada({ status: 'approved' }));
+    site.provider.clear();
+
+    const stored = onlyStored(await site.take());
+
+    assert.equal(stored.status, 'approved');
+    assert.equal(site.provider.sent.length, 0);
+  });
+
+  it('hashes the address rather than storing it', async () => {
+    const site = await intakeSite();
+
+    const stored = onlyStored(await site.take({ address: '198.51.100.7' }));
+
+    assert.ok(stored.addressHash !== null);
+    assert.doesNotMatch(stored.addressHash, /198\.51\.100\.7/);
+    assert.equal(readComments(site.contentDir, 'hello-world')[0]?.addressHash, stored.addressHash);
+  });
+
+  it('files what a checker calls spam, and tells nobody about it', async () => {
+    const site = await intakeSite();
+
+    const stored = onlyStored(await site.take({ checker: checkerSaying('spam') }));
+
+    assert.equal(stored.status, 'spam');
+    assert.equal(site.provider.sent.length, 0);
+  });
+
+  it('lets a comment a checker calls ham past the queue, and tells nobody', async () => {
+    const site = await intakeSite();
+
+    const stored = onlyStored(await site.take({ checker: checkerSaying('ham') }));
+
+    assert.equal(stored.status, 'approved');
+    assert.equal(site.provider.sent.length, 0);
+  });
+
+  it('stores nothing at all for a checker that says discard', async () => {
+    const site = await intakeSite();
+
+    const outcome = await site.take({ checker: checkerSaying('discard') });
+
+    assert.deepEqual(outcome, { kind: 'discarded', removed: false });
+    assert.deepEqual(readComments(site.contentDir, 'hello-world'), []);
+    assert.deepEqual(site.admin.listComments({}), []);
+    assert.equal(site.provider.sent.length, 0);
+  });
+
+  it('treats a checker that will not answer as no opinion', async () => {
+    const site = await intakeSite();
+    const checker = checkerSaying(new Error('the service is down'));
+
+    const stored = onlyStored(await site.take({ checker }));
+
+    assert.equal(checker.seen.length, 1);
+    assert.equal(stored.status, 'pending');
+  });
+
+  it('shows the checker the comment as it would be stored, and its post', async () => {
+    const site = await intakeSite();
+    const checker = checkerSaying('unknown');
+
+    await site.take({ checker, address: '198.51.100.7' });
+
+    const submission = checker.seen[0];
+    assert.equal(submission?.comment.source, 'comment');
+    assert.equal(submission?.comment.status, 'pending');
+    assert.equal(submission?.comment.author.name, 'Ada Lovelace');
+    assert.equal(submission?.address, '198.51.100.7');
+    assert.deepEqual(submission?.post, {
+      slug: 'hello-world',
+      title: 'Hello world',
+      url: `${BASE_URL}/2026/09/hello-world/`,
+    });
+    assert.equal(submission?.baseUrl, BASE_URL);
+  });
+
+  it('holds a webmention whatever the site would have done with a comment', async () => {
+    const site = await intakeSite();
+    // Ada has been approved before; a page of hers linking here still waits,
+    // because a webmention is a page rather than a person the site knows.
+    await addComment(site, ada({ status: 'approved' }));
+    site.provider.clear();
+
+    const stored = onlyStored(await site.take({ origin: 'webmention', comment: mention() }));
+
+    assert.equal(stored.status, 'pending');
+    assert.equal(stored.source, 'webmention');
+    assert.equal(site.provider.sent.length, 1);
+  });
+
+  it('tells the checker a webmention is one', async () => {
+    const site = await intakeSite();
+    const checker = checkerSaying('unknown');
+
+    await site.take({ origin: 'webmention', comment: mention(), checker });
+
+    assert.equal(checker.seen[0]?.comment.source, 'webmention');
+  });
+
+  it('files a webmention a checker calls spam, and approves one it calls ham', async () => {
+    const spam = await intakeSite();
+    assert.equal(
+      onlyStored(
+        await spam.take({
+          origin: 'webmention',
+          comment: mention(),
+          checker: checkerSaying('spam'),
+        }),
+      ).status,
+      'spam',
+    );
+
+    const ham = await intakeSite();
+    assert.equal(
+      onlyStored(
+        await ham.take({ origin: 'webmention', comment: mention(), checker: checkerSaying('ham') }),
+      ).status,
+      'approved',
+    );
+  });
+
+  it('rewrites the one a source already sent rather than adding a second', async () => {
+    const site = await intakeSite();
+    const first = onlyStored(await site.take({ origin: 'webmention', comment: mention() }));
+    site.provider.clear();
+
+    const outcome = await site.take({
+      origin: 'webmention',
+      comment: mention({ kind: 'reply', content: { markdown: 'Edited', html: '<p>Edited</p>' } }),
+    });
+
+    assert.equal(outcome.kind, 'stored');
+    assert.ok(outcome.kind === 'stored');
+    assert.equal(outcome.created, false);
+    assert.equal(outcome.comment.id, first.id);
+    assert.equal(outcome.comment.content.markdown, 'Edited');
+    assert.equal(readComments(site.contentDir, 'hello-world').length, 1);
+    // A page that is edited and re-sent is not news: the moderators heard the
+    // first time and the entry has been in the queue ever since.
+    assert.equal(site.provider.sent.length, 0);
+  });
+
+  it('keeps a moderator’s decision when a source sends its webmention again', async () => {
+    const site = await intakeSite();
+    const first = onlyStored(await site.take({ origin: 'webmention', comment: mention() }));
+    await updateComment(site, first.id, { status: 'approved' });
+
+    for (const verdict of ['unknown', 'ham'] as const) {
+      const outcome = await site.take({
+        origin: 'webmention',
+        comment: mention(),
+        checker: checkerSaying(verdict),
+      });
+      assert.equal(onlyStored(outcome).status, 'approved');
+    }
+  });
+
+  it('moves an approved webmention only when the fresh verdict is spam', async () => {
+    const site = await intakeSite();
+    const first = onlyStored(await site.take({ origin: 'webmention', comment: mention() }));
+    await updateComment(site, first.id, { status: 'approved' });
+
+    const outcome = await site.take({
+      origin: 'webmention',
+      comment: mention(),
+      checker: checkerSaying('spam'),
+    });
+
+    assert.equal(onlyStored(outcome).status, 'spam');
+  });
+
+  it('takes the webmention it already held away when a checker says discard', async () => {
+    const site = await intakeSite();
+    const first = onlyStored(await site.take({ origin: 'webmention', comment: mention() }));
+
+    const outcome = await site.take({
+      origin: 'webmention',
+      comment: mention(),
+      checker: checkerSaying('discard'),
+    });
+
+    assert.deepEqual(outcome, { kind: 'discarded', removed: true });
+    assert.deepEqual(readComments(site.contentDir, 'hello-world'), []);
+    assert.equal(site.admin.getComment(first.id), undefined);
+  });
+
+  it('approves a moderator’s reply without asking anybody', async () => {
+    const site = await intakeSite();
+    const parent = onlyStored(await site.take({ comment: proposal({ notify: true }) }));
+    site.provider.clear();
+    const checker = checkerSaying('spam');
+
+    const stored = onlyStored(
+      await site.take({
+        origin: 'moderator',
+        checker,
+        comment: proposal({
+          author: { name: 'The author', url: null, email: null, avatar: null },
+          content: { markdown: 'Thanks.', html: '<p>Thanks.</p>\n' },
+          inReplyTo: parent.id,
+        }),
+      }),
+    );
+
+    assert.equal(stored.status, 'approved');
+    // A moderator writing in the admin is the person who would have approved
+    // it; a spam service has no say in what the owner of the site says.
+    assert.deepEqual(checker.seen, []);
+    // Nothing is waiting, so no moderation notice goes; what does go is the
+    // message to whoever asked to hear about replies to their comment.
+    assert.equal(site.provider.sent.length, 1);
+    assert.deepEqual(
+      site.provider.sent[0]?.to.map((recipient) => recipient.address),
+      ['ada@example.com'],
+    );
   });
 });

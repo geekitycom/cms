@@ -1,11 +1,6 @@
 import { readSiteSettings } from '../admin/settings.ts';
-import type {
-  AdminStore,
-  PostComment,
-  SentWebmention,
-  WebmentionSendStatus,
-} from '../admin/store.ts';
-import type { CommentRecords } from '../comments/records.ts';
+import type { AdminStore, SentWebmention, WebmentionSendStatus } from '../admin/store.ts';
+import type { CommentNotices, CommentRecords } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
@@ -70,10 +65,11 @@ export interface CreateWebmentionServiceOptions {
   /**
    * Who to tell when an incoming webmention lands in the queue (TASK-55).
    *
-   * Optional, because a service built for a test of sending has nobody to
-   * tell; the CMS always hands one in.
+   * Handed straight to the intake, which decides whether this one is worth a
+   * message. Optional, because a service built for a test of sending has
+   * nobody to tell; the CMS always hands one in.
    */
-  notifications?: { pending(comment: PostComment): void } | undefined;
+  notifications?: CommentNotices | undefined;
 }
 
 /** Sends a site's webmentions, takes the ones sent to it, and remembers both. */
@@ -249,17 +245,14 @@ export function createWebmentionService(
             dataDir: config.dataDir,
             baseUrl: config.baseUrl,
             checker: config.commentChecker,
+            // The intake decides whether this one is news: a page that is
+            // edited and re-sent updates the entry it made, and putting the
+            // moderators through a message every time would make the notice
+            // worth ignoring.
+            notices: options.notifications,
             now: config.now(),
             logger,
           });
-
-          // Only a webmention this site had not already stored is news: a page
-          // that is edited and re-sent updates the entry it made, and putting
-          // the moderators through a message every time it happens would make
-          // the notice worth ignoring.
-          if (outcome.kind === 'stored' && outcome.created) {
-            options.notifications?.pending(outcome.comment);
-          }
 
           return outcome;
         } catch (thrown) {

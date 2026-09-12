@@ -3,7 +3,7 @@ id: doc-7
 title: Webmentions
 type: specification
 created_date: '2026-09-04 23:08'
-updated_date: '2026-09-04 23:31'
+updated_date: '2026-09-12 21:02'
 ---
 # Webmentions
 
@@ -156,12 +156,28 @@ hundred lines (`src/webmention/microformats.ts`, over a small tree parser in
 
 A comment in the post's file, `source: "webmention"`, `status: "pending"` — see
 doc-6 for the shape and the two keys a webmention fills in that a form does not.
-It goes through the same `CommentChecker` seam a native comment does, so a
-checker sees `comment.source === 'webmention'` and can tell Akismet it is a
-webmention rather than a comment. The shipped Akismet checker does exactly
-that: with a key in `data/akismet.json` an incoming webmention is sent to
-`comment-check` with `comment_type: webmention`, and a `true` answer files it
-as spam or drops it entirely (doc-6).
+
+Nothing here writes it. What this module does is read the source and hand
+`intakeComment` a proposed comment, exactly as the form under a post does
+(doc-6, "One door in"): the file, the index, the `CommentChecker` seam, the
+verdict-to-status rule and the moderation notice are then the very ones a
+native comment gets. Three things follow, and none of them is decided here.
+
+- A checker sees `comment.source === 'webmention'` and can tell Akismet it is a
+  webmention rather than a comment. The shipped Akismet checker does exactly
+  that: with a key in `data/akismet.json` an incoming webmention is sent to
+  `comment-check` with `comment_type: webmention`, and a `true` answer files it
+  as spam or drops it entirely (doc-6). The post a checker is told about is the
+  `target` its sender named, because that is the URL the conversation is about.
+- A page that is edited and re-sent rewrites the entry it made, and a
+  moderator's decision on that entry stands unless the fresh verdict is `spam`.
+- The moderators are emailed about a mention the first time it lands and not
+  when it is rewritten, because a source updating its entry is not new news.
+
+The one thing this module still decides on its own is a source that has stopped
+linking here or has gone: it looks up the entry that source left, deletes it,
+and never reaches the intake at all. There is no other way to withdraw a
+webmention, and no verdict is involved.
 
 What it is *not* held by is the closing rules. `commentsOpen` is asked by the
 form and by the form's endpoint and nowhere else: a post that stopped taking

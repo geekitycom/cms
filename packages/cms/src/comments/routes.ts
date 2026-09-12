@@ -16,7 +16,7 @@ import {
 } from './form.ts';
 import type { CommentFormContext } from './form.ts';
 import { commentPolicyOf, commentsOpen } from './policy.ts';
-import { commentAnchor } from './conversation.ts';
+import { commentAnchor } from '../web/conversation.ts';
 import {
   COMMENT_FIELDS,
   COMMENT_RATE_LIMIT,
@@ -86,6 +86,10 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       dataDir: config.dataDir,
       baseUrl: config.baseUrl,
       checker: config.commentChecker,
+      // Who hears about what lands is the intake's to decide, and neither
+      // message is awaited: the reader is redirected now and they go out
+      // behind them (TASK-55).
+      notices: c.var.notifications,
       address: clientAddress(c, config),
       userAgent: c.req.header('user-agent'),
       referrer: c.req.header('referer'),
@@ -98,12 +102,6 @@ export function mountComments(app: Hono<GeekityEnv>): void {
 
     if (outcome.kind === 'stored') {
       const stored = outcome.comment;
-      // Whoever moderates this site hears that something is waiting, and, when
-      // the site let it straight through, whoever it answers hears about it.
-      // Neither is awaited: the reader is redirected now and the messages go
-      // out behind them (TASK-55).
-      c.var.notifications.pending(stored);
-      c.var.notifications.replyApproved(stored);
       // A redirect rather than a rendered page, so a refresh does not post the
       // comment a second time. An approved comment is on the page already, so
       // the reader is sent to it; one waiting for a moderator has nothing to

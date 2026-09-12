@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-05 11:58'
+updated_date: '2026-09-12 21:20'
 ---
 # Native comments
 
@@ -243,11 +243,68 @@ the site would have held it, and `unknown` leaves the site's own rules to
 decide. A checker that throws is treated as `unknown` and logged, so a service
 that is down never stops a site taking comments.
 
+`check` has exactly one caller — the intake below — so those four answers mean
+the same thing whatever proposed the comment.
+
 The two report methods are the only training such a service gets, and they are
 called from the moderation screen when a human disagrees: `reportSpam` when an
 approved or pending comment is filed as spam, `reportHam` when one is let out
 of the spam list. Approving something that was merely waiting reports nothing —
 a service charged per call should not be told what it already assumed.
+
+## One door in
+
+Three things write a comment — the form under a post, the webmention endpoint
+(doc-7) and a moderator's reply on the admin screen — and all three go through
+one function: `intakeComment`, in `src/comments/records.ts`. It is handed a
+proposed comment and where it came from, and it owns everything between that
+and a comment existing: hashing the address, the auto-approval rule above, the
+`CommentChecker` call, the verdict-to-status rule below, the file and index
+write inside the per-file lock, and the message to whoever was waiting to hear.
+
+What the callers keep is what is really theirs. `src/comments/submission.ts`
+parses the form and runs the three defences; `src/webmention/receive.ts`
+fetches the source, checks that it really links here and reads its
+microformats; `src/admin/comments.ts` knows who is signed in. None of the three
+builds a comment record, asks a checker, maps a verdict onto a status, or sends
+a notice.
+
+### The verdict-to-status rule
+
+One rule, in one place, and this is the whole of it.
+
+| Verdict   | A new comment                              | A webmention this site already holds      |
+| --------- | ------------------------------------------ | ----------------------------------------- |
+| `discard` | Nothing is stored at all.                  | The held entry is deleted.                |
+| `spam`    | Filed as spam.                             | Filed as spam.                            |
+| `ham`     | Approved.                                  | The moderator's decision stands.          |
+| `unknown` | Where the site's own rules put it.         | The moderator's decision stands.          |
+
+"Where the site's own rules put it" is the auto-approval rule for a form
+comment — approved for a name and email approved before, pending otherwise —
+and `pending` for a webmention, which is a stranger's words like any other.
+
+A source re-sending its webmention must not take an approved mention back into
+the queue and must not quietly let a spam one out, which is why only a fresh
+`spam` moves one: that is a new fact about the content rather than a repeat of
+an old one. The entry's id, its post and its source never move, because those
+are what make it the same comment; its kind, author, words and date are
+replaced by what the page says now.
+
+A moderator's reply is never offered to a checker at all, and is approved: the
+person writing it is the person who would have approved it, and a spam service
+has no say in what the owner of the site says.
+
+### Who is told
+
+The intake decides that too, so the rule is written once rather than at each
+writer:
+
+- A **new entry that is waiting** sends the moderation notice, once.
+- A **webmention that was merely rewritten** sends nothing. The moderators
+  heard the first time, and it has been in the queue ever since.
+- An **auto-approved comment** sends no moderation notice — nothing is waiting
+  — and instead tells whoever it answers, if they asked to be told.
 
 ## Akismet
 
@@ -319,6 +376,8 @@ Email is what makes moderation timely, and it is off until a site can send it (T
 
 A comment or a webmention entering the queue emails every user who has an address and has not turned **New comments** off on `/admin/users`. Only `pending`: one Akismet filed as spam is not waiting for anybody, and one it said to discard was never stored. A webmention re-sent by a page somebody edited notifies nobody either — a source that updates its entry is not new news. And only the users who want it **as it arrives**: one on an hourly or a daily digest hears nothing at this moment, by definition of having chosen a window.
 
+Which of those a comment is, is the intake's decision and not the form's or the endpoint's ("Who is told", above); who then gets a message, and whether they get it now or in a window, is this module's.
+
 The message carries the words themselves, the post, and three links: approve, spam, delete. Each is `/_geekity/moderate?action=…&token=…`, needs no login, and lands on a page with one button on it. **Opening a link does nothing**; only the button acts. Mail readers, spam filters and corporate link scanners fetch the URLs in a message as a matter of course, and a link that moderated on being fetched would be a gateway silently deleting this site's comments.
 
 The token is an HMAC-signed claim, not a stored row. The secret is `data/notification-secret` (mode `0600`, minted on first use, the `comment-salt` pattern), so a link that has been in an inbox for three days goes on working across a restart, a rebuilt cache or a restored backup — all of which decision-9 says a site may do whenever it likes. What *is* stored is the fact that a link has been used: its SHA-256 in `spent_tokens`, swept once the signature has expired. Losing that table forgets which links were spent and costs nothing, because every action a link performs is idempotent. A link is bound to one action on one comment and lasts a week.
@@ -353,6 +412,39 @@ The unsubscribe link at the bottom is signed the same way, lasts a year rather t
 ### Adding another notice
 
 Preferences are a switchboard keyed by event name, not a field per notice. `src/notifications/preferences.ts` holds the registry; one entry there is a new checkbox on `/admin/users`, a new key in `data/users.json`, and a new answer from `notificationRecipients`. An event a user has said nothing about is at its default, so a notice that ships turned on reaches everybody with an address without anybody visiting that screen. An entry that says `batched: true` gets the how-often select beside its switch as well, and whatever sends it is then responsible for honouring a window; `immediately` is the default there, and a stored mode this version does not know is dropped and read as the default, exactly as an unknown event key is.
+
+## One way out: the conversation
+
+One function writes a comment and one module reads one back. `src/web/conversation.ts`
+is that module — doc-4 calls it the conversation on the page — and
+`createConversation({ admin, store, baseUrl })` is the whole of its interface:
+
+- **`thread(document)`** — everything said about one post, threaded: the
+  approved comments merged with the fediverse replies by the same `inReplyTo`
+  rule, and the likes, boosts and mentions beside them. This is what the theme
+  is handed as `conversation`.
+- **`counts(documents)`** — how many answers each of a list of posts has, by
+  permalink. The number `source:comments` puts beside an item of a post feed,
+  counted off the two indexes rather than by threading each post, because it is
+  asked for every item of a page and it goes into that feed's own ETag.
+- **`latest(limit)`** — the site's newest answers, each with the post it
+  answers, for `/comments/feed/`. One about a post that has since been
+  unpublished or trashed is left out: the feed would be showing a conversation
+  about nothing.
+
+A post's own comments feed is `thread` flattened by `spokenIn` — everything
+somebody actually said, at every depth, with the likes and boosts left out
+because a feed item with no words is nothing to publish — and `feedComments`
+turns an entry from either reading into a feed item, so the page, the post's
+feed and the site's feed cannot disagree about what a comment is or where it
+lives. A fediverse reply is unmoderated and always `published`, because a
+remote server published it before this site heard of it; a comment or a
+webmention reaches a reader only at `approved`.
+
+**Nothing outside this module and `intakeComment` reads the `comments` or
+`ap_inbox` index to show a reader a conversation.** The moderation screen and
+the notices read them and are not conversation display: they are about what a
+moderator still has to decide, which is the one thing a reader never sees.
 
 ## What a reader sees
 

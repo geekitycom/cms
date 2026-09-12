@@ -16,7 +16,6 @@ export type {
   AkismetKeyStatus,
   VerifyAkismetKeyOptions,
 } from './akismet.ts';
-export { commentAnchor, commentInteractions, interactionOf } from './conversation.ts';
 export {
   blankValues,
   COMMENT_NOTICE_PARAM,
@@ -44,11 +43,22 @@ export {
   commentsDirectory,
   commentsFile,
   deleteComment,
+  heldWebmention,
+  intakeComment,
   readComments,
   rebuildCommentIndexes,
   updateComment,
 } from './records.ts';
-export type { CommentIndexReport, CommentRecords, NewComment } from './records.ts';
+export type {
+  CommentIndexReport,
+  CommentIntakeOutcome,
+  CommentNotices,
+  CommentOrigin,
+  CommentRecords,
+  IntakeCommentOptions,
+  NewComment,
+  ProposedComment,
+} from './records.ts';
 export { commentFormFor, commentNoticeFor, mountComments } from './routes.ts';
 export {
   COMMENT_FIELDS,

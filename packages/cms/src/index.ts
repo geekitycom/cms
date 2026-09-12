@@ -41,14 +41,9 @@ import {
 import type { DeliveryService, RelayService, SiteFederation } from './federation/index.ts';
 import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
-import {
-  commentFormFor,
-  commentInteractions,
-  createAkismetChecker,
-  rebuildCommentIndexes,
-} from './comments/index.ts';
+import { commentFormFor, createAkismetChecker, rebuildCommentIndexes } from './comments/index.ts';
 import { contactFormFor } from './contact/index.ts';
-import { createRenderer, mountPublicSite, postConversation } from './web/index.ts';
+import { createConversation, createRenderer, mountPublicSite } from './web/index.ts';
 import { createWebmentionService } from './webmention/index.ts';
 import type { WebmentionService } from './webmention/index.ts';
 
@@ -416,10 +411,8 @@ export {
   COMMENT_SALT_FILE,
   COMMENTS_DATA_DIRECTORY,
   COMMENTS_FRONT_MATTER_KEY,
-  commentAnchor,
   commentForm,
   commentFormFor,
-  commentInteractions,
   commentKeys,
   commentNoticeFor,
   commentPolicyOf,
@@ -431,7 +424,8 @@ export {
   DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
   deleteComment,
   hashClientAddress,
-  interactionOf,
+  heldWebmention,
+  intakeComment,
   isModerationAction,
   MAXIMUM_BODY_LENGTH,
   MAXIMUM_FORM_AGE_SECONDS,
@@ -462,6 +456,9 @@ export type {
   CommentForm,
   CommentFormContext,
   CommentIndexReport,
+  CommentIntakeOutcome,
+  CommentNotices,
+  CommentOrigin,
   CommentOutcome,
   CommentPolicy,
   CommentProblems,
@@ -471,10 +468,12 @@ export type {
   CommentSubmission,
   CommentThrottle,
   CommentVerdict,
+  IntakeCommentOptions,
   ModerateCommentOptions,
   ModerationAction,
   ModerationOutcome,
   NewComment,
+  ProposedComment,
   SubmissionType,
   SubmitCommentOptions,
   VerifyAkismetKeyOptions,
@@ -884,7 +883,7 @@ export {
   assetResponse,
   atomFeed,
   categoryHref,
-  commentCounts,
+  commentAnchor,
   commentsFeedHref,
   commentsFeedPath,
   commentsFeedResponse,
@@ -892,6 +891,7 @@ export {
   COMMENTS_ROOT,
   COMMENTS_TITLE_PREFIX,
   contentEtag,
+  createConversation,
   createRenderer,
   createSiteDataSource,
   createTemplateEnvironment,
@@ -916,6 +916,7 @@ export {
   FEED_GENERATOR_URI,
   FEED_SEGMENT,
   FEED_SEGMENTS,
+  feedComments,
   feedExcerpt,
   feedHref,
   feedLanguage,
@@ -958,8 +959,6 @@ export {
   PAGE_SEGMENT,
   paginate,
   parseAccept,
-  postComments,
-  postConversation,
   postsPerPage,
   prefersActivityStreams,
   publicDocumentAt,
@@ -971,6 +970,7 @@ export {
   representationResponse,
   RESERVED_TOP_LEVEL_PATHS,
   rfc822,
+  spokenIn,
   robotsResponse,
   robotsTxt,
   ROBOTS_CONTENT_TYPE,
@@ -978,7 +978,6 @@ export {
   rssFeed,
   sanitizeCommentHtml,
   selectRepresentation,
-  siteComments,
   SITE_DATA_FILE,
   sitemapChildPath,
   sitemapDate,
@@ -1021,11 +1020,10 @@ export type {
   AssetResponseOptions,
   ConditionalHeaders,
   CreateRendererOptions,
-  Comment,
-  CommentContext,
   CommentFeedSource,
   Conversation,
   ConversationContext,
+  ConversationReader,
   CreateTemplateEnvironmentOptions,
   DateFormat,
   DocumentContext,
@@ -1047,6 +1045,7 @@ export type {
   InteractionSource,
   InteractionStatus,
   JsonFeedItem,
+  SiteInteraction,
   NotifyServer,
   Listing,
   MenuItem,
@@ -1381,6 +1380,12 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // restart. With nothing configured, sending is a line in the log.
   const mail = createMailService({ config: resolved, ...resolved.mail });
 
+  // The one reader of the two indexes a conversation is made of. The page, the
+  // per-post comments feed, `/comments/feed/` and the `source:comments` count
+  // on a post feed are all drawn from it, so a reader cannot be shown one
+  // thing on the page and another in the feed (TASK-62).
+  const conversation = createConversation({ admin, store, baseUrl: resolved.baseUrl });
+
   const renderer = createRenderer({
     config: resolved,
     // The pages that put themselves in the site menu are found by asking for
@@ -1389,22 +1394,12 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // same one the listing index already serves, and doing it per render is
     // what makes a page flagged in the editor appear in the menu at once.
     pages: () => store.listAll({ type: 'page', draft: false, trashed: false, scheduled: false }),
-    // What the fediverse said about a post, read per render for the same
-    // reason: a reply logged a second ago is on the page the next request
-    // draws (TASK-49).
-    conversation: (document) =>
-      postConversation(
-        {
-          admin,
-          baseUrl: resolved.baseUrl,
-          // Native comments join the fediverse replies in one thread rather
-          // than in a section of their own (TASK-50). Only the approved ones,
-          // and read per render for the same reason: a comment approved a
-          // second ago is on the page the next request draws.
-          comments: (post) => commentInteractions(admin, post),
-        },
-        document,
-      ),
+    // What has been said about a post, from every source at once and read per
+    // render for the same reason: a reply logged or a comment approved a
+    // second ago is on the page the next request draws (TASK-49, TASK-50).
+    // One dependency, and the very reader the comments feeds are published
+    // from, so the page and the feed cannot disagree.
+    conversation: conversation.thread,
     // And the form under it, when the post is still taking comments. Asked per
     // render because whether it is depends on the clock: a post that closed an
     // hour ago stops offering one on the very next request.
@@ -1490,6 +1485,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('admin', admin);
     c.set('config', resolved);
     c.set('renderer', renderer);
+    c.set('conversation', conversation);
     c.set('announce', (change) => content.announce(change));
     c.set('delivery', delivery);
     c.set('relays', relays);
