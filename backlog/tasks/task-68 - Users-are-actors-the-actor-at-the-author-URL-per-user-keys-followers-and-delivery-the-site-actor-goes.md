@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-05 13:51'
-updated_date: '2026-09-13 04:56'
+updated_date: '2026-09-13 04:57'
 labels:
   - federation
   - admin
@@ -46,7 +46,7 @@ Replace the site actor (doc-4) with one actor per user, per decision-14. A user'
 - [x] #3 Publishing a post delivers Create to its author's followers only and Update and Delete likewise; the outbox pages the author's posts; the fed-smoke job passes against the per-user actor
 - [x] #4 Each user's key pair lives under data/keys/ named by the user, is minted on first need and refused at boot when unreadable, exactly as the site's keys were; a rebuilt database re-reads every user's followers
 - [x] #5 The site actor, /ap/actor, the actor settings and the site avatar are gone, /ap/ is unregistered, and the settings screen and doc-4 no longer mention them; the federation screen is per user
-- [ ] #6 The commit is feat(cms)! with a BREAKING CHANGE footer; doc-4 is rewritten around user actors and the package README's route table follows
+- [x] #6 The commit is feat(cms)! with a BREAKING CHANGE footer; doc-4 is rewritten around user actors and the package README's route table follows
 <!-- AC:END -->
 
 ## Implementation Plan
