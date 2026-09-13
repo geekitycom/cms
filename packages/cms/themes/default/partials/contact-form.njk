@@ -11,9 +11,13 @@
   can reach: the address is read when a submission arrives, so it cannot end up
   in the HTML however this file is rewritten.
 
+  It wears `comment-respond`, which is the source design's name for a form
+  under an entry, because it is the same kind of form as the comment one and
+  the two are better off sharing a set of rules than keeping two that drift.
+
   It works with JavaScript switched off, and there is no script on it.
 #}
-<section class="contact-form" id="contact">
+<section class="comment-respond contact-form" id="contact">
   {% if contactNotice %}
   {#
     The thank-you the redirect after a submission landed on. The form is not
@@ -76,7 +80,7 @@
       {% endif %}
     </p>
 
-    <p class="contact-buttons">
+    <p class="form-submit">
       <button type="submit">Send message</button>
     </p>
   </form>

@@ -765,11 +765,11 @@ describe('the conversation under a post', () => {
 
     // The answer to the reply is nested inside it rather than beside it.
     const first = html.indexOf('<p>Good post.</p>');
-    const nested = html.indexOf('comment-replies');
+    const nested = html.indexOf('<ol class="children">');
     assert.ok(nested > first && nested < html.indexOf('Agreed'), 'the answer is nested');
   });
 
-  it('shows the likes and the boosts as counts with the actors behind them', async () => {
+  it('shows the likes and the boosts as facepiles with the actors behind them', async () => {
     const cms = await federated();
     reaction(cms, 'Like', 'https://remote.example/likes/1', 'https://remote.example/users/ada');
     reaction(cms, 'Like', 'https://remote.example/likes/2', 'https://remote.example/users/bob');
@@ -782,9 +782,9 @@ describe('the conversation under a post', () => {
 
     const html = await (await cms.app.request('/2026/09/hello/')).text();
 
-    assert.ok(html.includes('2 likes'), 'the likes are counted');
-    assert.ok(html.includes('1 boost'), 'the boosts are counted, in the singular');
-    assert.ok(html.includes('<details'), 'the actors are behind a disclosure');
+    assert.ok(html.includes('Likes (2)'), 'the likes are counted');
+    assert.ok(html.includes('Boosts (1)'), 'the boosts are counted');
+    assert.ok(html.includes('<div class="facepile">'), 'the actors are a facepile');
     assert.ok(html.includes('@ada@remote.example'), 'the first liker is listed');
     assert.ok(html.includes('@cal@remote.example'), 'the booster is listed');
   });

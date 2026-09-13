@@ -788,15 +788,10 @@ pre code {
   list-style: none;
 }
 
-/*
- * What follows styles the markup the theme prints today and is rewritten as the
- * design lands: the conversation and the forms in TASK-84. It is carried onto
- * the tokens above rather than deleted so that nothing goes unstyled in
- * between.
- */
-
-/* Titles: what heads a listing, a 404 and an author archive. An entry's own
-   title is `.blog-post header h1` above. */
+/* Titles: what heads a listing, a 404 and an author archive. The source theme
+   prints none of these — it has no archive heading at all — so they are the
+   theme's own, sized off the same scale. An entry's own title is
+   `.blog-post header h1` above. */
 
 .page-title {
   margin: 0 0 var(--spacing-2);
@@ -851,56 +846,67 @@ pre code {
   display: inline;
 }
 
-/* The conversation: fediverse replies, likes and boosts under a post. */
+/* Reactions: the likes, the boosts and the pages that mentioned a post,
+   grouped by kind as facepiles of small round avatars (TASK-84). */
 
-.conversation {
+.reactions-section {
   margin-top: var(--spacing-12);
-  padding-top: var(--spacing-6);
-  border-top: 1px solid var(--color-primary);
 }
 
-.conversation-title {
-  margin: 0 0 var(--spacing-4);
-  font-size: var(--fontSize-4);
+.reaction-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-3);
 }
 
-.conversation-reactions {
+.reaction-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-1);
+  white-space: nowrap;
+}
+
+.facepile {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-4);
-  margin-bottom: var(--spacing-6);
-}
-
-.reaction-group summary {
-  cursor: pointer;
-  font-family: var(--font-heading);
-  font-size: var(--fontSize-0);
-}
-
-.reaction-list,
-.comment-list,
-.comment-replies {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.reaction-list {
-  margin-top: var(--spacing-2);
+  gap: var(--spacing-1);
 }
 
 .facepile a,
-.reaction a {
+.facepile span {
+  display: inline-block;
+  line-height: 0;
+  text-decoration: none;
+}
+
+/* A face is a picture of somebody: the block of colour a link takes on hover
+   everywhere else would sit behind it as a frame, so it is taken back off. */
+
+.facepile a:hover,
+.facepile a:focus {
+  background-color: transparent;
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.facepile img {
+  display: block;
+  border-radius: 50%;
+}
+
+/* A reaction with no avatar has nothing to recognise anybody by, so the emoji
+   badge of its kind stands in and the name is printed beside it — which needs
+   the line box the faces above do without. */
+
+.facepile a:has(.reaction-name),
+.facepile span:has(.reaction-name) {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-1);
-  padding: var(--spacing-1) 0;
-}
-
-.reaction-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
+  line-height: normal;
 }
 
 .reaction-icon {
@@ -913,70 +919,165 @@ pre code {
   text-align: center;
 }
 
-.comment {
-  margin-bottom: var(--spacing-6);
+/* The thread under a post: the replies from every door, each one an h-entry
+   with its author, its time and its words, and answers nested inside it. */
+
+.comments-area {
+  margin-top: var(--spacing-12);
 }
 
-.comment-replies {
-  margin-top: var(--spacing-6);
-  padding-inline-start: var(--spacing-5);
-  border-inline-start: 2px solid var(--color-base);
+.comments-title {
+  margin: 0 0 var(--spacing-8);
+  font-size: var(--fontSize-4);
 }
 
-.comment-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-2);
-  font-family: var(--font-heading);
-  font-size: var(--fontSize-0);
+.comment-list,
+.comment-list .children {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.comment-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-}
-
-.comment-author {
-  font-weight: var(--fontWeight-semibold);
-}
-
-.comment-permalink {
-  margin-inline-start: auto;
+.comment-list .children {
+  margin-left: var(--spacing-8);
 }
 
 .comment-body {
-  margin-top: var(--spacing-1);
+  padding: var(--spacing-4) 0;
+  border-bottom: 1px solid var(--color-base);
 }
 
-.comment-body p {
-  margin: var(--spacing-2) 0;
+.comment-author {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-family: var(--font-heading);
 }
 
-.comment-reply {
-  margin: var(--spacing-1) 0 0;
+.comment-author .avatar {
+  border-radius: 50%;
+}
+
+.comment-metadata {
+  margin-bottom: var(--spacing-2);
   font-family: var(--font-heading);
   font-size: var(--fontSize-0);
 }
 
-/* The comment form under an open post, and the contact form on a page that
-   asked for one. Deliberately the same shapes rather than two sets of rules:
-   they are the same kind of form, and a site restyling one should not have to
-   find the other. */
+/* The permalink is the whole date line, so it is the ink of the page rather
+   than a link's colour until somebody points at it. */
 
-.comment-form,
-.contact-form {
-  margin-top: var(--spacing-12);
-  padding-top: var(--spacing-6);
-  border-top: 1px solid var(--color-primary);
+.comment-metadata a {
+  color: var(--color-text);
+  text-decoration: none;
 }
 
-.comment-form-title,
-.contact-form-title {
+.comment-metadata a:hover,
+.comment-metadata a:focus {
+  background-color: transparent;
+  color: var(--color-primary);
+}
+
+.comment-content {
+  margin-top: var(--spacing-2);
+}
+
+.comment-content > :last-child {
+  margin-bottom: 0;
+}
+
+.reply {
+  margin-top: var(--spacing-2);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
+}
+
+.no-comments {
+  font-family: var(--font-heading);
+  font-style: italic;
+}
+
+/* The comment form under an open post, and the contact form on a page that
+   asked for one. One set of rules rather than two: they are the same kind of
+   form, the contact form wears `comment-respond` to say so, and a site
+   restyling one cannot leave the other behind. */
+
+.comment-respond {
+  margin-top: var(--spacing-8);
+}
+
+.comment-respond .comment-reply-title,
+.comment-respond .contact-form-title {
   margin: 0 0 var(--spacing-4);
   font-size: var(--fontSize-4);
 }
+
+.comment-respond label {
+  display: block;
+  margin-bottom: var(--spacing-1);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
+}
+
+.comment-field,
+.contact-field,
+.comment-check {
+  margin: 0 0 var(--spacing-4);
+}
+
+/* The one label that belongs beside its field rather than over it. */
+
+.comment-check label {
+  display: inline;
+}
+
+.comment-respond input[type='text'],
+.comment-respond input[type='email'],
+.comment-respond input[type='url'],
+.comment-respond textarea {
+  width: 100%;
+  padding: var(--spacing-2);
+  border: 1px solid var(--color-base);
+  background-color: var(--color-base-3);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--fontSize-1);
+}
+
+.comment-respond input[type='text']:focus-visible,
+.comment-respond input[type='email']:focus-visible,
+.comment-respond input[type='url']:focus-visible,
+.comment-respond textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+  border-color: var(--color-primary);
+}
+
+.comment-respond textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+.comment-respond .form-submit button,
+.comment-respond .form-submit input[type='submit'] {
+  padding: var(--spacing-2) var(--spacing-6);
+  border: none;
+  background-color: var(--color-primary);
+  color: var(--color-body);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-1);
+  cursor: pointer;
+}
+
+.comment-respond .form-submit button:hover,
+.comment-respond .form-submit button:focus-visible,
+.comment-respond .form-submit input[type='submit']:hover,
+.comment-respond .form-submit input[type='submit']:focus-visible {
+  opacity: 0.85;
+}
+
+/* What a form says back: the thank-you after a submission, the message about
+   one that was refused, and what a reader is answering. */
 
 .comment-notice,
 .comment-error,
@@ -998,71 +1099,23 @@ pre code {
   font-size: var(--fontSize-0);
 }
 
-.comment-field,
-.contact-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-1);
-  margin: 0 0 var(--spacing-4);
-}
-
-.comment-field label,
-.contact-field label {
-  font-family: var(--font-heading);
+.comment-optional,
+.contact-optional {
   font-size: var(--fontSize-0);
 }
 
-.comment-field input,
-.comment-field textarea,
-.contact-field input,
-.contact-field textarea {
-  padding: var(--spacing-2);
-  border: 1px solid var(--color-base);
-  background-color: var(--color-base-3);
-  color: var(--color-text);
-  font-family: var(--font-body);
-  font-size: var(--fontSize-1);
-}
-
-.comment-field input:focus-visible,
-.comment-field textarea:focus-visible,
-.contact-field input:focus-visible,
-.contact-field textarea:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: -1px;
-  border-color: var(--color-primary);
-}
-
-.comment-field textarea,
-.contact-field textarea {
-  min-height: 8rem;
-  resize: vertical;
-}
-
-.comment-form button,
-.comment-form input[type='submit'],
-.contact-form button,
-.contact-form input[type='submit'] {
-  padding: var(--spacing-2) var(--spacing-6);
-  border: none;
-  background-color: var(--color-primary);
-  color: var(--color-body);
-  font-family: var(--font-heading);
-  font-size: var(--fontSize-1);
-  cursor: pointer;
-}
-
-.comment-optional,
 .comment-hint,
-.contact-optional,
-.contact-hint {
+.contact-hint,
+.comment-field-error,
+.contact-field-error {
+  display: block;
+  margin-top: var(--spacing-1);
   font-size: var(--fontSize-0);
 }
 
 .comment-field-error,
 .contact-field-error {
   color: var(--color-error);
-  font-size: var(--fontSize-0);
 }
 
 /*
@@ -1101,7 +1154,7 @@ pre code {
     list-style-position: inside;
   }
 
-  .comment-replies {
-    padding-inline-start: var(--spacing-4);
+  .comment-list .children {
+    margin-left: var(--spacing-4);
   }
 }

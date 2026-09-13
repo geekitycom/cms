@@ -853,16 +853,17 @@ ask:
 ```
 
 That is what `layouts/post.njk` does. `partials/conversation.njk` is the whole
-section — the reply thread, and the likes, boosts and mentions as counts with
-the people behind them inside a `<details>` — and a site replaces it with a
+section — a `div.reactions-section` of the likes, the boosts and the mentions
+as facepiles grouped by kind, and then the thread as
+`div#comments.comments-area` — and a site replaces it with a
 `partials/conversation.njk` of its own in the theme it wears, exactly as it
-replaces any other template. It defines three macros, `comment(reply)`,
-`reactions(actors, one, many)` and `mentions(items)`, and a layout that wants to
-place the pieces itself can import them:
+replaces any other template. It defines three macros, `face(item, icon, href)`,
+`group(items, label, kind, icon, source)` and `comment(reply)`, and a layout
+that wants to place the pieces itself can import them:
 
 ```njk
 {% import "partials/conversation.njk" as thread with context %}
-{{ thread.reactions(conversation.likes, "like", "likes") }}
+{{ thread.group(conversation.likes, "Likes", "p-like", "❤️") }}
 ```
 
 ### The shape
@@ -919,14 +920,32 @@ Markdown the commenter typed, rendered with raw HTML off, no images embedded,
 and every link carrying `rel="nofollow ugc"`. Nothing else survives any of the
 three routes, so a theme may print all of them directly.
 
-The packaged partial gives each entry `id="comment-{{ reply.id }}"` and a
-`comment-{{ reply.source }}` class, and puts a Reply link on the ones written
-here — `source == "comment"` — when the post is still open; the link carries the
-comment's id to the form as `?reply_to=`, so threading needs no JavaScript. A
-fediverse reply is answered on the server that holds it and a webmention on the
-page that sent it, so neither gets one. Mentions are drawn by a third macro,
-`mentions(items)`, as a `<details>` beside the likes and the boosts, each one
-linking to the page it came from.
+The packaged partial draws each entry as the source design does: an
+`li.comment.h-entry` carrying `id="comment-{{ reply.id }}"` and a
+`comment-{{ reply.source }}` class, holding an `article.comment-body` whose
+`footer.comment-meta` is the author as a `.comment-author.vcard.p-author.h-card`
+and the permalink as a `.comment-metadata` link around a `time.dt-published`,
+then the words in `div.comment-content.e-content`. Answers nest in an
+`ol.children` inside what they answer. A Reply link in a `div.reply` goes on the
+ones written here — `source == "comment"` — when the post is still open; it
+carries the comment's id to the form as `?reply_to=`, so threading needs no
+JavaScript. A fediverse reply is answered on the server that holds it and a
+webmention on the page that sent it, so neither gets one.
+
+Above the thread, `group()` draws one `div.reaction-group` per kind that has
+anything — `p-like`, `p-repost` and `p-mention`, the source theme's classes — as
+an `h2.reaction-title` of the label and the count beside a `div.facepile` of
+`a.u-url` faces. A face is a round `u-photo` avatar; a reaction whose author the
+site knows no picture of is the emoji badge of its kind and a `.reaction-name`
+instead. Likes and boosts link to the person, and a mention to the page it came
+from, because the page is the thing worth reading.
+
+There is no key saying a post has stopped taking comments, and none is needed:
+**the absence of `commentForm` is what a closed post looks like**, since the CMS
+puts the form on the context only while the site switch, the closing window and
+the post's own front matter all agree it is open. The packaged partial prints
+`p.no-comments` under a thread when there is no form, which is WordPress's
+"Comments are closed." and the reason a reader cannot find one.
 
 An Eleventy build of the same content gets the same thing from the same files:
 `docs/eleventy.config.example.js` adds a `conversation` filter over
@@ -956,8 +975,15 @@ matter all agree before it gets here, so a layout asks:
 
 That is what `layouts/post.njk` does, after the conversation. A closed post
 still shows the thread — including every fediverse reply, which arrives whether
-a post is open or not — and simply has no form. A site replaces
+a post is open or not — and simply has no form, which is what the conversation
+reads to print "Comments are closed." A site replaces
 `partials/comment-form.njk` the way it replaces any other template.
+
+The packaged partial is a `section#respond.comment-respond` with an
+`h2.comment-reply-title`, one paragraph per field and the button in a
+`p.form-submit` — the source design's names, so the stylesheet styles every
+label, field and button of both forms through `.comment-respond` and a site
+that has CSS for the WordPress theme can bring it.
 
 | Key                        | What it holds                                                                                                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -998,6 +1024,10 @@ That is what `layouts/page.njk` does, after the page's content. The key is
 honoured wherever it is written, so a theme that wants the form under a post as
 well only has to add the same two lines to `layouts/post.njk`; the editor
 offers the checkbox on pages.
+
+The packaged partial is a `section#contact.comment-respond.contact-form`: it is
+the same kind of form as the comment one, so it wears the same class and the two
+share one set of rules rather than keeping two that drift.
 
 | Key                                            | What it holds                                                                                                                                    |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
