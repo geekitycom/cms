@@ -8,12 +8,36 @@ import { saveSettings } from './__testing__/settings.ts';
 import { readSiteSettings } from './settings.ts';
 
 /**
- * The Reading settings page: how many posts a listing holds, the site menu,
- * and the server told when a feed changes.
+ * The Reading settings page: what the homepage shows, how many posts a listing
+ * holds, the site menu, and the server told when a feed changes.
  */
 
 const box = sandbox();
 after(() => box.cleanup());
+
+/** `content/_data/site.json` as it stands. */
+async function siteJson(contentDir: string): Promise<Record<string, unknown>> {
+  return JSON.parse(await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8')) as Record<
+    string,
+    unknown
+  >;
+}
+
+/** A content directory holding one published page per slug. */
+async function withPages(...slugs: string[]): Promise<string> {
+  const contentDir = await box.dir('geekity-settings-pages-');
+  await mkdir(path.join(contentDir, 'pages'), { recursive: true });
+
+  for (const slug of slugs) {
+    await writeFile(
+      path.join(contentDir, 'pages', `${slug}.md`),
+      `---\ntitle: ${slug}\npermalink: /${slug}/\n---\n\nThe ${slug} page.\n`,
+      'utf8',
+    );
+  }
+
+  return contentDir;
+}
 
 /** The value of a form field in the rendered page. */
 function field(html: string, name: string): string | undefined {
@@ -37,6 +61,109 @@ async function withPosts(count: number): Promise<string> {
 
   return contentDir;
 }
+
+describe('what the homepage displays', () => {
+  it('stores the two picks as slugs, and says nothing at all for the latest posts (AC #1)', async () => {
+    const contentDir = await withPages('about', 'news');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    assert.equal((await saveSettings(agent, 'reading')).status, 303);
+    const fresh = await siteJson(contentDir);
+    assert.equal('homepage' in fresh, false, 'a new site shows its latest posts');
+    assert.equal('postsPage' in fresh, false);
+
+    assert.equal(
+      (await saveSettings(agent, 'reading', { homepage: 'about', posts_page: 'news' })).status,
+      303,
+    );
+
+    const settings = readSiteSettings(contentDir);
+    assert.equal(settings.homepage, 'about');
+    assert.equal(settings.postsPage, 'news');
+
+    const written = await siteJson(contentDir);
+    assert.equal(written['homepage'], 'about', 'an Eleventy build reads it from the file');
+    assert.equal(written['postsPage'], 'news');
+
+    // Back to the latest posts: the keys go away rather than being emptied, so
+    // "no static front page" is the absence the description asks for.
+    assert.equal(
+      (await saveSettings(agent, 'reading', { homepage: '', posts_page: '' })).status,
+      303,
+    );
+    const cleared = await siteJson(contentDir);
+    assert.equal('homepage' in cleared, false);
+    assert.equal('postsPage' in cleared, false);
+    assert.equal(readSiteSettings(contentDir).homepage, '');
+  });
+
+  it('refuses a posts page with no homepage, as WordPress does (AC #1)', async () => {
+    const contentDir = await withPages('about', 'news');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await saveSettings(agent, 'reading', { homepage: '', posts_page: 'news' });
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /posts page/i);
+
+    assert.equal(readSiteSettings(contentDir).postsPage, '', 'nothing was written');
+  });
+
+  it('offers Your latest posts beside every published page, and keeps the pick (AC #1)', async () => {
+    const contentDir = await withPages('about', 'news');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(html, /<option value="">Your latest posts<\/option>/);
+    assert.match(html, /<option value="about"/, 'a published page is on offer');
+    assert.match(html, /<option value="news"/);
+
+    await saveSettings(agent, 'reading', { homepage: 'about', posts_page: 'news' });
+
+    const back = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(back, /<option value="about" selected>/, 'the homepage comes back chosen');
+    assert.match(back, /<option value="news" selected>/);
+  });
+
+  it('says why a pick came up empty once its page stopped being published (AC #4)', async () => {
+    const contentDir = await withPages('about', 'news');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await saveSettings(agent, 'reading', { homepage: 'about', posts_page: 'news' });
+
+    // The page is drafted behind the setting's back, which is the case the
+    // criterion is about: the pick still names it and nothing published has
+    // that slug any more.
+    await writeFile(
+      path.join(contentDir, 'pages', 'about.md'),
+      '---\ntitle: about\npermalink: /about/\ndraft: true\n---\n\nThe about page.\n',
+      'utf8',
+    );
+    await cms.sync();
+
+    const html = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(html, /no longer published/i, 'the Reading page says why the pick is empty');
+    assert.match(html, /about/);
+    assert.doesNotMatch(html, /<option value="about"/, 'and it is off the list');
+    assert.equal(readSiteSettings(contentDir).homepage, 'about', 'the pick itself is kept');
+  });
+
+  it('refuses one page picked as both', async () => {
+    const contentDir = await withPages('about');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await saveSettings(agent, 'reading', {
+      homepage: 'about',
+      posts_page: 'about',
+    });
+    assert.equal(response.status, 400);
+    assert.equal(readSiteSettings(contentDir).homepage, '');
+  });
+});
 
 describe('posts per page', () => {
   it('decides how the home page paginates (AC #3)', async () => {

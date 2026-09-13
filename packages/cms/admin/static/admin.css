@@ -292,6 +292,11 @@ h2 {
   color: var(--admin-muted);
 }
 
+/* What a page is to the site besides a page: Front Page, Posts Page. */
+.admin-page-role {
+  color: var(--admin-muted);
+}
+
 .admin-status-draft {
   color: var(--admin-error);
 }

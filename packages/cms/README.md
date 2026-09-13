@@ -1338,6 +1338,7 @@ source, another process entirely — always sees one whole version, and two save
 at once cannot each keep half of what the other kept.
 
 The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
+`homepage`, `postsPage`,
 `timezone`, `language`, `avatar`, `actorHandle`, `actorType`, `tagBase`,
 `categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
@@ -1345,6 +1346,13 @@ The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
 type is the default too: a hand-edited `site.json` cannot take the site down.
+
+`homepage` and `postsPage` are the only two written just when they have a
+value: WordPress's Reading choice, the slug of the page served at `/` and the
+slug of the page whose own URL carries the post listing, absent altogether on a
+site that shows its latest posts at `/`. A `postsPage` without a `homepage` is
+ignored, the listing being at `/` already, and a slug naming no published page
+is a site back on its latest posts. See [The front page](#the-front-page).
 
 Because it is the source rather than a copy, editing it by hand while the
 server runs is picked up on the next request — on the public site, in the
@@ -1371,6 +1379,39 @@ has those rows written into `site.json` on the first boot of this one, and the
 table is dropped. If the file was written after the rows were — a hand edit, or
 a content directory restored from git — the file wins, keeping only the actor
 handle and type from the rows, because those are the two the file never carried.
+
+### The front page
+
+`/` is the site's latest posts until the Reading settings say otherwise. The
+choice is WordPress's own, and so are its two answers:
+
+- **Your latest posts.** The archive at `/`, paginated at `/page/N/`. This is
+  the default, and it is what an empty `homepage` means.
+- **A static page.** The page is served at `/`, its own permalink answers `301`
+  to `/` so the front page has one URL, and the menu links it at `/`. A theme
+  may lay it out on its own with `theme/layouts/front-page.njk`, which falls
+  back to the page layout.
+
+With a homepage set, a second pick gives the listing a page of its own: the
+**posts page**. Its permalink carries the listing, with the page's own title
+and words above the posts, paginated beneath it at `{permalink}page/N/`;
+`/page/N/` at the root redirects there, and `theme/layouts/posts-page.njk` is
+the theme's override, falling back to the listing layout. A posts page with no
+homepage is refused, as WordPress refuses it, and so is one page picked as
+both. With a homepage and no posts page the listing has no page of its own,
+which is WordPress's answer too.
+
+The feeds do not move: `/feed/`, `/feed/atom/` and `/feed/json/` syndicate the
+site's posts wherever the listing is read, and every page advertises them. The
+sitemap follows the site — `/` once, and the listing's pages under the posts
+page — and the pages list marks the two rows **Front Page** and **Posts Page**.
+
+Both settings are page slugs in `content/_data/site.json`, so an Eleventy build
+of the same directory shows the same front page:
+`docs/eleventy.config.example.js` puts the homepage at `/` and flags the posts
+page on the context as `isPostsPage`. A slug whose page is drafted, trashed or
+deleted names nothing published, and the site is back to its latest posts with
+the pick kept: publishing the page again puts the front page back.
 
 ### The media library
 

@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 02:03'
+updated_date: '2026-09-13 03:13'
 ---
 # Content Negotiation
 
@@ -32,6 +32,28 @@ Every response includes `Vary: Accept` and a `Link` header advertising the alter
 Link: </2026/09/hello-world/index.md>; rel="alternate"; type="text/markdown",
       </2026/09/hello-world/index.json>; rel="alternate"; type="application/json"
 ```
+
+## The front page and the posts page
+
+`/` is the site's latest posts until the Reading settings say otherwise. With a
+`homepage` set it is that page instead, negotiated like any other document —
+HTML, Markdown at `/index.md`, JSON at `/index.json` — and the page's own
+permalink answers `301` to `/`, so the front page has one URL. A theme may lay
+it out on its own with `layouts/front-page.njk`, which falls back to the page
+layout.
+
+With a `postsPage` set as well, the listing moves to that page's permalink and
+paginates under it at `{permalink}page/N/`, with the page's own title and
+rendered body above the posts and `layouts/posts-page.njk` as the theme's
+override, falling back to the listing layout. `/page/N/` under the root then
+redirects there, and `{permalink}page/1/` collapses onto the page the way
+`/page/1/` collapses onto `/`. With a homepage and no posts page the listing
+has no page of its own, which is WordPress's own answer.
+
+The feeds do not move: `/feed/`, `/feed/atom/` and `/feed/json/` syndicate the
+site's posts wherever the listing is read, and the posts page advertises them
+like every other page. A slug naming a page that has been drafted, trashed or
+deleted names nothing, and the site is back to its latest posts at `/`.
 
 ## Collections
 

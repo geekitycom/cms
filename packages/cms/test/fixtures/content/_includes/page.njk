@@ -13,6 +13,18 @@
 <article class="page">
   <h1>{{ title }}</h1>
   {{ content | safe }}
+  {#
+    The posts page: the CMS serves the post listing at this page's own URL,
+    under its title and words, and the example config flags which page that is
+    so a build can do the same.
+  #}
+  {% if isPostsPage %}
+  <ul class="post-list">
+    {% for post in collections.post | reverse %}
+    <li><a href="{{ post.url }}">{{ post.data.title }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
 </article>
 {#
   The federation files the CMS publishes with the site, which Eleventy hands

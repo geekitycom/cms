@@ -22,10 +22,11 @@ import Eleventy from '@11ty/eleventy';
 import {
   categoryHref,
   DEFAULT_TAXONOMY_BASES,
+  frontPageSlugs,
   isTrashedPath,
   parseDocument,
 } from '../src/index.ts';
-import type { Document } from '../src/index.ts';
+import type { Document, FrontPageSlugs, SiteData } from '../src/index.ts';
 
 /** Where a site's Eleventy build would be run from: the fixtures project root. */
 const PROJECT_DIR = fileURLToPath(new URL('./fixtures/', import.meta.url));
@@ -91,14 +92,26 @@ function outputPathFor(permalink: string): string {
   return `${permalink.replace(/^\//, '')}index.html`;
 }
 
+/**
+ * The Reading choice the fixtures make: which page the site serves at `/`, and
+ * which one carries the listing. Read out of the same `site.json` the build
+ * reads, through the CMS's own reader, so the two cannot disagree.
+ */
+async function reading(): Promise<FrontPageSlugs> {
+  const file = await readFile(path.join(CONTENT_DIR, '_data', 'site.json'), 'utf8');
+  return frontPageSlugs(JSON.parse(file) as SiteData);
+}
+
 describe('the fixtures content directory under Eleventy', () => {
   let buildDir: string;
   let written: string[];
   let documents: Document[];
+  let picks: FrontPageSlugs;
   const originalCwd = process.cwd();
 
   before(async () => {
     documents = await fixtureDocuments();
+    picks = await reading();
 
     // The fixtures are copied somewhere writable and built there: Eleventy
     // resolves both the config's relative paths and its output directory
@@ -139,23 +152,21 @@ describe('the fixtures content directory under Eleventy', () => {
   });
 
   it('writes every published document at the permalink the CMS computes', () => {
-    const published = documents.filter(
-      (document) => !document.draft && !isTrashedPath(document.path),
-    );
+    const published = publishedDocuments();
     assert.ok(published.length >= 4, 'the fixtures do not exercise enough documents');
 
     for (const document of published) {
       assert.ok(
-        written.includes(outputPathFor(document.permalink)),
-        `${document.path} has permalink ${document.permalink}, so Eleventy should have written ` +
-          `${outputPathFor(document.permalink)}; it wrote ${written.join(', ')}`,
+        written.includes(outputFor(document)),
+        `${document.path} is served at ${servedAt(document)}, so Eleventy should have written ` +
+          `${outputFor(document)}; it wrote ${written.join(', ')}`,
       );
     }
   });
 
   it('writes nothing the CMS would not serve at that URL', () => {
     const expected = new Set([
-      ...publishedDocuments().map((document) => outputPathFor(document.permalink)),
+      ...publishedDocuments().map((document) => outputFor(document)),
       // The category archives the CMS serves at the same URLs; the test below
       // is what proves those URLs are the ones it serves.
       ...publishedCategories().map((category) =>
@@ -232,10 +243,54 @@ describe('the fixtures content directory under Eleventy', () => {
     return documents.filter((document) => !document.draft && !isTrashedPath(document.path));
   }
 
+  /**
+   * The URL the CMS serves one document at: `/` for the page the Reading
+   * setting makes the homepage, and its own permalink for everything else.
+   */
+  function servedAt(document: Document): string {
+    return document.slug === picks.homepage ? '/' : document.permalink;
+  }
+
+  /** The file Eleventy should write for it. */
+  function outputFor(document: Document): string {
+    return outputPathFor(servedAt(document));
+  }
+
   /** Every category the CMS's own archive would exist for. */
   function publishedCategories(): string[] {
     return [...new Set(publishedDocuments().flatMap((document) => document.categories))];
   }
+
+  it('builds the front page and the posts page the Reading setting names (AC #6)', async () => {
+    assert.notEqual(picks.homepage, '', 'the fixtures do not exercise the setting');
+    assert.notEqual(picks.postsPage, '');
+
+    const home = documents.find((document) => document.slug === picks.homepage);
+    const journal = documents.find((document) => document.slug === picks.postsPage);
+    assert.ok(home !== undefined && journal !== undefined);
+
+    // The homepage is at `/`, which is where the CMS serves it, and not at the
+    // URL the CMS redirects from.
+    const index = await readFile(path.join(buildDir, '_site', 'index.html'), 'utf8');
+    assert.match(index, /The page the site shows at its root\./);
+    assert.ok(!written.includes(outputPathFor(home.permalink)), 'and nowhere else');
+
+    // And the listing is on the posts page, under that page's own title and
+    // words, in the order the CMS lists it: newest first.
+    const listing = await readFile(
+      path.join(buildDir, '_site', outputPathFor(journal.permalink)),
+      'utf8',
+    );
+    assert.match(listing, /Everything I have written, newest first\./);
+
+    const list = /<ul class="post-list">([\s\S]*?)<\/ul>/.exec(listing)?.[1] ?? '';
+    const listed = [...list.matchAll(/<a href="([^"]*)">/g)].map((match) => match[1] ?? '');
+    assert.deepEqual(listed, [
+      '/2026/09/hello-world/',
+      '/2026/07/cafe-au-lait/',
+      '/notes/renamed/',
+    ]);
+  });
 
   it('leaves drafts out of the build', () => {
     const drafts = documents.filter((document) => document.draft);

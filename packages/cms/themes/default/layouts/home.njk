@@ -1,9 +1,16 @@
 {% extends "layouts/base.njk" %}
 
-{% block title %}{% if pagination.pageNumber > 0 %}Page {{ pagination.pageNumber + 1 }} &middot; {% endif %}{{ site.title }}{% endblock %}
+{% block title %}{% if pagination.pageNumber > 0 %}Page {{ pagination.pageNumber + 1 }} &middot; {% endif %}{% if title and title != site.title %}{{ title }} &middot; {% endif %}{{ site.title }}{% endblock %}
 
 {% block content %}
 <h1 class="page-title">{{ title }}</h1>
+{# A site whose listing lives on a posts page renders that page's own words
+   above the posts; the home listing has none, and prints nothing here. #}
+{% if content %}
+<div class="page-body e-content">
+  {{ content | safe }}
+</div>
+{% endif %}
 {% include "partials/post-list.njk" %}
 {% include "partials/pagination.njk" %}
 {% endblock %}

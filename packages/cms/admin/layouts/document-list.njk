@@ -40,7 +40,7 @@
       <tbody>
         {% for document in documents %}
           <tr>
-            <td><a href="{{ document.editUrl }}">{{ document.title }}</a></td>
+            <td><a href="{{ document.editUrl }}">{{ document.title }}</a>{% if document.role %} &mdash; <span class="admin-page-role">{{ document.role }}</span>{% endif %}</td>
             <td>{{ document.author }}</td>
             {% if kind.tagged %}
               <td>{{ document.tags }}</td>

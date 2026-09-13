@@ -17,7 +17,9 @@
  * 7. The site menu becomes `collections.menu`.
  * 8. A `date` filter that reads a UTC instant through `site.timezone`.
  * 9. `content/_data/federation/` — the followers and the inbox log — is data.
- * 10. A `conversation` filter that builds a post's replies, likes, boosts and
+ * 10. The Reading choice: `homepage` puts a page at `/` and `postsPage` puts
+ *     the listing on a page of its own.
+ * 11. A `conversation` filter that builds a post's replies, likes, boosts and
  *     mentions out of that log — and the approved comments and webmentions
  *     from `content/_data/comments/` alongside them — sanitised and nested, as the
  *     CMS's own theme gets them.
@@ -132,6 +134,20 @@ function yearAndMonth(date) {
     year: String(parsed.getUTCFullYear()).padStart(4, '0'),
     month: String(parsed.getUTCMonth() + 1).padStart(2, '0'),
   };
+}
+
+/**
+ * The Reading choice `site.json` names: which page is the front page, and
+ * which one carries the post listing.
+ *
+ * Both are page slugs, absent when the site shows its latest posts at `/`, and
+ * a posts page means nothing without a homepage — the listing would already be
+ * at `/` — so it is dropped alongside one, exactly as the CMS drops it.
+ */
+function readingPages(site) {
+  const homepage = typeof site?.homepage === 'string' ? site.homepage.trim() : '';
+  const postsPage = typeof site?.postsPage === 'string' ? site.postsPage.trim() : '';
+  return { homepage, postsPage: homepage === '' ? '' : postsPage };
 }
 
 /** One document's `categories`, which Eleventy hands over as written. */
@@ -708,6 +724,34 @@ export default function (eleventyConfig) {
   // and the `conversation` filter below takes it as its second argument.
   eleventyConfig.addPreprocessor('geekity-slug', 'md', (data) => {
     data.geekitySlug = slugOf(data);
+  });
+
+  // WordPress's Reading choice, which the CMS keeps in `site.json` as two page
+  // slugs: `homepage` is the page served at `/` instead of the latest posts,
+  // and `postsPage` is the page whose own URL carries the listing.
+  //
+  // The homepage's permalink becomes `/` — the CMS serves it there and
+  // redirects its own URL to it, and a static build has one URL rather than a
+  // redirect — and both pages are flagged on the context, so a layout knows
+  // which one it is rendering:
+  //
+  //     {% if isPostsPage %}
+  //     {% for post in collections.post | reverse %}…{% endfor %}
+  //     {% endif %}
+  //
+  // It runs after the slug preprocessor, because the slug is read off the
+  // permalink this is about to change.
+  eleventyConfig.addPreprocessor('geekity-front-page', 'md', (data) => {
+    const { homepage, postsPage } = readingPages(data.site);
+    if (homepage === '' || isPost(data.page?.inputPath ?? '')) return;
+
+    if (data.geekitySlug === homepage) {
+      data.permalink = '/';
+      data.isHomepage = true;
+      return;
+    }
+
+    if (postsPage !== '' && data.geekitySlug === postsPage) data.isPostsPage = true;
   });
 
   // The post's name in the fediverse, which is what a reply, a like or a boost

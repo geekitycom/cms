@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 01:28'
+updated_date: '2026-09-13 03:13'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -24,6 +24,17 @@ content/
   _data/
     site.json                  title, tagline, url, author (mirrored from settings)
 ```
+
+`site.json` also carries what the site chooses on the Reading settings page,
+including WordPress's own question of what the front page shows: `homepage` is
+the slug of the page served at `/` and `postsPage` the slug of the page whose
+own URL carries the post listing. Both are absent when the site shows its
+latest posts at `/`, which is the default; `postsPage` needs a `homepage`
+beside it, and is ignored without one. They are slugs rather than URLs because
+the setting follows the page rather than the permalink it happens to have, and
+a slug naming no published page is a site back on its latest posts. An Eleventy
+build reads the same two keys: `docs/eleventy.config.example.js` puts the
+homepage at `/` and flags the posts page on the context as `isPostsPage`.
 
 Post filenames carry a date prefix so they sort on disk. Pages do not. The CMS never depends on filename parsing for URLs; it always reads `permalink` from front matter.
 

@@ -12,5 +12,7 @@
       "label": "Elsewhere",
       "url": "https://elsewhere.example/"
     }
-  ]
+  ],
+  "homepage": "front",
+  "postsPage": "journal"
 }

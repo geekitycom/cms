@@ -108,6 +108,23 @@ export interface SiteSettings {
   language: string;
   /** How many posts a listing page holds. A positive integer. */
   postsPerPage: number;
+  /**
+   * The slug of the page served at `/`, or empty when the site shows its
+   * latest posts there. WordPress's Reading choice.
+   *
+   * A slug rather than a permalink, because a permalink is a thing the editor
+   * may change and the setting should follow the page rather than the URL it
+   * happened to have. A slug naming nothing published — a page drafted,
+   * trashed or deleted since — is a site back on its latest posts: the pick is
+   * kept so putting the page back puts the front page back with it.
+   */
+  homepage: string;
+  /**
+   * The slug of the page whose permalink carries the post listing, or empty
+   * for none. Only meaningful beside a {@link SiteSettings.homepage}, and the
+   * settings screen refuses one without it, exactly as WordPress does.
+   */
+  postsPage: string;
   /** Site author, used as the feed author. May be empty. */
   author: string;
   /** The local part of the ActivityPub handle, `@{handle}@{host}` (doc-4). */
@@ -258,6 +275,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   timezone: 'UTC',
   language: 'en',
   postsPerPage: 10,
+  homepage: '',
+  postsPage: '',
   author: '',
   actorHandle: 'blog',
   actorType: 'Person',
@@ -287,6 +306,8 @@ export const SETTINGS_FIELDS = {
   timezone: 'timezone',
   language: 'language',
   postsPerPage: 'posts_per_page',
+  homepage: 'homepage',
+  postsPage: 'posts_page',
   author: 'author',
   actorHandle: 'actor_handle',
   actorType: 'actor_type',
@@ -356,6 +377,10 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
       ? { language: file['language'] }
       : {}),
     ...(typeof file['avatar'] === 'string' ? { avatar: file['avatar'] } : {}),
+    // Absent is the ordinary state of these two: a site showing its latest
+    // posts writes neither key, so anything but a string is read as none.
+    ...(typeof file['homepage'] === 'string' ? { homepage: file['homepage'] } : {}),
+    ...(typeof file['postsPage'] === 'string' ? { postsPage: file['postsPage'] } : {}),
     ...(typeof file['actorHandle'] === 'string' && file['actorHandle'] !== ''
       ? { actorHandle: file['actorHandle'] }
       : {}),
@@ -429,12 +454,17 @@ export function taxonomyBasesFromSettings(settings: SiteSettings): TaxonomyBases
  * `site.author` without guarding it. Every other key the file already had is
  * kept: a site may put anything in there and reach it from its templates, and
  * the settings form is not going to be the thing that throws it away.
+ *
+ * `homepage` and `postsPage` are the one exception, and they earn it: a site
+ * showing its latest posts has no static front page at all rather than an
+ * empty one, so the keys are absent rather than empty — which is also how a
+ * `site.json` written before this version reads, and what it should mean.
  */
 export function siteJsonFor(
   settings: SiteSettings,
   existing: Record<string, unknown> = {},
 ): Record<string, unknown> {
-  return {
+  const file: Record<string, unknown> = {
     ...existing,
     title: settings.title,
     tagline: settings.tagline,
@@ -466,6 +496,13 @@ export function siteJsonFor(
     navigation: settings.navigation.map((item) => ({ ...item })),
     taxonomyRedirects: settings.taxonomyRedirects.map((entry) => ({ ...entry })),
   };
+
+  for (const key of ['homepage', 'postsPage'] as const) {
+    if (settings[key] === '') delete file[key];
+    else file[key] = settings[key];
+  }
+
+  return file;
 }
 
 /** The absolute path of one site's `content/_data/site.json`. */
@@ -650,6 +687,24 @@ const FIELD_CHECKS: Record<SettingsField, (form: SettingsForm) => string | undef
       : undefined;
   },
 
+  // The two picks are checked as a pair, the way the archive bases are, and
+  // for the same reason: two of the three rules are about the pair. Neither
+  // check asks whether the slug still names a published page — the select only
+  // offers ones that do, and a page drafted after it was picked is a site back
+  // on its latest posts rather than a settings screen that will not save.
+  homepage: (form) => slugProblem(form.homepage, 'A homepage'),
+
+  postsPage: (form) => {
+    if (form.postsPage.trim() === '') return undefined;
+    if (form.homepage.trim() === '') {
+      return 'A posts page needs a homepage: pick the page the front page shows first.';
+    }
+    if (form.postsPage.trim() === form.homepage.trim()) {
+      return 'The homepage and the posts page have to be two different pages.';
+    }
+    return slugProblem(form.postsPage, 'A posts page');
+  },
+
   timezone: (form) =>
     isValidTimezone(form.timezone)
       ? undefined
@@ -803,6 +858,11 @@ export function settingsFromForm(
     timezone: form.timezone.trim(),
     language: form.language.trim(),
     postsPerPage: Number(form.postsPerPage),
+    homepage: form.homepage.trim(),
+    // A posts page means nothing without a homepage, and the validator has
+    // already refused the pair; this is what makes clearing the homepage clear
+    // the listing's own page with it rather than leave it stranded.
+    postsPage: form.homepage.trim() === '' ? '' : form.postsPage.trim(),
     author: form.author.trim(),
     actorHandle: form.actorHandle.trim(),
     actorType: form.actorType,
@@ -836,6 +896,8 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     timezone: settings.timezone,
     language: settings.language,
     postsPerPage: String(settings.postsPerPage),
+    homepage: settings.homepage,
+    postsPage: settings.postsPage,
     author: settings.author,
     actorHandle: settings.actorHandle,
     actorType: settings.actorType,
@@ -970,6 +1032,23 @@ export function normalizeRelayInbox(value: string): string | undefined {
 
   const href = parsed.href;
   return href.endsWith('/') && parsed.pathname !== '/' ? href.slice(0, -1) : href;
+}
+
+/**
+ * What a page slug may be made of on this screen: the shape
+ * {@link slugify} produces, which is what the editor writes.
+ *
+ * The setting travels no further than a lookup by slug, so this is about
+ * catching a hand-typed value rather than about safety.
+ */
+const PAGE_SLUG_PATTERN = /^[A-Za-z0-9._~-]{1,200}$/;
+
+/** What is wrong with one page pick, or `undefined`. Empty is a value. */
+function slugProblem(value: string, what: string): string | undefined {
+  const slug = value.trim();
+  return slug === '' || PAGE_SLUG_PATTERN.test(slug)
+    ? undefined
+    : `${what} is the slug of one of the site's pages, such as about.`;
 }
 
 /** Whether `Intl` knows the zone. An empty name is not a zone. */

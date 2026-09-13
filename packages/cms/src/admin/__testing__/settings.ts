@@ -25,6 +25,8 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     language: 'en',
   },
   reading: {
+    homepage: '',
+    posts_page: '',
     posts_per_page: '10',
     navigation: '',
     notify_server: 'https://rpc.rsscloud.io',
