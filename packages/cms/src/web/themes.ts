@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -125,6 +125,67 @@ export function readTheme(dir: string): ThemeRead {
         : {}),
     },
   };
+}
+
+/** A directory under the themes directory that turned out not to be a theme. */
+export interface UnreadableTheme {
+  /** The directory name, as it sits on disk. */
+  readonly id: string;
+  /** Absolute path to it, so the screen can say where to go and look. */
+  readonly dir: string;
+  /** Why it is not a theme: {@link ThemeRead}'s reason. */
+  readonly reason: string;
+}
+
+/** What is in a site's themes directory: the themes, and the near misses. */
+export interface SiteThemes {
+  /** Every directory that is a theme, by directory name. */
+  readonly themes: readonly Theme[];
+  /** Every directory that was meant to be one and is not. */
+  readonly unreadable: readonly UnreadableTheme[];
+}
+
+/**
+ * Everything in one site's themes directory.
+ *
+ * Both halves come back because the Appearance screen draws both: a folder
+ * with a typo in its `theme.json` is listed with the reason rather than
+ * silently skipped, because a theme that has quietly vanished from the list is
+ * the hardest kind of mistake to find. The screen is the only caller —
+ * rendering asks {@link chooseTheme} about one name instead, and never reads
+ * the directory.
+ *
+ * Only a subdirectory is a candidate, and a hidden one is not even that: a
+ * `themes/` with a `.DS_Store`, a `README.md` or a `.git` in it is a site with
+ * no broken themes, not a site with three of them.
+ *
+ * A themes directory that is not there is an empty one. Nothing scaffolds it
+ * (decision-15), so a site that has never written a theme has no directory,
+ * and that is the ordinary state rather than a problem to report.
+ */
+export function listSiteThemes(themesDir: string): SiteThemes {
+  const root = path.resolve(themesDir);
+
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return { themes: [], unreadable: [] };
+  }
+
+  const themes: Theme[] = [];
+  const unreadable: UnreadableTheme[] = [];
+
+  for (const entry of [...entries].sort((left, right) => left.name.localeCompare(right.name))) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+
+    const dir = path.join(root, entry.name);
+    const read = readTheme(dir);
+    if (read.ok) themes.push(read.theme);
+    else unreadable.push({ id: entry.name, dir, reason: read.reason });
+  }
+
+  return { themes, unreadable };
 }
 
 /**

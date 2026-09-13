@@ -28,6 +28,7 @@ export const ADMIN_TEMPLATES = {
   documentConflict: 'layouts/document-conflict.njk',
   taxonomy: 'layouts/taxonomy.njk',
   media: 'layouts/media.njk',
+  themes: 'layouts/themes.njk',
   comments: 'layouts/comments.njk',
   messages: 'layouts/messages.njk',
   settingsGeneral: 'layouts/settings/general.njk',

@@ -14,6 +14,7 @@ describe('the admin menu registry', () => {
         'Media',
         'Comments',
         'Messages',
+        'Appearance',
         'Users',
         'Settings',
         'Federation',

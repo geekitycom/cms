@@ -9,6 +9,7 @@ import {
   chooseTheme,
   createThemeSource,
   findThemeFile,
+  listSiteThemes,
   PACKAGED_THEME_DIR,
   readTheme,
   SITE_THEME_KIND,
@@ -249,6 +250,96 @@ describe('choosing one theme out of a themes directory', () => {
       assert.deepEqual(chosen.dirs, [PACKAGED_THEME_DIR], `${name} chose a directory`);
       assert.ok(chosen.problem !== undefined, `${name} was taken as a theme name`);
     }
+  });
+});
+
+describe('listing what is in a themes directory', () => {
+  /** A themes directory holding whatever a test writes into it. */
+  async function themesDir(files: Record<string, string> = {}): Promise<string> {
+    const dir = await mkdtemp(path.join(tmpdir(), 'geekity-themes-list-'));
+    temporaryDirs.push(dir);
+
+    for (const [relative, contents] of Object.entries(files)) {
+      const file = path.join(dir, ...relative.split('/'));
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, contents, 'utf8');
+    }
+
+    return dir;
+  }
+
+  /** One theme's manifest, as a file for {@link themesDir}. */
+  function manifest(id: string, name: string, description?: string): Record<string, string> {
+    return {
+      [`${id}/${THEME_MANIFEST_FILE}`]: JSON.stringify({
+        name,
+        kind: 'site',
+        ...(description === undefined ? {} : { description }),
+      }),
+    };
+  }
+
+  it('is empty for a site that has never written a theme', () => {
+    const listed = listSiteThemes(path.join(tmpdir(), 'geekity-themes-that-are-not-there'));
+
+    assert.deepEqual(listed.themes, []);
+    assert.deepEqual(listed.unreadable, []);
+  });
+
+  it('reads every theme in it, by directory name, in order', async () => {
+    const dir = await themesDir({
+      ...manifest('midnight', 'Midnight', 'Dark and quiet.'),
+      ...manifest('daylight', 'Daylight'),
+    });
+
+    const listed = listSiteThemes(dir);
+
+    assert.deepEqual(
+      listed.themes.map((theme) => [theme.id, theme.name, theme.description]),
+      [
+        ['daylight', 'Daylight', undefined],
+        ['midnight', 'Midnight', 'Dark and quiet.'],
+      ],
+    );
+    assert.equal(listed.themes[1]?.dir, path.join(dir, 'midnight'), 'and where each one is');
+  });
+
+  it('says why a folder that is not a theme is not one, rather than dropping it', async () => {
+    const dir = await themesDir({
+      ...manifest('midnight', 'Midnight'),
+      [`halfway/${THEME_MANIFEST_FILE}`]: '{ "name": ',
+      'bare/layouts/post.njk': 'a layout and no manifest',
+    });
+
+    const listed = listSiteThemes(dir);
+
+    assert.deepEqual(
+      listed.themes.map((theme) => theme.id),
+      ['midnight'],
+    );
+    assert.deepEqual(
+      listed.unreadable.map((entry) => entry.id),
+      ['bare', 'halfway'],
+    );
+    assert.match(listed.unreadable[0]?.reason ?? '', /theme\.json/);
+    assert.match(listed.unreadable[1]?.reason ?? '', /JSON/);
+  });
+
+  it('does not take a file, or the operating system’s litter, for a theme', async () => {
+    const dir = await themesDir({
+      ...manifest('midnight', 'Midnight'),
+      '.DS_Store': 'binary nonsense',
+      'README.md': 'themes go in here',
+      '.git/HEAD': 'ref: refs/heads/main',
+    });
+
+    const listed = listSiteThemes(dir);
+
+    assert.deepEqual(
+      listed.themes.map((theme) => theme.id),
+      ['midnight'],
+    );
+    assert.deepEqual(listed.unreadable, [], 'and none of it is reported as a broken theme');
   });
 });
 
