@@ -5,8 +5,16 @@ import { themeSearchPath } from './themes.ts';
 
 /** Where a {@link createTemplateEnvironment} looks, and how it caches. */
 export interface CreateTemplateEnvironmentOptions {
-  /** The site's own theme directory. Searched first. It need not exist. */
-  themeDir: string;
+  /**
+   * The theme directories to read, in the order {@link themeSearchPath} gives
+   * them. Defaults to the packaged theme alone, which is what a site that has
+   * chosen no theme of its own renders through. None of them need exist.
+   *
+   * Where they came from is the caller's business, and changing them later is
+   * {@link useThemeDirs}: this is the environment's starting point, not a
+   * promise that it will read the same directories forever.
+   */
+  themeDirs?: readonly string[] | undefined;
   /** Public origin, for the `url` and `absoluteUrl` filters. */
   baseUrl: string;
   /**
@@ -28,12 +36,12 @@ export interface CreateTemplateEnvironmentOptions {
  * A Nunjucks environment whose loader searches the theme directories in the
  * order {@link themeSearchPath} gives them, one file at a time.
  *
- * That is the whole override mechanism: a site that ships only
- * `theme/layouts/post.njk` replaces the post layout and keeps receiving
- * updates to every other template.
+ * That is the whole override mechanism: a theme that ships only
+ * `layouts/post.njk` replaces the post layout and keeps receiving updates to
+ * every other template.
  */
 export function createTemplateEnvironment(options: CreateTemplateEnvironmentOptions): Environment {
-  const loader = new FileSystemLoader(themeSearchPath(options.themeDir), {
+  const loader = new FileSystemLoader([...(options.themeDirs ?? themeSearchPath())], {
     noCache: options.noCache === true,
   });
 
@@ -45,6 +53,40 @@ export function createTemplateEnvironment(options: CreateTemplateEnvironmentOpti
   });
 
   return addFilters(environment, options.baseUrl);
+}
+
+/**
+ * Point an environment at these theme directories for the renders that follow.
+ *
+ * This is what makes a change of theme take effect without a restart. An
+ * environment is built once per process and holds the filters a site added to
+ * it, so switching theme by building a second one would either lose those
+ * filters or hand two objects to something that was promised one. Nunjucks
+ * reads `searchPaths` afresh on every miss, so moving the path and dropping
+ * the compiled templates is the whole of it.
+ *
+ * Directories that have not changed cost nothing: the compiled templates are
+ * only thrown away when the answer is actually different, so the ordinary
+ * request — every request on a site that never changes theme — pays one array
+ * comparison.
+ */
+export function useThemeDirs(environment: Environment, dirs: readonly string[]): void {
+  // Through a cast because neither the loader's search paths nor the cache it
+  // keeps them for are in the published types, though both are documented API
+  // and both have been there since Nunjucks 2.
+  const internals = environment as unknown as {
+    loaders: { searchPaths?: string[] }[];
+    invalidateCache(): void;
+  };
+
+  for (const loader of internals.loaders) {
+    const paths = loader.searchPaths;
+    if (paths === undefined) continue;
+    if (paths.length === dirs.length && paths.every((dir, index) => dir === dirs[index])) continue;
+
+    loader.searchPaths = [...dirs];
+    internals.invalidateCache();
+  }
 }
 
 /** How `date` renders a value. */

@@ -32,7 +32,7 @@ apps/demo/             private site that consumes the package via workspace:*
   server.ts
   content/           six posts, three pages and _data/site.json
     _includes/       the two layouts an Eleventy build of the same files needs
-  theme/             the two files this site overrides: post.njk and style.css
+  themes/demo/       the theme this site wears: post.njk, style.css, theme.json
   eleventy.config.js re-exports the documented example config
   test/              boots the demo over HTTP, and builds it with Eleventy
 scripts/               pack-install-smoke.sh, the body of the CI job of the same name
@@ -116,7 +116,7 @@ export default defineConfig({
   port: 3000,
   contentDir: 'content',
   dataDir: 'data',
-  themeDir: 'theme',
+  themesDir: 'themes',
   baseUrl: 'http://localhost:3000',
   watch: true,
 });
@@ -130,7 +130,7 @@ directory; absolute ones are used as given.
 | `port`       | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on.                                                                                                                                                          |
 | `contentDir` | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                         |
 | `dataDir`    | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs. |
-| `themeDir`   | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme.                                                                                                                      |
+| `themesDir`  | `<cwd>/themes`            | `GEEKITY_THEMES_DIR`        | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                       |
 | `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                |
 | `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                              |
 
@@ -923,10 +923,12 @@ base layout, home, post, page, tag archive and 404; `partials/` for the post
 list, the pager and the tag macros; `static/style.css`, served at
 `/theme/style.css`. It is plain CSS with no build step.
 
-A template is looked up in the site's `themeDir` first and in the packaged
-theme second, one file at a time, so a site that ships only
-`theme/layouts/post.njk` replaces the post layout and keeps receiving updates
-to every other template. Assets under `/theme/` resolve in the same order.
+A site keeps its own themes under `themes/`, one directory per theme with a
+`theme.json` in it, and names the one it wears with `theme` in
+`content/_data/site.json`. A template is looked up in that theme first and in
+the packaged theme second, one file at a time, so a theme that ships only
+`layouts/post.njk` replaces the post layout and keeps receiving updates to
+every other template. Assets under `/theme/` resolve in the same order.
 
 The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`,
 `categories`, `content`, `page.url`, and every front matter key the file carried — so a

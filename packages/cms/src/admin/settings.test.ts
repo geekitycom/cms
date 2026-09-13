@@ -7,7 +7,14 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
-import { readSiteSettings } from './settings.ts';
+import {
+  DEFAULT_SITE_SETTINGS,
+  formFromSettings,
+  readSiteSettings,
+  settingsFromForm,
+  settingsProblems,
+  updateSiteSettings,
+} from './settings.ts';
 
 /**
  * The settings themselves: `content/_data/site.json`, which is what every
@@ -331,5 +338,94 @@ describe('the recorded archive renames', () => {
     assert.deepEqual(readSiteSettings(cms.config.contentDir).taxonomyRedirects, [
       { taxonomy: 'tag', from: 'eleventy', to: '11ty' },
     ]);
+  });
+});
+
+describe('the theme setting', () => {
+  /** A themes directory holding one theme with a manifest. */
+  async function themesDir(...names: string[]): Promise<string> {
+    const dir = await box.dir('geekity-settings-themes-');
+    for (const name of names) {
+      await mkdir(path.join(dir, name), { recursive: true });
+      await writeFile(
+        path.join(dir, name, 'theme.json'),
+        JSON.stringify({ name, kind: 'site' }),
+        'utf8',
+      );
+    }
+    return dir;
+  }
+
+  it('is read from site.json and written back, and is absent for the packaged theme', async () => {
+    const contentDir = await box.dir('geekity-settings-theme-');
+
+    await updateSiteSettings({
+      contentDir,
+      change: (current) => ({ ...current, theme: 'midnight' }),
+    });
+
+    const file = path.join(contentDir, '_data', 'site.json');
+    const chosen = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.equal(chosen['theme'], 'midnight');
+    assert.equal(readSiteSettings(contentDir).theme, 'midnight');
+
+    await updateSiteSettings({ contentDir, change: (current) => ({ ...current, theme: '' }) });
+
+    const packaged = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.ok(!('theme' in packaged), 'the packaged theme is the absence of the key');
+    assert.equal(readSiteSettings(contentDir).theme, '');
+  });
+
+  it('survives a save of a settings page that does not carry it', async () => {
+    const contentDir = await box.dir('geekity-settings-theme-keep-');
+    await updateSiteSettings({
+      contentDir,
+      change: (current) => ({ ...current, theme: 'midnight' }),
+    });
+
+    const cms = await box.site({ contentDir, themesDir: await themesDir('midnight') });
+    const agent = await signedIn(cms);
+    await saveSettings(agent, 'general', { title: 'Renamed' });
+
+    const settings = readSiteSettings(contentDir);
+    assert.equal(settings.title, 'Renamed');
+    assert.equal(settings.theme, 'midnight', 'the Appearance choice is not a General field');
+  });
+
+  it('round-trips through the form the way every other setting does', () => {
+    const form = formFromSettings({ ...DEFAULT_SITE_SETTINGS, theme: 'midnight' });
+
+    assert.equal(form.theme, 'midnight');
+    assert.equal(settingsFromForm(form).theme, 'midnight');
+  });
+
+  it('takes a name that is a theme, and the empty name for the packaged one', async () => {
+    const dir = await themesDir('midnight');
+    const form = formFromSettings(DEFAULT_SITE_SETTINGS);
+
+    for (const theme of ['midnight', '']) {
+      assert.deepEqual(
+        settingsProblems({ ...form, theme }, ['theme'], { themesDir: dir }),
+        {},
+        `"${theme}" was refused`,
+      );
+    }
+  });
+
+  it('refuses a name that is not a theme directory, with a message', async () => {
+    const dir = await themesDir('midnight');
+    const form = formFromSettings(DEFAULT_SITE_SETTINGS);
+
+    const missing = settingsProblems({ ...form, theme: 'daylight' }, ['theme'], { themesDir: dir });
+    assert.match(missing.theme ?? '', /daylight/);
+
+    await writeFile(path.join(dir, 'midnight', 'theme.json'), '{ not json', 'utf8');
+    const broken = settingsProblems({ ...form, theme: 'midnight' }, ['theme'], { themesDir: dir });
+    assert.match(broken.theme ?? '', /theme\.json/);
+
+    const escaping = settingsProblems({ ...form, theme: '../elsewhere' }, ['theme'], {
+      themesDir: dir,
+    });
+    assert.ok(escaping.theme !== undefined, 'a path is not a theme name');
   });
 });

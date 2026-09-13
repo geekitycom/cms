@@ -63,6 +63,12 @@ export interface SiteData {
    */
   relays?: readonly string[] | undefined;
   /**
+   * The theme the site renders through: the name of one directory under the
+   * configured themes directory. Absent — the ordinary state — is the theme
+   * the package ships (decision-15).
+   */
+  theme?: string | undefined;
+  /**
    * The slug of the page served at `/`, when the site shows a page there
    * rather than its latest posts. Absent for the latest posts.
    */
@@ -262,6 +268,20 @@ export function postsPerPage(site: SiteData): number {
     return configured;
   }
   return DEFAULT_POSTS_PER_PAGE;
+}
+
+/**
+ * The theme this site has chosen, from the site data, or the empty string for
+ * the theme the package ships.
+ *
+ * Read as tolerantly as everything else out of `site.json` — a key of the
+ * wrong type is a site on the packaged theme rather than a broken render —
+ * and read as a name rather than resolved to a directory, for the reason the
+ * front page is read as a slug: only something holding the themes directory
+ * can say whether the name still points at a theme.
+ */
+export function themeName(site: SiteData): string {
+  return typeof site['theme'] === 'string' ? site['theme'].trim() : '';
 }
 
 /** WordPress's Reading choice, as `site.json` spells it. */

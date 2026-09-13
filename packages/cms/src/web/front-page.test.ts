@@ -134,10 +134,12 @@ describe('a site whose homepage is a page', () => {
   });
 
   it('lets a theme lay the front page out on its own, and uses the page layout otherwise (AC #2)', async () => {
-    const themeDir = await temporaryDir('geekity-front-theme-');
+    const themesDir = await temporaryDir('geekity-front-themes-');
+    const themeDir = path.join(themesDir, 'fixture');
+    await writeTree(themeDir, { 'theme.json': JSON.stringify({ name: 'Fixture', kind: 'site' }) });
     const { cms } = await site(
-      { ...CONTENT, '_data/site.json': siteJson({ homepage: 'welcome' }) },
-      { themeDir },
+      { ...CONTENT, '_data/site.json': siteJson({ homepage: 'welcome', theme: 'fixture' }) },
+      { themesDir },
     );
 
     const fallback = await (await cms.app.request('/')).text();

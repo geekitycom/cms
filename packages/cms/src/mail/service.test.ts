@@ -47,7 +47,7 @@ async function site(
 ): Promise<{ mail: MailService; contentDir: string; dataDir: string; waited: number[] }> {
   const contentDir = await dir('geekity-mail-content-');
   const dataDir = await dir('geekity-mail-data-');
-  const themeDir = await dir('geekity-mail-theme-');
+  const themesDir = await dir('geekity-mail-themes-');
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
   await writeSiteJson({
     contentDir,
@@ -57,7 +57,7 @@ async function site(
   const waited: number[] = [];
 
   const mail = createMailService({
-    config: { baseUrl: 'https://blog.example', contentDir, dataDir, themeDir, watch: false },
+    config: { baseUrl: 'https://blog.example', contentDir, dataDir, themesDir, watch: false },
     ...(options.provider === undefined ? {} : { provider: options.provider }),
     // Always a logger of the test's own, so a passing run says nothing.
     logger: options.log ?? new Log(),
@@ -172,10 +172,17 @@ describe('sending a templated message', () => {
 
   it('puts the data and the site settings in front of the template', async () => {
     const provider = createMemoryMailProvider();
-    const themeDir = await dir('geekity-mail-theme-');
-    await mkdir(path.join(themeDir, 'mail'), { recursive: true });
+    // A named theme the site has chosen, which is where a message that is not
+    // the package's comes from (decision-15).
+    const themesDir = await dir('geekity-mail-themes-');
+    await mkdir(path.join(themesDir, 'fixture', 'mail'), { recursive: true });
     await writeFile(
-      path.join(themeDir, 'mail', 'greeting.txt.njk'),
+      path.join(themesDir, 'fixture', 'theme.json'),
+      JSON.stringify({ name: 'Fixture', kind: 'site' }),
+      'utf8',
+    );
+    await writeFile(
+      path.join(themesDir, 'fixture', 'mail', 'greeting.txt.njk'),
       'Hello {{ name }}, from {{ site.title }} at {{ baseUrl }}.\n',
       'utf8',
     );
@@ -183,7 +190,7 @@ describe('sending a templated message', () => {
     const contentDir = await dir('geekity-mail-content-');
     await writeSiteJson({
       contentDir,
-      settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site' },
+      settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', theme: 'fixture' },
     });
 
     const mail = createMailService({
@@ -191,7 +198,7 @@ describe('sending a templated message', () => {
         baseUrl: 'https://blog.example',
         contentDir,
         dataDir: await dir('geekity-mail-data-'),
-        themeDir,
+        themesDir,
         watch: false,
       },
       provider,

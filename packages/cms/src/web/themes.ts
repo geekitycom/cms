@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -128,16 +128,165 @@ export function readTheme(dir: string): ThemeRead {
 }
 
 /**
- * The theme directories one render reads from, in order: the site's own theme
- * first, the theme that ships in this package second.
+ * The theme directories one render reads from, in order: the theme the site
+ * has chosen first, the theme that ships in this package second.
  *
- * That is the whole override mechanism. A site that ships only
+ * That is the whole override mechanism. A theme that ships only
  * `layouts/post.njk` replaces the post layout and keeps receiving updates to
  * every other template, and the same order decides a `/theme/` asset and a
- * mail template. The site directory need not exist.
+ * mail template. The chosen directory need not exist.
+ *
+ * A site that has chosen nothing passes nothing, and reads the packaged theme
+ * alone: an unchosen theme is never on the path, and the packaged one is never
+ * on it twice (decision-15).
  */
-export function themeSearchPath(siteThemeDir: string): string[] {
-  return [siteThemeDir, PACKAGED_THEME_DIR];
+export function themeSearchPath(chosenThemeDir?: string): string[] {
+  return chosenThemeDir === undefined ? [PACKAGED_THEME_DIR] : [chosenThemeDir, PACKAGED_THEME_DIR];
+}
+
+/**
+ * What a `theme` in `site.json` may be: the name of one directory inside the
+ * themes directory, and nothing that would reach outside it.
+ *
+ * The setting is a word somebody picks off a list, so this is about a
+ * hand-edited file rather than about an attacker — but the value decides a
+ * directory every template is then read out of, so it is checked before it is
+ * joined to a path rather than after.
+ */
+export function themeNameProblem(name: string): string | undefined {
+  const chosen = name.trim();
+  if (chosen === '') return undefined;
+  if (chosen === '.' || chosen === '..' || /[/\\\0]/.test(chosen)) {
+    return `"${chosen}" is not a theme name: a theme is one directory inside the themes directory.`;
+  }
+  return undefined;
+}
+
+/** Which theme a render reads from, and why it is that one. */
+export interface ChosenTheme {
+  /** The site theme in use, or `undefined` when the packaged one is. */
+  readonly theme: Theme | undefined;
+  /** The directories to read, in order: {@link themeSearchPath}. */
+  readonly dirs: readonly string[];
+  /**
+   * Why the theme the site named is not the one in use, when it named one that
+   * is not there or is not a theme. `undefined` both for a site running the
+   * packaged theme on purpose and for one whose choice is working.
+   */
+  readonly problem: string | undefined;
+}
+
+/**
+ * The theme one site has chosen, resolved against its themes directory.
+ *
+ * A choice that cannot be honoured is the packaged theme and a sentence saying
+ * why, never an exception: a theme deleted from disk, or a `theme.json` broken
+ * by a hand edit, has to leave the site up and answering — the alternative is
+ * a site that 500s on every page because of a directory rename.
+ */
+export function chooseTheme(options: { themesDir: string; name: string }): ChosenTheme {
+  const name = options.name.trim();
+  if (name === '') return { theme: undefined, dirs: themeSearchPath(), problem: undefined };
+
+  const badName = themeNameProblem(name);
+  if (badName !== undefined) {
+    return { theme: undefined, dirs: themeSearchPath(), problem: badName };
+  }
+
+  const read = readTheme(path.join(options.themesDir, name));
+  if (!read.ok) {
+    return {
+      theme: undefined,
+      dirs: themeSearchPath(),
+      problem: `The theme "${name}" is not there: ${read.reason}`,
+    };
+  }
+
+  return { theme: read.theme, dirs: themeSearchPath(read.theme.dir), problem: undefined };
+}
+
+/** Where {@link createThemeSource} says what it could not do. */
+export interface ThemeLogger {
+  warn(message: string): void;
+}
+
+/** The theme in use right now, asked afresh whenever anything renders. */
+export interface ThemeSource {
+  /**
+   * The theme this render reads from.
+   *
+   * Cheap enough to call per render: it costs one read of the site's choice —
+   * which is itself cached against the `stat` of `site.json` — and one `stat`
+   * of the chosen theme's manifest.
+   */
+  current(): ChosenTheme;
+}
+
+/**
+ * The one thing that knows which theme a site is rendering through.
+ *
+ * It is a source rather than a value because the choice is a setting in
+ * `content/_data/site.json` (decision-9, decision-15): the Appearance screen
+ * writes that file, a hand edit writes the same file, and both have to reach
+ * the next request without a restart. So every consumer — the template
+ * environment, the `/theme/` assets, the mail templates — asks here per render
+ * instead of being handed a directory at boot.
+ *
+ * The result is cached against the choice and the `stat` of the chosen theme's
+ * manifest, so an unchanged site pays one `stat` per render and a theme
+ * edited, replaced or deleted under the running process is noticed on the next
+ * one. A choice that cannot be honoured is logged once, when the answer
+ * changes, rather than on every render: a site whose theme has been deleted
+ * should say so in the log and then serve pages, not fill the log with the
+ * same line.
+ */
+export function createThemeSource(options: {
+  /** Where the site's themes are: {@link ResolvedConfig.themesDir}. */
+  themesDir: string;
+  /** The site's choice, read per call. The empty string is the packaged theme. */
+  chosen: () => string;
+  /** Where a choice that could not be honoured is reported. Defaults to `console`. */
+  logger?: ThemeLogger | undefined;
+}): ThemeSource {
+  const logger = options.logger ?? console;
+
+  let cached: ChosenTheme | undefined;
+  let cachedKey: string | undefined;
+  let reported: string | undefined;
+
+  /**
+   * What would make the answer different: the name chosen, and the state of
+   * that theme's manifest. The modification time alone is not enough, for the
+   * reason it is not in {@link createSiteDataSource}: a filesystem rounds it,
+   * and a theme replaced wholesale changes the inode rather than the time.
+   */
+  function key(name: string): string {
+    if (name === '') return '';
+    try {
+      const stats = statSync(path.join(options.themesDir, name, THEME_MANIFEST_FILE));
+      return `${name}:${String(stats.mtimeMs)}:${String(stats.size)}:${String(stats.ino)}`;
+    } catch {
+      return `${name}:missing`;
+    }
+  }
+
+  return {
+    current() {
+      const name = options.chosen().trim();
+      const current = key(name);
+      if (cached !== undefined && current === cachedKey) return cached;
+
+      cachedKey = current;
+      cached = chooseTheme({ themesDir: options.themesDir, name });
+
+      if (cached.problem !== undefined && cached.problem !== reported) {
+        logger.warn(`${cached.problem} The packaged theme is being used instead.`);
+      }
+      reported = cached.problem;
+
+      return cached;
+    },
+  };
 }
 
 /**

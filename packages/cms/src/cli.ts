@@ -137,7 +137,7 @@ Options:
 
 Environment overrides:
   GEEKITY_PORT (or PORT), GEEKITY_CONTENT_DIR, GEEKITY_DATA_DIR,
-  GEEKITY_THEME_DIR, GEEKITY_BASE_URL, GEEKITY_WATCH
+  GEEKITY_THEMES_DIR, GEEKITY_BASE_URL, GEEKITY_WATCH
 `;
 
 /** Turn `process.argv.slice(2)` into a command, its options and its arguments. */

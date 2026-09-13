@@ -289,14 +289,14 @@ describe('a site that brings only content', () => {
   const post = (title: string, permalink: string): string =>
     `---\ntitle: ${title}\ndate: '2026-01-01T09:00:00Z'\npermalink: ${permalink}\n---\n\nBody.\n`;
 
-  it('serves the home page, a document and the stylesheet with no theme directory', async () => {
+  it('serves the home page, a document and the stylesheet with no themes directory', async () => {
     const { cms: instance } = await site(
       { 'posts/2026-01-01-hello.md': post('Hello', '/2026/01/hello/') },
-      { themeDir: path.join(tmpdir(), 'geekity-theme-that-is-not-there') },
+      { themesDir: path.join(tmpdir(), 'geekity-themes-that-are-not-there') },
     );
     await instance.sync();
 
-    assert.equal(existsSync(instance.config.themeDir), false);
+    assert.equal(existsSync(instance.config.themesDir), false);
     assert.equal((await instance.app.request('/')).status, 200);
     assert.equal((await instance.app.request('/2026/01/hello/')).status, 200);
     assert.equal((await instance.app.request('/theme/style.css')).status, 200);

@@ -12,6 +12,7 @@ import {
   postsPerPage,
   taxonomyBases,
   termRedirects,
+  themeName,
 } from './context.ts';
 import type { CommentFormContext } from '../comments/form.ts';
 import type { ContactFormContext } from '../contact/form.ts';
@@ -22,8 +23,9 @@ import type { DocumentContext, FrontPageSlugs, SiteData } from './context.ts';
 import { navigationMenu } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
-import { createTemplateEnvironment } from './templates.ts';
-import { findThemeFile, themeSearchPath } from './themes.ts';
+import { createTemplateEnvironment, useThemeDirs } from './templates.ts';
+import { createThemeSource, findThemeFile } from './themes.ts';
+import type { ThemeSource } from './themes.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 
 /** Templates the default theme ships and the public routes ask for by name. */
@@ -138,14 +140,29 @@ export interface Renderer {
   renderNotFound(url: string): string;
   /** Any template by name, with the site data already in the context. */
   render(template: string, context?: Record<string, unknown>): string;
+  /**
+   * The theme directories a render reads from right now, in order: what the
+   * `/theme/` route serves the site's static files out of, so a stylesheet and
+   * the page that links to it can never come from two different themes.
+   */
+  themeDirs(): readonly string[];
   /** The Nunjucks environment, for a site that wants to add its own filters. */
   readonly environment: Environment;
 }
 
 /** How to build a {@link Renderer}. */
 export interface CreateRendererOptions {
-  /** Config after defaults, for the theme directory, base URL and content directory. */
+  /** Config after defaults, for the themes directory, base URL and content directory. */
   config: ResolvedConfig;
+  /**
+   * Which theme the site is rendering through, asked per render (decision-15).
+   *
+   * Injected so that one CMS has one answer: the pages, the `/theme/` assets
+   * and the site's email all read the same source, so a theme that has gone
+   * missing is reported once rather than three times. A renderer built without
+   * one makes its own from the config, and follows the setting just as well.
+   */
+  themes?: ThemeSource | undefined;
   /**
    * The public pages, for the ones that put themselves in the site menu. Read
    * per render rather than at boot, because a page saved in the editor should
@@ -212,17 +229,31 @@ export interface CreateRendererOptions {
  */
 export function createRenderer(options: CreateRendererOptions): Renderer {
   const { config } = options;
+  const siteData = createSiteDataSource(config);
+  // Which theme every render below reads from. Built here when the caller did
+  // not bring one so that a renderer made on its own — a test over one
+  // template, a site rendering a fragment of its own — still follows the
+  // `theme` in `site.json`; `createCms` hands in the one the mail templates
+  // and the `/theme/` assets share, so a site has a single answer and logs a
+  // bad choice once.
+  const themes =
+    options.themes ??
+    createThemeSource({ themesDir: config.themesDir, chosen: () => themeName(siteData.read()) });
   const environment = createTemplateEnvironment({
-    themeDir: config.themeDir,
+    themeDirs: themes.current().dirs,
     baseUrl: config.baseUrl,
     noCache: config.watch,
   });
-  const siteData = createSiteDataSource(config);
   const pages = options.pages ?? ((): readonly Document[] => []);
   const users = options.users ?? ((): readonly User[] => []);
 
   function render(template: string, context: Record<string, unknown> = {}): string {
     const site = siteData.read();
+    // Before anything is looked up: a theme chosen on the Appearance screen, or
+    // written into `site.json` by hand, decides this very render rather than
+    // the next boot. It costs a comparison of two short arrays when nothing
+    // has changed, which is every render of a site that is not being rethemed.
+    useThemeDirs(environment, themes.current().dirs);
     // The menu is built here rather than by each caller because every page of
     // the site carries it: a listing, a document, the 404 and the editor's
     // preview all go through here, and a header that appeared on some of them
@@ -242,7 +273,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   function listingTemplate(listing: Listing): string {
     if (listing.template !== undefined) return listing.template;
     if (listing.document === undefined) return TEMPLATES.home;
-    return themeTemplate(config.themeDir, OPTIONAL_TEMPLATES.postsPage, TEMPLATES.home);
+    return themeTemplate(themes.current().dirs, OPTIONAL_TEMPLATES.postsPage, TEMPLATES.home);
   }
 
   /**
@@ -318,6 +349,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       return siteData.read();
     },
 
+    themeDirs() {
+      return themes.current().dirs;
+    },
+
     pageSize() {
       return postsPerPage(siteData.read());
     },
@@ -345,7 +380,11 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       return documentPage(document, {
         // A theme's own front page if it has written one, and the layout every
         // other page uses if it has not.
-        template: themeTemplate(config.themeDir, OPTIONAL_TEMPLATES.frontPage, TEMPLATES.page),
+        template: themeTemplate(
+          themes.current().dirs,
+          OPTIONAL_TEMPLATES.frontPage,
+          TEMPLATES.page,
+        ),
         // At `/`, which is where it is being read: the canonical link, the
         // menu's current item and anything else a theme takes off `page.url`
         // should say the URL this is served at rather than the one that
@@ -415,8 +454,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
  * per theme directory, and only on the two pages that have an override point
  * at all.
  */
-function themeTemplate(themeDir: string, preferred: string, fallback: string): string {
-  return findThemeFile(themeSearchPath(themeDir), preferred) === undefined ? fallback : preferred;
+function themeTemplate(themeDirs: readonly string[], preferred: string, fallback: string): string {
+  return findThemeFile(themeDirs, preferred) === undefined ? fallback : preferred;
 }
 
 /**

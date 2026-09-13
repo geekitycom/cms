@@ -59,16 +59,19 @@ have, is not a theme.
 
 ## Overriding a template
 
-Resolution order for any template is the site's own `themeDir` (`theme/` by
-default) first, then this directory, one file at a time. A site that ships only
+Resolution order for any template is the theme the site has chosen — one
+directory under its `themesDir`, named by the `theme` setting in
+`content/_data/site.json` — first, then this directory, one file at a time. A
+theme that ships only
 
 ```
-theme/layouts/post.njk
+themes/midnight/layouts/post.njk
 ```
 
 replaces the post layout and keeps receiving updates to every other template.
-`theme/static/style.css` replaces the stylesheet the same way — assets under
-`/theme/` resolve in the same order.
+`themes/midnight/static/style.css` replaces the stylesheet the same way —
+assets under `/theme/` resolve in the same order. A site that has chosen no
+theme reads this one and nothing else.
 
 An override is a normal Nunjucks template, so it can extend or include the
 packaged ones by name:

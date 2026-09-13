@@ -6,7 +6,13 @@ import { after, describe, it } from 'node:test';
 
 import { resolveConfig } from '../config.ts';
 import { parseDocument } from '../content/parser.ts';
-import { createRenderer, createTemplateEnvironment, formatDate, paginate } from './index.ts';
+import {
+  createRenderer,
+  createTemplateEnvironment,
+  formatDate,
+  paginate,
+  themeSearchPath,
+} from './index.ts';
 import type { Renderer } from './index.ts';
 
 const temporaryDirs: string[] = [];
@@ -35,7 +41,7 @@ async function renderer(
 
   const config = resolveConfig({
     contentDir,
-    themeDir: path.join(contentDir, 'theme'),
+    themesDir: path.join(contentDir, 'themes'),
     ...(overrides.baseUrl === undefined ? {} : { baseUrl: overrides.baseUrl }),
   });
   return { renderer: createRenderer({ config }), contentDir };
@@ -121,7 +127,7 @@ describe('the renderer', () => {
 
 describe('the theme filters', () => {
   const environment = (baseUrl: string) =>
-    createTemplateEnvironment({ themeDir: '/no/such/theme', baseUrl });
+    createTemplateEnvironment({ themeDirs: themeSearchPath('/no/such/theme'), baseUrl });
 
   it('formats a date in each documented format', () => {
     const date = new Date('2026-09-02T09:00:00Z');

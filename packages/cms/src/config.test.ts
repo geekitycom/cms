@@ -11,7 +11,7 @@ describe('resolveConfig', () => {
     assert.equal(config.port, 3000);
     assert.equal(config.contentDir, path.join('/srv/site', 'content'));
     assert.equal(config.dataDir, path.join('/srv/site', 'data'));
-    assert.equal(config.themeDir, path.join('/srv/site', 'theme'));
+    assert.equal(config.themesDir, path.join('/srv/site', 'themes'));
     assert.equal(config.baseUrl, 'http://localhost:3000');
   });
 
@@ -23,13 +23,13 @@ describe('resolveConfig', () => {
 
   it('resolves relative directories against the config file directory', () => {
     const config = resolveConfig(
-      { contentDir: 'src/content', dataDir: '../shared/data', themeDir: 'theme' },
+      { contentDir: 'src/content', dataDir: '../shared/data', themesDir: 'themes' },
       { cwd: '/srv/site', env: {} },
     );
 
     assert.equal(config.contentDir, '/srv/site/src/content');
     assert.equal(config.dataDir, '/srv/shared/data');
-    assert.equal(config.themeDir, '/srv/site/theme');
+    assert.equal(config.themesDir, '/srv/site/themes');
   });
 
   it('leaves absolute directories alone', () => {
@@ -53,7 +53,7 @@ describe('resolveConfig', () => {
         port: 3000,
         contentDir: '/from/config/content',
         dataDir: '/from/config/data',
-        themeDir: '/from/config/theme',
+        themesDir: '/from/config/themes',
         baseUrl: 'https://from-config.example',
       },
       {
@@ -62,7 +62,7 @@ describe('resolveConfig', () => {
           GEEKITY_PORT: '9001',
           GEEKITY_CONTENT_DIR: '/from/env/content',
           GEEKITY_DATA_DIR: '/from/env/data',
-          GEEKITY_THEME_DIR: '/from/env/theme',
+          GEEKITY_THEMES_DIR: '/from/env/themes',
           GEEKITY_BASE_URL: 'https://from-env.example',
         },
       },
@@ -71,8 +71,29 @@ describe('resolveConfig', () => {
     assert.equal(config.port, 9001);
     assert.equal(config.contentDir, '/from/env/content');
     assert.equal(config.dataDir, '/from/env/data');
-    assert.equal(config.themeDir, '/from/env/theme');
+    assert.equal(config.themesDir, '/from/env/themes');
     assert.equal(config.baseUrl, 'https://from-env.example');
+  });
+
+  // decision-15 replaced the single `theme/` directory with a `themes/`
+  // directory of named themes, and replaced rather than aliased the names: an
+  // environment still setting the old one is a deployment that has to be
+  // looked at, and quietly reading it as the new one would point the whole
+  // search path at a directory that now means something else.
+  it('ignores the environment variable the single theme directory had', () => {
+    const config = resolveConfig(
+      {},
+      { cwd: '/srv/site', env: { GEEKITY_THEME_DIR: '/from/env/theme' } },
+    );
+
+    assert.equal(config.themesDir, path.join('/srv/site', 'themes'));
+  });
+
+  it('makes a config that still names the single theme directory a type error', () => {
+    // @ts-expect-error `themeDir` is gone; a site names `themesDir` now.
+    const config = resolveConfig({ themeDir: '/from/config/theme' }, { cwd: '/srv/site', env: {} });
+
+    assert.equal(config.themesDir, path.join('/srv/site', 'themes'));
   });
 
   it('also honours PORT, which hosts set for us', () => {

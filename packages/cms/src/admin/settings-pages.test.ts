@@ -54,7 +54,12 @@ describe('the settings pages', () => {
     assert.equal(new Set(seen).size, seen.length, 'no field is on two pages');
     assert.deepEqual(
       [...seen].sort(),
-      Object.keys(SETTINGS_FIELDS).sort(),
+      // Every setting but the theme, which is chosen on Appearance > Themes
+      // rather than on a settings page (decision-15): it is a theme picked off
+      // a list of what the site has, not a field typed into a form.
+      Object.keys(SETTINGS_FIELDS)
+        .filter((field) => field !== 'theme')
+        .sort(),
       'every field of the old form is on a page',
     );
   });

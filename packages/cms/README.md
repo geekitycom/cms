@@ -39,9 +39,9 @@ content/
 .gitignore            node_modules, data and .env
 ```
 
-`data/` and `theme/` are not written. The index under `data/` is created on
-first boot and is safe to delete; `theme/` is optional and only exists once you
-override a template.
+`data/` and `themes/` are not written. The index under `data/` is created on
+first boot and is safe to delete; `themes/` is optional and only exists once
+you write a theme of your own.
 
 The generated `package.json` pins `@geekity/cms` to the version of the CLI that
 wrote it, so a site is never scaffolded against a version it has not been tested
@@ -230,7 +230,7 @@ export default defineConfig({
   port: 3000,
   contentDir: 'content',
   dataDir: 'data',
-  themeDir: 'theme',
+  themesDir: 'themes',
   baseUrl: 'http://localhost:3000',
   watch: true,
   sessionLifetime: 60 * 60 * 24 * 14,
@@ -248,7 +248,7 @@ directory; absolute ones are used as given.
 | `port`             | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on. `0` picks a free one.                                                                                                                                    |
 | `contentDir`       | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                         |
 | `dataDir`          | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs. |
-| `themeDir`         | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme. Need not exist.                                                                                                      |
+| `themesDir`        | `<cwd>/themes`            | `GEEKITY_THEMES_DIR`        | The site's themes, one directory per theme, each with a `theme.json`. Which one is in use is the `theme` setting in `site.json`, not a path. Need not exist.                              |
 | `baseUrl`          | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                |
 | `watch`            | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                              |
 | `sessionLifetime`  | `1209600` (14 days)       | `GEEKITY_SESSION_LIFETIME`  | How long an admin login lasts, in seconds.                                                                                                                                                |
@@ -1083,7 +1083,7 @@ throws — a failure is a result with `ok: false` and the provider's own words i
 ### Messages
 
 Messages are Nunjucks templates under `mail/` in the theme, resolved the way
-every other template is: the site's `themeDir` first, the packaged theme
+every other template is: the theme the site has chosen first, the packaged theme
 second, file by file. Each is up to three files — `mail/<name>.subject.njk`,
 `mail/<name>.txt.njk` (required) and `mail/<name>.html.njk` — so a site can
 replace the text of a message and keep the subject the package ships, or add a
@@ -1365,7 +1365,7 @@ and `off()`.
 
 Booting also mounts the admin at `/admin`. It is server-rendered from templates
 that ship inside the package, deliberately outside the theme search path: a
-site's `theme/` may override any public template, and must not be able to
+site's theme may override any public template, and must not be able to
 shadow the login form.
 
 | Route                                            | What it does                                                                              |
@@ -1581,13 +1581,13 @@ choice is WordPress's own, and so are its two answers:
   the default, and it is what an empty `homepage` means.
 - **A static page.** The page is served at `/`, its own permalink answers `301`
   to `/` so the front page has one URL, and the menu links it at `/`. A theme
-  may lay it out on its own with `theme/layouts/front-page.njk`, which falls
+  may lay it out on its own with `layouts/front-page.njk`, which falls
   back to the page layout.
 
 With a homepage set, a second pick gives the listing a page of its own: the
 **posts page**. Its permalink carries the listing, with the page's own title
 and words above the posts, paginated beneath it at `{permalink}page/N/`;
-`/page/N/` at the root redirects there, and `theme/layouts/posts-page.njk` is
+`/page/N/` at the root redirects there, and the theme's `layouts/posts-page.njk` is
 the theme's override, falling back to the listing layout. A posts page with no
 homepage is refused, as WordPress refuses it, and so is one page picked as
 both. With a homepage and no posts page the listing has no page of its own,
@@ -2448,21 +2448,41 @@ crawler looks.
 
 ## Theme overrides
 
-A template is looked up in the site's `themeDir` first, then in the theme that
-ships inside this package, file by file. Sites override one template at a time
+A site's themes live one directory per theme under `themesDir` (`themes/` by
+default), each with a `theme.json` naming it:
+
+```json
+{
+  "name": "Midnight",
+  "kind": "site",
+  "description": "Dark, quiet, mostly type."
+}
+```
+
+One setting in `content/_data/site.json`, `theme`, says which one the site is
+wearing, and the directory name is what it names:
+
+```json
+{ "theme": "midnight" }
+```
+
+A template is then looked up in that theme first and in the theme that ships
+inside this package second, file by file. Sites override one template at a time
 and keep receiving updates to the rest. Files under `/theme/` resolve the same
-way, so `theme/static/style.css` replaces the packaged stylesheet, and the
-[email messages](#messages) under `mail/` resolve the same way too.
+way, so `themes/midnight/static/style.css` replaces the packaged stylesheet,
+and the [email messages](#messages) under `mail/` resolve the same way too.
 
-`themeDir` need not exist. A site of nothing but `geekity.config.ts` and
-`content/` serves every page, the 404 and the stylesheet out of the packaged
-theme; creating `theme/` is how you start replacing pieces of it, not a
-condition of running.
+Neither the setting nor `themesDir` need exist. A site that names no theme
+serves every page, the 404 and the stylesheet out of the packaged theme, and an
+unchosen theme sitting in `themes/` changes nothing. A `theme` naming a
+directory that is not there falls back to the packaged theme with a warning in
+the log rather than a broken site, and changing the setting takes effect on the
+next request, with no restart.
 
-A site that ships only
+A theme that ships only
 
 ```
-theme/layouts/post.njk
+themes/midnight/layouts/post.njk
 ```
 
 replaces the post layout; the base layout, the archive, the tag pages and the

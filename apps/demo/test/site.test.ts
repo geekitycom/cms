@@ -1,13 +1,14 @@
 /**
  * The demo site, booted the way `pnpm --filter demo dev` boots it.
  *
- * The point of these tests is the override mechanism of decision-6: the demo
- * ships `theme/layouts/post.njk` and `theme/static/style.css`, and everything
- * else — the home page, the tag archives, the 404 — still comes from the
- * package. So the assertions are about what the site actually serves over HTTP,
- * not about which file was read.
+ * The point of these tests is the override mechanism of decision-6 and the
+ * named themes of decision-15: the demo ships one theme, `themes/demo/`, whose
+ * whole content is `layouts/post.njk` and `static/style.css`; its `site.json`
+ * chooses it by name, and everything else — the home page, the tag archives,
+ * the 404 — still comes from the package. So the assertions are about what the
+ * site actually serves over HTTP, not about which file was read.
  *
- * The content directory and the theme directory are the demo's own, from
+ * The content directory and the themes directory are the demo's own, from
  * `geekity.config.ts`. Only the port and the data directory are replaced: the
  * index is derived state, so a run gets a fresh one in a temporary directory
  * and leaves `apps/demo/data/` alone.

@@ -1,17 +1,19 @@
 import type { Environment } from 'nunjucks';
 
-import { createTemplateEnvironment } from '../web/templates.ts';
-import { findThemeFile, themeSearchPath } from '../web/themes.ts';
+import { createTemplateEnvironment, useThemeDirs } from '../web/templates.ts';
+import { findThemeFile } from '../web/themes.ts';
+import type { ThemeSource } from '../web/themes.ts';
 
 /**
  * What a message looks like before it is addressed: a subject, a plain text
  * body, and an HTML twin when the theme wrote one.
  *
  * Messages are Nunjucks templates under `mail/` in the theme, looked up the
- * way every other template is — the site's `themeDir` first, the theme that
- * ships in this package second, file by file. So a site overrides the text of
- * one message and keeps the subject and the HTML the package ships, and a site
- * that writes `mail/welcome.txt.njk` has a message the package never had.
+ * way every other template is — the theme the site has chosen first, the theme
+ * that ships in this package second, file by file. So a theme overrides the
+ * text of one message and keeps the subject and the HTML the package ships,
+ * and one that writes `mail/welcome.txt.njk` has a message the package never
+ * had.
  *
  * Three files rather than one, because the three parts of a message have
  * nothing to do with each other: a subject is one line with no markup, a text
@@ -54,8 +56,15 @@ export function mailTemplateFiles(name: string): MailTemplateFiles {
 
 /** What {@link createMailTemplates} needs. */
 export interface CreateMailTemplatesOptions {
-  /** The site's own theme directory. Searched first. It need not exist. */
-  themeDir: string;
+  /**
+   * Which theme the messages are read from, asked per message.
+   *
+   * A source rather than a directory because mail is part of the theme
+   * (decision-15): a site that changes theme changes the words its password
+   * resets and moderation notices are written in, and the message after the
+   * change should be the new theme's rather than the next boot's.
+   */
+  themes: ThemeSource;
   /** Public origin, for the `url` and `absoluteUrl` filters. */
   baseUrl: string;
   /**
@@ -99,7 +108,7 @@ export function createMailTemplates(options: CreateMailTemplatesOptions): MailTe
   // same `date`, `url` and `absoluteUrl` filters a page does and a site does
   // not have to learn a second set of rules to write one.
   const environment = createTemplateEnvironment({
-    themeDir: options.themeDir,
+    themeDirs: options.themes.current().dirs,
     baseUrl: options.baseUrl,
     ...(options.noCache === undefined ? {} : { noCache: options.noCache }),
   });
@@ -108,20 +117,27 @@ export function createMailTemplates(options: CreateMailTemplatesOptions): MailTe
   // are not HTML. Built here rather than by unescaping afterwards, because
   // there is no way to tell an `&amp;` the template meant from one it did not.
   const plainEnvironment = createTemplateEnvironment({
-    themeDir: options.themeDir,
+    themeDirs: options.themes.current().dirs,
     baseUrl: options.baseUrl,
     autoescape: false,
     ...(options.noCache === undefined ? {} : { noCache: options.noCache }),
   });
 
-  // The same directories, in the same order, that the two environments above
-  // resolve a template through: which halves of a message exist has to be the
-  // same question as which file a render would read.
-  const searchPath = themeSearchPath(options.themeDir);
-
-  /** Whether any theme on the search path has that template. */
-  function present(template: string): boolean {
-    return findThemeFile(searchPath, template) !== undefined;
+  /**
+   * The theme this message is being written in, with both environments pointed
+   * at it.
+   *
+   * Asked per message rather than held, for the reason a page asks per render:
+   * a theme chosen a minute ago is the one the next message should come from.
+   * The directories it hands back are what `present` then asks about, so which
+   * halves of a message exist is the same question as which file a render
+   * would read.
+   */
+  function themeDirs(): readonly string[] {
+    const dirs = options.themes.current().dirs;
+    useThemeDirs(environment, dirs);
+    useThemeDirs(plainEnvironment, dirs);
+    return dirs;
   }
 
   return {
@@ -130,6 +146,11 @@ export function createMailTemplates(options: CreateMailTemplatesOptions): MailTe
 
     render(name, context = {}) {
       const files = mailTemplateFiles(name);
+      const searchPath = themeDirs();
+
+      /** Whether any theme on the search path has that template. */
+      const present = (template: string): boolean =>
+        findThemeFile(searchPath, template) !== undefined;
 
       if (!present(files.text)) {
         throw new Error(

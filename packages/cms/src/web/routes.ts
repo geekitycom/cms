@@ -75,7 +75,6 @@ import {
 import type { SitemapUrl } from './sitemap.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
-import { themeSearchPath } from './themes.ts';
 
 /**
  * Register the public site on a Hono app.
@@ -1197,7 +1196,7 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
  */
 function themeAsset(c: Context<GeekityEnv>): Response {
   const relative = requestPath(c).slice(THEME_ASSET_PREFIX.length);
-  const asset = findThemeAsset(relative, themeSearchPath(c.var.config.themeDir));
+  const asset = findThemeAsset(relative, c.var.renderer.themeDirs());
   if (asset === undefined) return notFound(c);
 
   if (matchesEtag(c.req.header('if-none-match'), asset.etag)) {

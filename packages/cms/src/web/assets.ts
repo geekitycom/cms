@@ -92,7 +92,10 @@ export function findAsset(relative: string, roots: string[]): StaticAsset | unde
  * The path comes from `themeSearchPath`, so an asset and a layout are always
  * read from the same themes.
  */
-export function findThemeAsset(relative: string, themeDirs: string[]): ThemeAsset | undefined {
+export function findThemeAsset(
+  relative: string,
+  themeDirs: readonly string[],
+): ThemeAsset | undefined {
   return findAsset(
     relative,
     themeDirs.map((themeDir) => path.join(themeDir, THEME_STATIC_DIR)),

@@ -6,6 +6,8 @@ import { after, describe, it } from 'node:test';
 
 import { PACKAGED_ADMIN_DIR } from '../admin/templates.ts';
 import {
+  chooseTheme,
+  createThemeSource,
   findThemeFile,
   PACKAGED_THEME_DIR,
   readTheme,
@@ -13,6 +15,7 @@ import {
   THEME_MANIFEST_FILE,
   themeSearchPath,
 } from './themes.ts';
+import type { ThemeSource } from './themes.ts';
 
 const temporaryDirs: string[] = [];
 
@@ -171,6 +174,149 @@ describe('the site theme search path', () => {
       findThemeFile(themeSearchPath('/no/such/theme'), 'layouts/post.njk') !== undefined,
       'the packaged post layout is found',
     );
+  });
+
+  it('is the packaged theme alone when the site has chosen none', () => {
+    assert.deepEqual(themeSearchPath(), [PACKAGED_THEME_DIR]);
+  });
+});
+
+describe('choosing one theme out of a themes directory', () => {
+  /** A themes directory holding one theme per entry, each with a manifest. */
+  async function themesDir(themes: Record<string, Record<string, string>>): Promise<string> {
+    const dir = await mkdtemp(path.join(tmpdir(), 'geekity-themes-dir-'));
+    temporaryDirs.push(dir);
+
+    for (const [name, files] of Object.entries(themes)) {
+      for (const [relative, contents] of Object.entries({
+        [THEME_MANIFEST_FILE]: JSON.stringify({ name, kind: 'site' }),
+        ...files,
+      })) {
+        const file = path.join(dir, name, ...relative.split('/'));
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(file, contents, 'utf8');
+      }
+    }
+
+    return dir;
+  }
+
+  it('is the packaged theme alone when the site names none', async () => {
+    const dir = await themesDir({ midnight: {}, daylight: {} });
+
+    const chosen = chooseTheme({ themesDir: dir, name: '' });
+
+    assert.equal(chosen.theme, undefined);
+    assert.equal(chosen.problem, undefined);
+    assert.deepEqual(chosen.dirs, [PACKAGED_THEME_DIR]);
+  });
+
+  it('puts the named theme in front of the packaged one, and no other', async () => {
+    const dir = await themesDir({ midnight: {}, daylight: {} });
+
+    const chosen = chooseTheme({ themesDir: dir, name: 'midnight' });
+
+    assert.equal(chosen.theme?.id, 'midnight');
+    assert.deepEqual(chosen.dirs, [path.join(dir, 'midnight'), PACKAGED_THEME_DIR]);
+  });
+
+  it('falls back to the packaged theme, with a reason, when the theme is gone', async () => {
+    const dir = await themesDir({ midnight: {} });
+
+    const chosen = chooseTheme({ themesDir: dir, name: 'daylight' });
+
+    assert.equal(chosen.theme, undefined);
+    assert.deepEqual(chosen.dirs, [PACKAGED_THEME_DIR]);
+    assert.match(chosen.problem ?? '', /daylight/);
+  });
+
+  it('falls back, with a reason, when the directory is not a theme', async () => {
+    const dir = await themesDir({ midnight: {} });
+    await rm(path.join(dir, 'midnight', THEME_MANIFEST_FILE));
+
+    const chosen = chooseTheme({ themesDir: dir, name: 'midnight' });
+
+    assert.equal(chosen.theme, undefined);
+    assert.match(chosen.problem ?? '', /theme\.json/);
+  });
+
+  it('refuses a name that is a path rather than a directory in the themes directory', async () => {
+    const dir = await themesDir({ midnight: {} });
+
+    for (const name of ['../midnight', 'a/b', '.', '..', '/etc']) {
+      const chosen = chooseTheme({ themesDir: dir, name });
+
+      assert.deepEqual(chosen.dirs, [PACKAGED_THEME_DIR], `${name} chose a directory`);
+      assert.ok(chosen.problem !== undefined, `${name} was taken as a theme name`);
+    }
+  });
+});
+
+describe('the theme a site is rendering through', () => {
+  /** A themes directory with one theme in it, and the warnings it logs. */
+  async function source(name: string): Promise<{
+    dir: string;
+    warnings: string[];
+    chosen: { name: string };
+    themes: ThemeSource;
+  }> {
+    const dir = await mkdtemp(path.join(tmpdir(), 'geekity-themes-dir-'));
+    temporaryDirs.push(dir);
+    await mkdir(path.join(dir, name), { recursive: true });
+    await writeFile(
+      path.join(dir, name, THEME_MANIFEST_FILE),
+      JSON.stringify({ name, kind: 'site' }),
+      'utf8',
+    );
+
+    const warnings: string[] = [];
+    const chosen = { name: '' };
+    const themes = createThemeSource({
+      themesDir: dir,
+      chosen: () => chosen.name,
+      logger: { warn: (message: string) => warnings.push(message) },
+    });
+
+    return { dir, warnings, chosen, themes };
+  }
+
+  it('follows the choice as it changes, without being told', async () => {
+    const { dir, chosen, themes } = await source('midnight');
+
+    assert.deepEqual(themes.current().dirs, [PACKAGED_THEME_DIR]);
+    chosen.name = 'midnight';
+    assert.deepEqual(themes.current().dirs, [path.join(dir, 'midnight'), PACKAGED_THEME_DIR]);
+    chosen.name = '';
+    assert.deepEqual(themes.current().dirs, [PACKAGED_THEME_DIR]);
+  });
+
+  it('notices a theme that has gone missing and falls back to the packaged one', async () => {
+    const { dir, chosen, themes, warnings } = await source('midnight');
+    chosen.name = 'midnight';
+    assert.equal(themes.current().theme?.id, 'midnight');
+
+    await rm(path.join(dir, 'midnight'), { recursive: true, force: true });
+
+    assert.equal(themes.current().theme, undefined);
+    assert.deepEqual(themes.current().dirs, [PACKAGED_THEME_DIR]);
+    assert.equal(warnings.length, 1, 'one warning, however many renders follow');
+    assert.match(warnings[0] ?? '', /midnight/);
+  });
+
+  it('warns once per change rather than once per render', async () => {
+    const { chosen, themes, warnings } = await source('midnight');
+    chosen.name = 'daylight';
+
+    for (let i = 0; i < 5; i += 1) themes.current();
+    assert.equal(warnings.length, 1);
+
+    chosen.name = 'twilight';
+    themes.current();
+    assert.equal(warnings.length, 2, 'a different bad choice is worth saying');
+
+    chosen.name = 'midnight';
+    themes.current();
+    assert.equal(warnings.length, 2, 'a choice that works is not');
   });
 });
 
