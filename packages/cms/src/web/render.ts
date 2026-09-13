@@ -4,6 +4,7 @@ import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { DocumentNeighbours } from '../content/store.ts';
+import { siteIcons } from '../images/icons.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import {
@@ -291,9 +292,16 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // context by the callers below, and win by going on last.
     const owner =
       context['siteAuthor'] === undefined ? siteAuthorContext(users(), site.author) : undefined;
+    // The site's icons, as the three links a head carries (TASK-81). They are
+    // computed here rather than in the layout because only this side knows
+    // where a derived file is served and whether the site can derive one at
+    // all: a theme that was handed the avatar path would have to build the URL
+    // itself and would link three 404s on a site with image optimization off.
+    const icons = siteIcons(config, site.avatar);
     return environment.render(template, {
       site,
       menu,
+      icons,
       ...(owner === undefined ? {} : { siteAuthor: owner }),
       ...context,
     });

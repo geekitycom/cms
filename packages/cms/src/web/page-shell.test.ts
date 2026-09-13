@@ -1,18 +1,23 @@
 /**
- * The shell of the default theme: the wrapper, the header and the footer
- * (decision-16, TASK-80).
+ * The shell of the default theme: the wrapper, the header, the footer
+ * (decision-16, TASK-80) and the head (TASK-81).
  *
  * The source design puts the site title and the tagline on the front page as a
  * heading and a small link home on every other page, keeps the whole page in
  * one `.global-wrapper` that says when it is at the root, and ends with a
  * footer holding the copyright, the colophon, an RSS link and the site author's
- * `rel="me"` links. None of that is a function's return value, so all of it is
- * asserted over HTTP against the packaged theme.
+ * `rel="me"` links. Its head carries a description, Open Graph and Twitter card
+ * tags, icons derived from the site avatar and one JSON-LD graph. None of that
+ * is a function's return value, so all of it is asserted over HTTP against the
+ * packaged theme.
  */
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { after, describe, it } from 'node:test';
+
+import sharp from 'sharp';
 
 import { createUser, setUserProfile } from '../admin/accounts.ts';
 import { sandbox } from '../admin/__testing__/harness.ts';
@@ -40,11 +45,19 @@ async function writeTree(root: string, files: Record<string, string>): Promise<v
   }
 }
 
+/** Where a site's avatar upload is written, and the path `site.json` names. */
+const AVATAR = '/uploads/2026/09/avatar.png';
+
 /** One published post and one page, which is enough to visit every shell. */
 const CONTENT: Record<string, string> = {
   'posts/hello.md':
-    "---\ntitle: Hello\ndate: '2026-09-02T09:00:00Z'\npermalink: /2026/09/hello/\ntags:\n  - notes\n---\n\nBody.\n",
-  'pages/about.md': '---\ntitle: About\npermalink: /about/\n---\n\nAbout us.\n',
+    "---\ntitle: Hello\ndate: '2026-09-02T09:00:00Z'\nupdated: '2026-09-05T09:00:00Z'\npermalink: /2026/09/hello/\ntags:\n  - notes\n---\n\nBody.\n",
+  // A post whose front matter names its own picture, which is the one case
+  // where the head's image is not the site's avatar.
+  'posts/photo.md':
+    "---\ntitle: A photo\ndate: '2026-09-03T09:00:00Z'\npermalink: /2026/09/photo/\nimage: /uploads/2026/09/hero.png\n---\n\nLook at it.\n",
+  'pages/about.md':
+    '---\ntitle: About\npermalink: /about/\ndescription: What this site is about.\n---\n\nAbout us.\n',
 };
 
 /** A CMS wearing the packaged theme, with whatever `site.json` says. */
@@ -52,6 +65,14 @@ async function site(
   settings: Record<string, unknown> = {},
   config: GeekityConfig = {},
 ): Promise<Cms> {
+  return (await siteWithContent(settings, config)).cms;
+}
+
+/** The same, for a test that also has to put a file in the content directory. */
+async function siteWithContent(
+  settings: Record<string, unknown> = {},
+  config: GeekityConfig = {},
+): Promise<{ cms: Cms; contentDir: string }> {
   const contentDir = await box.dir('geekity-shell-content-');
   const dataDir = await box.dir('geekity-shell-data-');
 
@@ -64,7 +85,26 @@ async function site(
     ),
   });
 
-  return await box.open({ contentDir, dataDir, now: () => new Date(NOW), ...config });
+  const cms = await box.open({ contentDir, dataDir, now: () => new Date(NOW), ...config });
+  return { cms, contentDir };
+}
+
+/** A CMS whose `site.json` names an avatar, with the upload behind it on disk. */
+async function siteWearingAnAvatar(settings: Record<string, unknown> = {}): Promise<Cms> {
+  const { cms, contentDir } = await siteWithContent({ avatar: AVATAR, ...settings });
+
+  const file = path.join(contentDir, ...AVATAR.slice(1).split('/'));
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(
+    file,
+    await sharp({
+      create: { width: 240, height: 240, channels: 3, background: { r: 179, g: 57, b: 0 } },
+    })
+      .png()
+      .toBuffer(),
+  );
+
+  return cms;
 }
 
 /** Give the site a user with a profile, the way the users screen would. */
@@ -96,6 +136,49 @@ function header(html: string): string {
 /** The `<footer>…</footer>` of a page. */
 function footer(html: string): string {
   return /<footer>([\s\S]*?)<\/footer>/.exec(html)?.[1] ?? '';
+}
+
+/** The `content` of one `<meta>`, by whichever of `name` or `property` it uses. */
+function metaContent(html: string, key: string): string | undefined {
+  const tag = new RegExp(`<meta (?:name|property)="${key}" content="([^"]*)">`);
+  return tag.exec(html)?.[1];
+}
+
+/** Every `<link rel=…>` of a page, as `{ rel, sizes, type, href }`. */
+function links(html: string): { rel: string; sizes: string; type: string; href: string }[] {
+  return [...html.matchAll(/<link ([^>]*)>/g)].map((match) => {
+    const attributes = match[1] ?? '';
+    const value = (name: string): string =>
+      new RegExp(`${name}="([^"]*)"`).exec(attributes)?.[1] ?? '';
+    return {
+      rel: value('rel'),
+      sizes: value('sizes'),
+      type: value('type'),
+      href: value('href'),
+    };
+  });
+}
+
+/**
+ * The page's JSON-LD, parsed.
+ *
+ * Through `JSON.parse` rather than a regex over the text, because the whole
+ * point of the partial is that what it prints is valid JSON: a title with a
+ * quote in it or a stray comma would fail here and nowhere else.
+ */
+function graph(html: string): Record<string, unknown>[] {
+  const script = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html)?.[1];
+  assert.ok(script !== undefined, 'the page has no JSON-LD');
+
+  const parsed = JSON.parse(script) as { '@context'?: unknown; '@graph'?: unknown };
+  assert.equal(parsed['@context'], 'https://schema.org');
+  assert.ok(Array.isArray(parsed['@graph']), 'the JSON-LD has no @graph');
+  return parsed['@graph'] as Record<string, unknown>[];
+}
+
+/** One node of a graph by its `@type`. */
+function node(nodes: Record<string, unknown>[], type: string): Record<string, unknown> | undefined {
+  return nodes.find((candidate) => candidate['@type'] === type);
 }
 
 describe('the page shell (AC #1)', () => {
@@ -233,5 +316,321 @@ describe('the head (AC #5)', () => {
     ]) {
       assert.ok(html.includes(marker), `the head lost ${marker}`);
     }
+  });
+});
+
+describe('the description, Open Graph and Twitter card tags (TASK-81 AC #1)', () => {
+  it('describes an entry by its own description, else its summary', async () => {
+    const cms = await site();
+
+    const post = await body(cms, '/2026/09/hello/');
+    assert.equal(metaContent(post, 'description'), 'Body.', 'a post falls back to its summary');
+    assert.equal(metaContent(post, 'og:description'), 'Body.');
+    assert.equal(metaContent(post, 'twitter:description'), 'Body.');
+
+    const page = await body(cms, '/about/');
+    assert.equal(
+      metaContent(page, 'description'),
+      'What this site is about.',
+      'the description in the front matter did not win',
+    );
+
+    assert.equal(
+      [...post.matchAll(/<meta name="description"/g)].length,
+      1,
+      'the page describes itself twice',
+    );
+  });
+
+  it('describes a page that is not an entry by the tagline', async () => {
+    const cms = await site();
+
+    for (const pathname of ['/', '/tag/notes/']) {
+      assert.equal(
+        metaContent(await body(cms, pathname), 'description'),
+        'Words about words',
+        `${pathname} is not described by the tagline`,
+      );
+    }
+
+    const missing = await cms.app.request('/nothing-here/');
+    assert.equal(missing.status, 404);
+    assert.equal(metaContent(await missing.text(), 'description'), 'Words about words');
+  });
+
+  it('cards a post as an article and a listing as a website', async () => {
+    const cms = await siteWearingAnAvatar({ url: 'https://example.com' });
+
+    const post = await body(cms, '/2026/09/hello/');
+    assert.equal(metaContent(post, 'og:title'), 'Hello');
+    assert.equal(metaContent(post, 'og:url'), 'https://example.com/2026/09/hello/');
+    assert.equal(metaContent(post, 'og:type'), 'article');
+    assert.equal(metaContent(post, 'og:site_name'), 'A Site');
+    assert.equal(metaContent(post, 'og:image'), `https://example.com${AVATAR}`);
+    assert.equal(metaContent(post, 'twitter:card'), 'summary');
+    assert.equal(metaContent(post, 'twitter:title'), 'Hello');
+    assert.equal(metaContent(post, 'twitter:image'), `https://example.com${AVATAR}`);
+
+    assert.equal(
+      metaContent(await body(cms, '/about/'), 'og:type'),
+      'article',
+      'a page is one too',
+    );
+
+    // A listing is a website, and its og:title is what the page is called:
+    // the site on the front page, the term on an archive.
+    for (const [pathname, called] of [
+      ['/', 'A Site'],
+      ['/tag/notes/', 'notes'],
+    ] as const) {
+      const html = await body(cms, pathname);
+      assert.equal(metaContent(html, 'og:type'), 'website', `${pathname} claims to be an article`);
+      assert.equal(metaContent(html, 'og:title'), called, `${pathname} has the wrong og:title`);
+    }
+
+    assert.equal(metaContent(await body(cms, '/'), 'og:url'), 'https://example.com/');
+  });
+
+  it('prefers the entry’s own image to the site avatar', async () => {
+    const cms = await siteWearingAnAvatar({ url: 'https://example.com' });
+    const html = await body(cms, '/2026/09/photo/');
+
+    assert.equal(metaContent(html, 'og:image'), 'https://example.com/uploads/2026/09/hero.png');
+    assert.equal(
+      metaContent(html, 'twitter:image'),
+      'https://example.com/uploads/2026/09/hero.png',
+    );
+  });
+
+  it('leaves the image out when the site has no avatar and the entry no picture', async () => {
+    const html = await body(await site({ url: 'https://example.com' }), '/2026/09/hello/');
+
+    assert.equal(metaContent(html, 'og:image'), undefined, 'an image was invented');
+    assert.equal(metaContent(html, 'twitter:image'), undefined);
+    assert.equal(metaContent(html, 'twitter:card'), 'summary', 'and the card is still a summary');
+  });
+});
+
+describe('the icons (TASK-81 AC #2)', () => {
+  it('links three square icons derived from the site avatar', async () => {
+    const cms = await siteWearingAnAvatar();
+    const icons = links(await body(cms, '/')).filter((link) => link.rel.includes('icon'));
+
+    assert.deepEqual(
+      icons.map((icon) => `${icon.rel} ${icon.sizes}`),
+      ['icon 32x32', 'icon 16x16', 'apple-touch-icon 180x180'],
+      'the head does not link the three icons the design wants',
+    );
+
+    for (const icon of icons) {
+      assert.equal(icon.type, 'image/png', `${icon.href} is not announced as a PNG`);
+
+      const response = await cms.app.request(icon.href);
+      assert.equal(response.status, 200, `GET ${icon.href} answered ${String(response.status)}`);
+      assert.equal(response.headers.get('content-type'), 'image/png');
+
+      const size = Number(icon.sizes.split('x')[0]);
+      const derived = await sharp(Buffer.from(await response.arrayBuffer())).metadata();
+      assert.deepEqual(
+        { width: derived.width, height: derived.height, format: derived.format },
+        { width: size, height: size, format: 'png' },
+        `${icon.href} is not ${icon.sizes}`,
+      );
+    }
+  });
+
+  it('links no icon at all when the site has no avatar', async () => {
+    const cms = await site();
+
+    for (const pathname of ['/', '/about/', '/2026/09/hello/']) {
+      const html = await body(cms, pathname);
+      assert.equal(
+        links(html).filter((link) => link.rel.includes('icon')).length,
+        0,
+        `${pathname} links an icon the site has nothing to derive`,
+      );
+    }
+  });
+
+  it('serves every link in the head of a site without an avatar', async () => {
+    // The demo's case, and the one that would 404 quietly: a head full of
+    // links to files nobody has uploaded.
+    const cms = await site();
+
+    for (const link of links(await body(cms, '/2026/09/hello/'))) {
+      if (!link.href.startsWith('/') || link.rel === 'webmention') continue;
+      const response = await cms.app.request(link.href);
+      assert.notEqual(response.status, 404, `${link.rel} ${link.href} is not there`);
+    }
+  });
+});
+
+describe('the JSON-LD graph (TASK-81 AC #3)', () => {
+  /** A site whose `author` setting names a user with a whole profile. */
+  async function siteOfAda(settings: Record<string, unknown> = {}): Promise<Cms> {
+    const cms = await siteWearingAnAvatar({
+      url: 'https://example.com',
+      author: 'ada',
+      ...settings,
+    });
+    await addUser(cms, 'ada', {
+      displayName: 'Ada Lovelace',
+      bio: 'Writes about engines.',
+      avatar: '/uploads/2026/09/ada.png',
+      jobTitle: 'Analyst',
+      location: 'London',
+      links: [{ label: 'Mastodon', href: 'https://example.social/@ada' }],
+    });
+    return cms;
+  }
+
+  it('prints one WebSite and one Person on every page', async () => {
+    const cms = await siteOfAda();
+
+    for (const pathname of ['/', '/about/', '/2026/09/hello/', '/tag/notes/']) {
+      const nodes = graph(await body(cms, pathname));
+
+      const website = node(nodes, 'WebSite');
+      assert.ok(website !== undefined, `${pathname} has no WebSite`);
+      assert.equal(website['@id'], 'https://example.com/#website');
+      assert.equal(website['url'], 'https://example.com/');
+      assert.equal(website['name'], 'A Site');
+      assert.equal(website['description'], 'Words about words');
+
+      const person = node(nodes, 'Person');
+      assert.ok(person !== undefined, `${pathname} has no Person`);
+      assert.equal(person['@id'], 'https://example.com/author/ada/#person');
+      assert.equal(person['name'], 'Ada Lovelace');
+      assert.equal(person['url'], 'https://example.com/author/ada/');
+      assert.equal(person['image'], 'https://example.com/uploads/2026/09/ada.png');
+      assert.equal(person['description'], 'Writes about engines.');
+      assert.equal(person['jobTitle'], 'Analyst');
+      assert.deepEqual(person['address'], {
+        '@type': 'PostalAddress',
+        addressLocality: 'London',
+      });
+      assert.deepEqual(person['sameAs'], [
+        'https://example.social/@ada',
+        'https://example.com/author/ada/',
+      ]);
+
+      assert.deepEqual(website['publisher'], { '@id': person['@id'] });
+    }
+  });
+
+  it('adds a ProfilePage on an author archive', async () => {
+    const cms = await siteOfAda();
+    const nodes = graph(await body(cms, '/author/ada/'));
+
+    const profile = node(nodes, 'ProfilePage');
+    assert.ok(profile !== undefined, 'the author archive has no ProfilePage');
+    assert.equal(profile['@id'], 'https://example.com/author/ada/#profilepage');
+    assert.equal(profile['url'], 'https://example.com/author/ada/');
+    assert.equal(profile['name'], 'Ada Lovelace');
+    assert.deepEqual(profile['mainEntity'], { '@id': 'https://example.com/author/ada/#person' });
+
+    for (const pathname of ['/', '/2026/09/hello/']) {
+      assert.equal(
+        node(graph(await body(cms, pathname)), 'ProfilePage'),
+        undefined,
+        `${pathname} has a ProfilePage`,
+      );
+    }
+  });
+
+  it('adds a BlogPosting on a post and an Article on a page', async () => {
+    const cms = await siteOfAda();
+
+    const posting = node(graph(await body(cms, '/2026/09/hello/')), 'BlogPosting');
+    assert.ok(posting !== undefined, 'the post has no BlogPosting');
+    assert.equal(posting['headline'], 'Hello');
+    assert.equal(posting['url'], 'https://example.com/2026/09/hello/');
+    assert.equal(posting['mainEntityOfPage'], 'https://example.com/2026/09/hello/');
+    assert.equal(posting['datePublished'], '2026-09-02T09:00:00.000Z');
+    assert.equal(posting['dateModified'], '2026-09-05T09:00:00.000Z');
+    assert.equal(posting['description'], 'Body.');
+    assert.equal(posting['image'], `https://example.com${AVATAR}`);
+    assert.deepEqual(posting['author'], { '@id': 'https://example.com/author/ada/#person' });
+    assert.deepEqual(posting['publisher'], { '@id': 'https://example.com/author/ada/#person' });
+
+    const article = node(graph(await body(cms, '/about/')), 'Article');
+    assert.ok(article !== undefined, 'the page has no Article');
+    assert.equal(article['headline'], 'About');
+    assert.equal(article['url'], 'https://example.com/about/');
+    assert.equal(article['description'], 'What this site is about.');
+
+    assert.equal(
+      node(graph(await body(cms, '/tag/notes/')), 'BlogPosting'),
+      undefined,
+      'a listing prints an entry',
+    );
+  });
+
+  it('leaves the Person and every reference to it out when nobody matches', async () => {
+    // The demo's case: `site.json` names an author no user answers to.
+    const nodes = graph(await body(await site({ author: 'Joe Blog' }), '/2026/09/hello/'));
+
+    assert.equal(node(nodes, 'Person'), undefined, 'a Person was invented');
+
+    const website = node(nodes, 'WebSite');
+    assert.ok(website !== undefined);
+    assert.equal(website['publisher'], undefined, 'the WebSite is published by nobody');
+
+    const posting = node(nodes, 'BlogPosting');
+    assert.ok(posting !== undefined, 'the post lost its BlogPosting with its author');
+    assert.equal(posting['author'], undefined);
+    assert.equal(posting['publisher'], undefined);
+  });
+
+  it('keeps printing JSON when the words in it could close the script', async () => {
+    const cms = await site({ title: 'A </script><script>alert(1)</script> Site' });
+    const html = await body(cms, '/2026/09/hello/');
+
+    const website = node(graph(html), 'WebSite');
+    assert.ok(website !== undefined);
+    assert.equal(website['name'], 'A </script><script>alert(1)</script> Site');
+  });
+});
+
+describe('structured data is JSON-LD and nothing else (TASK-81 AC #4)', () => {
+  it('has no Microdata in any packaged template', async () => {
+    const root = fileURLToPath(new URL('../..', import.meta.url));
+    const templates: string[] = [];
+
+    async function walk(dir: string): Promise<void> {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const file = path.join(dir, entry.name);
+        if (entry.isDirectory()) await walk(file);
+        else if (entry.name.endsWith('.njk')) templates.push(file);
+      }
+    }
+
+    for (const dir of ['themes', 'admin', 'templates']) await walk(path.join(root, dir));
+    assert.ok(templates.length > 20, 'the walk found hardly any templates');
+
+    for (const file of templates) {
+      const source = await readFile(file, 'utf8');
+      assert.doesNotMatch(
+        source,
+        /itemscope|itemtype|itemprop/,
+        `${path.relative(root, file)} still carries Microdata`,
+      );
+    }
+  });
+});
+
+describe('a site theme replaces the graph (TASK-81 AC #5)', () => {
+  it('renders its own partials/jsonld.njk instead of the packaged one', async () => {
+    const themesDir = await box.dir('geekity-shell-themes-');
+    await writeTree(path.join(themesDir, 'mine'), {
+      'theme.json': JSON.stringify({ name: 'Mine', kind: 'site' }),
+      'partials/jsonld.njk':
+        '<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "WebPage", "name": {{ site.title | dump | safe }}}]}</script>',
+    });
+
+    const cms = await site({ theme: 'mine' }, { themesDir });
+    const nodes = graph(await body(cms, '/2026/09/hello/'));
+
+    assert.deepEqual(nodes, [{ '@type': 'WebPage', name: 'A Site' }]);
   });
 });

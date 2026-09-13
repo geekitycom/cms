@@ -585,11 +585,18 @@ export {
   IMAGE_SIZES,
   removeImageVariants,
   responsiveImages,
+  siteIcons,
   siteImageMarkup,
   variantUrl,
   VARIANT_ASSET_PREFIX,
 } from './images/index.ts';
-export type { DescribeImage, ImageConfig, ImageRecord, ImageVariant } from './images/index.ts';
+export type {
+  DescribeImage,
+  ImageConfig,
+  ImageRecord,
+  ImageVariant,
+  SiteIcon,
+} from './images/index.ts';
 
 export {
   calendarDayIn,

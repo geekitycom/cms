@@ -170,6 +170,62 @@ deliberately not in the package. They go in a site theme's `footer` block:
 {% endblock %}
 ```
 
+### The head
+
+Beside the title, the canonical link and the feeds, every page carries a
+description, Open Graph and Twitter card tags, the site's icons and one
+JSON-LD graph. All of it is in the `head` block, so an override that only means
+to add a tag calls `{{ super() }}` first.
+
+**The description** is the page's own `description` from the front matter, else
+the entry's `summary` — the line the feeds publish — else `site.tagline`. It is
+printed once, as `<meta name="description">`, and the Open Graph and Twitter
+descriptions say the same thing.
+
+**The card.** `og:title` is the page's title, or the site's on the front page;
+`og:site_name` is always the site's. `og:type` is `article` on a rendered post
+or page and `website` everywhere else, a listing carrying a page's front matter
+included. `og:url` is the canonical URL. `twitter:card` is `summary`, the small
+square picture beside the words, because the picture is usually a face rather
+than a wide photograph.
+
+**The picture** is the `image` in the entry's front matter, else `site.avatar`.
+A site with neither prints no `og:image` and no `twitter:image` rather than an
+empty one.
+
+**The icons** come from the site's avatar through the derived images
+(decision-10): `icon` at 32 and 16 pixels and `apple-touch-icon` at 180, each a
+square PNG cropped from the middle of the avatar and encoded the first time a
+browser asks for it. They are on the context as `icons`, a list of
+`{ rel, sizes, href }`, which is empty — and the links are not printed at all —
+when the site has no avatar, when its avatar is a file no icon can be made of,
+or when image optimization is off. There is no web manifest; a site that wants
+one adds it in its own `head` block.
+
+**The structured data** is `partials/jsonld.njk`, one `<script
+type="application/ld+json">` holding one `@graph` per page, and it is the only
+structured data the theme emits — there is no Microdata anywhere, by
+decision-16, because the visible markup already carries microformats2 for the
+IndieWeb. The graph holds:
+
+- `WebSite`, always, with the site's title, tagline and URL, and a `publisher`
+  pointing at the Person. Its `SearchAction` goes in when the site has a search
+  to point it at.
+- `Person`, from `siteAuthor`: their name, archive URL, avatar, bio, job title
+  and location, and a `sameAs` of their profile links and their actor id, which
+  is what asserts that the schema.org Person and the fediverse actor are one
+  identity. Identity comes from a user profile, so a site — or a byline —
+  naming nobody with an account here prints no Person, and the `author` and
+  `publisher` references go with it.
+- `ProfilePage` on an author archive, whose `mainEntity` is that Person.
+- `BlogPosting` on a post and `Article` on a page, with the headline, URL,
+  `mainEntityOfPage`, `datePublished`, `dateModified`, description, image,
+  `author` and `publisher`.
+
+A site that wants a different graph — more types, an `Organization` publisher,
+nothing at all — writes its own `partials/jsonld.njk` and that file replaces
+this one, like any other partial.
+
 ### Colours
 
 `static/style.css` is the source design: a serif body and sans headings at an
@@ -278,6 +334,7 @@ Every template gets:
 | `site`       | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
 | `menu`       | The site menu for this page: a list of `{ label, url, current }`. See [Navigation](#navigation).                                                                                                        |
 | `siteAuthor` | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
+| `icons`      | The site's icons, as `{ rel, sizes, href }`. Empty until the site has an avatar to derive them from. See [The head](#the-head).                                                                         |
 
 A document — one post, one page, or one entry of a listing — adds:
 

@@ -1675,12 +1675,21 @@ would have done anyway.
 | `removeImageVariants`              | Take a source's derived directory away.                                              |
 | `responsiveImages(html, describe)` | Rewrite `<img src="/uploads/…">` as `<picture>`. Pure: hand it any lookup.           |
 | `siteImageMarkup(config, html)`    | The same, over one site's own records, deriving in the background for a record miss. |
+| `siteIcons(config, avatar)`        | The head's icon links for a site's avatar: `{ rel, sizes, href }`, or none at all.   |
 
 `describeImage` is synchronous and cached because it is called once per image
 while a page renders, and decision-10 forbids probing an image file at render
 time. Its cache entry outlives the sidecar on purpose: `data/images/` is
 disposable, so a page whose variants have been swept away keeps rendering the
 markup that asks for them back, and the first request for each one rebuilds it.
+
+The site's icons are derived copies of the same kind, and `siteIcons` is how a
+head gets at them: three square PNGs, `icon` at 32 and 16 pixels and
+`apple-touch-icon` at 180, cropped from the middle of the site's avatar and
+encoded the first time a browser asks for one. It answers an empty list — and
+the packaged theme then links no icon at all — when the site has no avatar, when
+its avatar is a file no icon can be made of, or when `imageOptimization` is off,
+so a head never advertises a URL this server would answer 404 for.
 
 `documentContext(document, images)` is where the rewrite is applied. Passing the
 config is what turns the page's `content` into `<picture>` markup; the feeds,
@@ -2530,7 +2539,11 @@ at `/` only, a header that is the site title and tagline on the front page and a
 small link home on every other, `<main id="main">`, and a footer with the
 copyright year, the site author, the colophon, an RSS link and one `rel="me"`
 link per link on the site author's profile. Nothing particular to one site is in
-it — webrings and badges belong in a site theme's `footer` block. The stylesheet
+it — webrings and badges belong in a site theme's `footer` block. Its head
+carries a description, Open Graph and Twitter card tags, icons derived from the
+site's avatar, and one JSON-LD `@graph` from `partials/jsonld.njk`: that partial
+is all the structured data the theme emits, there is no Microdata anywhere, and
+a site that wants a different graph replaces the one file. The stylesheet
 is a serif body and sans headings at an 18px root, one column at 42rem, warm
 paper with a rust primary and a blue secondary, and a second scheme under
 `prefers-color-scheme: dark` that redefines the same `--color-*` tokens on dark

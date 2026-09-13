@@ -10,7 +10,8 @@
 
   Blocks a site can override without copying the whole file:
     title       the contents of <title>
-    head        extra tags at the end of <head>
+    head        the cards, the icons and the structured data, at the end of
+                <head>. Call `super()` from an override that only adds to it.
     alternates  <link rel="alternate"> tags, where the feeds go
     header      the site header
     content     the page body
@@ -22,14 +23,29 @@
     than the document's own permalink, so a static homepage under the Reading
     settings is the root path too. -#}
 {% set atRoot = (page.url or url or "/") == "/" %}
+{#- What the head says this page is, in one place, because the description
+    tags, the Open Graph tags and the Twitter card all say the same thing.
+
+    `metaDescription` is the page's own description, else the entry's summary
+    — the very line the feeds publish — else the site's tagline. `metaImage` is
+    the picture the front matter names, else the site's avatar; with neither,
+    nothing is printed rather than an empty tag. `isEntry` is a rendered post
+    or page, which is what Open Graph calls an article: a listing has
+    `pagination`, and the posts page is a listing carrying a page's front
+    matter, so it is a website like every other listing. -#}
+{% set metaDescription = description or summary or site.tagline %}
+{% set metaTitle = title or site.title %}
+{% set metaUrl = (page.url or "/") | absoluteUrl %}
+{% set metaImage = image or site.avatar %}
+{% set isEntry = (type == "post" or type == "page") and not pagination %}
 <!doctype html>
 <html lang="{{ site.language | default("en") }}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}{% if title %}{{ title }} &middot; {% endif %}{{ site.title }}{% endblock %}</title>
-    {% if description %}
-    <meta name="description" content="{{ description }}">
+    {% if metaDescription %}
+    <meta name="description" content="{{ metaDescription }}">
     {% endif %}
     <link rel="canonical" href="{{ (page.url or "/") | absoluteUrl }}">
     <link rel="stylesheet" href="{{ "/theme/style.css" | url }}">
@@ -46,7 +62,42 @@
     {% if webmention %}
     <link rel="webmention" href="{{ webmention | url }}">
     {% endif %}
-    {% block head %}{% endblock %}
+    {% block head %}
+    {#
+      What a link to this page looks like when somebody posts it: the same
+      title, description and picture to Open Graph and to a Twitter card,
+      which is the pair every reader of this markup understands. The card is
+      always `summary` — a small square picture beside the words — because the
+      picture is usually the site's avatar rather than a wide photograph.
+    #}
+    <meta property="og:title" content="{{ metaTitle }}">
+    {% if metaDescription %}
+    <meta property="og:description" content="{{ metaDescription }}">
+    {% endif %}
+    <meta property="og:url" content="{{ metaUrl }}">
+    <meta property="og:type" content="{% if isEntry %}article{% else %}website{% endif %}">
+    <meta property="og:site_name" content="{{ site.title }}">
+    {% if metaImage %}
+    <meta property="og:image" content="{{ metaImage | absoluteUrl }}">
+    {% endif %}
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ metaTitle }}">
+    {% if metaDescription %}
+    <meta name="twitter:description" content="{{ metaDescription }}">
+    {% endif %}
+    {% if metaImage %}
+    <meta name="twitter:image" content="{{ metaImage | absoluteUrl }}">
+    {% endif %}
+    {#
+      The site's icons, derived from its avatar. `icons` is empty — and these
+      lines print nothing — until a site has one, so a site with no avatar
+      links no icon rather than three that answer 404.
+    #}
+    {% for icon in icons %}
+    <link rel="{{ icon.rel }}" type="image/png" sizes="{{ icon.sizes }}" href="{{ icon.href | url }}">
+    {% endfor %}
+    {% include "partials/jsonld.njk" %}
+    {% endblock %}
   </head>
   <body>
     <a class="screen-reader-text" href="#main">Skip to content</a>

@@ -5,10 +5,12 @@ import path from 'node:path';
 import sharp from 'sharp';
 import type { Sharp } from 'sharp';
 
-import type { ResolvedConfig } from '../config.ts';
 import { writeFileAtomically } from '../files/atomic.ts';
-import { findAsset, UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
+import { findAsset } from '../web/assets.ts';
 import type { StaticAsset } from '../web/assets.ts';
+import { deriveSiteIcon, iconSize } from './icons.ts';
+import { derivedDir, sourceFile, IMAGE_DIRECTORY, VARIANT_ASSET_PREFIX } from './paths.ts';
+import type { ImageConfig } from './paths.ts';
 
 /**
  * Image variants: the derived copies of an upload, and the record of them.
@@ -19,30 +21,16 @@ import type { StaticAsset } from '../web/assets.ts';
  * and may be deleted at any moment — which is also decision-9's rule for
  * `data/`. Nothing here is ever read by the feeds or by a remote instance;
  * only the site's own HTML knows these files exist.
- */
-
-/** The directory under `dataDir` that holds every derived image. */
-export const IMAGE_DIRECTORY = 'images';
-
-/**
- * URL prefix the derived files are served under.
  *
- * It sits inside `/uploads/` rather than beside it so a site's asset host, its
- * cache rules and its Eleventy passthrough only ever have to know about one
- * path. `_` cannot collide with a real upload: the CMS files uploads under
- * `{yyyy}/{mm}/`, and Eleventy — like the CMS's own content walk — ignores
- * underscore-prefixed directories anyway.
+ * Where the files live is `paths.ts`, and the site's icons are `icons.ts`:
+ * both kinds of derived file share the directory and the URL prefix.
  */
-export const VARIANT_ASSET_PREFIX = `${UPLOAD_ASSET_PREFIX}_/`;
+
+export { IMAGE_DIRECTORY, VARIANT_ASSET_PREFIX } from './paths.ts';
+export type { ImageConfig } from './paths.ts';
 
 /** The sidecar that records what was derived, beside the files it describes. */
 export const IMAGE_RECORD_NAME = 'image.json';
-
-/** The part of the config the variants are derived according to. */
-export type ImageConfig = Pick<
-  ResolvedConfig,
-  'contentDir' | 'dataDir' | 'imageOptimization' | 'imageWidths' | 'imageFormats'
->;
 
 /** One derived copy of an upload. */
 export interface ImageVariant {
@@ -139,25 +127,6 @@ const records = new Map<string, ImageRecord>();
 
 /** Generations already running, so two requests for one image encode it once. */
 const generating = new Map<string, Promise<ImageRecord | undefined>>();
-
-/** The derived directory for one upload. */
-function derivedDir(config: ImageConfig, source: string): string {
-  return path.join(config.dataDir, IMAGE_DIRECTORY, ...source.split('/'));
-}
-
-/**
- * The upload as an absolute path, or `undefined` when it is not one.
- *
- * A source path can arrive off a URL, so containment is checked after
- * resolution rather than by inspecting the string — the rule
- * {@link findAsset} applies to every other request for a file.
- */
-function sourceFile(config: ImageConfig, source: string): string | undefined {
-  if (source === '' || source.includes('\0')) return undefined;
-  const root = path.resolve(config.contentDir, UPLOAD_DIRECTORY);
-  const file = path.resolve(root, source);
-  return file.startsWith(root + path.sep) ? file : undefined;
-}
 
 /**
  * Derive every variant of one upload and record what was derived.
@@ -425,6 +394,13 @@ export async function findImageVariant(
   if (cut <= 0) return undefined;
   const source = relative.slice(0, cut);
   const name = relative.slice(cut + 1);
+
+  // The site's icons live beside the widths and are derived one at a time,
+  // because they are asked for one at a time and belong in no `srcset`.
+  const icon = iconSize(name);
+  if (icon !== undefined) {
+    return (await deriveSiteIcon(config, source, icon)) ? findAsset(relative, [root]) : undefined;
+  }
 
   const known = describeImage(config, source);
   if (known !== undefined && !known.variants.some((variant) => variant.file === name)) {

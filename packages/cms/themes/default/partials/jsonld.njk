@@ -1,0 +1,111 @@
+{#
+  One schema.org graph for this page, as JSON-LD (decision-16).
+
+  All the structured data the theme emits is here, and there is no Microdata
+  anywhere: the visible markup carries microformats2 for the IndieWeb and this
+  file carries schema.org for everybody else, so neither has to be threaded
+  through the other's attributes. The CMS core knows nothing about schema.org —
+  a site that wants a different graph overrides this one file.
+
+  Everything is built from the context the visible markup uses, so what a
+  reader sees and what a consumer parses cannot drift. The Person is
+  `siteAuthor`: the site's own author on a page about nobody in particular, the
+  writer on a post, the archive's user on an author archive. Identity comes
+  from a user profile, so a name that answers to no account here has no Person
+  at all, and the author and publisher references go with it.
+
+  How it is printed: every value goes through `dump`, which is JSON.stringify,
+  with every `<` escaped to its `\u003C` form so nothing in a title or a
+  summary can close the script element. Each node opens with `@type`, which is
+  never optional, so every member after it can be written with a leading comma
+  and stay valid JSON however much of the page is missing. The nodes themselves
+  are collected and joined, so the comma between two of them is never a
+  question of which of them happened to be printed.
+#}
+{%- macro member(name, value) -%}
+{%- if value %}, {{ name | dump | safe }}: {{ value | dump | replace("<", "\\u003C") | safe }}{% endif -%}
+{%- endmacro -%}
+{#- Who the page is by, and the id everything else points at. A `siteAuthor`
+    with no `url` is a byline naming somebody with no account here: there is
+    nothing to identify them by, so no Person is printed. -#}
+{% set personUrl = siteAuthor.url | absoluteUrl if siteAuthor.url else "" %}
+{% set personId = personUrl + "#person" if personUrl else "" %}
+{% set home = "/" | absoluteUrl %}
+{#- What the author, publisher and mainEntity members hold: a reference to the
+    Person rather than a second copy of them. -#}
+{% set person = { "@id": personId } if personId else "" %}
+{#- `sameAs` is everywhere else this person is: the profile links they listed,
+    and their actor id, which asserts that the schema.org Person and the
+    fediverse actor are one identity — decision-14 makes their archive URL the
+    actor id. -#}
+{% set sameAs = [] %}
+{% for link in siteAuthor.links %}{% set _ = sameAs.push(link.href) %}{% endfor %}
+{% if personUrl %}{% set _ = sameAs.push(personUrl) %}{% endif %}
+{% set address = { "@type": "PostalAddress", "addressLocality": siteAuthor.location } if siteAuthor.location else "" %}
+{#- An author archive is the only page that is about a person: a listing whose
+    `author` is whose page this is. -#}
+{% set isProfilePage = pagination and author.url and url and (author.url in url) %}
+{% set entryType = "BlogPosting" if type == "post" else "Article" %}
+{% set nodes = [] %}
+{% set website %}
+    {
+      "@type": "WebSite"
+      {{- member("@id", home + "#website") }}
+      {{- member("name", site.title) }}
+      {{- member("description", site.tagline) }}
+      {{- member("url", home) }}
+      {#- The SearchAction goes in when the site has a search to point it at
+          (TASK-22). Advertising one before then would be telling a reader's
+          client about a URL that answers 404. #}
+      {{- member("publisher", person) }}
+    }{% endset %}
+{% set _ = nodes.push(website) %}
+{% if personId %}
+{% set profile %}
+    {
+      "@type": "Person"
+      {{- member("@id", personId) }}
+      {{- member("name", siteAuthor.name) }}
+      {{- member("url", personUrl) }}
+      {{- member("image", siteAuthor.avatar | absoluteUrl if siteAuthor.avatar else "") }}
+      {{- member("description", siteAuthor.bio) }}
+      {{- member("jobTitle", siteAuthor.jobTitle) }}
+      {{- member("address", address) }}
+      {{- member("sameAs", sameAs if sameAs.length else "") }}
+    }{% endset %}
+{% set _ = nodes.push(profile) %}
+{% endif %}
+{% if isProfilePage %}
+{% set profilePage %}
+    {
+      "@type": "ProfilePage"
+      {{- member("@id", (author.url | absoluteUrl) + "#profilepage") }}
+      {{- member("url", author.url | absoluteUrl) }}
+      {{- member("name", author.name) }}
+      {{- member("mainEntity", person) }}
+    }{% endset %}
+{% set _ = nodes.push(profilePage) %}
+{% elif isEntry %}
+{% set entry %}
+    {
+      "@type": {{ entryType | dump | safe }}
+      {{- member("headline", title) }}
+      {{- member("url", metaUrl) }}
+      {{- member("mainEntityOfPage", metaUrl) }}
+      {{- member("datePublished", date | date("iso") if date else "") }}
+      {{- member("dateModified", (updated or date) | date("iso") if (updated or date) else "") }}
+      {{- member("description", metaDescription) }}
+      {{- member("image", metaImage | absoluteUrl if metaImage else "") }}
+      {{- member("author", person) }}
+      {{- member("publisher", person) }}
+    }{% endset %}
+{% set _ = nodes.push(entry) %}
+{% endif %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+{{ nodes.join(",\n") | safe }}
+  ]
+}
+</script>
