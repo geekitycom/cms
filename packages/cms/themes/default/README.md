@@ -253,12 +253,14 @@ object:
 <link
   rel="alternate"
   type="application/activity+json"
-  href="https://example.com/ap/posts/hello"
+  href="https://example.com/2026/09/hello/"
 />
 ```
 
-That link is what lets a fediverse client find the post from its permalink. It
-comes from `activityStreams`, which — like `commentsFeed` — is only on the
+A post's object id is its permalink, so that link usually points at the page it
+is on: it says the URL answers ActivityStreams as well as HTML. A post migrated
+from elsewhere keeps the id its file names, and the link points there instead.
+It comes from `activityStreams`, which — like `commentsFeed` — is only on the
 context of a rendered published post, so a layout that overrides the block and
 does not call `super()` has to emit both itself. They are on the context rather
 than in `post.njk` so that a site which overrides that layout, as the demo

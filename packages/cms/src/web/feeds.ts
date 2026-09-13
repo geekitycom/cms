@@ -485,10 +485,11 @@ function rssItem(document: Document, source: FeedSource): string[] {
   const { site, baseUrl } = source;
   const url = absoluteUrl(document.permalink, baseUrl);
   const published = document.date === undefined ? undefined : new Date(document.date);
-  // The ActivityStreams object id rather than the permalink: it is minted from
-  // the slug and written back on the first delivery, so it survives a post
-  // being moved, and a reader that has already seen the item will not show it
-  // again. `isPermaLink="false"` is what says it is a name, not an address.
+  // The ActivityStreams object id, which decision-12 makes every feed's key
+  // for a post: after decision-13 that is the permalink itself, or the stored
+  // id a migrated post carries, so a reader keys the item by the same name the
+  // fediverse does. `isPermaLink="false"` is what says it is a name rather
+  // than an address — true of both, and the safe thing to say about either.
   const guid = activityStreamsId(document, baseUrl) ?? url;
   const creator = document.author ?? site.author;
 

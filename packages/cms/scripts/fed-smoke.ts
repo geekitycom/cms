@@ -182,15 +182,16 @@ async function main(): Promise<void> {
     ok(`the actor is @${ACTOR_HANDLE}@localhost:${String(port)} (${String(actor['name'])})`);
 
     // The object id of the post the fixture shipped, which the boot scan has
-    // just indexed. Reading the slug back rather than hard-coding it keeps the
-    // script honest about how a filename becomes a slug.
+    // just indexed. decision-13 makes that its permalink, and reading the
+    // permalink back rather than hard-coding it keeps the script honest about
+    // what the CMS actually serves.
     const existing = cms.store.listPosts()[0];
     assert.ok(existing !== undefined, 'the fixture content directory holds a published post');
-    const objectUrl = `${baseUrl}/ap/posts/${existing.slug}`;
+    const objectUrl = `${baseUrl}${existing.permalink}`;
 
     log(`fedify lookup ${objectUrl}`);
     const article = await lookup(objectUrl);
-    assert.equal(article['id'], objectUrl, 'the post object names its own id');
+    assert.equal(article['id'], objectUrl, 'the post object names its own permalink as its id');
     assert.equal(article['type'], 'Article', 'a published post is an Article');
     assert.equal(article['attributedTo'], actorUrl, 'the post is attributed to the site actor');
     assert.equal(article['name'], existing.title, 'the post object carries the post title');
@@ -300,7 +301,7 @@ async function main(): Promise<void> {
 
     // No activity is stored anywhere any more (decision-9), so what proves a
     // Create was built is the outcome recorded against the post's object id.
-    const publishedObject = `${baseUrl}/ap/posts/hot-off-the-press`;
+    const publishedObject = `${baseUrl}/2026/03/hot-off-the-press/`;
     const activity = await waitFor({
       what: 'the watcher to see the new post and the delivery service to build a Create',
       poll: () => {

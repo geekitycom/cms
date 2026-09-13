@@ -350,11 +350,11 @@ describe('publishing a post from the admin', () => {
 
     const object = create.body['object'] as Record<string, unknown>;
     assert.equal(object['type'], 'Article');
-    assert.equal(object['id'], `${BASE_URL}/ap/posts/hello-world`);
+    assert.equal(object['id'], `${BASE_URL}/2026/03/hello-world/`);
     assert.equal(object['name'], 'Hello, world');
   });
 
-  it('writes the object id and the first-published time into the post’s front matter', async () => {
+  it('writes the first-published time, and no id, into the post’s front matter', async () => {
     const { cms, contentDir } = await site();
     const agent = await signedIn(cms);
 
@@ -366,11 +366,12 @@ describe('publishing a post from the admin', () => {
       'utf8',
     );
     assert.match(source, /^activitypub:$/m);
-    assert.match(source, new RegExp(`^ {2}id: ${BASE_URL}/ap/posts/hello-world$`, 'm'));
     assert.match(source, /^ {2}published: '2026-03-04T10:00:00Z'$/m);
+    // decision-13: the id is the permalink, so there is nothing to freeze.
+    assert.doesNotMatch(source, /^ {2}id:/m);
 
     const indexed = cms.store.getBySlug('hello-world');
-    assert.equal(indexed?.activitypub?.id, `${BASE_URL}/ap/posts/hello-world`);
+    assert.equal(indexed?.activitypub?.id, undefined);
     assert.equal(indexed?.activitypub?.published, '2026-03-04T10:00:00Z');
   });
 });
@@ -398,7 +399,7 @@ describe('a scheduled post', () => {
     const object = (creates[0] as Delivery).body['object'] as Record<string, unknown>;
     assert.equal(object['type'], 'Article');
     assert.equal(object['name'], 'Hello, world');
-    assert.equal(object['id'], `${BASE_URL}/ap/posts/hello-world`);
+    assert.equal(object['id'], `${BASE_URL}/2026/09/hello-world/`);
 
     await cms.scheduler.run();
     await cms.delivery.settled();
@@ -514,7 +515,7 @@ describe('unpublishing a post', () => {
 
     const object = withdrawal.body['object'] as Record<string, unknown>;
     assert.equal(object['type'], 'Tombstone');
-    assert.equal(object['id'], `${BASE_URL}/ap/posts/hello-world`);
+    assert.equal(object['id'], `${BASE_URL}/2026/03/hello-world/`);
     assert.equal(object['formerType'], 'as:Article', 'the tombstone says what it used to be');
     assert.ok(typeof object['deleted'] === 'string', 'the tombstone was dated');
   });
@@ -528,7 +529,7 @@ describe('unpublishing a post', () => {
     await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
     await cms.delivery.settled();
 
-    const response = await cms.app.request(`${BASE_URL}/ap/posts/hello-world`, {
+    const response = await cms.app.request(`${BASE_URL}/2026/03/hello-world/`, {
       headers: { accept: 'application/activity+json' },
     });
     assert.equal(response.status, 404);
@@ -561,7 +562,7 @@ describe('restoring a post from the trash', () => {
     assert.equal(creates.length, 1, `expected one Create, saw ${JSON.stringify(deliveries)}`);
     const object = (creates[0] as Delivery).body['object'] as Record<string, unknown>;
     assert.equal(object['id'], firstObjectId, 'the restored post kept its object id');
-    assert.equal(object['id'], `${BASE_URL}/ap/posts/hello-world`);
+    assert.equal(object['id'], `${BASE_URL}/2026/03/hello-world/`);
   });
 });
 
@@ -585,7 +586,7 @@ describe('editing a published post file on disk', () => {
 
     const object = update.body['object'] as Record<string, unknown>;
     assert.equal(object['type'], 'Article');
-    assert.equal(object['id'], `${BASE_URL}/ap/posts/watched`);
+    assert.equal(object['id'], `${BASE_URL}/2026/03/watched/`);
     assert.match(String(object['content']), /A second thought, written later\./);
 
     // The write-back that stamps the front matter goes through the index the
@@ -604,10 +605,10 @@ describe('the delivery log', () => {
     await publishNewPost(agent);
     await cms.delivery.settled();
 
-    const activity = cms.admin.lastDeliveryToObject(`${BASE_URL}/ap/posts/hello-world`);
+    const activity = cms.admin.lastDeliveryToObject(`${BASE_URL}/2026/03/hello-world/`);
     assert.ok(activity !== undefined, 'the activity that went out was recorded');
     assert.equal(activity.activityType, 'Create');
-    assert.equal(activity.objectId, `${BASE_URL}/ap/posts/hello-world`);
+    assert.equal(activity.objectId, `${BASE_URL}/2026/03/hello-world/`);
     assert.equal(activity.slug, 'hello-world');
 
     const recorded = cms.admin.listDeliveries(activity.activityId);
@@ -642,7 +643,7 @@ describe('the delivery log', () => {
     await publishNewPost(agent);
     await cms.delivery.settled();
 
-    const activity = cms.admin.lastDeliveryToObject(`${BASE_URL}/ap/posts/hello-world`);
+    const activity = cms.admin.lastDeliveryToObject(`${BASE_URL}/2026/03/hello-world/`);
     assert.ok(activity !== undefined);
     const failed = cms.admin
       .listDeliveries(activity.activityId)
@@ -660,7 +661,7 @@ describe('the delivery log', () => {
 describe('resending a post', () => {
   /** Where the editor files the post {@link publishNewPost} writes. */
   const PUBLISHED_FILE = 'posts/2026-03-04-hello-world.md';
-  const PUBLISHED_OBJECT = `${BASE_URL}/ap/posts/hello-world`;
+  const PUBLISHED_OBJECT = `${BASE_URL}/2026/03/hello-world/`;
 
   it('sends an Update built from the file as it now reads (AC #1)', async () => {
     const { cms, contentDir } = await site();
@@ -716,7 +717,7 @@ describe('resending a post', () => {
     assert.notEqual(first.activityId, second.activityId);
   });
 
-  it('sends a Create and stamps the id into the file when it has none (AC #2)', async () => {
+  it('sends a Create and stamps the announcement into the file when it has none (AC #2)', async () => {
     const file = 'posts/2026-03-04-watched.md';
     // Indexed by the boot scan, which federates nothing and stamps nothing, so
     // the file is a published post no follower has ever been told about.
@@ -731,11 +732,12 @@ describe('resending a post', () => {
     const creates = delivered('Create');
     assert.equal(creates.length, 1, `expected one Create, saw ${JSON.stringify(deliveries)}`);
     const object = (creates[0] as Delivery).body['object'] as Record<string, unknown>;
-    assert.equal(object['id'], `${BASE_URL}/ap/posts/watched`);
+    assert.equal(object['id'], `${BASE_URL}/2026/03/watched/`);
 
     const source = await readFile(path.join(contentDir, ...file.split('/')), 'utf8');
-    assert.match(source, /activitypub:/, 'and the id is in the file');
-    assert.match(source, new RegExp(`id: ${BASE_URL}/ap/posts/watched`));
+    assert.match(source, /activitypub:/, 'and the announcement is in the file');
+    assert.match(source, /^ {2}published: /m);
+    assert.doesNotMatch(source, /^ {2}id:/m);
   });
 
   it('sends a Delete of a Tombstone for a post in the trash (AC #3)', async () => {
@@ -815,7 +817,7 @@ describe('resending a post', () => {
 });
 
 describe('renaming a post that has already been announced', () => {
-  it('keeps the object id, sends an Update, and goes on answering at the old URL', async () => {
+  it('is refused, so no follower is ever handed a second object (decision-13)', async () => {
     const { cms } = await site();
     const agent = await signedIn(cms);
     await publishNewPost(agent);
@@ -826,28 +828,16 @@ describe('renaming a post that has already been announced', () => {
       slug: 'renamed',
       action: 'update',
     });
-    assert.equal(response.status, 303, await response.text());
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /permalink of a published post is permanent/);
     await cms.delivery.settled();
+    assert.deepEqual(deliveries, [], 'nothing was announced, because nothing moved');
 
-    const updates = delivered('Update');
-    assert.equal(updates.length, 1, `expected one Update, saw ${JSON.stringify(deliveries)}`);
-    assert.equal(delivered('Create').length, 0, 'a rename is not a second post');
-    assert.equal(delivered('Delete').length, 0, 'and it does not withdraw the first one');
-
-    const object = (updates[0] as Delivery).body['object'] as Record<string, unknown>;
-    assert.equal(object['id'], `${BASE_URL}/ap/posts/hello-world`);
-
-    const served = await cms.app.request(`${BASE_URL}/ap/posts/hello-world`, {
+    const served = await cms.app.request(`${BASE_URL}/2026/03/hello-world/`, {
       headers: { accept: 'application/activity+json' },
     });
     assert.equal(served.status, 200, 'the id every follower holds still dereferences');
-    const document = (await served.json()) as Record<string, unknown>;
-    assert.equal(document['id'], `${BASE_URL}/ap/posts/hello-world`);
-
-    const fresh = await cms.app.request(`${BASE_URL}/ap/posts/renamed`, {
-      headers: { accept: 'application/activity+json' },
-    });
-    assert.equal(fresh.status, 404, 'the new slug is not a second object');
   });
 });
 

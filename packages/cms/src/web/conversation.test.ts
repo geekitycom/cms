@@ -52,7 +52,7 @@ async function reader(): Promise<{
 const BASE_URL = 'https://blog.example';
 
 /** The post every test here is about, and the id the fediverse knows it by. */
-const POST = 'https://blog.example/ap/posts/hello';
+const POST = 'https://blog.example/2026/09/hello/';
 
 function hello(): Document {
   return parseDocument(
@@ -383,7 +383,7 @@ describe('a post’s conversation', () => {
     logReaction(admin, 'Like', {
       id: 'https://remote.example/likes/3',
       actor: 'https://remote.example/users/dee',
-      object: 'https://blog.example/ap/posts/other',
+      object: 'https://blog.example/2026/09/other/',
     });
 
     const conversation = read.thread(hello());
@@ -574,7 +574,7 @@ describe('the site’s latest answers', () => {
       published: '2026-09-02T10:00:00Z',
     });
     logReply(admin, {
-      inReplyTo: 'https://blog.example/ap/posts/second',
+      inReplyTo: 'https://blog.example/2026/09/second/',
       id: 'https://remote.example/notes/2',
       published: '2026-09-02T08:00:00Z',
     });
@@ -622,7 +622,7 @@ describe('the site’s latest answers', () => {
     );
     posts.upsertAll([hello(), draft]);
     logReply(admin, {
-      inReplyTo: 'https://blog.example/ap/posts/hidden',
+      inReplyTo: 'https://blog.example/2026/09/hidden/',
       id: 'https://remote.example/notes/1',
     });
     indexComment(admin, draft, {
@@ -749,7 +749,7 @@ Words.
     await cms.sync();
 
     logReply(cms.admin, {
-      inReplyTo: 'https://blog.example/ap/posts/hello-world',
+      inReplyTo: 'https://blog.example/2026/09/hello-world/',
       id: NOTE,
       content: '<p>Federated words.</p>',
       published: '2026-09-02T09:00:00Z',

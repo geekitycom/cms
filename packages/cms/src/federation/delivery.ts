@@ -21,7 +21,7 @@ import {
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { followerRecipient } from './followers.ts';
 import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
-import { postObjectId, updateActivityId } from './paths.ts';
+import { updateActivityId } from './paths.ts';
 import { acceptedRelays, relayRecipient } from './relays.ts';
 
 /** What one activity's delivery came to, recipient by recipient. */
@@ -153,21 +153,25 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   }
 
   /**
-   * Write `activitypub.id` and `activitypub.published` into the post's file,
-   * and answer with the document as it now reads.
+   * Write `activitypub.published` into the post's file, and answer with the
+   * document as it now reads.
    *
-   * This happens before the first activity goes out, so the id the follower is
-   * handed is the id the file will keep however often the post is renamed
-   * afterwards (doc-4). It is written through the same
-   * {@link saveDocument} the admin writes through, which corrects the index in
-   * the same breath — so the watcher's re-read of the file finds a hash that
-   * already matches and this write federates nothing of its own.
+   * That one key is the whole of the record: it says the post has been
+   * announced and when, which is what decides `Create` against `Update` and
+   * what a resend needs. No id is minted — decision-13 makes the post's id its
+   * permalink, so there is nothing to freeze — and an `activitypub.id` the
+   * file already carries is left exactly where it is, because it is the name
+   * the post's followers already hold.
+   *
+   * It is written through the same {@link saveDocument} the admin writes
+   * through, which corrects the index in the same breath — so the watcher's
+   * re-read of the file finds a hash that already matches and this write
+   * federates nothing of its own.
    */
   async function stamp(document: Document): Promise<Document> {
     const existing = document.activitypub;
-    const id = existing?.id ?? postObjectId(document.slug, config.baseUrl);
     const published = existing?.published ?? document.date ?? store.now().toISOString();
-    if (existing?.id === id && existing.published === published) return document;
+    if (existing?.published === published) return document;
 
     // The zone only matters for a date somebody wrote by hand with no offset;
     // `saveDocument` is what turns every date in the file into an instant.
@@ -176,7 +180,10 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       store,
       timezone: readSiteSettings(config.contentDir).timezone,
       path: document.path,
-      content: { ...documentContent(document), activitypub: { id, published } },
+      content: {
+        ...documentContent(document),
+        activitypub: { ...existing, published },
+      },
     });
   }
 
@@ -369,7 +376,8 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       // Read before the queue rather than inside it, so a post with nothing to
       // send answers `undefined` rather than joining a queue to find that out.
       const published = isFederatedDocument(document, store.now());
-      if (!published && (document.activitypub?.id ?? '') === '') return undefined;
+      const announced = (document.activitypub?.published ?? '') !== '';
+      if (!published && !announced) return undefined;
 
       return await enqueue(async () => {
         const context = deliveryContext();
@@ -386,7 +394,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         }
 
         const stamped = await stamp(document);
-        if ((document.activitypub?.id ?? '') === '') {
+        if (!announced) {
           return await send(context, postCreateActivity(context, stamped), stamped);
         }
 
@@ -496,7 +504,7 @@ export function groupByInbox(followers: readonly Follower[]): Map<string, Follow
  * the newest, which is the post nine times out of ten. The federated list is
  * the fallback for the tenth — a page, or a live post of the same name,
  * standing in front of a trashed one — and it is the right fallback because a
- * post with no `activitypub.id` is not one a resend has anything to say about.
+ * post that was never announced is not one a resend has anything to say about.
  */
 function postBySlug(store: ContentStore, slug: string): Document | undefined {
   const direct = store.getBySlug(slug);

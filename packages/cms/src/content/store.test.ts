@@ -537,7 +537,7 @@ describe('listAll', () => {
 });
 
 describe('listFederated', () => {
-  /** The same corpus, with an `activitypub.id` on the documents named here. */
+  /** The same corpus, with an `activitypub.published` on the documents named here. */
   async function announced(...paths: string[]): Promise<ContentStore> {
     const index = await store();
     index.upsertAll(
@@ -545,7 +545,7 @@ describe('listFederated', () => {
         paths.includes(document.path)
           ? {
               ...document,
-              activitypub: { id: `https://blog.example/ap/posts/${document.slug}` },
+              activitypub: { published: document.date ?? '2026-01-01T00:00:00Z' },
             }
           : document,
       ),
@@ -553,7 +553,7 @@ describe('listFederated', () => {
     return index;
   }
 
-  it('lists the posts carrying an activitypub id, newest first', async () => {
+  it('lists the posts the site has announced, newest first', async () => {
     const index = await announced(
       'posts/2026-09-01-newest.md',
       'posts/2026-01-01-oldest.md',
@@ -578,12 +578,12 @@ describe('listFederated', () => {
     assert.deepEqual(titles(index.listFederated()), ['Thrown Away', 'A Draft']);
   });
 
-  it('leaves out a page and an activitypub block with no id in it', async () => {
+  it('leaves out a page and an activitypub block that records no announcement', async () => {
     const index = await store();
     index.upsertAll([
       ...corpus().map((document) =>
         document.path === 'pages/about.md'
-          ? { ...document, activitypub: { id: 'https://blog.example/ap/posts/about' } }
+          ? { ...document, activitypub: { published: '2026-01-01T09:00:00Z' } }
           : document,
       ),
       post({
@@ -592,7 +592,9 @@ describe('listFederated', () => {
         permalink: '/2026/09/stamped-later/',
         title: 'Not Announced Yet',
         date: '2026-09-04T09:00:00Z',
-        activitypub: { published: '2026-09-04T09:00:00Z' },
+        // A migrated post's stored id on its own says nothing about whether
+        // this site has ever delivered it.
+        activitypub: { id: 'https://blog.example/?p=813' },
       }),
     ]);
 

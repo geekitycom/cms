@@ -10,7 +10,7 @@ import { renderMarkdown } from '../content/markdown.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { OUTBOX_PAGE_SIZE } from './federation.ts';
-import { createActivityId, postObjectId } from './paths.ts';
+import { createActivityId } from './paths.ts';
 
 /** The origin every request in this file is sent to; Fedify checks it. */
 const BASE_URL = 'https://blog.example';
@@ -137,12 +137,12 @@ describe('the post object', () => {
   it('serves an Article whose content is the HTML and whose source is the Markdown', async () => {
     const instance = await site(HELLO);
 
-    const response = await get(instance, '/ap/posts/hello', ACTIVITY_STREAMS);
+    const response = await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS);
 
     assert.equal(response.status, 200);
     const article = (await response.json()) as Record<string, unknown>;
     assert.equal(article['type'], 'Article');
-    assert.equal(article['id'], `${BASE_URL}/ap/posts/hello`);
+    assert.equal(article['id'], `${BASE_URL}/2026/09/hello/`);
     assert.equal(article['name'], 'Hello, World!');
     assert.equal(article['content'], renderMarkdown(HELLO_BODY));
     assert.deepEqual(article['source'], {
@@ -155,11 +155,10 @@ describe('the post object', () => {
     const instance = await site(HELLO);
 
     const article = (await (
-      await get(instance, '/ap/posts/hello', ACTIVITY_STREAMS)
+      await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
 
-    // The id is built from the slug, the url from the permalink, so a post
-    // that moves keeps its object.
+    // One URL for both audiences: the id and the url are the permalink.
     assert.equal(article['url'], `${BASE_URL}/2026/09/hello/`);
     assert.equal(article['published'], '2026-09-02T09:00:00Z');
     assert.equal(article['updated'], '2026-09-03T10:30:00Z');
@@ -174,7 +173,7 @@ describe('the post object', () => {
     const instance = await site(HELLO);
 
     const article = (await (
-      await get(instance, '/ap/posts/hello', ACTIVITY_STREAMS)
+      await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
 
     const tags = article['tag'];
@@ -197,7 +196,7 @@ describe('the post object', () => {
     const instance = await site(HELLO, { tagBase: 'topics', categoryBase: 'filed' });
 
     const article = (await (
-      await get(instance, '/ap/posts/hello', ACTIVITY_STREAMS)
+      await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
 
     const tags = article['tag'];
@@ -217,7 +216,7 @@ describe('the post object', () => {
     );
   });
 
-  it('dispatches nothing for a draft, a trashed post, a page or an unknown slug', async () => {
+  it('serves nothing for a draft, a trashed post, a page or a URL naming nothing', async () => {
     const instance = await site({
       ...HELLO,
       'posts/2026-09-01-secret.md': post('Secret', {
@@ -235,14 +234,19 @@ describe('the post object', () => {
       }),
     });
 
-    for (const slug of ['secret', 'gone', 'about', 'never-written']) {
-      const response = await get(instance, `/ap/posts/${slug}`, ACTIVITY_STREAMS);
-      assert.equal(response.status, 404, `/ap/posts/${slug} is not an object`);
+    // A draft, a trashed post and a URL naming nothing have no public page at
+    // all, so they 404 exactly as they do for a browser. A page exists but
+    // federates nothing, so it falls through to the negotiator and earns the
+    // 406 doc-3 specifies.
+    for (const permalink of ['/2026/09/secret/', '/2026/08/gone/', '/2026/09/never-written/']) {
+      const response = await get(instance, permalink, ACTIVITY_STREAMS);
+      assert.equal(response.status, 404, `${permalink} is not an object`);
     }
+    assert.equal((await get(instance, '/about/', ACTIVITY_STREAMS)).status, 406);
 
-    // The published post next to them still is, so the 404s are the filter
-    // rather than a broken dispatcher.
-    assert.equal((await get(instance, '/ap/posts/hello', ACTIVITY_STREAMS)).status, 200);
+    // The published post next to them still is, so the refusals are the filter
+    // rather than a middleware that answers nothing.
+    assert.equal((await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS)).status, 200);
   });
 });
 
@@ -320,17 +324,17 @@ describe('the outbox', () => {
     assert.equal(items.length, 1);
     const activity = items[0] as Record<string, unknown>;
     assert.equal(activity['type'], 'Create');
-    assert.equal(activity['id'], `${BASE_URL}/ap/posts/hello#create`);
+    assert.equal(activity['id'], `${BASE_URL}/2026/09/hello/#create`);
     assert.equal(activity['actor'], `${BASE_URL}/ap/actor`);
     assert.equal(activity['to'], 'as:Public');
 
     const object = activity['object'] as Record<string, unknown>;
     assert.equal(object['type'], 'Article');
-    assert.equal(object['id'], `${BASE_URL}/ap/posts/hello`);
+    assert.equal(object['id'], `${BASE_URL}/2026/09/hello/`);
     assert.equal(object['name'], 'Hello, World!');
   });
 
-  it('leaves out drafts, trash and pages, exactly as the object dispatcher does', async () => {
+  it('leaves out drafts, trash and pages, exactly as the permalink does', async () => {
     const instance = await site({
       ...HELLO,
       'posts/2026-09-01-secret.md': post('Secret', {
@@ -362,7 +366,7 @@ describe('the outbox', () => {
     );
   });
 
-  it('leaves out a post whose date has not arrived, and 404s its object', async () => {
+  it('leaves out a post whose date has not arrived, and 404s its permalink', async () => {
     let now = new Date('2026-09-03T12:00:00Z');
     const instance = await site(
       {
@@ -380,7 +384,6 @@ describe('the outbox', () => {
       await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
     assert.equal(before['totalItems'], 1);
-    assert.equal((await get(instance, '/ap/posts/tomorrow', ACTIVITY_STREAMS)).status, 404);
     assert.equal((await get(instance, '/2026/09/tomorrow/', ACTIVITY_STREAMS)).status, 404);
 
     now = new Date('2026-09-04T09:00:00Z');
@@ -389,12 +392,12 @@ describe('the outbox', () => {
       await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
     assert.equal(after['totalItems'], 2);
-    assert.equal((await get(instance, '/ap/posts/tomorrow', ACTIVITY_STREAMS)).status, 200);
+    assert.equal((await get(instance, '/2026/09/tomorrow/', ACTIVITY_STREAMS)).status, 200);
   });
 });
 
 describe('a post permalink asked for as ActivityStreams', () => {
-  it('answers with the same Article the object URL serves', async () => {
+  it('answers with an Article whose id is the permalink (decision-13)', async () => {
     const instance = await site(HELLO);
 
     const response = await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS);
@@ -406,10 +409,17 @@ describe('a post permalink asked for as ActivityStreams', () => {
     );
     const article = (await response.json()) as Record<string, unknown>;
     assert.equal(article['type'], 'Article');
-    // The id is the object URL, not the permalink: one post, one object,
-    // whichever door a peer came in by.
-    assert.equal(article['id'], `${BASE_URL}/ap/posts/hello`);
+    // One URL per post: the id a peer files the object under is the URL a
+    // reader visits, negotiated by `Accept`.
+    assert.equal(article['id'], `${BASE_URL}/2026/09/hello/`);
+    assert.equal(article['url'], `${BASE_URL}/2026/09/hello/`);
     assert.equal(article['content'], renderMarkdown(HELLO_BODY));
+  });
+
+  it('no longer answers at the old /ap/posts/{slug} object URL', async () => {
+    const instance = await site(HELLO);
+
+    assert.equal((await get(instance, '/ap/posts/hello', ACTIVITY_STREAMS)).status, 404);
   });
 
   it('answers the profiled application/ld+json spelling too', async () => {
@@ -424,7 +434,7 @@ describe('a post permalink asked for as ActivityStreams', () => {
     assert.equal(response.status, 200);
     assert.equal(
       ((await response.json()) as Record<string, unknown>)['id'],
-      `${BASE_URL}/ap/posts/hello`,
+      `${BASE_URL}/2026/09/hello/`,
     );
   });
 
@@ -471,6 +481,94 @@ describe('a post permalink asked for as ActivityStreams', () => {
   });
 });
 
+describe('a post whose file already names an activitypub.id', () => {
+  /** The post as WordPress left it: announced long ago under `?p=813`. */
+  const MIGRATED = {
+    'posts/2011-06-06-old-news.md': [
+      '---',
+      'title: Old news',
+      "date: '2011-06-06T09:00:00Z'",
+      'permalink: /2011/06/old-news/',
+      'activitypub:',
+      "  id: 'https://blog.example/?p=813'",
+      "  published: '2011-06-06T09:00:00Z'",
+      '---',
+      '',
+      'Body.',
+      '',
+    ].join('\n'),
+  };
+
+  it('keeps the stored id as the object id at its permalink', async () => {
+    const instance = await site(MIGRATED);
+
+    const article = (await (
+      await get(instance, '/2011/06/old-news/', ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+
+    // The id its followers, its replies and its RSS subscribers already hold.
+    assert.equal(article['id'], 'https://blog.example/?p=813');
+    assert.equal(article['url'], `${BASE_URL}/2011/06/old-news/`);
+  });
+
+  it('serves the Article at the stored id, query string and all', async () => {
+    const instance = await site(MIGRATED);
+
+    const response = await get(instance, '/?p=813', ACTIVITY_STREAMS);
+
+    assert.equal(response.status, 200);
+    const article = (await response.json()) as Record<string, unknown>;
+    assert.equal(article['type'], 'Article');
+    assert.equal(article['id'], 'https://blog.example/?p=813');
+    assert.equal(article['name'], 'Old news');
+  });
+
+  it('redirects a browser from the stored id to the permalink', async () => {
+    const instance = await site(MIGRATED);
+
+    const response = await get(instance, '/?p=813', 'text/html');
+
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), '/2011/06/old-news/');
+  });
+
+  it('serves a path-shaped stored id the same way', async () => {
+    const instance = await site({
+      'posts/2011-06-06-old-news.md': [
+        '---',
+        'title: Old news',
+        "date: '2011-06-06T09:00:00Z'",
+        'permalink: /2011/06/old-news/',
+        'activitypub:',
+        "  id: 'https://blog.example/ap/posts/old-news'",
+        "  published: '2011-06-06T09:00:00Z'",
+        '---',
+        '',
+        'Body.',
+        '',
+      ].join('\n'),
+    });
+
+    const object = await get(instance, '/ap/posts/old-news', ACTIVITY_STREAMS);
+    assert.equal(object.status, 200);
+    assert.equal(
+      ((await object.json()) as Record<string, unknown>)['id'],
+      'https://blog.example/ap/posts/old-news',
+    );
+
+    const browser = await get(instance, '/ap/posts/old-news', 'text/html');
+    assert.equal(browser.status, 301);
+    assert.equal(browser.headers.get('location'), '/2011/06/old-news/');
+  });
+
+  it('leaves the home page alone when no query string names a post', async () => {
+    const instance = await site(MIGRATED);
+
+    assert.equal((await get(instance, '/', 'text/html')).status, 200);
+    assert.equal((await get(instance, '/?p=999', 'text/html')).status, 200);
+  });
+});
+
 describe('the HTML post page', () => {
   it('links to the ActivityStreams object with rel=alternate', async () => {
     const instance = await site(HELLO);
@@ -481,7 +579,7 @@ describe('the HTML post page', () => {
     assert.equal(response.status, 200);
     assert.ok(
       html.includes(
-        `<link rel="alternate" type="application/activity+json" href="${BASE_URL}/ap/posts/hello">`,
+        `<link rel="alternate" type="application/activity+json" href="${BASE_URL}/2026/09/hello/">`,
       ),
       `the page advertises its object id:\n${html}`,
     );
@@ -507,37 +605,16 @@ describe('the HTML post page', () => {
 });
 
 describe('object ids', () => {
-  it('are host-rooted even when the site lives in a subdirectory', () => {
-    // Fedify serves the federation endpoints on the host, not under the base
-    // path, so the id has to be built the same way or a peer dereferences a
-    // URL that answers nothing.
-    assert.equal(
-      postObjectId('hello', 'https://example.com/blog'),
-      'https://example.com/ap/posts/hello',
-    );
-    assert.equal(
-      postObjectId('hello', 'https://example.com'),
-      'https://example.com/ap/posts/hello',
-    );
-  });
-
-  it('escape a slug that would otherwise change the shape of the path', () => {
-    assert.equal(
-      postObjectId('a b/c', 'https://example.com'),
-      'https://example.com/ap/posts/a%20b%2Fc',
-    );
-  });
-
   it('name the announcing activity as a fragment of the object', () => {
     assert.equal(
-      createActivityId('https://example.com/ap/posts/hello').href,
-      'https://example.com/ap/posts/hello#create',
+      createActivityId('https://example.com/2026/09/hello/').href,
+      'https://example.com/2026/09/hello/#create',
     );
   });
 });
 
 describe('a site in a subdirectory', () => {
-  it('keeps the base path in the article url and off the object id', async () => {
+  it('keeps the base path in the article url and in the object id', async () => {
     const dataDir = await temporaryDir('geekity-article-sub-data-');
     const contentDir = await temporaryDir('geekity-article-sub-content-');
     await writeTree(contentDir, HELLO);
@@ -569,13 +646,16 @@ describe('a site in a subdirectory', () => {
 
     const article = (await (
       await instance.app.request(
-        new Request('https://example.com/ap/posts/hello', {
+        new Request('https://example.com/2026/09/hello/', {
           headers: { accept: ACTIVITY_STREAMS },
         }),
       )
     ).json()) as Record<string, unknown>;
 
-    assert.equal(article['id'], 'https://example.com/ap/posts/hello');
+    // decision-13: the object is served by the permalink rather than by a
+    // host-rooted dispatcher, so a site in a subdirectory keeps that directory
+    // in its ids as well as in its links.
+    assert.equal(article['id'], 'https://example.com/blog/2026/09/hello/');
     assert.equal(article['url'], 'https://example.com/blog/2026/09/hello/');
   });
 });

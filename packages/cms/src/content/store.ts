@@ -68,6 +68,16 @@ export interface ContentStore {
   /** The document a URL resolves to, or `undefined`. Permalinks are unique. */
   getByPermalink(permalink: string): Document | undefined;
   /**
+   * The post whose front matter names this ActivityStreams id, or `undefined`.
+   *
+   * Only a migrated post has one (decision-13): a post born on the CMS is
+   * named by its permalink and carries no `activitypub.id` at all. This is how
+   * the id its followers already hold keeps answering — with the `Article` for
+   * a peer and a redirect to the permalink for a browser — so the match is on
+   * the whole URL, a `?p=813` query string included.
+   */
+  getByStoredObjectId(objectId: string): Document | undefined;
+  /**
    * The document with this slug, or `undefined`. Slugs are not unique across
    * years, so the newest match wins.
    */
@@ -98,14 +108,14 @@ export interface ContentStore {
   listAll(options?: ListAllOptions): Document[];
   /**
    * Posts the site has announced to the fediverse: the ones whose front matter
-   * carries an `activitypub.id`, newest first, drafts, scheduled posts and the
-   * trash included.
+   * carries an `activitypub.published`, newest first, drafts, scheduled posts
+   * and the trash included.
    *
    * The federation screen's row source, and the reason the filter is a query
    * rather than a walk of {@link ContentStore.listAll}: a draft and a trashed
    * post belong on that screen — they are what a `Delete` is sent for — so the
-   * only thing that decides the list is whether an id was ever written into
-   * the file, which is the same thing as whether a follower holds a copy.
+   * only thing that decides the list is whether the post was ever announced,
+   * which is the same thing as whether a follower holds a copy.
    */
   listFederated(options?: ListOptions): Document[];
   /** Every indexed path, sorted. What a sync compares the content tree against. */
@@ -281,14 +291,17 @@ const SCHEDULED_CLAUSE = '(date_sort IS NOT NULL AND date_sort > ?)';
 
 /**
  * The clause that picks out a document some follower holds a copy of: one
- * whose `activitypub` block names an id.
+ * whose `activitypub` block records when it was announced.
  *
- * The block is stored as JSON rather than shredded into columns, so the id is
- * read back out of it here. An empty id is no id: the front matter is a file
- * somebody may have typed, and `activitypub: {id: ""}` is what a half-finished
- * hand edit looks like.
+ * `published` rather than `id`, because after decision-13 a post's id is its
+ * permalink and is never written into the file: the announcement date is the
+ * only mark a delivery leaves, and it is the one thing that says a follower
+ * was ever told. The block is stored as JSON rather than shredded into
+ * columns, so the date is read back out of it here. An empty value is no
+ * value: the front matter is a file somebody may have typed, and
+ * `activitypub: {published: ""}` is what a half-finished hand edit looks like.
  */
-const FEDERATED_CLAUSE = `COALESCE(json_extract(activitypub, '$.id'), '') <> ''`;
+const FEDERATED_CLAUSE = `COALESCE(json_extract(activitypub, '$.published'), '') <> ''`;
 
 /**
  * Open (and if needed create) the index in `dataDir`, applying every migration
@@ -343,6 +356,9 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     remove: db.prepare('DELETE FROM documents WHERE path = ?'),
     byPath: db.prepare('SELECT * FROM documents WHERE path = ?'),
     byPermalink: db.prepare('SELECT * FROM documents WHERE permalink = ?'),
+    byStoredObjectId: db.prepare(
+      `SELECT * FROM documents WHERE json_extract(activitypub, '$.id') = ? LIMIT 1`,
+    ),
     bySlug: db.prepare(
       `SELECT * FROM documents WHERE slug = ? ORDER BY date_sort DESC, path DESC LIMIT 1`,
     ),
@@ -529,6 +545,13 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
     getByPermalink(permalink) {
       return hydrate(statements.byPermalink.get(permalink) as Record<string, unknown> | undefined);
+    },
+
+    getByStoredObjectId(objectId) {
+      if (objectId === '') return undefined;
+      return hydrate(
+        statements.byStoredObjectId.get(objectId) as Record<string, unknown> | undefined,
+      );
     },
 
     getBySlug(slug) {

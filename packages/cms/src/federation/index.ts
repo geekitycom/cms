@@ -20,7 +20,6 @@ export type {
 } from './delivery.ts';
 export {
   createSiteFederation,
-  federatedObject,
   federatedPost,
   OUTBOX_PAGE_SIZE,
   SOFTWARE_NAME,
@@ -87,9 +86,6 @@ export {
   INBOX_PATH,
   NODEINFO_PATH,
   OUTBOX_PATH,
-  POST_OBJECT_PATH,
-  postObjectId,
-  postObjectPath,
   SHARED_INBOX_PATH,
   updateActivityId,
 } from './paths.ts';

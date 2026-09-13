@@ -2,17 +2,7 @@ import { createRequire } from 'node:module';
 
 import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/fedify';
 import type { Federation, FederationOptions, PageItems, RequestContext } from '@fedify/fedify';
-import {
-  Accept,
-  Announce,
-  Article,
-  Create,
-  Delete,
-  Follow,
-  Like,
-  Reject,
-  Undo,
-} from '@fedify/vocab';
+import { Accept, Announce, Create, Delete, Follow, Like, Reject, Undo } from '@fedify/vocab';
 
 import { countUsers } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
@@ -21,7 +11,7 @@ import type { FederationOverrides, ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import { siteActor } from './actor.ts';
-import { isFederatedDocument, postArticle, postCreateActivity } from './article.ts';
+import { isFederatedDocument, postCreateActivity } from './article.ts';
 import { followersPage, lastFollowersCursor } from './followers.ts';
 import {
   handleAccept,
@@ -40,8 +30,6 @@ import {
   INBOX_PATH,
   NODEINFO_PATH,
   OUTBOX_PATH,
-  POST_OBJECT_PATH,
-  postObjectId,
   SHARED_INBOX_PATH,
 } from './paths.ts';
 
@@ -61,7 +49,7 @@ export const OUTBOX_PAGE_SIZE = 20;
 export interface FederationContextData {
   /** The followers, the inbox log and the relay records. */
   readonly admin: AdminStore;
-  /** The content index, which the outbox and the post objects are built from. */
+  /** The content index, which the outbox and the post articles are built from. */
   readonly store: ContentStore;
   /** Config after defaults and environment overrides. */
   readonly config: ResolvedConfig;
@@ -88,8 +76,9 @@ export interface CreateSiteFederationOptions extends FederationOverrides {
 }
 
 /**
- * Build the site's `Federation` object: the actor, its keys, the post objects,
- * the outbox, WebFinger and NodeInfo.
+ * Build the site's `Federation` object: the actor, its keys, the outbox,
+ * WebFinger and NodeInfo. A post's object is not here — it is its permalink
+ * (decision-13), served by the middleware in `mount.ts`.
  *
  * It is a factory rather than a module-level singleton so the KV store and the
  * queue are arguments (decision-5), so a test can build one per data directory,
@@ -135,14 +124,11 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
         : [],
     );
 
-  // A post's ActivityStreams object. `null` is a 404, which is what a draft, a
-  // trashed post, a page and a slug that names nothing all get: the object
-  // dispatcher is the only thing that decides whether an object exists, so it
-  // cannot disagree with the outbox about it.
-  federation.setObjectDispatcher(Article, POST_OBJECT_PATH, (context, values) => {
-    const document = federatedObject(context.data.store, values.slug, context.data.config.baseUrl);
-    return document === undefined ? null : postArticle(context, document);
-  });
+  // No object dispatcher for posts. decision-13 makes a post's id its
+  // permalink, which Fedify never minted and cannot route: the permalink
+  // middleware in `mount.ts` answers an ActivityStreams request there, and
+  // `isFederatedDocument` is the one rule it and the outbox both read, so they
+  // cannot disagree about what exists.
 
   federation
     .setOutboxDispatcher(OUTBOX_PATH, (context, identifier, cursor) =>
@@ -233,34 +219,6 @@ export function federatedPost(store: ContentStore, slug: string): Document | und
   return document !== undefined && isFederatedDocument(document, store.now())
     ? document
     : undefined;
-}
-
-/**
- * The post whose ActivityStreams object is served at `/ap/posts/{slug}`.
- *
- * Nearly always the post with that slug. The exception is a post renamed after
- * it was announced: it keeps the id its old slug minted, written into
- * `activitypub.id` (doc-4), so the old URL has to keep answering or every
- * follower's copy points at a 404. That case is found by searching the
- * archive for the post holding the id, which is a walk rather than an index
- * lookup — the front matter is the source of truth (decision-1) and the index
- * has no column for it — but it is only reached when the slug itself does not
- * answer.
- */
-export function federatedObject(
-  store: ContentStore,
-  slug: string,
-  baseUrl: string,
-): Document | undefined {
-  const objectId = postObjectId(slug, baseUrl);
-  const direct = federatedPost(store, slug);
-
-  if (direct !== undefined) {
-    const stored = direct.activitypub?.id;
-    if (stored === undefined || stored === objectId) return direct;
-  }
-
-  return store.listPosts().find((post) => post.activitypub?.id === objectId);
 }
 
 /**

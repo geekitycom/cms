@@ -136,6 +136,10 @@ async function populatedSite(): Promise<{ contentDir: string; dataDir: string; b
     )}\n`,
   );
 
+  // Its `activitypub.id` is the shape a post migrated from elsewhere carries:
+  // the CMS never mints one, but a stored id is honoured for the life of the
+  // post (decision-13), so the object answers there and the inbox log below
+  // names it.
   await write(
     'posts/2026-09-01-hello.md',
     [
@@ -321,7 +325,10 @@ async function capture(cms: Cms): Promise<Record<string, unknown>> {
     followersPage: await activityStreams(cms, '/ap/actor/followers?cursor=0'),
     outbox: await activityStreams(cms, '/ap/actor/outbox'),
     outboxPage: await activityStreams(cms, '/ap/actor/outbox?cursor=0'),
+    // At the stored id, and at the permalink, which is where a post without a
+    // stored one answers.
     postObject: await activityStreams(cms, '/ap/posts/hello'),
+    postAtPermalink: await activityStreams(cms, '/2026/09/hello/'),
     login: { status, location },
     settings: withoutCsrf(await screen(agent, '/admin/settings')),
     federationScreen: withoutCsrf(await screen(agent, '/admin/federation')),

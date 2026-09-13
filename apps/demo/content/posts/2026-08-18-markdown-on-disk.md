@@ -10,7 +10,6 @@ categories:
 description: Why the files are the source of truth and the database is only an index.
 author: Andrew Shell
 activitypub:
-  id: http://localhost:3000/ap/posts/markdown-on-disk
   published: '2026-08-18T14:15:00Z'
 ---
 

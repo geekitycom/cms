@@ -2,7 +2,7 @@ import type { Document } from '../content/document.ts';
 import { isScheduled } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
-import { postObjectId } from '../federation/paths.ts';
+import { absoluteUrl } from './negotiate.ts';
 
 /**
  * Whether the public site may show a document.
@@ -35,31 +35,49 @@ export function publicDocumentAt(store: ContentStore, permalink: string): Docume
 }
 
 /**
- * The ActivityStreams id of a document, or `undefined` when it has none.
+ * A post's ActivityStreams object id: its permalink, absolute on the site's
+ * base URL, or the id its file already names.
  *
- * Only a published post federates (doc-4), so only a published post has an id
- * to advertise. This is what the theme's `<link rel="alternate">` points at
- * and what the RSS feed's `<guid isPermaLink="false">` names, and it is
- * deliberately the same string the object dispatcher answers under: the page,
- * the feed item and the object all agree about the post's name in the
- * fediverse.
+ * decision-13. A permalink is by name permanent, and the fediverse id is the
+ * same promise made to a different audience, so one URL answers both: a
+ * browser gets the page and a peer gets the `Article`, by content negotiation.
+ * There is no second URL to mint and none to keep in step.
  *
- * The id written into the front matter on the first delivery wins over the one
- * the slug implies, exactly as federation's `articleObjectId` prefers it: that
- * is what makes the name survive a rename, which is the whole reason a `guid`
- * is not the permalink. A hand-written `activitypub.id` that is not a URL is
- * not an id, and the derived one is used instead.
+ * A stored `activitypub.id` wins, for the life of the post. That is not a
+ * cache: it is what lets a post migrated from WordPress keep the
+ * `https://example.com/?p=813` id its followers, its replies and its RSS
+ * subscribers already hold (decision-14), so the CMS serves the object there
+ * too and names it in every `Update` and `Delete`. A hand-written
+ * `activitypub.id` that is not a URL is not an id, and the permalink is used
+ * instead.
+ *
+ * Unlike {@link activityStreamsId} this answers for any post, published or
+ * not: a draft that was announced before it was withdrawn still has the name
+ * its followers filed it under, and a `Delete` has to say it.
  */
-export function activityStreamsId(document: Document, baseUrl: string): string | undefined {
-  if (document.type !== 'post' || !isPublicDocument(document)) return undefined;
-
+export function postObjectId(document: Document, baseUrl: string): string {
   const stored = document.activitypub?.id;
   if (stored !== undefined && stored !== '') {
     try {
       return new URL(stored).href;
     } catch {
-      // Not a URL, so not an id. Fall through to the derived one.
+      // Not a URL, so not an id. Fall through to the permalink.
     }
   }
-  return postObjectId(document.slug, baseUrl);
+  return absoluteUrl(document.permalink, baseUrl);
+}
+
+/**
+ * The ActivityStreams id of a document, or `undefined` when it has none.
+ *
+ * Only a published post federates (doc-4), so only a published post has an id
+ * to advertise. This is what the theme's `<link rel="alternate">` points at,
+ * what every feed keys the post by (decision-12) and what the permalink
+ * answers an ActivityStreams request with: the page, the feed item and the
+ * object all agree about the post's name in the fediverse, because after
+ * decision-13 they are the same URL.
+ */
+export function activityStreamsId(document: Document, baseUrl: string): string | undefined {
+  if (document.type !== 'post' || !isPublicDocument(document)) return undefined;
+  return postObjectId(document, baseUrl);
 }
