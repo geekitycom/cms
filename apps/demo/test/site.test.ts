@@ -14,7 +14,7 @@
  * and leaves `apps/demo/data/` alone.
  */
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -25,6 +25,7 @@ import {
   CONTACT_POST_PATH,
   createCms,
   createUser,
+  PACKAGED_THEME_DIR,
   readSiteSettings,
   setUserProfile,
 } from '@geekity/cms';
@@ -34,6 +35,9 @@ import config from '../geekity.config.ts';
 
 /** The demo's content directory, absolute, for the readers that want a path. */
 const CONTENT_DIR = fileURLToPath(new URL('../content', import.meta.url));
+
+/** The demo's themes directory, absolute: one folder, `demo/`. */
+const THEMES_DIR = fileURLToPath(new URL('../themes', import.meta.url));
 
 let cms: Cms;
 let origin: string;
@@ -63,7 +67,7 @@ after(async () => {
   await rm(dataDir, { recursive: true, force: true });
 });
 
-describe('the demo theme override', () => {
+describe('the theme the demo chose', () => {
   it('serves a post through the demo post layout, not the packaged one', async () => {
     const body = await text('/2026/08/markdown-on-disk/');
 
@@ -89,6 +93,85 @@ describe('the demo theme override', () => {
 
     const body = await response.text();
     assert.match(body, /Geekity demo/, 'the packaged stylesheet is being served, not the demo one');
+  });
+});
+
+/**
+ * The same content with the choice taken out (decision-15).
+ *
+ * `themes/demo/` is still on disk and `themesDir` still points at it; the only
+ * difference is that `site.json` no longer names it, which is exactly what the
+ * Appearance screen writes when the packaged theme is activated. So this is
+ * the other half of the override mechanism: an unchosen theme is not on the
+ * search path at all, and the site falls back to the theme inside the package
+ * rather than to nothing.
+ *
+ * It runs against a copy of the demo's content in a temporary directory.
+ * `apps/demo/content/` is a working site that a person may have running, so a
+ * test never edits it — not even to put it back afterwards, because a crashed
+ * run would leave the demo wearing no theme.
+ */
+describe('the demo with its theme unchosen', () => {
+  let bare: Cms;
+  let bareOrigin: string;
+  let sandbox: string;
+
+  /** GET a path from the second site and assert it came back 200. */
+  async function bareText(pathname: string): Promise<string> {
+    const response = await fetch(new URL(pathname, bareOrigin));
+    assert.equal(response.status, 200, `GET ${pathname} answered ${String(response.status)}`);
+    return response.text();
+  }
+
+  before(async () => {
+    sandbox = await mkdtemp(path.join(tmpdir(), 'geekity-demo-unchosen-'));
+    const contentDir = path.join(sandbox, 'content');
+    const bareDataDir = path.join(sandbox, 'data');
+    await cp(CONTENT_DIR, contentDir, { recursive: true });
+    await mkdir(bareDataDir, { recursive: true });
+
+    const settingsFile = path.join(contentDir, '_data', 'site.json');
+    const settings = JSON.parse(await readFile(settingsFile, 'utf8')) as Record<string, unknown>;
+    assert.equal(settings['theme'], 'demo', 'the demo does not choose a theme to unchoose');
+    delete settings['theme'];
+    await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+
+    bare = createCms({
+      ...config,
+      port: 0,
+      contentDir,
+      dataDir: bareDataDir,
+      themesDir: THEMES_DIR,
+      watch: false,
+    });
+    const { port } = await bare.serve();
+    bareOrigin = `http://127.0.0.1:${String(port)}`;
+  });
+
+  after(async () => {
+    await bare.close();
+    await rm(sandbox, { recursive: true, force: true });
+  });
+
+  it('serves a post through the packaged post layout', async () => {
+    const body = await bareText('/2026/08/markdown-on-disk/');
+
+    assert.match(body, /<p class="post-meta">\s*Published/, 'not the packaged meta line');
+    assert.doesNotMatch(body, /post-byline/, 'the unchosen theme is still on the search path');
+    assert.doesNotMatch(body, /minute read/, 'the unchosen theme is still on the search path');
+  });
+
+  it('serves the packaged stylesheet at /theme/style.css', async () => {
+    const response = await fetch(new URL('/theme/style.css', bareOrigin));
+    assert.equal(response.status, 200);
+
+    const packaged = await readFile(path.join(PACKAGED_THEME_DIR, 'static', 'style.css'), 'utf8');
+    assert.equal(await response.text(), packaged, 'not the stylesheet inside the package');
+  });
+
+  it('serves the rest of the site exactly as before', async () => {
+    assert.match(await bareText('/'), /class="post-list"/);
+    assert.match(await bareText('/colophon/'), /Colophon/);
   });
 });
 

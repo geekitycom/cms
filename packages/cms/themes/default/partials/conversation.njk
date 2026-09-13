@@ -4,9 +4,9 @@
 
   Rendered from `layouts/post.njk` with the `conversation` on the context,
   which is only there when there is something in it, so a post nobody has
-  answered renders none of this. A site replaces the whole section by shipping
-  `theme/partials/conversation.njk` of its own; the shape it is handed is
-  documented in the theme README under "The conversation".
+  answered renders none of this. A site replaces the whole section with a
+  `partials/conversation.njk` of its own in the theme it wears; the shape it is
+  handed is documented in the theme README under "The conversation".
 
   The macros come first because Nunjucks defines one where it stands rather
   than hoisting it, and the section below calls all three.

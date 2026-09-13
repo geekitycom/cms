@@ -3,8 +3,9 @@
 
   `contactForm` is on the context only when the page asked for one, so a layout
   asks `{% if contactForm %}` and nothing else. A site replaces this whole
-  section by shipping `theme/partials/contact-form.njk` of its own; the shape it
-  is handed is documented in the theme README under "The contact form".
+  section with a `partials/contact-form.njk` of its own in the theme it wears;
+  the shape it is handed is documented in the theme README under "The contact
+  form".
 
   Where the message goes is deliberately not here and not anywhere a template
   can reach: the address is read when a submission arrives, so it cannot end up

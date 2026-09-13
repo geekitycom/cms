@@ -2,10 +2,10 @@
   The demo's own post layout.
 
   This is the whole override mechanism in one file: the site ships
-  `theme/layouts/post.njk`, the packaged `layouts/post.njk` is never read
-  again, and every other template — the base layout, the home archive, the tag
-  pages, the 404 — still comes from `@geekity/cms` and still gets updates when
-  the package does.
+  `themes/demo/layouts/post.njk` and its `site.json` says `"theme": "demo"`, so
+  the packaged `layouts/post.njk` is never read again, and every other template
+  — the base layout, the home archive, the tag pages, the 404 — still comes
+  from `@geekity/cms` and still gets updates when the package does.
 
   It extends the packaged base layout by name, so the site does not own the
   <head>, the header or the footer either. What it adds is a byline and a

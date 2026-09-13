@@ -41,7 +41,12 @@ content/
 
 `data/` and `themes/` are not written. The index under `data/` is created on
 first boot and is safe to delete; `themes/` is optional and only exists once
-you write a theme of your own.
+you write a theme of your own — one folder, `themes/<name>/`, with a
+`theme.json` in it, chosen on **Appearance > Themes** in the admin. Until then
+every page comes from the theme inside the package. [Theme
+overrides](#theme-overrides) has the whole of it, and the comment beside
+`themesDir` in the generated `geekity.config.ts` says it where you will see
+it.
 
 The generated `package.json` pins `@geekity/cms` to the version of the CLI that
 wrote it, so a site is never scaffolded against a version it has not been tested
@@ -1384,6 +1389,7 @@ shadow the login form.
 | `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                                     |
 | `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                                     |
 | `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                                   |
+| `/admin/appearance/themes`                       | Appearance > Themes: the themes on disk. `POST` activates the one named.                  |
 | `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language.                |
 | `/admin/settings/reading`                        | Posts per page, the site menu, the notify server.                                         |
 | `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.                   |
@@ -1416,9 +1422,9 @@ read, so it survives exactly one redirect.
 
 ### The menu
 
-The menu is WordPress classic: nine sections — Dashboard, Posts, Pages, Media,
-Comments, Messages, Users, Settings, Federation — each a heading over one or
-more children. Clicking a heading opens the section and lands on its first
+The menu is WordPress classic: ten sections — Dashboard, Posts, Pages, Media,
+Comments, Messages, Appearance, Users, Settings, Federation — each a heading
+over one or more children. Clicking a heading opens the section and lands on its first
 child; the open section shows its children and the one you are on carries
 `aria-current="page"`, so Users tells you that you are on Users > All users.
 Tags and categories are children of Posts, because a tag with no post on it is
@@ -2459,12 +2465,27 @@ default), each with a `theme.json` naming it:
 }
 ```
 
+`name` is what a person reads, `kind` is `site` — the only kind there is, and
+the field is in the file so another can be added later without the format
+changing — and `description` is optional. The directory name is the theme's id.
+
 One setting in `content/_data/site.json`, `theme`, says which one the site is
-wearing, and the directory name is what it names:
+wearing, and that id is what it holds:
 
 ```json
 { "theme": "midnight" }
 ```
+
+**Appearance > Themes** in the admin is where the choice is made. It lists the
+theme inside this package and every folder under `themesDir` with its name and
+description, marks the one in use, and Activate on another writes the setting —
+or, on the packaged theme, takes the key out of `site.json` again, which is why
+a site wearing it has no `theme` key rather than an empty one. A folder whose
+`theme.json` is missing, unparseable or names another kind is listed under
+"Not themes" with the reason, so a typo is something you can see on the screen
+that would otherwise have shown the theme. Activating takes effect on the next
+request, with no restart. Editing the setting by hand does exactly the same
+thing.
 
 A template is then looked up in that theme first and in the theme that ships
 inside this package second, file by file. Sites override one template at a time
@@ -2475,9 +2496,8 @@ and the [email messages](#messages) under `mail/` resolve the same way too.
 Neither the setting nor `themesDir` need exist. A site that names no theme
 serves every page, the 404 and the stylesheet out of the packaged theme, and an
 unchosen theme sitting in `themes/` changes nothing. A `theme` naming a
-directory that is not there falls back to the packaged theme with a warning in
-the log rather than a broken site, and changing the setting takes effect on the
-next request, with no restart.
+directory that is not there, or one whose manifest will not read, falls back to
+the packaged theme with a warning in the log rather than a broken site.
 
 A theme that ships only
 
@@ -2497,6 +2517,10 @@ can extend a packaged one by name:
 {{ content | safe }}
 {% endblock %}
 ```
+
+The admin is not themed. Its templates and its static files live in a tree of
+their own with a loader of their own, deliberately off this search path, so no
+theme can shadow the login form or the CSRF field inside it.
 
 The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`,
 `content`, `page.url`, and every front matter key the file carried — plus
@@ -2520,6 +2544,27 @@ renderer.site(); // content/_data/site.json, defaults filled in
 ```
 
 Handlers reach the same renderer as `c.var.renderer`.
+
+### Moving a `theme/` directory
+
+Before named themes a site had one `theme/` directory, always on the search
+path, pointed at by `themeDir` and `GEEKITY_THEME_DIR`. Both are gone and
+neither is aliased, so a site carrying one moves it:
+
+```sh
+mkdir -p themes/mine
+git mv theme/* themes/mine/
+rmdir theme
+```
+
+Then write `themes/mine/theme.json` with a `name` and `"kind": "site"`, choose
+it on **Appearance > Themes** (or put `"theme": "mine"` in
+`content/_data/site.json`), and drop `themeDir` from `geekity.config.ts` and
+`GEEKITY_THEME_DIR` from the environment — a config naming `themeDir` is now a
+type error and the variable is ignored. Nothing inside the theme changes: the
+layouts, partials, `mail/` and `static/` keep their names and their meaning.
+Until it is chosen the site serves the packaged theme, so the move and the
+choice belong in the same deploy.
 
 ## Building the same content with Eleventy
 

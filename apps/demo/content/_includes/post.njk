@@ -1,11 +1,11 @@
 {#
   The layout `content/posts/posts.json` names, for an Eleventy build.
 
-  Deliberately tiny. The CMS renders a post through the Nunjucks theme in
-  `theme/` and `@geekity/cms`; this file exists so the same directory also
-  builds as a static site, which is the escape hatch decision-3 promises. A
-  site that wanted both to look alike would point Eleventy at the theme instead
-  of writing this.
+  Deliberately tiny. The CMS renders a post through the theme this site has
+  chosen, `themes/demo/`, layered over the one inside `@geekity/cms`; this file
+  exists so the same directory also builds as a static site, which is the
+  escape hatch decision-3 promises. A site that wanted both to look alike would
+  point Eleventy at the theme instead of writing this.
 #}
 <!doctype html>
 <html lang="en">
