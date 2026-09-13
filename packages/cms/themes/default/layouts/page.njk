@@ -1,14 +1,50 @@
+{#
+  One page, as the source design's `content-page.php` draws it (decision-16,
+  TASK-83): the same `blog-post h-entry` a post is, with the same Published
+  line inside the `e-content` and the same bio under a rule.
+
+  What a page does not have: an IndieNews link, since it is not a post
+  anybody syndicates; neighbours, since it is in no archive; and taxonomy,
+  since only posts are filed. The bio credits `siteAuthor` — a page is by
+  whoever the site is by, not by the person a front matter line names.
+#}
 {% extends "layouts/base.njk" %}
 
+{#- Who the bio credits, and what tells `layouts/base.njk` the site menu is in
+    the bio rather than in the page footer. -#}
+{% set bioAuthor = siteAuthor %}
+
 {% block content %}
-<article class="page h-entry">
-  <header class="page-header">
-    <h1 class="page-title p-name">{{ title }}</h1>
+{% set entryUrl = page.url or url %}
+<article class="blog-post h-entry">
+  <header>
+    <h1 class="p-name">{{ title }}</h1>
   </header>
 
-  <div class="page-body e-content">
+  <section class="e-content">
     {{ content | safe }}
-  </div>
+    {#- Most pages carry no date at all — a colophon was not published on a
+        Tuesday — so this line is often empty, and empty is what it renders:
+        the stylesheet hides a `:empty` meta paragraph rather than the layout
+        deciding twice whether there is anything to say. -#}
+    <p class="page-meta">
+      {%- if date %}
+      <a href="{{ entryUrl | url }}" class="u-url"><time class="small dt-published" datetime="{{ date | date("iso") }}">Published {{ date | date }}</time></a>
+      {%- endif %}
+      {%- if updated and (not date or (updated | date("html")) != (date | date("html"))) %}
+      {% if date %}<br>{% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date }}</time>
+      {%- endif -%}
+    </p>
+  </section>
+
+  {#- The rule and the footer are the bio's own: a site whose author setting
+      names nobody with an account here ends the page at its words. -#}
+  {% if bioAuthor %}
+  <hr>
+  <footer>
+    {% include "partials/bio.njk" %}
+  </footer>
+  {% endif %}
 </article>
 
 {# Only a page whose front matter says `contact: true` has one (TASK-56). #}

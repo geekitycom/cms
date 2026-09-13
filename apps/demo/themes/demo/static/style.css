@@ -247,18 +247,16 @@ a:visited {
   color: var(--ink-muted);
 }
 
-/* Tags */
+/* Tags. The packaged macro prints them as the same paragraph of `p-category`
+   links the categories are (TASK-83); the demo's post layout wraps that
+   paragraph so its tags keep the hash and the small caps they had. */
 
-.tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+.post-tags .post-categories {
   margin: 0.75rem 0 0;
-  padding: 0;
-  list-style: none;
 }
 
-.tag {
+.post-tags a {
+  margin-right: 0.75rem;
   color: var(--ink-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.75rem;
@@ -266,12 +264,12 @@ a:visited {
   text-transform: uppercase;
 }
 
-.tag::before {
+.post-tags a::before {
   content: '#';
 }
 
-.tag:hover,
-.tag:focus {
+.post-tags a:hover,
+.post-tags a:focus {
   color: var(--ink);
 }
 

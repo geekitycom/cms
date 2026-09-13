@@ -964,7 +964,7 @@ describe('overriding one template', () => {
 
     for (const [url, marker] of [
       ['/', 'global-header'],
-      ['/about/', 'page-body'],
+      ['/about/', 'page-meta'],
       ['/tag/eleventy/', 'Tagged'],
       ['/nothing-here/', 'Not found'],
     ] as const) {

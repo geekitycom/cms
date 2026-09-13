@@ -19,7 +19,7 @@ themes/default/
     post-list.njk     the h-feed a listing is made of
     pagination.njk    previous/next pager
     tags.njk          macros for tag and category links
-    byline.njk        who wrote a post, linked to their archive
+    bio.njk           who an entry is by, as an h-card, with the site menu
     feeds.njk         macros for the feed links in <head>
     conversation.njk  the replies, likes and boosts under a post
     comment-form.njk  the form under a post that is taking comments
@@ -169,6 +169,111 @@ deliberately not in the package. They go in a site theme's `footer` block:
 </p>
 {% endblock %}
 ```
+
+### An entry
+
+`layouts/post.njk` and `layouts/page.njk` draw the same thing, the source
+design's entry, and it is a microformats2 `h-entry`:
+
+```html
+<article class="blog-post h-entry">
+  <header>
+    <h1 class="p-name">Hello</h1>
+  </header>
+  <section class="e-content">
+    <p>The rendered body.</p>
+    <p class="entry-meta">
+      <a class="u-category small" href="https://news.indieweb.org/en"
+        >#indienews</a
+      >
+      <a href="/2026/09/hello/" class="u-url"
+        ><time class="small dt-published" datetime="2026-09-02T09:00:00.000Z"
+          >Published 2 September 2026</time
+        ></a
+      >
+      <br /><time class="small dt-updated" datetime="2026-09-05T09:00:00.000Z"
+        >Updated 5 September 2026</time
+      >
+    </p>
+  </section>
+  <p class="post-categories">…categories…</p>
+  <p class="post-categories">…tags…</p>
+  <hr />
+  <footer>…the bio…</footer>
+</article>
+<nav class="blog-post-nav">…the posts either side…</nav>
+```
+
+**The Published line is inside the `e-content`**, which is the one thing about
+this shape worth knowing. It is what the source theme does: the date and the
+permalink are part of the words, so a reader — or a fediverse peer reading the
+`e-content` — takes them with the post. The permalink wraps the `dt-published`
+time as a `u-url`, and a `dt-updated` line follows it only when the update
+happened on a different day in the site's own timezone; a typo fixed an hour
+later is not news. A post tagged `indienews` opens the line with a
+`u-category` link to <https://news.indieweb.org/en>, which is how IndieNews is
+told the post is for it; a page never prints one, and its line is a
+`p.page-meta` rather than a `p.entry-meta`.
+
+What it is filed under is printed under the words and inside the article, so
+that each link is a `p-category` of this entry: the categories first, then the
+tags, each as one `p.post-categories` from `partials/tags.njk`.
+
+After the entry a post prints `nav.blog-post-nav`, `rel="prev"` and
+`rel="next"` links to `previous` and `next` with an arrow either side, and
+nothing at all at the ends of the archive; then the conversation and the
+comment form. A page prints the contact form when its front matter asked for
+one. A page has no neighbours, no taxonomy and no IndieNews link, because none
+of those are things a page has.
+
+### The bio
+
+`partials/bio.njk` is who the page is by: the `p-author h-card` the rule and
+the footer at the end of an entry hold, and the heading of an author archive.
+It replaces `partials/byline.njk`, which is gone — a byline was a name in a
+meta line, and this is the whole credit.
+
+```njk
+{% set bioAuthor = author or siteAuthor %}
+{% include "partials/bio.njk" %}
+```
+
+`bioAuthor` is the one thing to set, and nothing renders when it is absent.
+It is one of the profile objects the context already carries: `author` on a
+post, falling back to `siteAuthor`; `siteAuthor` on a page; the archive's
+person on an author archive. `layouts/base.njk` reads it too — see
+[Navigation](#navigation).
+
+What the bio prints: a round `u-photo` at 50px when they have an avatar,
+"Written by" and their name as a `p-name u-url` linked `rel="author me"` to
+their archive, then `p-job-title` and `p-locality` when the profile says. A
+name this site has no account for is printed unlinked, because the file still
+said somebody wrote this. Then the site menu.
+
+`bioLead` is what the line opens with, `Written by` unless a layout sets
+another; `layouts/author.njk` sets `Posts by`, because the card there heads
+somebody's writing rather than crediting one piece of it.
+
+Set `bioProfile` as well and it also prints their `p-note` and their `rel="me"`
+links; `layouts/author.njk` does, because that page is about the person rather
+than about something they wrote. An entry leaves it unset: the page footer
+already prints the site's identity links, and the `rel="author me"` link leads
+to the archive where this person's own are.
+
+**A site that used `partials/byline.njk`** — `{{ byline.line(author) }}` from
+an overridden layout — either includes this partial instead or writes the line
+itself. It was four lines of markup, and the object behind it has not changed:
+
+```njk
+{% set writer = author or { name: site.author } %}
+<span class="p-author h-card">
+  {%- if writer.url %}<a class="u-url" href="{{ writer.url | url }}">{{ writer.name }}</a>
+  {%- else %}{{ writer.name }}{% endif %}
+</span>
+```
+
+`apps/demo/themes/demo/layouts/post.njk` is that, worked: the demo wants a
+byline under the title rather than a bio in the footer, so it writes one.
 
 ### A listing
 
@@ -564,23 +669,20 @@ which is the one place identity is written:
 | `author.location` | Where they are, as they wrote it.                                                                              |
 | `author.links`    | `{ label, href }` for each link on their profile, in the order they listed them. Absent when they listed none. |
 
-`author` is absent altogether when the document names no author, so a byline is
-`{% if author %}`. Guard the link with `{% if author.url %}`: a file may name
-somebody who has no account here — a guest post, or a colleague whose account
-has gone — and that name is still printed, it simply links nowhere.
-`partials/byline.njk` does both:
-
-```njk
-{% import "partials/byline.njk" as byline %}
-by {{ byline.line(author) }}
-```
+`author` is absent altogether when the document names no author, so anything
+printing it is `{% if author %}`. Guard the link with `{% if author.url %}`: a
+file may name somebody who has no account here — a guest post, or a colleague
+whose account has gone — and that name is still printed, it simply links
+nowhere. [The bio](#the-bio) does both, and is what the theme prints instead of
+the `partials/byline.njk` it used to have.
 
 `layouts/author.njk` is that person's archive, at `/author/{username}/`, with
 their pages at `/author/{username}/page/2/` and their three feeds under
-`/author/{username}/feed/`. It is headed with the same `author` object — the
-name, the avatar, the bio and the links — and lists their published posts
-newest first. A user with no profile still has one; they are called by their
-username.
+`/author/{username}/feed/`. It is headed with their name and then the bio with
+`bioProfile` set — the avatar, the note and the `rel="me"` links — and lists
+their published posts newest first. The source design has no author archive, so
+the heading is the CMS's own; the h-card under it is the one partial the theme
+has. A user with no profile still has one; they are called by their username.
 
 `siteAuthor` is the same object on a different question: not who wrote this
 document, but who the page in front of the reader is by. It is what the bio,
@@ -609,9 +711,19 @@ it.
 ## Navigation
 
 `menu` is the site menu, already in order and already knowing which of its items
-is the page being looked at. Every template gets it. The design has no header
-navigation, so `layouts/base.njk` renders it in the `footer` block; a layout
-that overrides `header` or `footer` renders it the same way:
+is the page being looked at. Every template gets it.
+
+The design has no header navigation: the menu is the horizontal list inside
+[the bio](#the-bio). So it is printed once, in one of two places. A page with a
+bio — an entry, an author archive — carries it there. A page without one — a
+listing, the 404, a layout of a site's own — gets it from the `footer` block of
+`layouts/base.njk`. What decides is `bioAuthor`: a layout that renders the bio
+sets it, and the footer then leaves the menu out. A layout that sets nothing
+keeps the footer menu, which is why an overridden `layouts/post.njk` does not
+lose the navigation by not having a bio.
+
+The markup is the same either way, and a layout that overrides `header` or
+`footer` writes it the same way:
 
 ```njk
 {% if menu.length %}
@@ -915,9 +1027,11 @@ form.
 ## Taxonomy macros
 
 `partials/tags.njk` holds one macro per taxonomy, and each renders nothing at
-all for an empty list. `list` is a `<ul>` of tag links; `categories` is one
-paragraph of `p-category` links, which is the shape the design prints in a feed
-item's meta line and under an entry:
+all for an empty list. Both are one `p.post-categories` of `p-category` links,
+which is the shape the design prints in a feed item's meta line and under an
+entry — `categories` marks each link `rel="category"` and `list` marks each
+`rel="tag"`, so under an entry the two read as one line of what it is filed
+under, categories first:
 
 ```njk
 {% import "partials/tags.njk" as taxonomy with context %}

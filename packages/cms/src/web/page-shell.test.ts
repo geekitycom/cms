@@ -137,9 +137,15 @@ function header(html: string): string {
   return /<header class="global-header">([\s\S]*?)<\/header>/.exec(html)?.[1] ?? '';
 }
 
-/** The `<footer>…</footer>` of a page. */
+/**
+ * The `<footer>…</footer>` of the page: the one after `</main>`.
+ *
+ * An entry prints a `<footer>` of its own, holding the bio (TASK-83), so the
+ * first one in the document is not the page's.
+ */
 function footer(html: string): string {
-  return /<footer>([\s\S]*?)<\/footer>/.exec(html)?.[1] ?? '';
+  const afterMain = html.slice(html.lastIndexOf('</main>'));
+  return /<footer>([\s\S]*?)<\/footer>/.exec(afterMain)?.[1] ?? '';
 }
 
 /** The `content` of one `<meta>`, by whichever of `name` or `property` it uses. */
@@ -255,7 +261,39 @@ describe('the page shell (AC #1)', () => {
     for (const pathname of ['/', '/about/', '/2026/09/hello/']) {
       const html = await body(cms, pathname);
       assert.doesNotMatch(header(html), /<nav/, `${pathname} still has a header menu`);
+      // Nobody here answers to the site's author setting, so no page has a bio
+      // to carry the menu and the footer prints it everywhere (TASK-83).
       assert.match(footer(html), /<nav class="site-nav"/, `${pathname} lost the menu altogether`);
+    }
+  });
+
+  it('moves the menu into the bio on a page that has one', async () => {
+    const cms = await site({
+      author: 'Ada Lovelace',
+      navigation: [{ label: 'About', url: '/about/' }],
+    });
+    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+
+    // An entry credits somebody, so the menu is the horizontal list in its
+    // bio, where the source design reads it. A listing has no bio, so the
+    // footer keeps it. Either way it is on the page exactly once.
+    for (const [pathname, inTheBio] of [
+      ['/about/', true],
+      ['/2026/09/hello/', true],
+      ['/', false],
+      ['/tag/notes/', false],
+    ] as const) {
+      const html = await body(cms, pathname);
+      assert.equal(
+        [...html.matchAll(/class="site-nav"/g)].length,
+        1,
+        `${pathname} does not print the menu exactly once`,
+      );
+      assert.equal(
+        /<nav class="site-nav"/.test(footer(html)),
+        !inTheBio,
+        `${pathname} has the menu in the wrong place`,
+      );
     }
   });
 });

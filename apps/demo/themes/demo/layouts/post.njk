@@ -11,16 +11,23 @@
   <head>, the header or the footer either. What it adds is a byline and a
   reading time, which is what makes the override visible in a browser.
 
-  The byline comes from the packaged `partials/byline.njk`, because `author` is
-  the post's author as a profile rather than as a string (TASK-67): `name` to
-  print, and `url` to link to their archive when the name is one of the site's
-  users. A post that names nobody falls back to the site's own author, which is
-  a name and nothing else.
+  The byline is the demo's own markup. The packaged theme's is
+  `partials/bio.njk`, the whole `p-author h-card` the andrewshell.org design
+  puts in an entry's footer (TASK-83); this site wants a line under the title
+  instead, so it writes the `h-card` itself and reads the same object the
+  packaged bio would. `author` is the post's author as a profile rather than as
+  a string (TASK-67): `name` to print, and `url` to link to their archive when
+  the name is one of the site's users. A post that names nobody falls back to
+  the site's own author, which is a name and nothing else.
+
+  This layout renders no bio, so the packaged base layout keeps printing the
+  site menu in the page footer — that is what `bioAuthor` decides, and a
+  layout that says nothing about it gets the footer menu.
 #}
 {% extends "layouts/base.njk" %}
 {% import "partials/tags.njk" as taxonomy with context %}
-{% import "partials/byline.njk" as byline %}
 
+{% set writer = author or { name: site.author } %}
 {% set minutes = ((content | striptags | wordcount) / 220) | round(0, "ceil") %}
 
 {% block content %}
@@ -28,7 +35,14 @@
   <header class="post-header">
     <h1 class="post-title p-name">{{ title }}</h1>
     <p class="post-byline">
-      by {{ byline.line(author or { name: site.author }) }}
+      by
+      <span class="p-author h-card">
+        {%- if writer.url %}
+        <a class="u-url" href="{{ writer.url | url }}">{{ writer.name }}</a>
+        {%- else %}
+        {{ writer.name }}
+        {%- endif %}
+      </span>
     </p>
     <p class="post-meta">
       {% if date %}
@@ -50,7 +64,10 @@
   {% if tags.length or categories.length %}
   <footer class="post-footer">
     {{ taxonomy.categories(categories) }}
-    {{ taxonomy.list(tags) }}
+    {#- The tag macro prints the same paragraph of `p-category` links the
+        categories are (TASK-83). The demo wants its tags hashed and in small
+        caps, so it wraps them and styles the wrapper. -#}
+    <div class="post-tags">{{ taxonomy.list(tags) }}</div>
   </footer>
   {% endif %}
 </article>

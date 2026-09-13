@@ -116,7 +116,11 @@ describe('a site that has chosen no theme', () => {
     const { cms } = await site({ themes: ['midnight', 'daylight'] });
 
     const post = await body(cms, '/2026/09/hello/');
-    assert.match(post, /<article class="post h-entry">/, 'the packaged post layout drew the page');
+    assert.match(
+      post,
+      /<article class="blog-post h-entry">/,
+      'the packaged post layout drew the page',
+    );
     assert.doesNotMatch(post, /midnight|daylight/, 'no unchosen theme reached the page');
 
     const stylesheet = await body(cms, '/theme/style.css');
@@ -177,7 +181,7 @@ describe('changing the theme', () => {
         themes: ['midnight', 'daylight'],
         config: { watch },
       });
-      assert.match(await body(cms, '/2026/09/hello/'), /<article class="post h-entry">/);
+      assert.match(await body(cms, '/2026/09/hello/'), /<article class="blog-post h-entry">/);
 
       await choose(contentDir, 'midnight');
       assert.match(await body(cms, '/2026/09/hello/'), /<h1>midnight: Hello<\/h1>/);
@@ -188,7 +192,7 @@ describe('changing the theme', () => {
       assert.equal(await body(cms, '/theme/style.css'), '/* daylight */\n');
 
       await choose(contentDir, undefined);
-      assert.match(await body(cms, '/2026/09/hello/'), /<article class="post h-entry">/);
+      assert.match(await body(cms, '/2026/09/hello/'), /<article class="blog-post h-entry">/);
     });
   }
 
@@ -199,7 +203,7 @@ describe('changing the theme', () => {
     await rm(path.join(themesDir, 'midnight'), { recursive: true, force: true });
 
     const said = await warnings(async () => {
-      assert.match(await body(cms, '/2026/09/hello/'), /<article class="post h-entry">/);
+      assert.match(await body(cms, '/2026/09/hello/'), /<article class="blog-post h-entry">/);
       assert.match(await body(cms, '/theme/style.css'), /body/);
       assert.equal((await cms.app.request('/nothing-here/')).status, 404);
     });

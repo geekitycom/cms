@@ -183,7 +183,10 @@ describe('the demo with its theme unchosen', () => {
   it('serves a post through the packaged post layout', async () => {
     const body = await bareText('/2026/08/markdown-on-disk/');
 
-    assert.match(body, /<p class="post-meta">\s*Published/, 'not the packaged meta line');
+    // The packaged entry is the andrewshell.org one (TASK-83): the Published
+    // line lives inside the `e-content`, not in a meta line under the title.
+    assert.match(body, /<article class="blog-post h-entry">/, 'not the packaged entry');
+    assert.match(body, /<p class="entry-meta">[\s\S]*?Published/, 'not the packaged meta line');
     assert.doesNotMatch(body, /post-byline/, 'the unchosen theme is still on the search path');
     assert.doesNotMatch(body, /minute read/, 'the unchosen theme is still on the search path');
   });

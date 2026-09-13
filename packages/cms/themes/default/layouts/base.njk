@@ -17,6 +17,10 @@
     content     the page body
     footer      the site footer
     scripts     scripts at the end of <body>
+
+  One variable crosses between a layout and this file: `bioAuthor`, whoever an
+  entry's bio credits. A layout that prints `partials/bio.njk` sets it, and the
+  footer here leaves the site menu out because the bio is carrying it.
 #}{% import "partials/feeds.njk" as feeds %}
 {#- Whether this is the front page, which is the one page the header and the
     stylesheet treat differently. `page.url` is the URL being served rather
@@ -141,11 +145,15 @@
           {% endif %}
         </ul>
         {#
-          The site menu, until TASK-83 moves it into the bio where the design
-          puts it. It is in the footer block rather than the header because the
-          design has no header navigation.
+          The site menu, on a page that has no bio to carry it.
+
+          The design has no header navigation: the menu is the horizontal list
+          inside the bio (TASK-83), which an entry and an author archive print
+          and a listing, a 404 or a layout of a site's own does not. So a
+          layout that renders a bio sets `bioAuthor`, and this prints the menu
+          only where nothing else did — the menu is on every page, once.
         #}
-        {% if menu.length %}
+        {% if menu.length and not bioAuthor %}
         <nav class="site-nav" aria-label="Site">
           <ul class="hlist">
             {% for item in menu %}

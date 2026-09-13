@@ -4,14 +4,17 @@
    it. #}
 
 {# A list of tag links, under whatever base the site serves its archives at
-   (`site.tagBase`, `tag` by default). Renders nothing when the list is empty. #}
+   (`site.tagBase`, `tag` by default). The same paragraph of `p-category`
+   links the categories are — under an entry the two read as one line of what
+   it is filed under, categories first — with `rel="tag"`, which is what a
+   parser reads a tag by. Renders nothing when the list is empty. #}
 {% macro list(tags) %}
 {% if tags and tags.length %}
-<ul class="tag-list">
+<p class="post-categories">
   {% for tag in tags %}
-  <li><a class="tag" href="{{ ("/" + (site.tagBase or "tag") + "/" + (tag | urlencode) + "/") | url }}">{{ tag }}</a></li>
+  <a href="{{ ("/" + (site.tagBase or "tag") + "/" + (tag | urlencode) + "/") | url }}" class="p-category" rel="tag">{{ tag }}</a>
   {% endfor %}
-</ul>
+</p>
 {% endif %}
 {% endmacro %}
 

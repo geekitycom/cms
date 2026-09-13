@@ -4,10 +4,20 @@
   decision-14 makes this URL their ActivityPub actor as well, so a peer asking
   for the actor and a reader asking for the page are at the same address; this
   is the page half of it. `author` is the profile — `name`, and whatever of
-  `bio`, `avatar` and `links` they have written — and it is the same shape a
-  byline under a post is given.
+  `bio`, `avatar` and `links` they have written — and it is the same shape an
+  entry's bio is given.
+
+  The source design has no author archive, so there is nothing to port: the
+  heading is the CMS's own. What it does not keep is an h-card of its own.
+  `partials/bio.njk` is the one the theme has, and `bioProfile` asks it for the
+  whole profile — the note and the `rel="me"` links — because this page is
+  about that person rather than about something they wrote.
 #}
 {% extends "layouts/base.njk" %}
+
+{% set bioAuthor = author %}
+{% set bioProfile = true %}
+{% set bioLead = "Posts by" %}
 
 {% block title %}{{ author.name }}{% if pagination.pageNumber > 0 %}, page {{ pagination.pageNumber + 1 }}{% endif %} &middot; {{ site.title }}{% endblock %}
 
@@ -18,22 +28,10 @@
 {% endblock %}
 
 {% block content %}
-<header class="author-header h-card">
-  {% if author.avatar %}
-  <img class="author-avatar u-photo" src="{{ author.avatar | url }}" alt="" width="96" height="96">
-  {% endif %}
-  <h1 class="page-title p-name">{{ author.name }}</h1>
-  {% if author.bio %}
-  <p class="author-bio p-note">{{ author.bio }}</p>
-  {% endif %}
-  {% if author.links.length %}
-  <ul class="author-links">
-    {% for link in author.links %}
-    <li><a class="u-url" rel="me" href="{{ link.href }}">{{ link.label }}</a></li>
-    {% endfor %}
-  </ul>
-  {% endif %}
+<header class="author-header">
+  <h1 class="page-title">{{ author.name }}</h1>
 </header>
+{% include "partials/bio.njk" %}
 {% include "partials/post-list.njk" %}
 {% include "partials/pagination.njk" %}
 {% endblock %}

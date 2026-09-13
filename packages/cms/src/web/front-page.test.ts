@@ -143,7 +143,7 @@ describe('a site whose homepage is a page', () => {
     );
 
     const fallback = await (await cms.app.request('/')).text();
-    assert.match(fallback, /class="page h-entry"/, 'the page layout renders it until then');
+    assert.match(fallback, /<p class="page-meta">/, 'the page layout renders it until then');
 
     await writeTree(themeDir, {
       'layouts/front-page.njk':
@@ -156,7 +156,7 @@ describe('a site whose homepage is a page', () => {
     // It is the front page's layout and nobody else's: every other page still
     // goes through `page.njk`.
     const other = await (await cms.app.request('/news/')).text();
-    assert.match(other, /class="page h-entry"/);
+    assert.match(other, /<p class="page-meta">/);
     assert.doesNotMatch(other, /class="front"/);
   });
 
@@ -232,7 +232,7 @@ describe('a pick whose page is not published any more', () => {
     assert.equal((await cms.app.request('/page/2/')).status, 200, 'the pages are back at the root');
 
     const news = await (await cms.app.request('/news/')).text();
-    assert.match(news, /class="page h-entry"/, 'and the posts page is an ordinary page again');
+    assert.match(news, /<p class="page-meta">/, 'and the posts page is an ordinary page again');
   });
 
   it('does the same when the page is drafted after it was picked (AC #4)', async () => {
@@ -349,7 +349,7 @@ describe('a site with a posts page', () => {
     assert.match(html, /Newest/, 'the listing is at the root, where it always was');
 
     const news = await (await cms.app.request('/news/')).text();
-    assert.match(news, /class="page h-entry"/, 'and News is an ordinary page');
+    assert.match(news, /<p class="page-meta">/, 'and News is an ordinary page');
     assert.doesNotMatch(news, /Newest/);
   });
 });

@@ -1,0 +1,77 @@
+{#
+  Who the page in front of the reader is by: the `p-author h-card` the source
+  design puts in an entry's footer (decision-16, TASK-83).
+
+  It replaces `partials/byline.njk`, which printed a name in a meta line. This
+  is the whole credit — a round photo, "Written by" linked to their archive
+  with `rel="author me"`, what they do, where they are — and under it the site
+  menu, because the design has no navigation in the header and this is where it
+  reads it. The menu is here and not in the page footer whenever a page has a
+  bio; `layouts/base.njk` prints it in the footer on the pages that have none.
+
+  Set `bioAuthor` before including it and nothing renders when that is absent:
+
+    {% set bioAuthor = author %}
+    {% include "partials/bio.njk" %}
+
+  `bioAuthor` is one of the profile objects the context carries — `author` on a
+  post, `siteAuthor` on a page, the archive's person on an author archive — so
+  what a reader sees and what `partials/jsonld.njk` says come from one record
+  and cannot drift. Every field but `name` is optional: a profile with nothing
+  in it prints a name and nothing else, and a name this site has no account for
+  is printed unlinked, because the file still said somebody wrote this.
+
+  `bioLead` is what the line opens with, "Written by" unless a layout says
+  otherwise. An author archive sets "Posts by", because the card there heads a
+  list of somebody's writing rather than crediting one piece of it.
+
+  `bioProfile` is the second switch. Set it and the bio also prints their
+  `p-note` and their `rel="me"` links, which is what an author archive wants —
+  the page is about them. An entry leaves it unset: the page footer already
+  prints the site's identity links, and the `rel="author me"` link above leads
+  to the archive where this person's own are.
+#}
+{% if bioAuthor %}
+<div class="bio p-author h-card">
+  {%- if bioAuthor.avatar %}
+  <div class="bio-avatar">
+    <img class="u-photo" src="{{ bioAuthor.avatar | url }}" alt="{{ bioAuthor.name }}" width="50" height="50">
+  </div>
+  {%- endif %}
+
+  <div>
+    <p>
+      {{ bioLead | default("Written by") }}
+      {%- if bioAuthor.url %}
+      <a class="u-url p-name" rel="author me" href="{{ bioAuthor.url | url }}">{{ bioAuthor.name }}</a>
+      {%- else %}
+      <strong class="p-name">{{ bioAuthor.name }}</strong>
+      {%- endif %}
+      {%- if bioAuthor.jobTitle %}, a <span class="p-job-title">{{ bioAuthor.jobTitle }}</span>{% endif %}
+      {%- if bioAuthor.location %} from <span class="p-locality">{{ bioAuthor.location }}</span>{% endif %}.
+    </p>
+
+    {%- if bioProfile and bioAuthor.bio %}
+    <p class="bio-note p-note">{{ bioAuthor.bio }}</p>
+    {%- endif %}
+
+    {%- if menu.length %}
+    <nav class="site-nav" aria-label="Site">
+      <ul class="hlist">
+        {%- for item in menu %}
+        <li><a href="{{ item.url | url }}"{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
+        {%- endfor %}
+      </ul>
+    </nav>
+    {%- endif %}
+
+    {%- if bioProfile and bioAuthor.links.length %}
+    <ul class="hlist bio-links">
+      {%- for link in bioAuthor.links %}
+      <li><a class="u-url" rel="me" href="{{ link.href }}">{{ link.label }}</a></li>
+      {%- endfor %}
+    </ul>
+    {%- endif %}
+  </div>
+</div>
+{% endif %}

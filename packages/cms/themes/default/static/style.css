@@ -616,7 +616,35 @@ pre code {
   text-decoration: none;
 }
 
-/* The bio, which the entry footer prints (TASK-83). */
+/* An entry: a post or a page (TASK-83). The source design's own rules — the
+   title tight against the words under it, a subtitle in the heading font —
+   plus the small line the `e-content` ends on, which carries the permalink,
+   the published date and, when it is a different day, the updated one. */
+
+.blog-post header h1 {
+  margin: var(--spacing-0) var(--spacing-0) var(--spacing-4) var(--spacing-0);
+}
+
+.blog-post header p {
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-2);
+}
+
+.entry-meta,
+.page-meta {
+  margin-top: var(--spacing-8);
+}
+
+/* A page usually carries no date, and then this line has nothing in it. The
+   layout prints it anyway, so a site has one hook wherever it is; here is
+   where it disappears. */
+.entry-meta:empty,
+.page-meta:empty {
+  display: none;
+}
+
+/* The bio, which the entry footer prints and an author archive heads with
+   (TASK-83). */
 
 .bio {
   display: flex;
@@ -626,6 +654,26 @@ pre code {
 
 .bio p {
   margin-bottom: var(--spacing-0);
+}
+
+/* The name reads as the heading of the card; the source theme printed a
+   <strong> around it, which is styling in the markup. */
+.bio .p-name {
+  font-weight: var(--fontWeight-bold);
+}
+
+.bio-note {
+  margin-top: var(--spacing-2);
+  font-style: italic;
+}
+
+/* The site menu, and an author archive's `rel="me"` links: both horizontal
+   lists under the credit, small, in the heading font like every other piece
+   of navigation. */
+.bio .site-nav,
+.bio-links {
+  margin-top: var(--spacing-2);
+  font-size: var(--fontSize-0);
 }
 
 .bio-avatar {
@@ -726,6 +774,11 @@ pre code {
 
 /* Where a post links its neighbours, which the entry layout prints (TASK-83). */
 
+.blog-post-nav {
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
+}
+
 .blog-post-nav ul {
   display: flex;
   flex-wrap: wrap;
@@ -737,23 +790,17 @@ pre code {
 
 /*
  * What follows styles the markup the theme prints today and is rewritten as the
- * design lands: the entry and its bio in TASK-83, the conversation and the
- * forms in TASK-84. It is carried onto the tokens above rather than deleted so
- * that nothing goes unstyled in between.
+ * design lands: the conversation and the forms in TASK-84. It is carried onto
+ * the tokens above rather than deleted so that nothing goes unstyled in
+ * between.
  */
 
-/* Titles */
+/* Titles: what heads a listing, a 404 and an author archive. An entry's own
+   title is `.blog-post header h1` above. */
 
-.page-title,
-.post-title {
+.page-title {
   margin: 0 0 var(--spacing-2);
   font-size: var(--fontSize-6);
-}
-
-.post-meta {
-  margin: 0 0 var(--spacing-8);
-  font-family: var(--font-heading);
-  font-size: var(--fontSize-0);
 }
 
 .empty {
@@ -763,74 +810,32 @@ pre code {
 
 /* An author archive (TASK-67): the person above their posts. The same URL is
    their ActivityPub actor, so this is the page a follower sees when they click
-   through from somewhere else on the fediverse. */
+   through from somewhere else on the fediverse. The person themselves is the
+   bio above; this is only what is left, the heading over it. */
 
 .author-header {
-  margin-bottom: var(--spacing-6);
+  margin-bottom: var(--spacing-4);
 }
 
-.author-avatar {
-  display: block;
-  width: 96px;
-  height: 96px;
-  margin-bottom: var(--spacing-3);
-  border-radius: 50%;
-  object-fit: cover;
-}
+/* Body copy: whatever a document's words render into, which is the entry's
+   `section.e-content` and the `div.page-body.e-content` a posts page prints
+   its own words in. */
 
-.author-bio {
-  margin: var(--spacing-2) 0;
-}
-
-.author-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-3);
-  margin: var(--spacing-2) 0 0;
-  padding: 0;
-  list-style: none;
-  font-family: var(--font-heading);
-  font-size: var(--fontSize-0);
-}
-
-/* Tags: the list an entry still prints, until TASK-83 rewrites its footer. */
-
-.tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-2);
-  margin: var(--spacing-3) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.tag {
-  font-family: var(--font-heading);
-  font-size: var(--fontSize-0);
-}
-
-/* Body copy */
-
-.post-body,
-.page-body {
+.e-content {
   overflow-wrap: break-word;
 }
 
-.post-body > :first-child,
-.page-body > :first-child {
+.e-content > :first-child {
   margin-top: 0;
 }
 
-.post-body table,
-.page-body table {
+.e-content table {
   display: block;
   overflow-x: auto;
 }
 
-.post-body th,
-.post-body td,
-.page-body th,
-.page-body td {
+.e-content th,
+.e-content td {
   padding: var(--spacing-1) var(--spacing-3);
   text-align: start;
 }
@@ -844,10 +849,6 @@ pre code {
 
 .footnote-item p {
   display: inline;
-}
-
-.post-footer {
-  margin-top: var(--spacing-10);
 }
 
 /* The conversation: fediverse replies, likes and boosts under a post. */

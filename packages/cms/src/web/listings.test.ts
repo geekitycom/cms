@@ -308,7 +308,11 @@ describe('what heads a listing (AC #3)', () => {
 
     assert.match(inside, /class="[^"]*h-card"/, 'the header is not an h-card');
     assert.match(inside, /class="[^"]*u-photo"[^>]*src="\/uploads\/ada\.jpg"/, 'no u-photo');
-    assert.match(inside, /class="[^"]*p-name">Ada Lovelace</, 'no p-name');
+    assert.match(
+      inside,
+      /<a class="u-url p-name" rel="author me" href="\/author\/ada\/">Ada Lovelace<\/a>/,
+      'no p-name',
+    );
     assert.match(inside, /class="[^"]*p-note">Wrote the first program\.</, 'no p-note');
     assert.match(
       inside,
