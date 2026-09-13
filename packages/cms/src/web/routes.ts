@@ -1,5 +1,7 @@
 import type { Context, Hono } from 'hono';
 
+import { listUsers } from '../admin/accounts.ts';
+import type { User } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
@@ -25,6 +27,14 @@ import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
 import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
 import { mountNotificationLinks } from '../notifications/routes.ts';
+import {
+  authorFeedHref,
+  authorHref,
+  authorNames,
+  parseAuthorPath,
+  profileContext,
+} from './authors.ts';
+import type { AuthorContext } from './authors.ts';
 import { feedComments, spokenIn } from './conversation.ts';
 import { isPublicDocument, publicDocumentAt } from './documents.ts';
 import {
@@ -133,7 +143,7 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // paths are fixed — only the taxonomy feeds hang off a configurable base —
   // so the route table can hold them.
   for (const format of FEED_FORMATS) {
-    app.get(feedPathUnder('/', format), (c) => feed(c, format, undefined));
+    app.get(feedPathUnder('/', format), (c) => feed(c, format, {}));
   }
 
   // The site-wide comments feed, for the same reason and at WordPress's URL.
@@ -171,6 +181,7 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   const { store, renderer } = c.var;
   const pathname = requestPath(c);
   const bases = renderer.taxonomyBases();
+  const authors = authorsOf(c);
   const pages = frontPages(c);
 
   // The posts page carries the listing at its own URL, so it is answered
@@ -188,15 +199,23 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     }
   }
 
-  const feedRequest = parseFeedPath(store, pathname, bases);
+  const feedRequest = parseFeedPath(store, pathname, bases, authors);
   if (feedRequest !== undefined) {
     const { target, format } = feedRequest;
     if (!feedRequest.canonical) return c.redirect(feedTargetHref(target, format, bases), 301);
-    return target.kind === 'listing' ? feed(c, format, target.term) : comments(c, target.document);
+    return target.kind === 'listing'
+      ? feed(c, format, target.subject)
+      : comments(c, target.document);
   }
 
-  const archive = taxonomyArchive(c, pathname, bases);
+  const archive = taxonomyArchive(c, pathname, bases, authors);
   if (archive !== undefined) return archive;
+
+  // And one person's, which is the same kind of thing at a path the site
+  // reserves: `author` is never a document's first segment, so this can be
+  // answered before the permalink lookup without anything being shadowed.
+  const byAuthor = authorArchive(c, pathname, bases, authors);
+  if (byAuthor !== undefined) return byAuthor;
 
   const document = publicDocumentAt(store, pathname);
   if (document !== undefined) {
@@ -238,13 +257,13 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     // representations a listing has.
     if (LISTING_REPRESENTATIONS.includes(extension.representation)) {
       for (const candidate of extension.paths) {
-        const request = listingRequestAt(pages, candidate, bases);
+        const request = listingRequestAt(pages, candidate, bases, authors);
         if (request !== undefined) return listing(c, request, extension.representation);
       }
     }
   }
 
-  const canonical = canonicalPath(c, pathname, bases);
+  const canonical = canonicalPath(c, pathname, bases, authors);
   if (canonical !== undefined) return c.redirect(canonical, 301);
 
   return notFound(c);
@@ -263,25 +282,58 @@ function taxonomyArchive(
   c: Context<GeekityEnv>,
   pathname: string,
   bases: TaxonomyBases,
+  authors: AuthorLookup,
 ): Response | undefined {
   if (!pathname.endsWith('/')) return undefined;
 
-  const request = parseListingPath(pathname, bases);
+  const request = parseListingPath(pathname, bases, authors);
   if (request?.term === undefined) return undefined;
 
   // An archive that answers is served; only once nothing carries the term is
   // the record of renames consulted, so a term that comes back into use — or
   // one that was merged into and then recreated — beats what it used to be
   // called. One hop: the list is stored with its chains already collapsed.
-  if (countListing(c.var.store, request.term) === 0) {
+  if (countListing(c.var.store, request) === 0) {
     const moved = movedTerm(c, request.term);
     if (moved !== undefined) return c.redirect(termHref(moved, request.pageNumber, bases), 301);
   }
 
   const canonical = termHref(request.term, request.pageNumber, bases);
   if (canonical !== encodePath(pathname)) {
-    return countListing(c.var.store, request.term) === 0 ? notFound(c) : c.redirect(canonical, 301);
+    return countListing(c.var.store, request) === 0 ? notFound(c) : c.redirect(canonical, 301);
   }
+
+  return listing(c, request);
+}
+
+/**
+ * One person's archive, the redirect that puts it at its canonical URL, or
+ * `undefined` when the path is not one.
+ *
+ * Unlike a taxonomy archive it does not depend on there being anything on it.
+ * A tag exists only while something carries it; a person exists because they
+ * have an account, and after decision-14 this URL is the id their followers
+ * file them under — so an archive that 404'd until its owner published would
+ * be an account that came into being with a post. What decides the 404 is
+ * whether the username is somebody's, which {@link parseListingPath} has
+ * already asked.
+ *
+ * `/author/{username}/page/1/` collapses onto the archive root the way
+ * `/page/1/` collapses onto the home page.
+ */
+function authorArchive(
+  c: Context<GeekityEnv>,
+  pathname: string,
+  bases: TaxonomyBases,
+  authors: AuthorLookup,
+): Response | undefined {
+  if (!pathname.endsWith('/')) return undefined;
+
+  const request = parseListingPath(pathname, bases, authors);
+  if (request?.author === undefined) return undefined;
+
+  const canonical = authorHref(request.author.user.username, request.pageNumber);
+  if (canonical !== encodePath(pathname)) return c.redirect(canonical, 301);
 
   return listing(c, request);
 }
@@ -297,7 +349,7 @@ function movedTerm(c: Context<GeekityEnv>, term: TaxonomyTerm): TaxonomyTerm | u
 
 /** What a feed URL syndicates. */
 type FeedTarget =
-  | { kind: 'listing'; term: TaxonomyTerm | undefined }
+  | { kind: 'listing'; subject: ListingSubject }
   | { kind: 'comments'; document: Document | undefined };
 
 /** One feed, from the URL it was asked for at. */
@@ -323,6 +375,7 @@ function parseFeedPath(
   store: ContentStore,
   pathname: string,
   bases: TaxonomyBases,
+  authors: AuthorLookup,
 ): FeedRequest | undefined {
   const split = splitFeedPath(pathname);
   if (split === undefined) return undefined;
@@ -334,12 +387,12 @@ function parseFeedPath(
       : undefined;
   }
 
-  const root = parseListingPath(split.root, bases);
+  const root = parseListingPath(split.root, bases, authors);
   // Only a listing root has a feed, and only its first page: a feed is not
   // paginated, so `/{base}/x/page/2/feed/` names nothing.
   if (root !== undefined) {
     return root.pageNumber === 0
-      ? { target: { kind: 'listing', term: root.term }, format, canonical }
+      ? { target: { kind: 'listing', subject: root }, format, canonical }
       : undefined;
   }
 
@@ -356,7 +409,7 @@ function parseFeedPath(
 /** Where the canonical URL of one feed is. */
 function feedTargetHref(target: FeedTarget, format: FeedFormat, bases: TaxonomyBases): string {
   return target.kind === 'listing'
-    ? feedHref(target.term, format, bases)
+    ? listingFeedHref(target.subject, format, bases)
     : commentsFeedHref(target.document);
 }
 
@@ -510,10 +563,11 @@ function canonicalPath(
   c: Context<GeekityEnv>,
   pathname: string,
   bases: TaxonomyBases,
+  authors: AuthorLookup,
 ): string | undefined {
   if (pathname === '' || pathname.endsWith('/')) return undefined;
 
-  const target = canonicalTarget(c, `${pathname}/`, bases);
+  const target = canonicalTarget(c, `${pathname}/`, bases, authors);
   if (target === undefined) return undefined;
 
   return `${target}${new URL(c.req.url).search}`;
@@ -524,19 +578,20 @@ function canonicalTarget(
   c: Context<GeekityEnv>,
   pathname: string,
   bases: TaxonomyBases,
+  authors: AuthorLookup,
 ): string | undefined {
   const { store, renderer } = c.var;
 
   // A feed first: `/feed`, `/feed/atom`, `/{base}/x/feed`, `/comments/feed`
   // and a post's `{permalink}feed` all lead somewhere real, and `/feed/rss`
   // leads to `/feed/` in the same one hop rather than to a second redirect.
-  const feedRequest = parseFeedPath(store, pathname, bases);
+  const feedRequest = parseFeedPath(store, pathname, bases, authors);
   if (feedRequest !== undefined) {
     const { target } = feedRequest;
     if (
       target.kind === 'listing' &&
-      target.term !== undefined &&
-      countListing(store, target.term) === 0
+      target.subject.term !== undefined &&
+      countListing(store, target.subject) === 0
     ) {
       return undefined;
     }
@@ -553,23 +608,74 @@ function canonicalTarget(
     return document.path === pages.home?.path ? '/' : encodePath(pathname);
   }
 
-  const listing = listingRequestAt(pages, pathname, bases);
+  const listing = listingRequestAt(pages, pathname, bases, authors);
   if (listing === undefined) return undefined;
 
-  // The home listing exists even with nothing on it; a taxonomy archive does not.
-  const total = countListing(store, listing.term);
+  // The home listing and an author archive both exist with nothing on them; a
+  // taxonomy archive does not.
+  const total = countListing(store, listing);
   if (listing.term !== undefined && total === 0) return undefined;
 
   const totalPages = Math.max(1, Math.ceil(total / renderer.pageSize()));
   if (listing.pageNumber >= totalPages) return undefined;
 
-  return listingHref(listing.term, listing.pageNumber, bases, listing.document?.permalink ?? '/');
+  return listingHref(listing, listing.pageNumber, bases, listing.document?.permalink ?? '/');
+}
+
+/**
+ * What a listing is over: the whole site, one taxonomy term, or one person.
+ *
+ * Three kinds of archive share one pager, one negotiator and one validator,
+ * and this is the value that says which of them a request is about. Both keys
+ * absent is the home listing — the site's own posts, wherever the Reading
+ * setting has put them.
+ */
+interface ListingSubject {
+  /** The taxonomy archive this is, when it is one. */
+  term?: TaxonomyTerm | undefined;
+  /** The person whose archive this is, when it is one. */
+  author?: AuthorListing | undefined;
+}
+
+/**
+ * One user's archive: the person, and every `author` string the index should
+ * match for them.
+ *
+ * The names are resolved once, where the users file is read, rather than
+ * inside each query: `web/authors.ts` decides which stored spellings read as
+ * this person (a username, and the display name a file written before
+ * decision-14 carries), and the index only ever matches strings.
+ */
+interface AuthorListing {
+  /** Whose archive it is. */
+  user: User;
+  /** Every `author` value that reads as them. */
+  names: readonly string[];
+}
+
+/**
+ * The site's users, as the lookup the listing parser wants.
+ *
+ * Lazy, and read once per request rather than once per call: `users.json` is a
+ * few hundred bytes, but a request that is nothing to do with an author should
+ * not read it at all, and one that is should not read it four times on its way
+ * through the parser, the canonicaliser and the renderer.
+ */
+type AuthorLookup = (username: string) => AuthorListing | undefined;
+
+/** {@link AuthorLookup} over one request's site. */
+function authorsOf(c: Context<GeekityEnv>): AuthorLookup {
+  let users: readonly User[] | undefined;
+
+  return (username) => {
+    users ??= listUsers(c.var.config.dataDir);
+    const user = users.find((candidate) => candidate.username === username);
+    return user === undefined ? undefined : { user, names: authorNames(users, user) };
+  };
 }
 
 /** Which page of which listing a request is for. */
-interface ListingRequest {
-  /** The archive this is, or `undefined` for the home listing. */
-  term: TaxonomyTerm | undefined;
+interface ListingRequest extends ListingSubject {
   /** Zero-based index of the page. */
   pageNumber: number;
   /**
@@ -624,14 +730,19 @@ function listingRequestAt(
   pages: FrontPages,
   pathname: string,
   bases: TaxonomyBases,
+  authors: AuthorLookup,
 ): ListingRequest | undefined {
   const onPostsPage =
     pages.posts === undefined ? undefined : postsPageRequest(pages.posts, pathname);
   if (onPostsPage !== undefined) return onPostsPage;
 
-  const request = parseListingPath(pathname, bases);
+  const request = parseListingPath(pathname, bases, authors);
   if (request === undefined) return undefined;
-  if (request.term === undefined && listingRoot(pages) === undefined) return undefined;
+  // Only the home listing can be homeless. A tag archive and a person's
+  // archive have URLs of their own, whatever the Reading setting says `/` is.
+  if (request.term === undefined && request.author === undefined) {
+    if (listingRoot(pages) === undefined) return undefined;
+  }
   return request;
 }
 
@@ -682,10 +793,15 @@ function postsPageRequest(document: Document, pathname: string): ListingRequest 
 }
 
 /**
- * `/`, `/page/N/`, and either taxonomy's `/{base}/x/` and `/{base}/x/page/N/`,
- * as a listing to check.
+ * `/`, `/page/N/`, `/author/{username}/` and `/author/{username}/page/N/`, and
+ * either taxonomy's `/{base}/x/` and `/{base}/x/page/N/`, as a listing to
+ * check.
  */
-function parseListingPath(pathname: string, bases: TaxonomyBases): ListingRequest | undefined {
+function parseListingPath(
+  pathname: string,
+  bases: TaxonomyBases,
+  authors: AuthorLookup,
+): ListingRequest | undefined {
   const segments = pathname.split('/').filter((segment) => segment !== '');
 
   if (segments.length === 0) return { term: undefined, pageNumber: 0 };
@@ -693,6 +809,15 @@ function parseListingPath(pathname: string, bases: TaxonomyBases): ListingReques
   if (segments[0] === PAGE_SEGMENT && segments.length === 2) {
     const page = pageIndex(segments[1]);
     return page === undefined ? undefined : { term: undefined, pageNumber: page };
+  }
+
+  // One person's archive, at the path decision-14 reserves. A username nobody
+  // has is not a listing at all, which is what turns it into one 404 rather
+  // than an empty archive.
+  const byAuthor = parseAuthorPath(pathname);
+  if (byAuthor !== undefined) {
+    const found = authors(byAuthor.username);
+    return found === undefined ? undefined : { author: found, pageNumber: byAuthor.pageNumber };
   }
 
   const taxonomy = taxonomyForSegment(segments[0], bases);
@@ -708,7 +833,9 @@ function parseListingPath(pathname: string, bases: TaxonomyBases): ListingReques
 }
 
 /** How many published documents a listing holds. */
-function countListing(store: ContentStore, term: TaxonomyTerm | undefined): number {
+function countListing(store: ContentStore, subject: ListingSubject): number {
+  const { term, author } = subject;
+  if (author !== undefined) return store.countByAuthor(author.names);
   if (term === undefined) return store.counts().posts;
   return term.taxonomy === 'tag' ? store.countByTag(term.term) : store.countByCategory(term.term);
 }
@@ -716,9 +843,11 @@ function countListing(store: ContentStore, term: TaxonomyTerm | undefined): numb
 /** One page of a listing's documents, newest first. */
 function listListing(
   store: ContentStore,
-  term: TaxonomyTerm | undefined,
+  subject: ListingSubject,
   paging: ListOptions,
 ): Document[] {
+  const { term, author } = subject;
+  if (author !== undefined) return store.listByAuthor(author.names, paging);
   if (term === undefined) return store.listPosts(paging);
   return term.taxonomy === 'tag'
     ? store.listByTag(term.term, paging)
@@ -733,12 +862,32 @@ function listListing(
  * redirect and the sitemap all spell its pages the same way.
  */
 function listingHref(
-  term: TaxonomyTerm | undefined,
+  subject: ListingSubject,
   index: number,
   bases: TaxonomyBases,
   root = '/',
 ): string {
+  const { term, author } = subject;
+  if (author !== undefined) return authorHref(author.user.username, index);
   return term === undefined ? listingPageHref(root, index) : termHref(term, index, bases);
+}
+
+/**
+ * The URL of one format of one listing's feed, whichever kind of listing it is.
+ *
+ * The site's and a taxonomy's hang off the listing root; a person's hangs off
+ * their archive, which decision-14 keeps at WordPress's `/author/{username}/`
+ * rather than under the listing machinery, because that root is also an actor
+ * id.
+ */
+function listingFeedHref(
+  subject: ListingSubject,
+  format: FeedFormat,
+  bases: TaxonomyBases,
+): string {
+  return subject.author === undefined
+    ? feedHref(subject.term, format, bases)
+    : authorFeedHref(subject.author.user.username, format);
 }
 
 /**
@@ -758,7 +907,7 @@ function listing(
   representation: Representation | undefined = selectFromAccept(c, LISTING_REPRESENTATIONS),
 ): Response {
   const { store, renderer } = c.var;
-  const { term } = request;
+  const { term, author } = request;
   const size = renderer.pageSize();
   const bases = renderer.taxonomyBases();
   // Where this listing's pages live: the posts page's permalink when the site
@@ -769,26 +918,26 @@ function listing(
   // at a path, and the links are still out there. `/?feed=rss2` and
   // `/{base}/x/?feed=atom` land on the feed the listing now has.
   const asked = queryFeedFormat(c);
-  if (asked !== undefined) return c.redirect(feedHref(term, asked, bases), 301);
+  if (asked !== undefined) return c.redirect(listingFeedHref(request, asked, bases), 301);
 
   // A taxonomy archive only exists while something carries the term; the home
-  // listing exists even with nothing on it.
-  const total = countListing(store, term);
+  // listing and a person's archive exist even with nothing on them.
+  const total = countListing(store, request);
   if (term !== undefined && total === 0) return notFound(c);
 
-  const href = listingHref(term, request.pageNumber, bases, root);
+  const href = listingHref(request, request.pageNumber, bases, root);
   const pagination = paginate({
     total,
     size,
     pageNumber: request.pageNumber,
-    hrefForPage: (index) => listingHref(term, index, bases, root),
+    hrefForPage: (index) => listingHref(request, index, bases, root),
   });
 
   if (request.pageNumber >= pagination.totalPages) return notFound(c);
   if (representation === undefined) return notAcceptableResponse(href, LISTING_REPRESENTATIONS);
 
   const paging = { limit: size, offset: offsetForPage(request.pageNumber, size) };
-  const documents = listListing(store, term, paging);
+  const documents = listListing(store, request, paging);
 
   const full = wantsFullDocuments(c);
   const body =
@@ -797,9 +946,15 @@ function listing(
           documentJson(document, { baseUrl: c.var.config.baseUrl, body: full }),
         )
       : renderer.renderListing({
-          // The posts page is headed by its own title, the way any page is;
-          // the home listing is headed by the site's.
-          title: term?.term ?? request.document?.title ?? renderer.site().title,
+          // An author archive is headed by the person, a taxonomy archive by
+          // the term, the posts page by its own title the way any page is, and
+          // the home listing by the site's.
+          title:
+            term?.term ??
+            author?.user.profile?.displayName ??
+            author?.user.username ??
+            request.document?.title ??
+            renderer.site().title,
           url: href,
           documents,
           pagination,
@@ -807,6 +962,7 @@ function listing(
           // for: a theme prints `{{ content | safe }}` over the list.
           ...(request.document === undefined ? {} : { document: request.document }),
           ...(term === undefined ? {} : taxonomyContext(term)),
+          ...(author === undefined ? {} : authorArchiveContext(author)),
         });
 
   const validated = representation !== 'html' || !c.var.config.watch;
@@ -868,16 +1024,13 @@ function listingFingerprint(
  * feed reader should be told the URL is wrong rather than handed an empty feed
  * it will poll forever.
  */
-function feed(
-  c: Context<GeekityEnv>,
-  format: FeedFormat,
-  term: TaxonomyTerm | undefined,
-): Response {
+function feed(c: Context<GeekityEnv>, format: FeedFormat, subject: ListingSubject): Response {
   const { store, renderer, config } = c.var;
   const site = renderer.site();
   const bases = renderer.taxonomyBases();
+  const { term, author } = subject;
 
-  if (term !== undefined && countListing(store, term) === 0) {
+  if (term !== undefined && countListing(store, subject) === 0) {
     // A subscriber to a renamed archive's feed follows it to the new one
     // rather than being dropped, exactly as a reader of the archive does.
     const moved = movedTerm(c, term);
@@ -885,15 +1038,19 @@ function feed(
     return c.redirect(feedHref(moved, format, bases), 301);
   }
 
-  const documents = listListing(store, term, { limit: feedSize(site) });
-  const href = listingHref(term, 0, bases);
+  const documents = listListing(store, subject, { limit: feedSize(site) });
+  const href = listingHref(subject, 0, bases);
+  // What the feed calls itself: the site, and then the term or the person it
+  // is about, so a reader subscribed to several of a site's feeds can tell
+  // them apart in a list.
+  const about = term?.term ?? author?.user.profile?.displayName ?? author?.user.username;
 
   const source: FeedSource = {
     site,
     documents,
-    title: term === undefined ? site.title : `${site.title}: ${term.term}`,
+    title: about === undefined ? site.title : `${site.title}: ${about}`,
     href,
-    feedHref: feedHref(term, format, bases),
+    feedHref: listingFeedHref(subject, format, bases),
     baseUrl: config.baseUrl,
     // Only RSS carries the comment pointers; the other two formats have no
     // vocabulary for them, and counting for a feed that cannot say the number
@@ -1133,6 +1290,19 @@ function taxonomyContext(term: TaxonomyTerm): {
 }
 
 /**
+ * What the theme is told about an author archive: the person's profile under
+ * `author`, the same shape a post's byline gets, and the layout an archive of
+ * theirs uses.
+ *
+ * One shape for both places is the point. A theme that knows how to print a
+ * byline already knows how to print the heading of the archive that byline
+ * links to, and neither has to ask whether the site has users.
+ */
+function authorArchiveContext(author: AuthorListing): { author: AuthorContext; template: string } {
+  return { author: profileContext(author.user), template: TEMPLATES.author };
+}
+
+/**
  * The URL of a feed: the whole site's, or one taxonomy archive's.
  *
  * WordPress's layout, so a subscriber of a migrated site keeps polling the URL
@@ -1144,7 +1314,7 @@ export function feedHref(
   format: FeedFormat,
   bases: TaxonomyBases,
 ): string {
-  return feedPathUnder(listingHref(term, 0, bases), format);
+  return feedPathUnder(listingHref({ term }, 0, bases), format);
 }
 
 /**

@@ -12,11 +12,13 @@ themes/default/
     page.njk     one page
     tag.njk      a tag archive, paginated
     category.njk a category archive, paginated
+    author.njk   one person's archive, paginated
     404.njk      nothing at this URL
   partials/
     post-list.njk     a list of documents
     pagination.njk    previous/next pager
     tags.njk          macros for tag and category links
+    byline.njk        who wrote a post, linked to their archive
     feeds.njk         macros for the feed links in <head>
     conversation.njk  the replies, likes and boosts under a post
     comment-form.njk  the form under a post that is taking comments
@@ -157,27 +159,29 @@ Every template gets:
 
 A document — one post, one page, or one entry of a listing — adds:
 
-| Key                                                   | What it holds                                                                                                     |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `title`                                               | Display title.                                                                                                    |
-| `date`                                                | Publish date, a JavaScript `Date` at the UTC instant the file holds. Absent when the document has none.           |
-| `updated`                                             | Last modified date, a `Date`, when the front matter has one.                                                      |
-| `tags`                                                | The document's tags, in file order.                                                                               |
-| `categories`                                          | The document's categories, in file order.                                                                         |
-| `content`                                             | The Markdown body rendered to HTML. Print it with `\| safe`.                                                      |
-| `url`                                                 | The document's URL path, the same value as `page.url`.                                                            |
-| `page.url`                                            | The document's URL path. Always ends in `/`.                                                                      |
-| `page.date`                                           | The same `Date` as `date`.                                                                                        |
-| `page.fileSlug`                                       | The permalink's last segment.                                                                                     |
-| `page.inputPath`                                      | The source file, relative to the content directory.                                                               |
-| `type`                                                | `post` or `page`.                                                                                                 |
-| `permalink`, `slug`, `draft`, `description`, `author` | Straight from the front matter.                                                                                   |
-| `activityStreams`                                     | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
-| `webmention`                                          | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.      |
-| `conversation`                                        | The replies, likes and boosts under the post. Only when there are any. See [The conversation](#the-conversation). |
-| everything else                                       | Any front matter key the CMS does not model is on the context under its own name.                                 |
+| Key                                         | What it holds                                                                                                     |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `title`                                     | Display title.                                                                                                    |
+| `date`                                      | Publish date, a JavaScript `Date` at the UTC instant the file holds. Absent when the document has none.           |
+| `updated`                                   | Last modified date, a `Date`, when the front matter has one.                                                      |
+| `tags`                                      | The document's tags, in file order.                                                                               |
+| `categories`                                | The document's categories, in file order.                                                                         |
+| `content`                                   | The Markdown body rendered to HTML. Print it with `\| safe`.                                                      |
+| `url`                                       | The document's URL path, the same value as `page.url`.                                                            |
+| `page.url`                                  | The document's URL path. Always ends in `/`.                                                                      |
+| `page.date`                                 | The same `Date` as `date`.                                                                                        |
+| `page.fileSlug`                             | The permalink's last segment.                                                                                     |
+| `page.inputPath`                            | The source file, relative to the content directory.                                                               |
+| `type`                                      | `post` or `page`.                                                                                                 |
+| `permalink`, `slug`, `draft`, `description` | Straight from the front matter.                                                                                   |
+| `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
+| `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
+| `webmention`                                | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.      |
+| `conversation`                              | The replies, likes and boosts under the post. Only when there are any. See [The conversation](#the-conversation). |
+| everything else                             | Any front matter key the CMS does not model is on the context under its own name.                                 |
 
-A listing — the home page, a tag archive or a category archive — adds:
+A listing — the home page, a tag archive, a category archive or an author
+archive — adds:
 
 | Key                                        | What it holds                                                                     |
 | ------------------------------------------ | --------------------------------------------------------------------------------- |
@@ -190,6 +194,7 @@ A listing — the home page, a tag archive or a category archive — adds:
 | `pagination.pages`                         | Every page's URL, in order.                                                       |
 | `tag`                                      | The tag, on a tag archive only.                                                   |
 | `category`                                 | The category, on a category archive only.                                         |
+| `author`                                   | The person, on an author archive only. Same shape as a post's `author`.           |
 
 How many posts a listing page holds comes from `postsPerPage` in
 `content/_data/site.json`, and defaults to 10. How many entries a feed holds
@@ -198,6 +203,44 @@ comes from `language`, and defaults to `en`. The rssCloud and WebSub server the
 feeds advertise comes from `notifyServer`, and is empty for none; the theme
 writes nothing for it, because a cloud is advertised in the feed rather than on
 the page.
+
+## Bylines and author archives
+
+`author` on a document is the person the front matter names, resolved against
+the site's users:
+
+| Key               | What it holds                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| `author.name`     | What to print: their display name, else their username, else the raw name the file gives.                      |
+| `author.url`      | Their archive, `/author/{username}/`. **Absent** when the name is nobody this site has.                        |
+| `author.username` | Their login. Absent for the same reason `url` is.                                                              |
+| `author.bio`      | What they wrote about themselves, when they wrote any.                                                         |
+| `author.avatar`   | Their picture, as a path or URL. Absent when they have none.                                                   |
+| `author.links`    | `{ label, href }` for each link on their profile, in the order they listed them. Absent when they listed none. |
+
+`author` is absent altogether when the document names no author, so a byline is
+`{% if author %}`. Guard the link with `{% if author.url %}`: a file may name
+somebody who has no account here — a guest post, or a colleague whose account
+has gone — and that name is still printed, it simply links nowhere.
+`partials/byline.njk` does both:
+
+```njk
+{% import "partials/byline.njk" as byline %}
+by {{ byline.line(author) }}
+```
+
+`layouts/author.njk` is that person's archive, at `/author/{username}/`, with
+their pages at `/author/{username}/page/2/` and their three feeds under
+`/author/{username}/feed/`. It is headed with the same `author` object — the
+name, the avatar, the bio and the links — and lists their published posts
+newest first. A user with no profile still has one; they are called by their
+username.
+
+The URL is not only a page. Each user is an ActivityPub actor at that address,
+so it is the page a follower lands on when they click through from the
+fediverse. `author` is therefore a reserved first URL segment, like `tag` and
+`feed`: no document can be permalinked under it and no taxonomy base can take
+it.
 
 ## Navigation
 
@@ -258,6 +301,10 @@ and nothing else:
 ```njk
 {{ feeds.commentsFeedLink("/comments/feed/", site.title + " comments") }}
 ```
+
+`layouts/tag.njk`, `layouts/category.njk` and `layouts/author.njk` each call
+`feedLinks` over their own root, so an archive advertises its own three feeds
+as well as the site's — on an author archive that root is `author.url`.
 
 `layouts/base.njk` fills the `alternates` block with `feedLinks` over `/` and
 then the site's comments feed, so every page that extends it advertises all

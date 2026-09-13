@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 03:14'
+updated_date: '2026-09-13 03:58'
 ---
 # Admin UI
 
@@ -67,15 +67,16 @@ instead of becoming a sliver.
 | `/admin/settings/discussion` | comments on or off and the closing window, webmentions sent and received, the Akismet key |
 | `/admin/settings/email` | the mail provider, the From line and reply-to, the contact address, the credential and the test message |
 | `/admin/settings/federation` | the actor handle and type, and the relays the site subscribes to |
-| `/admin/users` | list, set each user's email, which notices go to it and how often, change your own password (single role: admin) |
+| `/admin/users` | list, edit each user's public profile, set their email, which notices go to it and how often, change your own password (single role: admin) |
 | `/admin/users/new` | the add form, Users > Add new |
 | `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
 
 ## Editor
 
-- Fields: title, slug (auto from title until touched), permalink preview, date, tags (comma separated), description, draft checkbox, comments (follow the site settings / open / closed), body. A page also carries **Show in navigation** with its menu order, and **Contact form**, which writes `contact: true` and puts a contact form under the page.
+- Fields: title, slug (auto from title until touched), permalink preview, date, tags (comma separated), description, **author**, draft checkbox, comments (follow the site settings / open / closed), body. A page also carries **Show in navigation** with its menu order, and **Contact form**, which writes `contact: true` and puts a contact form under the page.
 - Body is a plain `<textarea>` enhanced with CodeMirror 6 in markdown mode. A preview tab posts the body to `/admin/preview` and shows rendered HTML in the theme's post template.
 - Save writes the file (see doc-1 sync model). The form carries the file hash it was loaded with; a mismatch on save returns the form with a warning and both versions.
+- **Author** is a select of the site's users, not a free box: doc-2's `author` names a user, and after decision-14 that decides whose archive the post lands on and, once the actors land, whose followers hear about it. A new document starts on whoever is signed in; an existing one opens on the user the file names, which for a file written before decision-14 is the one its display name reads as. A file naming somebody with no account here keeps an option of its own, marked, so opening the editor and pressing Update cannot quietly reattribute the post.
 - Buttons: Save draft, Publish, Update, Move to trash, View.
 
 ## Comments
@@ -109,10 +110,17 @@ instead of becoming a sliver.
 
 ## Auth
 
-- Accounts live in `data/users.json` (decision-9): id, username, optional email, argon2id hash, created time, written atomically with 0600 permissions. Passwords hashed with argon2id.
+- Accounts live in `data/users.json` (decision-9): id, username, optional email, optional profile, argon2id hash, created time, written atomically with 0600 permissions. Passwords hashed with argon2id.
+- A username is a URL as well as a login — `/author/{username}/`, which decision-14 makes that person's actor id — so a name that would not survive as a URL segment is refused when the account is created.
 - Session id in an `HttpOnly; Secure; SameSite=Lax` cookie, stored in SQLite with expiry.
 - CSRF token per session on every mutating form.
 - First run: if no users exist, `/admin` shows a setup form that creates the first admin and writes initial settings.
+
+## User profiles
+
+- **What it is.** A display name, a short bio, an avatar and a list of links, stored under `profile` on the user in `data/users.json` beside the account. It is the public face of a person: the display name heads their archive at `/author/{username}/` and is what a byline under their posts prints, and the bio, avatar and links go on the archive beside it. decision-14 makes the same four fields the actor's `name`, `summary`, `icon` and `attachments`, which is why they live with the account rather than in the site settings.
+- **Where it is edited.** One form per row on `/admin/users`, beside the email field: display name, bio, avatar and a links box of one `Label | URL` per line — a bare URL labels itself. Any row, not only your own, for the reason the email field is any row: there is one role, and every user already has every power there is. The row also links to the archive the profile heads.
+- **Nothing is required.** A field left empty is not stored, and a user with no profile at all has no `profile` key and still has an archive under their username, headed by that username.
 
 ## User email and password recovery
 

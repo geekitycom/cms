@@ -1,5 +1,5 @@
-{# /admin/federation: who the site is to the fediverse, who follows it, what
-   arrived in the inbox, and how what went out landed. #}
+{# /admin/federation: who this site's people are to the fediverse, who follows
+   each of them, what arrived in the inbox, and how what went out landed. #}
 {% extends "layouts/shell.njk" %}
 
 {% block title %}Federation{% endblock %}
@@ -7,76 +7,74 @@
 {% block content %}
   <h1>Federation</h1>
 
-  <section class="admin-panel admin-actor">
-    <h2>This site’s actor</h2>
-    <div class="admin-actor-identity">
-      {% if actor.avatarUrl %}
-        <img class="admin-avatar admin-avatar-large" src="{{ actor.avatarUrl }}" alt="" width="96" height="96" />
-      {% else %}
-        <span class="admin-avatar admin-avatar-large admin-avatar-blank" aria-hidden="true"></span>
-      {% endif %}
-      <p class="admin-actor-handle">{{ actor.handle }}</p>
-    </div>
-    <dl class="admin-actor-fields">
-      <div>
-        <dt>Name</dt>
-        <dd>{{ actor.name }}</dd>
-      </div>
-      <div>
-        <dt>Summary</dt>
-        <dd>{% if actor.summary %}{{ actor.summary }}{% else %}<span class="admin-empty">None set.</span>{% endif %}</dd>
-      </div>
-      <div>
-        <dt>Type</dt>
-        <dd>{{ actor.type }}</dd>
-      </div>
-      <div>
-        <dt>Actor</dt>
-        <dd><a href="{{ actor.actorId }}">{{ actor.actorId }}</a></dd>
-      </div>
-      <div>
-        <dt>Profile</dt>
-        <dd><a href="{{ actor.url }}">{{ actor.url }}</a></dd>
-      </div>
-      <div>
-        <dt>Followers</dt>
-        <dd>{{ actor.followers }}</dd>
-      </div>
-    </dl>
-  </section>
+  {% if actors.length %}
+    {% for actor in actors %}
+      <section class="admin-panel admin-actor">
+        <h2>{{ actor.handle }}</h2>
+        <div class="admin-actor-identity">
+          {% if actor.avatarUrl %}
+            <img class="admin-avatar admin-avatar-large" src="{{ actor.avatarUrl }}" alt="" width="96" height="96" />
+          {% else %}
+            <span class="admin-avatar admin-avatar-large admin-avatar-blank" aria-hidden="true"></span>
+          {% endif %}
+          <p class="admin-actor-handle">{{ actor.name }}</p>
+        </div>
+        <dl class="admin-actor-fields">
+          <div>
+            <dt>Summary</dt>
+            <dd>{% if actor.summary %}{{ actor.summary }}{% else %}<span class="admin-empty">None set.</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt>Actor</dt>
+            <dd><a href="{{ actor.actorId }}">{{ actor.actorId }}</a></dd>
+          </div>
+          <div>
+            <dt>Profile</dt>
+            <dd><a href="{{ actor.url }}">{{ actor.url }}</a></dd>
+          </div>
+          <div>
+            <dt>Followers</dt>
+            <dd>{{ actor.followerCount }}</dd>
+          </div>
+        </dl>
 
-  <section class="admin-panel">
-    <h2>Followers</h2>
-    {% if followers.length %}
-      <table class="admin-list">
-        <thead>
-          <tr>
-            <th scope="col">Follower</th>
-            <th scope="col">Handle</th>
-            <th scope="col">Followed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for follower in followers %}
-            <tr>
-              <td class="admin-follower">
-                {% if follower.iconUrl %}
-                  <img class="admin-avatar" src="{{ follower.iconUrl }}" alt="" width="32" height="32" loading="lazy" />
-                {% else %}
-                  <span class="admin-avatar admin-avatar-blank" aria-hidden="true"></span>
-                {% endif %}
-                <a href="{{ follower.url }}">{{ follower.name }}</a>
-              </td>
-              <td>{{ follower.handle }}</td>
-              <td>{{ follower.followedAt | date('html') }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% else %}
-      <p class="admin-empty">Nobody follows the site yet.</p>
-    {% endif %}
-  </section>
+        {% if actor.followers.length %}
+          <table class="admin-list">
+            <thead>
+              <tr>
+                <th scope="col">Follower</th>
+                <th scope="col">Handle</th>
+                <th scope="col">Followed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for follower in actor.followers %}
+                <tr>
+                  <td class="admin-follower">
+                    {% if follower.iconUrl %}
+                      <img class="admin-avatar" src="{{ follower.iconUrl }}" alt="" width="32" height="32" loading="lazy" />
+                    {% else %}
+                      <span class="admin-avatar admin-avatar-blank" aria-hidden="true"></span>
+                    {% endif %}
+                    <a href="{{ follower.url }}">{{ follower.name }}</a>
+                  </td>
+                  <td>{{ follower.handle }}</td>
+                  <td>{{ follower.followedAt | date('html') }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="admin-empty">Nobody follows {{ actor.name }} yet.</p>
+        {% endif %}
+      </section>
+    {% endfor %}
+  {% else %}
+    <section class="admin-panel admin-actor">
+      <h2>Actors</h2>
+      <p class="admin-empty">The site has no users, so it has no actors.</p>
+    </section>
+  {% endif %}
 
   <section class="admin-panel">
     <h2>Relays</h2>
@@ -179,6 +177,7 @@
         <thead>
           <tr>
             <th scope="col">Post</th>
+            <th scope="col">Announced by</th>
             <th scope="col">Last activity</th>
             <th scope="col">Sent</th>
             <th scope="col">Queued</th>
@@ -194,6 +193,7 @@
                 <a href="{{ row.post.editUrl }}">{{ row.post.title }}</a>
                 {% if row.trashed %}<p class="admin-hint">In the trash.</p>{% endif %}
               </td>
+              <td>{% if row.author %}@{{ row.author }}{% else %}<span class="admin-empty">—</span>{% endif %}</td>
               {% if row.lastActivity %}
                 <td>{{ row.lastActivity.activityType }} <span class="admin-inbox-when">{{ row.lastActivity.attemptedAt | date('html') }}</span></td>
                 <td>{{ row.lastActivity.counts.sent }}</td>
@@ -224,8 +224,8 @@
         </tbody>
       </table>
       <p class="admin-hint">
-        Resending builds the post again from its file and sends it to every
-        follower and every accepted relay the site has now, and tells every
+        Resending builds the post again from its file and sends it to every one
+        of its author's followers and every accepted relay the site has now, and tells every
         page the post links to at the same time: an update for a
         published post, a withdrawal for one in the trash. The outcomes are a
         cache, so a database deleted since leaves the posts listed with nothing

@@ -7,6 +7,7 @@ import {
   notificationWanted,
 } from '../notifications/preferences.ts';
 import { countUsers, createUser, findUser, findUserById, verifyUserPassword } from './accounts.ts';
+import { writeUsers } from './__testing__/users.ts';
 import {
   browser,
   csrfField,
@@ -170,6 +171,164 @@ describe('a user email address (AC #1)', () => {
   });
 });
 
+describe('a user profile (TASK-67 AC #1)', () => {
+  it('is edited on a row and stored in the users file', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { token } = await usersScreen(agent);
+
+    const saved = await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      display_name: 'Ada Lovelace',
+      bio: 'Wrote the first program.',
+      avatar: '/uploads/2026/09/ada.jpg',
+      links: 'Her notes | https://ada.example\nhttps://bare.example',
+    });
+
+    assert.equal(saved.status, 303);
+    const stored = findUserById(cms.config.dataDir, ada.id)?.profile;
+    assert.equal(stored?.displayName, 'Ada Lovelace');
+    assert.equal(stored?.bio, 'Wrote the first program.');
+    assert.equal(stored?.avatar, '/uploads/2026/09/ada.jpg');
+    assert.deepEqual(stored?.links, [
+      { label: 'Her notes', href: 'https://ada.example' },
+      // A line with no label is its own label, so a bare URL still renders.
+      { label: 'https://bare.example', href: 'https://bare.example' },
+    ]);
+  });
+
+  it('shows what is stored, and links to the archive it heads', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { token } = await usersScreen(agent);
+
+    await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      display_name: 'Ada Lovelace',
+      bio: 'Wrote the first program.',
+      avatar: '',
+      links: '',
+    });
+
+    const { html } = await usersScreen(agent);
+    assert.match(html, /value="Ada Lovelace"/);
+    assert.match(html, /Wrote the first program\./);
+    assert.match(html, /href="\/author\/ada\/"/);
+  });
+
+  it('is edited on somebody else’s row too, and cleared when emptied', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const grace = await createUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    });
+    const { token } = await usersScreen(agent);
+
+    await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(grace.id),
+      display_name: 'Grace Hopper',
+      bio: '',
+      avatar: '',
+      links: '',
+    });
+    assert.equal(findUserById(cms.config.dataDir, grace.id)?.profile?.displayName, 'Grace Hopper');
+
+    await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(grace.id),
+      display_name: '',
+      bio: '',
+      avatar: '',
+      links: '',
+    });
+    assert.equal(findUserById(cms.config.dataDir, grace.id)?.profile, undefined);
+  });
+
+  it('says so when the row is already gone', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+
+    const response = await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: '404',
+      display_name: 'Nobody',
+    });
+
+    assert.equal(response.status, 303);
+    assert.match(await (await agent.get('/admin/users')).text(), /already gone/i);
+  });
+});
+
+describe('a stored actor id (TASK-69 AC #5)', () => {
+  /** What the WordPress ActivityPub plugin published this person as. */
+  const STORED = 'https://andrewshell.org/?author=2';
+
+  /**
+   * A site whose admin was published under {@link STORED} elsewhere, signed
+   * in. The account is written before the boot because no screen sets a stored
+   * id — the import does (TASK-71), or somebody editing the file.
+   */
+  async function migrated(): Promise<{ agent: Browser; dataDir: string }> {
+    const dataDir = await box.dir('geekity-users-data-');
+    writeUsers(dataDir, [
+      { username: FIRST_ADMIN.username, password: FIRST_ADMIN.password, actorId: STORED },
+    ]);
+    const cms = await box.open({
+      contentDir: await box.dir('geekity-users-content-'),
+      dataDir,
+    });
+    return { agent: await signIn(cms), dataDir };
+  }
+
+  it('is shown on the row, read-only, with what it means', async () => {
+    const { agent } = await migrated();
+
+    const { html } = await usersScreen(agent);
+
+    assert.match(html, /https:\/\/andrewshell\.org\/\?author=2/, 'the id is on the screen');
+    assert.match(html, /the fediverse knows/i, 'and the screen says what it is');
+    assert.doesNotMatch(
+      html,
+      /<input[^>]+value="https:\/\/andrewshell\.org\/\?author=2"/,
+      'it is not an editable field: only the import or the file sets one',
+    );
+  });
+
+  it('is left alone by a profile save, and absent for a user without one', async () => {
+    const { agent, dataDir } = await migrated();
+    const { token } = await usersScreen(agent);
+    const ada = findUser(dataDir, FIRST_ADMIN.username);
+    assert.ok(ada !== undefined);
+
+    await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      display_name: 'Ada Lovelace',
+      bio: '',
+      avatar: '',
+      links: '',
+    });
+
+    assert.equal(findUser(dataDir, FIRST_ADMIN.username)?.actorId, STORED);
+
+    // A site nobody migrated says nothing about one at all.
+    const plain = await box.site();
+    const other = await signedIn(plain);
+    const { html } = await usersScreen(other);
+    assert.doesNotMatch(html, /the fediverse knows/i);
+  });
+});
+
 describe('notification preferences (AC #3)', () => {
   it('offers a switch for every event the registry knows', async () => {
     const cms = await box.site();
@@ -309,6 +468,22 @@ describe('how often a notice arrives (AC #1)', () => {
 });
 
 describe('a bad add form', () => {
+  it('refuses a name that could not be an author URL (TASK-67 AC #4)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+
+    const response = await agent.post('/admin/users/new', {
+      csrf_token: token,
+      username: '..',
+      password: 'a password of their own',
+    });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /author URL/);
+    assert.equal(countUsers(cms.config.dataDir), 1, 'nothing was written');
+  });
+
   it('comes back with a 400, what was typed, and nobody created', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);

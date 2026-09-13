@@ -3,60 +3,33 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { sandbox, signedIn } from './__testing__/harness.ts';
+import { recordWordPressRequest } from '../federation/wordpress.ts';
+import { writeUsers } from './__testing__/users.ts';
+import { sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
 import { readSiteSettings } from './settings.ts';
 
 /**
- * The Federation settings page: who the site is on the fediverse, and which
- * relays boost it.
+ * The Federation settings page: which relays boost the site.
+ *
+ * Who the site's people are on the fediverse is not here any more
+ * (decision-14): every user is an actor, and their profile is theirs.
  */
 
 const box = sandbox();
 after(() => box.cleanup());
 
-describe('saving the Federation page', () => {
-  it('reaches the ActivityPub actor without a restart (AC #1)', async () => {
-    const base = 'https://actor.example';
-    const cms = await box.site({ baseUrl: base });
-    const agent = await signedIn(cms);
-
-    // The name and the summary are General's fields and the handle is this
-    // page's: an actor is built out of two pages, and a save of either tells
-    // the followers about the whole of it.
-    await saveSettings(agent, 'general', {
-      title: 'The Actor Renamed',
-      tagline: 'and re-summarised',
-      base_url: base,
-    });
-    await saveSettings(agent, 'federation', { actor_handle: 'writer' });
-
-    const actor = (await (
-      await cms.app.request(
-        new Request(`${base}/ap/actor`, { headers: { accept: 'application/activity+json' } }),
-      )
-    ).json()) as Record<string, unknown>;
-
-    assert.equal(actor['name'], 'The Actor Renamed');
-    assert.match(String(actor['summary']), /and re-summarised/);
-    assert.equal(actor['preferredUsername'], 'writer');
-  });
-});
-
-describe('a Federation form the validator refuses', () => {
-  it('refuses an actor handle that is not username-like, and an unknown actor type', async () => {
+describe('the Federation page', () => {
+  it('carries the relay list and nothing about an actor (decision-14)', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
-    for (const bad of ['@blog', 'my blog', 'blog@example.com', '']) {
-      const response = await saveSettings(agent, 'federation', { actor_handle: bad });
-      assert.equal(response.status, 400, JSON.stringify(bad));
-      assert.match(await response.text(), /An actor handle is 1 to 64/, JSON.stringify(bad));
-    }
+    const html = await (await agent.get('/admin/settings/federation')).text();
 
-    const response = await saveSettings(agent, 'federation', { actor_type: 'Sasquatch' });
-    assert.equal(response.status, 400);
-    assert.match(await response.text(), /An actor type is one of Person/);
+    assert.match(html, /name="relays"/);
+    // The handle, the type and the picture a site used to federate under are a
+    // user's profile now, edited on the users screen.
+    assert.doesNotMatch(html, /actor_handle|actor_type/);
   });
 });
 
@@ -175,5 +148,82 @@ describe('the relays setting', () => {
     assert.deepEqual(readSiteSettings(cms.config.contentDir).relays, [
       'https://kept.example/inbox',
     ]);
+  });
+});
+
+describe('the WordPress ActivityPub compatibility switch', () => {
+  /** `content/_data/site.json` as it is on disk right now. */
+  async function siteJson(contentDir: string): Promise<Record<string, unknown>> {
+    return JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+  }
+
+  it('is off, and site.json says nothing about it until it is on (AC #1)', async () => {
+    const contentDir = await box.dir('geekity-settings-wordpress-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings/federation')).text();
+    assert.match(html, /name="wordpress_activitypub"/, 'the switch is on the page');
+    assert.doesNotMatch(
+      html,
+      /name="wordpress_activitypub"[^>]*\schecked/,
+      'and it starts turned off',
+    );
+
+    assert.equal((await saveSettings(agent, 'federation')).status, 303);
+    assert.equal(readSiteSettings(contentDir).wordpressActivityPub, false);
+    assert.ok(
+      !('wordpressActivityPub' in (await siteJson(contentDir))),
+      'a site that has never turned it on does not carry the key',
+    );
+
+    assert.equal(
+      (await saveSettings(agent, 'federation', { wordpress_activitypub: '1' })).status,
+      303,
+    );
+    assert.equal(readSiteSettings(contentDir).wordpressActivityPub, true);
+    assert.equal((await siteJson(contentDir))['wordpressActivityPub'], true);
+
+    assert.equal((await saveSettings(agent, 'federation')).status, 303);
+    assert.ok(
+      !('wordpressActivityPub' in (await siteJson(contentDir))),
+      'and turning it off takes the key out again',
+    );
+  });
+});
+
+describe('when the WordPress paths were last asked for (AC #3)', () => {
+  it('lists every route beside the switch, with never until one is asked for', async () => {
+    const dataDir = await box.dir('geekity-settings-wp-data-');
+    writeUsers(dataDir, [{ username: 'ada', password: 'correct horse', wordpressActorId: 2 }]);
+    const cms = await box.site({ dataDir });
+    const agent = await signIn(cms, { username: 'ada', password: 'correct horse' });
+
+    const empty = await (await agent.get('/admin/settings/federation')).text();
+    assert.match(empty, /wp-json\/activitypub\/1\.0\/actors\/2\/inbox/);
+    assert.match(empty, /wp-json\/activitypub\/1\.0\/inbox/);
+    assert.match(empty, /Never/, 'a path nobody has asked for says so');
+    assert.match(empty, /refetched the actor/, 'and the note says when to turn the switch off');
+
+    await recordWordPressRequest({
+      dataDir,
+      target: { route: 'inbox', wordpressActorId: '2' },
+      username: 'ada',
+      at: new Date('2026-09-01T10:00:00.000Z'),
+    });
+
+    const asked = await (await agent.get('/admin/settings/federation')).text();
+    assert.match(asked, /1 September 2026|September 1, 2026|2026/, 'the instant is shown');
+  });
+
+  it('says so when no user carries a WordPress actor id', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings/federation')).text();
+
+    assert.match(html, /No user carries a WordPress actor id/);
   });
 });

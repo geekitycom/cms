@@ -9,12 +9,22 @@ import { CryptographicKey, Endpoints, Image, Person } from '@fedify/vocab';
 
 import { csrfField, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
+import { listUsers } from '../admin/accounts.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { addFollower } from './records.ts';
 
 /** The site under test. Fedify answers by origin, so every request uses this one. */
 const BASE_URL = 'https://blog.example';
+
+/**
+ * The one account these sites have — the name the setup form creates — and so
+ * the actor every post is announced by (decision-14).
+ */
+const ADA = 'ada';
+const ACTOR_URL = `${BASE_URL}/author/${ADA}/`;
 
 /** The peer that follows the site. It exists only in the fetch stub. */
 const REMOTE_ORIGIN = 'https://remote.example';
@@ -38,6 +48,11 @@ interface Delivery {
   url: string;
   /** Its body, as the JSON-LD the peer would read. */
   body: Record<string, unknown>;
+  /**
+   * What it was signed with: the `Signature-Input` header RFC 9421 asks for,
+   * which names the key id a receiving server has to dereference.
+   */
+  signature: string;
 }
 
 const started: Cms[] = [];
@@ -106,6 +121,7 @@ function routeRemoteHost(): () => void {
     if (request.method === 'POST') {
       deliveries.push({
         url: request.url,
+        signature: request.headers.get('signature-input') ?? request.headers.get('signature') ?? '',
         body: (await request.json()) as Record<string, unknown>,
       });
       return new Response('', { status: 202 });
@@ -153,6 +169,20 @@ async function site(
     followers?: number;
     files?: Record<string, string>;
     now?: () => Date;
+    /**
+     * Create the account before the site boots, for a test that never signs
+     * in: decision-14 makes a user the actor a post is announced by, and a
+     * site with no accounts federates nothing at all. A test that *does* sign
+     * in leaves this off, because the setup form only answers for a site with
+     * no accounts and it creates this same name.
+     */
+    account?: boolean;
+    /**
+     * The id the account was published under somewhere else (TASK-69), which
+     * is then what every activity it sends names as its actor. Implies
+     * `account`, because a stored id is a field of a user record.
+     */
+    actorId?: string;
   } = {},
 ): Promise<Site> {
   const dataDir = await temporaryDir('geekity-delivery-data-');
@@ -171,12 +201,15 @@ async function site(
       baseUrl: BASE_URL,
       timezone: 'UTC',
       postsPerPage: 10,
-      author: 'Ada',
-      actorHandle: 'blog',
-      actorType: 'Person',
-      avatar: '',
+      author: ADA,
     },
   });
+
+  if (options.account === true || options.actorId !== undefined) {
+    writeUsers(dataDir, [
+      { username: ADA, ...(options.actorId === undefined ? {} : { actorId: options.actorId }) },
+    ]);
+  }
 
   deliveries.length = 0;
   const cms = createCms({
@@ -190,7 +223,12 @@ async function site(
   });
   started.push(cms);
 
-  cms.admin.putFollower({
+  // Through the file rather than straight into the index (decision-9): the
+  // index is emptied and read back from `followers.json` on every boot, so a
+  // row written only to SQLite would vanish the next time a test reboots the
+  // same directories.
+  const records = { admin: cms.admin, contentDir };
+  await addFollower(records, ADA, {
     actorId: REMOTE_ACTOR,
     inboxId: REMOTE_INBOX,
     sharedInboxId: REMOTE_SHARED_INBOX,
@@ -200,7 +238,7 @@ async function site(
     url: null,
   });
   if ((options.followers ?? 1) > 1) {
-    cms.admin.putFollower({
+    await addFollower(records, ADA, {
       actorId: OTHER_ACTOR,
       inboxId: OTHER_INBOX,
       sharedInboxId: REMOTE_SHARED_INBOX,
@@ -319,12 +357,33 @@ Still thinking about it.
 `;
 }
 
+/**
+ * The same post after somebody took it back to a draft, still carrying the
+ * stamp that says the followers were once told about it — which is what makes
+ * a resend a `Delete` rather than nothing at all.
+ */
+function draftedPost(): string {
+  return `---
+title: On watching files
+date: 2026-03-04T10:00:00.000Z
+permalink: /2026/03/watched/
+author: ${ADA}
+draft: true
+activitypub:
+  published: '2026-03-04T10:00:00Z'
+---
+
+Back to the drawing board.
+`;
+}
+
 /** A published post file, as a site's own content directory would hold it. */
 function publishedPost(body: string): string {
   return `---
 title: On watching files
 date: 2026-03-04T10:00:00.000Z
 permalink: /2026/03/watched/
+author: ${ADA}
 tags:
   - essays
 ---
@@ -346,7 +405,7 @@ describe('publishing a post from the admin', () => {
     assert.equal(creates.length, 1, `expected one Create, saw ${JSON.stringify(deliveries)}`);
     const create = creates[0] as Delivery;
     assert.equal(create.url, REMOTE_SHARED_INBOX, 'the shared inbox was preferred');
-    assert.equal(create.body['actor'], `${BASE_URL}/ap/actor`);
+    assert.equal(create.body['actor'], ACTOR_URL);
 
     const object = create.body['object'] as Record<string, unknown>;
     assert.equal(object['type'], 'Article');
@@ -572,6 +631,7 @@ describe('editing a published post file on disk', () => {
   it('delivers an Update of the Article', async () => {
     const { cms, contentDir } = await site({
       watch: true,
+      account: true,
       files: { [POST_FILE]: publishedPost('The version everybody already has.') },
     });
     await cms.serve();
@@ -582,7 +642,7 @@ describe('editing a published post file on disk', () => {
 
     const update = await waitForDelivery('Update');
     assert.equal(update.url, REMOTE_SHARED_INBOX);
-    assert.equal(update.body['actor'], `${BASE_URL}/ap/actor`);
+    assert.equal(update.body['actor'], ACTOR_URL);
 
     const object = update.body['object'] as Record<string, unknown>;
     assert.equal(object['type'], 'Article');
@@ -630,6 +690,7 @@ describe('the delivery log', () => {
   it('records the reason a delivery failed', async () => {
     const { cms } = await site();
     cms.admin.putFollower({
+      username: ADA,
       actorId: BROKEN_ACTOR,
       inboxId: BROKEN_INBOX,
       sharedInboxId: null,
@@ -655,6 +716,83 @@ describe('the delivery log', () => {
       .listDeliveries(activity.activityId)
       .find((delivery) => delivery.actorId === REMOTE_ACTOR);
     assert.equal(reached?.status, 'sent', 'one bad inbox does not stop the others');
+  });
+});
+
+describe('a user whose record carries a stored actor id', () => {
+  /** What the WordPress ActivityPub plugin published this person as. */
+  const STORED = `${BASE_URL}/?author=2`;
+  const POST_FILE = 'posts/2026-03-04-watched.md';
+  const WATCHED_OBJECT = `${BASE_URL}/2026/03/watched/`;
+
+  /** A site whose one account was published under {@link STORED} elsewhere. */
+  async function migrated(): Promise<Site> {
+    return await site({ actorId: STORED, files: { [POST_FILE]: publishedPost('A first post.') } });
+  }
+
+  it('names the stored id as the actor of a Create, and signs with its key (AC #3)', async () => {
+    const { cms } = await migrated();
+
+    const report = await cms.delivery.resend('watched');
+    await cms.delivery.settled();
+
+    assert.equal(report?.activityType, 'Create');
+    const create = delivered('Create')[0] as Delivery;
+    assert.equal(create.body['actor'], STORED);
+    assert.match(
+      create.signature,
+      new RegExp(`keyid="${STORED.replaceAll('?', '\\?')}#main-key"`),
+      `the signature names a key the actor publishes: ${create.signature}`,
+    );
+    // FEP-8b32, the proof a peer verifies when it does not use the HTTP
+    // signature. Fedify numbers the Ed25519 multikey 1 (doc-8).
+    const proof = create.body['proof'] as { verificationMethod?: string } | undefined;
+    assert.equal(proof?.verificationMethod, `${STORED}#multikey-1`);
+  });
+
+  it('names it on an Update and on a Delete as well (AC #3)', async () => {
+    const { cms, contentDir } = await migrated();
+    await cms.delivery.resend('watched');
+    await cms.delivery.settled();
+    // The Create stamped the announcement into the file; the index re-reads it,
+    // so the next resend knows the followers already hold this post.
+    await cms.sync();
+    deliveries.length = 0;
+
+    // A post the followers already hold goes out again as an Update.
+    await cms.delivery.resend('watched');
+    await cms.delivery.settled();
+    assert.equal((delivered('Update')[0] as Delivery).body['actor'], STORED);
+
+    // And one that has become a draft is withdrawn with a Delete.
+    deliveries.length = 0;
+    await writeDocument(contentDir, POST_FILE, draftedPost());
+    await cms.sync();
+    await cms.delivery.resend('watched');
+    await cms.delivery.settled();
+
+    const withdrawal = delivered('Delete')[0] as Delivery;
+    assert.equal(withdrawal.body['actor'], STORED);
+    assert.equal((withdrawal.body['object'] as Record<string, unknown>)['id'], WATCHED_OBJECT);
+  });
+
+  it('sends an Update of the actor under the stored id itself (AC #3)', async () => {
+    const { cms, dataDir } = await migrated();
+    const user = listUsers(dataDir)[0];
+    assert.ok(user !== undefined);
+
+    await cms.delivery.updateActor(user);
+    await cms.delivery.settled();
+
+    const update = delivered('Update')[0] as Delivery;
+    assert.equal(update.body['actor'], STORED);
+    const object = update.body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], STORED, 'the object is the actor, under the id followers hold');
+    assert.equal(
+      (object['publicKey'] as { id?: string } | undefined)?.id,
+      `${STORED}#main-key`,
+      'and the key a peer verifies the signature with hangs off it',
+    );
   });
 });
 
@@ -722,6 +860,7 @@ describe('resending a post', () => {
     // Indexed by the boot scan, which federates nothing and stamps nothing, so
     // the file is a published post no follower has ever been told about.
     const { cms, contentDir } = await site({
+      account: true,
       files: { [file]: publishedPost('Published, but never announced.') },
     });
     assert.deepEqual(deliveries, [], 'the scan announced nothing');
@@ -841,25 +980,69 @@ describe('renaming a post that has already been announced', () => {
   });
 });
 
-describe('the site’s own profile', () => {
-  /** The CSRF token off the settings screen, which both avatar forms carry. */
-  async function settingsToken(agent: Browser): Promise<string> {
-    const token = csrfField(await (await agent.get('/admin/settings')).text());
-    assert.ok(token !== undefined, 'the settings screen carried a CSRF token');
-    return token;
+describe('two users', () => {
+  it('delivers a post only to its own author’s followers (AC #3)', async () => {
+    // decision-14: a post belongs to a person, and only that person's
+    // followers agreed to hear from them.
+    const { cms, contentDir } = await site({ account: true });
+    writeUsers(cms.config.dataDir, [
+      { username: ADA, id: 1 },
+      { username: 'grace', id: 2 },
+    ]);
+    await addFollower({ admin: cms.admin, contentDir }, 'grace', {
+      actorId: OTHER_ACTOR,
+      inboxId: OTHER_INBOX,
+      sharedInboxId: null,
+      handle: '@bob@remote.example',
+      name: 'Bob',
+      iconUrl: null,
+      url: null,
+    });
+
+    await writeDocument(
+      contentDir,
+      'posts/2026-03-04-watched.md',
+      publishedPost('Ada wrote this one.'),
+    );
+    await cms.sync();
+    const report = await cms.delivery.resend('watched');
+
+    assert.equal(report?.deliveries.length, 1, 'one recipient, not two');
+    assert.equal(report?.deliveries[0]?.actorId, REMOTE_ACTOR, 'Ada’s follower');
+    assert.deepEqual(
+      delivered('Create').map((one) => one.url),
+      [REMOTE_SHARED_INBOX],
+      'Grace’s follower heard nothing about Ada’s post',
+    );
+  });
+});
+
+describe('a user’s own profile', () => {
+  /** Save one user's profile through the users screen, as a browser would. */
+  async function saveProfile(agent: Browser, fields: Record<string, string>): Promise<Response> {
+    const token = csrfField(await (await agent.get('/admin/users')).text());
+    assert.ok(token !== undefined, 'the users screen carried a CSRF token');
+
+    return agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: '1',
+      display_name: '',
+      bio: '',
+      avatar: '',
+      links: '',
+      ...fields,
+    });
   }
 
-  it('delivers an Update of the actor when the avatar is saved (AC #4)', async () => {
+  it('delivers an Update of the actor when the profile is saved (AC #4)', async () => {
     const { cms } = await site();
     const agent = await signedIn(cms);
-    const token = await settingsToken(agent);
 
-    const response = await agent.upload(
-      '/admin/settings/avatar',
-      token,
-      { name: 'me.png', type: 'image/png', bytes: png() },
-      'avatar',
-    );
+    const response = await saveProfile(agent, {
+      display_name: 'Ada Lovelace',
+      bio: 'Writes about engines.',
+      avatar: '/uploads/2026/09/me.png',
+    });
     assert.equal(response.status, 303, await response.text());
     await cms.delivery.settled();
 
@@ -867,29 +1050,31 @@ describe('the site’s own profile', () => {
     assert.equal(updates.length, 1, `expected one Update, saw ${JSON.stringify(deliveries)}`);
     const update = updates[0] as Delivery;
     assert.equal(update.url, REMOTE_SHARED_INBOX, 'the shared inbox was preferred');
-    assert.equal(update.body['actor'], `${BASE_URL}/ap/actor`);
+    assert.equal(update.body['actor'], ACTOR_URL);
 
     const object = update.body['object'] as Record<string, unknown>;
-    assert.equal(object['id'], `${BASE_URL}/ap/actor`, 'the object is the actor itself');
+    assert.equal(object['id'], ACTOR_URL, 'the object is the actor itself');
     assert.equal(object['type'], 'Person');
+    assert.equal(object['name'], 'Ada Lovelace');
+    assert.equal(object['summary'], 'Writes about engines.');
     const icon = object['icon'] as { url?: string } | undefined;
-    assert.match(
-      icon?.url ?? '',
-      new RegExp(`^${BASE_URL}/uploads/\\d{4}/\\d{2}/me\\.png$`),
+    assert.equal(
+      icon?.url,
+      `${BASE_URL}/uploads/2026/09/me.png`,
       'carrying the avatar as an absolute URL',
     );
 
     assert.match(
-      await (await agent.get('/admin/settings')).text(),
-      /Avatar saved\. One follower has been told\./,
+      await (await agent.get('/admin/users')).text(),
+      /One follower has been told\./,
       'and the screen says so',
     );
 
     // Recorded like every other delivery, so the cache says who was told.
-    const recorded = cms.admin.lastDeliveryToObject(`${BASE_URL}/ap/actor`);
+    const recorded = cms.admin.lastDeliveryToObject(ACTOR_URL);
     assert.ok(recorded !== undefined);
     assert.equal(recorded.activityType, 'Update');
-    assert.equal(recorded.objectId, `${BASE_URL}/ap/actor`);
+    assert.equal(recorded.objectId, ACTOR_URL);
     assert.equal(recorded.slug, null, 'an actor update is about no post');
     assert.deepEqual(
       cms.admin.listDeliveries(recorded.activityId).map((delivery) => delivery.status),
@@ -897,75 +1082,45 @@ describe('the site’s own profile', () => {
     );
   });
 
-  it('delivers another Update when the avatar is removed', async () => {
+  it('delivers another Update when the avatar is taken off again', async () => {
     const { cms } = await site();
     const agent = await signedIn(cms);
-    const token = await settingsToken(agent);
 
-    await agent.upload(
-      '/admin/settings/avatar',
-      token,
-      { name: 'me.png', type: 'image/png', bytes: png() },
-      'avatar',
-    );
+    await saveProfile(agent, { avatar: '/uploads/2026/09/me.png' });
     await cms.delivery.settled();
     deliveries.length = 0;
 
-    const removed = await agent.post('/admin/settings/avatar', {
-      csrf_token: token,
-      action: 'remove',
-    });
-    assert.equal(removed.status, 303);
+    assert.equal((await saveProfile(agent, {})).status, 303);
     await cms.delivery.settled();
 
     const updates = delivered('Update');
     assert.equal(updates.length, 1, `expected one Update, saw ${JSON.stringify(deliveries)}`);
     const object = (updates[0] as Delivery).body['object'] as Record<string, unknown>;
-    assert.equal(object['id'], `${BASE_URL}/ap/actor`);
+    assert.equal(object['id'], ACTOR_URL);
     assert.equal(object['icon'], undefined, 'the profile no longer carries a picture');
+    assert.equal(object['name'], ADA, 'and is called by the username again');
   });
 
-  it('delivers an Update when a profile field is saved, and nothing when none was', async () => {
+  it('tells nobody about a setting that is the site’s own business', async () => {
     const { cms } = await site();
     const agent = await signedIn(cms);
-    const token = await settingsToken(agent);
+    const token = csrfField(await (await agent.get('/admin/settings')).text());
+    assert.ok(token !== undefined, 'the settings screen carried a CSRF token');
 
-    const form: Record<string, string> = {
+    const response = await agent.post('/admin/settings', {
       csrf_token: token,
-      title: 'Geekity',
+      title: 'Renamed',
       tagline: 'A file-first CMS',
       base_url: BASE_URL,
-      timezone: 'UTC',
+      timezone: 'Europe/London',
       language: 'en',
-      posts_per_page: '10',
-      author: 'Ada',
-      actor_handle: 'blog',
-      actor_type: 'Person',
-      tag_base: 'tag',
-      category_base: 'category',
-      comments: '1',
-      comments_close_after_days: '14',
-      mail_provider: 'none',
-    };
-
-    assert.equal(
-      (await agent.post('/admin/settings', { ...form, timezone: 'Europe/London' })).status,
-      303,
-    );
-    await cms.delivery.settled();
-    assert.equal(delivered('Update').length, 0, 'a time zone is nobody else’s business');
-
-    assert.equal((await agent.post('/admin/settings', { ...form, title: 'Renamed' })).status, 303);
+      author: ADA,
+    });
+    assert.equal(response.status, 303, await response.text());
     await cms.delivery.settled();
 
-    const updates = delivered('Update');
-    assert.equal(updates.length, 1, `expected one Update, saw ${JSON.stringify(deliveries)}`);
-    const object = (updates[0] as Delivery).body['object'] as Record<string, unknown>;
-    assert.equal(object['name'], 'Renamed');
+    // decision-14: the site is not an actor any more, so nothing on the
+    // settings screen is anybody's profile.
+    assert.equal(delivered('Update').length, 0);
   });
 });
-
-/** The first bytes of a PNG, which is all the signature check reads. */
-function png(): Uint8Array {
-  return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-}

@@ -23,7 +23,9 @@ import { isPublicDocument } from '../web/documents.ts';
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
 import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
 import { NAVIGATION_KEY, NAVIGATION_ORDER_KEY, navigationOrder } from '../web/navigation.ts';
-import { findUserById } from './accounts.ts';
+import { userForAuthor } from '../web/authors.ts';
+import { findUserById, listUsers } from './accounts.ts';
+import type { User } from './accounts.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
 import { readSiteSettings } from './settings.ts';
@@ -324,6 +326,7 @@ async function saveFromForm(
     tags: text(body['tags']).trim(),
     categories: text(body['categories']).trim(),
     description: text(body['description']).trim(),
+    author: text(body['author']).trim(),
     draft: body['draft'] !== undefined,
     exclude: body['exclude'] !== undefined,
     navigation: body['navigation'] !== undefined,
@@ -439,7 +442,7 @@ async function saveFromForm(
     categories: kind.categorised ? splitTags(form.categories) : [],
     draft,
     ...(form.description === '' ? {} : { description: form.description }),
-    ...optional('author', document?.author ?? currentUsername(c)),
+    ...optional('author', chosenAuthor(c, form.author, document)),
     ...optional('activitypub', document?.activitypub),
     extra: resolveExtra(kind, document, form),
     body: form.body,
@@ -717,6 +720,80 @@ function currentUsername(c: Context<GeekityEnv>): string | undefined {
   return findUserById(c.var.config.dataDir, userId)?.username;
 }
 
+/**
+ * What a save writes into the front matter's `author`.
+ *
+ * The submitted value is resolved through the same rule the public site reads
+ * it by ({@link userForAuthor}), and what is written is that user's login: so
+ * a file carrying a display name from before decision-14 is rewritten as a
+ * username the first time somebody saves it, which is exactly the "until it is
+ * next saved" doc-2 promises.
+ *
+ * A value naming nobody this site has changes nothing. There is no form this
+ * CMS renders that could submit one — the select only ever offers the users
+ * and, for a file that names a stranger, that file's own value — so the case
+ * is either a hand-made request or a user deleted between the load and the
+ * save, and neither is a reason to reattribute somebody's post.
+ */
+function chosenAuthor(
+  c: Context<GeekityEnv>,
+  submitted: string,
+  document: Document | undefined,
+): string | undefined {
+  const named = userForAuthor(listUsers(c.var.config.dataDir), submitted);
+  if (named !== undefined) return named.username;
+  return document?.author ?? currentUsername(c);
+}
+
+/** One entry of the editor's Author select. */
+export interface AuthorChoice {
+  /** What the option submits: a username, or the file's own stranger. */
+  value: string;
+  /** What it says: the display name and the login, or just the login. */
+  label: string;
+  /** Whether this is the one the document names. */
+  chosen: boolean;
+}
+
+/**
+ * The Author select: every user, whoever the document names, and — for a file
+ * naming somebody with no account here — that name too.
+ *
+ * The stranger's option is what keeps the editor honest. Without it, opening a
+ * post written by a colleague whose account has gone and pressing Update would
+ * quietly move the post to whoever happened to be first in the list; with it,
+ * the form submits back what the file says and changing the attribution stays
+ * a thing somebody chose to do.
+ *
+ * A new document starts on the signed-in user, which is what doc-5 says the
+ * editor does and what {@link blankForm} deliberately leaves to a request.
+ */
+export function authorChoices(c: Context<GeekityEnv>, current: string): AuthorChoice[] {
+  const users = listUsers(c.var.config.dataDir);
+  const named = userForAuthor(users, current);
+  const chosen = named?.username ?? (current === '' ? currentUsername(c) : current);
+
+  const choices = users.map((user) => ({
+    value: user.username,
+    label: authorLabel(user),
+    chosen: user.username === chosen,
+  }));
+
+  // A name the file holds that is nobody here: offered last, and marked, so it
+  // is plain that the post is attributed to somebody this site cannot reach.
+  if (named === undefined && current !== '') {
+    choices.push({ value: current, label: `${current} (no account here)`, chosen: true });
+  }
+
+  return choices;
+}
+
+/** How one user reads in the select: their name, and the login behind it. */
+function authorLabel(user: User): string {
+  const displayName = user.profile?.displayName;
+  return displayName === undefined ? user.username : `${displayName} (${user.username})`;
+}
+
 /** The file as it is now, when it is not the file the form was filled in from. */
 interface Conflict {
   /** The text of the file on disk. */
@@ -926,6 +1003,15 @@ export interface EditorForm {
   tags: string;
   categories: string;
   description: string;
+  /**
+   * Who the front matter says wrote this, as the select submits it (TASK-67).
+   *
+   * A username, because doc-2's `author` names a user after decision-14 — but
+   * kept as the raw string rather than as a resolved user, because a form is
+   * strings and because a file that still holds a display name from before
+   * decision-14 has to be offered back as what it says until somebody saves it.
+   */
+  author: string;
   draft: boolean;
   /** Whether `eleventyExcludeFromCollections` is set. Pages only. */
   exclude: boolean;
@@ -969,6 +1055,10 @@ export function blankForm(
     tags: '',
     categories: '',
     description: '',
+    // Empty rather than the signed-in user: `blankForm` is a pure function
+    // over a kind and a clock, and who is signed in is a fact about a request.
+    // {@link authorChoices} is where the default is applied.
+    author: '',
     draft: false,
     exclude: false,
     navigation: false,
@@ -997,6 +1087,7 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     tags: document.tags.join(', '),
     categories: document.categories.join(', '),
     description: document.description ?? '',
+    author: document.author ?? '',
     draft: document.draft,
     exclude: document.extra[EXCLUDE_KEY] === true,
     navigation: document.extra[NAVIGATION_KEY] === true,
@@ -1067,6 +1158,8 @@ function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Res
     actions,
     trashed,
     commentSettings: COMMENT_SETTINGS,
+    // Who this can be attributed to, and who it is attributed to now.
+    authors: authorChoices(c, form.author),
     heading:
       document === undefined ? `Add ${kind.singular}` : `Edit ${kind.singular}: ${document.title}`,
     saveUrl: document === undefined ? newEditorPath(kind) : editorPath(kind, document.slug),

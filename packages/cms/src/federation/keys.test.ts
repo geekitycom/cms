@@ -7,16 +7,17 @@ import { after, describe, it } from 'node:test';
 
 import { exportJwk } from '@fedify/fedify';
 
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
-import {
-  ACTOR_KEY_ALGORITHMS,
-  actorKeyFile,
-  actorKeysDir,
-  loadActorKeyPairs,
-  SITE_ACTOR_IDENTIFIER,
-} from './keys.ts';
+import { ACTOR_KEY_ALGORITHMS, actorKeyFile, actorKeysDir, loadActorKeyPairs } from './keys.ts';
+
+/**
+ * The identifier the keys in this file belong to: a username, which is what
+ * decision-14 makes every actor's identifier.
+ */
+const ADA = 'ada';
 
 /** The origin every request in this file is sent to; Fedify answers by origin. */
 const BASE_URL = 'https://blog.example';
@@ -55,7 +56,7 @@ describe('loadActorKeyPairs', () => {
   it('generates both algorithms on the first call', async () => {
     const dir = await dataDir();
 
-    const pairs = await loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER);
+    const pairs = await loadActorKeyPairs(dir, ADA);
 
     assert.equal(pairs.length, 2);
     assert.deepEqual(
@@ -72,26 +73,24 @@ describe('loadActorKeyPairs', () => {
     );
   });
 
-  it('writes one JWK file per algorithm, named after the identifier (AC #1)', async () => {
+  it('writes one JWK file per algorithm, named after the user (AC #1)', async () => {
     const dir = await dataDir();
 
-    await loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER);
+    await loadActorKeyPairs(dir, ADA);
 
     const rsa = JSON.parse(
-      await readFile(actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, 'RSASSA-PKCS1-v1_5'), 'utf8'),
+      await readFile(actorKeyFile(dir, ADA, 'RSASSA-PKCS1-v1_5'), 'utf8'),
     ) as Record<string, unknown>;
-    const ed = JSON.parse(
-      await readFile(actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, 'Ed25519'), 'utf8'),
-    ) as Record<string, unknown>;
+    const ed = JSON.parse(await readFile(actorKeyFile(dir, ADA, 'Ed25519'), 'utf8')) as Record<
+      string,
+      unknown
+    >;
 
     assert.equal(
-      actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, 'RSASSA-PKCS1-v1_5'),
-      path.join(dir, 'keys', 'actor.rsassa-pkcs1-v1_5.jwk'),
+      actorKeyFile(dir, ADA, 'RSASSA-PKCS1-v1_5'),
+      path.join(dir, 'keys', 'ada.rsassa-pkcs1-v1_5.jwk'),
     );
-    assert.equal(
-      actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, 'Ed25519'),
-      path.join(dir, 'keys', 'actor.ed25519.jwk'),
-    );
+    assert.equal(actorKeyFile(dir, ADA, 'Ed25519'), path.join(dir, 'keys', 'ada.ed25519.jwk'));
     assert.equal(rsa['kty'], 'RSA');
     assert.equal(rsa['alg'], 'RS256');
     assert.ok(typeof rsa['d'] === 'string', 'the file holds the private key');
@@ -103,12 +102,12 @@ describe('loadActorKeyPairs', () => {
   it('keeps the key files and their directory private (AC #1)', async () => {
     const dir = await dataDir();
 
-    await loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER);
+    await loadActorKeyPairs(dir, ADA);
 
     assert.equal((await stat(actorKeysDir(dir))).mode & 0o777, 0o700, 'data/keys is the owner’s');
     for (const algorithm of ['RSASSA-PKCS1-v1_5', 'Ed25519'] as const) {
       assert.equal(
-        (await stat(actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, algorithm))).mode & 0o777,
+        (await stat(actorKeyFile(dir, ADA, algorithm))).mode & 0o777,
         0o600,
         `${algorithm} is readable only by the owner`,
       );
@@ -120,19 +119,17 @@ describe('loadActorKeyPairs', () => {
     // is an actor no follower can verify.
     const dir = await dataDir();
 
-    const first = await loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER);
+    const first = await loadActorKeyPairs(dir, ADA);
     const written = await Promise.all(
-      ACTOR_KEY_ALGORITHMS.map((algorithm) =>
-        readFile(actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, algorithm), 'utf8'),
-      ),
+      ACTOR_KEY_ALGORITHMS.map((algorithm) => readFile(actorKeyFile(dir, ADA, algorithm), 'utf8')),
     );
-    const second = await loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER);
+    const second = await loadActorKeyPairs(dir, ADA);
 
     assert.deepEqual(await exported(second), await exported(first), 'the same keys');
     assert.deepEqual(
       await Promise.all(
         ACTOR_KEY_ALGORITHMS.map((algorithm) =>
-          readFile(actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, algorithm), 'utf8'),
+          readFile(actorKeyFile(dir, ADA, algorithm), 'utf8'),
         ),
       ),
       written,
@@ -142,10 +139,10 @@ describe('loadActorKeyPairs', () => {
 
   it('generates one algorithm without touching the other', async () => {
     const dir = await dataDir();
-    const both = await loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER);
-    await rm(actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, 'Ed25519'));
+    const both = await loadActorKeyPairs(dir, ADA);
+    await rm(actorKeyFile(dir, ADA, 'Ed25519'));
 
-    const after_ = await loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER);
+    const after_ = await loadActorKeyPairs(dir, ADA);
 
     const before = await exported(both);
     const later = await exported(after_);
@@ -156,10 +153,10 @@ describe('loadActorKeyPairs', () => {
   it('keeps one identifier’s keys away from another’s', async () => {
     const dir = await dataDir();
 
-    const site = await loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER);
+    const ada = await loadActorKeyPairs(dir, ADA);
     const other = await loadActorKeyPairs(dir, 'other');
 
-    assert.notDeepEqual(await exported(other), await exported(site));
+    assert.notDeepEqual(await exported(other), await exported(ada));
   });
 
   it('two callers racing on a fresh directory agree on one key (AC #1)', async () => {
@@ -169,13 +166,13 @@ describe('loadActorKeyPairs', () => {
     const dir = await dataDir();
 
     const [first, second] = await Promise.all([
-      loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER),
-      loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER),
+      loadActorKeyPairs(dir, ADA),
+      loadActorKeyPairs(dir, ADA),
     ]);
 
     assert.deepEqual(await exported(second), await exported(first));
     assert.deepEqual(
-      await exported(await loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER)),
+      await exported(await loadActorKeyPairs(dir, ADA)),
       await exported(first),
       'and it is what the files hold',
     );
@@ -183,14 +180,14 @@ describe('loadActorKeyPairs', () => {
 
   it('reports a key file that will not import rather than replacing it (AC #5)', async () => {
     const dir = await dataDir();
-    await loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER);
-    const rsaFile = actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, 'RSASSA-PKCS1-v1_5');
+    await loadActorKeyPairs(dir, ADA);
+    const rsaFile = actorKeyFile(dir, ADA, 'RSASSA-PKCS1-v1_5');
     const rsa = await readFile(rsaFile, 'utf8');
-    const file = actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, 'Ed25519');
+    const file = actorKeyFile(dir, ADA, 'Ed25519');
     await writeFile(file, '{"kty":"OKP","crv":"Ed255', 'utf8');
 
     await assert.rejects(
-      () => loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER),
+      () => loadActorKeyPairs(dir, ADA),
       (error: Error) => {
         assert.ok(error.message.includes(file), 'the message names the file');
         assert.match(error.message, /delete it/i, 'and says how to ask for a new key');
@@ -208,12 +205,12 @@ describe('loadActorKeyPairs', () => {
 
   it('reports a key file whose JWK is not a key it can use (AC #5)', async () => {
     const dir = await dataDir();
-    await loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER);
-    const file = actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, 'RSASSA-PKCS1-v1_5');
+    await loadActorKeyPairs(dir, ADA);
+    const file = actorKeyFile(dir, ADA, 'RSASSA-PKCS1-v1_5');
     await writeFile(file, JSON.stringify({ kty: 'RSA', alg: 'RS256', n: 'nonsense', e: 'AQAB' }));
 
     await assert.rejects(
-      () => loadActorKeyPairs(dir, SITE_ACTOR_IDENTIFIER),
+      () => loadActorKeyPairs(dir, ADA),
       (error: Error) => error.message.includes(file),
     );
   });
@@ -227,8 +224,11 @@ describe('the actor’s keys across boots', () => {
 
     await writeSiteJson({
       contentDir,
-      settings: { ...DEFAULT_SITE_SETTINGS, baseUrl: BASE_URL, actorHandle: 'blog' },
+      settings: { ...DEFAULT_SITE_SETTINGS, baseUrl: BASE_URL },
     });
+    // decision-14: the actor is a user, so there has to be one before the
+    // site can publish a key at all.
+    writeUsers(dir, [{ username: ADA }]);
 
     const instance = createCms({ contentDir, dataDir: dir, watch: false, baseUrl: BASE_URL });
     started.push(instance);
@@ -238,7 +238,9 @@ describe('the actor’s keys across boots', () => {
   /** The actor's published keys: the RSA `publicKey` and the multikeys. */
   async function publishedKeys(instance: Cms): Promise<{ publicKey: unknown; methods: unknown }> {
     const response = await instance.app.request(
-      new Request(`${BASE_URL}/ap/actor`, { headers: { accept: 'application/activity+json' } }),
+      new Request(`${BASE_URL}/author/${ADA}/`, {
+        headers: { accept: 'application/activity+json' },
+      }),
     );
     assert.equal(response.status, 200);
     const actor = (await response.json()) as Record<string, unknown>;
@@ -265,7 +267,7 @@ describe('the actor’s keys across boots', () => {
     const first = await site({ contentDir, dataDir: dir });
     await publishedKeys(first);
     await first.close();
-    const file = actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, 'Ed25519');
+    const file = actorKeyFile(dir, ADA, 'Ed25519');
     const whole = await readFile(file, 'utf8');
     await writeFile(file, whole.slice(0, 120), 'utf8');
 
@@ -287,11 +289,13 @@ describe('the actor’s keys across boots', () => {
     await publishedKeys(instance);
 
     // Damaged after boot, which the boot check cannot have caught.
-    const file = actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, 'Ed25519');
+    const file = actorKeyFile(dir, ADA, 'Ed25519');
     await writeFile(file, '{"kty":"OKP","crv":"Ed255', 'utf8');
 
     const response = await instance.app.request(
-      new Request(`${BASE_URL}/ap/actor`, { headers: { accept: 'application/activity+json' } }),
+      new Request(`${BASE_URL}/author/${ADA}/`, {
+        headers: { accept: 'application/activity+json' },
+      }),
     );
 
     assert.notEqual(response.status, 200, 'an actor without its keys is not an answer');
@@ -308,7 +312,7 @@ describe('the actor’s keys across boots', () => {
     assert.equal((keys.methods as unknown[]).length, 2, 'both multikeys');
     for (const algorithm of ACTOR_KEY_ALGORITHMS) {
       assert.ok(
-        (await readFile(actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, algorithm), 'utf8')).length > 0,
+        (await readFile(actorKeyFile(dir, ADA, algorithm), 'utf8')).length > 0,
         `${algorithm} was written to data/keys`,
       );
     }
@@ -331,9 +335,7 @@ describe('the actor’s keys across boots', () => {
     const first = await site({ contentDir, dataDir: dir });
     const before = await publishedKeys(first);
     const files = await Promise.all(
-      ACTOR_KEY_ALGORITHMS.map((algorithm) =>
-        readFile(actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, algorithm), 'utf8'),
-      ),
+      ACTOR_KEY_ALGORITHMS.map((algorithm) => readFile(actorKeyFile(dir, ADA, algorithm), 'utf8')),
     );
     await first.close();
 
@@ -347,7 +349,7 @@ describe('the actor’s keys across boots', () => {
     assert.deepEqual(
       await Promise.all(
         ACTOR_KEY_ALGORITHMS.map((algorithm) =>
-          readFile(actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, algorithm), 'utf8'),
+          readFile(actorKeyFile(dir, ADA, algorithm), 'utf8'),
         ),
       ),
       files,
@@ -382,9 +384,9 @@ describe('the actor’s keys across boots', () => {
       VALUES (?, ?, ?, ?, ?)
     `);
     for (const algorithm of ACTOR_KEY_ALGORITHMS) {
-      const file = actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, algorithm);
+      const file = actorKeyFile(dir, ADA, algorithm);
       insert.run(
-        SITE_ACTOR_IDENTIFIER,
+        ADA,
         algorithm,
         await readFile(file, 'utf8'),
         '{"ignored":"the public half is derived"}',
@@ -399,7 +401,7 @@ describe('the actor’s keys across boots', () => {
 
     assert.deepEqual(await publishedKeys(migrated), before, 'the same actor, key for key');
     for (const algorithm of ACTOR_KEY_ALGORITHMS) {
-      const file = actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, algorithm);
+      const file = actorKeyFile(dir, ADA, algorithm);
       assert.equal((await stat(file)).mode & 0o777, 0o600, `${algorithm} was written 0600`);
     }
     await migrated.close();
@@ -436,10 +438,7 @@ describe('the actor’s keys across boots', () => {
     const again = await site({ contentDir, dataDir: dir });
 
     assert.deepEqual(await publishedKeys(again), before, 'the file won');
-    assert.notEqual(
-      await readFile(actorKeyFile(dir, SITE_ACTOR_IDENTIFIER, 'Ed25519'), 'utf8'),
-      '{"stale":"row"}\n',
-    );
+    assert.notEqual(await readFile(actorKeyFile(dir, ADA, 'Ed25519'), 'utf8'), '{"stale":"row"}\n');
   });
 
   it('drops the table on a database this version created, where it was never used', async () => {

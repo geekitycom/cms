@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
 import { renderMarkdown } from '../content/markdown.ts';
@@ -14,6 +15,9 @@ import { createActivityId } from './paths.ts';
 
 /** The origin every request in this file is sent to; Fedify checks it. */
 const BASE_URL = 'https://blog.example';
+
+/** The one account these sites have, and so the actor every post is announced by. */
+const ADA = 'ada';
 
 /** What a peer asks for when it wants the ActivityStreams document. */
 const ACTIVITY_STREAMS = 'application/activity+json';
@@ -66,13 +70,13 @@ async function site(
       baseUrl: BASE_URL,
       timezone: 'UTC',
       postsPerPage: 10,
-      author: 'Ada',
-      actorHandle: 'blog',
-      actorType: 'Person',
-      avatar: '',
+      author: ADA,
       ...settings,
     },
   });
+  // decision-14: a post is announced by the actor of its author, so the site
+  // needs an account before it can federate anything at all.
+  writeUsers(dataDir, [{ username: ADA, profile: { displayName: 'Ada Lovelace' } }]);
 
   const instance = createCms({ dataDir, contentDir, watch: false, baseUrl: BASE_URL, ...config });
   started.push(instance);
@@ -100,12 +104,16 @@ function post(
     categories?: string[];
     draft?: boolean;
     body?: string;
+    author?: string;
   },
 ): string {
   const lines = [
     `title: ${JSON.stringify(title)}`,
     `date: '${options.date}'`,
     `permalink: ${options.permalink}`,
+    // decision-14 attributes a post to a user, and the outbox is that user's
+    // archive as activities: a post naming nobody is on nobody's.
+    `author: ${options.author ?? ADA}`,
   ];
   if (options.updated !== undefined) lines.push(`updated: '${options.updated}'`);
   if (options.tags !== undefined) {
@@ -162,11 +170,11 @@ describe('the post object', () => {
     assert.equal(article['url'], `${BASE_URL}/2026/09/hello/`);
     assert.equal(article['published'], '2026-09-02T09:00:00Z');
     assert.equal(article['updated'], '2026-09-03T10:30:00Z');
-    assert.equal(article['attributedTo'], `${BASE_URL}/ap/actor`);
+    assert.equal(article['attributedTo'], `${BASE_URL}/author/${ADA}/`);
     // `as:Public` is how the ActivityStreams context compacts the public
     // collection; it is the form Mastodon and friends both send and expect.
     assert.equal(article['to'], 'as:Public');
-    assert.equal(article['cc'], `${BASE_URL}/ap/actor/followers`);
+    assert.equal(article['cc'], `${BASE_URL}/author/${ADA}/followers/`);
   });
 
   it('publishes one Hashtag per tag and per category, pointing at their archives', async () => {
@@ -207,7 +215,7 @@ describe('the post object', () => {
     );
 
     const outbox = (await (
-      await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
     const page = await fetchLink(instance, outbox['first']);
     assert.ok(
@@ -279,7 +287,7 @@ describe('the outbox', () => {
     const instance = await site(archive(OUTBOX_PAGE_SIZE + 5));
 
     const outbox = (await (
-      await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
 
     assert.equal(outbox['type'], 'OrderedCollection');
@@ -294,7 +302,7 @@ describe('the outbox', () => {
     const instance = await site(archive(total));
 
     const outbox = (await (
-      await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
     const first = await fetchLink(instance, outbox['first']);
 
@@ -316,7 +324,7 @@ describe('the outbox', () => {
     const instance = await site(HELLO);
 
     const outbox = (await (
-      await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
     const page = await fetchLink(instance, outbox['first']);
 
@@ -325,7 +333,7 @@ describe('the outbox', () => {
     const activity = items[0] as Record<string, unknown>;
     assert.equal(activity['type'], 'Create');
     assert.equal(activity['id'], `${BASE_URL}/2026/09/hello/#create`);
-    assert.equal(activity['actor'], `${BASE_URL}/ap/actor`);
+    assert.equal(activity['actor'], `${BASE_URL}/author/${ADA}/`);
     assert.equal(activity['to'], 'as:Public');
 
     const object = activity['object'] as Record<string, unknown>;
@@ -353,7 +361,7 @@ describe('the outbox', () => {
     });
 
     const outbox = (await (
-      await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
     const page = await fetchLink(instance, outbox['first']);
 
@@ -381,7 +389,7 @@ describe('the outbox', () => {
     );
 
     const before = (await (
-      await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
     assert.equal(before['totalItems'], 1);
     assert.equal((await get(instance, '/2026/09/tomorrow/', ACTIVITY_STREAMS)).status, 404);
@@ -389,7 +397,7 @@ describe('the outbox', () => {
     now = new Date('2026-09-04T09:00:00Z');
 
     const after = (await (
-      await get(instance, '/ap/actor/outbox', ACTIVITY_STREAMS)
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
     ).json()) as Record<string, unknown>;
     assert.equal(after['totalItems'], 2);
     assert.equal((await get(instance, '/2026/09/tomorrow/', ACTIVITY_STREAMS)).status, 200);
@@ -628,12 +636,10 @@ describe('a site in a subdirectory', () => {
         baseUrl: 'https://example.com/blog',
         timezone: 'UTC',
         postsPerPage: 10,
-        author: 'Ada',
-        actorHandle: 'blog',
-        actorType: 'Person',
-        avatar: '',
+        author: ADA,
       },
     });
+    writeUsers(dataDir, [{ username: ADA }]);
 
     const instance = createCms({
       dataDir,

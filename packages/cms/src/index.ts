@@ -1,9 +1,11 @@
+import { MemoryKvStore } from '@fedify/fedify';
 import { serve as serveNode } from '@hono/node-server';
 import { Hono } from 'hono';
 
 import {
   baselineSecurityHeaders,
   effectiveBaseUrl,
+  listUsers,
   migrateSettingsToFile,
   migrateUsersToFile,
   mountAdmin,
@@ -32,11 +34,11 @@ import {
   createDeliveryService,
   createRelayService,
   createSiteFederation,
+  createWordPressFederation,
   migrateActorKeysToFiles,
   migrateFederationToFiles,
   mountFederation,
   rebuildFederationIndexes,
-  SITE_ACTOR_IDENTIFIER,
 } from './federation/index.ts';
 import type { DeliveryService, RelayService, SiteFederation } from './federation/index.ts';
 import { createFeedNotifier } from './notify.ts';
@@ -57,9 +59,7 @@ export type {
 } from './notify.ts';
 
 export {
-  ACTOR_HANDLE_PATTERN,
   LANGUAGE_TAG_PATTERN,
-  ACTOR_TYPES,
   COMMENT_ACTIONS,
   COMMENT_ADMIN_FIELDS,
   COMMENT_KINDS,
@@ -110,9 +110,6 @@ export {
   MAIL_TEST_TEMPLATE,
   mailPanel,
   ARGON2_PARAMETERS,
-  AVATAR_FIELDS,
-  AVATAR_PATH,
-  AVATAR_REMOVE,
   baselineSecurityHeaders,
   blankForm,
   CHANGE_PASSWORD_PATH,
@@ -199,8 +196,8 @@ export {
   passwordProblem,
   postEditorPath,
   POST_KIND,
+  primaryUser,
   PREVIEW_PATH,
-  profileChanged,
   readSiteSettings,
   RECOVERY_ANSWER,
   RECOVERY_FIELDS,
@@ -261,6 +258,10 @@ export {
   UPLOADS_PATH,
   setUserEmail,
   setUserPassword,
+  setUserProfile,
+  setUserWordPressActor,
+  ConflictingActorIdError,
+  UnknownUserError,
   USER_EMAIL_PATH,
   USER_FIELDS,
   USERNAME_PATTERN,
@@ -345,6 +346,7 @@ export type {
   SettingsForm,
   SettingsProblems,
   SiteSettings,
+  ProfileLink,
   StoredUpload,
   StoredUser,
   TaxonomyKind,
@@ -356,6 +358,7 @@ export type {
   UploadRefusal,
   UploadResult,
   User,
+  UserProfile,
 } from './admin/index.ts';
 
 // The database as a file a site may act on: where it is, how to throw it away,
@@ -774,27 +777,39 @@ export type {
 export {
   acceptedRelays,
   acceptRelay,
-  ACTOR_CLASSES,
   addFollower,
   appendInboxActivity,
   ACTOR_KEY_ALGORITHMS,
   ACTOR_PATH,
-  actorClassFor,
   assertActorKeysUsable,
   actorKeyFile,
   actorKeysDir,
   articleObjectId,
+  actorAliases,
+  actorId,
   avatarUrl,
+  keyIdFor,
+  mainKeyId,
+  multikeyId,
+  senderKeyPairs,
+  userActor,
+  userByUsername,
   createActivityId,
   createDeliveryService,
   createRelayService,
   createSiteFederation,
   deleteActivityId,
   deliveryTargets,
+  documentAuthor,
   federatedPost,
+  federatedUsernames,
   FEDERATION_DATA_DIRECTORY,
-  FEDERATION_PREFIX,
   federationOrigin,
+  acctOf,
+  handleHref,
+  userDirectory,
+  webFingerSubject,
+  WEBFINGER_PATH,
   followerFrom,
   followerRecipient,
   FOLLOWERS_FILE,
@@ -841,8 +856,6 @@ export {
   replyFrom,
   replyTargetOf,
   SHARED_INBOX_PATH,
-  SITE_ACTOR_IDENTIFIER,
-  siteActor,
   SOFTWARE_NAME,
   SOURCE_MEDIA_TYPE,
   toInstant,
@@ -853,6 +866,7 @@ export type {
   CreateDeliveryServiceOptions,
   FederationIndexReport,
   FederationRecords,
+  UserActorOptions,
   InboxLine,
   CreateRelayServiceOptions,
   CreateSiteFederationOptions,
@@ -864,7 +878,6 @@ export type {
   RelayLogger,
   RelayService,
   RelaySyncReport,
-  SiteActorOptions,
   SiteFederation,
   Reply,
   SiteInboxContext,
@@ -879,6 +892,11 @@ export {
   assetResponse,
   atomEntry,
   atomFeed,
+  AUTHOR_BASE,
+  authorContext,
+  authorFeedHref,
+  authorHref,
+  authorNames,
   categoryHref,
   commentAnchor,
   commentsFeedHref,
@@ -931,6 +949,7 @@ export {
   formatDate,
   frontPageSlugs,
   homeHref,
+  INBOX_BASE,
   isNotModified,
   isPublicDocument,
   JSON_FEED_VERSION,
@@ -962,9 +981,11 @@ export {
   PAGE_SEGMENT,
   paginate,
   parseAccept,
+  parseAuthorPath,
   postObjectId,
   postsPerPage,
   prefersActivityStreams,
+  profileContext,
   publicDocumentAt,
   recordTermRename,
   redirectedTerm,
@@ -999,6 +1020,7 @@ export {
   splitRepresentationExtension,
   tagHref,
   TAXONOMIES,
+  userForAuthor,
   TAXONOMY_BASE_PATTERN,
   TAXONOMY_LABELS,
   taxonomyBaseProblems,
@@ -1024,6 +1046,8 @@ export {
 export type {
   AcceptRange,
   AssetResponseOptions,
+  AuthorContext,
+  AuthorRequest,
   ConditionalHeaders,
   CreateRendererOptions,
   CommentFeedSource,
@@ -1334,11 +1358,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // for, and the file wins where there already is one.
   migrateUsersToFile({ admin, dataDir: resolved.dataDir });
 
-  // And the followers and the log of what the inbox was told, which become
-  // content/_data/federation/followers.json and inbox/{yyyy}-{mm}.jsonl.
-  // Unlike the three above, no table is dropped: `followers` and `ap_inbox`
-  // stay as indexes of those files, which is why the rebuild is next and runs
-  // on every boot rather than once.
+  // And the log of what the inbox was told, which becomes
+  // content/_data/federation/inbox/{yyyy}-{mm}.jsonl. Unlike the three above,
+  // no table is dropped: `ap_inbox` and `followers` stay as indexes of the
+  // files, which is why the rebuild is next and runs on every boot rather than
+  // once. The site actor's followers are not migrated: decision-14 replaced it
+  // with one actor per user, and nobody inherits a follow made with somebody
+  // who no longer exists.
   migrateFederationToFiles({ admin, contentDir: resolved.contentDir });
   rebuildFederationIndexes({ admin, contentDir: resolved.contentDir });
 
@@ -1349,12 +1375,15 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // one does.
   rebuildCommentIndexes({ admin, contentDir: resolved.contentDir });
 
-  // And, once the files are the whole story, that they are readable. This is
-  // the one thing here that can stop a boot: an actor that publishes no key
-  // is one no follower can verify, and Fedify would serve exactly that rather
-  // than complain. A minute of downtime with the file named is the better
-  // failure.
-  assertActorKeysUsable(resolved.dataDir, SITE_ACTOR_IDENTIFIER);
+  // And, once the files are the whole story, that every user's keys are
+  // readable. This is the one thing here that can stop a boot: an actor that
+  // publishes no key is one no follower can verify, and Fedify would serve
+  // exactly that rather than complain. A minute of downtime with the file
+  // named is the better failure. A user who has never federated has no key
+  // files at all, which is not damage and does not stop anything.
+  for (const user of listUsers(resolved.dataDir)) {
+    assertActorKeysUsable(resolved.dataDir, user.username);
+  }
 
   // The one thing the settings decide before a request arrives. It is settled
   // here, at boot, rather than per request: `baseUrl` also decides whether the
@@ -1404,6 +1433,12 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // same one the listing index already serves, and doing it per render is
     // what makes a page flagged in the editor appear in the menu at once.
     pages: () => store.listAll({ type: 'page', draft: false, trashed: false, scheduled: false }),
+    // Who may sign in, for the byline under a post and the heading of an
+    // author archive (TASK-67). Read per render for the reason the pages are:
+    // `data/users.json` is the truth about who exists (decision-9), and a
+    // display name saved on the users screen a second ago belongs on the very
+    // next page drawn.
+    users: () => listUsers(resolved.dataDir),
     // What has been said about a post, from every source at once and read per
     // render for the same reason: a reply logged or a comment approved a
     // second ago is on the page the next request draws (TASK-49, TASK-50).
@@ -1428,7 +1463,33 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // moment ago puts a form on the page the next request draws (TASK-56).
     contactForm: (document) => contactFormFor({ document, now: resolved.now() }),
   });
-  const federation = createSiteFederation({ baseUrl: resolved.baseUrl, ...resolved.federation });
+  // One KV store for both federations. The compatibility one (TASK-70) shares
+  // it so that the same `Follow` redelivered to a user's own inbox and to the
+  // WordPress path it used to have is recognised as one activity rather than
+  // handled twice; both sets of inbox listeners are `per-origin` for the same
+  // reason (doc-8).
+  const federationKv = resolved.federation.kv ?? new MemoryKvStore();
+  const federation = createSiteFederation({
+    baseUrl: resolved.baseUrl,
+    ...resolved.federation,
+    kv: federationKv,
+  });
+
+  /**
+   * The WordPress compatibility federation, built the first time a request
+   * actually reaches one of the plugin's paths with the switch on.
+   *
+   * Lazy because almost no site will ever turn the switch on, and a second set
+   * of dispatchers built at every boot for a setting nobody uses is work for
+   * nothing. `mountFederation` keeps whatever this hands back.
+   */
+  const wordpressFederation = (): SiteFederation =>
+    createWordPressFederation({
+      baseUrl: resolved.baseUrl,
+      ...resolved.federation,
+      kv: federationKv,
+      canonical: federation,
+    });
 
   // Federation listens to the index rather than to the admin, so a post edited
   // on disk federates exactly as one saved through the editor does (doc-4).
@@ -1516,7 +1577,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // every other, so putting it in front costs the rest of the app nothing and
   // is the only place it can go: the public site claims every unmatched path
   // in its not-found handler.
-  mountFederation(app, federation);
+  mountFederation(app, federation, { wordpress: wordpressFederation });
 
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);

@@ -117,6 +117,15 @@ export interface CreatePasswordResetInput {
  * dereferencing every one of them.
  */
 export interface Follower {
+  /**
+   * Which user is followed (decision-14).
+   *
+   * Every user is an actor with followers of their own, so a follower is only
+   * ever a follower *of somebody*: the column is what makes one person's
+   * followers collection, and one person's delivery, theirs. It is the name of
+   * the directory the file came from rather than anything the file says.
+   */
+  readonly username: string;
   /** The follower's ActivityStreams id, which is what identifies it. */
   readonly actorId: string;
   /** Where an activity addressed to this follower is delivered. */
@@ -178,6 +187,15 @@ export interface InboxActivity {
   /** What it was about — the post that was liked, the note replied to — or `null`. */
   readonly objectId: string | null;
   /**
+   * Which of this site's users it was addressed to, or `null` for one
+   * delivered to the shared inbox without naming one.
+   *
+   * decision-14 makes every user an actor, so the log records whose inbox was
+   * told as well as what it was told. Derived from the log line rather than
+   * from the activity, because the addressee is a fact about the delivery.
+   */
+  readonly recipient: string | null;
+  /**
    * The object this activity answers, for a `Create` that carried an
    * `inReplyTo`, and `null` for everything else.
    *
@@ -202,8 +220,18 @@ export interface InboxActivity {
  * arrival times back rather than stamping every activity with the moment the
  * index was rebuilt.
  */
-export type NewInboxActivity = Omit<InboxActivity, 'id' | 'receivedAt' | 'inReplyTo'> & {
+export type NewInboxActivity = Omit<
+  InboxActivity,
+  'id' | 'receivedAt' | 'inReplyTo' | 'recipient'
+> & {
   receivedAt?: string | undefined;
+  /**
+   * Who it was addressed to, when the delivery said. Optional and `null` by
+   * default: an activity that reached the shared inbox without naming one of
+   * this site's actors is addressed to nobody in particular, and so is every
+   * line of a log written before decision-14.
+   */
+  recipient?: string | null | undefined;
 };
 
 /** How one delivery of one activity to one follower ended. */
@@ -626,8 +654,11 @@ export interface AdminStore {
   getState(key: string): string | undefined;
   /** Write one piece of that state. */
   setState(key: string, value: string): void;
-  /** How many actors follow the site. What the followers collection counts. */
-  countFollowers(): number;
+  /**
+   * How many actors follow one user, or the whole site when no user is named.
+   * What a user's followers collection counts.
+   */
+  countFollowers(username?: string): number;
   /**
    * Followers, newest follow first, optionally one page of them.
    *
@@ -636,21 +667,21 @@ export interface AdminStore {
    * arrives while somebody is walking the collection shifts the pages under
    * them by one, which is the same trade the outbox makes.
    */
-  listFollowers(options?: ListPageOptions): Follower[];
-  /** One follower by actor id, or `undefined`. */
-  getFollower(actorId: string): Follower | undefined;
+  listFollowers(username?: string, options?: ListPageOptions): Follower[];
+  /** One user's follower by actor id, or `undefined`. */
+  getFollower(username: string, actorId: string): Follower | undefined;
   /**
    * Store a follower, replacing whatever was known about that actor. The
    * original `followedAt` is kept, because a repeat `Follow` from an actor
    * that already follows is a redelivery rather than a new follow.
    */
   putFollower(follower: NewFollower): Follower;
-  /** Forget a follower. Returns `false` when there was nothing to forget. */
-  deleteFollower(actorId: string): boolean;
+  /** Forget one user's follower. Returns `false` when there was nothing to forget. */
+  deleteFollower(username: string, actorId: string): boolean;
   /**
    * Make the followers index say exactly this, in one transaction.
    *
-   * What a rebuild from `content/_data/federation/followers.json` calls
+   * What a rebuild from every `content/_data/federation/{username}/followers.json` calls
    * (decision-9): the file is the source, so a row it does not carry is a row
    * that should not be delivered to, and replacing the lot is the only way to
    * say that. Nothing outside a rebuild should reach for it.
@@ -856,18 +887,23 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       INSERT INTO cms_state (key, value, updated_at) VALUES (?, ?, ?)
       ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     `),
-    countFollowers: db.prepare('SELECT COUNT(*) AS count FROM followers'),
+    // `?1 IS NULL` is how one statement answers both questions: naming a user
+    // counts theirs, naming nobody counts the site's.
+    countFollowers: db.prepare(
+      'SELECT COUNT(*) AS count FROM followers WHERE ?1 IS NULL OR username = ?1',
+    ),
     listFollowers: db.prepare(`
       SELECT * FROM followers
+      WHERE ?1 IS NULL OR username = ?1
       ORDER BY followed_at DESC, actor_id DESC
-      LIMIT ? OFFSET ?
+      LIMIT ?2 OFFSET ?3
     `),
-    followerById: db.prepare('SELECT * FROM followers WHERE actor_id = ?'),
+    followerById: db.prepare('SELECT * FROM followers WHERE username = ? AND actor_id = ?'),
     putFollower: db.prepare(`
       INSERT INTO followers (
-        actor_id, inbox_id, shared_inbox_id, handle, name, icon_url, url, followed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (actor_id) DO UPDATE SET
+        username, actor_id, inbox_id, shared_inbox_id, handle, name, icon_url, url, followed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (username, actor_id) DO UPDATE SET
         inbox_id = excluded.inbox_id,
         shared_inbox_id = excluded.shared_inbox_id,
         handle = excluded.handle,
@@ -875,7 +911,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         icon_url = excluded.icon_url,
         url = excluded.url
     `),
-    deleteFollower: db.prepare('DELETE FROM followers WHERE actor_id = ?'),
+    deleteFollower: db.prepare('DELETE FROM followers WHERE username = ? AND actor_id = ?'),
     clearFollowers: db.prepare('DELETE FROM followers'),
     clearInboxActivities: db.prepare('DELETE FROM ap_inbox'),
     resetInboxSequence: db.prepare("DELETE FROM sqlite_sequence WHERE name = 'ap_inbox'"),
@@ -887,13 +923,14 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     `),
     logInboxActivity: db.prepare(`
       INSERT INTO ap_inbox (
-        activity_id, activity_type, actor_id, object_id, in_reply_to, received_at, json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        activity_id, activity_type, actor_id, object_id, in_reply_to, recipient, received_at, json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (activity_id) DO UPDATE SET
         activity_type = excluded.activity_type,
         actor_id = excluded.actor_id,
         object_id = excluded.object_id,
         in_reply_to = excluded.in_reply_to,
+        recipient = excluded.recipient,
         received_at = excluded.received_at,
         json = excluded.json
       RETURNING *
@@ -1166,26 +1203,30 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return Number(statements.pruneSpentTokens.run(now.toISOString()).changes);
     },
 
-    countFollowers() {
-      const row = statements.countFollowers.get() as Record<string, unknown> | undefined;
+    countFollowers(username) {
+      const row = statements.countFollowers.get(username ?? null) as
+        Record<string, unknown> | undefined;
       return Number(row?.['count'] ?? 0);
     },
 
-    listFollowers(options = {}) {
+    listFollowers(username, options = {}) {
       const rows = statements.listFollowers.all(
+        username ?? null,
         options.limit ?? NO_LIMIT,
         options.offset ?? 0,
       ) as Record<string, unknown>[];
       return rows.map(toFollower);
     },
 
-    getFollower(actorId) {
-      const row = statements.followerById.get(actorId) as Record<string, unknown> | undefined;
+    getFollower(username, actorId) {
+      const row = statements.followerById.get(username, actorId) as
+        Record<string, unknown> | undefined;
       return row === undefined ? undefined : toFollower(row);
     },
 
     putFollower(follower) {
       statements.putFollower.run(
+        follower.username,
         follower.actorId,
         follower.inboxId,
         follower.sharedInboxId,
@@ -1198,7 +1239,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       // Read back rather than returning what was written: the upsert leaves an
       // existing `followed_at` alone, so the row is the only thing that knows
       // when the follow really began.
-      const row = statements.followerById.get(follower.actorId) as
+      const row = statements.followerById.get(follower.username, follower.actorId) as
         Record<string, unknown> | undefined;
       if (row === undefined) {
         throw new Error(`The follower "${follower.actorId}" vanished between insert and read.`);
@@ -1206,8 +1247,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return toFollower(row);
     },
 
-    deleteFollower(actorId) {
-      return statements.deleteFollower.run(actorId).changes > 0;
+    deleteFollower(username, actorId) {
+      return statements.deleteFollower.run(username, actorId).changes > 0;
     },
 
     replaceFollowers(followers) {
@@ -1215,6 +1256,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         statements.clearFollowers.run();
         for (const follower of followers) {
           statements.putFollower.run(
+            follower.username,
             follower.actorId,
             follower.inboxId,
             follower.sharedInboxId,
@@ -1250,6 +1292,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         // Derived here rather than passed in, so the column cannot say
         // something the stored activity does not.
         replyTargetOf(activity.json),
+        activity.recipient ?? null,
         activity.receivedAt ?? new Date().toISOString(),
         activity.json,
       ) as Record<string, unknown> | undefined;
@@ -1272,6 +1315,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             activity.actorId,
             activity.objectId,
             replyTargetOf(activity.json),
+            activity.recipient ?? null,
             activity.receivedAt ?? new Date().toISOString(),
             activity.json,
           );
@@ -1659,6 +1703,7 @@ function nullableText(value: unknown): string | null {
 
 function toFollower(row: Record<string, unknown>): Follower {
   return {
+    username: String(row['username']),
     actorId: String(row['actor_id']),
     inboxId: String(row['inbox_id']),
     sharedInboxId: nullableText(row['shared_inbox_id']),
@@ -1678,6 +1723,7 @@ function toInboxActivity(row: Record<string, unknown>): InboxActivity {
     actorId: String(row['actor_id']),
     objectId: nullableText(row['object_id']),
     inReplyTo: nullableText(row['in_reply_to']),
+    recipient: nullableText(row['recipient']),
     receivedAt: String(row['received_at']),
     json: String(row['json']),
   };
@@ -2342,6 +2388,39 @@ const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX spent_tokens_expires_at ON spent_tokens (expires_at);
 
       ALTER TABLE comments ADD COLUMN notify INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
+    // Followers belong to a user, and the inbox log says who was told
+    // (decision-14, TASK-68). The site actor is gone, so there is nothing to
+    // backfill: the `followers` table is rebuilt on every boot from the files
+    // under `content/_data/federation/{username}/`, and the rows a site
+    // carried for the site actor name nobody. The table is therefore dropped
+    // and made again with the new key rather than altered — `actor_id` was its
+    // primary key, and one actor may follow two of this site's users.
+    version: 18,
+    sql: `
+      DROP TABLE followers;
+
+      CREATE TABLE followers (
+        username        TEXT NOT NULL,
+        actor_id        TEXT NOT NULL,
+        inbox_id        TEXT NOT NULL,
+        shared_inbox_id TEXT,
+        handle          TEXT,
+        name            TEXT,
+        icon_url        TEXT,
+        url             TEXT,
+        followed_at     TEXT NOT NULL,
+        PRIMARY KEY (username, actor_id)
+      );
+
+      CREATE INDEX followers_followed_at ON followers (followed_at);
+      CREATE INDEX followers_actor_id ON followers (actor_id);
+
+      ALTER TABLE ap_inbox ADD COLUMN recipient TEXT;
+
+      CREATE INDEX ap_inbox_recipient ON ap_inbox (recipient);
     `,
   },
 ];

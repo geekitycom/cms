@@ -86,16 +86,27 @@ export const TAXONOMY_BASE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
  * answers on, which is what the list is: {@link TAXONOMY_BASE_PATTERN} would
  * refuse either of them anyway for the dot, so the entries are belt and
  * braces rather than the only thing standing in the way.
+ *
+ * `author` and `inbox` are reserved harder than the rest (decision-14). Every
+ * user is an actor at `/author/{username}/` and the shared inbox is `/inbox/`,
+ * and an actor id is a name a follower's server has filed the account under:
+ * a base that took one of those words would not shadow an archive, it would
+ * unmake an account. `web/authors.ts` spells them as `AUTHOR_BASE` and
+ * `INBOX_BASE`, and `taxonomy.test.ts` holds this list against those two
+ * constants, so the reservation and the URLs cannot drift apart; they are
+ * literals here only because that module reads {@link PAGE_SEGMENT} from this
+ * one, and a cycle between two files of constants is not worth the tidiness.
  */
 export const RESERVED_TOP_LEVEL_PATHS: readonly string[] = [
   PAGE_SEGMENT,
   'feed',
   'comments',
   'admin',
-  'ap',
   'theme',
   'uploads',
   'nodeinfo',
+  'author',
+  'inbox',
   'sitemap.xml',
   'robots.txt',
 ];

@@ -834,6 +834,29 @@ button[type='submit']:hover,
   margin: 0;
 }
 
+/* A row's public profile (TASK-67): four fields stacked in one cell, because
+   the display name, the bio, the avatar and the links are one Save and one
+   thing — the page at that person's author URL. Narrow on purpose: the column
+   sits in a table beside four others. */
+
+.admin-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-width: 18rem;
+}
+
+.admin-profile input[type='text'],
+.admin-profile textarea {
+  width: 100%;
+  margin: 0;
+}
+
+.admin-profile button {
+  margin: 0;
+  align-self: flex-start;
+}
+
 /* The how-often select beside a notification switch: narrow, so a row of
    switches and windows still reads as one column rather than as a form. */
 

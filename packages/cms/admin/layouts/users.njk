@@ -16,6 +16,7 @@
     <thead>
       <tr>
         <th scope="col">Username</th>
+        <th scope="col">Profile</th>
         <th scope="col">Email</th>
         <th scope="col">Email me about</th>
         <th scope="col">Created</th>
@@ -25,7 +26,41 @@
     <tbody>
       {% for entry in users %}
         <tr>
-          <td>{{ entry.username }}{% if entry.you %} <span class="admin-status">(you)</span>{% endif %}</td>
+          <td>
+            {{ entry.username }}{% if entry.you %} <span class="admin-status">(you)</span>{% endif %}
+            <br /><a href="{{ entry.archiveUrl }}">{{ entry.archiveUrl }}</a>
+            {# The id they were published under somewhere else (TASK-69).
+               Read-only on purpose: it is what the fediverse already holds,
+               and changing it would orphan every follow. #}
+            {% if entry.storedActorId %}
+              <br /><span class="admin-status">Also <code>{{ entry.storedActorId }}</code> — what the fediverse knows this user by. Set by the import or by hand in <code>data/users.json</code>, never here.</span>
+            {% endif %}
+          </td>
+          <td>
+            {# The public face of this person (TASK-67). Any row, not only your
+               own, for the reason the email box is any row: one role. After
+               decision-14 the same fields are what their ActivityPub actor
+               carries, which is why they live beside the account rather than
+               in the site settings. #}
+            <form class="admin-profile" method="post" action="{{ userProfileUrl }}">
+              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+              <input type="hidden" name="{{ fields.userId }}" value="{{ entry.id }}" />
+
+              <label class="admin-visually-hidden" for="display-name-{{ entry.id }}">Display name for {{ entry.username }}</label>
+              <input id="display-name-{{ entry.id }}" name="{{ fields.displayName }}" type="text" value="{{ entry.profile.displayName }}" placeholder="Display name" />
+
+              <label class="admin-visually-hidden" for="bio-{{ entry.id }}">Bio for {{ entry.username }}</label>
+              <textarea id="bio-{{ entry.id }}" name="{{ fields.bio }}" rows="2" placeholder="A line or two about them">{{ entry.profile.bio }}</textarea>
+
+              <label class="admin-visually-hidden" for="avatar-{{ entry.id }}">Avatar for {{ entry.username }}</label>
+              <input id="avatar-{{ entry.id }}" name="{{ fields.avatar }}" type="text" value="{{ entry.profile.avatar }}" placeholder="/uploads/…" />
+
+              <label class="admin-visually-hidden" for="links-{{ entry.id }}">Links for {{ entry.username }}</label>
+              <textarea id="links-{{ entry.id }}" name="{{ fields.links }}" rows="2" placeholder="Label | https://example.com">{{ entry.profile.links }}</textarea>
+
+              <button type="submit">Save profile</button>
+            </form>
+          </td>
           <td>
             {# Any row, not only your own: there is one role, so everybody here
                already has every power, and TASK-55's notices need somewhere to
@@ -88,6 +123,15 @@
       {% endfor %}
     </tbody>
   </table>
+
+  <p class="admin-hint">
+    A profile is public: the display name heads that person's archive and is
+    what a byline under their posts prints, and the bio, the avatar and the
+    links go on the archive beside it. Links are one per line, either
+    <code>Label | https://example.com</code> or a bare URL. Nothing here is
+    required — a user with no profile still has an archive under their
+    username.
+  </p>
 
   <p class="admin-hint">
     {% if mailConfigured %}

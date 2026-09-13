@@ -21,6 +21,10 @@
  *      `Accept`, and store the follower.
  *   5. A new post file is copied into the watched content directory, and the
  *      `Create(Article)` that follows has to reach both inboxes.
+ *   6. A second account carries the actor id it was published under elsewhere
+ *      (decision-14). That URL has to serve the actor, redirect a browser,
+ *      answer WebFinger, and — the part only a socket can prove — sign an
+ *      activity the peer verifies by dereferencing the key id it names.
  *
  * It is `pnpm fed:smoke` from the workspace root and the `fed-smoke` job in
  * CI. Nothing here writes inside the repository: the fixture is copied into a
@@ -55,6 +59,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import { cp, mkdtemp, rm } from 'node:fs/promises';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -74,7 +79,10 @@ import {
   Update,
 } from '@fedify/vocab';
 
+import { writeUsers } from '../src/admin/__testing__/users.ts';
+import { listUsers } from '../src/admin/accounts.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../src/admin/settings.ts';
+import { importWordPressActor } from '../src/federation/import-wordpress.ts';
 import { addFollower, readFollowers, readInboxLog } from '../src/federation/records.ts';
 import { createCms } from '../src/index.ts';
 import type { Cms } from '../src/index.ts';
@@ -86,8 +94,24 @@ const PACKAGE_DIR = path.resolve(fileURLToPath(import.meta.url), '../..');
 const FIXTURE_DIR = path.join(PACKAGE_DIR, 'test', 'fixtures', 'federation');
 const PENDING_POST = '2026-03-05-hot-off-the-press.md';
 
-/** The handle the site answers to. `blog` is the default; it is named to assert on it. */
-const ACTOR_HANDLE = 'blog';
+/**
+ * The one account this site has. decision-14 makes every user an actor at
+ * their author URL, so this is the handle, the identifier and the path.
+ */
+const USERNAME = 'andrew';
+
+/**
+ * A second account, standing in for one that arrived from somewhere else. It
+ * is brought across by `geekity import wordpress-actor` part way through the
+ * run (TASK-71), which is what gives it the stored actor id (TASK-69), the
+ * plugin's numeric id (TASK-70) and the RSA key its followers hold — so every
+ * id it answers by is that URL rather than its author URL, and the key a peer
+ * verifies with is the one that was imported rather than one this site minted.
+ */
+const MIGRATED_USERNAME = 'oldblog';
+
+/** The number the plugin gave that person, which its paths are built from. */
+const MIGRATED_WORDPRESS_ACTOR_ID = 2;
 
 /** How long any one wait may take before the run is called a failure. */
 const STEP_TIMEOUT_MS = 30_000;
@@ -141,12 +165,20 @@ async function main(): Promise<void> {
         baseUrl,
         timezone: 'UTC',
         postsPerPage: 10,
-        author: 'andrew',
-        actorHandle: ACTOR_HANDLE,
-        actorType: 'Person',
-        avatar: '',
+        author: USERNAME,
       },
     });
+
+    // The actor is a user, so the accounts exist before the site boots. The
+    // second one is the WordPress case decision-14 is built around: a person
+    // whose followers know them as `?author=2` and must go on doing so.
+    const storedActorId = `${baseUrl}/?author=2`;
+    writeUsers(dataDir, [
+      { username: USERNAME, profile: { displayName: 'Andrew Shell' } },
+      // No `actorId` and no key: both arrive with the import below, which is
+      // the only door either of them has.
+      { username: MIGRATED_USERNAME, id: 2, profile: { displayName: 'The Old Blog' } },
+    ]);
 
     log(`booting the site on ${baseUrl}`);
     const cms: Cms = createCms({
@@ -168,18 +200,40 @@ async function main(): Promise<void> {
     assert.equal(bound.port, port, 'the site bound the port its base URL names');
     ok(`the site is listening on ${baseUrl}`);
 
-    const actorUrl = `${baseUrl}/ap/actor`;
+    const actorUrl = `${baseUrl}/author/${USERNAME}/`;
 
     // ------------------------------------------------------- fedify lookup ×2
     log(`fedify lookup ${actorUrl}`);
     const actor = await lookup(actorUrl);
     assert.equal(actor['id'], actorUrl, 'the actor document names the actor URL as its id');
     assert.equal(actor['type'], 'Person', 'the actor is a Person');
-    assert.equal(actor['preferredUsername'], ACTOR_HANDLE, 'the actor keeps its handle');
-    for (const key of ['inbox', 'outbox', 'followers', 'publicKey'] as const) {
+    assert.equal(actor['preferredUsername'], USERNAME, 'the actor keeps its username');
+    for (const key of ['inbox', 'outbox', 'followers', 'following', 'publicKey'] as const) {
       assert.ok(actor[key] !== undefined, `the actor document carries ${key}`);
     }
-    ok(`the actor is @${ACTOR_HANDLE}@localhost:${String(port)} (${String(actor['name'])})`);
+    assert.equal(actor['inbox'], `${actorUrl}inbox/`, 'the inbox is a child of the actor');
+    assert.equal(
+      (actor['endpoints'] as { sharedInbox?: string } | undefined)?.sharedInbox,
+      `${baseUrl}/inbox/`,
+      'and the shared inbox is /inbox/ (decision-14)',
+    );
+    ok(`the actor is @${USERNAME}@localhost:${String(port)} (${String(actor['name'])})`);
+
+    // WebFinger is the CMS's own route rather than Fedify's (doc-8), and it is
+    // what a peer holding any one of a user's URLs uses to find the others.
+    const jrd = (await (
+      await fetch(
+        `${baseUrl}/.well-known/webfinger?resource=${encodeURIComponent(`acct:${USERNAME}@localhost:${String(port)}`)}`,
+      )
+    ).json()) as { subject: string; aliases: string[]; links: { rel: string; href?: string }[] };
+    assert.equal(jrd.subject, `acct:${USERNAME}@localhost:${String(port)}`);
+    assert.equal(
+      jrd.links.find((link) => link.rel === 'self')?.href,
+      actorUrl,
+      'WebFinger points at the actor',
+    );
+    assert.ok(jrd.aliases.includes(`${baseUrl}/@${USERNAME}`), 'and lists /@{username}');
+    ok(`WebFinger answers acct:${USERNAME}@localhost:${String(port)}`);
 
     // The object id of the post the fixture shipped, which the boot scan has
     // just indexed. decision-13 makes that its permalink, and reading the
@@ -193,7 +247,7 @@ async function main(): Promise<void> {
     const article = await lookup(objectUrl);
     assert.equal(article['id'], objectUrl, 'the post object names its own permalink as its id');
     assert.equal(article['type'], 'Article', 'a published post is an Article');
-    assert.equal(article['attributedTo'], actorUrl, 'the post is attributed to the site actor');
+    assert.equal(article['attributedTo'], actorUrl, 'the post is attributed to its author');
     assert.equal(article['name'], existing.title, 'the post object carries the post title');
     ok(`the post object is an Article titled ${JSON.stringify(existing.title)}`);
 
@@ -215,18 +269,15 @@ async function main(): Promise<void> {
     // `Follow` from that actor would have written — through the same
     // `addFollower` the inbox handler calls, so the followers file is the one
     // thing that decides who is delivered to here as well.
-    await addFollower(
-      { admin: cms.admin, contentDir },
-      {
-        actorId: cliActor,
-        inboxId: cliInbox,
-        sharedInboxId: null,
-        handle: null,
-        name: 'Fedify Ephemeral Inbox',
-        iconUrl: null,
-        url: null,
-      },
-    );
+    await addFollower({ admin: cms.admin, contentDir }, USERNAME, {
+      actorId: cliActor,
+      inboxId: cliInbox,
+      sharedInboxId: null,
+      handle: null,
+      name: 'Fedify Ephemeral Inbox',
+      iconUrl: null,
+      url: null,
+    });
     ok(`the ephemeral inbox is ${cliActor}, delivering to ${cliInbox}`);
 
     // ------------------------------------------------------ a real Follow
@@ -240,7 +291,7 @@ async function main(): Promise<void> {
     // `Accept` it answered with reached the peer and verified there too.
     const follower = await waitFor({
       what: 'the Follow to be accepted and the follower stored',
-      poll: () => cms.admin.getFollower(peer.actorId),
+      poll: () => cms.admin.getFollower(USERNAME, peer.actorId),
     });
     assert.equal(follower.inboxId, peer.inboxId, 'the stored follower names the peer’s inbox');
     await waitFor({
@@ -253,18 +304,18 @@ async function main(): Promise<void> {
     // The follow that just crossed a socket has to be in the file the site
     // publishes, not only in the index: decision-9 makes the file the source
     // and the table a cache of it.
-    const followers = readFollowers(contentDir);
+    const followers = readFollowers(contentDir, USERNAME);
     assert.deepEqual(
       followers.map((entry) => entry.actorId).sort(),
       [cliActor, peer.actorId].sort(),
-      'content/_data/federation/followers.json names both followers',
+      `content/_data/federation/${USERNAME}/followers.json names both followers`,
     );
     assert.equal(
       followers.find((entry) => entry.actorId === peer.actorId)?.inboxId,
       peer.inboxId,
       'the file names the peer’s inbox',
     );
-    ok('content/_data/federation/followers.json holds both followers');
+    ok(`content/_data/federation/${USERNAME}/followers.json holds both followers`);
 
     // ----------------------------------------------------------- a Like
     log('liking a published post from the peer');
@@ -392,6 +443,134 @@ async function main(): Promise<void> {
     const afterResend = cms.admin.lastDeliveryToObject(publishedObject);
     assert.equal(afterResend?.activityType, 'Update', 'and the outcome cache says so');
     assert.equal(afterResend?.slug, 'hot-off-the-press', 'against the post it was about');
+
+    // ------------------------------------------------------ a stored actor id
+    // decision-14: a user published elsewhere keeps the id their followers
+    // hold. Everything below is that URL doing the work the author URL does
+    // for everybody else — served, redirected from, discoverable, and signed
+    // with.
+    //
+    // The account gets all of it the way a real cutover does: an RSA pair
+    // exported as PEM from the plugin, the id it published, and its numeric
+    // actor id, through `geekity import wordpress-actor`. The followers step is
+    // skipped — the fake WordPress this run would have to fetch from does not
+    // exist, and `src/federation/import-wordpress.test.ts` covers it in
+    // process.
+    log(`importing ${MIGRATED_USERNAME} from the WordPress ActivityPub plugin`);
+    const exported = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    const imported = await importWordPressActor({
+      admin: cms.admin,
+      dataDir,
+      contentDir,
+      username: MIGRATED_USERNAME,
+      actorId: storedActorId,
+      wordpressActorId: MIGRATED_WORDPRESS_ACTOR_ID,
+      privateKeyPem: exported.privateKey,
+      publicKeyPem: exported.publicKey,
+      followers: false,
+    });
+    assert.ok(imported.changed, 'the import wrote the key and the ids');
+    assert.equal(imported.keys[0]?.state, 'imported', 'the RSA pair came from the PEM');
+    assert.equal(imported.keys[1]?.state, 'generated', 'and the Ed25519 pair was minted');
+    ok(`imported ${MIGRATED_USERNAME}: ${imported.keys.map((key) => key.file).join(', ')}`);
+
+    // Twice changes nothing, which is what makes a cutover a thing you can run
+    // again after an instance that was down comes back.
+    const rerun = await importWordPressActor({
+      admin: cms.admin,
+      dataDir,
+      contentDir,
+      username: MIGRATED_USERNAME,
+      actorId: storedActorId,
+      wordpressActorId: MIGRATED_WORDPRESS_ACTOR_ID,
+      privateKeyPem: exported.privateKey,
+      publicKeyPem: exported.publicKey,
+      followers: false,
+    });
+    assert.equal(rerun.changed, false, 'a second import changes nothing');
+    ok('a second import changed nothing');
+
+    const migratedArchive = `${baseUrl}/author/${MIGRATED_USERNAME}/`;
+    log(`fedify lookup ${storedActorId}`);
+    const migrated = await lookup(storedActorId);
+    assert.equal(migrated['id'], storedActorId, 'the stored id is the actor’s own id');
+    assert.equal(migrated['type'], 'Person');
+    assert.equal(migrated['url'], migratedArchive, 'and the archive is still where a person goes');
+    const publicKey = migrated['publicKey'] as { id?: string; publicKeyPem?: string } | undefined;
+    assert.equal(
+      publicKey?.id,
+      `${storedActorId}#main-key`,
+      'the key id hangs off the stored id, or no peer could dereference it',
+    );
+    // The point of the import: what a peer reads is the key the plugin held,
+    // not a key this site minted for a stranger.
+    assert.equal(
+      (publicKey?.publicKeyPem ?? '').replace(/\s+/g, ''),
+      exported.publicKey.replace(/\s+/g, ''),
+      'and it is the public half of the pair that was imported',
+    );
+    ok(`the actor at ${storedActorId} publishes the imported public key`);
+
+    const redirected = await fetch(storedActorId, {
+      headers: { accept: 'text/html' },
+      redirect: 'manual',
+    });
+    assert.equal(redirected.status, 301, 'a browser at the stored id is redirected');
+    assert.equal(redirected.headers.get('location'), `/author/${MIGRATED_USERNAME}/`);
+    ok(`a browser at ${storedActorId} is sent to the archive`);
+
+    const migratedJrd = (await (
+      await fetch(`${baseUrl}/.well-known/webfinger?resource=${encodeURIComponent(storedActorId)}`)
+    ).json()) as { subject: string; aliases: string[]; links: { rel: string; href?: string }[] };
+    assert.equal(migratedJrd.subject, `acct:${MIGRATED_USERNAME}@localhost:${String(port)}`);
+    assert.equal(
+      migratedJrd.links.find((link) => link.rel === 'self')?.href,
+      storedActorId,
+      'WebFinger points a peer at the stored id',
+    );
+    assert.ok(migratedJrd.aliases.includes(migratedArchive), 'and lists the archive beside it');
+    ok(`WebFinger resolves ${storedActorId}`);
+
+    // The proof that matters: an activity signed under the stored key id has
+    // to verify at a peer that has never heard of this site. The peer
+    // dereferences the key id in the signature, which is the stored URL, and
+    // refuses the delivery with a 401 if what it finds does not own the key.
+    await addFollower({ admin: cms.admin, contentDir }, MIGRATED_USERNAME, {
+      actorId: peer.actorId,
+      inboxId: peer.inboxId,
+      sharedInboxId: peer.sharedInboxId,
+      handle: null,
+      name: 'Smoke Test Peer',
+      iconUrl: null,
+      url: null,
+    });
+    const migratedUser = listUsers(dataDir).find((user) => user.username === MIGRATED_USERNAME);
+    assert.ok(migratedUser !== undefined, 'the migrated account is in the users file');
+
+    log(`sending an Update of ${storedActorId} to the peer`);
+    const actorUpdate = await cms.delivery.updateActor(migratedUser);
+    assert.ok(actorUpdate !== undefined, 'the actor update was built');
+    await cms.delivery.settled();
+
+    const toPeerFromMigrated = cms.admin
+      .listDeliveries(actorUpdate.activityId)
+      .find((delivery) => delivery.actorId === peer.actorId);
+    assert.equal(
+      toPeerFromMigrated?.status,
+      'sent',
+      `the peer accepted the Update${toPeerFromMigrated?.error === null ? '' : `: ${String(toPeerFromMigrated?.error)}`}`,
+    );
+    const actorUpdateAtPeer = await waitFor({
+      what: 'the peer to receive the Update of the migrated actor',
+      poll: () => peer.received().find((entry) => entry.objectId === storedActorId),
+      timeoutMs: 5000,
+    });
+    assert.equal(actorUpdateAtPeer.type, 'Update');
+    ok(`the peer verified a signature made under ${storedActorId}#main-key`);
 
     log('federation smoke passed');
   } finally {

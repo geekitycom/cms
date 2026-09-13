@@ -1,18 +1,25 @@
 {% extends "layouts/base.njk" %}
 {% import "partials/tags.njk" as taxonomy with context %}
+{% import "partials/byline.njk" as byline %}
 
 {% block content %}
 <article class="post h-entry">
   <header class="post-header">
     <h1 class="post-title p-name">{{ title }}</h1>
-    {% if date %}
+    {% if date or author %}
     <p class="post-meta">
+      {%- if date %}
       Published
       <time class="dt-published" datetime="{{ date | date("iso") }}">{{ date | date }}</time>
-      {% if updated %}
+      {%- if updated %}
       &middot; updated
       <time class="dt-updated" datetime="{{ updated | date("iso") }}">{{ updated | date }}</time>
-      {% endif %}
+      {%- endif %}
+      {%- endif %}
+      {#- Who wrote it, linked to their archive (TASK-67). -#}
+      {%- if author %}
+      {% if date %}&middot; {% endif %}by {{ byline.line(author) }}
+      {%- endif %}
     </p>
     {% endif %}
   </header>

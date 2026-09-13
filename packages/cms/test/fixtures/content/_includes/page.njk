@@ -29,11 +29,11 @@
 {#
   The federation files the CMS publishes with the site, which Eleventy hands
   over as ordinary data because they live under `_data/`: `followers.json`
-  becomes `federation.followers`, and each month of the inbox log becomes an
+  becomes `federation.{username}.followers`, and each month of the inbox log becomes an
   entry of `federation.inbox` (the config registers `.jsonl` as a data format).
 #}
 <ul class="followers">
-  {% for follower in federation.followers %}
+  {% for follower in federation.ada.followers %}
   <li><a href="{{ follower.url }}">{{ follower.name or follower.handle }}</a></li>
   {% endfor %}
 </ul>

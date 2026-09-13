@@ -10,9 +10,16 @@
   It extends the packaged base layout by name, so the site does not own the
   <head>, the header or the footer either. What it adds is a byline and a
   reading time, which is what makes the override visible in a browser.
+
+  The byline comes from the packaged `partials/byline.njk`, because `author` is
+  the post's author as a profile rather than as a string (TASK-67): `name` to
+  print, and `url` to link to their archive when the name is one of the site's
+  users. A post that names nobody falls back to the site's own author, which is
+  a name and nothing else.
 #}
 {% extends "layouts/base.njk" %}
 {% import "partials/tags.njk" as taxonomy with context %}
+{% import "partials/byline.njk" as byline %}
 
 {% set minutes = ((content | striptags | wordcount) / 220) | round(0, "ceil") %}
 
@@ -21,7 +28,7 @@
   <header class="post-header">
     <h1 class="post-title p-name">{{ title }}</h1>
     <p class="post-byline">
-      by <span class="p-author">{{ author | default(site.author) }}</span>
+      by {{ byline.line(author or { name: site.author }) }}
     </p>
     <p class="post-meta">
       {% if date %}

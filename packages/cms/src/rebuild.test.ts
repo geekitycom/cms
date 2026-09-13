@@ -71,8 +71,11 @@ describe('a database this package cannot use', () => {
   });
 });
 
-/** The account the captured login is made with. */
+/** The account the captured login is made with, and so the site's one actor. */
 const ADMIN = { username: 'ada', password: 'correct horse battery' };
+
+/** Where that account's actor and its collections live (decision-14). */
+const ACTOR_PATH = `/author/${ADMIN.username}/`;
 
 const ADA = 'https://remote.example/users/ada';
 const GRACE = 'https://remote.example/users/grace';
@@ -128,8 +131,6 @@ async function populatedSite(): Promise<{ contentDir: string; dataDir: string; b
         author: 'Ada Lovelace',
         timezone: 'America/Chicago',
         postsPerPage: 5,
-        actorHandle: 'blog',
-        actorType: 'Person',
       },
       null,
       2,
@@ -147,6 +148,9 @@ async function populatedSite(): Promise<{ contentDir: string; dataDir: string; b
       'title: Hello',
       'permalink: /2026/09/hello/',
       'date: 2026-09-01T12:00:00.000Z',
+      // decision-14: a post belongs to a user, and the outbox is that user's
+      // archive as activities.
+      `author: ${ADMIN.username}`,
       'tags: [eleventy, sqlite]',
       'categories: [general]',
       'activitypub:',
@@ -168,6 +172,7 @@ async function populatedSite(): Promise<{ contentDir: string; dataDir: string; b
       'title: Second',
       'permalink: /2026/09/second/',
       'date: 2026-09-02T12:00:00.000Z',
+      `author: ${ADMIN.username}`,
       'tags: [eleventy]',
       '---',
       '',
@@ -191,7 +196,7 @@ async function populatedSite(): Promise<{ contentDir: string; dataDir: string; b
   );
 
   await write(
-    '_data/federation/followers.json',
+    `_data/federation/${ADMIN.username}/followers.json`,
     `${JSON.stringify(
       [
         follower(),
@@ -317,14 +322,14 @@ async function capture(cms: Cms): Promise<Record<string, unknown>> {
   assert.equal(variant.status, 200, 'the 640px WebP was served');
 
   return {
-    actor: await activityStreams(cms, '/ap/actor'),
+    actor: await activityStreams(cms, ACTOR_PATH),
     webfinger: await (
-      await cms.app.request('/.well-known/webfinger?resource=acct:blog@blog.example')
+      await cms.app.request(`/.well-known/webfinger?resource=acct:${ADMIN.username}@blog.example`)
     ).json(),
-    followers: await activityStreams(cms, '/ap/actor/followers'),
-    followersPage: await activityStreams(cms, '/ap/actor/followers?cursor=0'),
-    outbox: await activityStreams(cms, '/ap/actor/outbox'),
-    outboxPage: await activityStreams(cms, '/ap/actor/outbox?cursor=0'),
+    followers: await activityStreams(cms, `${ACTOR_PATH}followers/`),
+    followersPage: await activityStreams(cms, `${ACTOR_PATH}followers/?cursor=0`),
+    outbox: await activityStreams(cms, `${ACTOR_PATH}outbox/`),
+    outboxPage: await activityStreams(cms, `${ACTOR_PATH}outbox/?cursor=0`),
     // At the stored id, and at the permalink, which is where a post without a
     // stored one answers.
     postObject: await activityStreams(cms, '/ap/posts/hello'),

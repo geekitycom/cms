@@ -1,33 +1,42 @@
 import type { FederationOrigin } from '@fedify/fedify';
 
-/**
- * Where the ActivityPub endpoints live, under one prefix so they never
- * collide with a permalink.
- *
- * The actor, its collections and the shared inbox are all that live here. A
- * post's object is not one of them: decision-13 makes a post's id its
- * permalink, so the permalink middleware serves the `Article` and there is no
- * `/ap/posts/{slug}` to register.
- */
-export const FEDERATION_PREFIX = '/ap';
+import { AUTHOR_BASE, INBOX_BASE } from '../web/authors.ts';
 
 /**
- * The actor's path template.
+ * Where a user's ActivityPub endpoints live: at their author URL, and under it.
  *
- * The identifier is a template variable because Fedify requires one, but only
- * the site actor's sentinel identifier ever answers: a site is one actor.
- * Because that identifier is a constant rather than the handle, the actor's id
- * is `{baseUrl}/ap/actor` however often the handle is renamed.
+ * decision-14 makes every user an actor whose id is their author archive,
+ * `{baseUrl}/author/{username}/`, so there is no prefix of its own any more —
+ * the actor is a page in a browser and an actor to a peer, exactly as a post
+ * is its permalink to both (decision-13). The collections are the archive's
+ * children, with the trailing slashes every URL on this site has, and Fedify
+ * builds each id from these templates so nothing has to guess the form.
+ *
+ * A GET of `/author/ada` without the slash is a Fedify 404 that falls through
+ * to the public site's own canonical redirect, which is where a browser that
+ * followed an actor id without its slash lands (doc-8).
  */
-export const ACTOR_PATH = `${FEDERATION_PREFIX}/{identifier}` as const;
+export const ACTOR_PATH = `/${AUTHOR_BASE}/{identifier}/` as const;
 
 /** The actor's inbox, its outbox and its two follow collections. */
-export const INBOX_PATH = `${ACTOR_PATH}/inbox` as const;
-export const OUTBOX_PATH = `${ACTOR_PATH}/outbox` as const;
-export const FOLLOWERS_PATH = `${ACTOR_PATH}/followers` as const;
-export const FOLLOWING_PATH = `${ACTOR_PATH}/following` as const;
-/** The instance-wide inbox, which a peer may use to deliver to every actor at once. */
-export const SHARED_INBOX_PATH = `${FEDERATION_PREFIX}/shared-inbox` as const;
+export const INBOX_PATH = `${ACTOR_PATH}inbox/` as const;
+export const OUTBOX_PATH = `${ACTOR_PATH}outbox/` as const;
+export const FOLLOWERS_PATH = `${ACTOR_PATH}followers/` as const;
+export const FOLLOWING_PATH = `${ACTOR_PATH}following/` as const;
+
+/**
+ * The instance-wide inbox, which a peer may use to deliver to every actor at
+ * once.
+ *
+ * A reserved top-level path (decision-14), which is why `inbox` is one of the
+ * two names `web/authors.ts` keeps a user from taking.
+ */
+export const SHARED_INBOX_PATH = `/${INBOX_BASE}/` as const;
+
+/** Where a user's mention-style short URL lives: `/@ada`, WordPress's alias. */
+export function handleHref(username: string): string {
+  return `/@${encodeURIComponent(username)}`;
+}
 
 /** Where the NodeInfo 2.1 document lives; `/.well-known/nodeinfo` points at it. */
 export const NODEINFO_PATH = '/nodeinfo/2.1';

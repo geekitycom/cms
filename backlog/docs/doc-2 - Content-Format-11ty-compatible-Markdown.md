@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 03:13'
+updated_date: '2026-09-13 03:57'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -61,12 +61,39 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | Key | Use |
 | --- | --- |
 | `updated` | last modified date, a UTC instant, written on every admin save |
-| `author` | user login; resolved to display name at render |
+| `author` | the username of a user; see below |
 | `activitypub.published` | timestamp of first delivery, a UTC instant. The only key the CMS writes here: it records that the post has been announced and when, which is what decides `Create` against `Update` |
 | `activitypub.id` | never written by the CMS. A post's ActivityStreams object id is its permalink (decision-13); this key is read, not minted, so a post migrated from elsewhere keeps the id its followers already hold — `https://example.com/?p=813` — and every `Update` and `Delete` names it |
 | `navigationOrder` | where a page in the menu sorts; the lower numbers first, and a page with none after every page with one |
 
 Unknown keys are preserved on round trip. The writer emits YAML with a stable key order so diffs stay small.
+
+## Author
+
+`author` names a **user**, by username. decision-14 makes each user an actor at
+`/author/{username}/`, so a post's author is a person rather than a string: it
+decides whose archive the post is on, whose byline it carries, and whose
+followers hear about it.
+
+The editor writes the username. A new document starts on whoever is signed in;
+an existing one offers the site's users in a select, preselected to the one the
+file names.
+
+A file the CMS did not write is read as generously as possible, because a site
+moving here has thousands of them. The value is matched first against every
+username, exactly, and then — for a file written before this — against every
+user's display name. A display name **exactly one** user answers to reads as
+that user, on the page and in the index alike, so their posts appear on their
+archive and their byline links to it without a file changing. Two people
+answering to the same display name is not an attribution, and reads as nobody.
+
+The mapping is read, not written: the file keeps what it says until the editor
+next saves it, and that save writes the username. A name no user answers to is
+kept and printed as it stands; it simply links nowhere.
+
+A username has to survive as a URL segment, because it is one. The rules are in
+`src/admin/credentials.ts`, and a name that would not is refused when the
+account is created.
 
 ## Dates
 

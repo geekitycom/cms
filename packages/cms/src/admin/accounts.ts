@@ -89,8 +89,83 @@ export interface User {
    * adding an event adds no field here either.
    */
   readonly notificationModes?: Readonly<Record<string, string>> | undefined;
+  /**
+   * What the public site says about this person, when somebody has filled any
+   * of it in (TASK-67).
+   *
+   * decision-14 makes a user an actor at their author URL, so the URL has to
+   * be a page before it can be an actor, and a page needs something to say.
+   * Absent for a user nobody has written a profile for, on the rule the two
+   * maps above follow: the file holds what somebody actually filled in, and a
+   * user with no profile still has an archive under their username.
+   */
+  readonly profile?: UserProfile | undefined;
+  /**
+   * The ActivityStreams id this person was published under somewhere else,
+   * when they were (TASK-69).
+   *
+   * decision-14 calls this identity rather than cache: a follower's server
+   * keys the account by it for as long as the follow lasts, and a document
+   * served under it with a different `id` reads as a different person, not as
+   * a moved one. So a site arriving from the WordPress ActivityPub plugin
+   * keeps the `https://example.com/?author=2` its followers already hold, for
+   * the life of the user.
+   *
+   * The CMS never mints one — a user born here is an actor at their author URL
+   * and has no second name to keep — and no screen writes one: it arrives with
+   * the import (TASK-71) or is typed into the file by hand. The whole URL is
+   * stored, query string and all, because that is what has to be matched.
+   */
+  readonly actorId?: string | undefined;
+  /**
+   * The number the WordPress ActivityPub plugin gave this person's actor, when
+   * they had one (TASK-70).
+   *
+   * The WordPress user id, which is what the plugin puts in the paths it
+   * publishes: `/wp-json/activitypub/1.0/actors/2/inbox` is user 2. Unlike
+   * {@link User.actorId} this is cache rather than identity — a follower's
+   * server replaces those paths the next time it refetches the actor — so it
+   * is only ever read behind the `wordpressActivityPub` site setting, and it
+   * is what maps a delivery arriving at one of those paths to a person.
+   *
+   * The CMS never mints one. It arrives with the import (TASK-71) or is typed
+   * into the file by hand, beside the stored actor id the same migration sets.
+   */
+  readonly wordpressActorId?: number | undefined;
   /** When the user was created, as an ISO 8601 instant. */
   readonly createdAt: string;
+}
+
+/**
+ * One thing a profile points at: somewhere else this person is.
+ *
+ * A label and a URL rather than a bare URL, because the label is what a theme
+ * prints and what an ActivityPub `attachment` calls the property (TASK-68).
+ */
+export interface ProfileLink {
+  /** What the link says. */
+  readonly label: string;
+  /** Where it goes. */
+  readonly href: string;
+}
+
+/**
+ * The public face of a user: what their archive is headed with and what their
+ * actor will carry.
+ *
+ * Every field is optional, and one that is empty is not stored at all: a
+ * profile is something somebody chose to write, and a user who has written
+ * none of it is not a user with four empty strings.
+ */
+export interface UserProfile {
+  /** The name to print instead of the username, when they gave one. */
+  readonly displayName?: string | undefined;
+  /** A few sentences about them. */
+  readonly bio?: string | undefined;
+  /** A picture, as the path or URL it is served at. */
+  readonly avatar?: string | undefined;
+  /** Somewhere else they are, in the order they listed them. */
+  readonly links?: readonly ProfileLink[] | undefined;
 }
 
 /** A user with the field no screen may render: its password hash. */
@@ -136,6 +211,27 @@ export function listUsers(dataDir: string): User[] {
     .users.map(withoutHash)
     .sort((one, other) =>
       one.username < other.username ? -1 : one.username > other.username ? 1 : 0,
+    );
+}
+
+/**
+ * The site's first account: the lowest id, which is the one the first run
+ * made.
+ *
+ * decision-14 leaves the site with no actor of its own, and two things still
+ * have to be somebody's: a relay subscription, which is an instance-wide
+ * agreement rather than one person's, and a post whose `author` names nobody
+ * this site knows. Both fall to the first account, because a site's first
+ * account is the one that has always existed and the only one that can be
+ * chosen without asking. `undefined` before anybody has signed up, which is
+ * first-run setup and federates nothing.
+ */
+export function primaryUser(dataDir: string): User | undefined {
+  return readUsersFile(dataDir)
+    .users.map(withoutHash)
+    .reduce<User | undefined>(
+      (lowest, user) => (lowest === undefined || user.id < lowest.id ? user : lowest),
+      undefined,
     );
 }
 
@@ -284,6 +380,70 @@ export async function setUserEmail(input: {
 }
 
 /**
+ * Write a user's profile, replacing whatever was there.
+ *
+ * The whole profile at once rather than a field at a time, because that is
+ * what the form on the users screen submits: four boxes and a Save, and a
+ * field somebody cleared is a field they no longer want. {@link cleanProfile}
+ * drops the empties, so a profile with nothing left in it leaves the user with
+ * no `profile` key rather than with an empty object. Returns `false` when
+ * there is no such user.
+ */
+export async function setUserProfile(input: {
+  /** Which site's users file to write. */
+  dataDir: string;
+  /** Whose profile. */
+  userId: number;
+  /** Everything the profile should say from now on. */
+  profile: UserProfile;
+}): Promise<boolean> {
+  const next = cleanProfile(input.profile);
+  let changed = false;
+
+  await write(input.dataDir, (contents) => {
+    changed = contents.users.some((user) => user.id === input.userId);
+    return {
+      ...contents,
+      users: contents.users.map((user) => {
+        if (user.id !== input.userId) return user;
+        const { profile: _removed, ...rest } = user;
+        return next === undefined ? rest : { ...rest, profile: next };
+      }),
+    };
+  });
+
+  return changed;
+}
+
+/**
+ * A profile with the empties taken out, or `undefined` when nothing is left.
+ *
+ * Trimming here rather than at the form is what makes a hand-edited file and a
+ * saved one read the same: a bio of three spaces is a bio nobody wrote, and a
+ * link with no URL is not somewhere this person is.
+ */
+export function cleanProfile(profile: UserProfile): UserProfile | undefined {
+  const displayName = (profile.displayName ?? '').trim();
+  const bio = (profile.bio ?? '').trim();
+  const avatar = (profile.avatar ?? '').trim();
+  const links = (profile.links ?? [])
+    .map((link) => ({ label: link.label.trim(), href: link.href.trim() }))
+    // A link needs somewhere to go; a label it does not have is the URL again,
+    // because a list of blank links is worse than a list of bare addresses.
+    .filter((link) => link.href !== '')
+    .map((link) => (link.label === '' ? { label: link.href, href: link.href } : link));
+
+  const cleaned: UserProfile = {
+    ...(displayName === '' ? {} : { displayName }),
+    ...(bio === '' ? {} : { bio }),
+    ...(avatar === '' ? {} : { avatar }),
+    ...(links.length === 0 ? {} : { links }),
+  };
+
+  return Object.keys(cleaned).length === 0 ? undefined : cleaned;
+}
+
+/**
  * Turn one notice on or off for one user.
  *
  * The map holds only what somebody changed, so this writes through
@@ -356,6 +516,102 @@ export async function setUserNotificationMode(input: {
   });
 
   return changed;
+}
+
+/**
+ * Thrown when the id being imported already belongs to somebody else.
+ *
+ * Two accounts answering to one actor id is two people with one identity, and
+ * two carrying one WordPress number is a delivery to the plugin's old inbox
+ * that could go to either. Neither is something to pick a winner for, so the
+ * import stops and says whose it is.
+ */
+export class ConflictingActorIdError extends Error {
+  override readonly name = 'ConflictingActorIdError';
+  /** The user who already has it. */
+  readonly username: string;
+
+  constructor(username: string, what: string) {
+    super(`${what} already belongs to "${username}".`);
+    this.username = username;
+  }
+}
+
+/**
+ * Write the two ids a site arriving from the WordPress ActivityPub plugin
+ * carries: the actor id its followers hold, and the number its paths are built
+ * from (TASK-69, TASK-70).
+ *
+ * The only writer of either field, and it is not a screen: doc-4 makes a
+ * stored actor id identity for the life of the account, and identity is not
+ * something a form should be able to retype. `geekity import wordpress-actor`
+ * is what calls this.
+ *
+ * Both ids have to be unique across the file, and the check is inside the
+ * write for the reason {@link createUser}'s duplicate check is: it is a rule
+ * about the file rather than about one user, so it is read and acted on as one
+ * step. Returns whether anything changed — a second run with the same ids
+ * writes nothing, which is what makes the import idempotent.
+ */
+export async function setUserWordPressActor(input: {
+  /** Which site's users file to write. */
+  dataDir: string;
+  /** Whose record, by login name. */
+  username: string;
+  /** The id WordPress published them under, query string and all. */
+  actorId: string;
+  /** The WordPress user id. */
+  wordpressActorId: number;
+}): Promise<boolean> {
+  let changed = false;
+
+  await write(input.dataDir, (contents) => {
+    const mine = contents.users.find((user) => user.username === input.username);
+    if (mine === undefined) throw new UnknownUserError(input.username);
+
+    const byActorId = contents.users.find(
+      (user) => user.id !== mine.id && user.actorId === input.actorId,
+    );
+    if (byActorId !== undefined) {
+      throw new ConflictingActorIdError(byActorId.username, `The actor id ${input.actorId}`);
+    }
+
+    const byNumber = contents.users.find(
+      (user) => user.id !== mine.id && user.wordpressActorId === input.wordpressActorId,
+    );
+    if (byNumber !== undefined) {
+      throw new ConflictingActorIdError(
+        byNumber.username,
+        `WordPress actor ${String(input.wordpressActorId)}`,
+      );
+    }
+
+    changed = mine.actorId !== input.actorId || mine.wordpressActorId !== input.wordpressActorId;
+    if (!changed) return contents;
+
+    return {
+      ...contents,
+      users: contents.users.map((user) =>
+        user.id === mine.id
+          ? { ...user, actorId: input.actorId, wordpressActorId: input.wordpressActorId }
+          : user,
+      ),
+    };
+  });
+
+  return changed;
+}
+
+/** Thrown when a command names a user this site does not have. */
+export class UnknownUserError extends Error {
+  override readonly name = 'UnknownUserError';
+  /** The name that was asked for. */
+  readonly username: string;
+
+  constructor(username: string) {
+    super(`This site has no user named "${username}".`);
+    this.username = username;
+  }
 }
 
 /**
@@ -446,6 +702,9 @@ function withoutHash(user: StoredUser): User {
     ...(user.email === undefined ? {} : { email: user.email }),
     ...(user.notifications === undefined ? {} : { notifications: user.notifications }),
     ...(user.notificationModes === undefined ? {} : { notificationModes: user.notificationModes }),
+    ...(user.profile === undefined ? {} : { profile: user.profile }),
+    ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
+    ...(user.wordpressActorId === undefined ? {} : { wordpressActorId: user.wordpressActorId }),
     createdAt: user.createdAt,
   };
 }
@@ -540,6 +799,9 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const email = record['email'];
   const preferences = notificationsFrom(record['notifications']);
   const modes = notificationModesFrom(record['notificationModes']);
+  const profile = profileFrom(record['profile']);
+  const actorId = storedActorIdFrom(record['actorId']);
+  const wordpressActorId = wordpressActorIdFrom(record['wordpressActorId']);
   const passwordHash = record['passwordHash'];
   const createdAt = record['createdAt'];
 
@@ -571,9 +833,100 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
     // know: a stored `weekly` from a later version is read as the default
     // rather than as a window nothing here could wait for.
     ...(modes === undefined ? {} : { notificationModes: modes }),
+    // Dropped field by field on the same rule, and for the sharper reason that
+    // a profile is prose somebody may well have typed straight into the file:
+    // a bio that is a number is not a bio, and refusing to load the users file
+    // over one would take the whole admin down.
+    ...(profile === undefined ? {} : { profile }),
+    // Dropped rather than refused on the same rule again, and one more of its
+    // own: an id that is not a URL could never be requested, so keeping it
+    // would change nothing except to make a person's actor unreadable.
+    ...(actorId === undefined ? {} : { actorId }),
+    // And once more: a WordPress id that is not a whole positive number could
+    // never appear in one of the plugin's paths, so keeping it would only make
+    // the compatibility switch answer for a route nobody asks for.
+    ...(wordpressActorId === undefined ? {} : { wordpressActorId }),
     passwordHash,
     createdAt: typeof createdAt === 'string' ? createdAt : '',
   };
+}
+
+/**
+ * A stored profile as this version reads it, or `undefined` when it says
+ * nothing usable.
+ *
+ * Read through the same {@link cleanProfile} a save goes through, so a file
+ * written by hand and one written by the users screen are read identically:
+ * whitespace is trimmed, an empty field is no field, and a link with no URL is
+ * no link.
+ */
+function profileFrom(value: unknown): UserProfile | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+
+  return cleanProfile({
+    ...optionalText('displayName', record['displayName']),
+    ...optionalText('bio', record['bio']),
+    ...optionalText('avatar', record['avatar']),
+    links: linksFrom(record['links']),
+  });
+}
+
+/**
+ * A stored actor id as this version reads it, or `undefined` when the file
+ * says nothing usable.
+ *
+ * It has to be an absolute `http`/`https` URL, because that is the only kind
+ * of thing a peer can dereference and the only kind the request middleware
+ * could ever match: a relative path or a bare word is not an id anybody holds.
+ * Anything else is dropped rather than refused, so a mistyped line leaves one
+ * person served under their author URL instead of taking the whole admin down.
+ */
+function storedActorIdFrom(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const wanted = value.trim();
+  if (wanted === '') return undefined;
+
+  try {
+    const url = new URL(wanted);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? wanted : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A stored WordPress actor id as this version reads it, or `undefined`.
+ *
+ * A whole number above zero, because that is what a WordPress user id is and
+ * the only thing that could ever appear in one of the plugin's paths. A string
+ * is not accepted even when it reads as a number: the file is written by the
+ * import, and a quoted id would be a sign that something else wrote it.
+ */
+function wordpressActorIdFrom(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) return undefined;
+  return value;
+}
+
+/** `{ [key]: value }` when the value is a string, and nothing when it is not. */
+function optionalText(key: string, value: unknown): Record<string, string> {
+  return typeof value === 'string' ? { [key]: value } : {};
+}
+
+/** A stored list of profile links as this version reads it. */
+function linksFrom(value: unknown): ProfileLink[] {
+  if (!Array.isArray(value)) return [];
+
+  const links: ProfileLink[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const href = record['href'];
+    const label = record['label'];
+    if (typeof href !== 'string') continue;
+    links.push({ label: typeof label === 'string' ? label : '', href });
+  }
+  return links;
 }
 
 /** A stored preference map as this version reads it, or `undefined`. */

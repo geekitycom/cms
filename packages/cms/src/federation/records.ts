@@ -38,15 +38,65 @@ import { uriOf } from './replies.ts';
 /** Where the federation files live, relative to the content directory. */
 export const FEDERATION_DATA_DIRECTORY = '_data/federation';
 
-/** The followers file, relative to the content directory. */
-export const FOLLOWERS_FILE = `${FEDERATION_DATA_DIRECTORY}/followers.json`;
+/** What a user's followers file is called, inside their own directory. */
+export const FOLLOWERS_FILE = 'followers.json';
 
 /** The directory of monthly inbox logs, relative to the content directory. */
 export const INBOX_DIRECTORY = `${FEDERATION_DATA_DIRECTORY}/inbox`;
 
-/** The absolute path of one site's `content/_data/federation/followers.json`. */
-export function followersFile(contentDir: string): string {
-  return path.join(contentDir, ...FOLLOWERS_FILE.split('/'));
+/**
+ * The directory one user's federation files live in, relative to the content
+ * directory: `_data/federation/{username}`.
+ *
+ * decision-14 makes every user an actor, and an actor's followers are its own
+ * — an actor that was followed and forgotten simply stops hearing from the
+ * site — so the one file doc-4 had becomes one per user. The name is the
+ * username verbatim, because it is also the name in the actor's id and in the
+ * key files, and a directory nobody can match to a person would be worse than
+ * one with an unusual name in it.
+ *
+ * `inbox` is not a username: it is where the shared log lives, and
+ * `web/authors.ts` reserves the path for exactly that reason. A name that
+ * could climb out of the directory is refused rather than sanitised, because
+ * sanitising two different usernames into one directory would merge two
+ * people's followers.
+ */
+export function userDirectory(username: string): string {
+  if (username === '' || username === '.' || username === '..' || /[/\\]/.test(username)) {
+    throw new Error(`"${username}" cannot name a federation directory.`);
+  }
+  return `${FEDERATION_DATA_DIRECTORY}/${username}`;
+}
+
+/** The absolute path of one user's `content/_data/federation/{username}/followers.json`. */
+export function followersFile(contentDir: string, username: string): string {
+  return path.join(contentDir, ...userDirectory(username).split('/'), FOLLOWERS_FILE);
+}
+
+/**
+ * Every user the content directory holds federation files for, sorted.
+ *
+ * Read from the directory rather than from `data/users.json`, because
+ * decision-9 makes the files the truth: a rebuilt database has to put back
+ * exactly what is on disk, including the followers of a user whose account was
+ * removed — deleting the account is not the same act as unfollowing everybody
+ * on their behalf, and only one of the two can be taken back.
+ */
+export function federatedUsernames(contentDir: string): string[] {
+  let entries: { name: string; isDirectory: () => boolean }[];
+  try {
+    entries = readdirSync(path.join(contentDir, ...FEDERATION_DATA_DIRECTORY.split('/')), {
+      withFileTypes: true,
+    });
+  } catch {
+    // No directory is a site nobody has federated with yet.
+    return [];
+  }
+
+  return entries
+    .filter((entry) => entry.isDirectory() && entry.name !== 'inbox')
+    .map((entry) => entry.name)
+    .sort();
 }
 
 /** The absolute path of one site's `content/_data/federation/inbox`. */
@@ -81,7 +131,8 @@ export interface FederationRecords {
 }
 
 /**
- * The followers, as `followers.json` says them, oldest follow first.
+ * One user's followers, as their `followers.json` says them, oldest follow
+ * first.
  *
  * A missing file is an empty list, which is what a site nobody has followed
  * yet has. Anything else that is not a list of deliverable followers throws,
@@ -89,17 +140,18 @@ export interface FederationRecords {
  * read as "no followers" would quietly unfollow everybody — the one thing
  * doc-4 says an ActivityPub site can never take back.
  */
-export function readFollowers(contentDir: string): Follower[] {
-  const file = followersFile(contentDir);
+export function readFollowers(contentDir: string, username: string): Follower[] {
+  const file = followersFile(contentDir, username);
   const source = readFileIfPresentSync(file);
   if (source === undefined) return [];
 
-  return parseFollowers(source, file);
+  return parseFollowers(source, file, username);
 }
 
 /**
- * Record a follow: append the follower to the file, or refresh the profile of
- * one already there, and put the same thing in the index.
+ * Record a follow of one user: append the follower to that user's file, or
+ * refresh the profile of one already there, and put the same thing in the
+ * index.
  *
  * Following twice is not two followers. The file is keyed by actor id exactly
  * as the index is, and an actor already in it keeps its place and its original
@@ -108,15 +160,17 @@ export function readFollowers(contentDir: string): Follower[] {
  */
 export async function addFollower(
   records: FederationRecords,
-  follower: NewFollower,
+  username: string,
+  follower: Omit<NewFollower, 'username'>,
 ): Promise<Follower> {
   const { admin, contentDir } = records;
-  const file = followersFile(contentDir);
+  const file = followersFile(contentDir, username);
 
   return await withFileLock(file, () => {
-    const held = readFollowers(contentDir);
+    const held = readFollowers(contentDir, username);
     const existing = held.find((entry) => entry.actorId === follower.actorId);
     const stored: Follower = {
+      username,
       actorId: follower.actorId,
       inboxId: follower.inboxId,
       sharedInboxId: follower.sharedInboxId,
@@ -141,7 +195,8 @@ export async function addFollower(
 }
 
 /**
- * Forget a follower: an `Undo(Follow)`, or an actor deleting itself.
+ * Forget one of a user's followers: an `Undo(Follow)`, or an actor deleting
+ * itself.
  *
  * Returns whether anything was there to forget. The index is emptied of the
  * actor whether or not the file held it, so a row left over from a file that
@@ -149,17 +204,18 @@ export async function addFollower(
  */
 export async function removeFollower(
   records: FederationRecords,
+  username: string,
   actorId: string,
 ): Promise<boolean> {
   const { admin, contentDir } = records;
-  const file = followersFile(contentDir);
+  const file = followersFile(contentDir, username);
 
   return await withFileLock(file, () => {
-    const held = readFollowers(contentDir);
+    const held = readFollowers(contentDir, username);
     const next = held.filter((entry) => entry.actorId !== actorId);
     if (next.length !== held.length) writeFileAtomicallySync(file, followersJson(next));
 
-    const indexed = admin.deleteFollower(actorId);
+    const indexed = admin.deleteFollower(username, actorId);
     return next.length !== held.length || indexed;
   });
 }
@@ -176,6 +232,16 @@ export async function removeFollower(
 export interface InboxLine {
   /** When the activity arrived, as an ISO 8601 instant. */
   readonly receivedAt: string;
+  /**
+   * The user it was addressed to, or `null` for one delivered to the shared
+   * inbox without naming an actor of this site.
+   *
+   * decision-14 makes every user an actor, so "what the inbox was told" is no
+   * longer one question: a `Follow` is a follow *of somebody*, and a reply is
+   * a reply to somebody's post. The log stays one chronological record, as it
+   * is a record of what this server was told, and each line says whose it was.
+   */
+  readonly recipient: string | null;
   /** The activity as compacted JSON-LD, exactly as it arrived. */
   readonly json: string;
 }
@@ -212,10 +278,11 @@ export function readInboxLog(contentDir: string): InboxLine[] {
 export async function appendInboxActivity(
   records: FederationRecords,
   json: string,
-  receivedAt: string = new Date().toISOString(),
+  options: { recipient?: string | null | undefined; receivedAt?: string | undefined } = {},
 ): Promise<InboxActivity | undefined> {
   const { admin, contentDir } = records;
-  const line: InboxLine = { receivedAt, json };
+  const receivedAt = options.receivedAt ?? new Date().toISOString();
+  const line: InboxLine = { receivedAt, recipient: options.recipient ?? null, json };
   const row = inboxRowFrom(line);
   if (row === undefined) return undefined;
 
@@ -259,6 +326,7 @@ export function inboxRowFrom(line: InboxLine): NewInboxActivity | undefined {
     activityType: activityTypeOf(parsed['type']),
     actorId,
     objectId: uriOf(parsed['object']),
+    recipient: line.recipient,
     receivedAt: line.receivedAt,
     json: line.json,
   };
@@ -266,7 +334,7 @@ export function inboxRowFrom(line: InboxLine): NewInboxActivity | undefined {
 
 /** What a rebuild put in the index. */
 export interface FederationIndexReport {
-  /** How many followers the file named. */
+  /** How many followers the files named, across every user. */
   followers: number;
   /** How many activities the log held. */
   activities: number;
@@ -289,7 +357,9 @@ export interface FederationIndexReport {
 export function rebuildFederationIndexes(records: FederationRecords): FederationIndexReport {
   const { admin, contentDir } = records;
 
-  const followers = readFollowers(contentDir);
+  const followers = federatedUsernames(contentDir).flatMap((username) =>
+    readFollowers(contentDir, username),
+  );
   const activities: NewInboxActivity[] = [];
   for (const line of readInboxLog(contentDir)) {
     const row = inboxRowFrom(line);
@@ -303,34 +373,40 @@ export function rebuildFederationIndexes(records: FederationRecords): Federation
 }
 
 /**
- * Write an older site's followers and inbox rows out as files, once.
+ * Write an older site's inbox rows out as files, once.
  *
- * Before this version the two tables were the source rather than an index of
- * one, so a site upgrading has rows that no file carries. The rule is the
- * simple one the other decision-9 migrations use, and it is simple here
- * because these files did not exist at all before: a file that is already
- * there wins outright and is not touched, and rows are written out only where
- * there is none.
+ * Before decision-9 the table was the source rather than an index of one, so a
+ * site upgrading has rows that no file carries. The rule is the simple one the
+ * other decision-9 migrations use, and it is simple here because the log did
+ * not exist as a file at all before: a log that is already there wins outright
+ * and is not touched, and rows are written out only where there is none. The
+ * lines it writes name no recipient, because the site they came from had one
+ * actor and it is gone (decision-14).
  *
- * Neither table is dropped, unlike `settings`, `actor_keys` and `users`: they
- * stay as the index the rest of the CMS reads. {@link rebuildFederationIndexes}
- * is what runs next and puts the files back into them.
+ * The site actor's followers are **not** migrated. decision-14 replaces one
+ * site actor with one actor per user, and there is no honest answer to which
+ * user inherited the followers of an account that no longer exists: a follow
+ * is an agreement with somebody, and handing it to whoever happens to have the
+ * lowest user id would be answering it for them. A site that federated as the
+ * site actor starts again as its users, and the old
+ * `content/_data/federation/followers.json` is left exactly where it is for an
+ * operator who wants to move rows into a user's file by hand.
+ *
+ * The table is not dropped, unlike `settings`, `actor_keys` and `users`: it
+ * stays as the index the rest of the CMS reads. {@link rebuildFederationIndexes}
+ * is what runs next and puts the files back into it.
  */
 export function migrateFederationToFiles(records: FederationRecords): void {
   const { admin, contentDir } = records;
 
-  const file = followersFile(contentDir);
-  if (readFileIfPresentSync(file) === undefined) {
-    // `listFollowers` is newest first, which is the order the collection is
-    // served in; the file is written oldest first, the order they arrived.
-    const held = [...admin.listFollowers()].reverse();
-    if (held.length > 0) writeFileAtomicallySync(file, followersJson(held));
-  }
-
   if (inboxFiles(contentDir).length === 0) {
     const byMonth = new Map<string, InboxLine[]>();
     for (const activity of [...admin.listInboxActivities()].reverse()) {
-      const line: InboxLine = { receivedAt: activity.receivedAt, json: activity.json };
+      const line: InboxLine = {
+        receivedAt: activity.receivedAt,
+        recipient: activity.recipient,
+        json: activity.json,
+      };
       const month = inboxFile(contentDir, activity.receivedAt);
       byMonth.set(month, [...(byMonth.get(month) ?? []), line]);
     }
@@ -338,9 +414,17 @@ export function migrateFederationToFiles(records: FederationRecords): void {
   }
 }
 
-/** The followers as the file spells them: an array, indented, newline ended. */
+/**
+ * One user's followers as their file spells them: an array, indented, newline
+ * ended.
+ *
+ * The username is not written into the entries. It is the name of the
+ * directory the file is in, and saying it again once per follower would be a
+ * second place for it to be wrong.
+ */
 function followersJson(followers: readonly Follower[]): string {
-  return `${JSON.stringify(followers, null, 2)}\n`;
+  const entries = followers.map(({ username: _username, ...rest }) => rest);
+  return `${JSON.stringify(entries, null, 2)}\n`;
 }
 
 /**
@@ -351,7 +435,7 @@ function followersJson(followers: readonly Follower[]): string {
  * name to key it by — and skipping such an entry would leave the file and the
  * index quietly disagreeing about who follows the site.
  */
-function parseFollowers(source: string, file: string): Follower[] {
+function parseFollowers(source: string, file: string, username: string): Follower[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(source);
@@ -378,6 +462,7 @@ function parseFollowers(source: string, file: string): Follower[] {
     }
 
     return {
+      username,
       actorId,
       inboxId,
       sharedInboxId: optionalText(follower['sharedInboxId']),
@@ -437,11 +522,13 @@ function readInboxFile(file: string): InboxLine[] {
       throw new Error(`${file}: line ${String(index + 1)} is not an activity.`);
     }
 
-    // `receivedAt` is the log's own word and everything else is the activity,
-    // so taking it off leaves exactly what the peer delivered.
-    const { receivedAt, ...activity } = parsed;
+    // `receivedAt` and `recipient` are the log's own words and everything else
+    // is the activity, so taking them off leaves exactly what the peer
+    // delivered.
+    const { receivedAt, recipient, ...activity } = parsed;
     lines.push({
       receivedAt: typeof receivedAt === 'string' ? receivedAt : '',
+      recipient: typeof recipient === 'string' && recipient !== '' ? recipient : null,
       json: JSON.stringify(activity),
     });
   }
@@ -452,7 +539,17 @@ function readInboxFile(file: string): InboxLine[] {
 /** The lines as the file spells them: one compact JSON object each. */
 function inboxJsonl(lines: readonly InboxLine[]): string {
   return lines
-    .map((line) => `${JSON.stringify({ receivedAt: line.receivedAt, ...JSON.parse(line.json) })}\n`)
+    .map(
+      (line) =>
+        `${JSON.stringify({
+          receivedAt: line.receivedAt,
+          // Absent rather than null for a shared-inbox delivery that named
+          // nobody, so a log written before decision-14 and one written after
+          // it read the same.
+          ...(line.recipient === null ? {} : { recipient: line.recipient }),
+          ...JSON.parse(line.json),
+        })}\n`,
+    )
     .join('');
 }
 

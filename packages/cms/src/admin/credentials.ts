@@ -22,8 +22,23 @@ export const MAXIMUM_USERNAME_LENGTH = 64;
  */
 export const USERNAME_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 
-/** What is wrong with a username, or `undefined` when nothing is. */
+/**
+ * What is wrong with a username, or `undefined` when nothing is.
+ *
+ * Two rules, because a username is two things. It is what somebody types into
+ * the login form, which is what {@link USERNAME_PATTERN} is about: nothing
+ * that would later need escaping in a URL, a shell or a template. And since
+ * decision-14 it is also a URL — the author archive at `/author/{username}/`,
+ * which is the same URL their actor lives at — so it has to be a segment a
+ * resolver will actually walk into. The pattern already refuses everything
+ * that would need percent-encoding; what it cannot see is that `.` and `..`
+ * are the current and the parent directory rather than names, so a user called
+ * one of them would have an archive at a URL meaning somewhere else entirely.
+ */
 export function usernameProblem(username: string): string | undefined {
+  if (/^\.+$/.test(username)) {
+    return 'A username is somebody’s author URL as well as their login, and a name of nothing but dots is not one.';
+  }
   if (USERNAME_PATTERN.test(username)) return undefined;
   return (
     `A username is 1 to ${String(MAXIMUM_USERNAME_LENGTH)} letters, digits, dots, dashes or ` +

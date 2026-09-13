@@ -74,19 +74,21 @@ changelog.
 site (or `npx geekity`, or a `package.json` script, which is how the generated
 `sync` script calls it).
 
-| Command                   | What it does                                                                             |
-| ------------------------- | ---------------------------------------------------------------------------------------- |
-| `geekity serve`           | Boot from the config file and listen. The default when no command is given.              |
-| `geekity init <dir>`      | Create a new site in `<dir>`. Refuses a directory that is not empty.                     |
-| `geekity sync`            | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed. |
-| `geekity rebuild`         | Delete `data/geekity.db` and build it again from the files.                              |
-| `geekity user add <name>` | Create an admin account, so a site can get its first login without the setup screen.     |
-| `geekity --help`, `-h`    | The same table, on the terminal.                                                         |
-| `geekity --version`       | The installed version.                                                                   |
+| Command                                 | What it does                                                                                                                                                          |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geekity serve`                         | Boot from the config file and listen. The default when no command is given.                                                                                           |
+| `geekity init <dir>`                    | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                  |
+| `geekity sync`                          | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                              |
+| `geekity rebuild`                       | Delete `data/geekity.db` and build it again from the files.                                                                                                           |
+| `geekity user add <name>`               | Create an admin account, so a site can get its first login without the setup screen.                                                                                  |
+| `geekity import wordpress-actor <name>` | Bring one person across from the WordPress ActivityPub plugin: their key pair, the actor id their followers hold, the plugin's numeric actor id, and their followers. |
+| `geekity --help`, `-h`                  | The same table, on the terminal.                                                                                                                                      |
+| `geekity --version`                     | The installed version.                                                                                                                                                |
 
-`serve`, `sync`, `rebuild` and `user add` take `--config <file>`; without it they look for
-`geekity.config.ts`, then `geekity.config.js`, then `geekity.config.mjs` in the
-working directory, and run on defaults if there is none.
+`serve`, `sync`, `rebuild`, `user add` and `import wordpress-actor` take
+`--config <file>`; without it they look for `geekity.config.ts`, then
+`geekity.config.js`, then `geekity.config.mjs` in the working directory, and run
+on defaults if there is none.
 
 `sync` prints what the scan did and forces watching off whatever the config
 says, because a one-shot scan that then sat in a watcher would never exit:
@@ -241,23 +243,23 @@ export default defineConfig({
 Every field is optional. Relative directories resolve against the working
 directory; absolute ones are used as given.
 
-| Field              | Default                   | Environment override        | Meaning                                                                                                                                                                             |
-| ------------------ | ------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `port`             | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on. `0` picks a free one.                                                                                                                              |
-| `contentDir`       | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                   |
-| `dataDir`          | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, the actor's key pairs. |
-| `themeDir`         | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme. Need not exist.                                                                                                |
-| `baseUrl`          | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                          |
-| `watch`            | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                        |
-| `sessionLifetime`  | `1209600` (14 days)       | `GEEKITY_SESSION_LIFETIME`  | How long an admin login lasts, in seconds.                                                                                                                                          |
-| `loginAttempts`    | `5`                       | `GEEKITY_LOGIN_ATTEMPTS`    | Failed sign-ins a username or an address may make before it is locked out.                                                                                                          |
-| `loginLockout`     | `900` (15 minutes)        | `GEEKITY_LOGIN_LOCKOUT`     | How long the first lockout lasts, in seconds. See [Login hardening](#login-hardening).                                                                                              |
-| `trustProxy`       | `false`                   | `GEEKITY_TRUST_PROXY`       | Believe `X-Forwarded-For` when deciding which address a sign-in came from.                                                                                                          |
-| `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                        |
-| `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                      |
-| `federation`       | `{}`                      | —                           | Federation stores and guards. See [Federation](#federation).                                                                                                                        |
-| `commentChecker`   | Akismet                   | —                           | A spam checker of the site's own, which wins over the key in `data/akismet.json`. See [Akismet](#akismet).                                                                          |
-| `mail`             | `{}`                      | —                           | Mail provider, retries, backoff and logger. See [Email](#email).                                                                                                                    |
+| Field              | Default                   | Environment override        | Meaning                                                                                                                                                                                   |
+| ------------------ | ------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port`             | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on. `0` picks a free one.                                                                                                                                    |
+| `contentDir`       | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                         |
+| `dataDir`          | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs. |
+| `themeDir`         | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme. Need not exist.                                                                                                      |
+| `baseUrl`          | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                |
+| `watch`            | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                              |
+| `sessionLifetime`  | `1209600` (14 days)       | `GEEKITY_SESSION_LIFETIME`  | How long an admin login lasts, in seconds.                                                                                                                                                |
+| `loginAttempts`    | `5`                       | `GEEKITY_LOGIN_ATTEMPTS`    | Failed sign-ins a username or an address may make before it is locked out.                                                                                                                |
+| `loginLockout`     | `900` (15 minutes)        | `GEEKITY_LOGIN_LOCKOUT`     | How long the first lockout lasts, in seconds. See [Login hardening](#login-hardening).                                                                                                    |
+| `trustProxy`       | `false`                   | `GEEKITY_TRUST_PROXY`       | Believe `X-Forwarded-For` when deciding which address a sign-in came from.                                                                                                                |
+| `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                              |
+| `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                            |
+| `federation`       | `{}`                      | —                           | Federation stores and guards. See [Federation](#federation).                                                                                                                              |
+| `commentChecker`   | Akismet                   | —                           | A spam checker of the site's own, which wins over the key in `data/akismet.json`. See [Akismet](#akismet).                                                                                |
+| `mail`             | `{}`                      | —                           | Mail provider, retries, backoff and logger. See [Email](#email).                                                                                                                          |
 
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site. A boolean environment variable
@@ -277,23 +279,24 @@ the same directory reads all of it, and everything in it is meant to be public:
 | -------------------------------------------------- | ------------------------------------------------------------------------ |
 | `content/posts/`, `content/pages/`                 | The Markdown documents, `_trash/` included.                              |
 | `content/uploads/`                                 | Uploaded files exactly as they arrived.                                  |
-| `content/_data/site.json`                          | Every site setting, the actor's handle and type among them.              |
+| `content/_data/site.json`                          | Every site setting.                                                      |
 | `content/_data/federation/followers.json`          | Who follows the site.                                                    |
 | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` | Every activity the inbox was handed, one per line.                       |
 | `content/_data/comments/{slug}.json`               | The comments left on that post, whatever a moderator has done with them. |
 
 `data/` is private. It is gitignored, and it is the half to copy somewhere safe:
 
-| Path                             | What it holds                                                                                                                   |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `data/users.json`                | Usernames and argon2id password hashes. Mode `0600`.                                                                            |
-| `data/keys/`                     | The actor's key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                            |
-| `data/comment-salt`              | What hides commenters' addresses in the published comment files. Mode `0600`.                                                   |
-| `data/akismet.json`              | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                         |
-| `data/mail.json`                 | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                 |
-| `data/notification-secret`       | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else. |
-| `data/comment-optouts.json`      | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                           |
-| `data/notification-digests.json` | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                         |
+| Path                              | What it holds                                                                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `data/users.json`                 | Usernames and argon2id password hashes. Mode `0600`.                                                                            |
+| `data/keys/`                      | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                      |
+| `data/comment-salt`               | What hides commenters' addresses in the published comment files. Mode `0600`.                                                   |
+| `data/akismet.json`               | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                         |
+| `data/mail.json`                  | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                 |
+| `data/notification-secret`        | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else. |
+| `data/comment-optouts.json`       | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                           |
+| `data/notification-digests.json`  | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                         |
+| `data/wordpress-activitypub.json` | When each WordPress compatibility path was last asked for. Losing it resets the answer the switch is watched by.                |
 
 Two things under `data/` may be deleted whenever the site is stopped, and
 nothing else in either directory may:
@@ -363,9 +366,21 @@ forward from it, and nothing in it is anything but a reading of the files.
 
 ## Federation
 
-The site is one ActivityPub actor, served by [Fedify]. Its stores have
-defaults that suit a single process, and `federation` is where a site that has
-outgrown them says so:
+**Every user is an ActivityPub actor**, served by [Fedify] at their author URL:
+`{baseUrl}/author/{username}/` is the archive in a browser and the `Person` to
+a peer asking for `application/activity+json`, exactly as a post's permalink is
+its page and its object. The collections are that URL's children —
+`inbox/`, `outbox/`, `followers/` and `following/` — and the instance-wide
+shared inbox is `/inbox/`. `author` and `inbox` are reserved top-level paths
+for that reason: an actor id a settings field could move would be a different
+account to everybody holding it.
+
+There is no site actor. A post is announced by the actor of the user its
+`author` names, its `outbox` is that user's archive as activities, and its
+followers are that user's own.
+
+Fedify's stores have defaults that suit a single process, and `federation` is
+where a site that has outgrown them says so:
 
 | Field                 | Default                 | Meaning                                                                                                                                        |
 | --------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -375,17 +390,19 @@ outgrown them says so:
 
 Followers and the log of what the inbox was told are the CMS's own, and they
 are files the site publishes (decision-9):
-`content/_data/federation/followers.json` holds one object per follower — actor
-id, inbox, shared inbox, handle, name, icon, profile URL and follow time,
-oldest follow first — and
+`content/_data/federation/{username}/followers.json` holds one object per
+follower of that user — actor id, inbox, shared inbox, handle, name, icon,
+profile URL and follow time, oldest follow first — and
 `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` holds one compact JSON-LD
-activity per line, with the `receivedAt` the log stamped it with in front of
-it. Both are in git beside the posts, and an Eleventy build of the same content
-directory sees them as `federation.followers` and `federation.inbox`. A `Follow`
-appends to the first, an `Undo(Follow)` or an actor's own `Delete` takes the
-entry out, and a like, a boost or a reply appends a line to the second; each
-write updates the SQLite index in the same step, behind a lock on the file, so
-the two can never disagree. The `followers` and `ap_inbox` tables are that
+activity per line, with the `receivedAt` the log stamped it with and the
+`recipient` it was addressed to in front of it. The log stays one chronological
+record because it is a record of what this server was told; each line says
+whose it was. Both are in git beside the posts, and an Eleventy build of the
+same content directory sees them as `federation.{username}.followers` and
+`federation.inbox`. A `Follow` appends to the first, an `Undo(Follow)` or an
+actor's own `Delete` takes the entry out, and a like, a boost or a reply
+appends a line to the second; each write updates the SQLite index in the same
+step, behind a lock on the file, so the two can never disagree. The `followers` and `ap_inbox` tables are that
 index and nothing more: every boot empties them and reads them back from the
 files, which is what makes editing `followers.json` by hand and restarting a
 supported thing to do, and what makes deleting the database cost a site
@@ -395,14 +412,15 @@ itself. The delivery outcomes stay in SQLite as a cache of what happened; the
 activities themselves are not stored at all, because they are rebuilt from the
 posts' files whenever they are wanted again.
 
-The actor's key pairs are the CMS's own too, but they are the one
+Each user's key pairs are the CMS's own too, but they are the one
 thing a site can never regenerate, so they live in files: one JWK per algorithm
-under `dataDir/keys` (`actor.rsassa-pkcs1-v1_5.jwk` and `actor.ed25519.jwk`),
-written `0600` in a `0700` directory, each holding the private key alone
-because the public half is derived from it. They are generated on the first
-request that needs them and read back on every one after that. The file names
-come from the actor's internal identifier rather than its handle, so renaming
-`@blog@example.com` keeps the keys.
+per user under `dataDir/keys` (`ada.rsassa-pkcs1-v1_5.jwk` and
+`ada.ed25519.jwk`), written `0600` in a `0700` directory, each holding the
+private key alone because the public half is derived from it. They are
+generated on the first request that needs them and read back on every one after
+that. The actor publishes the RSA key as `publicKey` at `{actor}#main-key`,
+which is what a peer verifies an HTTP Signature with, and both as
+`assertionMethod` multikeys at `{actor}#multikey-0` and `#multikey-1`.
 
 A key file that is there and will not import stops the boot, with a message
 naming it. That is deliberate: replacing it would give the site a new identity
@@ -491,15 +509,18 @@ boosts any public post carrying a hashtag it tracks, which every `Article` this
 CMS builds already carries one of per tag and per category.
 
 Adding a line sends that inbox a `Follow` whose object is the ActivityStreams
-Public collection, signed by the site actor and carrying the Linked Data
+Public collection, signed by the site's first account — a relay subscription is
+an instance-wide agreement rather than one person's, and the first account is
+the one actor that can be chosen without asking — and carrying the Linked Data
 signature a Mastodon-style relay verifies. The relay answers `Accept` or
 `Reject` — possibly days later, because a subscription may need a human to
 approve it — and that answer arrives in the site's inbox and moves the
 subscription. Removing the line sends `Undo` of the same `Follow`.
 
 Only an accepted relay is delivered to. From there it is one more inbox in the
-fan-out: every `Create`, `Update` and `Delete` for a post, and the actor
-`Update` a profile change sends, goes to it as well as to the followers, its
+fan-out: every `Create`, `Update` and `Delete` for a post, whoever wrote it,
+and the actor `Update` a profile change sends, goes to it as well as to the
+author's followers, its
 outcome recorded in the delivery log against its actor id and its inbox exactly
 as a follower's is — which is why Resend reaches relays too.
 
@@ -516,40 +537,205 @@ on the next boot.
 
 [fepae0c]: https://w3id.org/fep/ae0c
 
-### The site's avatar
+### A user's profile
 
-The actor's `icon` is an image uploaded on `/admin/settings`, the General page.
-It is stored with
-the site's other uploads, under `content/uploads/{yyyy}/{mm}/`, and the public
-path it is served at — `/uploads/2026/09/me.png` — is the `avatar` setting in
-`content/_data/site.json`, like the rest of them. The actor
-carries it as an absolute URL, resolved against the base URL in effect, because
-a peer has no site to resolve a path against; an `avatar` that is already an
-absolute URL is left alone, which is how a site puts its avatar on a CDN.
+An actor's `name`, `summary`, `icon` and `attachment` are the display name, the
+bio, the avatar and the links on their user record, edited on `/admin/users`
+and stored in `data/users.json` — the same profile the author archive is headed
+with, so a page and an actor cannot say different things about somebody. Their
+`preferredUsername` is their login, and `alsoKnownAs` lists every URL they
+answer to: the actor id, the archive and `/@{username}`.
 
-Saving or removing it delivers an `Update` of the actor to every follower, so
-the profile a peer cached is refreshed rather than left showing last year's
-picture. The same goes for the title, the tagline, the base URL and the actor's
-handle and type: those are the fields the profile is built from, and a save
-that moves one of them tells the followers. A save that only moves the time
-zone or the page size tells nobody, and neither does anything at all on a site
-that has no followers yet.
+The avatar is a path like `/uploads/2026/09/me.png`, stored with the site's
+other uploads. The actor carries it as an absolute URL resolved against the
+base URL in effect, because a peer has no site to resolve a path against; one
+that is already an absolute URL is left alone, which is how a profile picture
+goes on a CDN.
 
-Its outcome is recorded like every other activity's, with the actor's id as its
-object and no slug, and `cms.delivery.updateActor()` sends one from code.
-Because it is about no post, it is not a row in the federation screen's
-per-post delivery table, which is built from the posts the content index
-holds.
+Saving a profile delivers an `Update` of that user's actor to their followers,
+so the profile a peer cached is refreshed rather than left showing last year's
+picture. Nothing on the settings screen does: the site is not an actor.
+`cms.delivery.updateActor(user)` sends one from code. Its outcome is recorded
+like every other activity's, with the actor's id as its object and no slug, so
+it is not a row in the federation screen's per-post delivery table, which is
+built from the posts the content index holds.
+
+### WebFinger
+
+`/.well-known/webfinger` is the CMS's own route rather than Fedify's, because
+Fedify computes its `self` link and its `aliases` from the dispatcher path and
+neither can be added to. It answers for every spelling of the same person — the
+`acct:{username}@{host}` handle, the bare `{username}@{host}`, the author URL,
+`/@{username}` and the stored actor id of somebody who has one — with the actor
+id as `self`, the archive as `profile-page`, and all of the person's URLs as
+`aliases`. A username nobody has is a 404. `/@{username}` itself is a 301 to
+the archive.
+
+### A user's stored actor id
+
+A user record in `data/users.json` may carry an `actorId`: the ActivityStreams
+id that person was published under somewhere else, such as the
+`https://example.com/?author=2` the WordPress ActivityPub plugin publishes.
+That is identity, not cache — a follower's server keys the account by the URL
+it first saw — so the CMS serves the person under it for the life of the
+account, the way a post keeps its `activitypub.id`:
+
+```json
+{ "id": 2, "username": "ada", "actorId": "https://example.com/?author=2" }
+```
+
+The actor document's `id` is then that URL and its keys hang off it
+(`…?author=2#main-key`), every activity the user sends names it as `actor` and
+is signed with a key id under it, and the URL itself — query string and all —
+answers with the `Person` for a peer and a 301 to the author archive for a
+browser. WebFinger publishes it as `self` and resolves a lookup by it, and the
+actor lists it in `alsoKnownAs` beside the archive and `/@{username}`. Nothing
+else moves: `url` is still the archive and the collections are still the
+archive's children, because a peer refetches those.
+
+The CMS never mints one and no screen writes one. It arrives with the WordPress
+import, or is typed into the file by hand; `/admin/users` shows it read-only
+beside the account, and a value that is not an absolute URL is ignored.
+
+### WordPress ActivityPub compatibility
+
+A site that moved here from the WordPress ActivityPub plugin has followers
+whose servers still hold the plugin's endpoints — `/wp-json/activitypub/1.0/actors/2/inbox`,
+the shared `/wp-json/activitypub/1.0/inbox`, and the collections beside them.
+Those are cache rather than identity: a follower's server replaces them the
+next time it refetches the actor. So the CMS can carry them for a while, behind
+a switch, and is meant to stop.
+
+Turn **WordPress ActivityPub compatibility** on under
+`/admin/settings/federation`. It is off by default and `site.json` says nothing
+about it until it is on. It needs one thing on the user record in
+`data/users.json` besides the stored actor id above: the number WordPress gave
+that person, which is what its paths are built from.
+
+```json
+{
+  "id": 2,
+  "username": "ada",
+  "actorId": "https://example.com/?author=2",
+  "wordpressActorId": 2
+}
+```
+
+`geekity import wordpress-actor` writes both; no screen does. With the switch
+on, those paths are real inbox routes, signature-verified exactly as the
+canonical ones are — an unsigned or badly signed delivery is refused — plus GET
+routes for the actor, its outbox, its followers and its following. What a peer
+reads back is always the canonical document: the same `id`, the same key, and
+the _canonical_ inbox and collections, so a follower refetching the actor at
+the old URL is the follower that learns the new endpoints. A user with no
+`wordpressActorId` is not reachable through any of it.
+
+Every one of those paths records the instant it was last asked for, per user,
+in `data/wordpress-activitypub.json` — a file, so a deleted database does not
+forget it — and the settings page lists each path beside the switch with that
+instant, or _Never_. That is what the switch is watched by: once every
+follower's server has refetched the actor, nothing asks any more, and the
+switch can go off. Clearing it takes the paths away on the very next request,
+with no restart.
+
+### Moving a site off the WordPress ActivityPub plugin
+
+`geekity import wordpress-actor` brings one person across. It writes the three
+things the CMS cannot mint for itself — the RSA key pair the followers have
+cached, the actor id they key the account by, and the followers — and it is a
+command rather than a screen because a stored actor id is identity for the life
+of the account.
+
+```sh
+geekity import wordpress-actor ada \
+  --actor-id 'https://example.com/?author=2' \
+  --wordpress-id 2 \
+  --keypair ada.keypair.json
+```
+
+It writes `data/keys/ada.rsassa-pkcs1-v1_5.jwk` (and mints the Ed25519 pair
+beside it, which WordPress never had), puts `actorId` and `wordpressActorId` on
+the user in `data/users.json`, and fetches the plugin's public followers
+collection into `content/_data/federation/ada/followers.json`, dereferencing
+each follower for its inbox, shared inbox, handle, name, avatar and profile URL.
+
+| Option                                        | What it is                                                                                                                                            |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--actor-id <url>`                            | The id WordPress published, query string and all. The one thing the import cannot work out for itself.                                                |
+| `--wordpress-id <n>`                          | The WordPress user id, which is the number in the plugin's paths.                                                                                     |
+| `--keypair <file>`                            | The JSON the plugin's option holds: `{"private_key": …, "public_key": …}`.                                                                            |
+| `--private-key <file>`, `--public-key <file>` | The two PEMs instead, for a site still on the legacy user meta. The public key is only checked against the private half; it is derived, never stored. |
+| `--followers <url\|file\|none>`               | Where the followers come from. Left off, the plugin's own collection on the actor id's origin.                                                        |
+| `--force`                                     | Import over a key pair the user already has.                                                                                                          |
+
+**Exporting the key pair with wp-cli.** The plugin keeps a user's pair in a
+WordPress option named after their login:
+
+```sh
+# On the WordPress server. The login, not the user id, is what names the option.
+wp option get activitypub_keypair_for_ada --format=json > ada.keypair.json
+```
+
+A site old enough to still be on the plugin's legacy storage has the pair in
+user meta instead, one PEM per key:
+
+```sh
+wp user meta get 2 magic_sig_private_key > ada.private.pem
+wp user meta get 2 magic_sig_public_key  > ada.public.pem
+```
+
+Either export is accepted, and either PEM encoding — `-----BEGIN PRIVATE
+KEY-----` (PKCS#8) or `-----BEGIN RSA PRIVATE KEY-----` (PKCS#1). Treat the
+files the way you would treat a password: the private key is the account.
+
+**Running it twice changes nothing**, and says so, which is what makes it safe
+to run again after an instance that was down comes back — a follower already in
+the file keeps its place and its follow time. A follower whose server will not
+answer is listed and skipped rather than failing the import. A user who already
+has a _different_ key pair is refused: importing over one would change that
+person's identity, and every follower has cached the public half of the key
+that is there. `--force` is the way past that, and is only right when you are
+certain the pair being imported is the one the followers hold.
+
+#### The cutover, end to end
+
+1. **Export, while the WordPress site is still up.** The key pair, as above.
+   The followers can be saved too — `curl -H 'Accept: application/activity+json'
+'https://example.com/wp-json/activitypub/1.0/actors/2/followers?page=1' >
+followers.json` — which is worth doing if the old site is going away before
+   the import runs. Note the actor id and the numeric actor id off
+   `https://example.com/?author=2`, and bring the content across.
+2. **Import.** `geekity import wordpress-actor ada --actor-id … --wordpress-id
+… --keypair ada.keypair.json`, pointing `--followers` at the saved file if
+   you took one. Check the report: every follower should be added, and any that
+   were skipped should be re-run once their servers answer.
+3. **Switch on.** Turn **WordPress ActivityPub compatibility** on under
+   `/admin/settings/federation`, then move the DNS. Followers' servers go on
+   delivering to the plugin's old inbox paths until they next refetch the
+   actor, and the switch is what catches those deliveries.
+4. **Watch.** `/admin/federation` lists the users with their actor ids and
+   followers; `/admin/settings/federation` lists each compatibility path with
+   the instant it was last asked for. Deliveries should thin out as each
+   follower's server refetches the actor and learns the new endpoints.
+5. **Switch off.** Once every path says _Never_ again for long enough — weeks
+   rather than days, since a quiet instance refetches rarely — clear the switch.
+   The paths go away on the very next request, with nothing restarted, and if
+   something was still using them you can turn it back on just as quickly.
+
+Retiring the stored actor id itself is a separate, optional step by the Move
+protocol, and is not part of the cutover: not every follower's software honours
+a `Move`, and the ones that do not would simply stop following.
 
 ### The federation screen
 
-`/admin/federation` is all of that with a page in front of it. It shows the
-site's own actor — its avatar, handle and type, the name and summary the
-profile carries, and how many actors follow it — the follower list with avatars and
-follow dates, the recent likes, boosts and replies out of the inbox log, each
-linked to the remote object and to the post it was about, and one row per post
-that has been federated: its last activity, when it went, and how many
-recipients it reached, is queued for, or failed for. Each of those rows has a
+`/admin/federation` is all of that with a page in front of it. It shows one
+panel per user — their avatar, their `@username@host` handle, the summary their
+profile carries, their actor id, and the followers each of them has with
+avatars and follow dates — the recent likes, boosts and replies out of the
+inbox log, each linked to the remote object and to the post it was about, and
+one row per post that has been federated: who announced it, its last activity,
+when it went, and how many recipients it reached, is queued for, or failed
+for. Each of those rows has a
 Resend button, which is `cms.delivery.resend` behind a form: it builds the post
 again from its file, sends it to every follower and every accepted relay the
 site has now, and says what came of it.
@@ -584,8 +770,9 @@ pnpm dlx @fedify/cli tunnel 3000
 
 Leave that running and boot the site with `baseUrl` set to the address it
 printed, because `baseUrl` is what every ActivityStreams id is minted from — a
-site booted on `http://localhost:3000` serves an actor whose id is
-`http://localhost:3000/ap/actor`, and no remote instance can dereference that:
+site booted on `http://localhost:3000` serves actors whose ids are
+`http://localhost:3000/author/{username}/`, and no remote instance can
+dereference those:
 
 ```sh
 GEEKITY_BASE_URL=https://quiet-sun-42.serveo.net geekity serve
@@ -593,12 +780,12 @@ GEEKITY_BASE_URL=https://quiet-sun-42.serveo.net geekity serve
 
 Then, from a Mastodon account:
 
-1. Search for `@blog@quiet-sun-42.serveo.net` — the handle is the
-   `actorHandle` setting (`blog` unless it has been changed) at the tunnel's
-   host. The profile should come back with the site title, tagline and avatar.
-2. Follow it. The `Follow` lands on `/ap/actor/inbox`, the CMS answers
-   `Accept`, and the account appears on `/admin/federation` within a second or
-   two.
+1. Search for `@ada@quiet-sun-42.serveo.net` — the handle is a username at the
+   tunnel's host. The profile should come back with that user's display name,
+   bio and avatar.
+2. Follow it. The `Follow` lands on `/author/ada/inbox/` (or on `/inbox/`), the
+   CMS answers `Accept`, and the account appears on `/admin/federation` within
+   a second or two.
 3. Publish a post, from the editor or by writing a file into `content/posts/`.
    A `Create(Article)` is delivered, and the post shows up in the follower's
    home timeline; `/admin/federation` records the outcome, with a Resend
@@ -614,14 +801,14 @@ that no longer exists, so they cannot be migrated to the real domain. The
 admin has no button for removing a follower yet, so run tunnel rehearsals
 against a scratch `dataDir` rather than the one the real site will keep.
 
-The actor's key pairs live in `dataDir/keys`, not in the base URL, so they
+The key pairs live in `dataDir/keys`, not in the base URL, so they
 survive across tunnel sessions. That is usually what you want; it also means a
 `data` directory copied from one deployment to another brings the other's
 identity with it.
 
 `pnpm fed:smoke`, in this repository, is the automated half of the same idea:
-it boots the CMS on a free port, runs `fedify lookup` against the actor and a
-post object, and delivers a `Create(Article)` to two real inboxes over
+it boots the CMS on a free port, runs `fedify lookup` against a user's actor
+and a post object, reads WebFinger, and delivers a `Create(Article)` to two real inboxes over
 loopback. It needs no tunnel and no network, and it is a job in CI. See
 `packages/cms/scripts/fed-smoke.ts`, whose header explains why the `Follow`
 half is sent by a peer built in the script rather than by `fedify inbox`.
@@ -752,7 +939,7 @@ on for a site does not need anybody to visit the users screen.
 
 The one checker the package ships. It is off until a site has a key, and the
 key is a credential rather than a setting: it lives in `data/akismet.json` at
-mode `0600` beside the password hashes and the actor's private keys, never in
+mode `0600` beside the password hashes and the users' private keys, never in
 `content/_data/site.json`, which is public, in git and published with the site.
 
 Paste it into **Spam checking** on `/admin/settings/discussion`. It is checked with
@@ -852,7 +1039,7 @@ Two halves, kept apart for the reason the Akismet key is kept out of
 | `data/mail.json`          | The Brevo API key, and the SMTP host, port, TLS flag, user and password.          |
 
 `site.json` is public, in git and published with the site; `data/mail.json` is
-private, mode `0600`, and sits beside the password hashes and the actor's
+private, mode `0600`, and sits beside the password hashes and the users'
 private keys. No key or password is ever written to `site.json` and none is
 ever printed back into the settings screen — the panel shows the last four
 characters of an API key and the host and user of an SMTP connection, which is
@@ -1197,8 +1384,7 @@ shadow the login form.
 | `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                                     |
 | `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                                     |
 | `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                                   |
-| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language, avatar.        |
-| `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                                    |
+| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language.                |
 | `/admin/settings/reading`                        | Posts per page, the site menu, the notify server.                                         |
 | `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.                   |
 | `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                        |
@@ -1206,15 +1392,16 @@ shadow the login form.
 | `/admin/settings/email`                          | The mail provider, the From line, the reply-to and the contact address.                   |
 | `/admin/settings/mail`                           | `POST` only. Saves a mail credential, or forgets every one of them.                       |
 | `/admin/settings/mail/test`                      | `POST` only. Sends the theme's test message through the whole chain.                      |
-| `/admin/settings/federation`                     | The actor handle and type, and the relays the site subscribes to.                         |
+| `/admin/settings/federation`                     | The relays the site subscribes to, and the WordPress compatibility switch.                |
 | `/admin/users`                                   | Who may sign in, and the change-password form.                                            |
 | `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                           |
 | `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                                  |
 | `/admin/users/email`                             | `POST` only. Sets or clears the email address on the row the form names.                  |
+| `/admin/users/profile`                           | `POST` only. Saves the display name, bio, avatar and links on the row the form names.     |
 | `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the row the form names.                       |
 | `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice reaches the row: as they arrive, hourly or daily. |
 | `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                             |
-| `/admin/federation`                              | The actor, the followers, the inbox log, and per-post delivery.                           |
+| `/admin/federation`                              | The actors, their followers, the inbox log, and per-post delivery.                        |
 | `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.                |
 | `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                            |
 | `/admin/login`                                   | Username and password.                                                                    |
@@ -1257,11 +1444,13 @@ A screen naming a section or a child the registry does not hold throws
 so the mistake is a failed test instead of a menu that quietly marks nothing.
 
 Who may sign in is `data/users.json`: one entry per user with an id, a
-username, an argon2 hash and a created time, written atomically with `0600`
-permissions and serialised against itself, so two admins adding the same name
-at once cannot both succeed. It is in `data/` rather than `content/` because
+username, an argon2 hash and a created time — and, for a user who has them, an
+email address, notification preferences, a public profile and the
+[stored actor id](#a-users-stored-actor-id) they were published under
+elsewhere. Written atomically with `0600` permissions and serialised against
+itself, so two admins adding the same name at once cannot both succeed. It is in `data/` rather than `content/` because
 `content/` is published with the site, and it is one of the two things under
-`dataDir` that must be backed up — the actor's keys are the other.
+`dataDir` that must be backed up — the users' actor keys are the other.
 
 Sessions stay in SQLite, where the rest of the cache lives. They name a user by
 id and are joined against the file on every admin request, so a session whose
@@ -1339,7 +1528,7 @@ at once cannot each keep half of what the other kept.
 
 The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `homepage`, `postsPage`,
-`timezone`, `language`, `avatar`, `actorHandle`, `actorType`, `tagBase`,
+`timezone`, `language`, `tagBase`,
 `categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
 `contactEmail`, `relays`, `navigation` and `taxonomyRedirects`,
@@ -1347,16 +1536,20 @@ and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
 type is the default too: a hand-edited `site.json` cannot take the site down.
 
-`homepage` and `postsPage` are the only two written just when they have a
-value: WordPress's Reading choice, the slug of the page served at `/` and the
-slug of the page whose own URL carries the post listing, absent altogether on a
-site that shows its latest posts at `/`. A `postsPage` without a `homepage` is
+`homepage`, `postsPage` and `wordpressActivityPub` are the only three written
+just when they have a value. The first two are WordPress's Reading choice, the
+slug of the page served at `/` and the slug of the page whose own URL carries
+the post listing, absent altogether on a site that shows its latest posts at
+`/`; the third is the
+[WordPress ActivityPub compatibility](#wordpress-activitypub-compatibility)
+switch, absent until somebody turns it on and absent again when they turn it
+off. A `postsPage` without a `homepage` is
 ignored, the listing being at `/` already, and a slug naming no published page
 is a site back on its latest posts. See [The front page](#the-front-page).
 
 Because it is the source rather than a copy, editing it by hand while the
 server runs is picked up on the next request — on the public site, in the
-feeds, on the settings screen and in the ActivityPub actor alike — with nothing
+feeds and on the settings screen alike — with nothing
 to restart and nothing to tell. Put the file in git and a checkout of it is the
 site's settings.
 
@@ -1377,8 +1570,7 @@ so a key typed wrong cannot lose an edit to the title. See
 A site whose database was written by a version that kept the settings in SQLite
 has those rows written into `site.json` on the first boot of this one, and the
 table is dropped. If the file was written after the rows were — a hand edit, or
-a content directory restored from git — the file wins, keeping only the actor
-handle and type from the rows, because those are the two the file never carried.
+a content directory restored from git — the file wins outright.
 
 ### The front page
 
@@ -1435,7 +1627,7 @@ does nothing else, so the screen is complete before it loads and a browser
 without the clipboard API is not shown a button that would fail.
 
 The upload form is `storeUpload`, the same function behind `POST /admin/uploads`
-and the avatar: one allowlist, one signature check, one
+alike: one allowlist, one signature check, one
 `{yyyy}/{mm}/{slug}{ext}` naming rule, and one set of refusals, shown as a flash
 on the next page rather than as the editor's JSON.
 
@@ -1460,7 +1652,7 @@ to `removeImageVariants`, which takes the file's derived images with it.
 `generateImageVariants(config, uploadPath)` derives one upload's copies with
 sharp and writes them, plus an `image.json` sidecar, into
 `<dataDir>/images/<the upload's path>/`. It runs inside `storeUpload`, so the
-editor's control, the avatar and the media library all produce the same
+editor's control and the media library both produce the same
 variants for the same file and the encoding is paid for by whoever uploaded it.
 It answers `undefined`, having written nothing, for a GIF, an animation, a PDF,
 a text file, an upload that is not there, and a site with `imageOptimization`
@@ -1651,8 +1843,10 @@ Booting mounts the public site on the app. The routes are:
 | a document's permalink                  | The post or the page, through the theme.                                                            |
 | `/tag/{tag}/`                           | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`.                          |
 | `/category/{name}/`                     | The second taxonomy, paginated the same way.                                                        |
+| `/author/{username}/`                   | One user's published posts, headed by their profile, paginated the same way.                        |
 | `/feed/`, `/feed/atom/`, `/feed/json/`  | The recent posts as RSS 2.0, Atom and JSON Feed.                                                    |
 | `/tag/{tag}/feed/` and its two siblings | The same, for one tag; `/category/{name}/feed/` likewise.                                           |
+| `/author/{username}/feed/` and siblings | The same, for one person.                                                                           |
 | `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                                                    |
 | `{permalink}feed/`                      | One post's replies, the same way.                                                                   |
 | `/sitemap.xml`                          | Every public URL, for a search engine.                                                              |
@@ -1667,6 +1861,22 @@ Booting mounts the public site on the app. The routes are:
 | `/uploads/…`                            | A file from `content/uploads/`, byte for byte as it was stored.                                     |
 | `/uploads/_/…`                          | One derived copy of an uploaded image, generated on the spot if missing.                            |
 | anything else                           | The theme's 404.                                                                                    |
+
+The federation routes go on before it, and answer only their own paths:
+
+| Route                           | What it serves                                                                        |
+| ------------------------------- | ------------------------------------------------------------------------------------- |
+| `/author/{username}/`           | The `Person` on an ActivityStreams request; the archive above to anything else.       |
+| `/author/{username}/inbox/`     | `POST` only. That user's inbox, signature-verified by Fedify.                         |
+| `/author/{username}/outbox/`    | Their published posts as `Create` activities, paged 20 at a time.                     |
+| `/author/{username}/followers/` | Who follows them, paged 20 at a time.                                                 |
+| `/author/{username}/following/` | Always empty: a relay is a subscription rather than a relationship.                   |
+| `/inbox/`                       | `POST` only. The instance-wide shared inbox; the addressee is read out of the body.   |
+| `/@{username}`                  | A 301 to their archive.                                                               |
+| `/.well-known/webfinger`        | The handle, the author URL or `/@{username}`, all resolving to the same actor.        |
+| `/.well-known/nodeinfo`         | A link to the NodeInfo document.                                                      |
+| `/nodeinfo/2.1`                 | What software this is, how many users and how many posts.                             |
+| a post's permalink              | The `Article` on an ActivityStreams request (decision-13); the page to anything else. |
 
 Drafts, documents in the trash and posts whose date has not arrived are not on
 the public site: their URLs 404, and they are in no listing.
@@ -1690,8 +1900,8 @@ them, and
 the routes, the paging, the canonical redirects, the tag feeds, the theme's
 links and the ActivityStreams hashtags all follow on the next request. A base
 is one URL-safe path segment: no slashes, and not a path the site already
-answers on (`page`, `feed`, `comments`, `admin`, `ap`, `theme`, `uploads`,
-`nodeinfo`), and
+answers on (`page`, `feed`, `comments`, `admin`, `theme`, `uploads`,
+`nodeinfo`, `author`, `inbox`), and
 the two may not be the same word. Both are `tagBase` and `categoryBase` in
 `content/_data/site.json`, so an Eleventy build of the same content directory
 can put its archives at the same URLs.
@@ -2221,8 +2431,9 @@ Disallow: /admin/
 Sitemap: https://example.com/sitemap.xml
 ```
 
-Everything public is crawlable; only the admin is not. `/ap/` is deliberately
-left open — an actor and an object exist to be fetched, they carry the same
+Everything public is crawlable; only the admin is not. The actors and their
+collections are deliberately left open — an actor and an object exist to be
+fetched, they carry the same
 content as the pages that link to them, and a crawler that follows one gets
 JSON it will ignore.
 
@@ -2270,8 +2481,11 @@ can extend a packaged one by name:
 The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`,
 `content`, `page.url`, and every front matter key the file carried — plus
 `site`, which is `content/_data/site.json`. It is part of the semver contract.
-The full table of context keys, blocks and filters is in
-[`themes/default/README.md`](./themes/default/README.md).
+The one key that is not the front matter's own string is `author`: it is the
+person the file names, resolved against the site's users, with `author.name` to
+print and `author.url` — their archive at `/author/{username}/` — to link to
+when the name is one of them. The full table of context keys, blocks and
+filters is in [`themes/default/README.md`](./themes/default/README.md).
 
 Rendering is also callable without a request:
 

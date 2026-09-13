@@ -19,7 +19,14 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { CONTACT_FIELDS, CONTACT_POST_PATH, createCms, readSiteSettings } from '@geekity/cms';
+import {
+  CONTACT_FIELDS,
+  CONTACT_POST_PATH,
+  createCms,
+  createUser,
+  readSiteSettings,
+  setUserProfile,
+} from '@geekity/cms';
 import type { Cms } from '@geekity/cms';
 
 import config from '../geekity.config.ts';
@@ -59,9 +66,10 @@ describe('the demo theme override', () => {
   it('serves a post through the demo post layout, not the packaged one', async () => {
     const body = await text('/2026/08/markdown-on-disk/');
 
-    // The packaged `layouts/post.njk` prints no byline and no reading time;
-    // the demo's override adds both, and that is the whole visible difference.
-    assert.match(body, /<p class="post-byline">\s*by <span class="p-author">Andrew Shell</);
+    // The packaged `layouts/post.njk` prints its byline in the meta line and
+    // no reading time; the demo's override gives the byline a line of its own
+    // and adds the reading time, and that is the whole visible difference.
+    assert.match(body, /<p class="post-byline">[\s\S]{0,200}Andrew Shell/);
     assert.match(body, /\d+ minute read/);
   });
 
@@ -92,6 +100,41 @@ describe('the demo content', () => {
     // and a page 3 to page through.
     assert.match(await text('/page/2/'), /class="post-list"/);
     assert.match(await text('/page/3/'), /class="post-list"/);
+  });
+
+  it('gives the person its posts name an archive, once there is an account (TASK-67)', async () => {
+    // Every demo post says `author: Andrew Shell`, which is a display name
+    // rather than a login — what a file written before decision-14 holds. With
+    // a user answering to it, that name reads as that user: their posts land
+    // on their archive and the byline links to it. Without one — which is what
+    // a fresh checkout has, because `data/` is not in git — the name is still
+    // printed, it simply links nowhere.
+    const andrew = await createUser({
+      dataDir,
+      username: 'andrew',
+      password: 'a password for the demo',
+    });
+    await setUserProfile({
+      dataDir,
+      userId: andrew.id,
+      profile: { displayName: 'Andrew Shell', bio: 'Writes the CMS this runs on.' },
+    });
+
+    const archive = await text('/author/andrew/');
+    assert.match(archive, /Andrew Shell/, 'the archive is headed with the profile');
+    assert.match(archive, /Writes the CMS this runs on\./);
+    assert.match(archive, /The theme is just templates/, 'and lists the posts they wrote');
+    assert.match(archive, /href="\/author\/andrew\/page\/2\/"/, 'paginated like the home page');
+    assert.match(await text('/author/andrew/page/2/'), /Markdown on disk/);
+    assert.doesNotMatch(archive, /A draft nobody can see/, 'but not the draft');
+
+    assert.match(
+      await text('/2026/08/markdown-on-disk/'),
+      /href="\/author\/andrew\/"/,
+      'and the byline on a post links to it',
+    );
+    assert.match(await text('/author/andrew/feed/'), /The theme is just templates/);
+    assert.equal((await get('/author/nobody/')).status, 404);
   });
 
   it('serves the page with an explicit permalink at that permalink', async () => {

@@ -192,6 +192,7 @@ describe('a post’s conversation', () => {
   it('names an author from the follower profile the site holds', async () => {
     const { admin, conversation: read } = await reader();
     admin.putFollower({
+      username: 'ada',
       actorId: 'https://remote.example/users/ada',
       inboxId: 'https://remote.example/users/ada/inbox',
       sharedInboxId: null,

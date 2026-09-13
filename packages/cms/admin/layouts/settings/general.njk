@@ -39,46 +39,4 @@
   <p class="admin-hint">A BCP 47 tag, such as <code>en</code> or <code>en-GB</code>. It is the page's <code>lang</code> and the feeds' language.</p>
 {% endblock %}
 
-{% block settingsPanels %}
-  {# The avatar is its own pair of forms: a file cannot travel in the
-     urlencoded body the settings form posts, and a rejected image must not
-     take an edit to the title down with it. #}
-  <section class="admin-settings admin-avatar-panel">
-    <h2>Avatar</h2>
-
-    <div class="admin-avatar-current">
-      {% if avatar %}
-        <img class="admin-avatar admin-avatar-large" src="{{ avatar }}" alt="The site's avatar" width="96" height="96" />
-      {% else %}
-        <span class="admin-avatar admin-avatar-large admin-avatar-blank" aria-hidden="true"></span>
-      {% endif %}
-
-      <div class="admin-avatar-forms">
-        <form method="post" action="{{ avatarUrl }}" enctype="multipart/form-data">
-          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-          <label for="settings-avatar">Image</label>
-          <input id="settings-avatar" name="{{ avatarFields.file }}" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required />
-          <p class="admin-settings-buttons">
-            <button type="submit">Upload avatar</button>
-          </p>
-        </form>
-
-        {% if avatar %}
-          <form method="post" action="{{ avatarUrl }}">
-            <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-            <input type="hidden" name="{{ avatarFields.action }}" value="{{ avatarRemove }}" />
-            <p class="admin-settings-buttons">
-              <button type="submit">Remove avatar</button>
-            </p>
-          </form>
-        {% endif %}
-      </div>
-    </div>
-
-    <p class="admin-hint">
-      A PNG, JPEG, WebP or GIF, stored with the site's other uploads. It is the
-      picture on the site's fediverse profile, and saving or removing it tells
-      the followers.
-    </p>
-  </section>
-{% endblock %}
+{% block settingsPanels %}{% endblock %}

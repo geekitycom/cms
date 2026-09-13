@@ -1,7 +1,18 @@
-export { ACTOR_CLASSES, actorClassFor, avatarUrl, siteActor } from './actor.ts';
-export type { SiteActorOptions } from './actor.ts';
+export {
+  actorAliases,
+  actorId,
+  avatarUrl,
+  keyIdFor,
+  mainKeyId,
+  multikeyId,
+  senderKeyPairs,
+  userActor,
+  userByUsername,
+} from './actor.ts';
+export type { UserActorOptions } from './actor.ts';
 export {
   articleObjectId,
+  documentAuthor,
   isFederatedDocument,
   postArticle,
   postCreateActivity,
@@ -21,6 +32,7 @@ export type {
 export {
   createSiteFederation,
   federatedPost,
+  outboxPage,
   OUTBOX_PAGE_SIZE,
   SOFTWARE_NAME,
 } from './federation.ts';
@@ -29,6 +41,18 @@ export type {
   FederationContextData,
   SiteFederation,
 } from './federation.ts';
+export {
+  ExistingKeyPairError,
+  importWordPressActor,
+  UnusableKeyPemError,
+} from './import-wordpress.ts';
+export type {
+  FollowersImportReport,
+  ImportedKey,
+  ImportWordPressActorOptions,
+  ImportWordPressActorReport,
+  UnreachableFollower,
+} from './import-wordpress.ts';
 export {
   followerRecipient,
   followersPage,
@@ -53,13 +77,14 @@ export {
   assertActorKeysUsable,
   loadActorKeyPairs,
   migrateActorKeysToFiles,
-  SITE_ACTOR_IDENTIFIER,
+  writeActorKeyFile,
 } from './keys.ts';
 export type { ActorKeyAlgorithm } from './keys.ts';
 export {
   addFollower,
   appendInboxActivity,
   FEDERATION_DATA_DIRECTORY,
+  federatedUsernames,
   followersFile,
   FOLLOWERS_FILE,
   inboxDirectory,
@@ -72,17 +97,19 @@ export {
   readInboxLog,
   rebuildFederationIndexes,
   removeFollower,
+  userDirectory,
 } from './records.ts';
 export type { FederationIndexReport, FederationRecords, InboxLine } from './records.ts';
-export { mountFederation } from './mount.ts';
+export { acctOf, mountFederation, webFingerSubject, WEBFINGER_PATH } from './mount.ts';
+export type { MountFederationOptions } from './mount.ts';
 export {
   ACTOR_PATH,
   createActivityId,
   deleteActivityId,
-  FEDERATION_PREFIX,
   federationOrigin,
   FOLLOWERS_PATH,
   FOLLOWING_PATH,
+  handleHref,
   INBOX_PATH,
   NODEINFO_PATH,
   OUTBOX_PATH,
@@ -105,3 +132,25 @@ export type {
 } from './relays.ts';
 export { actorHandle, replyFrom, replyTargetOf, REPLY_ACTIVITY_TYPE } from './replies.ts';
 export type { Reply } from './replies.ts';
+export {
+  createWordPressFederation,
+  readWordPressRequests,
+  recordWordPressRequest,
+  userByWordPressActorId,
+  WORDPRESS_ACTIVITYPUB_BASE,
+  WORDPRESS_ACTOR_PATH,
+  WORDPRESS_FOLLOWERS_PATH,
+  WORDPRESS_FOLLOWING_PATH,
+  WORDPRESS_INBOX_PATH,
+  WORDPRESS_OUTBOX_PATH,
+  WORDPRESS_REQUESTS_FILE,
+  WORDPRESS_SHARED_INBOX_PATH,
+  wordPressRequestsFile,
+  wordPressRequestTarget,
+} from './wordpress.ts';
+export type {
+  CreateWordPressFederationOptions,
+  WordPressRequests,
+  WordPressRequestTarget,
+  WordPressRoute,
+} from './wordpress.ts';

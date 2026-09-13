@@ -5,6 +5,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { promisify } from 'node:util';
 import { execFile as execFileCallback } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { PassThrough } from 'node:stream';
 
@@ -89,6 +90,7 @@ describe('parseArgs', () => {
       configPath: undefined,
       password: undefined,
       email: undefined,
+      flags: {},
       args: [],
     });
   });
@@ -99,6 +101,7 @@ describe('parseArgs', () => {
       configPath: undefined,
       password: undefined,
       email: undefined,
+      flags: {},
       args: [],
     });
   });
@@ -109,6 +112,7 @@ describe('parseArgs', () => {
       configPath: 'site.config.ts',
       password: undefined,
       email: undefined,
+      flags: {},
       args: [],
     });
   });
@@ -119,6 +123,7 @@ describe('parseArgs', () => {
       configPath: 'site.config.ts',
       password: undefined,
       email: undefined,
+      flags: {},
       args: [],
     });
   });
@@ -144,6 +149,7 @@ describe('parseArgs', () => {
       configPath: undefined,
       password: undefined,
       email: undefined,
+      flags: {},
       args: ['my-site'],
     });
   });
@@ -154,6 +160,7 @@ describe('parseArgs', () => {
       configPath: 'site.config.ts',
       password: undefined,
       email: undefined,
+      flags: {},
       args: [],
     });
   });
@@ -164,6 +171,7 @@ describe('parseArgs', () => {
       configPath: undefined,
       password: undefined,
       email: undefined,
+      flags: {},
       args: [],
     });
   });
@@ -174,6 +182,7 @@ describe('parseArgs', () => {
       configPath: undefined,
       password: undefined,
       email: undefined,
+      flags: {},
       args: ['add', 'ada'],
     });
   });
@@ -184,6 +193,7 @@ describe('parseArgs', () => {
       configPath: undefined,
       password: 'hunter22',
       email: undefined,
+      flags: {},
       args: ['add', 'ada'],
     });
   });
@@ -221,6 +231,37 @@ describe('parseArgs', () => {
 
   it('keeps the flags of the command it is running out of its positional arguments', () => {
     assert.deepEqual(parseArgs(['init', 'my-site', '--config=other.ts']).args, ['my-site']);
+  });
+
+  it('reads the import command, its subcommand and the flags it carries', () => {
+    const parsed = parseArgs([
+      'import',
+      'wordpress-actor',
+      'ada',
+      '--actor-id',
+      'https://blog.example/?author=2',
+      '--wordpress-id=2',
+      '--force',
+    ]);
+
+    assert.equal(parsed.command, 'import');
+    assert.deepEqual(parsed.args, ['wordpress-actor', 'ada']);
+    assert.deepEqual(parsed.flags, {
+      'actor-id': 'https://blog.example/?author=2',
+      'wordpress-id': '2',
+      force: true,
+    });
+  });
+
+  it('rejects an option no command has', () => {
+    assert.throws(() => parseArgs(['import', '--nonsense', 'x']), /--nonsense/);
+  });
+
+  it('rejects a flag that carries no value', () => {
+    assert.throws(
+      () => parseArgs(['import', 'wordpress-actor', 'ada', '--actor-id']),
+      /--actor-id/,
+    );
   });
 });
 
@@ -769,7 +810,7 @@ describe('geekity rebuild', () => {
     return await site({
       'posts/2026-01-01-one.md': '---\ntitle: One\npermalink: /one/\n---\n\nOne.\n',
       'posts/2026-01-02-two.md': '---\ntitle: Two\npermalink: /two/\n---\n\nTwo.\n',
-      '_data/federation/followers.json': `${JSON.stringify(
+      '_data/federation/ada/followers.json': `${JSON.stringify(
         [
           {
             actorId: ADA,
@@ -894,6 +935,200 @@ describe('geekity rebuild', () => {
     assert.equal(run.code, 1);
     assert.match(run.stdout, /1 failed/);
     assert.match(run.stderr, /could not be parsed/);
+  });
+});
+
+describe('geekity import wordpress-actor', () => {
+  /** The plugin's actor and the number its paths are built from (decision-14). */
+  const STORED_ACTOR_ID = 'https://blog.example/?author=2';
+  const WORDPRESS_ACTOR_ID = '2';
+  /** The follower the saved collection carries, embedded so nothing is fetched. */
+  const FOLLOWER = 'https://mstdn.example/users/weldon';
+
+  /**
+   * A site with one account, an exported key pair and a saved followers
+   * collection.
+   *
+   * The collection is a file rather than a URL on purpose: the command's own
+   * fetch is covered in process by `src/federation/import-wordpress.test.ts`,
+   * and a child process reaching for a socket is the one thing a CLI test
+   * must not do.
+   */
+  async function siteToImportInto(prefix: string): Promise<{
+    directory: string;
+    dataDir: string;
+    privateKey: string;
+    publicKey: string;
+    followers: string;
+  }> {
+    const directory = await temporaryDir(prefix);
+    const dataDir = path.join(directory, 'data');
+    const run = await runCli(['user', 'add', 'ada', '--password', 'hunter22'], directory);
+    assert.equal(run.code, 0, run.stderr);
+
+    const pair = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    const privateKey = path.join(directory, 'ada.private.pem');
+    const publicKey = path.join(directory, 'ada.public.pem');
+    const followers = path.join(directory, 'followers.json');
+    await fs.writeFile(privateKey, pair.privateKey);
+    await fs.writeFile(publicKey, pair.publicKey);
+    await fs.writeFile(
+      followers,
+      JSON.stringify({
+        type: 'OrderedCollection',
+        orderedItems: [
+          {
+            id: FOLLOWER,
+            type: 'Person',
+            preferredUsername: 'weldon',
+            name: 'Weldon',
+            inbox: `${FOLLOWER}/inbox`,
+            endpoints: { sharedInbox: 'https://mstdn.example/inbox' },
+          },
+        ],
+      }),
+    );
+
+    return { directory, dataDir, privateKey, publicKey, followers };
+  }
+
+  /** The command line every test here runs, before its own flags. */
+  function importArgs(site: {
+    privateKey: string;
+    publicKey: string;
+    followers: string;
+  }): string[] {
+    return [
+      'import',
+      'wordpress-actor',
+      'ada',
+      '--actor-id',
+      STORED_ACTOR_ID,
+      '--wordpress-id',
+      WORDPRESS_ACTOR_ID,
+      '--private-key',
+      site.privateKey,
+      '--public-key',
+      site.publicKey,
+      '--followers',
+      site.followers,
+    ];
+  }
+
+  it('writes the key files, both ids and the followers, and says what it did', async () => {
+    const site = await siteToImportInto('geekity-import-');
+
+    const run = await runCli(importArgs(site), site.directory);
+
+    assert.equal(run.code, 0, run.stderr);
+
+    const user = listUsers(site.dataDir).find((entry) => entry.username === 'ada');
+    assert.equal(user?.actorId, STORED_ACTOR_ID);
+    assert.equal(user?.wordpressActorId, 2, 'the WordPress number is stored as a number');
+
+    assert.ok(
+      await exists(path.join(site.dataDir, 'keys', 'ada.rsassa-pkcs1-v1_5.jwk')),
+      'the imported RSA pair is on disk under the username',
+    );
+    assert.ok(
+      await exists(path.join(site.dataDir, 'keys', 'ada.ed25519.jwk')),
+      'and the Ed25519 pair WordPress never had is minted beside it',
+    );
+
+    const followers = JSON.parse(
+      await fs.readFile(
+        path.join(site.directory, 'content', '_data', 'federation', 'ada', 'followers.json'),
+        'utf8',
+      ),
+    ) as { actorId: string; inboxId: string }[];
+    assert.deepEqual(
+      followers.map((follower) => follower.actorId),
+      [FOLLOWER],
+    );
+    assert.equal(followers[0]?.inboxId, `${FOLLOWER}/inbox`);
+
+    assert.match(run.stdout, /ada/);
+    assert.match(run.stdout, /1 added/);
+  });
+
+  it('changes nothing the second time, and says so', async () => {
+    const site = await siteToImportInto('geekity-import-again-');
+    assert.equal((await runCli(importArgs(site), site.directory)).code, 0);
+
+    const run = await runCli(importArgs(site), site.directory);
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(run.stdout, /[Nn]othing to change/);
+  });
+
+  it('refuses to import over a different key pair unless told to', async () => {
+    const site = await siteToImportInto('geekity-import-force-');
+    assert.equal((await runCli(importArgs(site), site.directory)).code, 0);
+
+    const other = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    await fs.writeFile(site.privateKey, other.privateKey);
+    await fs.writeFile(site.publicKey, other.publicKey);
+
+    const refused = await runCli(importArgs(site), site.directory);
+    assert.equal(refused.code, 1);
+    assert.match(refused.stderr, /--force/);
+
+    const forced = await runCli([...importArgs(site), '--force'], site.directory);
+    assert.equal(forced.code, 0, forced.stderr);
+    assert.match(forced.stdout, /replaced/);
+  });
+
+  it('refuses a run that is missing what it cannot invent', async () => {
+    const site = await siteToImportInto('geekity-import-missing-');
+
+    const run = await runCli(
+      ['import', 'wordpress-actor', 'ada', '--private-key', site.privateKey],
+      site.directory,
+    );
+
+    assert.equal(run.code, 1);
+    assert.match(run.stderr, /--actor-id/);
+    assert.equal(listUsers(site.dataDir)[0]?.actorId, undefined, 'and nothing was written');
+  });
+
+  it('reads the key pair out of the JSON wp option get prints', async () => {
+    const site = await siteToImportInto('geekity-import-keypair-');
+    const keypair = path.join(site.directory, 'keypair.json');
+    await fs.writeFile(
+      keypair,
+      JSON.stringify({
+        private_key: await fs.readFile(site.privateKey, 'utf8'),
+        public_key: await fs.readFile(site.publicKey, 'utf8'),
+      }),
+    );
+
+    const run = await runCli(
+      [
+        'import',
+        'wordpress-actor',
+        'ada',
+        '--actor-id',
+        STORED_ACTOR_ID,
+        '--wordpress-id',
+        WORDPRESS_ACTOR_ID,
+        '--keypair',
+        keypair,
+        '--followers',
+        'none',
+      ],
+      site.directory,
+    );
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.ok(await exists(path.join(site.dataDir, 'keys', 'ada.rsassa-pkcs1-v1_5.jwk')));
   });
 });
 

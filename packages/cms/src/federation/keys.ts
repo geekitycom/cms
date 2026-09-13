@@ -12,17 +12,6 @@ import {
 } from '../files/atomic.ts';
 
 /**
- * The site actor's internal identifier.
- *
- * Fedify keys actors by an identifier rather than by handle, and the two are
- * deliberately not the same thing here: the handle is a setting somebody may
- * change, while the identifier is what the actor's id, its inbox, its outbox
- * and its key files are all built from. Renaming `@blog@example.com` to
- * `@notes@example.com` therefore leaves every URL — and every follower — alone.
- */
-export const SITE_ACTOR_IDENTIFIER = 'actor';
-
-/**
  * The algorithms an actor holds a key pair for, in the order Fedify wants them:
  * the RSA pair signs HTTP Signatures for Mastodon and friends, the Ed25519
  * pair signs FEP-8b32 integrity proofs.
@@ -38,12 +27,13 @@ export function actorKeysDir(dataDir: string): string {
 }
 
 /**
- * The file one key pair lives in, e.g. `data/keys/actor.ed25519.jwk`.
+ * The file one key pair lives in, e.g. `data/keys/ada.ed25519.jwk`.
  *
- * The name is built from the identifier rather than the handle, so a site that
- * renames its actor does not orphan its own keys, and from the algorithm, so
- * the two pairs are independent files that can be backed up, restored and
- * regenerated one at a time.
+ * The identifier is the user's username (decision-14), which is also what
+ * their actor id is built from, so a site can tell at a glance whose key a
+ * file is; and the algorithm is in the name too, so the two pairs are
+ * independent files that can be backed up, restored and regenerated one at a
+ * time.
  *
  * `algorithm` is a bare string rather than an {@link ActorKeyAlgorithm}, for
  * the migration's sake: a row written by a version that knows an algorithm
@@ -54,7 +44,34 @@ export function actorKeyFile(dataDir: string, identifier: string, algorithm: str
 }
 
 /**
- * The actor's key pairs, generated on the first call and read from
+ * Put one private JWK on disk as a user's key file for an algorithm, replacing
+ * whatever was there, and answer with the path it was written to.
+ *
+ * The only door into `data/keys` that is not {@link loadActorKeyPairs}, and it
+ * exists for the import (TASK-71): a key pair that arrives from somewhere else
+ * is the one case where a file has to be written from bytes the CMS did not
+ * mint. Everything about the layout stays here rather than at the caller — the
+ * name, the `0700` directory and the `0600` file — so there is one answer to
+ * where a user's key lives.
+ *
+ * It does not decide whether writing is allowed: an existing key is somebody's
+ * identity, and the caller is the one that knows whether it was told to
+ * replace it.
+ */
+export function writeActorKeyFile(
+  dataDir: string,
+  identifier: string,
+  algorithm: ActorKeyAlgorithm,
+  privateJwk: string,
+): string {
+  const file = actorKeyFile(dataDir, identifier, algorithm);
+  ensureKeysDir(dataDir);
+  writeFileAtomicallySync(file, `${privateJwk.trimEnd()}\n`, { mode: KEY_FILE_MODE });
+  return file;
+}
+
+/**
+ * One user's key pairs, generated on the first call and read from
  * `data/keys` on every one after that.
  *
  * Both of {@link ACTOR_KEY_ALGORITHMS} are returned, in that order. Each file
@@ -83,6 +100,13 @@ export async function loadActorKeyPairs(
 /**
  * Turn an older site's `actor_keys` rows into files under `data/keys`, once,
  * and drop the table.
+ *
+ * The rows this writes out are the site actor's, which no version after
+ * TASK-68 has: decision-14 replaced it with one actor per user, and a user's
+ * keys are named after their username rather than after the sentinel `actor`.
+ * The files are still written rather than dropped on the floor, because a
+ * private key is the one thing this CMS never deletes for somebody — an
+ * operator who wants the old identity back has it on disk to move.
  *
  * This is the migration decision-9 calls the one that must not fail. Settings
  * a site could type again and followers a site could ask for again; an actor's

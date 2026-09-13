@@ -17,6 +17,7 @@ import {
   listUsers,
   setUserEmail,
   setUserPassword,
+  setUserProfile,
   usersFile,
   verifyUserPassword,
 } from './accounts.ts';
@@ -194,6 +195,200 @@ describe('a user with an email address (AC #1)', () => {
     assert.equal(findUserByIdentifier(dataDir, 'grace')?.email, undefined);
     assert.equal(findUserByIdentifier(dataDir, 'nobody@example.com'), undefined);
     assert.equal(findUserByIdentifier(dataDir, ''), undefined, 'the empty string matches nobody');
+  });
+});
+
+describe('a user with a profile (TASK-67 AC #1)', () => {
+  it('stores the four fields and leaves the key off a user who has none', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    await createUser({ dataDir, username: 'grace', password: 'a password of hers' });
+
+    assert.equal(
+      await setUserProfile({
+        dataDir,
+        userId: ada.id,
+        profile: {
+          displayName: 'Ada Lovelace',
+          bio: 'Wrote the first program.',
+          avatar: '/uploads/2026/09/ada.jpg',
+          links: [{ label: 'Home', href: 'https://ada.example' }],
+        },
+      }),
+      true,
+    );
+
+    const stored = findUserById(dataDir, ada.id)?.profile;
+    assert.equal(stored?.displayName, 'Ada Lovelace');
+    assert.equal(stored?.bio, 'Wrote the first program.');
+    assert.equal(stored?.avatar, '/uploads/2026/09/ada.jpg');
+    assert.deepEqual(stored?.links, [{ label: 'Home', href: 'https://ada.example' }]);
+
+    const file = JSON.parse(await readFile(usersFile(dataDir), 'utf8')) as {
+      users: Record<string, unknown>[];
+    };
+    assert.equal(
+      Object.hasOwn(file.users[1] ?? {}, 'profile'),
+      false,
+      'a user with no profile has no key for one',
+    );
+  });
+
+  it('drops a field somebody cleared and the whole key when nothing is left', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    const hash = findUser(dataDir, 'ada')?.passwordHash;
+
+    await setUserProfile({
+      dataDir,
+      userId: ada.id,
+      profile: { displayName: 'Ada Lovelace', bio: 'Wrote the first program.' },
+    });
+    await setUserProfile({ dataDir, userId: ada.id, profile: { displayName: 'Ada Lovelace' } });
+
+    assert.deepEqual(findUserById(dataDir, ada.id)?.profile, { displayName: 'Ada Lovelace' });
+
+    await setUserProfile({ dataDir, userId: ada.id, profile: {} });
+    assert.equal(findUserById(dataDir, ada.id)?.profile, undefined);
+    assert.equal(findUser(dataDir, 'ada')?.passwordHash, hash, 'the password is untouched');
+
+    assert.equal(await setUserProfile({ dataDir, userId: 404, profile: {} }), false);
+  });
+
+  it('reads a hand-written file tolerantly rather than refusing to load', async () => {
+    const dataDir = await temporaryDir();
+    await writeFile(
+      usersFile(dataDir),
+      JSON.stringify({
+        nextId: 2,
+        users: [
+          {
+            id: 1,
+            username: 'ada',
+            passwordHash: hashPassword('correct horse'),
+            createdAt: '2026-01-01T00:00:00.000Z',
+            profile: {
+              displayName: 42,
+              bio: '  Spaced out.  ',
+              links: [{ label: 'Home', href: 'https://ada.example' }, 'nonsense', { href: '' }],
+            },
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    const stored = findUserById(dataDir, 1)?.profile;
+    assert.equal(stored?.displayName, undefined, 'a display name that is not a string is dropped');
+    assert.equal(stored?.bio, 'Spaced out.');
+    assert.deepEqual(stored?.links, [{ label: 'Home', href: 'https://ada.example' }]);
+  });
+});
+
+describe('a user with a stored actor id (TASK-69)', () => {
+  /** One hand-written users file, written straight rather than through a form. */
+  async function fileWith(actorId: unknown): Promise<string> {
+    const dataDir = await temporaryDir();
+    await writeFile(
+      usersFile(dataDir),
+      JSON.stringify({
+        nextId: 2,
+        users: [
+          {
+            id: 1,
+            username: 'ada',
+            actorId,
+            passwordHash: hashPassword('correct horse'),
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+      'utf8',
+    );
+    return dataDir;
+  }
+
+  it('is read back whole, query string and all', async () => {
+    const dataDir = await fileWith('https://andrewshell.org/?author=2');
+
+    assert.equal(findUserById(dataDir, 1)?.actorId, 'https://andrewshell.org/?author=2');
+    assert.equal(listUsers(dataDir)[0]?.actorId, 'https://andrewshell.org/?author=2');
+  });
+
+  it('is dropped rather than refused when it is not a URL a peer could fetch', async () => {
+    // Each of these would be an id nothing could ever dereference, so the user
+    // is served under their author URL instead of the admin refusing to load.
+    for (const bad of ['not a url', '/author/ada/', 'mailto:ada@example.com', '   ', 42, null]) {
+      const dataDir = await fileWith(bad);
+      assert.equal(findUserById(dataDir, 1)?.actorId, undefined, `${JSON.stringify(bad)} is no id`);
+      assert.equal(findUserById(dataDir, 1)?.username, 'ada', 'and the user still loads');
+    }
+  });
+
+  it('survives a save of something else on the same user', async () => {
+    const dataDir = await fileWith('https://andrewshell.org/?author=2');
+    const ada = findUserById(dataDir, 1);
+    assert.ok(ada !== undefined);
+
+    await setUserProfile({ dataDir, userId: ada.id, profile: { displayName: 'Ada Lovelace' } });
+    await setUserEmail({ dataDir, userId: ada.id, email: 'ada@example.com' });
+
+    // Nothing writes a stored id and nothing may quietly drop one: it is the
+    // name every follower this person has holds them under.
+    assert.equal(findUserById(dataDir, 1)?.actorId, 'https://andrewshell.org/?author=2');
+  });
+});
+
+describe('a user with a WordPress actor id (TASK-70)', () => {
+  /** One hand-written users file carrying whatever the plugin's id reads as. */
+  async function fileWith(wordpressActorId: unknown): Promise<string> {
+    const dataDir = await temporaryDir();
+    await writeFile(
+      usersFile(dataDir),
+      JSON.stringify({
+        nextId: 2,
+        users: [
+          {
+            id: 1,
+            username: 'ada',
+            wordpressActorId,
+            passwordHash: hashPassword('correct horse'),
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+      'utf8',
+    );
+    return dataDir;
+  }
+
+  it('is read back as the number the plugin numbered the author', async () => {
+    const dataDir = await fileWith(2);
+
+    assert.equal(findUserById(dataDir, 1)?.wordpressActorId, 2);
+    assert.equal(listUsers(dataDir)[0]?.wordpressActorId, 2);
+  });
+
+  it('is dropped rather than refused when it is not a whole positive number', async () => {
+    for (const bad of ['2', 0, -1, 2.5, null, 'two']) {
+      const dataDir = await fileWith(bad);
+      assert.equal(
+        findUserById(dataDir, 1)?.wordpressActorId,
+        undefined,
+        `${JSON.stringify(bad)} is no actor id`,
+      );
+      assert.equal(findUserById(dataDir, 1)?.username, 'ada', 'and the user still loads');
+    }
+  });
+
+  it('survives a save of something else on the same user', async () => {
+    const dataDir = await fileWith(2);
+    const ada = findUserById(dataDir, 1);
+    assert.ok(ada !== undefined);
+
+    await setUserProfile({ dataDir, userId: ada.id, profile: { displayName: 'Ada Lovelace' } });
+
+    assert.equal(findUserById(dataDir, 1)?.wordpressActorId, 2);
   });
 });
 

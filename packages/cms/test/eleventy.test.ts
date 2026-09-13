@@ -339,9 +339,10 @@ describe('the fixtures content directory under Eleventy', () => {
   it('sees the followers and the inbox log under _data/federation as data', async () => {
     const html = await readFile(path.join(buildDir, '_site', 'about/index.html'), 'utf8');
 
-    // `content/_data/federation/followers.json` is a data file in a namespaced
-    // subdirectory, so Eleventy hands it over as `federation.followers`
-    // without being told anything.
+    // `content/_data/federation/{username}/followers.json` is a data file in a
+    // namespaced subdirectory, so Eleventy hands it over as
+    // `federation.{username}.followers` without being told anything
+    // (decision-14).
     const followers = [
       ...(/<ul class="followers">([\s\S]*?)<\/ul>/.exec(html)?.[1] ?? '').matchAll(
         /<a href="([^"]*)">([^<]*)<\/a>/g,

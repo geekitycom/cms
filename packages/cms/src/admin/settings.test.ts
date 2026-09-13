@@ -49,9 +49,6 @@ describe('content/_data/site.json', () => {
       postsPerPage: 7,
       timezone: 'Europe/London',
       language: 'en',
-      avatar: '',
-      actorHandle: 'blog',
-      actorType: 'Person',
       tagBase: 'tag',
       categoryBase: 'category',
       comments: true,
@@ -125,14 +122,14 @@ describe('where the values come from', () => {
     assert.equal(field(screen, 'title'), 'Edited by hand', 'the General settings page');
     assert.equal(field(screen, 'tagline'), 'in an editor');
 
-    const actor = (await (
-      await cms.app.request(
-        new Request('http://localhost/ap/actor', {
-          headers: { accept: 'application/activity+json' },
-        }),
-      )
-    ).json()) as Record<string, unknown>;
-    assert.equal(actor['name'], 'Edited by hand', 'and the actor');
+    // And nobody's actor moved: decision-14 made the profile a user's, so the
+    // site's own title is not published to anybody any more.
+    const actor = await cms.app.request(
+      new Request('http://localhost/author/ada/', {
+        headers: { accept: 'application/activity+json' },
+      }),
+    );
+    assert.equal(((await actor.json()) as Record<string, unknown>)['name'], 'ada');
   });
 
   it('survives a restart, because nothing else holds the settings', async () => {
@@ -248,12 +245,9 @@ describe('a database whose settings are still rows', () => {
       timezone: 'Europe/London',
       language: 'en-GB',
       postsPerPage: '4',
-      actorHandle: 'writer',
-      actorType: 'Organization',
       tagBase: 'topic',
       categoryBase: 'section',
       notifyServer: '',
-      avatar: '/uploads/2026/09/me.png',
     });
 
     const cms = await box.site({ contentDir, dataDir });
@@ -268,12 +262,9 @@ describe('a database whose settings are still rows', () => {
     assert.equal(written['timezone'], 'Europe/London');
     assert.equal(written['language'], 'en-GB');
     assert.equal(written['postsPerPage'], 4);
-    assert.equal(written['actorHandle'], 'writer');
-    assert.equal(written['actorType'], 'Organization');
     assert.equal(written['tagBase'], 'topic');
     assert.equal(written['categoryBase'], 'section');
     assert.equal(written['notifyServer'], '');
-    assert.equal(written['avatar'], '/uploads/2026/09/me.png');
 
     assert.match(await (await cms.app.request('/')).text(), /A Site With Rows/, 'and the site');
     await cms.close();
@@ -290,12 +281,12 @@ describe('a database whose settings are still rows', () => {
     const contentDir = await box.dir('geekity-settings-legacy-file-');
     // The rows were last saved an hour ago; the file is written now. That is
     // the site that was edited by hand — or restored from git — since the last
-    // save. The file wins, as it does for a post; the two settings it has never
-    // been able to carry come from the rows. The hour is deliberate: a row and
-    // a file stamped within the same instant is a tie, and a tie goes to the
-    // rows.
+    // save. The file wins outright, as it does for a post: since decision-14
+    // there is no setting the file has never been able to carry. The hour is
+    // deliberate: a row and a file stamped within the same instant is a tie,
+    // and a tie goes to the rows.
     const dataDir = await legacyDatabase(
-      { title: 'The Rows', actorHandle: 'writer', actorType: 'Service' },
+      { title: 'The Rows', tagBase: 'topic' },
       new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     );
 
@@ -313,8 +304,7 @@ describe('a database whose settings are still rows', () => {
     ) as Record<string, unknown>;
     assert.equal(written['title'], 'The File');
     assert.equal(written['feedSize'], 9, 'a key the form does not manage survived');
-    assert.equal(written['actorHandle'], 'writer', 'the handle the file could not carry');
-    assert.equal(written['actorType'], 'Service');
+    assert.equal(written['tagBase'], 'tag', 'and the rows did not overwrite the file');
 
     assert.match(await (await cms.app.request('/')).text(), /The File/);
   });

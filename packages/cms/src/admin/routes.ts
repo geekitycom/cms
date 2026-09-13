@@ -23,7 +23,6 @@ import { adminMenu } from './menu.ts';
 import { MESSAGES_PATH, mountMessagesScreen, unreadMessages } from './messages.ts';
 import { mountPreview } from './preview.ts';
 import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
-import { AVATAR_PATH } from './settings-general.ts';
 import { mountSettings } from './settings-pages.ts';
 import {
   ADMIN_PREFIX,
@@ -163,10 +162,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
   // In front of the guard, because the guard parses the form to find the CSRF
   // token and parsing a multipart form reads the whole file into memory. Every
-  // multipart endpoint needs it: the editor's uploads, the avatar, and the
-  // media screen's own form.
+  // multipart endpoint needs it: the editor's uploads and the media screen's
+  // own form.
   app.use(UPLOADS_PATH, refuseOversizedUpload);
-  app.use(AVATAR_PATH, refuseOversizedUpload);
   app.use(MEDIA_UPLOAD_PATH, refuseOversizedUpload);
 
   app.use(ADMIN_PREFIX, guard);

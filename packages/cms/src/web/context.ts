@@ -5,6 +5,7 @@ import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { siteImageMarkup } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
+import type { AuthorContext } from './authors.ts';
 import { DEFAULT_TAXONOMY_BASES, taxonomyBasesOrDefault, taxonomyRedirectsOf } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 
@@ -139,8 +140,21 @@ export interface DocumentContext {
  * theme's HTML may have it: the feeds, the JSON and Markdown representations
  * and the ActivityStreams `content` all read `document.html` directly and must
  * keep the plain `<img>` of the original.
+ *
+ * `author` is the profile behind the front matter's `author` (TASK-67), and it
+ * is an argument for the reason `images` is: only something holding the site's
+ * users can resolve a name to a person. Given one, the context's `author` is
+ * that object rather than the raw string — `author.name` to print and
+ * `author.url` to link — so a theme writes one thing whether the file names a
+ * login, a display name from before decision-14, or somebody who has no
+ * account here at all. Without one the file's own string is left where it was,
+ * which is what a test over a single template renders.
  */
-export function documentContext(document: Document, images?: ImageConfig): DocumentContext {
+export function documentContext(
+  document: Document,
+  images?: ImageConfig,
+  author?: AuthorContext,
+): DocumentContext {
   const date = toDate(document.date);
 
   return {
@@ -149,7 +163,7 @@ export function documentContext(document: Document, images?: ImageConfig): Docum
     slug: document.slug,
     draft: document.draft,
     ...optional('description', document.description),
-    ...optional('author', document.author),
+    ...optional('author', author ?? document.author),
     ...optional('updated', toDate(document.updated)),
     ...optional('activitypub', document.activitypub),
 

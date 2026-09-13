@@ -4,17 +4,18 @@ import type { Document } from '../content/document.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
+import { listUsers } from './accounts.ts';
+import type { User } from './accounts.ts';
 import { avatarUrl } from '../federation/actor.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
 import type { WebmentionReport } from '../webmention/service.ts';
-import { SITE_ACTOR_IDENTIFIER } from '../federation/keys.ts';
-import { ACTOR_PATH, federationOrigin, FEDERATION_PREFIX } from '../federation/paths.ts';
-import { postObjectId } from '../web/documents.ts';
+import { ACTOR_PATH, federationOrigin } from '../federation/paths.ts';
+import { authorHref, profileContext, userForAuthor } from '../web/authors.ts';
+import { postObjectId, publicDocumentAt } from '../web/documents.ts';
+import { absoluteUrl } from '../web/negotiate.ts';
 import { editorPath, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { readSiteSettings } from './settings.ts';
-import type { SiteSettings } from './settings.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import type {
   Delivery,
@@ -87,19 +88,22 @@ export function mountFederationScreen(
     const admin = c.var.admin;
     const baseUrl = c.var.config.baseUrl;
     const post = localPosts(c.var.store, baseUrl);
+    const users = listUsers(c.var.config.dataDir);
 
     return render(c, ADMIN_TEMPLATES.federation, {
       section: 'federation',
       child: 'followers',
       resendUrl: RESEND_PATH,
       fields: FEDERATION_FIELDS,
-      actor: actorSummary(readSiteSettings(c.var.config.contentDir), {
-        baseUrl,
-        followers: admin.countFollowers(),
-      }),
-      followers: admin
-        .listFollowers({ limit: FEDERATION_RECENT })
-        .map((follower) => followerRow(follower)),
+      actors: users.map((user) =>
+        actorSummary(user, {
+          baseUrl,
+          followerCount: admin.countFollowers(user.username),
+          followers: admin
+            .listFollowers(user.username, { limit: FEDERATION_RECENT })
+            .map((follower) => followerRow(follower)),
+        }),
+      ),
       // The inbox log holds the follow traffic as well, and only a fraction of
       // it survives {@link inboxRows}, so more is read than is shown.
       inbox: inboxRows(admin.listInboxActivities({ limit: FEDERATION_RECENT * 4 }), {
@@ -112,6 +116,7 @@ export function mountFederationScreen(
         .map((relay) => relayRow(relay, admin.lastDeliveryToInbox(relay.inboxId))),
       posts: deliveryRows(c.var.store.listFederated({ limit: FEDERATION_RECENT }), {
         baseUrl,
+        author: (document) => userForAuthor(users, document.author)?.username ?? null,
         lastDelivery: (objectId) => admin.lastDeliveryToObject(objectId),
         counts: (activityId) => admin.countDeliveriesByStatus(activityId),
         webmentions: (slug) => admin.countSentWebmentionsByStatus(slug),
@@ -253,6 +258,13 @@ function webmentionMessage(links: WebmentionReport | undefined): string | undefi
 export interface DeliveryRow {
   /** The post, as the row names and links to it. */
   readonly post: LocalPost;
+  /**
+   * The username whose actor announced it, or `null` when its `author` names
+   * nobody this site knows — in which case the site's first account announced
+   * it, which the screen says nothing about because it is a fallback rather
+   * than an attribution.
+   */
+  readonly author: string | null;
   /** What the Resend button submits. */
   readonly slug: string;
   /** Whether the post is in the trash, which is why its last activity was a `Delete`. */
@@ -285,6 +297,8 @@ export interface DeliveryRow {
 export interface DeliveryRowsContext {
   /** The site's public origin, which a post's object id is built on. */
   readonly baseUrl: string;
+  /** Whose actor announced one post, or `null` when its `author` names nobody. */
+  readonly author: (document: Document) => string | null;
   /** The newest outcome recorded about one object id, or `undefined`. */
   readonly lastDelivery: (objectId: string) => Delivery | undefined;
   /** How one activity's deliveries ended, by status. */
@@ -321,6 +335,7 @@ export function deliveryRows(
         title: document.title,
         editUrl: editorPath(POST_KIND, document.slug),
       },
+      author: context.author(document),
       slug: document.slug,
       trashed: isTrashedPath(document.path),
       lastActivity:
@@ -336,56 +351,71 @@ export function deliveryRows(
   });
 }
 
-/** The site's own actor, as the top of the screen describes it. */
+/** One user's actor, as a panel of the screen describes it. */
 export interface ActorSummary {
-  /** `@handle@host`, the way somebody would type it into a search box. */
+  /** Their login, which is also their Fedify identifier and their handle. */
+  readonly username: string;
+  /** `@username@host`, the way somebody would type it into a search box. */
   readonly handle: string;
-  /** `Person` or `Service`. */
-  readonly type: string;
-  /** The display name, which is the site title. */
+  /** The display name, or the username when they have written none. */
   readonly name: string;
-  /** The summary, which is the tagline. May be empty. */
+  /** The summary, which is their bio. May be empty. */
   readonly summary: string;
-  /** The actor's ActivityStreams id, which is also where it is served. */
+  /** The actor's ActivityStreams id, which is also their archive. */
   readonly actorId: string;
-  /** The profile a human would open, which is the site itself. */
+  /** The profile a human would open, which is that same archive. */
   readonly url: string;
   /**
-   * The avatar the actor's `icon` carries, absolute, or `null` when the site
-   * has none — which is what the screen draws a placeholder for.
+   * The avatar the actor's `icon` carries, absolute, or `null` when they have
+   * none — which is what the screen draws a placeholder for.
    */
   readonly avatarUrl: string | null;
-  /** How many actors follow it. */
-  readonly followers: number;
+  /** How many actors follow them. */
+  readonly followerCount: number;
+  /** The newest of those followers, as the table renders them. */
+  readonly followers: readonly FollowerRow[];
 }
 
 /**
- * The site's actor as the screen shows it.
+ * One user's actor as the screen shows it (decision-14).
  *
  * The handle's host and the actor's id both come from the base URL's origin
  * rather than from the whole of it, because that is where the federation
- * endpoints are served: a site under `/blog` is still `@blog@example.com`.
+ * endpoints are served: a site under `/blog` still answers `@ada@example.com`.
+ * The id is built from {@link ACTOR_PATH} rather than from `authorHref` for
+ * the same reason — it is the path Fedify dispatches the actor at, and the
+ * screen should say what a peer would get. Which is also why a user with a
+ * stored actor id (TASK-69) is shown under that: it is the id their followers
+ * hold, and a screen naming the other one would be describing a document
+ * nobody fetches.
  */
 export function actorSummary(
-  settings: SiteSettings,
+  user: User,
   context: {
     /** The base URL actually in effect, which the settings' own may not be. */
     baseUrl: string;
-    followers: number;
+    followerCount: number;
+    followers: readonly FollowerRow[];
   },
 ): ActorSummary {
   const baseUrl = context.baseUrl === '' ? 'http://localhost' : context.baseUrl;
   const origin = federationOrigin(baseUrl);
+  const profile = profileContext(user);
 
   return {
-    handle: `@${settings.actorHandle}@${origin.handleHost}`,
-    avatarUrl: avatarUrl(settings.avatar, baseUrl) ?? null,
-    type: settings.actorType,
-    name: settings.title,
-    summary: settings.tagline,
-    actorId: new URL(ACTOR_PATH.replace('{identifier}', SITE_ACTOR_IDENTIFIER), origin.webOrigin)
-      .href,
-    url: baseUrl,
+    username: user.username,
+    handle: `@${user.username}@${origin.handleHost}`,
+    avatarUrl: profile.avatar === undefined ? null : (avatarUrl(profile.avatar, baseUrl) ?? null),
+    name: profile.name,
+    summary: profile.bio ?? '',
+    actorId:
+      user.actorId ??
+      new URL(
+        ACTOR_PATH.replace('{identifier}', encodeURIComponent(user.username)),
+        origin.webOrigin,
+      ).href,
+    url: absoluteUrl(authorHref(user.username), baseUrl),
+    followerCount: context.followerCount,
     followers: context.followers,
   };
 }
@@ -519,16 +549,17 @@ function replyObject(
 /**
  * Resolve one of the site's own ActivityStreams ids to the post behind it.
  *
- * An id from anywhere else — a like of somebody else's post that reached the
- * shared inbox, a reply to a reply — is `null` rather than a guess, and so is
- * one whose slug the index has never heard of.
+ * A post's id is its permalink (decision-13), so this is a lookup by URL
+ * against the content index: an id from anywhere else — a like of somebody
+ * else's post that reached the shared inbox, a reply to a reply — is `null`
+ * rather than a guess, and so is one whose path the index has never heard of.
  */
 export function localPosts(
   store: ContentStore,
   baseUrl: string,
 ): (objectId: string | null) => LocalPost | null {
-  const origin = federationOrigin(baseUrl === '' ? 'http://localhost' : baseUrl).webOrigin;
-  const prefix = `${FEDERATION_PREFIX}/posts/`;
+  const site = baseUrl === '' ? 'http://localhost' : baseUrl;
+  const origin = new URL(site).origin;
 
   return (objectId) => {
     if (objectId === null) return null;
@@ -539,17 +570,17 @@ export function localPosts(
     } catch {
       return null;
     }
+    if (url.origin !== origin) return null;
 
-    if (url.origin !== origin || !url.pathname.startsWith(prefix)) return null;
+    const document =
+      store.getByStoredObjectId(objectId) ??
+      publicDocumentAt(store, decodeURIComponent(url.pathname));
+    if (document === undefined || document.type !== 'post') return null;
 
-    const slug = decodeURIComponent(url.pathname.slice(prefix.length));
-    if (slug === '') return null;
-
-    const document = store.getBySlug(slug);
     return {
-      slug,
-      title: document?.title ?? slug,
-      editUrl: editorPath(POST_KIND, slug),
+      slug: document.slug,
+      title: document.title,
+      editUrl: editorPath(POST_KIND, document.slug),
     };
   };
 }

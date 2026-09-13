@@ -14,9 +14,11 @@ import type {
   Undo,
 } from '@fedify/vocab';
 
+import { listUsers } from '../admin/accounts.ts';
+import type { User } from '../admin/accounts.ts';
 import type { NewFollower } from '../admin/store.ts';
+import { actorId, senderKeyPairs, userByUsername } from './actor.ts';
 import type { FederationContextData } from './federation.ts';
-import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
 import { addFollower, appendInboxActivity, removeFollower } from './records.ts';
 import type { FederationRecords } from './records.ts';
 import { acceptRelay, rejectRelay } from './relays.ts';
@@ -25,46 +27,76 @@ import { acceptRelay, rejectRelay } from './relays.ts';
 export type SiteInboxContext = InboxContext<FederationContextData>;
 
 /**
- * Handle a `Follow`: store the follower and reply `Accept`.
+ * Handle a `Follow`: store the follower under the user it named, and reply
+ * `Accept` as that user.
  *
- * A `Follow` of anything but the site actor is ignored rather than refused —
- * a peer that asked to follow a post has not done anything wrong, it has
- * merely addressed something that does not accept followers. The reply goes
- * to the follower's own inbox rather than through the followers collection,
- * because at this moment the follow is not yet a fact for anybody but us.
+ * A `Follow` of anything but one of this site's users is ignored rather than
+ * refused — a peer that asked to follow a post has not done anything wrong, it
+ * has merely addressed something that does not accept followers. The reply
+ * goes to the follower's own inbox rather than through the followers
+ * collection, because at this moment the follow is not yet a fact for anybody
+ * but us.
  *
  * Following twice is a no-op beyond refreshing the stored profile: the store
- * is keyed by actor id and keeps the original follow time, so a redelivered
- * or repeated `Follow` cannot turn one follower into two.
+ * is keyed by the pair (user, actor) and keeps the original follow time, so a
+ * redelivered or repeated `Follow` cannot turn one follower into two. One
+ * actor may follow two of this site's users, and that is two rows.
  */
 export async function handleFollow(context: SiteInboxContext, follow: Follow): Promise<void> {
-  await logActivity(context, follow);
-  if (follow.id === null || follow.objectId === null) return;
-
-  // `parseUri` is what decides whether the object is this actor: comparing
-  // strings would have to know how Fedify spells the actor's URL, and this
-  // asks Fedify instead.
-  const parsed = context.parseUri(follow.objectId);
-  if (parsed?.type !== 'actor' || parsed.identifier !== SITE_ACTOR_IDENTIFIER) return;
+  const followed = followedUser(context, follow);
+  await logActivity(context, follow, followed?.username);
+  if (follow.id === null || follow.objectId === null || followed === undefined) return;
 
   const actor = await follow.getActor(dereference(context));
   if (actor === null) return;
   const follower = await followerFrom(context, actor);
   if (follower === undefined) return;
 
-  await addFollower(recordsOf(context), follower);
+  await addFollower(recordsOf(context), followed.username, follower);
 
   await context.sendActivity(
-    { identifier: SITE_ACTOR_IDENTIFIER },
+    await senderKeyPairs(context, followed),
     actor,
     new Accept({
       // A fresh id every time: an actor may follow, unfollow and follow again,
       // and those are three activities rather than one repeated.
-      id: new URL(`#accept/${randomUUID()}`, context.getActorUri(SITE_ACTOR_IDENTIFIER)),
-      actor: follow.objectId,
+      id: new URL(`#accept/${randomUUID()}`, actorId(context, followed)),
+      // The user's own id rather than the URL the `Follow` happened to name.
+      // They are the same thing for almost everybody, but a user with a stored
+      // actor id may be followed at either of two URLs, and the `Accept` has to
+      // come from the one their actor document publishes — it is what a peer
+      // matches against the account it is waiting to hear about, and the owner
+      // of the key that signed the reply.
+      actor: actorId(context, followed),
       object: follow,
     }),
   );
+}
+
+/**
+ * The user a `Follow` is a follow of, or `undefined` when it names none.
+ *
+ * `parseUri` is what decides whether the object is one of this site's actors:
+ * comparing strings would have to know how Fedify spells an actor's URL, and
+ * this asks Fedify instead. The identifier it answers with is the username
+ * (decision-14), and a username nobody has is not a follow of anybody.
+ *
+ * A stored actor id is the other way in, and the commoner one for a migrated
+ * site: it is the `id` the actor document publishes, so it is what a peer that
+ * just read the document names, and Fedify's router cannot parse it because it
+ * is not a path Fedify dispatches (doc-8). Matched on the whole URL, as it is
+ * everywhere else.
+ */
+function followedUser(context: SiteInboxContext, follow: Follow): User | undefined {
+  if (follow.objectId === null) return undefined;
+
+  const parsed = context.parseUri(follow.objectId);
+  if (parsed?.type === 'actor') {
+    return userByUsername(context.data.config.dataDir, parsed.identifier);
+  }
+
+  const wanted = follow.objectId.href;
+  return listUsers(context.data.config.dataDir).find((user) => user.actorId === wanted);
 }
 
 /**
@@ -76,16 +108,21 @@ export async function handleFollow(context: SiteInboxContext, follow: Follow): P
  * about who the follow belonged to.
  */
 export async function handleUndo(context: SiteInboxContext, undo: Undo): Promise<void> {
-  await logActivity(context, undo);
-
   const object = await undo.getObject(dereference(context));
+  const followed = object instanceof Follow ? followedUser(context, object) : undefined;
+  await logActivity(context, undo, followed?.username);
+
   if (!(object instanceof Follow)) return;
 
   const undoer = undo.actorId;
   const follower = object.actorId;
   if (undoer === null || follower === null || undoer.href !== follower.href) return;
 
-  await removeFollower(recordsOf(context), follower.href);
+  // An `Undo` that names which actor was followed unfollows exactly that one;
+  // one that does not — the object arrived as a bare id nothing could
+  // dereference — unfollows everybody, which is what "I do not want your
+  // posts" means when it says nothing more.
+  await forget(context, follower.href, followed?.username);
 }
 
 /**
@@ -97,13 +134,43 @@ export async function handleUndo(context: SiteInboxContext, undo: Undo): Promise
  * object to remove.
  */
 export async function handleDelete(context: SiteInboxContext, activity: Delete): Promise<void> {
-  await logActivity(context, activity);
+  await logActivity(context, activity, context.recipient ?? undefined);
 
   const actor = activity.actorId;
   const object = activity.objectId;
   if (actor === null || object === null || actor.href !== object.href) return;
 
-  await removeFollower(recordsOf(context), object.href);
+  // An account that is gone is gone from everybody's followers, whichever
+  // inbox the announcement happened to reach.
+  await forget(context, object.href);
+}
+
+/**
+ * Take one actor off a user's followers, or off every user's.
+ *
+ * Which users to touch is asked of the index rather than of the file listing,
+ * because the index is the one place that already knows which of this site's
+ * people an actor follows; `removeFollower` then rewrites each file and
+ * corrects the index inside the same lock, so the two cannot disagree.
+ */
+async function forget(
+  context: SiteInboxContext,
+  actorHref: string,
+  username?: string,
+): Promise<void> {
+  const records = recordsOf(context);
+  if (username !== undefined) {
+    await removeFollower(records, username, actorHref);
+    return;
+  }
+
+  const usernames = new Set(
+    context.data.admin
+      .listFollowers()
+      .filter((follower) => follower.actorId === actorHref)
+      .map((follower) => follower.username),
+  );
+  for (const name of usernames) await removeFollower(records, name, actorHref);
 }
 
 /**
@@ -144,24 +211,34 @@ export async function handleLoggedActivity(
 }
 
 /**
- * Write one inbound activity to the log.
+ * Write one inbound activity to the log, attributed to the user it was
+ * addressed to.
  *
  * Every handled activity goes through here, the follow traffic included, so
  * the log is a complete record of what the inbox was told rather than of what
  * the inbox ignored. An activity with no actor is dropped: Fedify has already
  * refused anything whose signature does not match its actor, so an activity
  * without one is malformed rather than anonymous.
+ *
+ * The recipient defaults to the inbox the delivery arrived at —
+ * `context.recipient` is the username for a personal inbox and `null` for the
+ * shared one — and a caller that has worked out the addressee for itself, as
+ * `handleFollow` has, names it instead (decision-14).
  */
-export async function logActivity(context: SiteInboxContext, activity: Activity): Promise<void> {
-  const actorId = activity.actorId;
-  if (actorId === null) return;
+export async function logActivity(
+  context: SiteInboxContext,
+  activity: Activity,
+  recipient: string | undefined = context.recipient ?? undefined,
+): Promise<void> {
+  const sender = activity.actorId;
+  if (sender === null) return;
 
   const json = await activity.toJsonLd({
     format: 'compact',
     contextLoader: context.contextLoader,
   });
 
-  await appendInboxActivity(recordsOf(context), JSON.stringify(json));
+  await appendInboxActivity(recordsOf(context), JSON.stringify(json), { recipient });
 }
 
 /** The files this inbox writes, and the index over them. */
@@ -180,7 +257,7 @@ function recordsOf(context: SiteInboxContext): FederationRecords {
 export async function followerFrom(
   context: SiteInboxContext,
   actor: Actor,
-): Promise<NewFollower | undefined> {
+): Promise<Omit<NewFollower, 'username'> | undefined> {
   if (actor.id === null || actor.inboxId === null) return undefined;
 
   const icon = await actor.getIcon({ ...dereference(context), suppressError: true });

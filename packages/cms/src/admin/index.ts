@@ -14,15 +14,21 @@ export {
   findUserById,
   findUserByIdentifier,
   listUsers,
+  primaryUser,
   migrateUsersToFile,
+  cleanProfile,
   setUserEmail,
   setUserPassword,
+  setUserProfile,
+  setUserWordPressActor,
+  ConflictingActorIdError,
+  UnknownUserError,
   USERS_FILE,
   USERS_FILE_MODE,
   usersFile,
   verifyUserPassword,
 } from './accounts.ts';
-export type { CreateUserInput, StoredUser, User } from './accounts.ts';
+export type { CreateUserInput, ProfileLink, StoredUser, User, UserProfile } from './accounts.ts';
 export {
   credentialProblem,
   emailProblem,
@@ -193,15 +199,12 @@ export type {
   AdminSection,
 } from './menu.ts';
 export {
-  ACTOR_HANDLE_PATTERN,
   LANGUAGE_TAG_PATTERN,
-  ACTOR_TYPES,
   DEFAULT_SITE_SETTINGS,
   effectiveBaseUrl,
   EMAIL_PATTERN,
   formFromSettings,
   migrateSettingsToFile,
-  profileChanged,
   readSiteSettings,
   SETTINGS_FIELD_NAMES,
   SETTINGS_FIELDS,
@@ -220,7 +223,7 @@ export type { SettingsField, SettingsForm, SettingsProblems, SiteSettings } from
 export { bodyField, mountSettingsPage, settingsPagePath, settingsScreen } from './settings-page.ts';
 export type { MountSettingsOptions, SettingsPage, SubmittedBody } from './settings-page.ts';
 export { mountSettings, SETTINGS_PAGES } from './settings-pages.ts';
-export { AVATAR_FIELDS, AVATAR_PATH, AVATAR_REMOVE, GENERAL_SETTINGS } from './settings-general.ts';
+export { GENERAL_SETTINGS } from './settings-general.ts';
 export { READING_SETTINGS } from './settings-reading.ts';
 export { PERMALINKS_SETTINGS } from './settings-permalinks.ts';
 export {

@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 03:13'
+updated_date: '2026-09-13 03:57'
 ---
 # Content Negotiation
 
@@ -55,9 +55,30 @@ site's posts wherever the listing is read, and the posts page advertises them
 like every other page. A slug naming a page that has been drafted, trashed or
 deleted names nothing, and the site is back to its latest posts at `/`.
 
+## Author archives
+
+Each user has an archive at `/author/{username}/`, paginated at
+`/author/{username}/page/N/` and fed at `/author/{username}/feed/` and its two
+siblings. It lists that user's published posts, newest first, headed by their
+profile — display name, bio, avatar and links — and advertises its three feeds
+the way a tag archive does.
+
+Which posts are theirs is decided by doc-2's `author`: a post naming their
+username, and one naming a display name exactly one user answers to. A username
+nobody has 404s; a user with nothing published does **not** — decision-14 makes
+this URL their ActivityPub actor's id, and an id that 404'd until its owner
+published would be an account that came into being with a post.
+
+The trailing slash is required, as everywhere else, and `/author/{username}`
+redirects to it in one hop — which is where a browser at an actor id lands,
+because Fedify 404s the slashless form and falls through. `author` and `inbox`
+are reserved first URL segments: no document can be permalinked under them and
+no taxonomy base can take them.
+
 ## Collections
 
-Listing URLs (home, tag archives, paginated archives) negotiate too. HTML renders the theme's list template. JSON returns an array of the same document shape with `markdown` and `html` omitted unless `?full=1`. Markdown is not offered for listings.
+Listing URLs (home, tag archives, author archives, paginated archives)
+negotiate too. HTML renders the theme's list template. JSON returns an array of the same document shape with `markdown` and `html` omitted unless `?full=1`. Markdown is not offered for listings.
 
 ## Feeds
 
@@ -69,6 +90,7 @@ Feeds are routes, not representations, because feed readers do not send useful `
 | `/feed/atom/` | Atom 1.0 (`application/atom+xml`) |
 | `/feed/json/` | JSON Feed 1.1 (`application/feed+json`) |
 | `/{tagBase}/{tag}/feed/`, `/{categoryBase}/{name}/feed/` | The same three over one archive |
+| `/author/{username}/feed/` and its two siblings | The same three over one person's posts |
 | `/comments/feed/` | Every reply the inbox has been sent, as RSS 2.0 |
 | `{permalink}feed/` | One post's replies, the same way |
 
@@ -76,7 +98,7 @@ Every format renders the same **feed item**: one shape derived once per post and
 
 The three answers, on the wire. **Identity**: the object id is RSS's `guid`, Atom's `<id>` and JSON Feed's `id`, and the permalink is always the link — RSS's `<link>`, Atom's `rel="alternate"` and JSON Feed's `url`. The two are the same URL for a post born here and differ only for one carrying a stored id, which is what `guid`'s `isPermaLink` reports: `true` for the permalink, `false` for a stored id such as `https://example.com/?p=813`. **Terms**: the post's categories and then its tags, in file order, as one flat list in all three — no feed format can say which vocabulary a term came from, and neither does WordPress. **Summary**: the document's `description` when it has one, else an excerpt of the rendered HTML cut at 55 words, printed by all three and left out only when there is nothing to summarise.
 
-`/feed/` is RSS because that is the format nearly every existing subscriber holds. The site's three are registered routes; the per-archive ones are resolved in the not-found handler, because the two bases are a setting and a route table is fixed when the app is built.
+`/feed/` is RSS because that is the format nearly every existing subscriber holds. The site's three are registered routes; the per-archive ones — a term's and a person's alike — are resolved in the not-found handler, because the two taxonomy bases are a setting and a route table is fixed when the app is built. An author feed is titled after the person, `{site}: {display name}`, as a tag's is titled after the term.
 
 WordPress's older spellings redirect 301 rather than 404: `/feed/rss/` at any of those roots to that root's RSS feed, `?feed=rss2`, `?feed=rss`, `?feed=atom` and `?feed=json` on any listing to that listing's feed, and `?feed=rss2` or `?feed=rss` on a post's permalink to that post's comments feed. A feed URL without its trailing slash redirects to the canonical one in a single hop, exactly as any other listing URL does.
 
