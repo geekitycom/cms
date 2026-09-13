@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-05 13:08'
-updated_date: '2026-09-13 02:06'
+updated_date: '2026-09-13 02:08'
 labels:
   - web
 milestone: m-10
@@ -35,7 +35,7 @@ With the feed item in place (TASK-63) the three formats stop disagreeing. Per de
 - [x] #2 Atom and JSON Feed items list categories and tags; RSS's terms are unchanged
 - [x] #3 All three formats use the same summary rule: description, else an excerpt of the HTML
 - [x] #4 The ETag of each feed changes once with the upgrade and is stable afterwards
-- [ ] #5 The commit is feat(cms)! with a BREAKING CHANGE footer naming what RSS subscribers will see; doc-3 and the package README describe the item's identity
+- [x] #5 The commit is feat(cms)! with a BREAKING CHANGE footer naming what RSS subscribers will see; doc-3 and the package README describe the item's identity
 - [x] #6 The feed checks TASK-37 used (xmllint and the strict XML reader) still pass on all three feeds
 - [x] #7 A post carrying a stored id changes in no feed
 <!-- AC:END -->
