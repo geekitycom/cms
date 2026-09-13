@@ -3,13 +3,17 @@ import type { Environment } from 'nunjucks';
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { authorContext } from './authors.ts';
+import type { DocumentNeighbours } from '../content/store.ts';
+import { siteIcons } from '../images/icons.ts';
+import { archiveMonths, archiveOpen } from './archive.ts';
+import { authorContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import {
   createSiteDataSource,
   documentContext,
   frontPageSlugs,
   postsPerPage,
+  siteTimezone,
   taxonomyBases,
   termRedirects,
   themeName,
@@ -19,7 +23,7 @@ import type { ContactFormContext } from '../contact/form.ts';
 import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
-import type { DocumentContext, FrontPageSlugs, SiteData } from './context.ts';
+import type { DocumentContext, FrontPageSlugs, NeighbourContext, SiteData } from './context.ts';
 import { navigationMenu } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
@@ -40,18 +44,21 @@ export const TEMPLATES = {
 } as const;
 
 /**
- * The two templates a theme may add for the Reading choice, neither of which
- * the default theme ships.
+ * The two templates named for the Reading choice, which a theme may write and
+ * which fall back to an ordinary layout when it has not.
  *
- * They are override points rather than layouts: a site that sets a static
- * homepage gets the page layout and a site that sets a posts page gets the
- * listing layout, until it writes one of these — which is WordPress's own
- * `front-page.php` and `home.php`, and the same reason for having them. A
- * front page is often the one page of a site that looks like nothing else, and
- * saying so should not mean overriding the layout every other page uses.
+ * They are WordPress's own `front-page.php` and `home.php`, and they exist for
+ * the same reason: a front page is often the one page of a site that looks
+ * like nothing else, and saying so should not mean overriding the layout every
+ * other page uses. The default theme ships `front-page.njk` (TASK-85) and no
+ * posts page layout, so a site that sets a posts page gets the listing layout
+ * until it writes one.
  */
 export const OPTIONAL_TEMPLATES = {
-  /** The front page alone. Falls back to {@link TEMPLATES.page}. */
+  /**
+   * The front page alone. The default theme ships one (TASK-85), so the
+   * fallback is only reached by a theme that replaced it with nothing.
+   */
   frontPage: 'layouts/front-page.njk',
   /** The listing on the posts page. Falls back to {@link TEMPLATES.home}. */
   postsPage: 'layouts/posts-page.njk',
@@ -218,6 +225,36 @@ export interface CreateRendererOptions {
    * it simply links nowhere.
    */
   users?: (() => readonly User[]) | undefined;
+  /**
+   * The published posts either side of one, for `previous` and `next` under an
+   * entry (TASK-79).
+   *
+   * Injected for the reason the conversation is — the renderer holds no index
+   * — and asked per render rather than at boot, because a post published a
+   * minute ago is the neighbour the post before it should already be linking
+   * to. A renderer built without it draws no such links, which is what a test
+   * over one template wants.
+   */
+  neighbours?: ((document: Document) => DocumentNeighbours) | undefined;
+  /**
+   * The newest posts, for `recentPosts` on the front page (TASK-79).
+   *
+   * Which posts are recent is `web/recent.ts`'s rule and the query behind it
+   * is the index's; this is only how the answer reaches a template. Asked per
+   * render, and only while drawing the front page, so a site whose `/` is its
+   * listing never runs it at all.
+   */
+  recentPosts?: (() => readonly Document[]) | undefined;
+  /**
+   * Every published post, for a page whose front matter says `archive: true`
+   * (TASK-85).
+   *
+   * Injected for the reason the recent posts are, and asked per render and
+   * only for a page that asked for the list: an archive is the one listing
+   * with no paging, so a site with a thousand posts runs the query on the one
+   * page that prints a thousand links and on no other.
+   */
+  archivePosts?: (() => readonly Document[]) | undefined;
 }
 
 /**
@@ -262,7 +299,79 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // front-matter key a page opts in with, and a document's own front matter
     // goes on top of the globals exactly as Eleventy's data cascade does.
     const menu = navigationMenu({ site, pages: pages(), url: currentUrl(context) });
-    return environment.render(template, { site, menu, ...context });
+    // Who the page is by, for the bio, the `rel="me"` links and the structured
+    // data (decision-16). It is here rather than in each caller because every
+    // page of the site carries it, for the reason the menu does — and it is
+    // the site's own author only when the page is about nobody in particular:
+    // a document's byline and an author archive's person are put on the
+    // context by the callers below, and win by going on last.
+    const owner =
+      context['siteAuthor'] === undefined ? siteAuthorContext(users(), site.author) : undefined;
+    // The site's icons, as the three links a head carries (TASK-81). They are
+    // computed here rather than in the layout because only this side knows
+    // where a derived file is served and whether the site can derive one at
+    // all: a theme that was handed the avatar path would have to build the URL
+    // itself and would link three 404s on a site with image optimization off.
+    const icons = siteIcons(config, site.avatar);
+    return environment.render(template, {
+      site,
+      menu,
+      icons,
+      ...(owner === undefined ? {} : { siteAuthor: owner }),
+      ...context,
+    });
+  }
+
+  /**
+   * The front page's recent posts, as the entries a listing prints, or nothing
+   * at all when the renderer was built without a source for them.
+   *
+   * One read of the users file for the whole list, the way a listing does it:
+   * five posts is five bylines resolved against the same people.
+   */
+  function recentPostsContext(): Record<string, unknown> {
+    const posts = options.recentPosts?.();
+    if (posts === undefined) return {};
+
+    const people = users();
+    return {
+      recentPosts: posts.map((document) =>
+        documentContext(document, config, authorContext(people, document.author)),
+      ),
+    };
+  }
+
+  /**
+   * The whole archive as the months an archive page heads, or nothing at all
+   * for every other document.
+   *
+   * The front matter key decides, so the list is on the context of exactly the
+   * page that asked for it and a layout writes `{% if archiveMonths %}` rather
+   * than reading front matter for itself — the way `contactForm` works.
+   */
+  function archiveContext(document: Document): Record<string, unknown> {
+    if (!archiveOpen(document)) return {};
+    const posts = options.archivePosts?.();
+    if (posts === undefined) return {};
+
+    return { archiveMonths: archiveMonths(posts, siteTimezone(siteData.read())) };
+  }
+
+  /**
+   * The page whose own URL carries the listing, as the link a front page draws
+   * to it, or nothing at all when the site names none.
+   *
+   * Resolved here rather than by the route because the renderer already holds
+   * both halves — the setting and the published pages — and because the link
+   * is the front page's alone: everywhere else the posts page is an ordinary
+   * item of the site menu.
+   */
+  function postsPageContext(): Record<string, unknown> {
+    const slug = frontPageSlugs(siteData.read()).postsPage;
+    if (slug === '') return {};
+
+    const found = pages().find((document) => document.slug === slug);
+    return found === undefined ? {} : { postsPage: { title: found.title, url: found.permalink } };
   }
 
   /**
@@ -293,7 +402,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // The profile behind the document's `author`, resolved here rather than in
     // `documentContext` for the reason the object id is: it needs the site's
     // users, which a document on its own does not carry.
-    const context = documentContext(document, config, authorContext(users(), document.author));
+    const writer = authorContext(users(), document.author);
+    const context = documentContext(document, config, writer);
     // The URL it is being served at, which is its own permalink everywhere but
     // the front page.
     const url = options_.url ?? context.url;
@@ -323,9 +433,19 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // only when the site takes them, so a theme asks `{% if webmention %}`
     // and a site that has turned them off advertises nothing.
     const webmention = webmentionEndpointFor(siteData.read());
+    // The posts either side of this one, as the two links a theme draws under
+    // an entry (TASK-79). Each is on the context only when there is one, so a
+    // theme asks `{% if previous %}` and the ends of the archive draw nothing.
+    const either = options.neighbours?.(document) ?? {};
 
     return render(template, {
       ...context,
+      // This page's own person, which is the site's author everywhere else:
+      // the byline and the identity a theme prints are one object, so what a
+      // reader sees and what the structured data says cannot drift.
+      ...(writer === undefined ? {} : { siteAuthor: writer }),
+      ...neighbourContext('previous', either.previous),
+      ...neighbourContext('next', either.next),
       url,
       page: { ...context.page, url },
       ...(objectId === undefined
@@ -334,6 +454,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
             activityStreams: objectId,
             commentsFeed: commentsFeedPath(document.permalink),
           }),
+      // And the whole archive, for a page whose front matter asked for it
+      // (TASK-85). On the context only for that page, so a theme asks
+      // `{% if archiveMonths %}` exactly as it asks about the contact form.
+      ...archiveContext(document),
       ...(said === undefined || said.counts.total === 0 ? {} : { conversation: said }),
       ...(form === undefined ? {} : { commentForm: form }),
       ...(contact === undefined ? {} : { contactForm: contact }),
@@ -390,7 +514,13 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         // should say the URL this is served at rather than the one that
         // redirects here.
         url: '/',
-        extra,
+        // The newest posts under the page's own words, which is what a front
+        // page is for (decision-16). Built here rather than by the route
+        // because it is the same document context every listing entry is, and
+        // resolved once for the whole list the way a listing's bylines are.
+        // `postsPage` goes with them: the front page is the one page that
+        // links the listing by name rather than by menu item.
+        extra: { ...recentPostsContext(), ...postsPageContext(), ...extra },
       });
     },
 
@@ -428,8 +558,12 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         ...(listing.category === undefined ? {} : { category: listing.category }),
         // On an author archive this is the person the archive is of, and it
         // goes on last so it wins over the posts page's own `author`, which is
-        // the page's writer rather than whose archive this is.
-        ...(listing.author === undefined ? {} : { author: listing.author }),
+        // the page's writer rather than whose archive this is. They are also
+        // whose page this is, so the identity a theme prints is theirs rather
+        // than the site's.
+        ...(listing.author === undefined
+          ? {}
+          : { author: listing.author, siteAuthor: listing.author }),
       });
     },
 
@@ -443,6 +577,22 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     render,
   };
+}
+
+/**
+ * One neighbour under the name a theme reads it by, or nothing at all when
+ * there is no post on that side.
+ *
+ * The title and the URL and no more: a link is what it says and where it goes,
+ * and handing a theme a second document context would be handing it a second
+ * post to print by accident.
+ */
+function neighbourContext(
+  key: 'previous' | 'next',
+  document: Document | undefined,
+): Record<string, NeighbourContext> | object {
+  if (document === undefined) return {};
+  return { [key]: { title: document.title, url: document.permalink } };
 }
 
 /**

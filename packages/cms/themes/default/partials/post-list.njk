@@ -1,25 +1,57 @@
-{# A list of documents, newest first. Expects `posts`. #}
+{#
+  The feed a listing is made of: `h-feed` of `h-entry` items, as the source
+  design lists them (decision-16).
+
+  Expects `posts`. Each entry prints its title as a linked `p-name`, its
+  `summary` — the very line the feeds publish — as a `p-summary` cut to about
+  280 characters, a Continue reading link, its publish date and the categories
+  it is filed under. Tags are deliberately not here: an entry's tags belong
+  under the entry, and a feed of twenty posts listing everyone's would be a
+  wall of links rather than a list of writing.
+
+  `feedHeading` is the heading level, which belongs to the layout rather than
+  to the list: a listing is a page of entries and heads each one at 2, and a
+  front page whose feed sits under a heading of its own sets 3 so the outline
+  never skips a level.
+#}
 {% import "partials/tags.njk" as taxonomy with context %}
+{% set feedTitleTag = "h" + (feedHeading | default(2)) %}
 {% if posts.length %}
-<ol class="post-list">
+<div class="feed h-feed">
   {% for post in posts %}
-  <li class="post-list-item">
-    <article class="post-summary">
-      <h2 class="post-summary-title"><a href="{{ post.url | url }}">{{ post.title }}</a></h2>
-      {% if post.date %}
-      <p class="post-meta">
-        <time datetime="{{ post.date | date("html") }}">{{ post.date | date }}</time>
+  {% if not loop.first %}
+  <hr class="feed-separator">
+  {% endif %}
+  <article class="feed-item h-entry">
+    <div class="feed-content">
+      <{{ feedTitleTag }} class="feed-title p-name">
+        <a href="{{ post.url | url }}" class="u-url">{{ post.title }}</a>
+      </{{ feedTitleTag }}>
+      {% if post.summary %}
+      <div class="feed-excerpt p-summary">
+        {#- `truncate` cuts at the last space before the length and adds an
+            ellipsis, so a description short enough is printed whole and a long
+            one never breaks a word. -#}
+        <p>{{ post.summary | truncate(280) }}</p>
+      </div>
+      {% endif %}
+      <p class="feed-more">
+        <a href="{{ post.url | url }}" aria-label="Continue reading: {{ post.title }}">Continue reading<span aria-hidden="true"> &rarr;</span></a>
       </p>
-      {% endif %}
-      {% if post.description %}
-      <p class="post-summary-description">{{ post.description }}</p>
-      {% endif %}
-      {{ taxonomy.categories(post.categories) }}
-      {{ taxonomy.list(post.tags) }}
-    </article>
-  </li>
+      <div class="feed-meta">
+        {% if post.date %}
+        <p>
+          <time class="feed-date dt-published" datetime="{{ post.date | date("iso") }}">
+            {{ post.date | date }}
+          </time>
+        </p>
+        {% endif %}
+        {{ taxonomy.categories(post.categories) }}
+      </div>
+    </div>
+  </article>
   {% endfor %}
-</ol>
+</div>
 {% else %}
-<p class="empty">Nothing published yet.</p>
+<p class="empty">No posts found.</p>
 {% endif %}

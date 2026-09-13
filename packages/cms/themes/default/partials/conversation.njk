@@ -1,6 +1,7 @@
 {#
-  What has been said about a post: replies as a thread, and likes, boosts and
-  mentions as counts with the people behind them.
+  What has been said about a post: likes, boosts and mentions as facepiles
+  grouped by kind, and the replies as a thread, in the source design's markup
+  (decision-16, TASK-84).
 
   Rendered from `layouts/post.njk` with the `conversation` on the context,
   which is only there when there is something in it, so a post nobody has
@@ -9,36 +10,69 @@
   handed is documented in the theme README under "The conversation".
 
   The macros come first because Nunjucks defines one where it stands rather
-  than hoisting it, and the section below calls all three.
+  than hoisting it, and the two sections below call them.
 #}
+{#
+  One face in a facepile: somebody's avatar, linked to wherever they are.
+
+  Without an avatar there is nothing to recognise them by, so the emoji badge
+  of their kind stands in and their name is printed beside it — which is what
+  a mention from a site with no `h-card` photo, and a like from an actor
+  nobody here follows, look like.
+#}
+{% macro face(item, icon, href) %}
+{%- set name = item.author.name -%}
+{%- if href %}<a class="u-url" href="{{ href }}" title="{{ name }}" rel="nofollow noopener noreferrer">{% else %}<span title="{{ name }}">{% endif %}
+{%- if item.author.avatar -%}
+<img class="avatar u-photo" src="{{ item.author.avatar }}" alt="{{ name }}" width="32" height="32" loading="lazy">
+{%- else -%}
+<span class="reaction-icon" aria-hidden="true">{{ icon }}</span><span class="reaction-name">{{ name }}</span>
+{%- endif -%}
+{%- if href %}</a>{% else %}</span>{% endif %}
+{%- endmacro %}
+
+{#
+  One kind of reaction: a title carrying the label and how many there are, and
+  the people behind them as a facepile. Nothing at all for a kind nothing has.
+
+  `source` says where a face links. A like or a boost is a person, so it links
+  to them; a mention is a page that wrote about this one, and the page is the
+  thing worth reading, so it links there and falls back to its author.
+#}
+{% macro group(items, label, kind, icon, source=false) %}
+{% if items.length %}
+<div class="reaction-group {{ kind }}">
+  <h2 class="reaction-title">{{ label }} ({{ items.length }})</h2>
+  <div class="facepile">
+    {%- for item in items %}{{ face(item, icon, (item.url or item.author.url) if source else (item.author.url or item.url)) }}{% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endmacro %}
+
 {#
   One reply and everything under it. A macro rather than an include so it can
   call itself: a reply that answers a reply is the same thing one level in.
 #}
 {% macro comment(reply) %}
-<li class="comment h-cite comment-{{ reply.source }}" id="comment-{{ reply.id }}">
-  <article>
-    <header class="comment-header">
-      {% if reply.author.avatar %}
-      <img class="comment-avatar u-photo" src="{{ reply.author.avatar }}" alt="" width="48" height="48" loading="lazy">
-      {% endif %}
-      {% if reply.author.url %}
-      <a class="comment-author p-author h-card" href="{{ reply.author.url }}" rel="nofollow ugc noopener noreferrer">{{ reply.author.name }}</a>
-      {% else %}
-      <span class="comment-author p-author h-card">{{ reply.author.name }}</span>
-      {% endif %}
-      {% if reply.author.handle and reply.author.handle != reply.author.name %}
-      <span class="comment-handle">{{ reply.author.handle }}</span>
-      {% endif %}
-      {% if reply.url %}
-      <a class="comment-permalink u-url" href="{{ reply.url }}"{% if reply.source != "comment" %} rel="nofollow noopener noreferrer"{% endif %}>
+<li id="comment-{{ reply.id }}" class="comment h-entry comment-{{ reply.source }}">
+  <article class="comment-body">
+    <footer class="comment-meta">
+      <div class="comment-author vcard p-author h-card">
+        {%- if reply.author.avatar %}
+        <img class="avatar u-photo" src="{{ reply.author.avatar }}" alt="" width="40" height="40" loading="lazy">
+        {%- endif %}
+        <b class="fn p-name">{% if reply.author.url %}<a class="url u-url" href="{{ reply.author.url }}" rel="nofollow ugc noopener noreferrer">{{ reply.author.name }}</a>{% else %}{{ reply.author.name }}{% endif %}</b>
+      </div>
+      <div class="comment-metadata">
+        {%- if reply.url %}
+        <a class="u-url" href="{{ reply.url }}"{% if reply.source != "comment" %} rel="nofollow noopener noreferrer"{% endif %}><time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time></a>
+        {%- else %}
         <time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time>
-      </a>
-      {% else %}
-      <time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time>
-      {% endif %}
-    </header>
-    <div class="comment-body e-content p-content">
+        {%- endif %}
+      </div>
+    </footer>
+    <div class="comment-content e-content">
       {{ reply.content | safe }}
     </div>
     {#
@@ -48,13 +82,11 @@
       is answered on the page that sent it, so neither gets such a link.
     #}
     {% if commentForm and reply.source == "comment" %}
-    <p class="comment-reply">
-      <a href="{{ page.url }}?reply_to={{ reply.id }}#respond">Reply</a>
-    </p>
+    <div class="reply"><a class="comment-reply-link" href="{{ page.url }}?reply_to={{ reply.id }}#respond">Reply</a></div>
     {% endif %}
   </article>
   {% if reply.replies.length %}
-  <ol class="comment-replies">
+  <ol class="children">
     {% for child in reply.replies %}
     {{ comment(child) }}
     {% endfor %}
@@ -64,74 +96,44 @@
 {% endmacro %}
 
 {#
-  A count of one kind of reaction with the actors behind it, closed until a
-  reader opens it. `<details>` rather than a hover, so it works on a phone and
-  needs no script.
+  The reactions, above the thread. A like and a boost come from the fediverse
+  and a `repost` from a webmention; the CMS has already put a repost among the
+  boosts, which is why there are three groups and not four. `p-like`,
+  `p-repost` and `p-mention` are the source theme's classes for them.
 #}
-{% macro reactions(actors, one, many) %}
-{% if actors.length %}
-<details class="reaction-group">
-  <summary>{{ actors.length }} {{ one if actors.length == 1 else many }}</summary>
-  <ul class="reaction-list">
-    {% for actor in actors %}
-    <li class="reaction h-card">
-      <a href="{{ actor.author.url or actor.url }}" rel="nofollow noopener noreferrer">
-        {% if actor.author.avatar %}
-        <img class="reaction-avatar u-photo" src="{{ actor.author.avatar }}" alt="" width="24" height="24" loading="lazy">
-        {% endif %}
-        <span class="reaction-name p-name">{{ actor.author.name }}</span>
-      </a>
-    </li>
-    {% endfor %}
-  </ul>
-</details>
+{% if conversation.likes.length or conversation.boosts.length or conversation.mentions.length %}
+<div class="reactions-section">
+  {{- group(conversation.likes, "Likes", "p-like", "❤️") }}
+  {{- group(conversation.boosts, "Boosts", "p-repost", "🔁") }}
+  {{- group(conversation.mentions, "Mentions", "p-mention", "🔗", true) }}
+</div>
 {% endif %}
-{% endmacro %}
 
 {#
-  The pages that linked here without answering. A webmention only: the
-  fediverse has no way of saying "I wrote about this" that is not a reply or a
-  boost. Each one links to the page that sent it rather than to its author,
-  because the page is the thing worth reading.
-#}
-{% macro mentions(items) %}
-{% if items.length %}
-<details class="reaction-group">
-  <summary>{{ items.length }} {{ "mention" if items.length == 1 else "mentions" }}</summary>
-  <ul class="reaction-list">
-    {% for item in items %}
-    <li class="reaction h-cite">
-      <a href="{{ item.url }}" rel="nofollow ugc noopener noreferrer">
-        {% if item.author.avatar %}
-        <img class="reaction-avatar u-photo" src="{{ item.author.avatar }}" alt="" width="24" height="24" loading="lazy">
-        {% endif %}
-        <span class="reaction-name p-name">{{ item.author.name }}</span>
-      </a>
-    </li>
-    {% endfor %}
-  </ul>
-</details>
-{% endif %}
-{% endmacro %}
+  And the thread. The title counts the whole of it rather than the top level,
+  which is what `counts.replies` is, and names the post the way the source
+  theme does.
 
-<section class="conversation" id="comments">
-  <h2 class="conversation-title">
-    {{ conversation.counts.replies }} {{ "reply" if conversation.counts.replies == 1 else "replies" }}
+  "Comments are closed." is printed under a post that has been answered and is
+  no longer taking comments. That a post is closed is what the absence of
+  `commentForm` says: the CMS puts the form on the context only while the site
+  switch, the closing window and the post's own front matter all agree it is
+  open, so there is nothing else for a theme to work out.
+#}
+{% if conversation.replies.length %}
+<div id="comments" class="comments-area">
+  <h2 class="comments-title">
+    {%- if conversation.counts.replies == 1 %}One comment{% else %}{{ conversation.counts.replies }} comments{% endif %} on &ldquo;<span>{{ title }}</span>&rdquo;
   </h2>
 
-  {% if conversation.likes.length or conversation.boosts.length or conversation.mentions.length %}
-  <div class="conversation-reactions">
-    {{ reactions(conversation.likes, "like", "likes") }}
-    {{ reactions(conversation.boosts, "boost", "boosts") }}
-    {{ mentions(conversation.mentions) }}
-  </div>
-  {% endif %}
-
-  {% if conversation.replies.length %}
   <ol class="comment-list">
     {% for reply in conversation.replies %}
     {{ comment(reply) }}
     {% endfor %}
   </ol>
+
+  {% if not commentForm %}
+  <p class="no-comments">Comments are closed.</p>
   {% endif %}
-</section>
+</div>
+{% endif %}

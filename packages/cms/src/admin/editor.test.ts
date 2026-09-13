@@ -47,8 +47,9 @@ describe('the preview endpoint', () => {
 
     const html = await response.text();
     // The theme's post layout, not a preview-only one.
-    assert.match(html, /<article class="post h-entry">/);
-    assert.match(html, /<h1 class="post-title p-name">Six tables<\/h1>/);
+    assert.match(html, /<article class="blog-post h-entry">/);
+    assert.match(html, /<h1 class="p-name">Six tables<\/h1>/);
+    assert.match(html, /<p class="entry-meta">/, 'the post layout, not the page one');
     // markdown-it with the CMS's plugins: heading anchors and footnotes.
     assert.match(html, /<h2 id="a-heading">A heading<\/h2>/);
     assert.match(html, /<em>emphasis<\/em>/);
@@ -69,8 +70,9 @@ describe('the preview endpoint', () => {
       })
     ).text();
 
-    assert.match(html, /<article class="page h-entry">/);
-    assert.match(html, /<h1 class="page-title p-name">Colophon<\/h1>/);
+    assert.match(html, /<article class="blog-post h-entry">/);
+    assert.match(html, /<h1 class="p-name">Colophon<\/h1>/);
+    assert.match(html, /<p class="page-meta">/, 'the page layout, not the post one');
   });
 
   it('previews a body with no title without falling over', async () => {

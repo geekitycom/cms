@@ -168,14 +168,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -204,7 +204,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3]);
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -212,6 +212,29 @@ describe('migrations', () => {
 
       upgraded.upsert(post({ path: 'posts/old.md', permalink: '/old/', slug: 'old' }));
       assert.deepEqual(upgraded.getByPath('posts/old.md')?.categories, ['general']);
+    } finally {
+      upgraded.close();
+    }
+  });
+
+  it('empties an index whose HTML predates the focusable code block (TASK-86)', async () => {
+    const dir = await dataDir();
+
+    // A version 2 database holding a row rendered before `<pre>` carried a
+    // tabindex. Its file hashes the same as it always did, so nothing but an
+    // empty index makes the next scan render it again.
+    const before = openContentStore({ dataDir: dir });
+    before.upsert(post({ html: '<pre><code class="language-js">const x = 1;\n</code></pre>\n' }));
+    before.close();
+
+    const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
+    legacy.exec('DELETE FROM migrations WHERE version = 3');
+    legacy.close();
+
+    const upgraded = openContentStore({ dataDir: dir });
+    try {
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3]);
+      assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
     } finally {
       upgraded.close();
     }
@@ -385,6 +408,131 @@ describe('listPosts', () => {
       scheduled: 0,
       trashed: 1,
     });
+  });
+});
+
+describe('neighbours', () => {
+  it('answers with the published posts either side of one by date', async () => {
+    const index = await populated();
+    const middle = index.getByPermalink('/2026/06/middle/');
+    assert.ok(middle !== undefined);
+
+    const either = index.neighbours(middle);
+
+    assert.equal(either.previous?.title, 'Earlier Same Day', 'the older post');
+    assert.equal(either.next?.title, 'Newest', 'the newer post');
+  });
+
+  it('leaves the end of the archive off rather than wrapping round it', async () => {
+    const index = await populated();
+    const newest = index.getByPermalink('/2026/09/newest/');
+    const oldest = index.getByPermalink('/2026/01/oldest/');
+    assert.ok(newest !== undefined && oldest !== undefined);
+
+    assert.equal(index.neighbours(newest).next, undefined);
+    assert.equal(index.neighbours(newest).previous?.title, 'Middle');
+    assert.equal(index.neighbours(oldest).previous, undefined);
+    assert.equal(index.neighbours(oldest).next?.title, 'Earlier Same Day');
+  });
+
+  it('never offers a draft, a trashed post, a page or a post that is not due yet', async () => {
+    let now = new Date('2026-09-05T00:00:00Z');
+    const index = openContentStore({ dataDir: await dataDir(), now: () => now });
+    openStores.push(index);
+    index.upsertAll(corpus());
+    index.upsert(
+      post({
+        path: 'posts/2026-12-01-scheduled.md',
+        slug: 'scheduled',
+        permalink: '/2026/12/scheduled/',
+        title: 'Scheduled',
+        date: '2026-12-01T00:00:00Z',
+      }),
+    );
+    const newest = index.getByPermalink('/2026/09/newest/');
+    assert.ok(newest !== undefined);
+
+    // The draft, the trashed post and the scheduled one are all dated after it.
+    assert.equal(index.neighbours(newest).next, undefined);
+
+    now = new Date('2026-12-02T00:00:00Z');
+    assert.equal(
+      index.neighbours(newest).next?.title,
+      'Scheduled',
+      'and the scheduled one becomes the neighbour on its date',
+    );
+  });
+
+  it('has no neighbours for a page, which is not part of anybody’s archive', async () => {
+    const index = await populated();
+    const about = index.getByPermalink('/about/');
+    assert.ok(about !== undefined);
+
+    assert.deepEqual(index.neighbours(about), {});
+  });
+
+  it('separates two posts sharing an instant by path, the way the listings order them', async () => {
+    const index = await store();
+    index.upsertAll([
+      post({
+        path: 'posts/a.md',
+        slug: 'a',
+        permalink: '/a/',
+        title: 'A',
+        date: '2026-01-01T00:00:00Z',
+      }),
+      post({
+        path: 'posts/b.md',
+        slug: 'b',
+        permalink: '/b/',
+        title: 'B',
+        date: '2026-01-01T00:00:00Z',
+      }),
+    ]);
+    const b = index.getByPermalink('/b/');
+    assert.ok(b !== undefined);
+
+    // Newest first is `date DESC, path DESC`, so B is listed before A.
+    assert.equal(index.neighbours(b).previous?.title, 'A');
+    assert.equal(index.neighbours(b).next, undefined);
+  });
+});
+
+describe('listPostsSince', () => {
+  it('returns the published posts dated at or after an instant, newest first', async () => {
+    const index = await populated();
+
+    assert.deepEqual(titles(index.listPostsSince('2026-06-01T00:00:00.000Z')), [
+      'Newest',
+      'Middle',
+      'Earlier Same Day',
+    ]);
+    assert.deepEqual(titles(index.listPostsSince('2026-09-01T00:00:00.000Z')), ['Newest']);
+    assert.deepEqual(index.listPostsSince('2026-10-01T00:00:00.000Z'), []);
+  });
+
+  it('leaves out the drafts, the trash, the pages and anything not due yet', async () => {
+    let now = new Date('2026-09-05T00:00:00Z');
+    const index = openContentStore({ dataDir: await dataDir(), now: () => now });
+    openStores.push(index);
+    index.upsertAll(corpus());
+    index.upsert(
+      post({
+        path: 'posts/2026-12-01-scheduled.md',
+        slug: 'scheduled',
+        permalink: '/2026/12/scheduled/',
+        title: 'Scheduled',
+        date: '2026-12-01T00:00:00Z',
+      }),
+    );
+
+    assert.deepEqual(titles(index.listPostsSince('2026-09-01T00:00:00.000Z')), ['Newest']);
+
+    now = new Date('2026-12-02T00:00:00Z');
+    assert.deepEqual(titles(index.listPostsSince('2026-09-01T00:00:00.000Z')), [
+      'Scheduled',
+      'Newest',
+    ]);
   });
 });
 

@@ -185,6 +185,8 @@ describe('a user profile (TASK-67 AC #1)', () => {
       display_name: 'Ada Lovelace',
       bio: 'Wrote the first program.',
       avatar: '/uploads/2026/09/ada.jpg',
+      job_title: 'Analyst',
+      location: 'London',
       links: 'Her notes | https://ada.example\nhttps://bare.example',
     });
 
@@ -193,6 +195,8 @@ describe('a user profile (TASK-67 AC #1)', () => {
     assert.equal(stored?.displayName, 'Ada Lovelace');
     assert.equal(stored?.bio, 'Wrote the first program.');
     assert.equal(stored?.avatar, '/uploads/2026/09/ada.jpg');
+    assert.equal(stored?.jobTitle, 'Analyst');
+    assert.equal(stored?.location, 'London');
     assert.deepEqual(stored?.links, [
       { label: 'Her notes', href: 'https://ada.example' },
       // A line with no label is its own label, so a bare URL still renders.
@@ -213,6 +217,8 @@ describe('a user profile (TASK-67 AC #1)', () => {
       display_name: 'Ada Lovelace',
       bio: 'Wrote the first program.',
       avatar: '',
+      job_title: 'Analyst',
+      location: 'London',
       links: '',
     });
 
@@ -220,6 +226,8 @@ describe('a user profile (TASK-67 AC #1)', () => {
     assert.match(html, /value="Ada Lovelace"/);
     assert.match(html, /Wrote the first program\./);
     assert.match(html, /href="\/author\/ada\/"/);
+    assert.match(html, /value="Analyst"/, 'the job title comes back in its box');
+    assert.match(html, /value="London"/, 'and so does the location');
   });
 
   it('is edited on somebody else’s row too, and cleared when emptied', async () => {

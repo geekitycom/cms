@@ -25,6 +25,26 @@
   --rule: #ddd2c0;
   --accent: #9a3412;
   --accent-visited: #7c3a5e;
+
+  /* Syntax highlighting. A stylesheet is an all-or-nothing override, so a theme
+     that ships its own owns the highlighter's colours too: without these rules
+     the packaged `static/highlight.js` still runs and marks the tokens up, and
+     they all come out the colour of the surrounding code. The palette is the
+     packaged theme's — Tomorrow on light paper, Tomorrow Night on dark —
+     darkened a little further where this warmer sunk paper needed it to keep
+     4.5:1. */
+  --code-comment: #666764;
+  --code-tag: #656765;
+  --code-name: #c52728;
+  --code-literal: #9f5108;
+  --code-class: #7e6200;
+  --code-string: #596f00;
+  --code-support: #2e7074;
+  --code-function: #3d68a1;
+  --code-keyword: #82539f;
+  --code-meta: #8c5a4e;
+  --code-added: #dff0d8;
+  --code-removed: #f8dcdc;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -36,6 +56,19 @@
     --rule: #3b352d;
     --accent: #f0a37a;
     --accent-visited: #d6a2c4;
+
+    --code-comment: #999999;
+    --code-tag: #b4b7b4;
+    --code-name: #f2777a;
+    --code-literal: #f99157;
+    --code-class: #ffcc66;
+    --code-string: #99cc99;
+    --code-support: #66cccc;
+    --code-function: #6699cc;
+    --code-keyword: #cc99cc;
+    --code-meta: #c08b7d;
+    --code-added: rgb(32 54 34);
+    --code-removed: rgb(64 30 30);
   }
 }
 
@@ -146,61 +179,104 @@ a:visited {
   text-transform: uppercase;
 }
 
-/* Listings */
+/* Listings: the packaged `partials/post-list.njk` h-feed, in the demo's own
+   idiom rather than the packaged theme's. */
 
-.post-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.post-list-item + .post-list-item {
-  margin-top: 2.5rem;
-  padding-top: 2.5rem;
+.feed-separator {
+  margin: 2.5rem 0;
+  border: 0;
   border-top: 1px solid var(--rule);
 }
 
-.post-summary-title {
+.feed-title {
   margin: 0 0 0.25rem;
   font-size: 1.4rem;
   line-height: 1.25;
 }
 
-.post-summary-title a {
+.feed-title a {
   color: inherit;
   text-decoration: none;
 }
 
-.post-summary-title a:hover,
-.post-summary-title a:focus {
+.feed-title a:hover,
+.feed-title a:focus {
   text-decoration: underline;
 }
 
-.post-summary .post-meta {
-  margin-bottom: 0.5rem;
-}
-
-.post-summary-description {
+.feed-excerpt p {
   margin: 0 0 0.5rem;
 }
 
-.empty,
-.tag-count {
-  color: var(--ink-muted);
+.feed-more {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
 }
 
-/* Tags */
-
-.tag-list {
+.feed-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  margin: 0.75rem 0 0;
+  align-items: baseline;
+  color: var(--ink-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.feed-meta p {
+  margin: 0;
+}
+
+.post-categories a {
+  display: inline-block;
+  margin-right: 0.5rem;
+}
+
+.category-header {
+  margin-bottom: 2rem;
+}
+
+.category-description {
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+.empty {
+  color: var(--ink-muted);
+}
+
+/* The front page's line of links, under the recent posts, and the archive page
+   (TASK-85). A stylesheet is an all-or-nothing override, so the two page kinds
+   the package added need their rules here as well. */
+
+.front-links {
+  margin-top: 2rem;
+  font-size: 0.9rem;
+}
+
+.archive h2 {
+  margin-bottom: 0.4rem;
+  font-size: 1.2rem;
+}
+
+.archive ol {
+  margin: 0 0 2rem;
   padding: 0;
   list-style: none;
 }
 
-.tag {
+/* Tags. The packaged macro prints them as the same paragraph of `p-category`
+   links the categories are (TASK-83); the demo's post layout wraps that
+   paragraph so its tags keep the hash and the small caps they had. */
+
+.post-tags .post-categories {
+  margin: 0.75rem 0 0;
+}
+
+.post-tags a {
+  margin-right: 0.75rem;
   color: var(--ink-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.75rem;
@@ -208,12 +284,12 @@ a:visited {
   text-transform: uppercase;
 }
 
-.tag::before {
+.post-tags a::before {
   content: '#';
 }
 
-.tag:hover,
-.tag:focus {
+.post-tags a:hover,
+.post-tags a:focus {
   color: var(--ink);
 }
 
@@ -228,10 +304,6 @@ a:visited {
   padding-top: 1.25rem;
   border-top: 2px solid var(--ink);
   font-size: 0.9rem;
-}
-
-.pagination-position {
-  color: var(--ink-muted);
 }
 
 .pagination-previous {
@@ -305,6 +377,111 @@ a:visited {
   padding: 0;
   background: none;
   font-size: inherit;
+}
+
+/* What `/theme/highlight.js` marks up, in the demo's own warm key. The scopes
+   are highlight.js's base16 mapping, the same one the packaged theme follows. */
+
+.hljs-comment {
+  color: var(--code-comment);
+}
+
+.hljs-tag {
+  color: var(--code-tag);
+}
+
+.hljs-subst,
+.hljs-punctuation,
+.hljs-operator {
+  color: var(--ink);
+}
+
+.hljs-bullet,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-tag,
+.hljs-name {
+  color: var(--code-name);
+}
+
+.hljs-symbol,
+.hljs-number,
+.hljs-link,
+.hljs-attr,
+.hljs-variable.constant_,
+.hljs-literal {
+  color: var(--code-literal);
+}
+
+.hljs-title,
+.hljs-class .hljs-title,
+.hljs-title.class_ {
+  color: var(--code-class);
+}
+
+.hljs-strong {
+  color: var(--code-class);
+  font-weight: 700;
+}
+
+.hljs-code,
+.hljs-string,
+.hljs-title.class_.inherited__ {
+  color: var(--code-string);
+}
+
+.hljs-built_in,
+.hljs-doctag,
+.hljs-quote,
+.hljs-regexp,
+.hljs-keyword.hljs-atrule {
+  color: var(--code-support);
+}
+
+.hljs-attribute,
+.hljs-function .hljs-title,
+.hljs-section,
+.hljs-title.function_ {
+  color: var(--code-function);
+}
+
+.hljs-keyword,
+.hljs-template-tag,
+.hljs-type {
+  color: var(--code-keyword);
+}
+
+.hljs-emphasis {
+  color: var(--code-keyword);
+  font-style: italic;
+}
+
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-meta .hljs-string {
+  color: var(--code-meta);
+}
+
+/* A diff reads by the line: the tint goes out to the edges of the block, which
+   is the 1rem padding above, and the line keeps the body's ink. */
+
+.hljs-addition,
+.hljs-deletion {
+  display: block;
+  margin-right: -1rem;
+  margin-left: -1rem;
+  padding-right: 1rem;
+  padding-left: 1rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.hljs-addition {
+  background-color: var(--code-added);
+}
+
+.hljs-deletion {
+  background-color: var(--code-removed);
 }
 
 .post-body table,

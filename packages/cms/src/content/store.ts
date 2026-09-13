@@ -85,6 +85,33 @@ export interface ContentStore {
   /** Published, untrashed, already-due posts, newest first. */
   listPosts(options?: ListOptions): Document[];
   /**
+   * Published, untrashed, already-due posts dated at or after an instant,
+   * newest first: everything since the start of a month, or a week, or a year.
+   *
+   * A query of its own rather than an option on {@link ContentStore.listPosts}
+   * because it is a different question — "what has been written lately", not
+   * "the front of the archive" — and because an option honoured by one listing
+   * and silently dropped by the counts beside it would be a trap. The instant
+   * is a {@link dateSortKey}, so the comparison is between two UTC ISO strings.
+   */
+  listPostsSince(instant: string): Document[];
+  /**
+   * The published posts either side of one by date: what a theme links as
+   * previous and next under an entry.
+   *
+   * `previous` is the post before it and `next` the one after it, in the order
+   * every listing is in — newest first, ties broken by path — so a reader
+   * walking the links walks the archive. Either is absent at its end of the
+   * archive rather than wrapping round to the other end.
+   *
+   * Only published posts are neighbours: a draft, a trashed post, a page and a
+   * post whose date is still ahead are all things a reader cannot open, and a
+   * link to one would be a link to a 404. A document that is not a post has no
+   * neighbours at all, because an archive is what somebody wrote and a page is
+   * furniture.
+   */
+  neighbours(document: Document): DocumentNeighbours;
+  /**
    * When the next scheduled document becomes public, as the UTC instant the
    * index sorts by, or `undefined` when nothing is waiting.
    *
@@ -163,6 +190,20 @@ export interface ContentStore {
   listTermUsage(taxonomy: TaxonomyName): TermUsage[];
   /** Close the database. Safe to call twice. */
   close(): void;
+}
+
+/**
+ * The published posts either side of one, as {@link ContentStore.neighbours}
+ * answers.
+ *
+ * Both keys are absent for a document with no neighbours at all, so a caller
+ * reads the pair rather than asking twice.
+ */
+export interface DocumentNeighbours {
+  /** The post before this one by date, absent at the end of the archive. */
+  previous?: Document | undefined;
+  /** The post after this one by date, absent at the front of it. */
+  next?: Document | undefined;
 }
 
 /** Paging for the public listings. */
@@ -521,6 +562,32 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     return Number(row['count']);
   }
 
+  /**
+   * The nearest published post on one side of a point in the archive.
+   *
+   * `direction` is which way to look — `<` for older, `>` for newer — and
+   * `order` is the sort that puts the nearest one first, so one query serves
+   * both ends of {@link ContentStore.neighbours}.
+   */
+  function neighbour(
+    direction: '<' | '>',
+    order: 'ASC' | 'DESC',
+    key: string,
+    contentPath: string,
+  ): Document | undefined {
+    const row = db
+      .prepare(
+        `SELECT * FROM documents
+         WHERE type = 'post' AND draft = 0 AND trashed = 0 AND ${DUE_CLAUSE}
+           AND date_sort IS NOT NULL
+           AND (date_sort, path) ${direction} (?, ?)
+         ORDER BY date_sort ${order}, path ${order}
+         LIMIT 1`,
+      )
+      .get(...([nowKey(), key, contentPath] as never[])) as Record<string, unknown> | undefined;
+    return hydrate(row);
+  }
+
   function select(where: string[], params: unknown[], options: ListOptions): Document[] {
     const clause = where.length === 0 ? '' : `WHERE ${where.join(' AND ')}`;
     const rows = db
@@ -578,6 +645,37 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
     listPosts(options = {}) {
       return select(["type = 'post'", 'draft = 0', 'trashed = 0', DUE_CLAUSE], [nowKey()], options);
+    },
+
+    listPostsSince(instant) {
+      const since = dateSortKey(instant);
+      if (since === null) return [];
+      return select(
+        ["type = 'post'", 'draft = 0', 'trashed = 0', DUE_CLAUSE, 'date_sort >= ?'],
+        [nowKey(), since],
+        {},
+      );
+    },
+
+    neighbours(document) {
+      // A page is nobody's neighbour, and neither is a document the archive
+      // does not order: without a date there is no place in the sequence to be
+      // either side of.
+      const key = dateSortKey(document.date);
+      if (document.type !== 'post' || key === null) return {};
+
+      // The listings are ordered by `date_sort DESC, path DESC`, so "before"
+      // and "after" are that same pair compared as a row: two posts sharing an
+      // instant are separated by their paths exactly as the listing separates
+      // them, and the document itself is excluded by the comparison being
+      // strict.
+      const previous = neighbour('<', 'DESC', key, document.path);
+      const next = neighbour('>', 'ASC', key, document.path);
+
+      return {
+        ...(previous === undefined ? {} : { previous }),
+        ...(next === undefined ? {} : { next }),
+      };
     },
 
     nextDue() {
@@ -903,6 +1001,19 @@ const MIGRATIONS: readonly Migration[] = [
       -- and never learn what those files are filed under. Emptying the index
       -- is what makes the next scan read them all again; the files are the
       -- source of truth, so nothing is lost (decision-1).
+      DELETE FROM documents;
+    `,
+  },
+  {
+    version: 3,
+    sql: `
+      -- The renderer now puts \`tabindex="0"\` on every \`<pre>\` (TASK-86), so a
+      -- wide block of code can be scrolled from the keyboard. The HTML in this
+      -- table was rendered by the old one, and the hash covers the file rather
+      -- than what was made of it, so a scan would find every row up to date and
+      -- serve the old markup for as long as nobody edited the post. Emptying
+      -- the index is what makes the next scan render them all again; the files
+      -- are the source of truth, so nothing is lost (decision-1).
       DELETE FROM documents;
     `,
   },

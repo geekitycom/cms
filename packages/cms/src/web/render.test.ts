@@ -90,7 +90,14 @@ describe('the renderer', () => {
     });
 
     assert.equal(theme.site().title, 'A Site');
-    assert.ok(theme.renderNotFound('/gone/').includes('and a tagline'));
+    assert.ok(theme.renderNotFound('/gone/').includes('A Site'), 'the title reaches a page');
+    // Any key of the file is readable, not only the ones the CMS models. The
+    // tagline is printed under the site title on the front page and nowhere
+    // else (decision-16), so the root path is where to look for it.
+    assert.ok(
+      theme.render('layouts/base.njk', { page: { url: '/' } }).includes('and a tagline'),
+      'an unmodelled site key does not reach a template',
+    );
   });
 
   it('picks the page size up from the site data, and defaults to ten', async () => {
@@ -147,6 +154,13 @@ describe('the theme filters', () => {
   it('renders nothing for a value that is not a date', () => {
     assert.equal(formatDate(undefined, 'html'), '');
     assert.equal(formatDate('not a date', 'readable'), '');
+  });
+
+  it('reads "now" as the moment it is asked, for the footer’s copyright year', () => {
+    const thisYear = String(new Date().getUTCFullYear());
+
+    assert.equal(formatDate('now', 'year', 'UTC'), thisYear);
+    assert.equal(formatDate('now', 'html', 'UTC').slice(0, 4), thisYear);
   });
 
   it('renders readable, html and year in the timezone it is given', () => {

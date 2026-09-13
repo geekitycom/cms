@@ -30,6 +30,11 @@ export default tseslint.config(
       // A build product: esbuild's output, written by `pnpm build` from
       // packages/cms/editor/, which is linted as source instead.
       'packages/cms/admin/static/editor.js',
+      // The other esbuild output: the default theme's highlight.js bundle,
+      // written by `pnpm --filter @geekity/cms build:highlight`. Unlike the
+      // editor's it is committed, so it has to be named here; the source it is
+      // built from is the entry inside scripts/build-highlight.js.
+      'packages/cms/themes/default/static/highlight.js',
       'backlog/**',
       // Content, not code: fixtures are stored exactly as the document writer
       // emits them, so nothing may rewrite them.

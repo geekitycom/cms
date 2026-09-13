@@ -192,7 +192,11 @@ describe('the themes the screen lists', () => {
 describe('activating a theme', () => {
   it('writes it into site.json and renders through it next request (AC #3)', async () => {
     const { cms, agent, contentDir } = await site({ themes: { midnight: undefined } });
-    assert.match(await post(cms), /<article class="post h-entry">/, 'the packaged theme, first');
+    assert.match(
+      await post(cms),
+      /<article class="blog-post h-entry">/,
+      'the packaged theme, first',
+    );
 
     const response = await activate(agent, 'midnight');
 
@@ -218,7 +222,7 @@ describe('activating a theme', () => {
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
     ) as Record<string, unknown>;
     assert.ok(!('theme' in written), 'the key is gone rather than empty');
-    assert.match(await post(cms), /<article class="post h-entry">/);
+    assert.match(await post(cms), /<article class="blog-post h-entry">/);
   });
 
   it('needs the session’s CSRF token like every other admin form (AC #3)', async () => {
@@ -262,7 +266,7 @@ describe('a folder that is not a theme', () => {
     assert.equal(response.status, 303);
     assert.equal(readSiteSettings(contentDir).theme, '', 'nothing was written');
     assert.match(await screen(agent), /halfway/, 'and the screen says why not');
-    assert.match(await post(cms), /<article class="post h-entry">/, 'the site is untouched');
+    assert.match(await post(cms), /<article class="blog-post h-entry">/, 'the site is untouched');
   });
 
   it('refuses a name that is a path rather than a theme in the directory (AC #4)', async () => {

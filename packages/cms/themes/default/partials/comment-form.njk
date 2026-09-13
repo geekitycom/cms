@@ -8,10 +8,15 @@
   `partials/comment-form.njk` of its own in the theme it wears; the shape it is
   handed is documented in the theme README under "The comment form".
 
+  `comment-respond` and `comment-reply-title` are the source design's names for
+  a form under a post and its heading (decision-16), and the stylesheet styles
+  every label, field and button through them — so the contact form wears the
+  same class rather than repeating the rules.
+
   It works with JavaScript switched off, and there is no script on it.
 #}
-<section class="comment-form" id="respond">
-  <h2 class="comment-form-title">Leave a comment</h2>
+<section class="comment-respond" id="respond">
+  <h2 class="comment-reply-title">Leave a comment</h2>
 
   {% if commentNotice %}
   <p class="comment-notice" role="status">{{ commentNotice }}</p>
@@ -97,7 +102,7 @@
     </p>
     {% endif %}
 
-    <p class="comment-buttons">
+    <p class="form-submit">
       <button type="submit">Post comment</button>
     </p>
   </form>

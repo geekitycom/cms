@@ -79,11 +79,41 @@ describe('the theme the demo chose', () => {
   });
 
   it('keeps the packaged layouts it did not override', async () => {
+    // `layouts/home.njk` and `partials/post-list.njk` are the package's, and
+    // the listing they draw is on the posts page now (TASK-85).
+    const listing = await text('/posts/');
+    assert.match(listing, /<div class="feed h-feed">/);
+    assert.match(listing, /<article class="feed-item h-entry">/);
+
     const body = await text('/');
 
-    // `layouts/home.njk` and `partials/post-list.njk` are the package's.
-    assert.match(body, /class="post-list"/);
-    assert.match(body, /Skip to content/);
+    // So is `layouts/base.njk` — the shell of the andrewshell.org design
+    // (decision-16): the skip link, the wrapper that says it is the root path,
+    // and the site title as the heading with the tagline under it.
+    assert.match(body, /<a class="screen-reader-text" href="#main">Skip to content<\/a>/);
+    assert.match(body, /<div class="global-wrapper" data-is-root-path="true">/);
+    assert.match(body, /<h1 class="main-heading">\s*<a href="\/">Geekity Demo<\/a>/);
+    assert.match(body, /A file-first site, served straight from Markdown/);
+  });
+
+  it('degrades the footer for a site author no user answers to', async () => {
+    // `site.json` says `"author": "Joe Blog"` and the demo has no such account,
+    // so `siteAuthor` is absent: the name is still in the copyright line and
+    // there are no `rel="me"` links to print (TASK-79, TASK-80).
+    const body = await text('/2026/08/markdown-on-disk/');
+    const footer = /<footer>([\s\S]*?)<\/footer>/.exec(body)?.[1] ?? '';
+
+    assert.match(footer, /&copy; \d{4}, Joe Blog/, 'no copyright line');
+    assert.match(footer, /Published with[\s\S]*Geekity/, 'no colophon');
+    assert.match(footer, /<a href="\/feed\/">RSS<\/a>/, 'no RSS link');
+    assert.doesNotMatch(footer, /rel="me"/, 'a name with no profile behind it has links');
+  });
+
+  it('heads every page but the front one with the small link home', async () => {
+    const body = await text('/2026/08/markdown-on-disk/');
+
+    assert.match(body, /<a class="header-link-home" href="\/">Geekity Demo<\/a>/);
+    assert.doesNotMatch(body, /main-heading/, 'the front page heading is on an entry');
   });
 
   it('serves the demo stylesheet at /theme/style.css', async () => {
@@ -156,7 +186,10 @@ describe('the demo with its theme unchosen', () => {
   it('serves a post through the packaged post layout', async () => {
     const body = await bareText('/2026/08/markdown-on-disk/');
 
-    assert.match(body, /<p class="post-meta">\s*Published/, 'not the packaged meta line');
+    // The packaged entry is the andrewshell.org one (TASK-83): the Published
+    // line lives inside the `e-content`, not in a meta line under the title.
+    assert.match(body, /<article class="blog-post h-entry">/, 'not the packaged entry');
+    assert.match(body, /<p class="entry-meta">[\s\S]*?Published/, 'not the packaged meta line');
     assert.doesNotMatch(body, /post-byline/, 'the unchosen theme is still on the search path');
     assert.doesNotMatch(body, /minute read/, 'the unchosen theme is still on the search path');
   });
@@ -170,20 +203,45 @@ describe('the demo with its theme unchosen', () => {
   });
 
   it('serves the rest of the site exactly as before', async () => {
-    assert.match(await bareText('/'), /class="post-list"/);
+    assert.match(await bareText('/'), /<div class="feed h-feed">/);
     assert.match(await bareText('/colophon/'), /Colophon/);
+  });
+
+  it('wears the packaged shell on every page of it', async () => {
+    assert.match(await bareText('/'), /<div class="global-wrapper" data-is-root-path="true">/);
+    assert.match(await bareText('/colophon/'), /<a class="header-link-home" href="\/">/);
+  });
+
+  it('loads the highlighter only on the post with code on it (TASK-86)', async () => {
+    const withCode = await bareText('/2026/07/six-tables-and-a-migration/');
+
+    assert.match(withCode, /<pre tabindex="0"><code class="language-sql">/);
+    assert.match(withCode, /<pre tabindex="0"><code class="language-typescript">/);
+    assert.match(withCode, /<pre tabindex="0"><code class="language-diff">/);
+    assert.match(withCode, /<script src="\/theme\/highlight\.js" defer><\/script>/);
+
+    const withoutCode = await bareText('/2026/08/one-url-many-representations/');
+    assert.doesNotMatch(withoutCode, /highlight\.js/, 'a post with no code ships JavaScript');
+    assert.doesNotMatch(withoutCode, /<script(?![^>]*application\/ld\+json)/, 'and any script');
+  });
+
+  it('serves the packaged token colours with the packaged stylesheet', async () => {
+    const css = await bareText('/theme/style.css');
+
+    assert.match(css, /--color-code-keyword:/, 'the stylesheet has no highlighting palette');
+    assert.match(css, /\.hljs-addition \{/, 'the stylesheet has no diff treatment');
   });
 });
 
 describe('the demo content', () => {
-  it('paginates the home page at the configured postsPerPage', async () => {
-    const body = await text('/');
-    assert.match(body, /class="pagination"/, 'the home page is not paginated');
+  it('paginates the posts page at the configured postsPerPage', async () => {
+    const body = await text('/posts/');
+    assert.match(body, /class="pagination"/, 'the listing is not paginated');
 
     // `postsPerPage` is 2 and five posts are published, so there is a page 2
     // and a page 3 to page through.
-    assert.match(await text('/page/2/'), /class="post-list"/);
-    assert.match(await text('/page/3/'), /class="post-list"/);
+    assert.match(await text('/posts/page/2/'), /<div class="feed h-feed">/);
+    assert.match(await text('/posts/page/3/'), /<div class="feed h-feed">/);
   });
 
   it('gives the person its posts name an archive, once there is an account (TASK-67)', async () => {
@@ -238,6 +296,8 @@ describe('the demo content', () => {
   it('keeps the draft off the site', async () => {
     assert.equal((await get('/2026/09/a-draft-nobody-can-see/')).status, 404);
     assert.doesNotMatch(await text('/'), /A draft nobody can see/);
+    assert.doesNotMatch(await text('/posts/'), /A draft nobody can see/);
+    assert.doesNotMatch(await text('/archive/'), /A draft nobody can see/);
     assert.doesNotMatch(await text('/tag/theme/'), /A draft nobody can see/);
     assert.doesNotMatch(await text('/category/general/'), /A draft nobody can see/);
   });
@@ -280,6 +340,45 @@ describe('the demo content', () => {
 });
 
 /**
+ * The demo's Reading settings (TASK-74) and the two page kinds they turn on
+ * (TASK-85): `site.json` names About as the homepage and Posts as the posts
+ * page, so `/` is the About page's words over the recent posts and the
+ * listing lives at `/posts/`. The Archive page says `archive: true`, and is
+ * the whole archive grouped by month.
+ */
+describe('the demo front page and archive page', () => {
+  it('serves the About page at / over the recent posts', async () => {
+    const body = await text('/');
+
+    assert.match(body, /The demo site exists so the CMS/, 'the homepage’s own words');
+    assert.match(body, /<h2>Recent Posts<\/h2>/);
+    assert.match(body, /<h3 class="feed-title p-name">/, 'the entries are headed under the h2');
+    assert.match(body, /The theme is just templates/, 'the newest post is not listed');
+    assert.match(body, /<p class="front-links">[\s\S]*?href="\/posts\/"/, 'no link to the listing');
+  });
+
+  it('redirects the About page’s own permalink to /', async () => {
+    const response = await get('/about/', { redirect: 'manual' });
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), '/');
+  });
+
+  it('lists every published post by month on the archive page', async () => {
+    const body = await text('/archive/');
+
+    assert.match(body, /puts every published post below/, 'the page’s own words');
+    assert.match(body, /<h2>September 2026<\/h2>\s*<ol class="list-none">/);
+    assert.match(body, /<h2>August 2026<\/h2>/);
+    assert.match(body, /<a href="\/reading-the-index\/">/, 'the oldest post is missing');
+
+    // Newest month first, and the pages are not on it: an archive is the posts.
+    const months = [...body.matchAll(/<h2>(\w+ 2026)<\/h2>/g)].map((match) => match[1]);
+    assert.deepEqual(months, ['September 2026', 'August 2026', 'July 2026', 'June 2026']);
+    assert.doesNotMatch(body, /<a href="\/colophon\/"><span>/);
+  });
+});
+
+/**
  * The contact page is the demo's only page that asks for a form, and the only
  * place the demo exercises TASK-56 at all. What is asserted here is what a
  * visitor can see: the form is under the page, the page is reachable from the
@@ -315,5 +414,60 @@ describe('the demo contact page', () => {
     // the address is read when a submission arrives and reaches no template.
     assert.doesNotMatch(await text('/contact/'), new RegExp(contactEmail));
     assert.doesNotMatch(await text('/'), new RegExp(contactEmail));
+  });
+});
+
+/**
+ * Code highlighting (TASK-86), on the two sites this file boots.
+ *
+ * The packaged base layout loads `/theme/highlight.js` on a page whose rendered
+ * body holds a `language-` class and on no other page, so the demo is where
+ * that is worth proving end to end: one post has three fenced blocks on it and
+ * another has none, and both are served by the same layout.
+ */
+describe('the demo highlights code where there is code', () => {
+  /** The post with fenced SQL, TypeScript and a diff in it. */
+  const WITH_CODE = '/2026/07/six-tables-and-a-migration/';
+
+  /** A post of the same shape with nothing fenced in it. */
+  const WITHOUT_CODE = '/2026/08/one-url-many-representations/';
+
+  it('marks the fenced blocks up for the highlighter to find', async () => {
+    const body = await text(WITH_CODE);
+
+    for (const language of ['sql', 'typescript', 'diff']) {
+      assert.match(
+        body,
+        new RegExp(`<pre tabindex="0"><code class="language-${language}">`),
+        `the post has no ${language} block, or it lost its class`,
+      );
+    }
+  });
+
+  it('loads the highlighter there and nowhere else, on the theme the demo chose', async () => {
+    assert.match(await text(WITH_CODE), /<script src="\/theme\/highlight\.js" defer><\/script>/);
+    assert.doesNotMatch(await text(WITHOUT_CODE), /highlight\.js/);
+    assert.doesNotMatch(await text('/'), /highlight\.js/);
+  });
+
+  it('gives the demo stylesheet its own token colours for what the bundle marks up', async () => {
+    // A stylesheet is an all-or-nothing override, so the theme that ships one
+    // owns the highlighter's colours too. Without these the bundle would still
+    // run and every token would come out the colour of the code around it.
+    const css = await text('/theme/style.css');
+
+    assert.match(css, /--code-keyword:/, 'the demo stylesheet has no highlighting palette');
+    assert.match(css, /\.hljs-addition \{/, 'the demo stylesheet has no diff treatment');
+  });
+
+  it('serves the packaged bundle, because the demo theme has no static of its own', async () => {
+    const response = await get('/theme/highlight.js');
+    assert.equal(response.status, 200);
+
+    const packaged = await readFile(
+      path.join(PACKAGED_THEME_DIR, 'static', 'highlight.js'),
+      'utf8',
+    );
+    assert.equal(await response.text(), packaged);
   });
 });

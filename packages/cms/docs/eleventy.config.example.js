@@ -643,9 +643,10 @@ function escapeComment(value) {
 
 export default function (eleventyConfig) {
   // The CMS's `date` filter, in Eleventy's terms: `readable` (the default),
-  // `html` and `year` are the calendar the site's own zone is on, and `iso` is
-  // the instant, because a <time datetime> and a feed want UTC and must not
-  // move when a setting does. Pass a zone as the second argument to override.
+  // `html`, `year` and `month` are the calendar the site's own zone is on, and
+  // `iso` is the instant, because a <time datetime> and a feed want UTC and
+  // must not move when a setting does. Pass a zone as the second argument to
+  // override.
   //
   // With Luxon — which Eleventy already ships — the same filter reads:
   //
@@ -655,14 +656,19 @@ export default function (eleventyConfig) {
   //
   // This version uses Intl so the file keeps its promise of no dependencies.
   const defaultZone = siteTimezone();
+  //
+  // `'now'` is the one word the filter reads rather than parses: the default
+  // theme's footer writes `{{ "now" | date("year") }}` for its copyright line,
+  // because that is the one date a page has that no file carries.
   eleventyConfig.addFilter('date', (value, format = 'readable', zone = defaultZone) => {
-    const at = value instanceof Date ? value : new Date(value);
+    const at = value === 'now' ? new Date() : value instanceof Date ? value : new Date(value);
     if (Number.isNaN(at.getTime())) return '';
     if (format === 'iso') return at.toISOString();
 
     const [year, month, day] = calendarDayIn(at, zone).split('-');
     if (format === 'html') return `${year}-${month}-${day}`;
     if (format === 'year') return year;
+    if (format === 'month') return `${MONTHS[Number(month) - 1]} ${year}`;
     return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
   });
 

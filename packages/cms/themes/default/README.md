@@ -9,6 +9,7 @@ themes/default/
   layouts/
     base.njk     the page every other layout extends
     home.njk     the post archive, paginated
+    front-page.njk  the page the Reading setting serves at /
     post.njk     one post
     page.njk     one page
     tag.njk      a tag archive, paginated
@@ -16,14 +17,15 @@ themes/default/
     author.njk   one person's archive, paginated
     404.njk      nothing at this URL
   partials/
-    post-list.njk     a list of documents
+    post-list.njk     the h-feed a listing is made of
     pagination.njk    previous/next pager
     tags.njk          macros for tag and category links
-    byline.njk        who wrote a post, linked to their archive
+    bio.njk           who an entry is by, as an h-card, with the site menu
     feeds.njk         macros for the feed links in <head>
     conversation.njk  the replies, likes and boosts under a post
     comment-form.njk  the form under a post that is taking comments
     contact-form.njk  the form on a page whose front matter says contact: true
+    archive.njk       every post by month, on a page that says archive: true
   mail/
     test.*.njk              the Send test email message
     password-reset.*.njk    the forgot-password link
@@ -113,21 +115,488 @@ packaged ones by name:
 `layouts/base.njk` defines the blocks `title`, `head`, `alternates`, `header`,
 `content`, `footer` and `scripts`, so most sites never have to copy it.
 
-Two layouts are override points rather than files shipped here, for the pages
-the Reading settings name:
+Two layouts are named for the pages the Reading settings pick:
 
-| Template                 | Rendered for                  | Falls back to      |
-| ------------------------ | ----------------------------- | ------------------ |
-| `layouts/front-page.njk` | the page served at `/`        | `layouts/page.njk` |
-| `layouts/posts-page.njk` | the listing on the posts page | `layouts/home.njk` |
+| Template                 | Rendered for                  | Shipped here | Falls back to      |
+| ------------------------ | ----------------------------- | ------------ | ------------------ |
+| `layouts/front-page.njk` | the page served at `/`        | yes          | `layouts/page.njk` |
+| `layouts/posts-page.njk` | the listing on the posts page | no           | `layouts/home.njk` |
 
-Neither is needed: a site that sets a homepage gets the page layout for it and
-a site that sets a posts page gets the listing layout, until it writes one.
-Writing `layouts/front-page.njk` into the theme is how a front page is laid out
-differently from every other page without overriding the layout they all use.
-On the posts page the page's own front matter and rendered body are on the
-context beside the listing, so `{{ content | safe }}` prints its words above
-the posts; `layouts/home.njk` already does.
+`layouts/front-page.njk` is a layout here rather than only an override point:
+see [The front page](#the-front-page) for what it draws. Overriding it is how a
+front page is laid out differently from every other page without overriding the
+layout they all use, and the fallback above is reached only by a theme that
+replaced it with nothing.
+
+There is no posts page layout: a site that sets one gets the listing layout
+until it writes one. On the posts page the page's own front matter and rendered
+body are on the context beside the listing, so `{{ content | safe }}` prints its
+words above the posts; `layouts/home.njk` already does.
+
+## The page shell
+
+`layouts/base.njk` is the andrewshell.org design's shell (decision-16): the
+skip link, one `.global-wrapper` at the 42rem measure, `.global-header`,
+`<main id="main">` and the footer, in that order.
+
+**The header has one rule.** On the front page it is the site title as
+`h1.main-heading`, linked home, with `site.tagline` in a paragraph under it; on
+every other page it is `a.header-link-home`, the site title small and linked
+home, and no tagline. The wrapper carries `data-is-root-path="true"` at `/` and
+nothing anywhere else, which is how the stylesheet tells the two apart. There is
+no navigation in the header — see [Navigation](#navigation).
+
+**The footer** prints the copyright with the current year and `site.author`,
+`Published with Geekity`, and then one `ul.hlist` holding an RSS link to
+`/feed/` and one `rel="me"` link per entry of `siteAuthor.links`. A site whose
+`author` setting names nobody with an account here gets the line and the RSS
+link and no identity links, because `siteAuthor` is absent. The year is
+`{{ "now" | date("year") }}` — `now` is the one word the `date` filter reads
+rather than parses — so it is the year at the moment the page is rendered, in
+the site's own timezone.
+
+Webrings, badges, a licence notice and anything else particular to one site are
+deliberately not in the package. They go in a site theme's `footer` block:
+
+```njk
+{% extends "layouts/base.njk" %}
+
+{% block footer %}
+{{ super() }}
+<p class="webring">
+  <a href="https://example.ring/previous">&larr;</a>
+  An <a href="https://example.ring">example webring</a>
+  <a href="https://example.ring/next">&rarr;</a>
+</p>
+{% endblock %}
+```
+
+### An entry
+
+`layouts/post.njk` and `layouts/page.njk` draw the same thing, the source
+design's entry, and it is a microformats2 `h-entry`:
+
+```html
+<article class="blog-post h-entry">
+  <header>
+    <h1 class="p-name">Hello</h1>
+  </header>
+  <section class="e-content">
+    <p>The rendered body.</p>
+    <p class="entry-meta">
+      <a class="u-category small" href="https://news.indieweb.org/en"
+        >#indienews</a
+      >
+      <a href="/2026/09/hello/" class="u-url"
+        ><time class="small dt-published" datetime="2026-09-02T09:00:00.000Z"
+          >Published 2 September 2026</time
+        ></a
+      >
+      <br /><time class="small dt-updated" datetime="2026-09-05T09:00:00.000Z"
+        >Updated 5 September 2026</time
+      >
+    </p>
+  </section>
+  <p class="post-categories">…categories…</p>
+  <p class="post-categories">…tags…</p>
+  <hr />
+  <footer>…the bio…</footer>
+</article>
+<nav class="blog-post-nav">…the posts either side…</nav>
+```
+
+**The Published line is inside the `e-content`**, which is the one thing about
+this shape worth knowing. It is what the source theme does: the date and the
+permalink are part of the words, so a reader — or a fediverse peer reading the
+`e-content` — takes them with the post. The permalink wraps the `dt-published`
+time as a `u-url`, and a `dt-updated` line follows it only when the update
+happened on a different day in the site's own timezone; a typo fixed an hour
+later is not news. A post tagged `indienews` opens the line with a
+`u-category` link to <https://news.indieweb.org/en>, which is how IndieNews is
+told the post is for it; a page never prints one, and its line is a
+`p.page-meta` rather than a `p.entry-meta`.
+
+What it is filed under is printed under the words and inside the article, so
+that each link is a `p-category` of this entry: the categories first, then the
+tags, each as one `p.post-categories` from `partials/tags.njk`.
+
+After the entry a post prints `nav.blog-post-nav`, `rel="prev"` and
+`rel="next"` links to `previous` and `next` with an arrow either side, and
+nothing at all at the ends of the archive; then the conversation and the
+comment form. A page prints the contact form when its front matter asked for
+one. A page has no neighbours, no taxonomy and no IndieNews link, because none
+of those are things a page has.
+
+### The bio
+
+`partials/bio.njk` is who the page is by: the `p-author h-card` the rule and
+the footer at the end of an entry hold, and the heading of an author archive.
+It replaces `partials/byline.njk`, which is gone — a byline was a name in a
+meta line, and this is the whole credit.
+
+```njk
+{% set bioAuthor = author or siteAuthor %}
+{% include "partials/bio.njk" %}
+```
+
+`bioAuthor` is the one thing to set, and nothing renders when it is absent.
+It is one of the profile objects the context already carries: `author` on a
+post, falling back to `siteAuthor`; `siteAuthor` on a page; the archive's
+person on an author archive. `layouts/base.njk` reads it too — see
+[Navigation](#navigation).
+
+What the bio prints: a round `u-photo` at 50px when they have an avatar,
+"Written by" and their name as a `p-name u-url` linked `rel="author me"` to
+their archive, then `p-job-title` and `p-locality` when the profile says. A
+name this site has no account for is printed unlinked, because the file still
+said somebody wrote this. Then the site menu.
+
+`bioLead` is what the line opens with, `Written by` unless a layout sets
+another; `layouts/author.njk` sets `Posts by`, because the card there heads
+somebody's writing rather than crediting one piece of it.
+
+Set `bioProfile` as well and it also prints their `p-note` and their `rel="me"`
+links; `layouts/author.njk` does, because that page is about the person rather
+than about something they wrote. An entry leaves it unset: the page footer
+already prints the site's identity links, and the `rel="author me"` link leads
+to the archive where this person's own are.
+
+**A site that used `partials/byline.njk`** — `{{ byline.line(author) }}` from
+an overridden layout — either includes this partial instead or writes the line
+itself. It was four lines of markup, and the object behind it has not changed:
+
+```njk
+{% set writer = author or { name: site.author } %}
+<span class="p-author h-card">
+  {%- if writer.url %}<a class="u-url" href="{{ writer.url | url }}">{{ writer.name }}</a>
+  {%- else %}{{ writer.name }}{% endif %}
+</span>
+```
+
+`apps/demo/themes/demo/layouts/post.njk` is that, worked: the demo wants a
+byline under the title rather than a bio in the footer, so it writes one.
+
+### A listing
+
+`partials/post-list.njk` is the feed every listing is made of — the home page,
+the posts page, a tag, category or author archive — and it is a microformats2
+`h-feed`:
+
+```html
+<div class="feed h-feed">
+  <article class="feed-item h-entry">
+    <div class="feed-content">
+      <h2 class="feed-title p-name">
+        <a href="/2026/09/hello/" class="u-url">Hello</a>
+      </h2>
+      <div class="feed-excerpt p-summary">
+        <p>What the post is about, in about 280 characters...</p>
+      </div>
+      <p class="feed-more">
+        <a href="/hello/" aria-label="Continue reading: Hello">
+          Continue reading<span aria-hidden="true"> &rarr;</span>
+        </a>
+      </p>
+      <div class="feed-meta">
+        <p>
+          <time class="feed-date dt-published" datetime="…"
+            >2 September 2026</time
+          >
+        </p>
+        <p class="post-categories">
+          <a href="/category/notes/" class="p-category" rel="category">notes</a>
+        </p>
+      </div>
+    </div>
+  </article>
+  <hr class="feed-separator" />
+  <article class="feed-item h-entry">…</article>
+</div>
+```
+
+The excerpt is the entry's `summary` — the very line the feeds publish, so a
+reader and a feed cannot be told two different things — through Nunjucks'
+`truncate(280)`, which cuts at the last space before 280 characters and adds an
+ellipsis. A `description` shorter than that is printed whole. It is plain text
+rather than markup, deliberately: an excerpt with half a code block in it is
+not an excerpt.
+
+An entry's tags are not in a feed item. They belong under the entry, where
+there is one post's worth of them rather than twenty.
+
+**The heading level belongs to the layout**, not to the list. `feedHeading` is
+the level `post-list.njk` prints its titles at and defaults to 2, which is what
+a listing wants; a page whose feed sits under a heading of its own sets 3
+before including it, so the outline never skips a level:
+
+```njk
+{% set feedHeading = 3 %}
+{% include "partials/post-list.njk" %}
+```
+
+A listing with nothing on it says `No posts found.` in `p.empty`.
+
+`partials/pagination.njk` prints two arrows in `nav.pagination` — `← Previous`
+to the page before this one and `Next →` to the page after it, with `rel="prev"`
+and `rel="next"` — and nothing at all on a listing of one page. The arrows
+themselves are `aria-hidden`, because a screen reader that announced them would
+read the decoration and then the word.
+
+Each listing layout heads its own page: `layouts/home.njk` with the listing's
+title, `layouts/tag.njk` and `layouts/category.njk` with the term, and
+`layouts/author.njk` with the person as an `h-card`. The category archive puts
+its heading in a `header.category-header` and prints a `div.category-description`
+under it when the context carries a `categoryDescription`; the CMS has no store
+of term descriptions, so nothing writes one today and the header is the heading
+alone.
+
+`layouts/404.njk` says `Content not found.` and links home. A link to the site's
+search goes in beside it once there is a search to link to.
+
+### The front page
+
+`layouts/front-page.njk` is what a site gets at `/` once the Reading settings
+name a homepage (`homepage` in `content/_data/site.json`). It is that page read
+somewhere else: the same document, the same context, with `page.url` saying `/`
+rather than the permalink that redirects there.
+
+It draws the page's own words and then what the site has been writing:
+
+1. `div.page-body.e-content`, the rendered body. No title — `layouts/base.njk`
+   heads the root path with the site title, and a second `h1` under it would be
+   one heading too many — and no Published line, because a front page is read
+   as the site rather than as a page somebody wrote on a Tuesday.
+2. `<h2>Recent Posts</h2>` over `partials/post-list.njk` with `feedHeading` set
+   to 3, so the entries sit under that heading rather than beside it.
+3. `p.front-links`, a line of links to where the writing is. The posts page is
+   linked by its own title when the site names one; a search link joins it once
+   there is a search to link to (TASK-22).
+4. The bio, under a rule, exactly as an entry ends — so the site menu is there
+   too, because that is where this design keeps it.
+
+Two context keys are the front page's alone. `recentPosts` is the entries to
+list, in the same shape a listing's are: the posts of the current month when
+there are at least five of them, and the five newest otherwise. `postsPage` is
+`{ title, url }` for the page carrying the listing, and is **absent** when the
+site names none — a link to a listing that has no URL is a link to nothing.
+
+### An archive page
+
+A page whose front matter says `archive: true` prints every post the site has
+published under its own words, newest month first:
+
+```html
+<section class="archive">
+  <h2>September 2026</h2>
+  <ol class="list-none">
+    <li>
+      <a href="/2026/09/hello/"><span>Hello</span></a>
+    </li>
+  </ol>
+  <h2>August 2026</h2>
+  …
+</section>
+```
+
+`partials/archive.njk` draws it and `layouts/page.njk` includes it. It is the
+whole archive on one page and nothing paginates it: an archive page is a way of
+finding one piece of writing rather than a listing to read through, which is
+also why there are no excerpts on it. Drafts and posts whose date has not
+arrived are absent, as they are everywhere else.
+
+`archiveMonths` is what it loops over, and it is on the context **only** for a
+page whose front matter says `archive: true`, so a layout asks:
+
+```njk
+{% if archiveMonths %}
+{% include "partials/archive.njk" %}
+{% endif %}
+```
+
+Each entry of it is `{ month, posts }`: `month` is the heading, `September
+2026`, and `posts` is `{ title, url, date }` for each post of it, newest first.
+Which month a post belongs to is the CMS's answer rather than the template's,
+because a date in a file is a UTC instant and the site's `timezone` is the lens
+it is read through — so the grouping and the date printed under an entry are
+one decision rather than two.
+
+The key is honoured wherever it is written, exactly as `contact: true` is: a
+theme that wants the list on some other kind of page adds the same three lines
+to that layout.
+
+### The head
+
+Beside the title, the canonical link and the feeds, every page carries a
+description, Open Graph and Twitter card tags, the site's icons and one
+JSON-LD graph. All of it is in the `head` block, so an override that only means
+to add a tag calls `{{ super() }}` first.
+
+**The description** is the page's own `description` from the front matter, else
+the entry's `summary` — the line the feeds publish — else `site.tagline`. It is
+printed once, as `<meta name="description">`, and the Open Graph and Twitter
+descriptions say the same thing.
+
+**The card.** `og:title` is the page's title, or the site's on the front page;
+`og:site_name` is always the site's. `og:type` is `article` on a rendered post
+or page and `website` everywhere else, a listing carrying a page's front matter
+included. `og:url` is the canonical URL. `twitter:card` is `summary`, the small
+square picture beside the words, because the picture is usually a face rather
+than a wide photograph.
+
+**The picture** is the `image` in the entry's front matter, else `site.avatar`.
+A site with neither prints no `og:image` and no `twitter:image` rather than an
+empty one.
+
+**The icons** come from the site's avatar through the derived images
+(decision-10): `icon` at 32 and 16 pixels and `apple-touch-icon` at 180, each a
+square PNG cropped from the middle of the avatar and encoded the first time a
+browser asks for it. They are on the context as `icons`, a list of
+`{ rel, sizes, href }`, which is empty — and the links are not printed at all —
+when the site has no avatar, when its avatar is a file no icon can be made of,
+or when image optimization is off. There is no web manifest; a site that wants
+one adds it in its own `head` block.
+
+**The structured data** is `partials/jsonld.njk`, one `<script
+type="application/ld+json">` holding one `@graph` per page, and it is the only
+structured data the theme emits — there is no Microdata anywhere, by
+decision-16, because the visible markup already carries microformats2 for the
+IndieWeb. The graph holds:
+
+- `WebSite`, always, with the site's title, tagline and URL, and a `publisher`
+  pointing at the Person. Its `SearchAction` goes in when the site has a search
+  to point it at.
+- `Person`, from `siteAuthor`: their name, archive URL, avatar, bio, job title
+  and location, and a `sameAs` of their profile links and their actor id, which
+  is what asserts that the schema.org Person and the fediverse actor are one
+  identity. Identity comes from a user profile, so a site — or a byline —
+  naming nobody with an account here prints no Person, and the `author` and
+  `publisher` references go with it.
+- `ProfilePage` on an author archive, whose `mainEntity` is that Person.
+- `BlogPosting` on a post and `Article` on a page, with the headline, URL,
+  `mainEntityOfPage`, `datePublished`, `dateModified`, description, image,
+  `author` and `publisher`.
+
+A site that wants a different graph — more types, an `Organization` publisher,
+nothing at all — writes its own `partials/jsonld.njk` and that file replaces
+this one, like any other partial.
+
+### Colours
+
+`static/style.css` is the source design: a serif body and sans headings at an
+18px root on a 1.2 minor-third scale, warm paper with near-black text, a rust
+primary and a blue secondary, one column, links that invert to the primary
+colour on hover, and a rule in the primary colour. Everything is a custom
+property on `:root`, so a site that only wants different colours overrides the
+half-dozen `--color-*` tokens rather than the stylesheet.
+
+The source is light only. The theme adds a second scheme under
+`@media (prefers-color-scheme: dark)` that redefines the same colour tokens on
+dark paper, with the rust and the blue lifted until they read on it, and
+`color-scheme: light dark` so a browser paints its own form controls and
+scrollbars to match. There is no toggle: the reader's system setting is the
+setting.
+
+Both schemes meet WCAG 2.2 AA — 4.5:1 for body text, 3:1 for large text, rules
+and focus outlines — and that is a test rather than a claim.
+`src/web/theme-colors.test.ts` reads the custom properties out of this
+stylesheet and computes the ratios for every pair the design puts on screen, so
+a colour changed here that breaks one fails the build.
+
+| Token                     | What it colours                                    |
+| ------------------------- | -------------------------------------------------- |
+| `--color-body`            | The paper, and the text of an inverted link.       |
+| `--color-text`            | The ink.                                           |
+| `--color-primary`         | Links, the rule, the focus outline, table headers. |
+| `--color-secondary`       | Blockquote text and its border.                    |
+| `--color-base`            | A warm sunk surface: rules between entries.        |
+| `--color-base-2`          | A cooler sunk surface.                             |
+| `--color-base-3`          | The raised surface: the focused skip link, inputs. |
+| `--color-code-background` | Behind `code` and a fenced block.                  |
+| `--color-code-text`       | Code with no highlighting on it.                   |
+| `--color-error`           | A form field that will not do.                     |
+
+### Code highlighting
+
+The CMS renders a fenced block as `<pre tabindex="0"><code
+class="language-x">` and highlights nothing: highlighting is a theme's, and it
+happens on the client (decision-16). The `tabindex` is the core's doing and is
+there on every `<pre>`, because a block wider than the measure scrolls sideways
+and a scroll container nothing can focus cannot be read from a keyboard.
+
+This theme highlights with **[highlight.js](https://highlightjs.org/)**,
+self-hosted at `static/highlight.js` and pinned — nothing is fetched from a
+CDN. The `scripts` block of `layouts/base.njk` loads it, deferred, **only on a
+page whose rendered body holds a `language-` class**, so a page with no code on
+it ships no JavaScript at all. Auto-detection is off: a block with no language,
+or one naming a language the bundle does not carry, is left exactly as the
+renderer wrote it — its class, its plain text, no highlighting.
+
+The bundle carries the core and eighteen grammars — `bash`, `css`, `diff`,
+`dockerfile`, `go`, `ini`, `javascript`, `json`, `markdown`, `nginx`, `php`,
+`python`, `rust`, `shell`, `sql`, `typescript`, `xml` and `yaml`, with their
+aliases, so `js`, `ts`, `html`, `yml` and `sh` all work. It is a build product
+that is nevertheless committed, so a site gets a working highlighter out of the
+package with no build step. Rebuilding it is one command:
+
+```
+pnpm --filter @geekity/cms build:highlight
+```
+
+Run that after bumping the `highlight.js` devDependency or editing the language
+list in `scripts/build-highlight.js`, and commit what it writes.
+`src/web/highlight-bundle.test.ts` fails when the committed file was built from
+a different version of highlight.js than the one installed.
+
+**The palette is Tomorrow**, the one both of the sites this design comes from
+used: Chris Kempson's Tomorrow on light paper and Tomorrow Night on dark, from
+highlight.js's own base16 themes, which is also what decides which `hljs-`
+scope takes which slot. Five of the light colours are not the stock ones — a
+syntax theme is drawn for an editor, where a faint comment is a feature, and on
+this paper the stock greys, orange, yellow, green and teal read between 1.7:1
+and 3.5:1. Each was darkened along its own hue until it made 4.5:1 and no
+further; on the dark scheme only the `base0F` brown needed lifting. Every one
+of them is in the contrast test beside the rest of the palette.
+
+| Token                             | base16   | What it colours                            |
+| --------------------------------- | -------- | ------------------------------------------ |
+| `--color-code-comment`            | `base03` | Comments.                                  |
+| `--color-code-tag`                | `base04` | Markup tags.                               |
+| `--color-code-name`               | `base08` | Variables, names, selectors, list bullets. |
+| `--color-code-literal`            | `base09` | Numbers, constants, attributes, links.     |
+| `--color-code-class`              | `base0A` | Class names, bold.                         |
+| `--color-code-string`             | `base0B` | Strings and inline code.                   |
+| `--color-code-support`            | `base0C` | Built-ins, regexps, quotes.                |
+| `--color-code-function`           | `base0D` | Function names, headings, attributes.      |
+| `--color-code-keyword`            | `base0E` | Keywords, types, italic.                   |
+| `--color-code-meta`               | `base0F` | Preprocessor and embedded-language lines.  |
+| `--color-code-added-background`   | —        | An added line in a diff.                   |
+| `--color-code-removed-background` | —        | A removed line in a diff.                  |
+
+Delimiters, operators and substitutions are deliberately `--color-code-text`,
+the block's own ink: they are most of the characters on screen and a colour
+there is noise. A `diff` block reads by the line rather than by the token, the
+way the source site's `prism-diff.css` did: `.hljs-addition` and
+`.hljs-deletion` take a tint out to the edges of the block and keep the ink, so
+the `+` and the `-` in the text carry the meaning as well as the colour does.
+
+**Swapping it.** Four sizes of change, smallest first:
+
+- _Another palette, same highlighter._ Redefine the dozen `--color-code-*`
+  tokens. Note that `static/style.css` is an all-or-nothing override: a theme
+  that ships its own stylesheet owns these rules too, and a fenced block on it
+  is unhighlighted until it writes them.
+- _Other languages._ Edit `LANGUAGES` in `scripts/build-highlight.js`, rebuild,
+  and commit — or put your own `static/highlight.js` in your theme, which the
+  `/theme/` route resolves before the packaged one.
+- _Another highlighter._ Override the `scripts` block with your own tag. The
+  markup is `pre > code.language-x`, which is what every highlighter reads.
+- _None._ Override the `scripts` block with nothing in it.
+
+```njk
+{% extends "layouts/base.njk" %}
+
+{% block scripts %}{% endblock %}
+```
 
 ## Mail templates
 
@@ -197,10 +666,12 @@ an Eleventy build needs few edits. It is part of the package's semver contract.
 
 Every template gets:
 
-| Key    | What it holds                                                                                                                                                                                           |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `site` | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
-| `menu` | The site menu for this page: a list of `{ label, url, current }`. See [Navigation](#navigation).                                                                                                        |
+| Key          | What it holds                                                                                                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `site`       | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
+| `menu`       | The site menu for this page: a list of `{ label, url, current }`. See [Navigation](#navigation).                                                                                                        |
+| `siteAuthor` | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
+| `icons`      | The site's icons, as `{ rel, sizes, href }`. Empty until the site has an avatar to derive them from. See [The head](#the-head).                                                                         |
 
 A document — one post, one page, or one entry of a listing — adds:
 
@@ -212,6 +683,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `tags`                                      | The document's tags, in file order.                                                                               |
 | `categories`                                | The document's categories, in file order.                                                                         |
 | `content`                                   | The Markdown body rendered to HTML. Print it with `\| safe`.                                                      |
+| `summary`                                   | Its `description` as plain text, else an excerpt of the body, else empty. The line the feeds publish.             |
 | `url`                                       | The document's URL path, the same value as `page.url`.                                                            |
 | `page.url`                                  | The document's URL path. Always ends in `/`.                                                                      |
 | `page.date`                                 | The same `Date` as `date`.                                                                                        |
@@ -221,6 +693,11 @@ A document — one post, one page, or one entry of a listing — adds:
 | `permalink`, `slug`, `draft`, `description` | Straight from the front matter.                                                                                   |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
+| `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |
+| `next`                                      | The published post after it. Absent on the newest post, and on a page.                                            |
+| `recentPosts`                               | The newest posts, as entries, on the front page only: this month's when it holds five, else five.                 |
+| `postsPage`                                 | The page carrying the listing, as `{ title, url }`, on the front page only. Absent when the site names none.      |
+| `archiveMonths`                             | Every published post as `{ month, posts }`, newest month first. Only on a page that says `archive: true`.         |
 | `webmention`                                | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.      |
 | `conversation`                              | The replies, likes and boosts under the post. Only when there are any. See [The conversation](#the-conversation). |
 | everything else                             | Any front matter key the CMS does not model is on the context under its own name.                                 |
@@ -252,7 +729,8 @@ the page.
 ## Bylines and author archives
 
 `author` on a document is the person the front matter names, resolved against
-the site's users:
+the site's users. The fields come from their profile on **Users** in the admin,
+which is the one place identity is written:
 
 | Key               | What it holds                                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -261,25 +739,42 @@ the site's users:
 | `author.username` | Their login. Absent for the same reason `url` is.                                                              |
 | `author.bio`      | What they wrote about themselves, when they wrote any.                                                         |
 | `author.avatar`   | Their picture, as a path or URL. Absent when they have none.                                                   |
+| `author.jobTitle` | What they do, when their profile says.                                                                         |
+| `author.location` | Where they are, as they wrote it.                                                                              |
 | `author.links`    | `{ label, href }` for each link on their profile, in the order they listed them. Absent when they listed none. |
 
-`author` is absent altogether when the document names no author, so a byline is
-`{% if author %}`. Guard the link with `{% if author.url %}`: a file may name
-somebody who has no account here — a guest post, or a colleague whose account
-has gone — and that name is still printed, it simply links nowhere.
-`partials/byline.njk` does both:
-
-```njk
-{% import "partials/byline.njk" as byline %}
-by {{ byline.line(author) }}
-```
+`author` is absent altogether when the document names no author, so anything
+printing it is `{% if author %}`. Guard the link with `{% if author.url %}`: a
+file may name somebody who has no account here — a guest post, or a colleague
+whose account has gone — and that name is still printed, it simply links
+nowhere. [The bio](#the-bio) does both, and is what the theme prints instead of
+the `partials/byline.njk` it used to have.
 
 `layouts/author.njk` is that person's archive, at `/author/{username}/`, with
 their pages at `/author/{username}/page/2/` and their three feeds under
-`/author/{username}/feed/`. It is headed with the same `author` object — the
-name, the avatar, the bio and the links — and lists their published posts
-newest first. A user with no profile still has one; they are called by their
-username.
+`/author/{username}/feed/`. It is headed with their name and then the bio with
+`bioProfile` set — the avatar, the note and the `rel="me"` links — and lists
+their published posts newest first. The source design has no author archive, so
+the heading is the CMS's own; the h-card under it is the one partial the theme
+has. A user with no profile still has one; they are called by their username.
+
+`siteAuthor` is the same object on a different question: not who wrote this
+document, but who the page in front of the reader is by. It is what the bio,
+the footer's `rel="me"` links and any structured data a theme emits should all
+read, so that what a reader sees and what a machine reads cannot drift apart.
+It resolves in this order:
+
+- the document's own `author`, on a post or a page that names one;
+- the person whose archive it is, on an author archive;
+- the profile behind the site's `author` setting, everywhere else — the home
+  page, a taxonomy archive, a page that names nobody, the 404.
+
+It is **absent** when none of those name anybody this site has. The site
+setting is read more strictly than a byline is: a byline prints the name a file
+gives whether or not somebody answers to it, but a site author with no profile
+behind it has no picture, no bio and nowhere to link, so there is nothing to
+print and the key is not there. Write `{% if siteAuthor %}` around the bio and
+the identity links.
 
 The URL is not only a page. Each user is an ActivityPub actor at that address,
 so it is the page a follower lands on when they click through from the
@@ -290,15 +785,26 @@ it.
 ## Navigation
 
 `menu` is the site menu, already in order and already knowing which of its items
-is the page being looked at. Every template gets it, so a layout that overrides
-`header` renders the menu the same way `layouts/base.njk` does:
+is the page being looked at. Every template gets it.
+
+The design has no header navigation: the menu is the horizontal list inside
+[the bio](#the-bio). So it is printed once, in one of two places. A page with a
+bio — an entry, an author archive — carries it there. A page without one — a
+listing, the 404, a layout of a site's own — gets it from the `footer` block of
+`layouts/base.njk`. What decides is `bioAuthor`: a layout that renders the bio
+sets it, and the footer then leaves the menu out. A layout that sets nothing
+keeps the footer menu, which is why an overridden `layouts/post.njk` does not
+lose the navigation by not having a bio.
+
+The markup is the same either way, and a layout that overrides `header` or
+`footer` writes it the same way:
 
 ```njk
 {% if menu.length %}
 <nav class="site-nav" aria-label="Site">
-  <ul>
+  <ul class="hlist">
     {% for item in menu %}
-    <li><a href="{{ item.url | url }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
+    <li><a href="{{ item.url | url }}"{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
     {% endfor %}
   </ul>
 </nav>
@@ -421,16 +927,17 @@ ask:
 ```
 
 That is what `layouts/post.njk` does. `partials/conversation.njk` is the whole
-section — the reply thread, and the likes, boosts and mentions as counts with
-the people behind them inside a `<details>` — and a site replaces it with a
+section — a `div.reactions-section` of the likes, the boosts and the mentions
+as facepiles grouped by kind, and then the thread as
+`div#comments.comments-area` — and a site replaces it with a
 `partials/conversation.njk` of its own in the theme it wears, exactly as it
-replaces any other template. It defines three macros, `comment(reply)`,
-`reactions(actors, one, many)` and `mentions(items)`, and a layout that wants to
-place the pieces itself can import them:
+replaces any other template. It defines three macros, `face(item, icon, href)`,
+`group(items, label, kind, icon, source)` and `comment(reply)`, and a layout
+that wants to place the pieces itself can import them:
 
 ```njk
 {% import "partials/conversation.njk" as thread with context %}
-{{ thread.reactions(conversation.likes, "like", "likes") }}
+{{ thread.group(conversation.likes, "Likes", "p-like", "❤️") }}
 ```
 
 ### The shape
@@ -487,14 +994,32 @@ Markdown the commenter typed, rendered with raw HTML off, no images embedded,
 and every link carrying `rel="nofollow ugc"`. Nothing else survives any of the
 three routes, so a theme may print all of them directly.
 
-The packaged partial gives each entry `id="comment-{{ reply.id }}"` and a
-`comment-{{ reply.source }}` class, and puts a Reply link on the ones written
-here — `source == "comment"` — when the post is still open; the link carries the
-comment's id to the form as `?reply_to=`, so threading needs no JavaScript. A
-fediverse reply is answered on the server that holds it and a webmention on the
-page that sent it, so neither gets one. Mentions are drawn by a third macro,
-`mentions(items)`, as a `<details>` beside the likes and the boosts, each one
-linking to the page it came from.
+The packaged partial draws each entry as the source design does: an
+`li.comment.h-entry` carrying `id="comment-{{ reply.id }}"` and a
+`comment-{{ reply.source }}` class, holding an `article.comment-body` whose
+`footer.comment-meta` is the author as a `.comment-author.vcard.p-author.h-card`
+and the permalink as a `.comment-metadata` link around a `time.dt-published`,
+then the words in `div.comment-content.e-content`. Answers nest in an
+`ol.children` inside what they answer. A Reply link in a `div.reply` goes on the
+ones written here — `source == "comment"` — when the post is still open; it
+carries the comment's id to the form as `?reply_to=`, so threading needs no
+JavaScript. A fediverse reply is answered on the server that holds it and a
+webmention on the page that sent it, so neither gets one.
+
+Above the thread, `group()` draws one `div.reaction-group` per kind that has
+anything — `p-like`, `p-repost` and `p-mention`, the source theme's classes — as
+an `h2.reaction-title` of the label and the count beside a `div.facepile` of
+`a.u-url` faces. A face is a round `u-photo` avatar; a reaction whose author the
+site knows no picture of is the emoji badge of its kind and a `.reaction-name`
+instead. Likes and boosts link to the person, and a mention to the page it came
+from, because the page is the thing worth reading.
+
+There is no key saying a post has stopped taking comments, and none is needed:
+**the absence of `commentForm` is what a closed post looks like**, since the CMS
+puts the form on the context only while the site switch, the closing window and
+the post's own front matter all agree it is open. The packaged partial prints
+`p.no-comments` under a thread when there is no form, which is WordPress's
+"Comments are closed." and the reason a reader cannot find one.
 
 An Eleventy build of the same content gets the same thing from the same files:
 `docs/eleventy.config.example.js` adds a `conversation` filter over
@@ -524,8 +1049,15 @@ matter all agree before it gets here, so a layout asks:
 
 That is what `layouts/post.njk` does, after the conversation. A closed post
 still shows the thread — including every fediverse reply, which arrives whether
-a post is open or not — and simply has no form. A site replaces
+a post is open or not — and simply has no form, which is what the conversation
+reads to print "Comments are closed." A site replaces
 `partials/comment-form.njk` the way it replaces any other template.
+
+The packaged partial is a `section#respond.comment-respond` with an
+`h2.comment-reply-title`, one paragraph per field and the button in a
+`p.form-submit` — the source design's names, so the stylesheet styles every
+label, field and button of both forms through `.comment-respond` and a site
+that has CSS for the WordPress theme can bring it.
 
 | Key                        | What it holds                                                                                                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -567,6 +1099,14 @@ honoured wherever it is written, so a theme that wants the form under a post as
 well only has to add the same two lines to `layouts/post.njk`; the editor
 offers the checkbox on pages.
 
+`archive: true` is the other front matter key of this kind: it puts every
+published post on the page instead of a form. See
+[An archive page](#an-archive-page).
+
+The packaged partial is a `section#contact.comment-respond.contact-form`: it is
+the same kind of form as the comment one, so it wears the same class and the two
+share one set of rules rather than keeping two that drift.
+
 | Key                                            | What it holds                                                                                                                                    |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `action`                                       | Where the form posts. One fixed path; the page travels as a field.                                                                               |
@@ -594,8 +1134,12 @@ form.
 
 ## Taxonomy macros
 
-`partials/tags.njk` holds one macro per taxonomy. Both render a `<ul>` of links
-to the archives, and nothing at all for an empty list:
+`partials/tags.njk` holds one macro per taxonomy, and each renders nothing at
+all for an empty list. Both are one `p.post-categories` of `p-category` links,
+which is the shape the design prints in a feed item's meta line and under an
+entry — `categories` marks each link `rel="category"` and `list` marks each
+`rel="tag"`, so under an entry the two read as one line of what it is filed
+under, categories first:
 
 ```njk
 {% import "partials/tags.njk" as taxonomy with context %}
@@ -612,11 +1156,16 @@ the import above carries `with context`: a macro imported without it cannot see
 
 ## Filters
 
-| Filter               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `date(format, zone)` | Formats a `Date` or a date string. `readable` (the default) gives `2 September 2026`, `html` gives `2026-09-02` for a `<time datetime>`, `year` gives `2026`, `iso` gives the full ISO 8601 instant. A date in a file is a UTC instant; `readable`, `html` and `year` are rendered in the site's `timezone` setting, and `iso` stays the instant. Pass `zone` — an IANA name — to override the setting for one call. A value that is not a date renders as the empty string. |
-| `url`                | Prefixes a root-relative path with the base URL's path, so a site served from a subdirectory links correctly. Eleventy's filter of the same name.                                                                                                                                                                                                                                                                                                                            |
-| `absoluteUrl`        | The same path as a fully qualified URL against the site's `baseUrl`.                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Filter               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `date(format, zone)` | Formats a `Date` or a date string. `readable` (the default) gives `2 September 2026`, `html` gives `2026-09-02` for a `<time datetime>`, `year` gives `2026`, `month` gives `September 2026`, `iso` gives the full ISO 8601 instant. A date in a file is a UTC instant; every format but `iso` is rendered in the site's `timezone` setting, and `iso` stays the instant. Pass `zone` — an IANA name — to override the setting for one call. A value that is not a date renders as the empty string. |
+| `url`                | Prefixes a root-relative path with the base URL's path, so a site served from a subdirectory links correctly. Eleventy's filter of the same name.                                                                                                                                                                                                                                                                                                                                                    |
+| `absoluteUrl`        | The same path as a fully qualified URL against the site's `baseUrl`.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+`date` reads one word rather than parsing it: `{{ "now" | date("year") }}` is
+the year at the moment the page is rendered, in the site's own timezone. It is
+what the footer's copyright line is written with, and it is the one date a page
+has that no file carries.
 
 Nunjucks' own filters — `default`, `join`, `urlencode`, `safe` and the rest —
 are all available. Autoescaping is on, so rendered Markdown is the one thing

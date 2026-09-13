@@ -90,15 +90,16 @@ export function useThemeDirs(environment: Environment, dirs: readonly string[]):
 }
 
 /** How `date` renders a value. */
-export type DateFormat = 'readable' | 'iso' | 'html' | 'year';
+export type DateFormat = 'readable' | 'iso' | 'html' | 'year' | 'month';
 
 /**
  * The filter set, which is part of the semver contract because site templates
  * are written against it.
  *
  * Per decision-11 a date in a file is a UTC instant and the site's `timezone`
- * setting is the lens it is read through, so `readable`, `html` and `year` are
- * rendered in the site's zone and `iso` stays the instant. The zone comes from
+ * setting is the lens it is read through, so `readable`, `html`, `year` and
+ * `month` are rendered in the site's zone and `iso` stays the instant. The
+ * zone comes from
  * the `site` global of the render in hand — Nunjucks calls a filter with the
  * template context as `this`, so nothing has to be threaded through every
  * template — which is what lets the setting change what every page shows
@@ -164,9 +165,14 @@ const MONTHS = [
  *
  * `iso` is the instant, always in UTC, because that is what a `<time
  * datetime>` and a feed want and it must not move when a setting does. The
- * other three are the calendar the reader in `timezone` is on, which is what
+ * other four are the calendar the reader in `timezone` is on, which is what
  * makes a post published at half past midnight in Berlin say 1 October rather
  * than the 30 September UTC was still on.
+ *
+ * `month` is the month that calendar day falls in, "September 2026", which is
+ * what heads a group of an archive page (TASK-85). It is a format rather than
+ * something the archive works out for itself so that the month names are in
+ * one table and a theme can head a group of its own the same way.
  */
 export function formatDate(
   value: unknown,
@@ -187,6 +193,8 @@ export function formatDate(
       return day;
     case 'year':
       return year;
+    case 'month':
+      return `${MONTHS[Number(month) - 1] ?? ''} ${year}`;
     case 'readable':
     default:
       return `${String(Number(dayOfMonth))} ${MONTHS[Number(month) - 1] ?? ''} ${year}`;
@@ -214,8 +222,20 @@ function siteTimezone(context: unknown): string {
   return typeof timezone === 'string' && timezone !== '' ? timezone : DEFAULT_TIMEZONE;
 }
 
+/**
+ * A value as an instant, or `undefined` when it is not one.
+ *
+ * `'now'` is the one word the filter reads rather than parses, for the thing a
+ * page has that no file carries: the year in the footer's copyright line. It is
+ * read at render time rather than at boot so a site left running over New Year
+ * says the new one, and it goes through the same zone lens as every other date,
+ * so a site in Auckland turns the year over when Auckland does. Eleventy themes
+ * spell it the same way, and `docs/eleventy.config.example.js` answers to it
+ * too, so one footer renders identically in both builds.
+ */
 function toDate(value: unknown): Date | undefined {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? undefined : value;
+  if (value === 'now') return new Date();
   if (typeof value === 'string' || typeof value === 'number') {
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;

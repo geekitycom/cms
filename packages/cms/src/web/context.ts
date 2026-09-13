@@ -3,9 +3,11 @@ import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { DEFAULT_TIMEZONE } from '../content/time.ts';
 import { siteImageMarkup } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import type { AuthorContext } from './authors.ts';
+import { feedExcerpt } from './feed-item.ts';
 import { DEFAULT_TAXONOMY_BASES, taxonomyBasesOrDefault, taxonomyRedirectsOf } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 
@@ -123,6 +125,16 @@ export interface DocumentContext {
   categories: string[];
   /** The Markdown body rendered to HTML. Templates print it with `| safe`. */
   content: string;
+  /**
+   * What the document is about in one line of plain text: the `description`
+   * the author wrote, else an excerpt of the rendered body, else empty.
+   *
+   * The very string the feeds publish as a summary, from the same function, so
+   * a feed item and the entry a listing prints for the same post cannot say
+   * two different things (decision-16). Always present, empty included, so a
+   * theme prints it without asking whether it is there.
+   */
+  summary: string;
   /** The document's URL path, the same value as `page.url`. */
   url: string;
   /** Eleventy's `page`. */
@@ -131,6 +143,22 @@ export interface DocumentContext {
   type: string;
   /** Everything else from the front matter, including unmodelled keys. */
   [key: string]: unknown;
+}
+
+/**
+ * One of a post's neighbours by date, as a theme links it: `previous` and
+ * `next` under an entry.
+ *
+ * Two keys rather than the whole document, because that is what the link is —
+ * the words on it and where it goes — and a theme that was handed a second
+ * document context would be a theme that could print a second post by
+ * accident.
+ */
+export interface NeighbourContext {
+  /** The neighbour's title, which is what the link says. */
+  title: string;
+  /** Its URL path. */
+  url: string;
 }
 
 /**
@@ -178,6 +206,10 @@ export function documentContext(
     tags: document.tags,
     categories: document.categories,
     content: images === undefined ? document.html : siteImageMarkup(images, document.html),
+    // The plain-text summary, taken off the document rather than off the
+    // markup above: an excerpt is text, and the `<picture>` a site's image
+    // config puts in the HTML is not something to cut words out of.
+    summary: feedExcerpt(document),
     url: document.permalink,
     type: document.type,
     page: {
@@ -283,6 +315,20 @@ export function postsPerPage(site: SiteData): number {
  */
 export function themeName(site: SiteData): string {
   return typeof site['theme'] === 'string' ? site['theme'].trim() : '';
+}
+
+/**
+ * The zone this site's dates are read in, from the site data, or UTC when it
+ * names none.
+ *
+ * The same lens the `date` filter applies (decision-11), for the things the
+ * CMS rather than a template has to put a date through: which month of an
+ * archive a post belongs to is the same calendar question as which day the
+ * line under it says, and the two must not be answered by different clocks.
+ */
+export function siteTimezone(site: SiteData): string {
+  const timezone = site['timezone'];
+  return typeof timezone === 'string' && timezone !== '' ? timezone : DEFAULT_TIMEZONE;
 }
 
 /** WordPress's Reading choice, as `site.json` spells it. */

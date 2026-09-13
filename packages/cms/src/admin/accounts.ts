@@ -164,6 +164,13 @@ export interface UserProfile {
   readonly bio?: string | undefined;
   /** A picture, as the path or URL it is served at. */
   readonly avatar?: string | undefined;
+  /**
+   * What they do, when they said: the line a theme prints under the name in a
+   * bio, and the `jobTitle` of the JSON-LD `Person` it emits (decision-16).
+   */
+  readonly jobTitle?: string | undefined;
+  /** Where they are, as they wrote it: "Madison, Wisconsin", "Somewhere wet". */
+  readonly location?: string | undefined;
   /** Somewhere else they are, in the order they listed them. */
   readonly links?: readonly ProfileLink[] | undefined;
 }
@@ -426,6 +433,8 @@ export function cleanProfile(profile: UserProfile): UserProfile | undefined {
   const displayName = (profile.displayName ?? '').trim();
   const bio = (profile.bio ?? '').trim();
   const avatar = (profile.avatar ?? '').trim();
+  const jobTitle = (profile.jobTitle ?? '').trim();
+  const location = (profile.location ?? '').trim();
   const links = (profile.links ?? [])
     .map((link) => ({ label: link.label.trim(), href: link.href.trim() }))
     // A link needs somewhere to go; a label it does not have is the URL again,
@@ -437,6 +446,8 @@ export function cleanProfile(profile: UserProfile): UserProfile | undefined {
     ...(displayName === '' ? {} : { displayName }),
     ...(bio === '' ? {} : { bio }),
     ...(avatar === '' ? {} : { avatar }),
+    ...(jobTitle === '' ? {} : { jobTitle }),
+    ...(location === '' ? {} : { location }),
     ...(links.length === 0 ? {} : { links }),
   };
 
@@ -868,6 +879,8 @@ function profileFrom(value: unknown): UserProfile | undefined {
     ...optionalText('displayName', record['displayName']),
     ...optionalText('bio', record['bio']),
     ...optionalText('avatar', record['avatar']),
+    ...optionalText('jobTitle', record['jobTitle']),
+    ...optionalText('location', record['location']),
     links: linksFrom(record['links']),
   });
 }

@@ -920,8 +920,24 @@ detail.
 Templates are Nunjucks (decision-4). The default theme lives in
 `packages/cms/themes/default` and ships inside the package: `layouts/` for the
 base layout, home, post, page, tag archive and 404; `partials/` for the post
-list, the pager and the tag macros; `static/style.css`, served at
+list, the pager, the bio and the tag macros; `static/style.css`, served at
 `/theme/style.css`. It is plain CSS with no build step.
+
+It is the andrewshell.org design (decision-16): a serif body and sans headings
+at an 18px root, warm paper, a rust primary and a blue secondary, one column at
+42rem, links that invert on hover. `layouts/base.njk` is the shell — the skip
+link, a `.global-wrapper` that says when it is at `/`, a header that is the
+site title and tagline on the front page and a small link home everywhere else,
+and a footer with the copyright, the colophon, an RSS link and the site author's
+`rel="me"` links. There is no navigation in the header: the site menu is the
+horizontal list in the bio under an entry, and the footer prints it only on a
+page that has no bio — a listing, the 404 — so it is on every page once.
+Webrings, badges and anything else particular to one site are not in the
+package: they go in a site theme's `footer` block. The source design is light only; the theme adds a dark
+scheme under `prefers-color-scheme: dark`, and
+`packages/cms/src/web/theme-colors.test.ts` reads the custom properties out of
+the stylesheet and proves every text and background pair in both schemes meets
+WCAG 2.2 AA, so a colour change that breaks one fails the build.
 
 A site keeps its own themes under `themes/` — `themesDir` in the config,
 `GEEKITY_THEMES_DIR` at boot — one directory per theme with a `theme.json` in
@@ -957,8 +973,8 @@ of the semver contract; they are documented in
 `apps/demo/themes/demo/` is the worked example, and the demo's
 `content/_data/site.json` says `"theme": "demo"`, so the demo proves the choice
 rather than the default. Beside its `theme.json` it holds two files:
-`layouts/post.njk`, which extends the packaged base layout and adds a byline
-and a reading time, and `static/style.css`, which replaces the packaged
+`layouts/post.njk`, which extends the packaged base layout and adds a byline of
+its own and a reading time, and `static/style.css`, which replaces the packaged
 stylesheet at `/theme/style.css`. Everything else the demo serves still comes
 from the package. `apps/demo/test/site.test.ts` asserts both halves over HTTP:
 the byline, the reading time and the demo stylesheet while the theme is chosen,

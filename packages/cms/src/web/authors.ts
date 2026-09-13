@@ -151,6 +151,10 @@ export interface AuthorContext {
   bio?: string | undefined;
   /** Their picture, as the path or URL it is served at. */
   avatar?: string | undefined;
+  /** What they do, when their profile says. */
+  jobTitle?: string | undefined;
+  /** Where they are, as they wrote it. */
+  location?: string | undefined;
   /** Somewhere else they are, in the order they listed them. */
   links?: readonly ProfileLink[] | undefined;
 }
@@ -171,8 +175,33 @@ export function profileContext(user: User): AuthorContext {
     url: authorHref(user.username),
     ...(profile?.bio === undefined ? {} : { bio: profile.bio }),
     ...(profile?.avatar === undefined ? {} : { avatar: profile.avatar }),
+    ...(profile?.jobTitle === undefined ? {} : { jobTitle: profile.jobTitle }),
+    ...(profile?.location === undefined ? {} : { location: profile.location }),
     ...(profile?.links === undefined ? {} : { links: profile.links }),
   };
+}
+
+/**
+ * The profile behind the site's `author` setting, or `undefined` when it names
+ * nobody this site has.
+ *
+ * What a theme is given as `siteAuthor` on a page that is about nobody in
+ * particular (decision-16): the site's own identity, the same object a byline
+ * is, so the visible h-card, the footer's `rel="me"` links and the structured
+ * data all read one profile and cannot drift.
+ *
+ * Strict where {@link authorContext} is forgiving, and deliberately: a byline
+ * prints the name a file gives whether or not anybody answers to it, because
+ * somebody did write the post. A site author that resolves to nobody has
+ * nothing behind it — no picture, no bio, nowhere to link — so it is absent
+ * rather than a lone name, and a theme writes `{% if siteAuthor %}` once.
+ */
+export function siteAuthorContext(
+  users: readonly User[],
+  author: string | undefined,
+): AuthorContext | undefined {
+  const user = userForAuthor(users, author);
+  return user === undefined ? undefined : profileContext(user);
 }
 
 /**

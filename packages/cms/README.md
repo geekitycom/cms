@@ -549,7 +549,9 @@ bio, the avatar and the links on their user record, edited on `/admin/users`
 and stored in `data/users.json` — the same profile the author archive is headed
 with, so a page and an actor cannot say different things about somebody. Their
 `preferredUsername` is their login, and `alsoKnownAs` lists every URL they
-answer to: the actor id, the archive and `/@{username}`.
+answer to: the actor id, the archive and `/@{username}`. The profile holds two
+more fields the actor does not carry — a job title and a location — which are
+there for a theme to print beside the name.
 
 The avatar is a path like `/uploads/2026/09/me.png`, stored with the site's
 other uploads. The actor carries it as an absolute URL resolved against the
@@ -1131,6 +1133,21 @@ provider.failNext(2); // watch the retry without waiting for it
 `mail` also takes `attempts`, `backoffMs` and `logger`, which is how a test
 proves the retry without spending ten seconds on it.
 
+## The archive page
+
+A page carrying `archive: true` in its front matter lists every published post
+under its own words, grouped by the month it was published in, newest month
+first and newest post first inside a month. Nothing paginates it: an archive
+page is a way of finding one piece of writing rather than a listing to read
+through. Drafts and posts whose date has not arrived are absent, as they are
+everywhere else.
+
+The default theme draws it from `partials/archive.njk`, and the CMS hands the
+layout `archiveMonths` — `{ month, posts }` per month, the month already read
+through the site's `timezone` so the heading and the dates agree. Eleventy
+ignores the key, and a static build of the same directory publishes the page as
+an ordinary page.
+
 ## The contact form
 
 A page carrying `contact: true` in its front matter renders a contact form
@@ -1403,7 +1420,7 @@ shadow the login form.
 | `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                           |
 | `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                                  |
 | `/admin/users/email`                             | `POST` only. Sets or clears the email address on the row the form names.                  |
-| `/admin/users/profile`                           | `POST` only. Saves the display name, bio, avatar and links on the row the form names.     |
+| `/admin/users/profile`                           | `POST` only. Saves the whole public profile on the row the form names.                    |
 | `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the row the form names.                       |
 | `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice reaches the row: as they arrive, hourly or daily. |
 | `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                             |
@@ -1586,9 +1603,10 @@ choice is WordPress's own, and so are its two answers:
 - **Your latest posts.** The archive at `/`, paginated at `/page/N/`. This is
   the default, and it is what an empty `homepage` means.
 - **A static page.** The page is served at `/`, its own permalink answers `301`
-  to `/` so the front page has one URL, and the menu links it at `/`. A theme
-  may lay it out on its own with `layouts/front-page.njk`, which falls
-  back to the page layout.
+  to `/` so the front page has one URL, and the menu links it at `/`. The
+  default theme draws it with `layouts/front-page.njk` — the page's own words,
+  then `Recent Posts`, then the line of links and the bio — and a theme lays it
+  out differently by overriding that one file.
 
 With a homepage set, a second pick gives the listing a page of its own: the
 **posts page**. Its permalink carries the listing, with the page's own title
@@ -1673,12 +1691,21 @@ would have done anyway.
 | `removeImageVariants`              | Take a source's derived directory away.                                              |
 | `responsiveImages(html, describe)` | Rewrite `<img src="/uploads/…">` as `<picture>`. Pure: hand it any lookup.           |
 | `siteImageMarkup(config, html)`    | The same, over one site's own records, deriving in the background for a record miss. |
+| `siteIcons(config, avatar)`        | The head's icon links for a site's avatar: `{ rel, sizes, href }`, or none at all.   |
 
 `describeImage` is synchronous and cached because it is called once per image
 while a page renders, and decision-10 forbids probing an image file at render
 time. Its cache entry outlives the sidecar on purpose: `data/images/` is
 disposable, so a page whose variants have been swept away keeps rendering the
 markup that asks for them back, and the first request for each one rebuilds it.
+
+The site's icons are derived copies of the same kind, and `siteIcons` is how a
+head gets at them: three square PNGs, `icon` at 32 and 16 pixels and
+`apple-touch-icon` at 180, cropped from the middle of the site's avatar and
+encoded the first time a browser asks for one. It answers an empty list — and
+the packaged theme then links no icon at all — when the site has no avatar, when
+its avatar is a file no icon can be made of, or when `imageOptimization` is off,
+so a head never advertises a URL this server would answer 404 for.
 
 `documentContext(document, images)` is where the rewrite is applied. Passing the
 config is what turns the page's `content` into `<picture>` markup; the feeds,
@@ -2522,13 +2549,35 @@ The admin is not themed. Its templates and its static files live in a tree of
 their own with a loader of their own, deliberately off this search path, so no
 theme can shadow the login form or the CSRF field inside it.
 
+The packaged theme is the andrewshell.org design (decision-16). `base.njk` is
+its shell: a skip link, a `.global-wrapper` carrying `data-is-root-path="true"`
+at `/` only, a header that is the site title and tagline on the front page and a
+small link home on every other, `<main id="main">`, and a footer with the
+copyright year, the site author, the colophon, an RSS link and one `rel="me"`
+link per link on the site author's profile. Nothing particular to one site is in
+it — webrings and badges belong in a site theme's `footer` block. Its head
+carries a description, Open Graph and Twitter card tags, icons derived from the
+site's avatar, and one JSON-LD `@graph` from `partials/jsonld.njk`: that partial
+is all the structured data the theme emits, there is no Microdata anywhere, and
+a site that wants a different graph replaces the one file. The stylesheet
+is a serif body and sans headings at an 18px root, one column at 42rem, warm
+paper with a rust primary and a blue secondary, and a second scheme under
+`prefers-color-scheme: dark` that redefines the same `--color-*` tokens on dark
+paper. Both meet WCAG 2.2 AA, checked by a test that reads the custom properties
+out of the stylesheet and computes the ratios.
+
 The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`,
 `content`, `page.url`, and every front matter key the file carried — plus
 `site`, which is `content/_data/site.json`. It is part of the semver contract.
 The one key that is not the front matter's own string is `author`: it is the
 person the file names, resolved against the site's users, with `author.name` to
 print and `author.url` — their archive at `/author/{username}/` — to link to
-when the name is one of them. The full table of context keys, blocks and
+when the name is one of them. `siteAuthor` is the same object answering a
+different question — who the page in front of the reader is by, which is the
+entry's author on a document, the archive's person on an author archive and the
+profile behind the site's `author` setting everywhere else — so the bio, the
+`rel="me"` links and any structured data a theme emits all read one profile.
+The full table of context keys, blocks and
 filters is in [`themes/default/README.md`](./themes/default/README.md).
 
 Rendering is also callable without a request:

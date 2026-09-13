@@ -160,7 +160,7 @@ describe('leaving a comment', () => {
     await approve(cms, held[0]?.id ?? '');
     const html = await postPage(cms);
     assert.match(html, /Good post\./);
-    assert.match(html, /class="conversation"/);
+    assert.match(html, /<div id="comments" class="comments-area">/);
     assert.ok(!html.includes('ada@example.com'), 'the email is never shown');
 
     // And the file says the same thing, because the file is the comment.
@@ -244,7 +244,7 @@ describe('leaving a comment', () => {
     await approve(cms, second?.id ?? '');
 
     const html = await postPage(cms);
-    const nested = /<ol class="comment-replies">[\s\S]*?Answering Ada\.[\s\S]*?<\/ol>/.test(html);
+    const nested = /<ol class="children">[\s\S]*?Answering Ada\.[\s\S]*?<\/ol>/.test(html);
     assert.ok(nested, `the answer is nested under what it answers: ${html}`);
   });
 

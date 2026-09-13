@@ -198,7 +198,7 @@ describe('the comments screen', () => {
 
     const html = await (await cms.app.request('/2026/09/hello-world/')).text();
     assert.ok(
-      /<ol class="comment-replies">[\s\S]*?Thanks, <strong>Ada<\/strong>[\s\S]*?<\/ol>/.test(html),
+      /<ol class="children">[\s\S]*?Thanks, <strong>Ada<\/strong>[\s\S]*?<\/ol>/.test(html),
       `the reply is nested under the comment: ${html}`,
     );
   });

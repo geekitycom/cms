@@ -1,40 +1,81 @@
+{#
+  One post, as the source design's `content-essay.php` draws it (decision-16,
+  TASK-83): `article.blog-post.h-entry`, the title as its `p-name`, the body
+  and the Published line together in one `section.e-content`, then a rule and a
+  footer holding the bio. The neighbouring posts, the conversation and the
+  comment form follow the entry.
+
+  The Published line is inside the `e-content` on purpose. It is what the
+  source theme does, and it is what makes a reader who copies the words out
+  take the date and the permalink with them.
+#}
 {% extends "layouts/base.njk" %}
 {% import "partials/tags.njk" as taxonomy with context %}
-{% import "partials/byline.njk" as byline %}
+
+{#- Who the bio credits: the person the file names, and otherwise whoever the
+    site is by, which is what the source theme's bio reads. A post naming
+    nobody on a site whose author setting names nobody either has no bio at
+    all. It is set out here rather than in the block because
+    `layouts/base.njk` reads it too — a page with a bio carries the site menu
+    in it, and the page footer prints the menu only where there is none. -#}
+{% set bioAuthor = author or siteAuthor %}
 
 {% block content %}
-<article class="post h-entry">
-  <header class="post-header">
-    <h1 class="post-title p-name">{{ title }}</h1>
-    {% if date or author %}
-    <p class="post-meta">
-      {%- if date %}
-      Published
-      <time class="dt-published" datetime="{{ date | date("iso") }}">{{ date | date }}</time>
-      {%- if updated %}
-      &middot; updated
-      <time class="dt-updated" datetime="{{ updated | date("iso") }}">{{ updated | date }}</time>
-      {%- endif %}
-      {%- endif %}
-      {#- Who wrote it, linked to their archive (TASK-67). -#}
-      {%- if author %}
-      {% if date %}&middot; {% endif %}by {{ byline.line(author) }}
-      {%- endif %}
-    </p>
-    {% endif %}
+{% set entryUrl = page.url or url %}
+<article class="blog-post h-entry">
+  <header>
+    <h1 class="p-name">{{ title }}</h1>
   </header>
 
-  <div class="post-body e-content">
+  <section class="e-content">
     {{ content | safe }}
-  </div>
+    <p class="entry-meta">
+      {#- A post tagged `indienews` opens the line with the link that submits
+          it there, which is how IndieNews is told the post is for it. -#}
+      {%- if "indienews" in tags %}
+      <a class="u-category small" href="https://news.indieweb.org/en">#indienews</a>
+      {%- endif %}
+      {%- if date %}
+      <a href="{{ entryUrl | url }}" class="u-url"><time class="small dt-published" datetime="{{ date | date("iso") }}">Published {{ date | date }}</time></a>
+      {%- endif %}
+      {#- Updated only when it is a different day in the site's own timezone:
+          a typo fixed an hour after publishing is not news. -#}
+      {%- if updated and (not date or (updated | date("html")) != (date | date("html"))) %}
+      {% if date %}<br>{% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date }}</time>
+      {%- endif -%}
+    </p>
+  </section>
 
-  {% if tags.length or categories.length %}
-  <footer class="post-footer">
-    {{ taxonomy.categories(categories) }}
-    {{ taxonomy.list(tags) }}
+  {# What it is filed under, inside the entry so that each link is a
+     `p-category` of it: the categories first, then the tags. #}
+  {{ taxonomy.categories(categories) }}
+  {{ taxonomy.list(tags) }}
+
+  {#- The rule and the footer are the bio's own: a post nobody is credited with
+      ends at its words rather than at an empty box. -#}
+  {% if bioAuthor %}
+  <hr>
+  <footer>
+    {% include "partials/bio.njk" %}
   </footer>
   {% endif %}
 </article>
+
+{# The post either side of this one. Each is on the context only when there is
+   one, so the ends of the archive draw one arrow and a site of a single post
+   draws none. #}
+{% if previous or next %}
+<nav class="blog-post-nav">
+  <ul>
+    {% if previous %}
+    <li><a rel="prev" href="{{ previous.url | url }}">&larr; {{ previous.title }}</a></li>
+    {% endif %}
+    {% if next %}
+    <li><a rel="next" href="{{ next.url | url }}">{{ next.title }} &rarr;</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
 
 {# Only a post that has been replied to, liked or boosted has one of these. #}
 {% if conversation %}
