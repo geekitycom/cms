@@ -23,7 +23,8 @@ import { adminMenu } from './menu.ts';
 import { MESSAGES_PATH, mountMessagesScreen, unreadMessages } from './messages.ts';
 import { mountPreview } from './preview.ts';
 import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
-import { AVATAR_PATH, mountSettings } from './settings.ts';
+import { AVATAR_PATH } from './settings-general.ts';
+import { mountSettings } from './settings-pages.ts';
 import {
   ADMIN_PREFIX,
   clearSessionCookie,

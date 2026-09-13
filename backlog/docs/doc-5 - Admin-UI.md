@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 02:19'
+updated_date: '2026-09-13 02:47'
 ---
 # Admin UI
 
@@ -29,7 +29,7 @@ know whether it is the only one of its kind.
 | Comments   | All comments                                 |
 | Messages   | All messages                                 |
 | Users      | All users, Add new                           |
-| Settings   | General (the pages TASK-73 splits it into)   |
+| Settings   | General, Reading, Permalinks, Discussion, Email, Federation |
 | Federation | Followers                                    |
 
 The terms are under Posts rather than at the top level because that is what
@@ -61,7 +61,12 @@ instead of becoming a sliver.
 | `/admin/tags`, `/admin/categories` | every term in use with its post and file counts; rename, merge, delete (under Posts in the menu) |
 | `/admin/comments` | pending, approved and spam, with approve, spam, delete and reply on every row |
 | `/admin/messages` | what the contact form on a page collected: read, mark read, delete |
-| `/admin/settings` | site title, tagline, base URL, timezone, posts per page, comments on/off and closing window, actor handle and type, the Akismet key, the mail provider and its credential, the contact address |
+| `/admin/settings` | Settings > General: site title, tagline, author, base URL, time zone, language, and the avatar |
+| `/admin/settings/reading` | posts per page, the site menu, the notify server |
+| `/admin/settings/permalinks` | the tag and category bases, and the archive redirects the taxonomy screens recorded |
+| `/admin/settings/discussion` | comments on or off and the closing window, webmentions sent and received, the Akismet key |
+| `/admin/settings/email` | the mail provider, the From line and reply-to, the contact address, the credential and the test message |
+| `/admin/settings/federation` | the actor handle and type, and the relays the site subscribes to |
 | `/admin/users` | list, set each user's email, which notices go to it and how often, change your own password (single role: admin) |
 | `/admin/users/new` | the add form, Users > Add new |
 | `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
@@ -92,10 +97,14 @@ instead of becoming a sliver.
 
 ## Settings
 
-- Every setting is a field of one form that rewrites `content/_data/site.json` (decision-9), with two exceptions: the avatar, which is an image, and the Akismet key, which is a credential. Both are their own pair of forms — save and remove — because neither can travel in that body, and because a rejected one must not lose an edit to the title.
+- Settings is six pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (posts per page, the site menu, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message) and **Federation** (the actor handle and type, and the relays). `/admin/settings` is the General page, which is where the Settings heading lands.
+- Every page is one form of its own with its own POST, and every one of them rewrites `content/_data/site.json` through the same update (decision-9). A page writes the fields it carries and no others, onto the file as re-read inside the write, so two people saving two different pages at the same moment both land and a key the settings do not model is kept. A page validates its own fields and no others: a refused save comes back on the page it was sent from, with the problems on the fields that have them, having written nothing at all.
+- Three things are not fields of any form, and each is its own pair of forms — save and remove — because none can travel in that body and because a rejected one must not lose an edit beside it: the **avatar**, on General; the **Akismet key**, on Discussion; and the **mail credential**, on Email.
 - **Spam checking.** The Akismet key lives in `data/akismet.json` at mode `0600` rather than in `site.json`, which is public and in git. Saving one checks it with Akismet's `verify-key` first; the panel then says connected, "does not recognise this key", "could not be reached", or not connected, and shows the last four characters rather than the key. Remove key turns Akismet off. See doc-6.
-- **Email.** How the site sends mail is three settings on the main form — `mailProvider` (`none`, `brevo` or `smtp`), the From name and address, and the reply-to — and one credential below it. The Brevo API key and the SMTP host, port, TLS flag, user and password live in `data/mail.json` at mode `0600`, never in `site.json`, and are its own pair of forms for the reason the Akismet key is. Neither secret is printed back: the panel shows the last four characters of the key and the non-secret half of the SMTP connection, and a blank secret keeps the stored one. **Send test email** takes an address and sends the theme's `test` message through the whole chain, reporting the provider's own answer and its message id on the flash. With no configuration, nothing is sent and every feature that emails still succeeds. See the Email section of the package README.
-- **The contact address.** `contactEmail`, on the same form under Email, is where a message from a page's contact form is sent, with reply-to set to whoever wrote it. Empty falls back to the first admin with an email address, by username, so a fresh site with a mail credential takes messages without anybody visiting the field. It is read when a message arrives and is never put on a render context, so it cannot appear in the HTML of the page the form is on however a theme is written.
+- **Email.** How the site sends mail is four settings on the Email form — `mailProvider` (`none`, `brevo` or `smtp`), the From name and address, and the reply-to — and one credential below it. The Brevo API key and the SMTP host, port, TLS flag, user and password live in `data/mail.json` at mode `0600`, never in `site.json`. Neither secret is printed back: the panel shows the last four characters of the key and the non-secret half of the SMTP connection, and a blank secret keeps the stored one. **Send test email** takes an address and sends the theme's `test` message through the whole chain, reporting the provider's own answer and its message id on the flash. With no configuration, nothing is sent and every feature that emails still succeeds. See the Email section of the package README.
+- **The contact address.** `contactEmail`, on the Email page, is where a message from a page's contact form is sent, with reply-to set to whoever wrote it. Empty falls back to the first admin with an email address, by username, so a fresh site with a mail credential takes messages without anybody visiting the field. It is read when a message arrives and is never put on a render context, so it cannot appear in the HTML of the page the form is on however a theme is written.
+- **Side effects stay with the field.** Saving General or Federation tells the followers when what it changed is part of the actor's profile; saving Federation reconciles the relay list, sending a `Follow` for a line added and an `Undo` for one removed; saving or removing the avatar tells the followers too. The flash says what was sent.
+- The code follows the same seam: `src/admin/settings.ts` is the settings themselves and nothing about a screen, `settings-page.ts` is what every page is made of, `settings-pages.ts` is the list, and each page is its own module beside its own template under `admin/layouts/settings/`.
 
 ## Auth
 

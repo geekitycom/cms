@@ -1,0 +1,84 @@
+{# /admin/settings: what the site is called, where it lives, and its picture. #}
+{% extends "layouts/settings/page.njk" %}
+
+{% block settingsFields %}
+  <label for="settings-title">Title</label>
+  <input id="settings-title" name="{{ fields.title }}" type="text" value="{{ form.title }}" required autofocus />
+  {% if problems.title %}<p class="admin-field-error">{{ problems.title }}</p>{% endif %}
+
+  <label for="settings-tagline">Tagline</label>
+  <input id="settings-tagline" name="{{ fields.tagline }}" type="text" value="{{ form.tagline }}" />
+  <p class="admin-hint">One line, shown under the title and used as the feed subtitle.</p>
+
+  <label for="settings-author">Author</label>
+  <input id="settings-author" name="{{ fields.author }}" type="text" value="{{ form.author }}" />
+  <p class="admin-hint">The name on the feeds.</p>
+
+  <label for="settings-base-url">Base URL</label>
+  <input
+    id="settings-base-url"
+    name="{{ fields.baseUrl }}"
+    type="text"
+    value="{{ form.baseUrl }}"
+    inputmode="url"
+    {% if baseUrlOverridden %}readonly disabled{% endif %}
+  />
+  {% if problems.baseUrl %}<p class="admin-field-error">{{ problems.baseUrl }}</p>{% endif %}
+  <p class="admin-hint">
+    In effect: <code>{{ baseUrlInEffect }}</code>. {{ baseUrlNote }}
+  </p>
+
+  <label for="settings-timezone">Time zone</label>
+  <input id="settings-timezone" name="{{ fields.timezone }}" type="text" value="{{ form.timezone }}" required />
+  {% if problems.timezone %}<p class="admin-field-error">{{ problems.timezone }}</p>{% endif %}
+  <p class="admin-hint">An IANA name, such as <code>Europe/London</code> or <code>UTC</code>.</p>
+
+  <label for="settings-language">Language</label>
+  <input id="settings-language" name="{{ fields.language }}" type="text" value="{{ form.language }}" required />
+  {% if problems.language %}<p class="admin-field-error">{{ problems.language }}</p>{% endif %}
+  <p class="admin-hint">A BCP 47 tag, such as <code>en</code> or <code>en-GB</code>. It is the page's <code>lang</code> and the feeds' language.</p>
+{% endblock %}
+
+{% block settingsPanels %}
+  {# The avatar is its own pair of forms: a file cannot travel in the
+     urlencoded body the settings form posts, and a rejected image must not
+     take an edit to the title down with it. #}
+  <section class="admin-settings admin-avatar-panel">
+    <h2>Avatar</h2>
+
+    <div class="admin-avatar-current">
+      {% if avatar %}
+        <img class="admin-avatar admin-avatar-large" src="{{ avatar }}" alt="The site's avatar" width="96" height="96" />
+      {% else %}
+        <span class="admin-avatar admin-avatar-large admin-avatar-blank" aria-hidden="true"></span>
+      {% endif %}
+
+      <div class="admin-avatar-forms">
+        <form method="post" action="{{ avatarUrl }}" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          <label for="settings-avatar">Image</label>
+          <input id="settings-avatar" name="{{ avatarFields.file }}" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required />
+          <p class="admin-settings-buttons">
+            <button type="submit">Upload avatar</button>
+          </p>
+        </form>
+
+        {% if avatar %}
+          <form method="post" action="{{ avatarUrl }}">
+            <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+            <input type="hidden" name="{{ avatarFields.action }}" value="{{ avatarRemove }}" />
+            <p class="admin-settings-buttons">
+              <button type="submit">Remove avatar</button>
+            </p>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <p class="admin-hint">
+      A PNG, JPEG, WebP or GIF, stored with the site's other uploads. It is the
+      picture on the site's fediverse profile, and saving or removing it tells
+      the followers.
+    </p>
+  </section>
+{% endblock %}

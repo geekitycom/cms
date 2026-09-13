@@ -9,6 +9,7 @@ import { Accept, Application, CryptographicKey, Follow, Reject } from '@fedify/v
 
 import { csrfField, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
+import { saveSettings as saveSettingsPage } from '../admin/__testing__/settings.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
@@ -151,33 +152,9 @@ async function site(options: { relays?: readonly string[]; dataDir?: string } = 
   return { cms, contentDir, dataDir };
 }
 
-/** The fields the settings form submits, with the values a relay test does not care about. */
-const SETTINGS_FORM: Record<string, string> = {
-  title: 'Geekity',
-  tagline: '',
-  base_url: BASE_URL,
-  timezone: 'UTC',
-  language: 'en',
-  posts_per_page: '10',
-  author: '',
-  actor_handle: 'blog',
-  actor_type: 'Person',
-  tag_base: 'tag',
-  category_base: 'category',
-  comments: '1',
-  comments_close_after_days: '14',
-  notify_server: '',
-  mail_provider: 'none',
-  relays: '',
-};
-
-/** Save the settings form the way a browser would. */
+/** Save the Federation settings page the way a browser would. */
 async function saveSettings(agent: Browser, fields: Record<string, string>): Promise<Response> {
-  const html = await (await agent.get('/admin/settings')).text();
-  const token = csrfField(html);
-  assert.ok(token !== undefined, 'the settings form carried a CSRF token');
-
-  return agent.post('/admin/settings', { csrf_token: token, ...SETTINGS_FORM, ...fields });
+  return saveSettingsPage(agent, 'federation', fields);
 }
 
 /** Everything sent whose activity is of this type. */

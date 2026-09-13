@@ -30,7 +30,12 @@ export const ADMIN_TEMPLATES = {
   media: 'layouts/media.njk',
   comments: 'layouts/comments.njk',
   messages: 'layouts/messages.njk',
-  settings: 'layouts/settings.njk',
+  settingsGeneral: 'layouts/settings/general.njk',
+  settingsReading: 'layouts/settings/reading.njk',
+  settingsPermalinks: 'layouts/settings/permalinks.njk',
+  settingsDiscussion: 'layouts/settings/discussion.njk',
+  settingsEmail: 'layouts/settings/email.njk',
+  settingsFederation: 'layouts/settings/federation.njk',
   users: 'layouts/users.njk',
   federation: 'layouts/federation.njk',
 } as const;

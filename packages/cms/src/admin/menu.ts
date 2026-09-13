@@ -21,7 +21,7 @@ import { newEditorPath, PAGE_KIND, POST_KIND } from './documents.ts';
 import { FEDERATION_PATH } from './federation.ts';
 import { MEDIA_PATH } from './media.ts';
 import { MESSAGES_PATH } from './messages.ts';
-import { SETTINGS_PATH } from './settings.ts';
+import { settingsPagePath } from './settings-page.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { CATEGORY_KIND, TAG_KIND } from './taxonomy.ts';
 import { ADD_USER_PATH, USERS_PATH } from './users.ts';
@@ -105,8 +105,16 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     { child: 'all', label: 'All users', url: USERS_PATH },
     { child: 'new', label: 'Add new', url: ADD_USER_PATH },
   ]),
-  // One child until TASK-73 splits the settings screen into its pages.
-  section('settings', 'Settings', [{ child: 'general', label: 'General', url: SETTINGS_PATH }]),
+  // WordPress's own pages, in its own order. General is first because the
+  // heading lands on the first child and General is `/admin/settings` itself.
+  section('settings', 'Settings', [
+    { child: 'general', label: 'General', url: settingsPagePath('general') },
+    { child: 'reading', label: 'Reading', url: settingsPagePath('reading') },
+    { child: 'permalinks', label: 'Permalinks', url: settingsPagePath('permalinks') },
+    { child: 'discussion', label: 'Discussion', url: settingsPagePath('discussion') },
+    { child: 'email', label: 'Email', url: settingsPagePath('email') },
+    { child: 'federation', label: 'Federation', url: settingsPagePath('federation') },
+  ]),
   section('federation', 'Federation', [
     { child: 'followers', label: 'Followers', url: FEDERATION_PATH },
   ]),

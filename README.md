@@ -459,8 +459,8 @@ but only when the canonical URL resolves, so a missing address 404s straight
 away instead of bouncing first. `/page/1/` redirects to `/`.
 
 The two archive bases are settings. `tag` and `category` are WordPress's, so a
-site imported from it keeps the URLs it published; the settings screen moves
-either one, and every link, feed and hashtag follows.
+site imported from it keeps the URLs it published; the Permalinks settings page
+moves either one, and every link, feed and hashtag follows.
 
 Documents are resolved after every registered route has failed to match, so
 routes a site adds — and the admin and federation routes of later milestones —
@@ -665,12 +665,20 @@ offered.
 
 ## Site settings
 
-`/admin/settings` holds the values that are a site's own rather than a post's:
-title, tagline, base URL, time zone, language, posts per page, the tag and
-category archive bases, the site menu, the ActivityPub actor handle and type,
-the relays the site subscribes to, the notify server the feeds advertise, how
-the site sends email, and the site's avatar. They live in
+`/admin/settings` holds the values that are a site's own rather than a post's,
+on six pages under the Settings menu: **General** (title, tagline, author, base
+URL, time zone, language and the avatar), **Reading** (posts per page, the site
+menu, the notify server the feeds advertise), **Permalinks** (the tag and
+category archive bases), **Discussion** (comments and when they close,
+webmentions sent and received), **Email** (how the site sends mail and where a
+message written to it goes) and **Federation** (the ActivityPub actor handle and
+type, and the relays the site subscribes to). They live in
 `content/_data/site.json`, which is published with the site and in git.
+
+Each page is its own form saving its own fields. A page writes the settings it
+carries onto the file as it reads at that moment and validates only what it
+shows, so two pages saved at once both land, and a refused save comes back on
+the page it came from having written nothing.
 
 The time zone is the one setting that changes what a page says rather than what
 it holds. Every date the CMS writes into a file is a UTC instant ending in `Z`;
@@ -682,7 +690,7 @@ Changing it moves what every page shows on the next request and moves nothing
 on disk, and it cannot move a URL that already exists. The package README has
 [the whole rule](packages/cms/README.md#dates-and-the-timezone-setting).
 
-**`content/_data/site.json` is the source.** The settings screen reads that
+**`content/_data/site.json` is the source.** Every settings page reads that
 file, validates what was typed, and writes it back — to a temporary file in the
 same directory, renamed over the old one, with the read and the write as one
 step nothing else writing that file can get between. Nothing else remembers a
@@ -777,7 +785,7 @@ is not. `mailProvider` picks `none`, Brevo's transactional API or any SMTP
 server, and the From name, From address and reply-to go in `site.json` with
 everything else — but the Brevo API key and the SMTP host, port, user and
 password live in `data/mail.json` at mode `0600`, which is private and out of
-git, and they have a pair of forms of their own on the same screen. Neither
+git, and they have a pair of forms of their own on the Email page. Neither
 secret is ever printed back into the page: the panel shows the last four
 characters of the key and the host and user of the SMTP connection, and leaving
 a secret blank keeps the one already stored. A **Send test email** button sends
@@ -788,7 +796,7 @@ working. See [Email][email] in the package README.
 [email]: packages/cms/README.md#email
 
 The avatar is not one of those fields, because it is a file: it has a pair of
-forms of its own on the same screen, posting to `POST /admin/settings/avatar` —
+forms of its own on the General page, posting to `POST /admin/settings/avatar` —
 one multipart form uploads an image, the other takes it down again. The image
 goes through the same rules as an editor upload, with one more on top of them:
 it has to be an image, so a PDF the site is happy to accept as an upload is

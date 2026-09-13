@@ -196,28 +196,14 @@ export {
   ACTOR_HANDLE_PATTERN,
   LANGUAGE_TAG_PATTERN,
   ACTOR_TYPES,
-  AKISMET_FIELDS,
-  AKISMET_PATH,
-  AKISMET_REMOVE,
-  akismetPanel,
-  AVATAR_FIELDS,
-  AVATAR_PATH,
-  AVATAR_REMOVE,
   DEFAULT_SITE_SETTINGS,
   effectiveBaseUrl,
   EMAIL_PATTERN,
   formFromSettings,
-  MAIL_FIELDS,
-  MAIL_PATH,
-  MAIL_REMOVE,
-  MAIL_TEST_FIELDS,
-  MAIL_TEST_PATH,
-  MAIL_TEST_TEMPLATE,
-  mailPanel,
   migrateSettingsToFile,
-  mountSettings,
   profileChanged,
   readSiteSettings,
+  SETTINGS_FIELD_NAMES,
   SETTINGS_FIELDS,
   SETTINGS_PATH,
   settingsFromForm,
@@ -230,13 +216,31 @@ export {
   updateSiteSettings,
   writeSiteJson,
 } from './settings.ts';
-export type {
-  MountSettingsOptions,
-  SettingsField,
-  SettingsForm,
-  SettingsProblems,
-  SiteSettings,
-} from './settings.ts';
+export type { SettingsField, SettingsForm, SettingsProblems, SiteSettings } from './settings.ts';
+export { bodyField, mountSettingsPage, settingsPagePath, settingsScreen } from './settings-page.ts';
+export type { MountSettingsOptions, SettingsPage, SubmittedBody } from './settings-page.ts';
+export { mountSettings, SETTINGS_PAGES } from './settings-pages.ts';
+export { AVATAR_FIELDS, AVATAR_PATH, AVATAR_REMOVE, GENERAL_SETTINGS } from './settings-general.ts';
+export { READING_SETTINGS } from './settings-reading.ts';
+export { PERMALINKS_SETTINGS } from './settings-permalinks.ts';
+export {
+  AKISMET_FIELDS,
+  AKISMET_PATH,
+  AKISMET_REMOVE,
+  akismetPanel,
+  DISCUSSION_SETTINGS,
+} from './settings-discussion.ts';
+export {
+  EMAIL_SETTINGS,
+  MAIL_FIELDS,
+  MAIL_PATH,
+  MAIL_REMOVE,
+  MAIL_TEST_FIELDS,
+  MAIL_TEST_PATH,
+  MAIL_TEST_TEMPLATE,
+  mailPanel,
+} from './settings-email.ts';
+export { FEDERATION_SETTINGS } from './settings-federation.ts';
 export {
   addUserProblems,
   changePasswordProblems,

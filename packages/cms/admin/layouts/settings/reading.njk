@@ -1,0 +1,29 @@
+{# /admin/settings/reading: what a visitor is shown, and who is told when it
+   changes. #}
+{% extends "layouts/settings/page.njk" %}
+
+{% block settingsFields %}
+  <label for="settings-posts-per-page">Posts per page</label>
+  <input id="settings-posts-per-page" name="{{ fields.postsPerPage }}" type="text" inputmode="numeric" value="{{ form.postsPerPage }}" required autofocus />
+  {% if problems.postsPerPage %}<p class="admin-field-error">{{ problems.postsPerPage }}</p>{% endif %}
+  <p class="admin-hint">How many posts a listing page holds, on the home page and on every archive.</p>
+
+  <label for="settings-navigation">Menu</label>
+  <textarea id="settings-navigation" name="{{ fields.navigation }}" rows="4" spellcheck="false">{{ form.navigation }}</textarea>
+  {% if problems.navigation %}<p class="admin-field-error">{{ problems.navigation }}</p>{% endif %}
+  <p class="admin-hint">
+    One item per line, written <code>Label | URL</code> &mdash; for example
+    <code>About | /about/</code> or <code>Mastodon | https://example.social/@me</code>.
+    They are the menu in the site header, in this order. A page can put itself
+    on the end of it by ticking <em>Show in navigation</em> in the editor.
+  </p>
+
+  <label for="settings-notify-server">Notify server</label>
+  <input id="settings-notify-server" name="{{ fields.notifyServer }}" type="text" value="{{ form.notifyServer }}" inputmode="url" />
+  {% if problems.notifyServer %}<p class="admin-field-error">{{ problems.notifyServer }}</p>{% endif %}
+  <p class="admin-hint">
+    An rssCloud and WebSub server, told whenever a feed changes so subscribers
+    hear at once instead of waiting for their next poll. Every feed advertises
+    it. Leave it empty for none.
+  </p>
+{% endblock %}

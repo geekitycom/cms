@@ -1,31 +1,13 @@
 import { statSync } from 'node:fs';
 import path from 'node:path';
 
-import type { Context, Hono } from 'hono';
-
-import {
-  readAkismetKey,
-  removeAkismetKey,
-  verifyAkismetKey,
-  writeAkismetKey,
-} from '../comments/akismet.ts';
-import type { AkismetKeyRecord } from '../comments/akismet.ts';
 import { DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from '../comments/policy.ts';
 import type { ResolvedConfig } from '../config.ts';
-import type { GeekityEnv } from '../env.ts';
 import {
   readFileIfPresentSync,
   updateFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
-import type { DeliveryReport } from '../federation/delivery.ts';
-import type { RelaySyncReport } from '../federation/relays.ts';
-import {
-  readMailCredentials,
-  removeMailCredentials,
-  writeMailCredentials,
-} from '../mail/credentials.ts';
-import type { MailCredentials } from '../mail/credentials.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
@@ -38,74 +20,14 @@ import {
   taxonomyRedirectsOf,
 } from '../web/taxonomy.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from '../web/taxonomy.ts';
-import type { AdminRender } from './documents.ts';
-import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import type { AdminStore, LegacySetting } from './store.ts';
-import { ADMIN_TEMPLATES } from './templates.ts';
-import { refusedUpload, storeUpload } from './uploads.ts';
 
-/** Where the settings screen lives. */
+/**
+ * Where the settings live: the General page, and the root every other settings
+ * page hangs off ({@link settingsPagePath}).
+ */
 export const SETTINGS_PATH = `${ADMIN_PREFIX}/settings`;
-
-/** Where the avatar's upload form and its Remove button post. */
-export const AVATAR_PATH = `${SETTINGS_PATH}/avatar`;
-
-/** The fields those two forms submit. */
-export const AVATAR_FIELDS = { file: 'avatar', action: 'action' } as const;
-
-/** The {@link AVATAR_FIELDS.action} that takes the avatar down again. */
-export const AVATAR_REMOVE = 'remove';
-
-/**
- * Where the Akismet key's form and its Remove button post.
- *
- * Its own endpoint, for the reason the avatar has one: the key is a credential
- * that lives in `data/akismet.json` rather than a setting that lives in
- * `content/_data/site.json` (TASK-52), so it is not a field of the settings
- * form, and a key Akismet will not take must not lose an edit to the title.
- */
-export const AKISMET_PATH = `${SETTINGS_PATH}/akismet`;
-
-/** The fields those two forms submit. */
-export const AKISMET_FIELDS = { key: 'akismet_key', action: 'action' } as const;
-
-/** The {@link AKISMET_FIELDS.action} that forgets the key again. */
-export const AKISMET_REMOVE = 'remove';
-
-/**
- * Where the mail credential's form and its Remove button post.
- *
- * Its own endpoint for the reason the Akismet key has one: an API key and an
- * SMTP password are credentials, they live in `data/mail.json` rather than in
- * `content/_data/site.json`, and a credential typed wrong must not lose an
- * edit to the title. Which provider is in use and who mail is from are
- * settings and stay on the main form.
- */
-export const MAIL_PATH = `${SETTINGS_PATH}/mail`;
-
-/** The fields the credential form and its Remove button submit. */
-export const MAIL_FIELDS = {
-  brevoApiKey: 'brevo_api_key',
-  smtpHost: 'smtp_host',
-  smtpPort: 'smtp_port',
-  smtpSecure: 'smtp_secure',
-  smtpUser: 'smtp_user',
-  smtpPassword: 'smtp_password',
-  action: 'action',
-} as const;
-
-/** The {@link MAIL_FIELDS.action} that forgets every mail credential. */
-export const MAIL_REMOVE = 'remove';
-
-/** Where the Send test email button posts. */
-export const MAIL_TEST_PATH = `${SETTINGS_PATH}/mail/test`;
-
-/** The field that form submits: where to send the test message. */
-export const MAIL_TEST_FIELDS = { to: 'to' } as const;
-
-/** The message the Send test email button sends, as the theme names it. */
-export const MAIL_TEST_TEMPLATE = 'test';
 
 /**
  * The ActivityPub actor types doc-4 allows a site to be.
@@ -701,109 +623,159 @@ export function effectiveBaseUrl(
   return settings.baseUrl === '' ? config.baseUrl : settings.baseUrl;
 }
 
-/** What is wrong with a submitted settings form, one message per field. */
-export function settingsProblems(form: SettingsForm): SettingsProblems {
-  const problems: SettingsProblems = {};
+/**
+ * What is wrong with each field of a submitted form: one check per field, so a
+ * page can run the checks for the fields it carries and no others.
+ *
+ * A field nothing can be wrong with — a tagline, an author, a checkbox — has a
+ * check all the same, because a table with a hole in it is a field somebody
+ * added and forgot to think about.
+ */
+const FIELD_CHECKS: Record<SettingsField, (form: SettingsForm) => string | undefined> = {
+  title: (form) => (form.title.trim() === '' ? 'The site needs a title.' : undefined),
 
-  if (form.title.trim() === '') problems.title = 'The site needs a title.';
+  tagline: () => undefined,
 
-  const url = normalizeBaseUrl(form.baseUrl);
-  if (url === undefined) {
-    problems.baseUrl = 'The base URL has to be an absolute http:// or https:// URL.';
-  }
+  author: () => undefined,
 
-  const perPage = Number(form.postsPerPage);
-  if (!Number.isInteger(perPage) || perPage < 1) {
-    problems.postsPerPage = 'Posts per page has to be a whole number of one or more.';
-  }
+  baseUrl: (form) =>
+    normalizeBaseUrl(form.baseUrl) === undefined
+      ? 'The base URL has to be an absolute http:// or https:// URL.'
+      : undefined,
 
-  if (!isValidTimezone(form.timezone)) {
-    problems.timezone = 'That is not an IANA time zone name, such as Europe/London.';
-  }
+  postsPerPage: (form) => {
+    const perPage = Number(form.postsPerPage);
+    return !Number.isInteger(perPage) || perPage < 1
+      ? 'Posts per page has to be a whole number of one or more.'
+      : undefined;
+  },
 
-  if (!LANGUAGE_TAG_PATTERN.test(form.language.trim())) {
-    problems.language = 'That is not a language tag, such as en, en-GB or pt-BR.';
-  }
+  timezone: (form) =>
+    isValidTimezone(form.timezone)
+      ? undefined
+      : 'That is not an IANA time zone name, such as Europe/London.',
 
-  if (!ACTOR_HANDLE_PATTERN.test(form.actorHandle)) {
-    problems.actorHandle =
-      'An actor handle is 1 to 64 letters, digits, dashes or underscores, with no @ and no dots.';
-  }
+  language: (form) =>
+    LANGUAGE_TAG_PATTERN.test(form.language.trim())
+      ? undefined
+      : 'That is not a language tag, such as en, en-GB or pt-BR.',
 
-  if (!ACTOR_TYPES.includes(form.actorType)) {
-    problems.actorType = `An actor type is one of ${ACTOR_TYPES.join(', ')}.`;
-  }
+  actorHandle: (form) =>
+    ACTOR_HANDLE_PATTERN.test(form.actorHandle)
+      ? undefined
+      : 'An actor handle is 1 to 64 letters, digits, dashes or underscores, with no @ and no dots.',
+
+  actorType: (form) =>
+    ACTOR_TYPES.includes(form.actorType)
+      ? undefined
+      : `An actor type is one of ${ACTOR_TYPES.join(', ')}.`,
+
+  comments: () => undefined,
 
   // The empty string is refused rather than read as zero, which is what
   // `Number('')` would make it: a cleared field is a mistake, and "never close
   // comments" should have to be typed.
-  const closeAfterTyped = form.commentsCloseAfterDays.trim();
-  const closeAfter = Number(closeAfterTyped);
-  if (closeAfterTyped === '' || !Number.isInteger(closeAfter) || closeAfter < 0) {
-    problems.commentsCloseAfterDays =
-      'Comments close after a whole number of days, or 0 for never.';
-  }
+  commentsCloseAfterDays: (form) => {
+    const typed = form.commentsCloseAfterDays.trim();
+    const days = Number(typed);
+    return typed === '' || !Number.isInteger(days) || days < 0
+      ? 'Comments close after a whole number of days, or 0 for never.'
+      : undefined;
+  },
+
+  webmentionsSend: () => undefined,
+
+  webmentionsReceive: () => undefined,
 
   // Empty is a value here — it is how a site turns real-time notification off
   // — so only a non-empty one has to be a URL. http as well as https, because
   // a notify server on a private network or a loopback port is a real one.
-  if (form.notifyServer.trim() !== '' && normalizeBaseUrl(form.notifyServer) === undefined) {
-    problems.notifyServer =
-      'A notify server is an absolute http:// or https:// URL, or empty for none.';
-  }
+  notifyServer: (form) =>
+    form.notifyServer.trim() !== '' && normalizeBaseUrl(form.notifyServer) === undefined
+      ? 'A notify server is an absolute http:// or https:// URL, or empty for none.'
+      : undefined,
 
-  if (!(MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)) {
-    problems.mailProvider = `A mail provider is one of ${MAIL_PROVIDERS.join(', ')}.`;
-  }
+  mailProvider: (form) =>
+    (MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)
+      ? undefined
+      : `A mail provider is one of ${MAIL_PROVIDERS.join(', ')}.`,
+
+  mailFromName: () => undefined,
 
   // Empty is a value for both of these — no From address falls back to
   // `no-reply@` at the site's host, and no reply-to means replies go to the
   // From address — so only a non-empty one has to look like an address.
-  if (form.mailFromAddress.trim() !== '' && !EMAIL_PATTERN.test(form.mailFromAddress.trim())) {
-    problems.mailFromAddress =
-      'A From address is an email address, such as blog@example.com, or empty for the default.';
-  }
+  mailFromAddress: (form) =>
+    form.mailFromAddress.trim() !== '' && !EMAIL_PATTERN.test(form.mailFromAddress.trim())
+      ? 'A From address is an email address, such as blog@example.com, or empty for the default.'
+      : undefined,
 
-  if (form.mailReplyTo.trim() !== '' && !EMAIL_PATTERN.test(form.mailReplyTo.trim())) {
-    problems.mailReplyTo =
-      'A reply-to is an email address, such as hello@example.com, or empty to reply to the From address.';
-  }
+  mailReplyTo: (form) =>
+    form.mailReplyTo.trim() !== '' && !EMAIL_PATTERN.test(form.mailReplyTo.trim())
+      ? 'A reply-to is an email address, such as hello@example.com, or empty to reply to the From address.'
+      : undefined,
 
   // Empty is a value here too — it is how a site says "whichever admin has an
   // address" — so only a non-empty one has to look like one.
-  if (form.contactEmail.trim() !== '' && !EMAIL_PATTERN.test(form.contactEmail.trim())) {
-    problems.contactEmail =
-      'A contact address is an email address, such as hello@example.com, or empty for the first admin with one.';
-  }
+  contactEmail: (form) =>
+    form.contactEmail.trim() !== '' && !EMAIL_PATTERN.test(form.contactEmail.trim())
+      ? 'A contact address is an email address, such as hello@example.com, or empty for the first admin with one.'
+      : undefined,
 
   // A relay list is checked line by line, and the first bad line is what the
   // field says: a textarea has one message, and pointing at the line somebody
   // has to fix is more use than counting how many are wrong.
-  const badRelay = relayLines(form.relays).find((line) => normalizeRelayInbox(line) === undefined);
-  if (badRelay !== undefined) {
-    problems.relays =
-      `A relay is its inbox as an absolute http:// or https:// URL, one per line. ` +
-      `"${badRelay}" is not one.`;
-  }
+  relays: (form) => {
+    const bad = relayLines(form.relays).find((line) => normalizeRelayInbox(line) === undefined);
+    return bad === undefined
+      ? undefined
+      : `A relay is its inbox as an absolute http:// or https:// URL, one per line. ` +
+          `"${bad}" is not one.`;
+  },
 
   // A menu is checked line by line like the relays, and for the same reason:
   // one message on a textarea is more use pointing at the line to fix than
   // counting how many are wrong.
-  const badItem = navigationLines(form.navigation).find(
-    (line) => navigationItem(line) === undefined,
-  );
-  if (badItem !== undefined) {
-    problems.navigation =
-      `A menu item is "Label | URL", one per line, where the URL is a path ` +
-      `like /about/ or an absolute http:// or https:// URL. "${badItem}" is not one.`;
-  }
+  navigation: (form) => {
+    const bad = navigationLines(form.navigation).find((line) => navigationItem(line) === undefined);
+    return bad === undefined
+      ? undefined
+      : `A menu item is "Label | URL", one per line, where the URL is a path ` +
+          `like /about/ or an absolute http:// or https:// URL. "${bad}" is not one.`;
+  },
 
-  // The two archive bases are checked as a pair: two of the rules — that they
-  // differ, and that neither takes a path the site already answers on — are
-  // about the pair rather than either one.
-  const bases = taxonomyBaseProblems({ tag: form.tagBase, category: form.categoryBase });
-  if (bases.tag !== undefined) problems.tagBase = bases.tag;
-  if (bases.category !== undefined) problems.categoryBase = bases.category;
+  // The two archive bases are checked as a pair, because two of the rules —
+  // that they differ, and that neither takes a path the site already answers
+  // on — are about the pair rather than either one. They are on one page for
+  // exactly that reason.
+  tagBase: (form) => taxonomyBaseProblems({ tag: form.tagBase, category: form.categoryBase }).tag,
+
+  categoryBase: (form) =>
+    taxonomyBaseProblems({ tag: form.tagBase, category: form.categoryBase }).category,
+};
+
+/** Every field of the settings, in the order the form fields name them. */
+export const SETTINGS_FIELD_NAMES: readonly SettingsField[] = Object.keys(
+  SETTINGS_FIELDS,
+) as SettingsField[];
+
+/**
+ * What is wrong with a submitted settings form, one message per field.
+ *
+ * `fields` is what a page carries: it validates its own fields and says
+ * nothing about the rest, so a page cannot refuse a save over a field it does
+ * not show and gives no way to fix.
+ */
+export function settingsProblems(
+  form: SettingsForm,
+  fields: readonly SettingsField[] = SETTINGS_FIELD_NAMES,
+): SettingsProblems {
+  const problems: SettingsProblems = {};
+
+  for (const name of fields) {
+    const problem = FIELD_CHECKS[name](form);
+    if (problem !== undefined) problems[name] = problem;
+  }
 
   return problems;
 }
@@ -883,311 +855,6 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     navigation: navigationText(settings.navigation),
   };
 }
-
-/** What {@link mountSettings} needs from the admin around it. */
-export interface MountSettingsOptions {
-  /** The admin's renderer, which injects the chrome, the CSRF token and the flash. */
-  render: AdminRender;
-}
-
-/**
- * Register the settings screen.
- *
- * Every read is of `content/_data/site.json` as it is at that moment, and a
- * save rewrites it: the screen is a view of the file rather than of anything
- * this process remembers (decision-9). A form the validator has anything to
- * say about is a 400 that writes nothing at all.
- */
-export function mountSettings(app: Hono<GeekityEnv>, options: MountSettingsOptions): void {
-  const { render } = options;
-
-  app.get(SETTINGS_PATH, (c) =>
-    render(
-      c,
-      ADMIN_TEMPLATES.settings,
-      screen(c.var.config, readSiteSettings(c.var.config.contentDir)),
-    ),
-  );
-
-  app.post(SETTINGS_PATH, async (c) => {
-    const body = await c.req.parseBody();
-    const stored = readSiteSettings(c.var.config.contentDir);
-    const submitted: SettingsForm = {
-      title: field(body[SETTINGS_FIELDS.title]),
-      tagline: field(body[SETTINGS_FIELDS.tagline]),
-      // A field the form rendered read-only is not submitted, so an overridden
-      // base URL keeps the value it had rather than being cleared by a save.
-      baseUrl:
-        c.var.config.baseUrlSource === 'default'
-          ? field(body[SETTINGS_FIELDS.baseUrl])
-          : stored.baseUrl === ''
-            ? c.var.config.baseUrl
-            : stored.baseUrl,
-      timezone: field(body[SETTINGS_FIELDS.timezone]),
-      language: field(body[SETTINGS_FIELDS.language]),
-      postsPerPage: field(body[SETTINGS_FIELDS.postsPerPage]),
-      author: field(body[SETTINGS_FIELDS.author]),
-      actorHandle: field(body[SETTINGS_FIELDS.actorHandle]),
-      actorType: field(body[SETTINGS_FIELDS.actorType]),
-      tagBase: field(body[SETTINGS_FIELDS.tagBase]),
-      categoryBase: field(body[SETTINGS_FIELDS.categoryBase]),
-      comments: field(body[SETTINGS_FIELDS.comments]),
-      commentsCloseAfterDays: field(body[SETTINGS_FIELDS.commentsCloseAfterDays]),
-      webmentionsSend: field(body[SETTINGS_FIELDS.webmentionsSend]),
-      webmentionsReceive: field(body[SETTINGS_FIELDS.webmentionsReceive]),
-      notifyServer: field(body[SETTINGS_FIELDS.notifyServer]),
-      mailProvider: field(body[SETTINGS_FIELDS.mailProvider]),
-      mailFromName: field(body[SETTINGS_FIELDS.mailFromName]),
-      mailFromAddress: field(body[SETTINGS_FIELDS.mailFromAddress]),
-      mailReplyTo: field(body[SETTINGS_FIELDS.mailReplyTo]),
-      contactEmail: field(body[SETTINGS_FIELDS.contactEmail]),
-      relays: field(body[SETTINGS_FIELDS.relays]),
-      navigation: field(body[SETTINGS_FIELDS.navigation]),
-    };
-
-    const problems = settingsProblems(submitted);
-    if (Object.keys(problems).length > 0) {
-      c.status(400);
-      return render(c, ADMIN_TEMPLATES.settings, {
-        ...screen(c.var.config, stored),
-        form: submitted,
-        problems,
-      });
-    }
-
-    // The avatar and the recorded renames are read again inside the write, not
-    // taken from the form's own read: a save of the title must not undo an
-    // avatar somebody uploaded while this form was open.
-    const settings = await save(c, (current) =>
-      settingsFromForm(submitted, current.avatar, current.taxonomyRedirects),
-    );
-
-    // The name, the summary and the handle are the actor's profile as much as
-    // the avatar is, and a follower's copy of it is only as fresh as the last
-    // thing it was told.
-    const report = profileChanged(stored, settings)
-      ? await c.var.delivery.updateActor()
-      : undefined;
-
-    // The relay list is the only setting that is an instruction as well as a
-    // value: a line added is a `Follow` to send and a line removed is an
-    // `Undo`. The reconciliation reads the settings that were just written, so
-    // it has to come after the save rather than be derived from the form.
-    const relays = c.var.relays.sync();
-
-    flash(c, 'notice', `Settings saved.${toldFollowers(report)}${toldRelays(relays)}`);
-    return c.redirect(SETTINGS_PATH, 303);
-  });
-
-  /**
-   * The avatar's own endpoint: one multipart form uploads an image, and a
-   * second, plain one takes it down again.
-   *
-   * It is separate from the settings form because a file cannot travel in a
-   * urlencoded body, and because the two should not share a fate: a rejected
-   * image must not lose an edit to the title, and a rejected title must not
-   * lose the avatar. A refusal is a flash and a redirect, so what is stored is
-   * exactly what it was and the screen says why.
-   */
-  app.post(AVATAR_PATH, async (c) => {
-    const body = await c.req.parseBody();
-    const stored = readSiteSettings(c.var.config.contentDir);
-
-    if (field(body[AVATAR_FIELDS.action]) === AVATAR_REMOVE) {
-      if (stored.avatar === '') {
-        flash(c, 'notice', 'The site has no avatar.');
-        return c.redirect(SETTINGS_PATH, 303);
-      }
-
-      await save(c, (current) => ({ ...current, avatar: '' }));
-      const removal = await c.var.delivery.updateActor();
-      flash(c, 'notice', `Avatar removed.${toldFollowers(removal)}`);
-      return c.redirect(SETTINGS_PATH, 303);
-    }
-
-    const outcome = await storeUpload(body[AVATAR_FIELDS.file], c.var.config, {
-      imagesOnly: true,
-    });
-    if (refusedUpload(outcome)) {
-      flash(c, 'error', `${outcome.error} The avatar is unchanged.`);
-      return c.redirect(SETTINGS_PATH, 303);
-    }
-
-    await save(c, (current) => ({ ...current, avatar: outcome.url }));
-    const report = await c.var.delivery.updateActor();
-    flash(c, 'notice', `Avatar saved.${toldFollowers(report)}`);
-    return c.redirect(SETTINGS_PATH, 303);
-  });
-
-  /**
-   * The Akismet key: one form saves it, a second forgets it.
-   *
-   * The key is checked with Akismet's own `verify-key` before it is stored, so
-   * a site is told about a typo now rather than by a queue that quietly stops
-   * being filtered. What comes back is stored beside the key, because it is
-   * what the screen reports and re-asking on every render would be a network
-   * call to draw a page.
-   *
-   * A key Akismet refuses is stored all the same, marked as refused. It does
-   * no harm — `comment-check` with a key Akismet does not know answers
-   * `invalid`, which this treats as no opinion, so comments queue exactly as
-   * they did — and storing it is what lets the screen say "Akismet does not
-   * recognise this key" instead of throwing away what somebody pasted.
-   */
-  app.post(AKISMET_PATH, async (c) => {
-    const body = await c.req.parseBody();
-    const { config } = c.var;
-
-    if (field(body[AKISMET_FIELDS.action]) === AKISMET_REMOVE) {
-      await removeAkismetKey(config.dataDir);
-      flash(c, 'notice', 'The Akismet key is gone. Nothing is sent to Akismet any more.');
-      return c.redirect(SETTINGS_PATH, 303);
-    }
-
-    const key = field(body[AKISMET_FIELDS.key]).trim();
-    if (key === '') {
-      flash(c, 'error', 'An Akismet key cannot be empty. Use Remove key to turn Akismet off.');
-      return c.redirect(SETTINGS_PATH, 303);
-    }
-
-    const blog = effectiveBaseUrl(config, readSiteSettings(config.contentDir));
-    const status = await verifyAkismetKey({ key, blog });
-
-    await writeAkismetKey(config.dataDir, {
-      key,
-      status,
-      checkedAt: config.now().toISOString(),
-    });
-
-    flash(
-      c,
-      status === 'valid' ? 'notice' : 'error',
-      status === 'valid'
-        ? 'Akismet is connected. Comments and webmentions are checked from now on.'
-        : status === 'invalid'
-          ? 'The key is stored, but Akismet does not recognise it, so nothing it says will be believed.'
-          : 'The key is stored, but Akismet could not be reached to check it. Save it again to try.',
-    );
-    return c.redirect(SETTINGS_PATH, 303);
-  });
-
-  /**
-   * The mail credential: one form saves it, a second forgets it.
-   *
-   * A separate endpoint from the settings form for the reason the Akismet key
-   * has one — an API key and an SMTP password belong in `data/mail.json`, not
-   * in the public `site.json` — and it keeps both providers' credentials at
-   * once, so a site trying SMTP after Brevo can switch the provider back
-   * without pasting the key in again.
-   *
-   * A blank secret keeps the stored one. The form cannot render a password
-   * back into a page, so a blank field has to mean "unchanged" or nobody could
-   * ever edit the SMTP port without retyping the password.
-   */
-  app.post(MAIL_PATH, async (c) => {
-    const body = await c.req.parseBody();
-    const { config } = c.var;
-    const stored = readMailCredentials(config.dataDir);
-
-    if (field(body[MAIL_FIELDS.action]) === MAIL_REMOVE) {
-      await removeMailCredentials(config.dataDir);
-      flash(c, 'notice', 'The mail credentials are gone. No email is sent any more.');
-      return c.redirect(SETTINGS_PATH, 303);
-    }
-
-    const apiKey = field(body[MAIL_FIELDS.brevoApiKey]).trim();
-    const host = field(body[MAIL_FIELDS.smtpHost]).trim();
-    const port = Number(field(body[MAIL_FIELDS.smtpPort]).trim());
-    const password = field(body[MAIL_FIELDS.smtpPassword]);
-
-    if (host !== '' && (!Number.isInteger(port) || port < 1 || port > 65535)) {
-      flash(c, 'error', 'An SMTP port is a whole number between 1 and 65535. Nothing was saved.');
-      return c.redirect(SETTINGS_PATH, 303);
-    }
-
-    const credentials: MailCredentials = {
-      ...(apiKey === ''
-        ? stored.brevo === undefined
-          ? {}
-          : { brevo: stored.brevo }
-        : { brevo: { apiKey } }),
-      ...(host === ''
-        ? stored.smtp === undefined
-          ? {}
-          : { smtp: stored.smtp }
-        : {
-            smtp: {
-              host,
-              port,
-              secure: field(body[MAIL_FIELDS.smtpSecure]) !== '',
-              user: field(body[MAIL_FIELDS.smtpUser]).trim(),
-              // A blank password keeps the stored one, so the port and the
-              // user can be edited without retyping a secret the form was
-              // never allowed to show.
-              password: password === '' ? (stored.smtp?.password ?? '') : password,
-            },
-          }),
-    };
-
-    await writeMailCredentials(config.dataDir, credentials);
-
-    const settings = readSiteSettings(config.contentDir);
-    flash(
-      c,
-      'notice',
-      settings.mailProvider === 'none'
-        ? 'Saved. Choose a provider above and save the settings to start sending.'
-        : 'Saved. Send a test message to prove it reaches you.',
-    );
-    return c.redirect(SETTINGS_PATH, 303);
-  });
-
-  /**
-   * Send test email: the one button that proves the whole chain.
-   *
-   * It goes through the same {@link MailService} every feature will, so what
-   * it proves is not "these credentials parse" but "a message from this site
-   * arrives" — the template, the From line, the provider and the retry
-   * included. Whatever the provider said comes back on the flash, its own
-   * words and all, because a refusal names the field to fix and a summary of
-   * one never does.
-   */
-  app.post(MAIL_TEST_PATH, async (c) => {
-    const body = await c.req.parseBody();
-    const to = field(body[MAIL_TEST_FIELDS.to]).trim();
-
-    if (!EMAIL_PATTERN.test(to)) {
-      flash(c, 'error', 'Type the address to send the test message to.');
-      return c.redirect(SETTINGS_PATH, 303);
-    }
-
-    const result = await c.var.mail.send({ to, template: MAIL_TEST_TEMPLATE });
-
-    flash(
-      c,
-      result.ok && !result.skipped ? 'notice' : 'error',
-      result.skipped
-        ? 'No mail is configured, so nothing was sent. Choose a provider and save a credential first.'
-        : result.ok
-          ? `A test message was sent to ${to} via ${result.provider}${
-              result.messageId === undefined ? '' : ` (${result.messageId})`
-            }. If it does not arrive, look in the spam folder and at the provider's own log.`
-          : `${result.provider} would not send to ${to} after ${String(result.attempts)} ${
-              result.attempts === 1 ? 'attempt' : 'attempts'
-            }: ${result.error ?? 'no reason given'}`,
-    );
-    return c.redirect(SETTINGS_PATH, 303);
-  });
-
-  /** Change `content/_data/site.json`, re-reading it inside the write. */
-  function save(
-    c: Context<GeekityEnv>,
-    change: (current: SiteSettings) => SiteSettings,
-  ): Promise<SiteSettings> {
-    return updateSiteSettings({ contentDir: c.var.config.contentDir, change });
-  }
-}
-
 /**
  * A `taxonomy|from|to` block as the renames it names, which is how the old
  * settings table spelled them ({@link migrateSettingsToFile}).
@@ -1230,184 +897,6 @@ export function profileChanged(before: SiteSettings, after: SiteSettings): boole
     before.actorType !== after.actorType ||
     before.avatar !== after.avatar
   );
-}
-
-/**
- * The sentence a flash adds about the followers, when there were any: a save
- * of the profile is also an announcement, and it should say so rather than
- * leave the admin wondering.
- */
-function toldFollowers(report: DeliveryReport | undefined): string {
-  const total = report?.deliveries.length ?? 0;
-  if (total === 0) return '';
-  return total === 1
-    ? ' One follower has been told.'
-    : ` ${String(total)} followers have been told.`;
-}
-
-/**
- * The sentence a flash adds about the relays a save subscribed to or left.
- *
- * A relay does not answer at once — FEP-ae0c allows a human to approve the
- * subscription days later — so the message says a follow was sent rather than
- * that the site is now on the relay, and points at the screen that will say.
- */
-function toldRelays(report: RelaySyncReport): string {
-  const parts: string[] = [];
-  if (report.followed.length > 0) {
-    parts.push(
-      report.followed.length === 1
-        ? 'A follow has been sent to one new relay'
-        : `Follows have been sent to ${String(report.followed.length)} new relays`,
-    );
-  }
-  if (report.unfollowed.length > 0) {
-    parts.push(
-      report.unfollowed.length === 1
-        ? 'one relay has been unfollowed'
-        : `${String(report.unfollowed.length)} relays have been unfollowed`,
-    );
-  }
-  if (parts.length === 0) return '';
-
-  const sentence = parts.join(', and ');
-  return ` ${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}; the Federation screen says where each stands.`;
-}
-
-/**
- * What the screen says about Akismet: connected, refused, unchecked, or off.
- *
- * The key itself never leaves this function. A settings screen that printed it
- * back would put a credential in every browser cache and every screenshot; the
- * last four characters are enough for somebody to recognise which key is in
- * there without being handed it.
- */
-export function akismetPanel(dataDir: string): Record<string, unknown> {
-  const stored: AkismetKeyRecord | undefined = readAkismetKey(dataDir);
-
-  if (stored === undefined) {
-    return {
-      akismetUrl: AKISMET_PATH,
-      akismetFields: AKISMET_FIELDS,
-      akismetRemove: AKISMET_REMOVE,
-      akismetPresent: false,
-      akismetState: 'none',
-      akismetHint: 'Not connected: no key, so no comment is sent to Akismet.',
-    };
-  }
-
-  return {
-    akismetUrl: AKISMET_PATH,
-    akismetFields: AKISMET_FIELDS,
-    akismetRemove: AKISMET_REMOVE,
-    akismetPresent: true,
-    akismetState: stored.status,
-    akismetKeyHint: `…${stored.key.slice(-4)}`,
-    akismetCheckedAt: stored.checkedAt,
-    akismetHint:
-      stored.status === 'valid'
-        ? 'Connected. Every comment and every incoming webmention is checked.'
-        : stored.status === 'invalid'
-          ? 'Akismet does not recognise this key, so nothing it says is believed and every comment queues as it would without one.'
-          : 'Akismet could not be reached the last time this key was checked. Save it again to try.',
-  };
-}
-
-/**
- * What the screen says about email: which provider is chosen, whether the
- * credential it needs is there, and enough of it to recognise which one.
- *
- * Nothing here ever prints a key or a password. A settings screen that echoed
- * one would put a credential in every browser cache, every screenshot and
- * every `view-source`; the last four characters of an API key and the host and
- * user of an SMTP connection are enough for somebody to tell what is stored
- * without being handed the means to use it.
- */
-export function mailPanel(dataDir: string, settings: SiteSettings): Record<string, unknown> {
-  const stored = readMailCredentials(dataDir);
-  const present =
-    settings.mailProvider === 'brevo' ? stored.brevo !== undefined : stored.smtp !== undefined;
-
-  return {
-    mailUrl: MAIL_PATH,
-    mailFields: MAIL_FIELDS,
-    mailRemove: MAIL_REMOVE,
-    mailTestUrl: MAIL_TEST_PATH,
-    mailTestFields: MAIL_TEST_FIELDS,
-    mailProviders: MAIL_PROVIDERS,
-    mailProvider: settings.mailProvider,
-    // Whether the chosen provider has what it needs. A key stored for the
-    // provider that is not chosen is not "configured": nothing would use it.
-    mailConfigured: settings.mailProvider !== 'none' && present,
-    mailBrevoPresent: stored.brevo !== undefined,
-    mailSmtpPresent: stored.smtp !== undefined,
-    ...(stored.brevo === undefined
-      ? {}
-      : { mailBrevoKeyHint: `…${stored.brevo.apiKey.slice(-4)}` }),
-    ...(stored.smtp === undefined
-      ? {}
-      : {
-          mailSmtp: {
-            host: stored.smtp.host,
-            port: stored.smtp.port,
-            secure: stored.smtp.secure,
-            user: stored.smtp.user,
-            // Not the password. Whether there is one at all is all the screen
-            // needs to say.
-            hasPassword: stored.smtp.password !== '',
-          },
-        }),
-    mailHint:
-      settings.mailProvider === 'none'
-        ? 'This site sends no email. Password resets, moderation notices and contact messages are still recorded; they are simply not sent.'
-        : present
-          ? 'Mail is configured. Send a test message to prove it reaches you.'
-          : settings.mailProvider === 'brevo'
-            ? 'Brevo is chosen but there is no API key, so nothing is sent.'
-            : 'SMTP is chosen but there is no server, so nothing is sent.',
-  };
-}
-
-/** Everything the settings template renders, for a given set of settings. */
-function screen(
-  config: Pick<ResolvedConfig, 'baseUrl' | 'baseUrlSource' | 'dataDir'>,
-  settings: SiteSettings,
-): Record<string, unknown> {
-  const overridden = config.baseUrlSource !== 'default';
-  const inEffect = effectiveBaseUrl(config, settings);
-
-  return {
-    section: 'settings',
-    // One child until TASK-73 splits this screen into its pages.
-    child: 'general',
-    settingsUrl: SETTINGS_PATH,
-    fields: SETTINGS_FIELDS,
-    actorTypes: ACTOR_TYPES,
-    ...akismetPanel(config.dataDir),
-    ...mailPanel(config.dataDir, settings),
-    avatar: settings.avatar,
-    avatarUrl: AVATAR_PATH,
-    avatarFields: AVATAR_FIELDS,
-    avatarRemove: AVATAR_REMOVE,
-    // The base URL field shows the one in effect rather than the one the file
-    // happens to hold: a site.json with no `url` at all would otherwise render
-    // an empty field that the validator refuses the moment anything is saved.
-    form: formFromSettings({ ...settings, baseUrl: inEffect }),
-    problems: {},
-    baseUrlInEffect: inEffect,
-    baseUrlOverridden: overridden,
-    baseUrlSource: config.baseUrlSource,
-    baseUrlNote: overridden
-      ? config.baseUrlSource === 'environment'
-        ? 'GEEKITY_BASE_URL is set, so it is the base URL in effect and this field is not editable here.'
-        : 'The config file sets baseUrl, so it is the base URL in effect and this field is not editable here.'
-      : 'Absolute URLs, the feeds and the session cookie pick this up when the site next starts.',
-  };
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function field(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }
 
 /**

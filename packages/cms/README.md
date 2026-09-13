@@ -484,8 +484,8 @@ rather than in the trash: there is no file left to build the `Tombstone` from.
 
 A [Mastodon-style relay][fepae0c] boosts every public activity it is sent on to
 the instances subscribed to it, which is how a site nobody follows yet reaches
-people. `relays` is the setting: one relay inbox per line on `/admin/settings`, kept
-in `site.json` like every other setting, and
+people. `relays` is the setting: one relay inbox per line on
+`/admin/settings/federation`, kept in `site.json` like every other setting, and
 `https://tags.pub/user/_____relay_____/inbox` is one worth knowing about — it
 boosts any public post carrying a hashtag it tracks, which every `Article` this
 CMS builds already carries one of per tag and per category.
@@ -518,7 +518,8 @@ on the next boot.
 
 ### The site's avatar
 
-The actor's `icon` is an image uploaded on `/admin/settings`. It is stored with
+The actor's `icon` is an image uploaded on `/admin/settings`, the General page.
+It is stored with
 the site's other uploads, under `content/uploads/{yyyy}/{mm}/`, and the public
 path it is served at — `/uploads/2026/09/me.png` — is the `avatar` setting in
 `content/_data/site.json`, like the rest of them. The actor
@@ -754,7 +755,7 @@ key is a credential rather than a setting: it lives in `data/akismet.json` at
 mode `0600` beside the password hashes and the actor's private keys, never in
 `content/_data/site.json`, which is public, in git and published with the site.
 
-Paste it into **Spam checking** on `/admin/settings`. It is checked with
+Paste it into **Spam checking** on `/admin/settings/discussion`. It is checked with
 Akismet's `verify-key` before it is stored, and the panel then reads Connected,
 "Akismet does not recognise this key", "Akismet could not be reached", or Not
 connected. The key is never printed back — the last four characters are, so it
@@ -794,7 +795,7 @@ Marking something spam or not spam on `/admin/comments` posts `submit-spam` or
 
 The open web's version of what ActivityPub does: one page telling another that
 it linked to it. Both directions are on by default and each has a switch on the
-settings screen.
+Discussion settings page.
 
 | Setting in `site.json` | What it does                                                             |
 | ---------------------- | ------------------------------------------------------------------------ |
@@ -876,7 +877,7 @@ back to `no-reply@` at the site's host, which most providers will refuse.
 
 ### Send test email
 
-The settings screen has an address field and a button that sends the `test`
+The Email settings page has an address field and a button that sends the `test`
 message through the whole chain — the template, the From line, the provider and
 the retry — and reports what came back, the provider's own words and its
 message id included. It is the one thing that proves mail works before somebody
@@ -1196,8 +1197,16 @@ shadow the login form.
 | `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                                     |
 | `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                                     |
 | `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                                   |
-| `/admin/settings`                                | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor.             |
+| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language, avatar.        |
 | `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                                    |
+| `/admin/settings/reading`                        | Posts per page, the site menu, the notify server.                                         |
+| `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.                   |
+| `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                        |
+| `/admin/settings/akismet`                        | `POST` only. Saves the Akismet key, or forgets it.                                        |
+| `/admin/settings/email`                          | The mail provider, the From line, the reply-to and the contact address.                   |
+| `/admin/settings/mail`                           | `POST` only. Saves a mail credential, or forgets every one of them.                       |
+| `/admin/settings/mail/test`                      | `POST` only. Sends the theme's test message through the whole chain.                      |
+| `/admin/settings/federation`                     | The actor handle and type, and the relays the site subscribes to.                         |
 | `/admin/users`                                   | Who may sign in, and the change-password form.                                            |
 | `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                           |
 | `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                                  |
@@ -1311,9 +1320,15 @@ await createUser({
 ### Settings
 
 `content/_data/site.json` is the source of truth for a site's settings. The
-screen at `/admin/settings` reads that file, validates what was typed, and
-writes it back; nothing else remembers a setting, and `data/geekity.db` holds
-none of them.
+pages under `/admin/settings` — General, Reading, Permalinks, Discussion, Email
+and Federation — each read that file, validate what was typed and write it
+back; nothing else remembers a setting, and `data/geekity.db` holds none of
+them.
+
+Each page saves its own fields and no others, onto the file as re-read inside
+the write, so two people saving two different pages at the same moment both
+land, and each page validates only what it shows: a refused save comes back on
+the page it was sent from and writes nothing at all.
 
 The write is atomic and serialised: the bytes go to a temporary file beside the
 real one and are renamed over it, and the read of what the file already held
@@ -1340,8 +1355,8 @@ site's settings.
 The one exception is `url`. A base URL decides the absolute URLs in the feeds,
 the ActivityStreams ids and whether the session cookie is `Secure`, so
 `GEEKITY_BASE_URL` and a `baseUrl` in the config file both win over the file's,
-and the settings screen renders the field read-only and says which value is in
-effect and why. When neither names one, the file's `url` becomes the base URL
+and the General settings page renders the field read-only and says which value
+is in effect and why. When neither names one, the file's `url` becomes the base URL
 at boot — at boot rather than on save, so an `https` base URL cannot log out
 the admin who submitted it over `http`.
 
@@ -1629,7 +1644,8 @@ of the request.
 
 `tag` and `category` are the bases a site has until it says otherwise —
 WordPress's own, so a site imported from it keeps every archive URL it
-published. `tagBase` and `categoryBase` on the settings screen move them, and
+published. `tagBase` and `categoryBase` on the Permalinks settings page move
+them, and
 the routes, the paging, the canonical redirects, the tag feeds, the theme's
 links and the ActivityStreams hashtags all follow on the next request. A base
 is one URL-safe path segment: no slashes, and not a path the site already
@@ -1644,7 +1660,8 @@ can put its archives at the same URLs.
 Every page carries the site menu, which the theme renders in the header. It is
 two things joined:
 
-1. The `navigation` setting, edited on `/admin/settings` as one `Label | URL`
+1. The `navigation` setting, edited on `/admin/settings/reading` as one
+   `Label | URL`
    per line — `About | /about/`, `Mastodon | https://example.social/@me` — in
    the order it is typed. The URL is a site-root path or an absolute
    `http(s)` URL; anything else is refused with the offending line quoted.
