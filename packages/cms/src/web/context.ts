@@ -62,6 +62,16 @@ export interface SiteData {
    */
   relays?: readonly string[] | undefined;
   /**
+   * The slug of the page served at `/`, when the site shows a page there
+   * rather than its latest posts. Absent for the latest posts.
+   */
+  homepage?: string | undefined;
+  /**
+   * The slug of the page whose own URL carries the post listing, when there is
+   * one. Absent unless `homepage` names a page as well.
+   */
+  postsPage?: string | undefined;
+  /**
    * The taxonomy archives that have moved, as `{ taxonomy, from, to }`: what
    * lets the URL a renamed archive used to live at point at the one it lives
    * at now. Written by the taxonomy screens; an Eleventy build of the same
@@ -238,6 +248,33 @@ export function postsPerPage(site: SiteData): number {
     return configured;
   }
   return DEFAULT_POSTS_PER_PAGE;
+}
+
+/** WordPress's Reading choice, as `site.json` spells it. */
+export interface FrontPageSlugs {
+  /** The page served at `/`, or empty for the site's latest posts. */
+  homepage: string;
+  /** The page whose permalink carries the listing, or empty for none. */
+  postsPage: string;
+}
+
+/**
+ * Which page is the front page and which carries the listing, from the site
+ * data.
+ *
+ * Read as tolerantly as everything else out of `site.json`, and read as slugs
+ * rather than resolved to documents: only something holding the index can say
+ * whether a slug still names a published page, and a slug that names none is a
+ * site showing its latest posts.
+ */
+export function frontPageSlugs(site: SiteData): FrontPageSlugs {
+  const homepage = typeof site['homepage'] === 'string' ? site['homepage'].trim() : '';
+  const postsPage = typeof site['postsPage'] === 'string' ? site['postsPage'].trim() : '';
+
+  // A posts page without a homepage would be a second URL for the listing that
+  // is already at `/`. The settings screen refuses the pair; a hand-edited
+  // file is read the same way rather than serving it.
+  return { homepage, postsPage: homepage === '' ? '' : postsPage };
 }
 
 /**

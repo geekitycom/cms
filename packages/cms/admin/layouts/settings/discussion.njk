@@ -1,0 +1,107 @@
+{# /admin/settings/discussion: comments, webmentions, and what checks them. #}
+{% extends "layouts/settings/page.njk" %}
+
+{% block settingsFields %}
+  <h2>Comments</h2>
+
+  <p class="admin-check">
+    <input id="settings-comments" name="{{ fields.comments }}" type="checkbox" value="1"{% if form.comments %} checked{% endif %} />
+    <label for="settings-comments">Take comments on this site</label>
+  </p>
+  <p class="admin-hint">
+    Clear this and no post shows a comment form and every submission is
+    refused. Fediverse replies keep arriving and keep being shown either way:
+    a remote server sends those, and nothing here can stop it.
+  </p>
+
+  <label for="settings-comments-close">Close comments after</label>
+  <input id="settings-comments-close" name="{{ fields.commentsCloseAfterDays }}" type="number" min="0" step="1" value="{{ form.commentsCloseAfterDays }}" />
+  {% if problems.commentsCloseAfterDays %}<p class="admin-field-error">{{ problems.commentsCloseAfterDays }}</p>{% endif %}
+  <p class="admin-hint">
+    Days after a post's date that it stops taking comments; <code>0</code>
+    never closes one. A post overrides this for itself with
+    <code>comments: true</code> or <code>comments: false</code>, which the
+    editor offers as a field. Pages are closed unless they say otherwise.
+  </p>
+
+  <h2>Webmentions</h2>
+
+  <p class="admin-check">
+    <input id="settings-webmentions-send" name="{{ fields.webmentionsSend }}" type="checkbox" value="1"{% if form.webmentionsSend %} checked{% endif %} />
+    <label for="settings-webmentions-send">Tell the pages a post links to</label>
+  </p>
+  <p class="admin-hint">
+    When a post is published or edited, every external page it links to is
+    asked whether it takes webmentions and told about the post if it does.
+    The Resend button on the federation screen sends them again.
+  </p>
+
+  <p class="admin-check">
+    <input id="settings-webmentions-receive" name="{{ fields.webmentionsReceive }}" type="checkbox" value="1"{% if form.webmentionsReceive %} checked{% endif %} />
+    <label for="settings-webmentions-receive">Accept webmentions sent here</label>
+  </p>
+  <p class="admin-hint">
+    Every post advertises an endpoint, and a page that links to one and says
+    so lands in the comment queue like a comment. Clear this and the endpoint
+    is gone from the pages and answers nothing; what has already arrived
+    stays where it is.
+  </p>
+{% endblock %}
+
+{% block settingsPanels %}
+  {# Akismet is its own pair of forms for the reason the avatar is: the key is
+     a credential in data/akismet.json rather than a setting in site.json, and
+     a key Akismet will not take must not lose an edit to the fields above. #}
+  <section class="admin-settings admin-akismet-panel">
+    <h2>Spam checking</h2>
+
+    <p class="admin-akismet-state admin-akismet-{{ akismetState }}">
+      {% if akismetState == 'valid' %}
+        <strong>Connected</strong> &mdash; key {{ akismetKeyHint }}, checked {{ akismetCheckedAt }}.
+      {% elif akismetState == 'invalid' %}
+        <strong>Akismet does not recognise this key</strong> &mdash; key {{ akismetKeyHint }}, checked {{ akismetCheckedAt }}.
+      {% elif akismetState == 'unchecked' %}
+        <strong>Akismet could not be reached</strong> to check key {{ akismetKeyHint }}.
+      {% else %}
+        <strong>Not connected</strong> &mdash; this site has no key.
+      {% endif %}
+    </p>
+    <p class="admin-hint">{{ akismetHint }}</p>
+
+    <form method="post" action="{{ akismetUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+      <label for="settings-akismet-key">Akismet API key</label>
+      <input
+        id="settings-akismet-key"
+        name="{{ akismetFields.key }}"
+        type="password"
+        value=""
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="{% if akismetPresent %}Replace the stored key{% else %}Paste your key{% endif %}"
+      />
+      <p class="admin-settings-buttons">
+        <button type="submit">{% if akismetPresent %}Replace key{% else %}Save key{% endif %}</button>
+      </p>
+    </form>
+
+    {% if akismetPresent %}
+      <form method="post" action="{{ akismetUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ akismetFields.action }}" value="{{ akismetRemove }}" />
+        <p class="admin-settings-buttons">
+          <button type="submit">Remove key</button>
+        </p>
+      </form>
+    {% endif %}
+
+    <p class="admin-hint">
+      A key from <a href="https://akismet.com/">akismet.com</a> turns on spam
+      checking for native comments and incoming webmentions. It is checked with
+      Akismet when it is saved and kept in <code>data/akismet.json</code>, never
+      in <code>site.json</code> and never on the public site. Marking something
+      spam or not spam on the Comments screen tells Akismet, which is the only
+      way it learns. Fediverse replies are never sent to it.
+    </p>
+  </section>
+{% endblock %}

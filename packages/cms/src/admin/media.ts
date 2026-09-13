@@ -369,6 +369,7 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
 
     return {
       section: MEDIA_SECTION,
+      child: 'library',
       heading: 'Media',
       listUrl: MEDIA_PATH,
       uploadUrl: MEDIA_UPLOAD_PATH,

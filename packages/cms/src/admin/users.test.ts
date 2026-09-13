@@ -47,12 +47,29 @@ describe('the users screen', () => {
 });
 
 describe('adding a user', () => {
+  it('is a screen of its own that the list links to (TASK-72)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    const list = await (await agent.get('/admin/users')).text();
+    assert.match(list, /href="\/admin\/users\/new"/, 'the list offers Add new');
+    assert.doesNotMatch(list, /id="add-username"/, 'and does not carry the form itself');
+
+    const response = await agent.get('/admin/users/new');
+    const html = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(html, /id="add-username"/, 'the add form is here');
+    assert.match(html, /action="\/admin\/users\/new"/, 'and posts to this screen');
+    assert.doesNotMatch(html, /Change your password/, 'which is about somebody else');
+  });
+
   it('creates somebody who can then log in (AC #1)', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
     const { token } = await usersScreen(agent);
 
-    const response = await agent.post('/admin/users', {
+    const response = await agent.post('/admin/users/new', {
       csrf_token: token,
       username: 'grace',
       password: 'a password of her own',
@@ -71,7 +88,7 @@ describe('adding a user', () => {
     const agent = await signedIn(cms);
     const { token } = await usersScreen(agent);
 
-    await agent.post('/admin/users', {
+    await agent.post('/admin/users/new', {
       csrf_token: token,
       username: 'grace',
       password: '',
@@ -97,7 +114,7 @@ describe('a user email address (AC #1)', () => {
     const agent = await signedIn(cms);
     const { token } = await usersScreen(agent);
 
-    await agent.post('/admin/users', {
+    await agent.post('/admin/users/new', {
       csrf_token: token,
       username: 'grace',
       password: 'a password of her own',
@@ -297,7 +314,7 @@ describe('a bad add form', () => {
     const agent = await signedIn(cms);
     const { token } = await usersScreen(agent);
 
-    const response = await agent.post('/admin/users', {
+    const response = await agent.post('/admin/users/new', {
       csrf_token: token,
       username: 'grace hopper',
       password: 'a password of her own',
@@ -315,7 +332,7 @@ describe('a bad add form', () => {
     const agent = await signedIn(cms);
     const { token } = await usersScreen(agent);
 
-    const response = await agent.post('/admin/users', {
+    const response = await agent.post('/admin/users/new', {
       csrf_token: token,
       username: 'grace',
       password: 'short',
@@ -331,7 +348,7 @@ describe('a bad add form', () => {
     const agent = await signedIn(cms);
     const { token } = await usersScreen(agent);
 
-    const response = await agent.post('/admin/users', {
+    const response = await agent.post('/admin/users/new', {
       csrf_token: token,
       username: 'ada',
       password: 'a completely different password',

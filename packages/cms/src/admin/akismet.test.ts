@@ -13,10 +13,12 @@ import {
   AKISMET_FIELDS,
   AKISMET_PATH,
   AKISMET_REMOVE,
-  DEFAULT_SITE_SETTINGS,
-  SETTINGS_PATH,
-  writeSiteJson,
-} from './settings.ts';
+  DISCUSSION_SETTINGS,
+} from './settings-discussion.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './settings.ts';
+
+/** The page the key lives on: Discussion, beside what it checks. */
+const SETTINGS_PATH = DISCUSSION_SETTINGS.path;
 import { COMMENT_ADMIN_FIELDS, COMMENTS_MODERATE_PATH, COMMENTS_PATH } from './comments.ts';
 
 /**

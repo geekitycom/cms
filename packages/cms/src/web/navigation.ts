@@ -1,4 +1,5 @@
 import type { Document } from '../content/document.ts';
+import { frontPageSlugs } from './context.ts';
 import type { SiteData } from './context.ts';
 
 /**
@@ -42,7 +43,12 @@ export interface NavigationMenuOptions {
 /** The menu for one request: the explicit items, then the pages that opted in. */
 export function navigationMenu(options: NavigationMenuOptions): MenuItem[] {
   const here = comparablePath(options.url);
-  const items = [...navigationItems(options.site), ...navigationPages(options.pages)];
+  const items = [
+    ...navigationItems(options.site),
+    // The page serving as the front page is linked at `/`, not at the URL that
+    // redirects there: a menu should point at where a reader lands.
+    ...navigationPages(options.pages, frontPageSlugs(options.site).homepage),
+  ];
 
   return items.map((item) => ({
     ...item,
@@ -59,13 +65,17 @@ export function navigationMenu(options: NavigationMenuOptions): MenuItem[] {
  * `navigationOrder` and then by title, and a page that names no order sorts
  * after every page that does: an order is a way of pulling one page to the
  * front, not something every page has to carry before any of them can.
+ *
+ * `homepage` is the slug of the page the site serves at `/`, if it has one:
+ * that page is linked at `/` rather than at its own permalink, which redirects
+ * there.
  */
-export function navigationPages(pages: readonly Document[]): NavigationItem[] {
+export function navigationPages(pages: readonly Document[], homepage = ''): NavigationItem[] {
   return pages
     .filter((document) => document.extra[NAVIGATION_KEY] === true)
     .map((document) => ({
       label: document.title,
-      url: document.permalink,
+      url: homepage !== '' && document.slug === homepage ? '/' : document.permalink,
       order: navigationOrder(document),
     }))
     .sort(

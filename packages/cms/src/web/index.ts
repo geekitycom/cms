@@ -20,12 +20,19 @@ export {
   createSiteDataSource,
   DEFAULT_POSTS_PER_PAGE,
   documentContext,
+  frontPageSlugs,
   postsPerPage,
   SITE_DATA_FILE,
   taxonomyBases,
   termRedirects,
 } from './context.ts';
-export type { DocumentContext, PageContext, SiteData, SiteDataSource } from './context.ts';
+export type {
+  DocumentContext,
+  FrontPageSlugs,
+  PageContext,
+  SiteData,
+  SiteDataSource,
+} from './context.ts';
 export { commentAnchor, createConversation, feedComments, spokenIn } from './conversation.ts';
 export type {
   Conversation,
@@ -155,9 +162,15 @@ export {
 export type { MenuItem, NavigationItem, NavigationMenuOptions } from './navigation.ts';
 export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
-export { createRenderer, TEMPLATES } from './render.ts';
+export { createRenderer, OPTIONAL_TEMPLATES, TEMPLATES } from './render.ts';
 export type { CreateRendererOptions, Listing, Renderer } from './render.ts';
-export { commentsFeedHref, feedHref, homeHref, mountPublicSite } from './routes.ts';
+export {
+  commentsFeedHref,
+  feedHref,
+  homeHref,
+  listingPageHref,
+  mountPublicSite,
+} from './routes.ts';
 export { sanitizeCommentHtml } from './sanitize.ts';
 export {
   robotsResponse,

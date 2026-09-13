@@ -1,0 +1,51 @@
+{# /admin/settings/permalinks: the URLs the archives live at, and the ones they
+   used to. #}
+{% extends "layouts/settings/page.njk" %}
+
+{% block settingsFields %}
+  <label for="settings-tag-base">Tag base</label>
+  <input id="settings-tag-base" name="{{ fields.tagBase }}" type="text" value="{{ form.tagBase }}" required autofocus />
+  {% if problems.tagBase %}<p class="admin-field-error">{{ problems.tagBase }}</p>{% endif %}
+  <p class="admin-hint">The tag archives live at <code>/{{ form.tagBase }}/{tag}/</code>. One path segment, no slashes.</p>
+
+  <label for="settings-category-base">Category base</label>
+  <input id="settings-category-base" name="{{ fields.categoryBase }}" type="text" value="{{ form.categoryBase }}" required />
+  {% if problems.categoryBase %}<p class="admin-field-error">{{ problems.categoryBase }}</p>{% endif %}
+  <p class="admin-hint">The category archives live at <code>/{{ form.categoryBase }}/{name}/</code>.</p>
+{% endblock %}
+
+{% block settingsPanels %}
+  {# The recorded renames are a record of what happened rather than a
+     preference: the taxonomy screens write them as a term is renamed or merged,
+     and this page is where the URLs they are about are decided. #}
+  <section class="admin-settings admin-redirects-panel">
+    <h2>Archive redirects</h2>
+
+    {% if taxonomyRedirects.length %}
+      <table class="admin-list">
+        <thead>
+          <tr><th scope="col">Taxonomy</th><th scope="col">Was</th><th scope="col">Is now</th></tr>
+        </thead>
+        <tbody>
+          {% for redirect in taxonomyRedirects %}
+            <tr>
+              <td>{{ redirect.label }}</td>
+              <td><code>{{ redirect.from }}</code></td>
+              <td><code>{{ redirect.to }}</code></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="admin-hint">
+        Every one of these answers with a permanent redirect to the archive the
+        term lives at now, so a link somebody published still arrives.
+      </p>
+    {% else %}
+      <p class="admin-hint">
+        Nothing has moved yet. Renaming or merging a term on the Tags or
+        Categories screen records the archive URL it used to have here, and the
+        site answers that URL with a permanent redirect from then on.
+      </p>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -100,12 +100,30 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // prefix again, and no session behind either of them.
   mountNotificationLinks(app);
 
-  app.get('/', (c) => listing(c, { term: undefined, pageNumber: 0 }));
+  app.get('/', (c) => {
+    // The site's latest posts, or the page the Reading setting names — the
+    // whole of WordPress's "Your homepage displays", decided per request off
+    // `site.json` so a save on the settings screen moves the front page on the
+    // very next one.
+    const home = frontPages(c).home;
+    if (home === undefined) return listing(c, { term: undefined, pageNumber: 0 });
+    return negotiateDocument(c, home, selectFromAccept(c, DOCUMENT_REPRESENTATIONS), '/');
+  });
 
   app.get(`/${PAGE_SEGMENT}/:page{[0-9]+}/`, (c) => {
     const requested = Number(c.req.param('page'));
     // Page one is the home page; it does not get a second URL.
     if (requested <= 1) return c.redirect('/', 301);
+
+    const pages = frontPages(c);
+    // With a posts page, the listing's pages live under it and these are the
+    // URLs they used to have; with a static homepage and no posts page, the
+    // listing has no page of its own and neither have its pages.
+    if (pages.posts !== undefined) {
+      return c.redirect(listingPageHref(pages.posts.permalink, requested - 1), 301);
+    }
+    if (pages.home !== undefined) return notFound(c);
+
     return listing(c, { term: undefined, pageNumber: requested - 1 });
   });
 
@@ -153,6 +171,22 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   const { store, renderer } = c.var;
   const pathname = requestPath(c);
   const bases = renderer.taxonomyBases();
+  const pages = frontPages(c);
+
+  // The posts page carries the listing at its own URL, so it is answered
+  // before the document lookup that would otherwise render it as the page it
+  // also is. Its pagination hangs off it: `{permalink}page/2/`.
+  if (pages.posts !== undefined) {
+    const request = postsPageRequest(pages.posts, pathname);
+    if (request !== undefined) {
+      // `{permalink}page/1/` is the listing's own URL spelled twice, and
+      // collapses onto it exactly as `/page/1/` collapses onto `/`.
+      if (request.pageNumber === 0 && pathname !== pages.posts.permalink) {
+        return c.redirect(encodePath(pages.posts.permalink), 301);
+      }
+      return listing(c, request);
+    }
+  }
 
   const feedRequest = parseFeedPath(store, pathname, bases);
   if (feedRequest !== undefined) {
@@ -166,6 +200,12 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
 
   const document = publicDocumentAt(store, pathname);
   if (document !== undefined) {
+    // The front page has one URL. The page it is made of keeps its own
+    // permalink in the file, so that a homepage put back to being an ordinary
+    // page goes back to answering there, and that URL points at `/` while it
+    // is the front page.
+    if (document.path === pages.home?.path) return c.redirect('/', 301);
+
     // WordPress answered `?feed=rss2` on a permalink with that post's comments
     // feed, which is the only feed a post has here too. The other spellings
     // name a format a comments feed does not come in, so they are not a feed
@@ -179,8 +219,18 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   const extension = splitRepresentationExtension(pathname);
   if (extension !== undefined) {
     for (const candidate of extension.paths) {
-      const found = publicDocumentAt(store, candidate);
-      if (found !== undefined) return negotiateDocument(c, found, extension.representation);
+      // `/index.md` and `/index.json` are the front page's own
+      // representations on a site whose `/` is a page: the document is at `/`
+      // however it is asked for.
+      const found = candidate === '/' ? pages.home : publicDocumentAt(store, candidate);
+      if (found !== undefined) {
+        return negotiateDocument(
+          c,
+          found,
+          extension.representation,
+          candidate === '/' ? '/' : undefined,
+        );
+      }
     }
 
     // `/index.json`, `/page/2/index.json`, `/tag/x/index.json`,
@@ -188,7 +238,7 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     // representations a listing has.
     if (LISTING_REPRESENTATIONS.includes(extension.representation)) {
       for (const candidate of extension.paths) {
-        const request = parseListingPath(candidate, bases);
+        const request = listingRequestAt(pages, candidate, bases);
         if (request !== undefined) return listing(c, request, extension.representation);
       }
     }
@@ -370,14 +420,21 @@ function selectFromAccept(
   return selectRepresentation(c.req.header('accept'), available);
 }
 
-/** One document in one representation, or the 406 an impossible `Accept` earns. */
+/**
+ * One document in one representation, or the 406 an impossible `Accept` earns.
+ *
+ * `href` is where it is being served, which is its own permalink everywhere
+ * but the front page: a page serving as the homepage is read at `/`, and the
+ * canonical URL, the alternates and the theme's own links have to say so.
+ */
 function negotiateDocument(
   c: Context<GeekityEnv>,
   document: Document,
   representation: Representation | undefined,
+  href: string = document.permalink,
 ): Response {
   if (representation === undefined) {
-    return notAcceptableResponse(encodePath(document.permalink), DOCUMENT_REPRESENTATIONS);
+    return notAcceptableResponse(encodePath(href), DOCUMENT_REPRESENTATIONS);
   }
 
   const body =
@@ -388,7 +445,11 @@ function negotiateDocument(
         : // The thank-you after a comment was posted, which the redirect
           // carried back as a query. It is the only thing about a document's
           // HTML that the URL rather than the file decides.
-          c.var.renderer.renderDocument(document, commentNotice(c, document));
+          // A document served at `/` is the site's front page, and the front
+          // page is the one place a theme may lay a page out differently.
+          href === '/'
+          ? c.var.renderer.renderFrontPage(document, commentNotice(c, document))
+          : c.var.renderer.renderDocument(document, commentNotice(c, document));
 
   // The theme can change without the document changing, and only the document
   // is hashed. While the watcher is on — a development server, where a template
@@ -398,7 +459,7 @@ function negotiateDocument(
   return representationResponse({
     body,
     representation,
-    href: encodePath(document.permalink),
+    href: encodePath(href),
     available: DOCUMENT_REPRESENTATIONS,
     // Where a webmention about this page is sent. It is a header rather than
     // only a `<link>` because a sender is allowed to find the endpoint without
@@ -482,12 +543,17 @@ function canonicalTarget(
     return feedTargetHref(target, feedRequest.format, bases);
   }
 
+  const pages = frontPages(c);
+
   const document = store.getByPermalink(pathname);
   if (document !== undefined) {
-    return isPublicDocument(document) ? encodePath(pathname) : undefined;
+    if (!isPublicDocument(document)) return undefined;
+    // The homepage's own URL leads to `/` rather than to the redirect that
+    // leads to `/`: one hop, the way `/page/1` reaches `/` in one.
+    return document.path === pages.home?.path ? '/' : encodePath(pathname);
   }
 
-  const listing = parseListingPath(pathname, bases);
+  const listing = listingRequestAt(pages, pathname, bases);
   if (listing === undefined) return undefined;
 
   // The home listing exists even with nothing on it; a taxonomy archive does not.
@@ -497,7 +563,7 @@ function canonicalTarget(
   const totalPages = Math.max(1, Math.ceil(total / renderer.pageSize()));
   if (listing.pageNumber >= totalPages) return undefined;
 
-  return listingHref(listing.term, listing.pageNumber, bases);
+  return listingHref(listing.term, listing.pageNumber, bases, listing.document?.permalink ?? '/');
 }
 
 /** Which page of which listing a request is for. */
@@ -506,6 +572,113 @@ interface ListingRequest {
   term: TaxonomyTerm | undefined;
   /** Zero-based index of the page. */
   pageNumber: number;
+  /**
+   * The posts page this listing is being served under, when the site has one.
+   * It decides where the listing's pages live and puts the page's own title
+   * and body above them.
+   */
+  document?: Document | undefined;
+}
+
+/** The pages the Reading setting names, as documents the site would serve. */
+interface FrontPages {
+  /** The page served at `/`, or `undefined` for the site's latest posts. */
+  home: Document | undefined;
+  /** The page whose permalink carries the listing, or `undefined` for none. */
+  posts: Document | undefined;
+}
+
+/**
+ * WordPress's Reading choice, resolved for this request.
+ *
+ * The setting holds slugs, and a slug is only a front page while it names a
+ * page the public site would serve: one drafted, trashed or deleted since it
+ * was picked resolves to nothing, and a site whose homepage resolves to
+ * nothing is a site showing its latest posts again. That is the whole of the
+ * fallback — there is no state to repair and nothing to write — and it is why
+ * the pick is kept rather than cleared: publishing the page again puts the
+ * front page back.
+ */
+function frontPages(c: Context<GeekityEnv>): FrontPages {
+  const { homepage, postsPage } = c.var.renderer.frontPageSlugs();
+  const home = publicPage(c, homepage);
+
+  return {
+    home,
+    // Without a homepage there is no posts page: the listing is already at
+    // `/`, and a second URL for it is exactly what this pair exists to avoid.
+    posts: home === undefined ? undefined : publicPage(c, postsPage),
+  };
+}
+
+/**
+ * A path as the page of a listing it names, wherever the listing lives, or
+ * `undefined` when it names none.
+ *
+ * The posts page first, because its permalink is the listing's root on a site
+ * that has one; then the ordinary `/`, `/page/N/` and the taxonomy archives.
+ * A site whose homepage is a page and which named no posts page has no home
+ * listing at all, so nothing under the root is one either.
+ */
+function listingRequestAt(
+  pages: FrontPages,
+  pathname: string,
+  bases: TaxonomyBases,
+): ListingRequest | undefined {
+  const onPostsPage =
+    pages.posts === undefined ? undefined : postsPageRequest(pages.posts, pathname);
+  if (onPostsPage !== undefined) return onPostsPage;
+
+  const request = parseListingPath(pathname, bases);
+  if (request === undefined) return undefined;
+  if (request.term === undefined && listingRoot(pages) === undefined) return undefined;
+  return request;
+}
+
+/**
+ * Where the post listing lives, or `undefined` when it has no page at all.
+ *
+ * A site showing its latest posts has it at `/`; a site with a posts page has
+ * it there; a site whose homepage is a page and which named no posts page has
+ * nowhere for it, which is WordPress's own answer and the reason its Reading
+ * screen offers the second pick. The feeds are unaffected either way.
+ */
+function listingRoot(pages: FrontPages): string | undefined {
+  if (pages.posts !== undefined) return pages.posts.permalink;
+  return pages.home === undefined ? '/' : undefined;
+}
+
+/** The published page one slug names, or `undefined`. */
+function publicPage(c: Context<GeekityEnv>, slug: string): Document | undefined {
+  if (slug === '') return undefined;
+  const found = c.var.store.getBySlug(slug);
+  if (found?.type !== 'page') return undefined;
+  return isPublicDocument(found, c.var.store.now()) ? found : undefined;
+}
+
+/**
+ * `{permalink}` or `{permalink}page/N/` as a page of the listing the posts
+ * page carries, or `undefined` when the path is neither.
+ *
+ * `page/1/` is not one: the first page of a listing lives at the listing's own
+ * URL, exactly as `/page/1/` collapses onto `/`, and the canonicalisation that
+ * says so is the ordinary one.
+ */
+function postsPageRequest(document: Document, pathname: string): ListingRequest | undefined {
+  const { permalink } = document;
+  if (pathname === permalink) return { term: undefined, pageNumber: 0, document };
+  if (!pathname.startsWith(permalink)) return undefined;
+
+  const segments = pathname
+    .slice(permalink.length)
+    .split('/')
+    .filter((segment) => segment !== '');
+  if (segments.length !== 2 || segments[0] !== PAGE_SEGMENT || !pathname.endsWith('/')) {
+    return undefined;
+  }
+
+  const page = pageIndex(segments[1]);
+  return page === undefined ? undefined : { term: undefined, pageNumber: page, document };
 }
 
 /**
@@ -552,9 +725,20 @@ function listListing(
     : store.listByCategory(term.term, paging);
 }
 
-/** The URL of a page of a listing: the home archive's, or a taxonomy's. */
-function listingHref(term: TaxonomyTerm | undefined, index: number, bases: TaxonomyBases): string {
-  return term === undefined ? homeHref(index) : termHref(term, index, bases);
+/**
+ * The URL of a page of a listing: the home archive's, or a taxonomy's.
+ *
+ * `root` is where the home listing lives — `/`, or the posts page's permalink
+ * on a site that has one — so every link the listing draws, every canonical
+ * redirect and the sitemap all spell its pages the same way.
+ */
+function listingHref(
+  term: TaxonomyTerm | undefined,
+  index: number,
+  bases: TaxonomyBases,
+  root = '/',
+): string {
+  return term === undefined ? listingPageHref(root, index) : termHref(term, index, bases);
 }
 
 /**
@@ -577,6 +761,9 @@ function listing(
   const { term } = request;
   const size = renderer.pageSize();
   const bases = renderer.taxonomyBases();
+  // Where this listing's pages live: the posts page's permalink when the site
+  // has one, and the site root otherwise.
+  const root = request.document?.permalink ?? '/';
 
   // WordPress served every feed as a query on the listing before it served one
   // at a path, and the links are still out there. `/?feed=rss2` and
@@ -589,12 +776,12 @@ function listing(
   const total = countListing(store, term);
   if (term !== undefined && total === 0) return notFound(c);
 
-  const href = listingHref(term, request.pageNumber, bases);
+  const href = listingHref(term, request.pageNumber, bases, root);
   const pagination = paginate({
     total,
     size,
     pageNumber: request.pageNumber,
-    hrefForPage: (index) => listingHref(term, index, bases),
+    hrefForPage: (index) => listingHref(term, index, bases, root),
   });
 
   if (request.pageNumber >= pagination.totalPages) return notFound(c);
@@ -610,10 +797,15 @@ function listing(
           documentJson(document, { baseUrl: c.var.config.baseUrl, body: full }),
         )
       : renderer.renderListing({
-          title: term?.term ?? renderer.site().title,
+          // The posts page is headed by its own title, the way any page is;
+          // the home listing is headed by the site's.
+          title: term?.term ?? request.document?.title ?? renderer.site().title,
           url: href,
           documents,
           pagination,
+          // And its words go above the posts, which is what a posts page is
+          // for: a theme prints `{{ content | safe }}` over the list.
+          ...(request.document === undefined ? {} : { document: request.document }),
           ...(term === undefined ? {} : taxonomyContext(term)),
         });
 
@@ -786,6 +978,7 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   const now = store.now();
   const size = renderer.pageSize();
   const bases = renderer.taxonomyBases();
+  const pages = frontPages(c);
   const urls: SitemapUrl[] = [];
 
   /** The pages of one listing, each dated by the newest document on it. */
@@ -801,13 +994,27 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   };
 
   const posts = store.listPosts().filter((document) => isPublicDocument(document, now));
-  listingPages(posts, homeHref);
 
-  const pages = store
+  // The listing's pages, wherever it lives: under `/`, under the posts page,
+  // or nowhere at all on a site whose homepage is a page and which named no
+  // posts page. Its first page is that root, which is why `/` and the posts
+  // page's own URL are listed here rather than with the documents.
+  const root = listingRoot(pages);
+  if (root !== undefined) listingPages(posts, (index) => listingPageHref(root, index));
+
+  // And `/` itself when it is a page rather than the listing: the front page
+  // is published at one URL, and it is this one.
+  if (pages.home !== undefined) urls.push({ loc: '/', lastmod: lastModifiedOf(pages.home) });
+
+  const documents = store
     .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
     .filter((document) => isPublicDocument(document, now));
 
-  for (const document of [...posts, ...pages]) {
+  for (const document of [...posts, ...documents]) {
+    // The homepage answers at `/` and redirects from its own permalink, and
+    // the posts page is the listing's first page, which is already listed:
+    // neither is advertised twice.
+    if (document.path === pages.home?.path || document.path === pages.posts?.path) continue;
     urls.push({ loc: document.permalink, lastmod: lastModifiedOf(document) });
   }
 
@@ -898,7 +1105,17 @@ function upload(c: Context<GeekityEnv>): Response {
 
 /** The URL of a page of the home listing, by zero-based index. */
 export function homeHref(index: number): string {
-  return index === 0 ? '/' : `/${PAGE_SEGMENT}/${String(index + 1)}/`;
+  return listingPageHref('/', index);
+}
+
+/**
+ * The URL of a page of the listing that hangs off `root`, by zero-based index.
+ *
+ * The first page is the root itself: `/` or the posts page's own permalink,
+ * which is what makes a posts page one URL rather than two.
+ */
+export function listingPageHref(root: string, index: number): string {
+  return index === 0 ? root : `${root}${PAGE_SEGMENT}/${String(index + 1)}/`;
 }
 
 /**

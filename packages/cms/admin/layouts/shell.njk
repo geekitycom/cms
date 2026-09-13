@@ -19,11 +19,25 @@
 
 {% block main %}
   <div class="admin-shell">
+    {# WordPress classic: a section is a heading over its screens. The heading
+       goes to the first of them, the open section shows the rest, and the one
+       you are on carries aria-current. Nothing here is scripted — the server
+       already knows which section is open, so expanding one is a page the
+       browser asks for rather than a class JavaScript toggles. #}
     <nav class="admin-nav" aria-label="Sections">
       <ul>
         {% for item in navigation %}
-          <li>
-            <a href="{{ item.url }}"{% if item.section == section %} aria-current="page"{% endif %}>{{ item.label }}</a>
+          <li class="admin-nav-section{% if item.open %} admin-nav-open{% endif %}">
+            <a class="admin-nav-heading" href="{{ item.url }}">{{ item.label }}</a>
+            {% if item.open %}
+              <ul class="admin-nav-children">
+                {% for entry in item.children %}
+                  <li>
+                    <a href="{{ entry.url }}"{% if entry.current %} aria-current="page"{% endif %}>{{ entry.label }}</a>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% endif %}
           </li>
         {% endfor %}
       </ul>

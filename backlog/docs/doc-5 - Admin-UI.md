@@ -3,11 +3,50 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-05 11:58'
+updated_date: '2026-09-13 03:14'
 ---
 # Admin UI
 
 The admin lives at `/admin` and borrows the shape of WordPress classic without its editors. Server-rendered Nunjucks pages, progressive enhancement only where it clearly helps (markdown preview, slug auto-fill).
+
+## The menu
+
+The navigation down the left is WordPress classic. A **section** is a heading
+with one or more children; clicking the heading opens the section and lands on
+the first of its children; the open section shows its children and the one you
+are on is marked with `aria-current="page"`, so clicking Users tells you that
+you are on Users > All users. Every section has at least one child even when it
+has exactly one screen, because that is what makes the rule uniform: a second
+child can appear later without the menu changing shape, and no screen has to
+know whether it is the only one of its kind.
+
+| Section    | Children                                     |
+| ---------- | -------------------------------------------- |
+| Dashboard  | Home                                         |
+| Posts      | All posts, Add new, Categories, Tags         |
+| Pages      | All pages, Add new                           |
+| Media      | Library                                      |
+| Comments   | All comments                                 |
+| Messages   | All messages                                 |
+| Users      | All users, Add new                           |
+| Settings   | General, Reading, Permalinks, Discussion, Email, Federation |
+| Federation | Followers                                    |
+
+The terms are under Posts rather than at the top level because that is what
+they are about: a tag with no post on it is nothing.
+
+The whole menu is one registry, `src/admin/menu.ts`. A screen names its section
+and its child — `render(c, template, { section: 'posts', child: 'tags', … })` —
+and the registry renders the list; a pair it does not hold is refused rather
+than drawn as a menu expanded around nothing, so a screen cannot ship naming a
+child that does not exist. Adding a screen to the menu is one entry in a
+section's `children` and the same `child` name on what that screen renders.
+
+The menu needs no JavaScript. The server already knows which section is open,
+so expanding one is a page the browser asks for rather than a class a script
+toggles: it is a list of links, the open section a real nested `<ul>` inside its
+section's `<li>`. On a narrow screen the column moves above the page and wraps
+instead of becoming a sliver.
 
 ## Screens
 
@@ -19,11 +58,17 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 | `/admin/posts` | table: title, author, tags, date, status; filters for all/published/draft/trash |
 | `/admin/posts/new`, `/admin/posts/:slug` | editor |
 | `/admin/pages`, `/admin/pages/new`, `/admin/pages/:slug` | same as posts, without date prefix or tags |
-| `/admin/tags`, `/admin/categories` | every term in use with its post and file counts; rename, merge, delete |
+| `/admin/tags`, `/admin/categories` | every term in use with its post and file counts; rename, merge, delete (under Posts in the menu) |
 | `/admin/comments` | pending, approved and spam, with approve, spam, delete and reply on every row |
 | `/admin/messages` | what the contact form on a page collected: read, mark read, delete |
-| `/admin/settings` | site title, tagline, base URL, timezone, posts per page, comments on/off and closing window, actor handle and type, the Akismet key, the mail provider and its credential, the contact address |
-| `/admin/users` | list, add, set each user's email, which notices go to it and how often, change your own password (single role: admin) |
+| `/admin/settings` | Settings > General: site title, tagline, author, base URL, time zone, language, and the avatar |
+| `/admin/settings/reading` | what the homepage displays, posts per page, the site menu, the notify server |
+| `/admin/settings/permalinks` | the tag and category bases, and the archive redirects the taxonomy screens recorded |
+| `/admin/settings/discussion` | comments on or off and the closing window, webmentions sent and received, the Akismet key |
+| `/admin/settings/email` | the mail provider, the From line and reply-to, the contact address, the credential and the test message |
+| `/admin/settings/federation` | the actor handle and type, and the relays the site subscribes to |
+| `/admin/users` | list, set each user's email, which notices go to it and how often, change your own password (single role: admin) |
+| `/admin/users/new` | the add form, Users > Add new |
 | `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
 
 ## Editor
@@ -52,10 +97,15 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 
 ## Settings
 
-- Every setting is a field of one form that rewrites `content/_data/site.json` (decision-9), with two exceptions: the avatar, which is an image, and the Akismet key, which is a credential. Both are their own pair of forms — save and remove — because neither can travel in that body, and because a rejected one must not lose an edit to the title.
+- Settings is six pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (what the homepage displays, posts per page, the site menu, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message) and **Federation** (the actor handle and type, and the relays). `/admin/settings` is the General page, which is where the Settings heading lands.
+- Every page is one form of its own with its own POST, and every one of them rewrites `content/_data/site.json` through the same update (decision-9). A page writes the fields it carries and no others, onto the file as re-read inside the write, so two people saving two different pages at the same moment both land and a key the settings do not model is kept. A page validates its own fields and no others: a refused save comes back on the page it was sent from, with the problems on the fields that have them, having written nothing at all.
+- Three things are not fields of any form, and each is its own pair of forms — save and remove — because none can travel in that body and because a rejected one must not lose an edit beside it: the **avatar**, on General; the **Akismet key**, on Discussion; and the **mail credential**, on Email.
 - **Spam checking.** The Akismet key lives in `data/akismet.json` at mode `0600` rather than in `site.json`, which is public and in git. Saving one checks it with Akismet's `verify-key` first; the panel then says connected, "does not recognise this key", "could not be reached", or not connected, and shows the last four characters rather than the key. Remove key turns Akismet off. See doc-6.
-- **Email.** How the site sends mail is three settings on the main form — `mailProvider` (`none`, `brevo` or `smtp`), the From name and address, and the reply-to — and one credential below it. The Brevo API key and the SMTP host, port, TLS flag, user and password live in `data/mail.json` at mode `0600`, never in `site.json`, and are its own pair of forms for the reason the Akismet key is. Neither secret is printed back: the panel shows the last four characters of the key and the non-secret half of the SMTP connection, and a blank secret keeps the stored one. **Send test email** takes an address and sends the theme's `test` message through the whole chain, reporting the provider's own answer and its message id on the flash. With no configuration, nothing is sent and every feature that emails still succeeds. See the Email section of the package README.
-- **The contact address.** `contactEmail`, on the same form under Email, is where a message from a page's contact form is sent, with reply-to set to whoever wrote it. Empty falls back to the first admin with an email address, by username, so a fresh site with a mail credential takes messages without anybody visiting the field. It is read when a message arrives and is never put on a render context, so it cannot appear in the HTML of the page the form is on however a theme is written.
+- **Email.** How the site sends mail is four settings on the Email form — `mailProvider` (`none`, `brevo` or `smtp`), the From name and address, and the reply-to — and one credential below it. The Brevo API key and the SMTP host, port, TLS flag, user and password live in `data/mail.json` at mode `0600`, never in `site.json`. Neither secret is printed back: the panel shows the last four characters of the key and the non-secret half of the SMTP connection, and a blank secret keeps the stored one. **Send test email** takes an address and sends the theme's `test` message through the whole chain, reporting the provider's own answer and its message id on the flash. With no configuration, nothing is sent and every feature that emails still succeeds. See the Email section of the package README.
+- **What the homepage displays.** WordPress's own question, and its two answers: **Your latest posts**, the archive at `/`, or a page picked from the site's published pages, which is then served at `/` while its own URL redirects there. A second pick, the **Posts page**, gives the listing a page of its own: that page's URL carries it, under the page's title and words, paginated beneath it, and `/page/N/` at the root redirects there. A posts page with no homepage is refused, as WordPress refuses it, and so is one page picked as both. The two are stored in `site.json` as the slugs `homepage` and `postsPage` — absent altogether for the latest posts — so an Eleventy build of the same directory shows the same front page. A pick whose page is later drafted, trashed or deleted is off the list and the site is back to its latest posts; the setting keeps the slug and the page says which one has gone, because a select that had quietly reset itself would be the screen lying about what is stored. The pages list marks both rows the way WordPress does, **Front Page** and **Posts Page**, and the feeds stay at `/feed/` and its siblings whatever is chosen.
+- **The contact address.** `contactEmail`, on the Email page, is where a message from a page's contact form is sent, with reply-to set to whoever wrote it. Empty falls back to the first admin with an email address, by username, so a fresh site with a mail credential takes messages without anybody visiting the field. It is read when a message arrives and is never put on a render context, so it cannot appear in the HTML of the page the form is on however a theme is written.
+- **Side effects stay with the field.** Saving General or Federation tells the followers when what it changed is part of the actor's profile; saving Federation reconciles the relay list, sending a `Follow` for a line added and an `Undo` for one removed; saving or removing the avatar tells the followers too. The flash says what was sent.
+- The code follows the same seam: `src/admin/settings.ts` is the settings themselves and nothing about a screen, `settings-page.ts` is what every page is made of, `settings-pages.ts` is the list, and each page is its own module beside its own template under `admin/layouts/settings/`.
 
 ## Auth
 
@@ -66,7 +116,7 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 
 ## User email and password recovery
 
-- **The address.** Every user may have an email address, and most will not: a login is a username and a password, and the address only buys password recovery and, later, the notices TASK-55 sends. It is set on the `/admin/users` table — one inline field per row, any row, since there is one role and every user already has every power — on the add form beside the username, and by `geekity user add <name> --email <address>`. An empty box removes it. It never appears on the public site.
+- **The address.** Every user may have an email address, and most will not: a login is a username and a password, and the address only buys password recovery and, later, the notices TASK-55 sends. It is set on the `/admin/users` table — one inline field per row, any row, since there is one role and every user already has every power — on the add form at `/admin/users/new` beside the username, and by `geekity user add <name> --email <address>`. An empty box removes it. It never appears on the public site.
 - **Asking.** `/admin/forgot` takes a username *or* an email address and always answers with the same sentence, whether the name matched, did not match, or matched somebody with no address. That is the whole point of the screen: an answer that varied would be a list of which accounts the site has. Requests are rate limited by username and by address exactly as sign-ins are, on a throttle of its own, so a flood of resets for one person cannot lock them out of logging in.
 - **The link.** A match with an address gets a message from the theme's `password-reset` template carrying `/admin/reset?token=…` — 256 random bits, hex. Only the token's SHA-256 is stored, in the `password_resets` table beside the sessions, so a copy of `geekity.db` is not a stack of working links. It expires an hour out and works once. The token is never rendered into the page of the browser that asked for it.
 - **Setting it.** The reset form holds the new password to the same rules every other door does, then deletes every reset that user had outstanding, signs out every session they had, and sends the theme's `password-changed` confirmation, which carries no link back in. Both screens are unauthenticated and carry the session CSRF token and the admin security headers like every other form.

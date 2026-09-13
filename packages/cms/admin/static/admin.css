@@ -130,10 +130,71 @@ a {
   font-weight: 600;
 }
 
+/* A section is a heading over its screens. Only the open one shows them, so
+   the menu is a list of nine things until you are inside one of them. */
+
+.admin-nav-section + .admin-nav-section {
+  border-top: 1px solid #3c434a;
+}
+
+.admin-nav-heading {
+  font-weight: 600;
+}
+
+.admin-nav-open > .admin-nav-heading {
+  background: #1d2327;
+  color: #fff;
+}
+
+.admin-nav-children {
+  background: #32373c;
+  font-size: 0.95em;
+}
+
+.admin-nav-children a {
+  padding-left: 1.6rem;
+  font-weight: 400;
+}
+
 .admin-main {
   flex: 1;
   min-width: 0;
   padding: 1.25rem 1.5rem 3rem;
+}
+
+/* Narrow: the column would be a sliver, so the menu goes above the screen and
+   wraps, sections on one line and the open section's children under them. */
+
+@media (max-width: 45rem) {
+  .admin-shell {
+    display: block;
+  }
+
+  .admin-nav > ul,
+  .admin-nav-children {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .admin-nav-section + .admin-nav-section {
+    border-top: 0;
+  }
+
+  .admin-nav-section {
+    flex: 1 0 auto;
+  }
+
+  .admin-nav-open {
+    flex-basis: 100%;
+  }
+
+  .admin-nav-children a {
+    padding-left: 0.9rem;
+  }
+
+  .admin-main {
+    padding: 1rem 1rem 3rem;
+  }
 }
 
 /* Login and setup: no navigation, one card in the middle of the page. */
@@ -231,6 +292,11 @@ h2 {
   color: var(--admin-muted);
 }
 
+/* What a page is to the site besides a page: Front Page, Posts Page. */
+.admin-page-role {
+  color: var(--admin-muted);
+}
+
 .admin-status-draft {
   color: var(--admin-error);
 }
@@ -254,6 +320,7 @@ label {
 
 input[type='text'],
 input[type='password'],
+input[type='email'],
 textarea {
   width: 100%;
   padding: 0.4rem 0.5rem;

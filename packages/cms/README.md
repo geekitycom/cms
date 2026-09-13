@@ -484,8 +484,8 @@ rather than in the trash: there is no file left to build the `Tombstone` from.
 
 A [Mastodon-style relay][fepae0c] boosts every public activity it is sent on to
 the instances subscribed to it, which is how a site nobody follows yet reaches
-people. `relays` is the setting: one relay inbox per line on `/admin/settings`, kept
-in `site.json` like every other setting, and
+people. `relays` is the setting: one relay inbox per line on
+`/admin/settings/federation`, kept in `site.json` like every other setting, and
 `https://tags.pub/user/_____relay_____/inbox` is one worth knowing about — it
 boosts any public post carrying a hashtag it tracks, which every `Article` this
 CMS builds already carries one of per tag and per category.
@@ -518,7 +518,8 @@ on the next boot.
 
 ### The site's avatar
 
-The actor's `icon` is an image uploaded on `/admin/settings`. It is stored with
+The actor's `icon` is an image uploaded on `/admin/settings`, the General page.
+It is stored with
 the site's other uploads, under `content/uploads/{yyyy}/{mm}/`, and the public
 path it is served at — `/uploads/2026/09/me.png` — is the `avatar` setting in
 `content/_data/site.json`, like the rest of them. The actor
@@ -754,7 +755,7 @@ key is a credential rather than a setting: it lives in `data/akismet.json` at
 mode `0600` beside the password hashes and the actor's private keys, never in
 `content/_data/site.json`, which is public, in git and published with the site.
 
-Paste it into **Spam checking** on `/admin/settings`. It is checked with
+Paste it into **Spam checking** on `/admin/settings/discussion`. It is checked with
 Akismet's `verify-key` before it is stored, and the panel then reads Connected,
 "Akismet does not recognise this key", "Akismet could not be reached", or Not
 connected. The key is never printed back — the last four characters are, so it
@@ -794,7 +795,7 @@ Marking something spam or not spam on `/admin/comments` posts `submit-spam` or
 
 The open web's version of what ActivityPub does: one page telling another that
 it linked to it. Both directions are on by default and each has a switch on the
-settings screen.
+Discussion settings page.
 
 | Setting in `site.json` | What it does                                                             |
 | ---------------------- | ------------------------------------------------------------------------ |
@@ -876,7 +877,7 @@ back to `no-reply@` at the site's host, which most providers will refuse.
 
 ### Send test email
 
-The settings screen has an address field and a button that sends the `test`
+The Email settings page has an address field and a button that sends the `test`
 message through the whole chain — the template, the From line, the provider and
 the retry — and reports what came back, the provider's own words and its
 message id included. It is the one thing that proves mail works before somebody
@@ -1196,9 +1197,18 @@ shadow the login form.
 | `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                                     |
 | `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                                     |
 | `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                                   |
-| `/admin/settings`                                | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor.             |
+| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language, avatar.        |
 | `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                                    |
-| `/admin/users`                                   | Who may sign in. `POST` adds one.                                                         |
+| `/admin/settings/reading`                        | Posts per page, the site menu, the notify server.                                         |
+| `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.                   |
+| `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                        |
+| `/admin/settings/akismet`                        | `POST` only. Saves the Akismet key, or forgets it.                                        |
+| `/admin/settings/email`                          | The mail provider, the From line, the reply-to and the contact address.                   |
+| `/admin/settings/mail`                           | `POST` only. Saves a mail credential, or forgets every one of them.                       |
+| `/admin/settings/mail/test`                      | `POST` only. Sends the theme's test message through the whole chain.                      |
+| `/admin/settings/federation`                     | The actor handle and type, and the relays the site subscribes to.                         |
+| `/admin/users`                                   | Who may sign in, and the change-password form.                                            |
+| `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                           |
 | `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                                  |
 | `/admin/users/email`                             | `POST` only. Sets or clears the email address on the row the form names.                  |
 | `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the row the form names.                       |
@@ -1212,11 +1222,39 @@ shadow the login form.
 | `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                               |
 
 The screens behind the login share one layout: a bar across the top with the
-site name and a link to the public site, the sections down the left with the
-current one marked, and a place for flash messages. A message queued with
-`flash(c, 'notice', '…')` is kept on the session row, shown on the next page the
-browser asks for, and cleared as it is read, so it survives exactly one
-redirect.
+site name and a link to the public site, the menu down the left, and a place for
+flash messages. A message queued with `flash(c, 'notice', '…')` is kept on the
+session row, shown on the next page the browser asks for, and cleared as it is
+read, so it survives exactly one redirect.
+
+### The menu
+
+The menu is WordPress classic: nine sections — Dashboard, Posts, Pages, Media,
+Comments, Messages, Users, Settings, Federation — each a heading over one or
+more children. Clicking a heading opens the section and lands on its first
+child; the open section shows its children and the one you are on carries
+`aria-current="page"`, so Users tells you that you are on Users > All users.
+Tags and categories are children of Posts, because a tag with no post on it is
+nothing. Every section has at least one child even when it has one screen, so
+the rule never needs an exception and a second child can appear later without
+the menu changing shape. There is no JavaScript in it: the server knows which
+section is open, so expanding one is a page rather than a script.
+
+The whole menu is `ADMIN_SECTIONS` in `src/admin/menu.ts`. A site's own screen
+joins it in two steps:
+
+```ts
+// 1. One entry in the section's children, naming the screen and its URL.
+{ child: 'imports', label: 'Imports', url: '/admin/imports' }
+
+// 2. The same pair on whatever that screen renders.
+render(c, 'layouts/imports.njk', { section: 'posts', child: 'imports' });
+```
+
+Nothing else changes: the heading, the landing URL and the marking all follow.
+A screen naming a section or a child the registry does not hold throws
+`UnknownAdminScreenError` rather than rendering a menu expanded around nothing,
+so the mistake is a failed test instead of a menu that quietly marks nothing.
 
 Who may sign in is `data/users.json`: one entry per user with an id, a
 username, an argon2 hash and a created time, written atomically with `0600`
@@ -1282,9 +1320,15 @@ await createUser({
 ### Settings
 
 `content/_data/site.json` is the source of truth for a site's settings. The
-screen at `/admin/settings` reads that file, validates what was typed, and
-writes it back; nothing else remembers a setting, and `data/geekity.db` holds
-none of them.
+pages under `/admin/settings` — General, Reading, Permalinks, Discussion, Email
+and Federation — each read that file, validate what was typed and write it
+back; nothing else remembers a setting, and `data/geekity.db` holds none of
+them.
+
+Each page saves its own fields and no others, onto the file as re-read inside
+the write, so two people saving two different pages at the same moment both
+land, and each page validates only what it shows: a refused save comes back on
+the page it was sent from and writes nothing at all.
 
 The write is atomic and serialised: the bytes go to a temporary file beside the
 real one and are renamed over it, and the read of what the file already held
@@ -1294,6 +1338,7 @@ source, another process entirely — always sees one whole version, and two save
 at once cannot each keep half of what the other kept.
 
 The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
+`homepage`, `postsPage`,
 `timezone`, `language`, `avatar`, `actorHandle`, `actorType`, `tagBase`,
 `categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
@@ -1301,6 +1346,13 @@ The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
 type is the default too: a hand-edited `site.json` cannot take the site down.
+
+`homepage` and `postsPage` are the only two written just when they have a
+value: WordPress's Reading choice, the slug of the page served at `/` and the
+slug of the page whose own URL carries the post listing, absent altogether on a
+site that shows its latest posts at `/`. A `postsPage` without a `homepage` is
+ignored, the listing being at `/` already, and a slug naming no published page
+is a site back on its latest posts. See [The front page](#the-front-page).
 
 Because it is the source rather than a copy, editing it by hand while the
 server runs is picked up on the next request — on the public site, in the
@@ -1311,8 +1363,8 @@ site's settings.
 The one exception is `url`. A base URL decides the absolute URLs in the feeds,
 the ActivityStreams ids and whether the session cookie is `Secure`, so
 `GEEKITY_BASE_URL` and a `baseUrl` in the config file both win over the file's,
-and the settings screen renders the field read-only and says which value is in
-effect and why. When neither names one, the file's `url` becomes the base URL
+and the General settings page renders the field read-only and says which value
+is in effect and why. When neither names one, the file's `url` becomes the base URL
 at boot — at boot rather than on save, so an `https` base URL cannot log out
 the admin who submitted it over `http`.
 
@@ -1327,6 +1379,39 @@ has those rows written into `site.json` on the first boot of this one, and the
 table is dropped. If the file was written after the rows were — a hand edit, or
 a content directory restored from git — the file wins, keeping only the actor
 handle and type from the rows, because those are the two the file never carried.
+
+### The front page
+
+`/` is the site's latest posts until the Reading settings say otherwise. The
+choice is WordPress's own, and so are its two answers:
+
+- **Your latest posts.** The archive at `/`, paginated at `/page/N/`. This is
+  the default, and it is what an empty `homepage` means.
+- **A static page.** The page is served at `/`, its own permalink answers `301`
+  to `/` so the front page has one URL, and the menu links it at `/`. A theme
+  may lay it out on its own with `theme/layouts/front-page.njk`, which falls
+  back to the page layout.
+
+With a homepage set, a second pick gives the listing a page of its own: the
+**posts page**. Its permalink carries the listing, with the page's own title
+and words above the posts, paginated beneath it at `{permalink}page/N/`;
+`/page/N/` at the root redirects there, and `theme/layouts/posts-page.njk` is
+the theme's override, falling back to the listing layout. A posts page with no
+homepage is refused, as WordPress refuses it, and so is one page picked as
+both. With a homepage and no posts page the listing has no page of its own,
+which is WordPress's answer too.
+
+The feeds do not move: `/feed/`, `/feed/atom/` and `/feed/json/` syndicate the
+site's posts wherever the listing is read, and every page advertises them. The
+sitemap follows the site — `/` once, and the listing's pages under the posts
+page — and the pages list marks the two rows **Front Page** and **Posts Page**.
+
+Both settings are page slugs in `content/_data/site.json`, so an Eleventy build
+of the same directory shows the same front page:
+`docs/eleventy.config.example.js` puts the homepage at `/` and flags the posts
+page on the context as `isPostsPage`. A slug whose page is drafted, trashed or
+deleted names nothing published, and the site is back to its latest posts with
+the pick kept: publishing the page again puts the front page back.
 
 ### The media library
 
@@ -1600,7 +1685,8 @@ of the request.
 
 `tag` and `category` are the bases a site has until it says otherwise —
 WordPress's own, so a site imported from it keeps every archive URL it
-published. `tagBase` and `categoryBase` on the settings screen move them, and
+published. `tagBase` and `categoryBase` on the Permalinks settings page move
+them, and
 the routes, the paging, the canonical redirects, the tag feeds, the theme's
 links and the ActivityStreams hashtags all follow on the next request. A base
 is one URL-safe path segment: no slashes, and not a path the site already
@@ -1615,7 +1701,8 @@ can put its archives at the same URLs.
 Every page carries the site menu, which the theme renders in the header. It is
 two things joined:
 
-1. The `navigation` setting, edited on `/admin/settings` as one `Label | URL`
+1. The `navigation` setting, edited on `/admin/settings/reading` as one
+   `Label | URL`
    per line — `About | /about/`, `Mastodon | https://example.social/@me` — in
    the order it is typed. The URL is a site-root path or an absolute
    `http(s)` URL; anything else is refused with the offending line quoted.

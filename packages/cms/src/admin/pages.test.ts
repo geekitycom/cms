@@ -138,6 +138,34 @@ describe('the pages listing', () => {
     assert.ok(!/<th scope="col">Tags<\/th>/.test(html), 'a page carries no tags');
     assert.ok(!/<th scope="col">Date<\/th>/.test(html), 'and no publish date');
   });
+
+  it('marks the homepage and the posts page, the way WordPress does (AC #4)', async () => {
+    const contentDir = await seeded([
+      { file: 'pages/welcome.md', title: 'Welcome', permalink: '/welcome/' },
+      { file: 'pages/news.md', title: 'News', permalink: '/news/' },
+      { file: 'pages/about.md', title: 'About', permalink: '/about/' },
+    ]);
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({ title: 'A Site', homepage: 'welcome', postsPage: 'news' }),
+      'utf8',
+    );
+
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const rows = (await (await agent.get('/admin/pages')).text())
+      .split('<tr>')
+      .filter((row) => row.includes('/admin/pages/'));
+
+    const rowFor = (title: string): string =>
+      rows.find((row) => row.includes(`>${title}</a>`)) ?? '';
+
+    assert.match(rowFor('Welcome'), /Front Page/);
+    assert.match(rowFor('News'), /Posts Page/);
+    assert.doesNotMatch(rowFor('About'), /Front Page|Posts Page/);
+  });
 });
 
 describe('the page editor', () => {

@@ -1,0 +1,30 @@
+{# /admin/settings/federation: who the site is on the fediverse, and who boosts
+   it. The Federation section in the menu is the other half: who follows it. #}
+{% extends "layouts/settings/page.njk" %}
+
+{% block settingsFields %}
+  <label for="settings-actor-handle">Actor handle</label>
+  <input id="settings-actor-handle" name="{{ fields.actorHandle }}" type="text" value="{{ form.actorHandle }}" required autofocus />
+  {% if problems.actorHandle %}<p class="admin-field-error">{{ problems.actorHandle }}</p>{% endif %}
+  <p class="admin-hint">The local part of the site's handle: <code>@{{ form.actorHandle }}@…</code>.</p>
+
+  <label for="settings-actor-type">Actor type</label>
+  <select id="settings-actor-type" name="{{ fields.actorType }}">
+    {% for type in actorTypes %}
+      <option value="{{ type }}"{% if type == form.actorType %} selected{% endif %}>{{ type }}</option>
+    {% endfor %}
+  </select>
+  {% if problems.actorType %}<p class="admin-field-error">{{ problems.actorType }}</p>{% endif %}
+  <p class="admin-hint">Some clients hide <code>Service</code> actors from timelines; <code>Person</code> is the safer default.</p>
+
+  <label for="settings-relays">Relays</label>
+  <textarea id="settings-relays" name="{{ fields.relays }}" rows="3" spellcheck="false">{{ form.relays }}</textarea>
+  {% if problems.relays %}<p class="admin-field-error">{{ problems.relays }}</p>{% endif %}
+  <p class="admin-hint">
+    One relay inbox per line, such as
+    <code>https://tags.pub/user/_____relay_____/inbox</code>. Adding one sends
+    it a follow; every public post then goes to it as well as to the
+    followers, and it boosts them on to instances nobody here follows. The
+    Federation screen says where each subscription stands.
+  </p>
+{% endblock %}

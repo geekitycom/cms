@@ -12,15 +12,17 @@ import type { MailCredentials } from '../mail/credentials.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import {
-  DEFAULT_SITE_SETTINGS,
+  EMAIL_SETTINGS,
   MAIL_FIELDS,
   MAIL_PATH,
   MAIL_REMOVE,
   MAIL_TEST_FIELDS,
   MAIL_TEST_PATH,
-  SETTINGS_PATH,
-  writeSiteJson,
-} from './settings.ts';
+} from './settings-email.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './settings.ts';
+
+/** The page the credential lives on: Email, beside the From line it sends as. */
+const SETTINGS_PATH = EMAIL_SETTINGS.path;
 
 /**
  * Email on the settings screen: where the credential lands, what the screen
@@ -250,20 +252,6 @@ describe('where mail credentials live (AC #3)', () => {
     assert.ok(token !== undefined);
     const response = await agent.post(SETTINGS_PATH, {
       csrf_token: token,
-      title: 'A Site',
-      tagline: '',
-      base_url: 'https://blog.example',
-      timezone: 'UTC',
-      language: 'en',
-      posts_per_page: '10',
-      author: '',
-      actor_handle: 'blog',
-      actor_type: 'Person',
-      tag_base: 'tag',
-      category_base: 'category',
-      comments: '1',
-      comments_close_after_days: '14',
-      notify_server: '',
       mail_provider: 'brevo',
       mail_from_name: 'A Site',
       mail_from_address: 'blog@example.com',

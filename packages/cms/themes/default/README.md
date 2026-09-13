@@ -66,6 +66,22 @@ packaged ones by name:
 `layouts/base.njk` defines the blocks `title`, `head`, `alternates`, `header`,
 `content`, `footer` and `scripts`, so most sites never have to copy it.
 
+Two layouts are override points rather than files shipped here, for the pages
+the Reading settings name:
+
+| Template                 | Rendered for                  | Falls back to      |
+| ------------------------ | ----------------------------- | ------------------ |
+| `layouts/front-page.njk` | the page served at `/`        | `layouts/page.njk` |
+| `layouts/posts-page.njk` | the listing on the posts page | `layouts/home.njk` |
+
+Neither is needed: a site that sets a homepage gets the page layout for it and
+a site that sets a posts page gets the listing layout, until it writes one.
+Writing `theme/layouts/front-page.njk` is how a front page is laid out
+differently from every other page without overriding the layout they all use.
+On the posts page the page's own front matter and rendered body are on the
+context beside the listing, so `{{ content | safe }}` prints its words above
+the posts; `layouts/home.njk` already does.
+
 ## Mail templates
 
 The messages the CMS sends live under `mail/` and resolve the same way, so

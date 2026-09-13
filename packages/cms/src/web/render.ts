@@ -1,10 +1,15 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+
 import type { Environment } from 'nunjucks';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { themeSearchPath } from './assets.ts';
 import {
   createSiteDataSource,
   documentContext,
+  frontPageSlugs,
   postsPerPage,
   taxonomyBases,
   termRedirects,
@@ -14,7 +19,7 @@ import type { ContactFormContext } from '../contact/form.ts';
 import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
-import type { DocumentContext, SiteData } from './context.ts';
+import type { DocumentContext, FrontPageSlugs, SiteData } from './context.ts';
 import { navigationMenu } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
@@ -29,6 +34,24 @@ export const TEMPLATES = {
   tag: 'layouts/tag.njk',
   category: 'layouts/category.njk',
   notFound: 'layouts/404.njk',
+} as const;
+
+/**
+ * The two templates a theme may add for the Reading choice, neither of which
+ * the default theme ships.
+ *
+ * They are override points rather than layouts: a site that sets a static
+ * homepage gets the page layout and a site that sets a posts page gets the
+ * listing layout, until it writes one of these — which is WordPress's own
+ * `front-page.php` and `home.php`, and the same reason for having them. A
+ * front page is often the one page of a site that looks like nothing else, and
+ * saying so should not mean overriding the layout every other page uses.
+ */
+export const OPTIONAL_TEMPLATES = {
+  /** The front page alone. Falls back to {@link TEMPLATES.page}. */
+  frontPage: 'layouts/front-page.njk',
+  /** The listing on the posts page. Falls back to {@link TEMPLATES.home}. */
+  postsPage: 'layouts/posts-page.njk',
 } as const;
 
 /** A listing of documents, ready to render. */
@@ -47,6 +70,12 @@ export interface Listing {
   category?: string | undefined;
   /** Which template to use. Defaults to the home layout. */
   template?: string | undefined;
+  /**
+   * The page whose permalink this listing is at, when the site has a posts
+   * page. Its front matter and its rendered body go on the context under the
+   * listing's own title and URL, so a theme prints the words above the posts.
+   */
+  document?: Document | undefined;
 }
 
 /**
@@ -75,6 +104,14 @@ export interface Renderer {
    */
   termRedirects(): readonly TaxonomyRedirect[];
   /**
+   * The Reading choice, per the site data: which page is served at `/`, and
+   * which one's URL carries the listing. Read per request for the reason the
+   * bases are — a save on the settings screen moves the front page on the very
+   * next one — and answered as slugs, because only the index knows whether one
+   * still names a published page.
+   */
+  frontPageSlugs(): FrontPageSlugs;
+  /**
    * One document through its type's layout.
    *
    * `extra` goes on the context last and so wins: it is how the comment
@@ -82,6 +119,12 @@ export interface Renderer {
    * redirect after a submission gets its thank-you onto the post.
    */
   renderDocument(document: Document, extra?: Record<string, unknown>): string;
+  /**
+   * One page as the site's front page: the same context its own URL would give
+   * it, at `/`, through the theme's front-page template if it has one and its
+   * page layout if it has not.
+   */
+  renderFrontPage(document: Document, extra?: Record<string, unknown>): string;
   /** A listing through the home, tag or category layout. */
   renderListing(listing: Listing): string;
   /** The 404 page, for a path that resolved to nothing. */
@@ -169,6 +212,80 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return environment.render(template, { site, menu, ...context });
   }
 
+  /**
+   * Which template one listing renders through: whatever it named, the posts
+   * page's own template when it is one and the theme ships one, and the home
+   * layout otherwise.
+   */
+  function listingTemplate(listing: Listing): string {
+    if (listing.template !== undefined) return listing.template;
+    if (listing.document === undefined) return TEMPLATES.home;
+    return themeTemplate(config.themeDir, OPTIONAL_TEMPLATES.postsPage, TEMPLATES.home);
+  }
+
+  /**
+   * One document through one template, with everything a page of the theme is
+   * given: its own context, its ActivityStreams id, its conversation, its
+   * forms and its webmention endpoint.
+   *
+   * The template and the URL are arguments because the front page is the same
+   * page rendered somewhere else: `renderDocument` and `renderFrontPage` are
+   * this with two different answers to "which layout, and at which URL".
+   */
+  function documentPage(
+    document: Document,
+    options_: { template: string; url?: string | undefined; extra: Record<string, unknown> },
+  ): string {
+    const { template, extra } = options_;
+    const context = documentContext(document, config);
+    // The URL it is being served at, which is its own permalink everywhere but
+    // the front page.
+    const url = options_.url ?? context.url;
+    // `activityStreams` is the object id the base layout advertises. It is
+    // added here rather than in `documentContext` because it needs the
+    // site's base URL, which a document on its own does not carry.
+    const objectId = activityStreamsId(document, config.baseUrl);
+    // `commentsFeed` is where this post's replies are syndicated. It is set
+    // here rather than in a layout because only a published post has one —
+    // a page never federates, so nothing can ever have replied to it — and
+    // because a site that overrides `post.njk` should keep the link anyway.
+    // `conversation` is what the fediverse said back. It is on the context
+    // only when there is something in it, so a theme can ask `{% if
+    // conversation %}` and a post nobody has answered renders no empty
+    // section (TASK-49).
+    const said = options.conversation?.(document);
+    // `commentForm` is on the context only when the post is open, so the
+    // theme asks `{% if commentForm %}` rather than working the rules out
+    // for itself — and a closed post shows the thread with no form.
+    const form = options.commentForm?.(document);
+    // And the contact form, when the page's front matter asked for one
+    // (TASK-56). Nothing about where a message would go is on the context:
+    // the address is read when a submission arrives, so a theme cannot
+    // print it however it is written.
+    const contact = options.contactForm?.(document);
+    // Where a webmention about this page is sent (TASK-51). On the context
+    // only when the site takes them, so a theme asks `{% if webmention %}`
+    // and a site that has turned them off advertises nothing.
+    const webmention = webmentionEndpointFor(siteData.read());
+
+    return render(template, {
+      ...context,
+      url,
+      page: { ...context.page, url },
+      ...(objectId === undefined
+        ? {}
+        : {
+            activityStreams: objectId,
+            commentsFeed: commentsFeedPath(document.permalink),
+          }),
+      ...(said === undefined || said.counts.total === 0 ? {} : { conversation: said }),
+      ...(form === undefined ? {} : { commentForm: form }),
+      ...(contact === undefined ? {} : { contactForm: contact }),
+      ...(webmention === undefined ? {} : { webmention }),
+      ...extra,
+    });
+  }
+
   return {
     environment,
 
@@ -188,48 +305,28 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       return termRedirects(siteData.read());
     },
 
-    renderDocument(document, extra = {}) {
-      const template = document.type === 'post' ? TEMPLATES.post : TEMPLATES.page;
-      // `activityStreams` is the object id the base layout advertises. It is
-      // added here rather than in `documentContext` because it needs the
-      // site's base URL, which a document on its own does not carry.
-      const objectId = activityStreamsId(document, config.baseUrl);
-      // `commentsFeed` is where this post's replies are syndicated. It is set
-      // here rather than in a layout because only a published post has one —
-      // a page never federates, so nothing can ever have replied to it — and
-      // because a site that overrides `post.njk` should keep the link anyway.
-      // `conversation` is what the fediverse said back. It is on the context
-      // only when there is something in it, so a theme can ask `{% if
-      // conversation %}` and a post nobody has answered renders no empty
-      // section (TASK-49).
-      const said = options.conversation?.(document);
-      // `commentForm` is on the context only when the post is open, so the
-      // theme asks `{% if commentForm %}` rather than working the rules out
-      // for itself — and a closed post shows the thread with no form.
-      const form = options.commentForm?.(document);
-      // And the contact form, when the page's front matter asked for one
-      // (TASK-56). Nothing about where a message would go is on the context:
-      // the address is read when a submission arrives, so a theme cannot
-      // print it however it is written.
-      const contact = options.contactForm?.(document);
-      // Where a webmention about this page is sent (TASK-51). On the context
-      // only when the site takes them, so a theme asks `{% if webmention %}`
-      // and a site that has turned them off advertises nothing.
-      const webmention = webmentionEndpointFor(siteData.read());
+    frontPageSlugs() {
+      return frontPageSlugs(siteData.read());
+    },
 
-      return render(template, {
-        ...documentContext(document, config),
-        ...(objectId === undefined
-          ? {}
-          : {
-              activityStreams: objectId,
-              commentsFeed: commentsFeedPath(document.permalink),
-            }),
-        ...(said === undefined || said.counts.total === 0 ? {} : { conversation: said }),
-        ...(form === undefined ? {} : { commentForm: form }),
-        ...(contact === undefined ? {} : { contactForm: contact }),
-        ...(webmention === undefined ? {} : { webmention }),
-        ...extra,
+    renderDocument(document, extra = {}) {
+      return documentPage(document, {
+        template: document.type === 'post' ? TEMPLATES.post : TEMPLATES.page,
+        extra,
+      });
+    },
+
+    renderFrontPage(document, extra = {}) {
+      return documentPage(document, {
+        // A theme's own front page if it has written one, and the layout every
+        // other page uses if it has not.
+        template: themeTemplate(config.themeDir, OPTIONAL_TEMPLATES.frontPage, TEMPLATES.page),
+        // At `/`, which is where it is being read: the canonical link, the
+        // menu's current item and anything else a theme takes off `page.url`
+        // should say the URL this is served at rather than the one that
+        // redirects here.
+        url: '/',
+        extra,
       });
     },
 
@@ -237,11 +334,19 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       const items: DocumentContext[] = listing.documents.map((document) =>
         documentContext(document, config),
       );
+      // The posts page's own front matter and rendered body, under the
+      // listing's title, URL and posts: a theme prints `{{ content | safe }}`
+      // above the list and a site without a posts page has nothing there. The
+      // listing's own keys go on after it, because this page of the listing is
+      // what is being served — page two of it is not the page's own URL.
+      const document =
+        listing.document === undefined ? undefined : documentContext(listing.document, config);
 
-      return render(listing.template ?? TEMPLATES.home, {
+      return render(listingTemplate(listing), {
+        ...document,
         title: listing.title,
         url: listing.url,
-        page: { url: listing.url },
+        page: { ...document?.page, url: listing.url },
         // `posts` is the friendly name a theme loops over; `pagination.items`
         // is the same array under the name Eleventy gives it.
         posts: items,
@@ -261,6 +366,23 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     render,
   };
+}
+
+/**
+ * `preferred` when a theme in the search path ships it, and `fallback`
+ * otherwise.
+ *
+ * Asked per render rather than at boot, so adding `front-page.njk` to a theme
+ * shows on the next request exactly as editing one does. It costs one `stat`
+ * per theme directory, and only on the two pages that have an override point
+ * at all.
+ */
+function themeTemplate(themeDir: string, preferred: string, fallback: string): string {
+  const relative = preferred.split('/');
+  const found = themeSearchPath(themeDir).some((directory) =>
+    existsSync(path.join(directory, ...relative)),
+  );
+  return found ? preferred : fallback;
 }
 
 /**

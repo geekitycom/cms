@@ -1,0 +1,26 @@
+{# What every settings page is: a heading, one form that saves the fields that
+   page carries, and whatever panels sit under it. A page fills in the two
+   blocks; nothing about the chrome is written six times. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ settingsLabel }} settings{% endblock %}
+
+{% block content %}
+  <h1>{{ settingsLabel }}</h1>
+
+  {% if hasProblems %}
+    <p class="admin-error">Nothing was saved. Fix the fields marked below and try again.</p>
+  {% endif %}
+
+  <form class="admin-settings" method="post" action="{{ settingsUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+    {% block settingsFields %}{% endblock %}
+
+    <p class="admin-settings-buttons">
+      <button type="submit">Save settings</button>
+    </p>
+  </form>
+
+  {% block settingsPanels %}{% endblock %}
+{% endblock %}

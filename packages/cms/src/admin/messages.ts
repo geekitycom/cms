@@ -117,6 +117,7 @@ export function mountMessagesScreen(
 
     return render(c, ADMIN_TEMPLATES.messages, {
       section: MESSAGES_SECTION,
+      child: 'all',
       heading: 'Messages',
       status,
       counts,

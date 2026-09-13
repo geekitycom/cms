@@ -29,8 +29,18 @@ import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
-/** Where the users screen lives. The add form posts here too. */
+/** Where the users screen lives. */
 export const USERS_PATH = `${ADMIN_PREFIX}/users`;
+
+/**
+ * Where the add form lives, and where it posts.
+ *
+ * A screen of its own rather than a panel under the table, because the menu
+ * says Users > Add new and a menu entry has to be somewhere to go. It is also
+ * what keeps a refused add on a page about adding somebody instead of at the
+ * top of a list of everybody.
+ */
+export const ADD_USER_PATH = `${USERS_PATH}/new`;
 
 /** Where the signed-in admin's change-password form posts. */
 export const CHANGE_PASSWORD_PATH = `${USERS_PATH}/password`;
@@ -101,7 +111,9 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
 
   app.get(USERS_PATH, (c) => render(c, ADMIN_TEMPLATES.users, screen(c)));
 
-  app.post(USERS_PATH, async (c) => {
+  app.get(ADD_USER_PATH, (c) => render(c, ADMIN_TEMPLATES.users, addScreen(c)));
+
+  app.post(ADD_USER_PATH, async (c) => {
     const body = await c.req.parseBody();
     const username = field(body[USER_FIELDS.username]).trim();
     const supplied = field(body[USER_FIELDS.password]);
@@ -122,10 +134,11 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
 
     if (Object.keys(problems).length > 0) {
       c.status(400);
+      // Back onto the form that was refused, with what was typed still in it.
       return render(
         c,
         ADMIN_TEMPLATES.users,
-        screen(c, { addForm: { username, email, generate }, addProblems: problems }),
+        addScreen(c, { addForm: { username, email, generate }, addProblems: problems }),
       );
     }
 
@@ -460,6 +473,19 @@ export function generatePassword(): string {
   return password;
 }
 
+/**
+ * The Add new screen: the same template, showing the add form instead of the
+ * table. One template rather than two because the two screens are the same
+ * chrome around one of two forms, and a second file would be a copy of the
+ * hint about what an email address is for.
+ */
+function addScreen(
+  c: Parameters<AdminRender>[0],
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return screen(c, { child: 'new', adding: true, ...extra });
+}
+
 /** Everything the users template renders. */
 function screen(
   c: Parameters<AdminRender>[0],
@@ -470,7 +496,9 @@ function screen(
 
   return {
     section: 'users',
+    child: 'all',
     usersUrl: USERS_PATH,
+    addUserUrl: ADD_USER_PATH,
     changePasswordUrl: CHANGE_PASSWORD_PATH,
     deleteUserUrl: DELETE_USER_PATH,
     userEmailUrl: USER_EMAIL_PATH,

@@ -15,8 +15,12 @@ import { COMMENT_STATUSES } from './store.ts';
 
 const ADMIN_DIR = fileURLToPath(new URL('../../admin/', import.meta.url));
 
-/** The screens this file covers. Both are lists of what somebody wrote. */
-const SCREENS = ['layouts/comments.njk', 'layouts/messages.njk'];
+/**
+ * The templates this file covers: the two lists of what somebody wrote, and
+ * the shell every signed-in screen is drawn inside, whose menu is the one
+ * thing on every page (TASK-72).
+ */
+const SCREENS = ['layouts/comments.njk', 'layouts/messages.njk', 'layouts/shell.njk'];
 
 /** Marks where a `{{ … }}` stood, so an interpolated name is not mistaken
  *  for a literal one. */
@@ -56,7 +60,7 @@ function styledClasses(css: string): Set<string> {
 
 const css = styledClasses(await readFile(`${ADMIN_DIR}static/admin.css`, 'utf8'));
 
-describe('the comments and messages screens', () => {
+describe('the admin screens', () => {
   for (const screen of SCREENS) {
     it(`has a rule for every class ${screen} emits`, async () => {
       const { literal } = classNames(await readFile(`${ADMIN_DIR}${screen}`, 'utf8'));

@@ -235,6 +235,7 @@ export function mountDocumentScreens(
 
     return render(c, ADMIN_TEMPLATES.documentList, {
       section: kind.section,
+      child: 'all',
       kind,
       filter,
       filters: DOCUMENT_FILTERS.map((name) => ({
@@ -243,7 +244,9 @@ export function mountDocumentScreens(
         url: listingUrl(kind, name, 1),
         current: name === filter,
       })),
-      documents: rows.map((document) => listRow(kind, document, c.var.store.now())),
+      documents: rows.map((document) =>
+        listRow(kind, document, c.var.store.now(), pageRole(kind, document, c)),
+      ),
       newUrl: newEditorPath(kind),
       returnUrl: listingUrl(kind, filter, pageNumber),
       page: pageNumber,
@@ -793,6 +796,8 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
   c.status(409);
   return options.render(c, ADMIN_TEMPLATES.documentConflict, {
     section: kind.section,
+    // Editing something that exists, so the listing is where the menu stands.
+    child: 'all',
     kind,
     form,
     // The hash the file has now, so resubmitting this form is a deliberate
@@ -1054,6 +1059,9 @@ function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Res
 
   return options.render(c, ADMIN_TEMPLATES.documentEditor, {
     section: kind.section,
+    // The blank form is Add new; editing one that exists is still All posts,
+    // the way WordPress leaves the listing marked while you are in the editor.
+    child: document === undefined ? 'new' : 'all',
     kind,
     form,
     actions,
@@ -1118,9 +1126,41 @@ export interface DocumentRow {
   editUrl: string;
   /** Its public URL, or `undefined` when the public site would not serve it. */
   viewUrl: string | undefined;
+  /**
+   * What this page is to the site besides a page — Front Page, Posts Page —
+   * or `undefined` for every other row.
+   */
+  role: string | undefined;
 }
 
-function listRow(kind: DocumentKind, document: Document, now: Date): DocumentRow {
+/**
+ * WordPress's own two labels for the pages the Reading setting names, beside
+ * the title on the pages screen, so it is plain from the list which page is
+ * the front page and which carries the posts.
+ */
+export const PAGE_ROLE_LABELS = { homepage: 'Front Page', postsPage: 'Posts Page' } as const;
+
+/** What one row's page is to the site, if anything. */
+function pageRole(
+  kind: DocumentKind,
+  document: Document,
+  c: Context<GeekityEnv>,
+): string | undefined {
+  if (kind.type !== 'page') return undefined;
+
+  const settings = readSiteSettings(c.var.config.contentDir);
+  if (settings.homepage === '') return undefined;
+  if (document.slug === settings.homepage) return PAGE_ROLE_LABELS.homepage;
+  if (document.slug === settings.postsPage) return PAGE_ROLE_LABELS.postsPage;
+  return undefined;
+}
+
+function listRow(
+  kind: DocumentKind,
+  document: Document,
+  now: Date,
+  role: string | undefined,
+): DocumentRow {
   const isPublic = isPublicDocument(document, now);
   return {
     title: document.title,
@@ -1138,6 +1178,7 @@ function listRow(kind: DocumentKind, document: Document, now: Date): DocumentRow
     scheduled: scheduledFor(document, now) !== undefined,
     editUrl: editorPath(kind, document.slug),
     viewUrl: isPublic ? document.permalink : undefined,
+    role,
   };
 }
 
