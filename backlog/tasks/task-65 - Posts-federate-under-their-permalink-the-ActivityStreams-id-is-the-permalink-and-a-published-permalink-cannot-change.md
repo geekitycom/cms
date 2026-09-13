@@ -3,11 +3,11 @@ id: TASK-65
 title: >-
   Posts federate under their permalink: the ActivityStreams id is the permalink,
   and a published permalink cannot change
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-05 13:15'
-updated_date: '2026-09-13 01:36'
+updated_date: '2026-09-13 01:37'
 labels:
   - federation
   - web
@@ -46,7 +46,7 @@ doc-4 gave a post two URLs: the permalink for readers and {baseUrl}/ap/posts/{sl
 - [x] #4 The editor refuses to change a published post's slug or permalink with a message saying a published permalink is permanent, and still lets a draft's change; a test covers both
 - [x] #5 A fediverse reply whose inReplyTo is the post's object id, permalink or stored, appears in the post's conversation, its comments feed and its source:comments count
 - [x] #6 The Eleventy example config puts the object id on the context as activityStreams and the Eleventy test passes; the fed-smoke script fetches the object at the permalink
-- [ ] #7 doc-2 (front matter table), doc-3 (negotiation table), doc-4 (object id) and the package README describe one URL per post and the stored-id rule; the commit is feat(cms)! with a BREAKING CHANGE footer naming what followers see
+- [x] #7 doc-2 (front matter table), doc-3 (negotiation table), doc-4 (object id) and the package README describe one URL per post and the stored-id rule; the commit is feat(cms)! with a BREAKING CHANGE footer naming what followers see
 <!-- AC:END -->
 
 ## Implementation Plan
