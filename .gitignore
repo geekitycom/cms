@@ -26,3 +26,12 @@ apps/*/data/
 
 # OS noise
 .DS_Store
+
+# The demo boots against its checked-in content directory in tests and dev,
+# so the state the CMS keeps under content/ at runtime (decision-9) is residue
+# here rather than anything the demo means to publish: federation followers
+# and the inbox log, comments, and documents moved to the trash. A real site
+# keeps all three. Uploads stay tracked, because the demo's are deliberate.
+apps/demo/content/_data/federation/
+apps/demo/content/_data/comments/
+apps/demo/content/_trash/
