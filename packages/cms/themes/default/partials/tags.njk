@@ -16,14 +16,15 @@
 {% endmacro %}
 
 {# The same for categories, which are the second taxonomy and archive under
-   `site.categoryBase` (`category` by default). Renders nothing when the list
-   is empty. #}
+   `site.categoryBase` (`category` by default). One paragraph of `p-category`
+   links, which is what the design prints in a feed item's meta line and under
+   an entry. Renders nothing when the list is empty. #}
 {% macro categories(categories) %}
 {% if categories and categories.length %}
-<ul class="category-list">
+<p class="post-categories">
   {% for category in categories %}
-  <li><a class="category" href="{{ ("/" + (site.categoryBase or "category") + "/" + (category | urlencode) + "/") | url }}">{{ category }}</a></li>
+  <a href="{{ ("/" + (site.categoryBase or "category") + "/" + (category | urlencode) + "/") | url }}" class="p-category" rel="category">{{ category }}</a>
   {% endfor %}
-</ul>
+</p>
 {% endif %}
 {% endmacro %}

@@ -171,7 +171,7 @@ describe('the home page', () => {
     const response = await cms.app.request('/');
 
     assert.equal(response.status, 200);
-    assert.match(await response.text(), /Nothing published yet/);
+    assert.match(await response.text(), /No posts found/);
   });
 });
 
@@ -250,7 +250,7 @@ describe('a single document', () => {
 
     assert.equal(response.status, 404);
     assert.match(response.headers.get('content-type') ?? '', /text\/html/);
-    assert.match(await response.text(), /Not found/);
+    assert.match(await response.text(), /Content not found/);
   });
 });
 

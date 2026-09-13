@@ -132,7 +132,7 @@ describe('a site wearing one of its themes', () => {
     assert.equal(await body(cms, '/theme/style.css'), '/* midnight */\n');
     // Everything the theme did not write still comes from the package, one
     // file at a time: it ships a post layout and a stylesheet and nothing else.
-    assert.match(await body(cms, '/'), /class="post-list"/);
+    assert.match(await body(cms, '/'), /class="feed h-feed"/);
     assert.doesNotMatch(await body(cms, '/'), /midnight: /);
   });
 

@@ -34,10 +34,6 @@
   </ul>
   {% endif %}
 </header>
-
-<p class="tag-count">
-  {{ pagination.total }} {% if pagination.total == 1 %}entry{% else %}entries{% endif %}.
-</p>
 {% include "partials/post-list.njk" %}
 {% include "partials/pagination.njk" %}
 {% endblock %}

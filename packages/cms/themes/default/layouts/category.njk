@@ -10,10 +10,18 @@
 {% endblock %}
 
 {% block content %}
-<h1 class="page-title">Filed under &ldquo;{{ category }}&rdquo;</h1>
-<p class="tag-count">
-  {{ pagination.total }} {% if pagination.total == 1 %}entry{% else %}entries{% endif %}.
-</p>
+{#
+  The archive's header. `categoryDescription` is what the design prints under
+  the name; nothing in the CMS writes one yet, so the header is the heading
+  alone until something does — a site whose own context carries one gets it
+  printed without overriding this layout.
+#}
+<header class="category-header">
+  <h1 class="page-title">Filed under &ldquo;{{ category }}&rdquo;</h1>
+  {% if categoryDescription %}
+  <div class="category-description">{{ categoryDescription }}</div>
+  {% endif %}
+</header>
 {% include "partials/post-list.njk" %}
 {% include "partials/pagination.njk" %}
 {% endblock %}

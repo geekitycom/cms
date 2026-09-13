@@ -16,7 +16,7 @@ themes/default/
     author.njk   one person's archive, paginated
     404.njk      nothing at this URL
   partials/
-    post-list.njk     a list of documents
+    post-list.njk     the h-feed a listing is made of
     pagination.njk    previous/next pager
     tags.njk          macros for tag and category links
     byline.njk        who wrote a post, linked to their archive
@@ -169,6 +169,83 @@ deliberately not in the package. They go in a site theme's `footer` block:
 </p>
 {% endblock %}
 ```
+
+### A listing
+
+`partials/post-list.njk` is the feed every listing is made of — the home page,
+the posts page, a tag, category or author archive — and it is a microformats2
+`h-feed`:
+
+```html
+<div class="feed h-feed">
+  <article class="feed-item h-entry">
+    <div class="feed-content">
+      <h2 class="feed-title p-name">
+        <a href="/2026/09/hello/" class="u-url">Hello</a>
+      </h2>
+      <div class="feed-excerpt p-summary">
+        <p>What the post is about, in about 280 characters...</p>
+      </div>
+      <p class="feed-more">
+        <a href="/hello/" aria-label="Continue reading: Hello">
+          Continue reading<span aria-hidden="true"> &rarr;</span>
+        </a>
+      </p>
+      <div class="feed-meta">
+        <p>
+          <time class="feed-date dt-published" datetime="…"
+            >2 September 2026</time
+          >
+        </p>
+        <p class="post-categories">
+          <a href="/category/notes/" class="p-category" rel="category">notes</a>
+        </p>
+      </div>
+    </div>
+  </article>
+  <hr class="feed-separator" />
+  <article class="feed-item h-entry">…</article>
+</div>
+```
+
+The excerpt is the entry's `summary` — the very line the feeds publish, so a
+reader and a feed cannot be told two different things — through Nunjucks'
+`truncate(280)`, which cuts at the last space before 280 characters and adds an
+ellipsis. A `description` shorter than that is printed whole. It is plain text
+rather than markup, deliberately: an excerpt with half a code block in it is
+not an excerpt.
+
+An entry's tags are not in a feed item. They belong under the entry, where
+there is one post's worth of them rather than twenty.
+
+**The heading level belongs to the layout**, not to the list. `feedHeading` is
+the level `post-list.njk` prints its titles at and defaults to 2, which is what
+a listing wants; a page whose feed sits under a heading of its own sets 3
+before including it, so the outline never skips a level:
+
+```njk
+{% set feedHeading = 3 %}
+{% include "partials/post-list.njk" %}
+```
+
+A listing with nothing on it says `No posts found.` in `p.empty`.
+
+`partials/pagination.njk` prints two arrows in `nav.pagination` — `← Previous`
+to the page before this one and `Next →` to the page after it, with `rel="prev"`
+and `rel="next"` — and nothing at all on a listing of one page. The arrows
+themselves are `aria-hidden`, because a screen reader that announced them would
+read the decoration and then the word.
+
+Each listing layout heads its own page: `layouts/home.njk` with the listing's
+title, `layouts/tag.njk` and `layouts/category.njk` with the term, and
+`layouts/author.njk` with the person as an `h-card`. The category archive puts
+its heading in a `header.category-header` and prints a `div.category-description`
+under it when the context carries a `categoryDescription`; the CMS has no store
+of term descriptions, so nothing writes one today and the header is the heading
+alone.
+
+`layouts/404.njk` says `Content not found.` and links home. A link to the site's
+search goes in beside it once there is a search to link to.
 
 ### The head
 
@@ -837,8 +914,10 @@ form.
 
 ## Taxonomy macros
 
-`partials/tags.njk` holds one macro per taxonomy. Both render a `<ul>` of links
-to the archives, and nothing at all for an empty list:
+`partials/tags.njk` holds one macro per taxonomy, and each renders nothing at
+all for an empty list. `list` is a `<ul>` of tag links; `categories` is one
+paragraph of `p-category` links, which is the shape the design prints in a feed
+item's meta line and under an entry:
 
 ```njk
 {% import "partials/tags.njk" as taxonomy with context %}

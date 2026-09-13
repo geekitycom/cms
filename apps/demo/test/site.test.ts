@@ -85,7 +85,8 @@ describe('the theme the demo chose', () => {
     // is `layouts/base.njk` — the shell of the andrewshell.org design
     // (decision-16): the skip link, the wrapper that says it is the root path,
     // and the site title as the heading with the tagline under it.
-    assert.match(body, /class="post-list"/);
+    assert.match(body, /<div class="feed h-feed">/);
+    assert.match(body, /<article class="feed-item h-entry">/);
     assert.match(body, /<a class="screen-reader-text" href="#main">Skip to content<\/a>/);
     assert.match(body, /<div class="global-wrapper" data-is-root-path="true">/);
     assert.match(body, /<h1 class="main-heading">\s*<a href="\/">Geekity Demo<\/a>/);
@@ -196,7 +197,7 @@ describe('the demo with its theme unchosen', () => {
   });
 
   it('serves the rest of the site exactly as before', async () => {
-    assert.match(await bareText('/'), /class="post-list"/);
+    assert.match(await bareText('/'), /<div class="feed h-feed">/);
     assert.match(await bareText('/colophon/'), /Colophon/);
   });
 
@@ -233,8 +234,8 @@ describe('the demo content', () => {
 
     // `postsPerPage` is 2 and five posts are published, so there is a page 2
     // and a page 3 to page through.
-    assert.match(await text('/page/2/'), /class="post-list"/);
-    assert.match(await text('/page/3/'), /class="post-list"/);
+    assert.match(await text('/page/2/'), /<div class="feed h-feed">/);
+    assert.match(await text('/page/3/'), /<div class="feed h-feed">/);
   });
 
   it('gives the person its posts name an archive, once there is an account (TASK-67)', async () => {

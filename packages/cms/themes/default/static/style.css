@@ -648,14 +648,101 @@ pre code {
   border-radius: 50%;
 }
 
+/* A listing: the feed of entries, and what heads one (TASK-82). The source
+   design's own rules, on the tokens above. The feed itself takes no styling —
+   it is a stack of articles at the measure — and what makes it read as a list
+   is the rule between two of them and the small meta line under each. */
+
+.feed-title {
+  margin: var(--spacing-0) var(--spacing-0) var(--spacing-4) var(--spacing-0);
+  padding: var(--spacing-0);
+  font-size: var(--fontSize-3);
+}
+
+.feed-separator {
+  margin: var(--spacing-2) var(--spacing-0) var(--spacing-4) var(--spacing-0);
+}
+
+.feed-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  align-items: baseline;
+  font-size: 70%;
+}
+
+.feed-meta p {
+  margin: var(--spacing-0);
+}
+
+.post-categories {
+  margin-top: var(--spacing-2);
+  margin-bottom: var(--spacing-0);
+  font-size: 70%;
+}
+
+.post-categories a {
+  display: inline-block;
+  margin-right: var(--spacing-2);
+}
+
+/* The categories are already small; inside the meta line they would be small
+   twice over, so there they are the size of the line they sit on. */
+.feed-meta .post-categories {
+  font-size: 100%;
+}
+
+.category-header {
+  margin-bottom: var(--spacing-8);
+}
+
+.category-description {
+  margin-top: var(--spacing-2);
+  font-style: italic;
+}
+
+/* Pagination: two arrows under a listing, the previous one at the left edge
+   and the next at the right however few there are. */
+
+.pagination {
+  display: flex;
+  gap: var(--spacing-4);
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: var(--spacing-12);
+  padding-top: var(--spacing-5);
+  border-top: 1px solid var(--color-base);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
+}
+
+.pagination-previous {
+  margin-inline-end: auto;
+}
+
+.pagination-next {
+  margin-inline-start: auto;
+}
+
+/* Where a post links its neighbours, which the entry layout prints (TASK-83). */
+
+.blog-post-nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin: var(--spacing-0);
+  padding: 0;
+  list-style: none;
+}
+
 /*
  * What follows styles the markup the theme prints today and is rewritten as the
- * design lands: the listings in TASK-82, the entry and its bio in TASK-83, the
- * conversation and the forms in TASK-84. It is carried onto the tokens above
- * rather than deleted so that nothing goes unstyled in between.
+ * design lands: the entry and its bio in TASK-83, the conversation and the
+ * forms in TASK-84. It is carried onto the tokens above rather than deleted so
+ * that nothing goes unstyled in between.
  */
 
-/* Titles and listings */
+/* Titles */
 
 .page-title,
 .post-title {
@@ -669,38 +756,7 @@ pre code {
   font-size: var(--fontSize-0);
 }
 
-.post-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.post-list-item + .post-list-item {
-  margin-top: var(--spacing-8);
-  padding-top: var(--spacing-8);
-  border-top: 1px solid var(--color-base);
-}
-
-.post-summary-title {
-  margin: 0 0 var(--spacing-2);
-  font-size: var(--fontSize-3);
-}
-
-.post-summary-title a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.post-summary .post-meta {
-  margin-bottom: var(--spacing-2);
-}
-
-.post-summary-description {
-  margin: 0 0 var(--spacing-2);
-}
-
-.empty,
-.tag-count {
+.empty {
   font-family: var(--font-heading);
   font-size: var(--fontSize-0);
 }
@@ -737,19 +793,7 @@ pre code {
   font-size: var(--fontSize-0);
 }
 
-/* Tags and categories */
-
-.post-categories {
-  margin-top: var(--spacing-2);
-  margin-bottom: var(--spacing-0);
-  font-family: var(--font-heading);
-  font-size: var(--fontSize-0);
-}
-
-.post-categories a {
-  display: inline-block;
-  margin-right: var(--spacing-2);
-}
+/* Tags: the list an entry still prints, until TASK-83 rewrites its footer. */
 
 .tag-list {
   display: flex;
@@ -763,28 +807,6 @@ pre code {
 .tag {
   font-family: var(--font-heading);
   font-size: var(--fontSize-0);
-}
-
-/* Pagination */
-
-.pagination {
-  display: flex;
-  gap: var(--spacing-4);
-  align-items: baseline;
-  justify-content: space-between;
-  margin-top: var(--spacing-12);
-  padding-top: var(--spacing-5);
-  border-top: 1px solid var(--color-base);
-  font-family: var(--font-heading);
-  font-size: var(--fontSize-0);
-}
-
-.pagination-previous {
-  margin-inline-end: auto;
-}
-
-.pagination-next {
-  margin-inline-start: auto;
 }
 
 /* Body copy */

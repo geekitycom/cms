@@ -179,46 +179,71 @@ a:visited {
   text-transform: uppercase;
 }
 
-/* Listings */
+/* Listings: the packaged `partials/post-list.njk` h-feed, in the demo's own
+   idiom rather than the packaged theme's. */
 
-.post-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.post-list-item + .post-list-item {
-  margin-top: 2.5rem;
-  padding-top: 2.5rem;
+.feed-separator {
+  margin: 2.5rem 0;
+  border: 0;
   border-top: 1px solid var(--rule);
 }
 
-.post-summary-title {
+.feed-title {
   margin: 0 0 0.25rem;
   font-size: 1.4rem;
   line-height: 1.25;
 }
 
-.post-summary-title a {
+.feed-title a {
   color: inherit;
   text-decoration: none;
 }
 
-.post-summary-title a:hover,
-.post-summary-title a:focus {
+.feed-title a:hover,
+.feed-title a:focus {
   text-decoration: underline;
 }
 
-.post-summary .post-meta {
-  margin-bottom: 0.5rem;
-}
-
-.post-summary-description {
+.feed-excerpt p {
   margin: 0 0 0.5rem;
 }
 
-.empty,
-.tag-count {
+.feed-more {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.feed-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: baseline;
+  color: var(--ink-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.feed-meta p {
+  margin: 0;
+}
+
+.post-categories a {
+  display: inline-block;
+  margin-right: 0.5rem;
+}
+
+.category-header {
+  margin-bottom: 2rem;
+}
+
+.category-description {
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+.empty {
   color: var(--ink-muted);
 }
 
@@ -261,10 +286,6 @@ a:visited {
   padding-top: 1.25rem;
   border-top: 2px solid var(--ink);
   font-size: 0.9rem;
-}
-
-.pagination-position {
-  color: var(--ink-muted);
 }
 
 .pagination-previous {

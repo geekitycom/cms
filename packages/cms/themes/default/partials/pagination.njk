@@ -1,14 +1,20 @@
-{# Previous/next pager. Expects `pagination`. Renders nothing on a one-page listing. #}
+{#
+  Previous/next pager. Expects `pagination`. Renders nothing on a one-page
+  listing.
+
+  Two arrows and two words, as the source design pages (decision-16).
+  `previous` is the page before this one, which on a listing newest-first is
+  the newer posts, and `next` the page after it. The arrows are
+  `aria-hidden`: a screen reader announcing "left arrow Previous" reads the
+  decoration twice.
+#}
 {% if pagination.totalPages > 1 %}
 <nav class="pagination" aria-label="Pagination">
   {% if pagination.href.previous %}
-  <a class="pagination-previous" rel="prev" href="{{ pagination.href.previous | url }}">Newer</a>
+  <a class="pagination-previous" rel="prev" href="{{ pagination.href.previous | url }}"><span aria-hidden="true">&larr;</span> Previous</a>
   {% endif %}
-  <span class="pagination-position">
-    Page {{ pagination.pageNumber + 1 }} of {{ pagination.totalPages }}
-  </span>
   {% if pagination.href.next %}
-  <a class="pagination-next" rel="next" href="{{ pagination.href.next | url }}">Older</a>
+  <a class="pagination-next" rel="next" href="{{ pagination.href.next | url }}">Next <span aria-hidden="true">&rarr;</span></a>
   {% endif %}
 </nav>
 {% endif %}
