@@ -1801,6 +1801,36 @@ post on a site that publishes several.
 { "title": "My Site", "tagline": "Notes", "author": "Me", "feedSize": 20 }
 ```
 
+### What every format says about a post
+
+The three formats render one **feed item**, derived once per post, rather than
+each reading the file for itself. So they agree about the three things a reader
+actually keys on.
+
+**Identity.** A post is named by its ActivityStreams object id, which is its
+permalink (see [Federation](#federation)) or the `activitypub.id` the front
+matter stores for a post migrated from elsewhere. That id is RSS's `guid`,
+Atom's `id` and JSON Feed's `id`. The permalink is always the link: RSS's
+`link`, Atom's `link rel="alternate"` and JSON Feed's `url`. The two are the
+same URL for every post born on this CMS, and differ only for one carrying a
+stored id — which is what lets a migrated post keep the name its WordPress
+subscribers already hold. RSS's `isPermaLink` says which of the two a `guid`
+is: `true` when it is the permalink, `false` for a stored id like `?p=813`.
+
+**Terms.** Every format lists the post's categories and then its tags, in file
+order, as one flat list: RSS's `category` elements, Atom's `category term`
+attributes, JSON Feed's `tags`. None of the three can say which vocabulary a
+term came from, which is how WordPress publishes both too.
+
+**Summary.** Every format summarises a post the same way: the `description`
+front matter when the post has one — it is what the author wrote for exactly
+this — and otherwise the first paragraph of the rendered body, stripped to
+plain text and cut at 55 words, WordPress's own excerpt length. It is RSS's
+`description`, Atom's `summary` and JSON Feed's `summary`, and it is left out
+only when there is nothing to summarise at all. The whole post goes in the
+content element beside it, so a reader that shows both has something to choose
+between.
+
 ### RSS 2.0
 
 The channel carries `title`, `link`, `description` (the tagline), `language`
@@ -1809,20 +1839,11 @@ The channel carries `title`, `link`, `description` (the tagline), `language`
 [Real-time notification](#real-time-notification), and an `image` built from the
 avatar when the site has one.
 
-An item carries `title`, `link`, `guid isPermaLink="false"`, `pubDate` in
-RFC 822, `dc:creator` from the post's author or the site's, one `category` per
-category and per tag, `description` holding an excerpt, `content:encoded`
-holding the whole rendered post, and `source:markdown` holding the Markdown the
-post was written from.
-
-The `guid` is the post's ActivityStreams object id rather than its permalink.
-That id is minted from the slug and written into the front matter on the first
-delivery, so it survives the post being moved and a reader that has already
-shown the item will not show it again.
-
-The excerpt is the `description` front matter when the post has one, and
-otherwise the first paragraph of the rendered body, stripped to plain text and
-cut at 55 words — WordPress's own excerpt length.
+An item carries `title`, `link`, `guid`, `pubDate` in RFC 822, `dc:creator` from
+the post's author or the site's, one `category` per term, `description` holding
+the summary, `content:encoded` holding the whole rendered post, and
+`source:markdown` holding the Markdown the post was written from. The `guid`,
+the terms and the summary are the ones described above.
 
 `source:markdown` is Dave Winer's [source namespace][source-ns]: a reader that
 understands Markdown should render from it rather than from `content:encoded`.
@@ -1880,19 +1901,20 @@ disappears from `/comments/feed/`, and that post's own feed 404s with the post.
 
 ### Atom and JSON Feed
 
-An Atom entry carries `id` (the post's absolute URL), `title`, `updated`,
-`published`, `link rel="alternate"`, an `author` when the front matter names
-one, a `category` per tag, a `summary` when the front matter has a
-`description`, and the whole rendered post as `content type="html"`. The feed
-itself carries `id`, `title`, `subtitle` from the site's tagline, `updated`,
-`link rel="self"`, `link rel="alternate"` to the HTML page, a `generator`, an
+An Atom entry carries `id` (the post's object id), `title`, `updated`,
+`published`, `link rel="alternate"` (the permalink), an `author` when the front
+matter names one, a `category` per term, a `summary`, and the whole rendered
+post as `content type="html"`. The feed itself carries `id`, `title`,
+`subtitle` from the site's tagline, `updated`, `link rel="self"`,
+`link rel="alternate"` to the HTML page, a `generator`, an
 `xml:lang` from the `language` setting, and — when the site names a notify
 server — a `source:cloud` and a `link rel="hub"`.
 
-A JSON Feed item carries `id`, `url`, `title`, `content_html`, `summary`,
-`date_published`, `date_modified`, `tags` and `authors`; the feed carries
-`version`, `title`, `home_page_url`, `feed_url`, `description`, `authors` and
-`hubs`. Keys with nothing behind them are left out rather than sent empty.
+A JSON Feed item carries `id` (the object id), `url` (the permalink), `title`,
+`content_html`, `summary`, `date_published`, `date_modified`, `tags` (the
+terms) and `authors`; the feed carries `version`, `title`, `home_page_url`,
+`feed_url`, `description`, `authors` and `hubs`. Keys with nothing behind them
+are left out rather than sent empty.
 
 The XML is written by this package rather than by a library. Text is escaped;
 `content:encoded` and `source:markdown` are CDATA sections, with any `]]>` in
@@ -1973,6 +1995,10 @@ the feed's metadata as well as its entries, and each format and each scope gets
 its own, so a reader holding the RSS feed is never told the Atom one is
 unchanged. Feeds are validated even while `watch` is on, because a feed is not
 rendered through the theme.
+
+The validator also covers the revision of the item format itself, so a release
+that changes what a feed says about a post moves every post feed's `ETag` once
+rather than leaving a polling reader with a `304` that hides the new bytes.
 
 ```sh
 curl -i https://example.com/feed/

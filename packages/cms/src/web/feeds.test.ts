@@ -219,9 +219,9 @@ describe('the RSS feed', () => {
     assert.equal(child(newer, 'dc:creator').text, 'Andrew Shell');
 
     // The guid is the ActivityStreams object id, which after decision-13 is
-    // the permalink itself.
+    // the permalink itself — so it really is a permalink, and says so.
     const guid = child(newer, 'guid');
-    assert.equal(guid.attributes['isPermaLink'], 'false');
+    assert.equal(guid.attributes['isPermaLink'], 'true');
     assert.equal(guid.text, 'https://example.com/2026/09/newer/');
 
     // Both taxonomies become categories, categories before tags.
@@ -401,6 +401,7 @@ describe('the Atom feed', () => {
         updated: '2026-09-03T12:00:00Z',
         permalink: '/2026/09/newer/',
         tags: ['introductions', 'meta'],
+        categories: ['engineering'],
         description: 'A short summary.',
         author: 'Andrew Shell',
         body: 'A *file-first* CMS & proud of it.',
@@ -408,6 +409,7 @@ describe('the Atom feed', () => {
       'posts/2026-08-15-older.md': post('Older', {
         date: '2026-08-15T09:00:00Z',
         permalink: '/2026/08/older/',
+        body: 'Nothing much to say.',
       }),
     });
 
@@ -432,9 +434,10 @@ describe('the Atom feed', () => {
     assert.equal(child(child(newer, 'author'), 'name').text, 'Andrew Shell');
     assert.equal(child(newer, 'summary').text, 'A short summary.');
 
+    // Categories and then tags, the same terms RSS lists (decision-12).
     assert.deepEqual(
       childrenNamed(newer, 'category').map((category) => category.attributes['term']),
-      ['introductions', 'meta'],
+      ['engineering', 'introductions', 'meta'],
     );
 
     const content = child(newer, 'content');
@@ -443,8 +446,9 @@ describe('the Atom feed', () => {
     assert.equal(content.children.length, 0);
     assert.equal(content.text.trim(), '<p>A <em>file-first</em> CMS &amp; proud of it.</p>');
 
-    // A post without one carries no summary rather than an empty one.
-    assert.equal(childrenNamed(older, 'summary').length, 0);
+    // A post that wrote no description is summarised all the same, by the same
+    // rule RSS has always used: an excerpt of the rendered body.
+    assert.equal(child(older, 'summary').text, 'Nothing much to say.');
   });
 
   it('leaves out drafts, trashed documents and pages', async () => {
@@ -580,6 +584,7 @@ describe('the JSON feed', () => {
         updated: '2026-09-03T12:00:00Z',
         permalink: '/2026/09/newer/',
         tags: ['introductions', 'meta'],
+        categories: ['engineering'],
         description: 'A short summary.',
         author: 'Andrew Shell',
         body: 'A *file-first* CMS & proud of it.',
@@ -587,6 +592,7 @@ describe('the JSON feed', () => {
       'posts/2026-08-15-older.md': post('Older', {
         date: '2026-08-15T09:00:00Z',
         permalink: '/2026/08/older/',
+        body: 'Nothing much to say.',
       }),
       'posts/2026-09-01-draft.md': post('Secret Draft', {
         date: '2026-09-01T09:00:00Z',
@@ -620,13 +626,85 @@ describe('the JSON feed', () => {
     assert.equal(newer['summary'], 'A short summary.');
     assert.equal(newer['date_published'], '2026-09-02T09:00:00.000Z');
     assert.equal(newer['date_modified'], '2026-09-03T12:00:00.000Z');
-    assert.deepEqual(newer['tags'], ['introductions', 'meta']);
+    // Categories and then tags, the same terms the other two formats list.
+    assert.deepEqual(newer['tags'], ['engineering', 'introductions', 'meta']);
     assert.deepEqual(newer['authors'], [{ name: 'Andrew Shell' }]);
 
-    // A post with no description and no `updated` carries neither key rather
-    // than a null: JSON Feed readers treat absent and empty differently.
-    assert.equal('summary' in older, false);
+    // A post that wrote no description is summarised by the same rule as
+    // everywhere else, and one filed under nothing carries no `tags` key at
+    // all: JSON Feed readers treat absent and empty differently.
+    assert.equal(older['summary'], 'Nothing much to say.');
+    assert.equal('tags' in older, false);
     assert.equal(older['date_modified'], '2026-08-15T09:00:00.000Z');
+  });
+});
+
+describe('the three formats over one post', () => {
+  const files = {
+    '_data/site.json': JSON.stringify({ title: 'Geekity Demo' }),
+    'posts/2026-09-02-hello.md': post('Hello, World!', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/2026/09/hello/',
+      categories: ['engineering', 'notes'],
+      tags: ['releases', 'meta'],
+      body: 'Fish &amp; chips, twice.\n\nA second paragraph nobody should see.',
+    }),
+  };
+
+  /** The id, terms and summary each format prints for the one post. */
+  async function readings(cms: Cms): Promise<Record<string, unknown>[]> {
+    const { channel } = await rss(cms, '/feed/');
+    const item = child(channel, 'item');
+
+    const { feed } = await atom(cms, '/feed/atom/');
+    const entry = child(feed, 'entry');
+
+    const { items } = await jsonFeedAt(cms, '/feed/json/');
+    const json = items[0] as Record<string, unknown>;
+
+    return [
+      {
+        id: child(item, 'guid').text,
+        terms: childrenNamed(item, 'category').map((category) => category.text),
+        summary: child(item, 'description').text,
+      },
+      {
+        id: child(entry, 'id').text,
+        terms: childrenNamed(entry, 'category').map((category) => category.attributes['term']),
+        summary: child(entry, 'summary').text,
+      },
+      { id: json['id'], terms: json['tags'], summary: json['summary'] },
+    ];
+  }
+
+  it('agree on the post’s id, its terms and its summary', async () => {
+    const { cms } = await site(files);
+    const [rssReading, atomReading, jsonReading] = await readings(cms);
+
+    // decision-12, all three answers at once. Written out rather than compared
+    // to each other so the test says what the answers are, not only that they
+    // match.
+    const expected = {
+      id: 'https://example.com/2026/09/hello/',
+      terms: ['engineering', 'notes', 'releases', 'meta'],
+      summary: 'Fish & chips, twice.',
+    };
+
+    assert.deepEqual(rssReading, expected);
+    assert.deepEqual(atomReading, expected);
+    assert.deepEqual(jsonReading, expected);
+  });
+
+  it('give the post the same validator on every poll', async () => {
+    const { cms } = await site(files);
+
+    for (const url of ['/feed/', '/feed/atom/', '/feed/json/']) {
+      const first = (await cms.app.request(url)).headers.get('etag');
+      const second = (await cms.app.request(url)).headers.get('etag');
+
+      assert.ok(first !== null, `${url} carries a validator`);
+      assert.equal(second, first, `${url} keeps it while nothing changes`);
+    }
   });
 });
 
@@ -1121,6 +1199,30 @@ describe('a reply to a migrated post’s stored object id', () => {
     // decision-12: the guid is the object id, which here is the stored one, so
     // the migrated post's RSS subscribers see nothing new.
     assert.equal(child(item, 'guid').text, MIGRATED);
+  });
+
+  it('is named by its stored id in all three formats, and still read at its permalink', async () => {
+    const { cms } = await site(files);
+    const permalink = 'https://example.com/2011/06/old-news/';
+
+    // RSS: the guid WordPress's own feed gave the post, marked a name rather
+    // than an address because that is what it is.
+    const { channel } = await rss(cms, '/feed/');
+    const item = child(channel, 'item');
+    assert.equal(child(item, 'guid').text, MIGRATED);
+    assert.equal(child(item, 'guid').attributes['isPermaLink'], 'false');
+    assert.equal(child(item, 'link').text, permalink);
+
+    // Atom: the same id, with the permalink as the alternate link.
+    const { feed } = await atom(cms, '/feed/atom/');
+    const entry = child(feed, 'entry');
+    assert.equal(child(entry, 'id').text, MIGRATED);
+    assert.equal(linkWithRel(entry, 'alternate').attributes['href'], permalink);
+
+    // JSON Feed: the same id again, with the permalink as the `url`.
+    const { items } = await jsonFeedAt(cms, '/feed/json/');
+    assert.equal(items[0]?.['id'], MIGRATED);
+    assert.equal(items[0]?.['url'], permalink);
   });
 
   it('shows the reply in the conversation on the page', async () => {

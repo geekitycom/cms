@@ -16,10 +16,9 @@ import { absoluteUrl, latestModified } from './negotiate.ts';
 /**
  * Atom 1.0: the feed and its entries, rendered from {@link FeedItem}s.
  *
- * Atom names an entry by its permalink and tags it with the post's tags alone,
- * which is not what RSS does with the same item. decision-12 settles that
- * disagreement in favour of the object id and both taxonomies; TASK-64 is what
- * changes the bytes here.
+ * An entry names the post by its object id and lists every term it carries,
+ * which is what RSS and JSON Feed do with the same item: decision-12 leaves
+ * the three formats nothing to disagree about.
  */
 
 /** One feed as an Atom 1.0 document. */
@@ -68,11 +67,19 @@ function atomCloud(site: SiteData): string[] {
   return [element('source:cloud', notify.pleaseNotify), link({ rel: 'hub', href: notify.hub })];
 }
 
-/** One item as an Atom entry. */
+/**
+ * One item as an Atom entry.
+ *
+ * `<id>` is the object id and the `rel="alternate"` link is the permalink,
+ * which are the same URL for every post born on this CMS and differ only for
+ * one carrying a stored id. A summary is written whenever there is one, which
+ * after decision-12 is every post with a body: Atom's `<summary>` is optional,
+ * and an empty one says less than none.
+ */
 export function atomEntry(item: FeedItem): string[] {
   return [
     '  <entry>',
-    element('id', item.link, 2),
+    element('id', item.id, 2),
     element('title', item.title, 2),
     element('updated', (item.updated ?? EMPTY_FEED_UPDATED).toISOString(), 2),
     ...(item.published === undefined
@@ -80,10 +87,10 @@ export function atomEntry(item: FeedItem): string[] {
       : [element('published', item.published.toISOString(), 2)]),
     link({ rel: 'alternate', type: 'text/html', href: item.link }, 2),
     ...author(item.author, 2),
-    ...item.tags.map((tag) => `    <category term="${escapeXml(tag)}"/>`),
-    ...(item.description === undefined
+    ...item.terms.map((term) => `    <category term="${escapeXml(term)}"/>`),
+    ...(item.summary === ''
       ? []
-      : [`    <summary type="text">${escapeXml(item.description)}</summary>`]),
+      : [`    <summary type="text">${escapeXml(item.summary)}</summary>`]),
     // `type="html"` means the markup is escaped rather than inlined, so a
     // reader that does not parse XHTML still gets the whole post.
     `    <content type="html">${escapeXml(item.html)}</content>`,

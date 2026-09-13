@@ -1,4 +1,5 @@
 import { atomFeed } from './feed-atom.ts';
+import { FEED_ITEM_REVISION } from './feed-item.ts';
 import { jsonFeed } from './feed-json.ts';
 import { rssFeed, commentsRssFeed } from './feed-rss.ts';
 import { FEED_CONTENT_TYPES, feedLanguage, notifyServerOf } from './feed-source.ts';
@@ -54,7 +55,14 @@ export type {
   NotifyServer,
 } from './feed-source.ts';
 
-export { EXCERPT_WORDS, excerptFromHtml, feedExcerpt, feedItem, feedItems } from './feed-item.ts';
+export {
+  EXCERPT_WORDS,
+  excerptFromHtml,
+  FEED_ITEM_REVISION,
+  feedExcerpt,
+  feedItem,
+  feedItems,
+} from './feed-item.ts';
 export type { FeedItem, FeedItemComments, FeedItemContext } from './feed-item.ts';
 
 export {
@@ -91,7 +99,10 @@ export interface FeedResponseOptions {
  */
 export function feedResponse(options: FeedResponseOptions): Response {
   const { format, source } = options;
-  const etag = contentEtag(`feed:${format}`, feedFingerprint(source));
+  // The revision is part of the label rather than of the fingerprint so that
+  // what a feed is made of and how it is written stay separate reasons for the
+  // validator to move. See {@link FEED_ITEM_REVISION}.
+  const etag = contentEtag(`feed:${format}:${String(FEED_ITEM_REVISION)}`, feedFingerprint(source));
   const lastModified = latestModified(source.documents);
   const headers = feedHeaders(source, etag, lastModified);
 
