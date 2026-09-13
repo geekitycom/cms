@@ -22,8 +22,8 @@ import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 
 import Eleventy from '@11ty/eleventy';
-import { isPublicDocument, parseDocument } from '@geekity/cms';
-import type { Document } from '@geekity/cms';
+import { frontPageSlugs, isPublicDocument, parseDocument } from '@geekity/cms';
+import type { Document, FrontPageSlugs, SiteData } from '@geekity/cms';
 
 /** The demo site's root: what a site runs `npx @11ty/eleventy` from. */
 const PROJECT_DIR = fileURLToPath(new URL('../', import.meta.url));
@@ -86,14 +86,26 @@ function outputPathFor(permalink: string): string {
   return `${permalink.replace(/^\//, '')}index.html`;
 }
 
+/**
+ * The Reading choice the demo makes: which page the site serves at `/`, and
+ * which one carries the listing. Read out of the same `site.json` the build
+ * reads, through the CMS's own reader, so the two cannot disagree.
+ */
+async function reading(): Promise<FrontPageSlugs> {
+  const file = await readFile(path.join(CONTENT_DIR, '_data', 'site.json'), 'utf8');
+  return frontPageSlugs(JSON.parse(file) as SiteData);
+}
+
 describe('the demo content directory under Eleventy', () => {
   let buildDir: string;
   let written: string[];
   let documents: Document[];
+  let picks: FrontPageSlugs;
   const originalCwd = process.cwd();
 
   before(async () => {
     documents = await demoDocuments();
+    picks = await reading();
 
     buildDir = await mkdtemp(path.join(tmpdir(), 'geekity-demo-11ty-'));
     await cp(CONTENT_DIR, path.join(buildDir, 'content'), { recursive: true });
@@ -129,7 +141,7 @@ describe('the demo content directory under Eleventy', () => {
     );
   });
 
-  it('writes every published document at the permalink the CMS computes', () => {
+  it('writes every published document where the CMS serves it', () => {
     // The CMS's own public predicate, so this comparison keeps meaning "what
     // the site serves" as that grows: drafts, the trash, and a post whose date
     // has not arrived (which the example config's preprocessor leaves out too).
@@ -138,9 +150,9 @@ describe('the demo content directory under Eleventy', () => {
 
     for (const document of published) {
       assert.ok(
-        written.includes(outputPathFor(document.permalink)),
-        `${document.path} has permalink ${document.permalink}, so Eleventy should have written ` +
-          `${outputPathFor(document.permalink)}; it wrote ${written.join(', ')}`,
+        written.includes(outputFor(document)),
+        `${document.path} is served at ${servedAt(document)}, so Eleventy should have written ` +
+          `${outputFor(document)}; it wrote ${written.join(', ')}`,
       );
     }
   });
@@ -149,7 +161,7 @@ describe('the demo content directory under Eleventy', () => {
     const expected = new Set(
       documents
         .filter((document) => isPublicDocument(document))
-        .map((document) => outputPathFor(document.permalink)),
+        .map((document) => outputFor(document)),
     );
 
     const unexplained = written.filter(
@@ -170,6 +182,21 @@ describe('the demo content directory under Eleventy', () => {
       );
     }
   });
+
+  /**
+   * The URL the CMS serves one document at: `/` for the page the Reading
+   * setting makes the homepage (TASK-74), and its own permalink for every
+   * other one. The example config builds the same way, which is the whole
+   * point of the comparison.
+   */
+  function servedAt(document: Document): string {
+    return document.slug === picks.homepage ? '/' : document.permalink;
+  }
+
+  /** The file Eleventy should write for it. */
+  function outputFor(document: Document): string {
+    return outputPathFor(servedAt(document));
+  }
 
   it('renders a post through the demo layout in content/_includes', async () => {
     const html = await readFile(

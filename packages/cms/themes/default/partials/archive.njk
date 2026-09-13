@@ -1,0 +1,27 @@
+{#
+  Everything the site has published, month by month: the source design's
+  essays page (decision-16, TASK-85).
+
+  `archiveMonths` is on the context only when a page's front matter says
+  `archive: true`, so including this is the whole of it. Each month is a
+  heading over an `ol.list-none` of links, newest month first and newest post
+  first inside it; which month a post belongs to is the CMS's answer rather
+  than this file's, because a date is an instant and the month it falls in
+  depends on the site's timezone (decision-11).
+
+  No dates and no excerpts: the page is a way of finding one piece of writing
+  among hundreds, and a summary under each of them would make it a listing
+  rather than an index.
+#}
+{% if archiveMonths.length %}
+<section class="archive">
+  {% for group in archiveMonths %}
+  <h2>{{ group.month }}</h2>
+  <ol class="list-none">
+    {% for entry in group.posts %}
+    <li><a href="{{ entry.url | url }}"><span>{{ entry.title }}</span></a></li>
+    {% endfor %}
+  </ol>
+  {% endfor %}
+</section>
+{% endif %}

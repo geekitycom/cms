@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { DEFAULT_TIMEZONE } from '../content/time.ts';
 import { siteImageMarkup } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import type { AuthorContext } from './authors.ts';
@@ -314,6 +315,20 @@ export function postsPerPage(site: SiteData): number {
  */
 export function themeName(site: SiteData): string {
   return typeof site['theme'] === 'string' ? site['theme'].trim() : '';
+}
+
+/**
+ * The zone this site's dates are read in, from the site data, or UTC when it
+ * names none.
+ *
+ * The same lens the `date` filter applies (decision-11), for the things the
+ * CMS rather than a template has to put a date through: which month of an
+ * archive a post belongs to is the same calendar question as which day the
+ * line under it says, and the two must not be answered by different clocks.
+ */
+export function siteTimezone(site: SiteData): string {
+  const timezone = site['timezone'];
+  return typeof timezone === 'string' && timezone !== '' ? timezone : DEFAULT_TIMEZONE;
 }
 
 /** WordPress's Reading choice, as `site.json` spells it. */

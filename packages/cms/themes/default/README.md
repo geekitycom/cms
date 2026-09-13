@@ -9,6 +9,7 @@ themes/default/
   layouts/
     base.njk     the page every other layout extends
     home.njk     the post archive, paginated
+    front-page.njk  the page the Reading setting serves at /
     post.njk     one post
     page.njk     one page
     tag.njk      a tag archive, paginated
@@ -24,6 +25,7 @@ themes/default/
     conversation.njk  the replies, likes and boosts under a post
     comment-form.njk  the form under a post that is taking comments
     contact-form.njk  the form on a page whose front matter says contact: true
+    archive.njk       every post by month, on a page that says archive: true
   mail/
     test.*.njk              the Send test email message
     password-reset.*.njk    the forgot-password link
@@ -113,24 +115,23 @@ packaged ones by name:
 `layouts/base.njk` defines the blocks `title`, `head`, `alternates`, `header`,
 `content`, `footer` and `scripts`, so most sites never have to copy it.
 
-Two layouts are override points rather than files shipped here, for the pages
-the Reading settings name:
+Two layouts are named for the pages the Reading settings pick:
 
-| Template                 | Rendered for                  | Falls back to      |
-| ------------------------ | ----------------------------- | ------------------ |
-| `layouts/front-page.njk` | the page served at `/`        | `layouts/page.njk` |
-| `layouts/posts-page.njk` | the listing on the posts page | `layouts/home.njk` |
+| Template                 | Rendered for                  | Shipped here | Falls back to      |
+| ------------------------ | ----------------------------- | ------------ | ------------------ |
+| `layouts/front-page.njk` | the page served at `/`        | yes          | `layouts/page.njk` |
+| `layouts/posts-page.njk` | the listing on the posts page | no           | `layouts/home.njk` |
 
-Neither is needed: a site that sets a homepage gets the page layout for it and
-a site that sets a posts page gets the listing layout, until it writes one.
-Writing `layouts/front-page.njk` into the theme is how a front page is laid out
-differently from every other page without overriding the layout they all use.
-The front page also gets `recentPosts`, entries in the same shape a listing's
-are, so it can print its words and then the writing: the posts of the current
-month when there are at least five of them, and the five newest otherwise.
-On the posts page the page's own front matter and rendered body are on the
-context beside the listing, so `{{ content | safe }}` prints its words above
-the posts; `layouts/home.njk` already does.
+`layouts/front-page.njk` is a layout here rather than only an override point:
+see [The front page](#the-front-page) for what it draws. Overriding it is how a
+front page is laid out differently from every other page without overriding the
+layout they all use, and the fallback above is reached only by a theme that
+replaced it with nothing.
+
+There is no posts page layout: a site that sets one gets the listing layout
+until it writes one. On the posts page the page's own front matter and rendered
+body are on the context beside the listing, so `{{ content | safe }}` prints its
+words above the posts; `layouts/home.njk` already does.
 
 ## The page shell
 
@@ -351,6 +352,77 @@ alone.
 
 `layouts/404.njk` says `Content not found.` and links home. A link to the site's
 search goes in beside it once there is a search to link to.
+
+### The front page
+
+`layouts/front-page.njk` is what a site gets at `/` once the Reading settings
+name a homepage (`homepage` in `content/_data/site.json`). It is that page read
+somewhere else: the same document, the same context, with `page.url` saying `/`
+rather than the permalink that redirects there.
+
+It draws the page's own words and then what the site has been writing:
+
+1. `div.page-body.e-content`, the rendered body. No title — `layouts/base.njk`
+   heads the root path with the site title, and a second `h1` under it would be
+   one heading too many — and no Published line, because a front page is read
+   as the site rather than as a page somebody wrote on a Tuesday.
+2. `<h2>Recent Posts</h2>` over `partials/post-list.njk` with `feedHeading` set
+   to 3, so the entries sit under that heading rather than beside it.
+3. `p.front-links`, a line of links to where the writing is. The posts page is
+   linked by its own title when the site names one; a search link joins it once
+   there is a search to link to (TASK-22).
+4. The bio, under a rule, exactly as an entry ends — so the site menu is there
+   too, because that is where this design keeps it.
+
+Two context keys are the front page's alone. `recentPosts` is the entries to
+list, in the same shape a listing's are: the posts of the current month when
+there are at least five of them, and the five newest otherwise. `postsPage` is
+`{ title, url }` for the page carrying the listing, and is **absent** when the
+site names none — a link to a listing that has no URL is a link to nothing.
+
+### An archive page
+
+A page whose front matter says `archive: true` prints every post the site has
+published under its own words, newest month first:
+
+```html
+<section class="archive">
+  <h2>September 2026</h2>
+  <ol class="list-none">
+    <li>
+      <a href="/2026/09/hello/"><span>Hello</span></a>
+    </li>
+  </ol>
+  <h2>August 2026</h2>
+  …
+</section>
+```
+
+`partials/archive.njk` draws it and `layouts/page.njk` includes it. It is the
+whole archive on one page and nothing paginates it: an archive page is a way of
+finding one piece of writing rather than a listing to read through, which is
+also why there are no excerpts on it. Drafts and posts whose date has not
+arrived are absent, as they are everywhere else.
+
+`archiveMonths` is what it loops over, and it is on the context **only** for a
+page whose front matter says `archive: true`, so a layout asks:
+
+```njk
+{% if archiveMonths %}
+{% include "partials/archive.njk" %}
+{% endif %}
+```
+
+Each entry of it is `{ month, posts }`: `month` is the heading, `September
+2026`, and `posts` is `{ title, url, date }` for each post of it, newest first.
+Which month a post belongs to is the CMS's answer rather than the template's,
+because a date in a file is a UTC instant and the site's `timezone` is the lens
+it is read through — so the grouping and the date printed under an entry are
+one decision rather than two.
+
+The key is honoured wherever it is written, exactly as `contact: true` is: a
+theme that wants the list on some other kind of page adds the same three lines
+to that layout.
 
 ### The head
 
@@ -624,6 +696,8 @@ A document — one post, one page, or one entry of a listing — adds:
 | `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |
 | `next`                                      | The published post after it. Absent on the newest post, and on a page.                                            |
 | `recentPosts`                               | The newest posts, as entries, on the front page only: this month's when it holds five, else five.                 |
+| `postsPage`                                 | The page carrying the listing, as `{ title, url }`, on the front page only. Absent when the site names none.      |
+| `archiveMonths`                             | Every published post as `{ month, posts }`, newest month first. Only on a page that says `archive: true`.         |
 | `webmention`                                | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.      |
 | `conversation`                              | The replies, likes and boosts under the post. Only when there are any. See [The conversation](#the-conversation). |
 | everything else                             | Any front matter key the CMS does not model is on the context under its own name.                                 |
@@ -1025,6 +1099,10 @@ honoured wherever it is written, so a theme that wants the form under a post as
 well only has to add the same two lines to `layouts/post.njk`; the editor
 offers the checkbox on pages.
 
+`archive: true` is the other front matter key of this kind: it puts every
+published post on the page instead of a form. See
+[An archive page](#an-archive-page).
+
 The packaged partial is a `section#contact.comment-respond.contact-form`: it is
 the same kind of form as the comment one, so it wears the same class and the two
 share one set of rules rather than keeping two that drift.
@@ -1078,11 +1156,11 @@ the import above carries `with context`: a macro imported without it cannot see
 
 ## Filters
 
-| Filter               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `date(format, zone)` | Formats a `Date` or a date string. `readable` (the default) gives `2 September 2026`, `html` gives `2026-09-02` for a `<time datetime>`, `year` gives `2026`, `iso` gives the full ISO 8601 instant. A date in a file is a UTC instant; `readable`, `html` and `year` are rendered in the site's `timezone` setting, and `iso` stays the instant. Pass `zone` — an IANA name — to override the setting for one call. A value that is not a date renders as the empty string. |
-| `url`                | Prefixes a root-relative path with the base URL's path, so a site served from a subdirectory links correctly. Eleventy's filter of the same name.                                                                                                                                                                                                                                                                                                                            |
-| `absoluteUrl`        | The same path as a fully qualified URL against the site's `baseUrl`.                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Filter               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `date(format, zone)` | Formats a `Date` or a date string. `readable` (the default) gives `2 September 2026`, `html` gives `2026-09-02` for a `<time datetime>`, `year` gives `2026`, `month` gives `September 2026`, `iso` gives the full ISO 8601 instant. A date in a file is a UTC instant; every format but `iso` is rendered in the site's `timezone` setting, and `iso` stays the instant. Pass `zone` — an IANA name — to override the setting for one call. A value that is not a date renders as the empty string. |
+| `url`                | Prefixes a root-relative path with the base URL's path, so a site served from a subdirectory links correctly. Eleventy's filter of the same name.                                                                                                                                                                                                                                                                                                                                                    |
+| `absoluteUrl`        | The same path as a fully qualified URL against the site's `baseUrl`.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 `date` reads one word rather than parsing it: `{{ "now" | date("year") }}` is
 the year at the moment the page is rendered, in the site's own timezone. It is

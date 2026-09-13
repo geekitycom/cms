@@ -15,6 +15,8 @@ export {
   UPLOAD_DIRECTORY,
 } from './assets.ts';
 export type { AssetResponseOptions, StaticAsset, ThemeAsset } from './assets.ts';
+export { archiveMonths, ARCHIVE_FRONT_MATTER_KEY, archiveOpen } from './archive.ts';
+export type { ArchiveEntry, ArchiveMonth } from './archive.ts';
 export {
   AUTHOR_BASE,
   authorContext,
@@ -34,6 +36,7 @@ export {
   documentContext,
   frontPageSlugs,
   postsPerPage,
+  siteTimezone,
   SITE_DATA_FILE,
   taxonomyBases,
   termRedirects,

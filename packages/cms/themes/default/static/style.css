@@ -812,6 +812,26 @@ pre code {
   margin-bottom: var(--spacing-4);
 }
 
+/* The front page (TASK-85): the site's own words, then Recent Posts, then
+   where to go next. Almost nothing is needed — the words are `.e-content`
+   below, the posts are the feed above, and the heading over them is an
+   ordinary `h2` — so this is only the line of links, which follows a feed
+   rather than a paragraph and needs the air a paragraph would already have. */
+
+.front-links {
+  margin-top: var(--spacing-8);
+}
+
+/* An archive page: every post there has ever been, under a heading per month.
+   The source design's essays page is plain headings over `ol.list-none` and
+   nothing else, so the prose rules draw it; what is here only closes the gap
+   between a month and its own posts, which at the prose spacing reads as two
+   things rather than as one. */
+
+.archive h2 {
+  margin-bottom: var(--spacing-2);
+}
+
 /* Body copy: whatever a document's words render into, which is the entry's
    `section.e-content` and the `div.page-body.e-content` a posts page prints
    its own words in. */

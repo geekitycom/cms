@@ -1,0 +1,57 @@
+{#
+  The front page: the page the Reading setting names, read at `/`, as the
+  source design's `front-page.php` draws it (decision-16, TASK-85).
+
+  A site's own words, then what it has been writing. The words are the page's
+  rendered body and nothing else — no title, because `layouts/base.njk` heads
+  the root path with the site title and a second `h1` under it would be one
+  heading too many, and no Published line, because a front page is read as the
+  site rather than as a page somebody wrote on a Tuesday. Then `Recent Posts`
+  over the same feed a listing is made of, headed at 3 so the outline never
+  skips a level, then the line of links, then the bio.
+
+  A theme that wants a different front page replaces this file; a site that
+  wants no front page of its own sets no homepage, and `/` is the listing.
+#}
+{% extends "layouts/base.njk" %}
+
+{#- Who the bio credits, and what tells `layouts/base.njk` the site menu is in
+    the bio rather than in the page footer. -#}
+{% set bioAuthor = siteAuthor %}
+
+{% block content %}
+<div class="page-body e-content">
+  {{ content | safe }}
+</div>
+
+<h2>Recent Posts</h2>
+{#- The feed a listing prints, over the posts the CMS decided were recent:
+    this month's writing when there is enough of it and the five newest
+    otherwise. `feedHeading` is 3 because the `h2` above is what they sit
+    under. -#}
+{% set posts = recentPosts %}
+{% set feedHeading = 3 %}
+{% include "partials/post-list.njk" %}
+
+{#- Where to go next. The posts page is here only when the site has one — on a
+    site without one there is no second URL for the archive, and a link to one
+    would be a link to nothing. Search belongs on this line too and is not
+    written yet: TASK-22. -#}
+{% if postsPage %}
+<p class="front-links">
+  <a href="{{ postsPage.url | url }}">{{ postsPage.title }}<span aria-hidden="true"> &rarr;</span></a>
+</p>
+{% endif %}
+
+{% if bioAuthor %}
+<hr>
+<footer>
+  {% include "partials/bio.njk" %}
+</footer>
+{% endif %}
+
+{# A homepage may ask for a contact form like any other page (TASK-56). #}
+{% if contactForm %}
+{% include "partials/contact-form.njk" %}
+{% endif %}
+{% endblock %}

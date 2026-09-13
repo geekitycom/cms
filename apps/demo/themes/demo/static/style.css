@@ -247,6 +247,26 @@ a:visited {
   color: var(--ink-muted);
 }
 
+/* The front page's line of links, under the recent posts, and the archive page
+   (TASK-85). A stylesheet is an all-or-nothing override, so the two page kinds
+   the package added need their rules here as well. */
+
+.front-links {
+  margin-top: 2rem;
+  font-size: 0.9rem;
+}
+
+.archive h2 {
+  margin-bottom: 0.4rem;
+  font-size: 1.2rem;
+}
+
+.archive ol {
+  margin: 0 0 2rem;
+  padding: 0;
+  list-style: none;
+}
+
 /* Tags. The packaged macro prints them as the same paragraph of `p-category`
    links the categories are (TASK-83); the demo's post layout wraps that
    paragraph so its tags keep the hash and the small caps they had. */

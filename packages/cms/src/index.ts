@@ -903,6 +903,9 @@ export {
   ACTIVITY_STREAMS_MEDIA_TYPES,
   activityStreamsId,
   alternateLinks,
+  archiveMonths,
+  ARCHIVE_FRONT_MATTER_KEY,
+  archiveOpen,
   assetNotModified,
   assetResponse,
   atomEntry,
@@ -1037,6 +1040,7 @@ export {
   SITEMAP_PATH,
   SOURCE_NAMESPACE,
   siteAuthorContext,
+  siteTimezone,
   splitFeedPath,
   splitRepresentationExtension,
   startOfMonth,
@@ -1516,6 +1520,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // rule. Only the front page asks, so a site whose `/` is its listing never
     // runs the query at all.
     recentPosts: () => recentPosts(store),
+    // And every published post, for a page that says `archive: true`. The one
+    // listing with no paging, so it is asked for only by the page that prints
+    // it (TASK-85).
+    archivePosts: () => store.listPosts(),
   });
   // One KV store for both federations. The compatibility one (TASK-70) shares
   // it so that the same `Follow` redelivered to a user's own inbox and to the

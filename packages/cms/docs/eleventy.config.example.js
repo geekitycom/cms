@@ -643,9 +643,10 @@ function escapeComment(value) {
 
 export default function (eleventyConfig) {
   // The CMS's `date` filter, in Eleventy's terms: `readable` (the default),
-  // `html` and `year` are the calendar the site's own zone is on, and `iso` is
-  // the instant, because a <time datetime> and a feed want UTC and must not
-  // move when a setting does. Pass a zone as the second argument to override.
+  // `html`, `year` and `month` are the calendar the site's own zone is on, and
+  // `iso` is the instant, because a <time datetime> and a feed want UTC and
+  // must not move when a setting does. Pass a zone as the second argument to
+  // override.
   //
   // With Luxon — which Eleventy already ships — the same filter reads:
   //
@@ -667,6 +668,7 @@ export default function (eleventyConfig) {
     const [year, month, day] = calendarDayIn(at, zone).split('-');
     if (format === 'html') return `${year}-${month}-${day}`;
     if (format === 'year') return year;
+    if (format === 'month') return `${MONTHS[Number(month) - 1]} ${year}`;
     return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
   });
 

@@ -1133,6 +1133,21 @@ provider.failNext(2); // watch the retry without waiting for it
 `mail` also takes `attempts`, `backoffMs` and `logger`, which is how a test
 proves the retry without spending ten seconds on it.
 
+## The archive page
+
+A page carrying `archive: true` in its front matter lists every published post
+under its own words, grouped by the month it was published in, newest month
+first and newest post first inside a month. Nothing paginates it: an archive
+page is a way of finding one piece of writing rather than a listing to read
+through. Drafts and posts whose date has not arrived are absent, as they are
+everywhere else.
+
+The default theme draws it from `partials/archive.njk`, and the CMS hands the
+layout `archiveMonths` — `{ month, posts }` per month, the month already read
+through the site's `timezone` so the heading and the dates agree. Eleventy
+ignores the key, and a static build of the same directory publishes the page as
+an ordinary page.
+
 ## The contact form
 
 A page carrying `contact: true` in its front matter renders a contact form
@@ -1588,9 +1603,10 @@ choice is WordPress's own, and so are its two answers:
 - **Your latest posts.** The archive at `/`, paginated at `/page/N/`. This is
   the default, and it is what an empty `homepage` means.
 - **A static page.** The page is served at `/`, its own permalink answers `301`
-  to `/` so the front page has one URL, and the menu links it at `/`. A theme
-  may lay it out on its own with `layouts/front-page.njk`, which falls
-  back to the page layout.
+  to `/` so the front page has one URL, and the menu links it at `/`. The
+  default theme draws it with `layouts/front-page.njk` — the page's own words,
+  then `Recent Posts`, then the line of links and the bio — and a theme lays it
+  out differently by overriding that one file.
 
 With a homepage set, a second pick gives the listing a page of its own: the
 **posts page**. Its permalink carries the listing, with the page's own title

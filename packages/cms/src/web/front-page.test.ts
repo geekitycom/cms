@@ -94,7 +94,11 @@ describe('a site whose homepage is a page', () => {
     const html = await response.text();
     assert.match(html, /Hello and welcome\./, 'the page’s own body is the front page');
     assert.match(html, /Welcome/);
-    assert.doesNotMatch(html, /Newest/, 'and the archive is not');
+    // The archive is not what `/` is: the posts under the page's words are the
+    // front page's own Recent Posts (TASK-85), not the paginated listing,
+    // which has a `page-title` heading and lives on the posts page now.
+    assert.match(html, /<h2>Recent Posts<\/h2>/);
+    assert.doesNotMatch(html, /class="page-title"/, 'the listing is still at the root');
   });
 
   it('redirects the page’s own permalink to / so there is one front page (AC #2)', async () => {
@@ -133,25 +137,42 @@ describe('a site whose homepage is a page', () => {
     assert.match(negotiated.headers.get('content-type') ?? '', /text\/markdown/);
   });
 
-  it('lets a theme lay the front page out on its own, and uses the page layout otherwise (AC #2)', async () => {
+  /**
+   * A site wearing a theme of its own, holding whatever files it was given
+   * beside its manifest.
+   */
+  async function themedSite(theme: Record<string, string>): Promise<Cms> {
     const themesDir = await temporaryDir('geekity-front-themes-');
-    const themeDir = path.join(themesDir, 'fixture');
-    await writeTree(themeDir, { 'theme.json': JSON.stringify({ name: 'Fixture', kind: 'site' }) });
+    await writeTree(path.join(themesDir, 'fixture'), {
+      'theme.json': JSON.stringify({ name: 'Fixture', kind: 'site' }),
+      ...theme,
+    });
     const { cms } = await site(
       { ...CONTENT, '_data/site.json': siteJson({ homepage: 'welcome', theme: 'fixture' }) },
       { themesDir },
     );
+    return cms;
+  }
 
-    const fallback = await (await cms.app.request('/')).text();
-    assert.match(fallback, /<p class="page-meta">/, 'the page layout renders it until then');
+  it('is the packaged front page for a theme that has written none (AC #2)', async () => {
+    // The package ships `layouts/front-page.njk` (TASK-85), so the fallback to
+    // the page layout is only reached by a theme that took it away.
+    const html = await (await (await themedSite({})).app.request('/')).text();
 
-    await writeTree(themeDir, {
+    assert.match(html, /Hello and welcome\./, 'the page’s own words are still the front page');
+    assert.match(html, /<h2>Recent Posts<\/h2>/, 'over the posts the packaged layout prints');
+    assert.doesNotMatch(html, /<p class="page-meta">/, 'and not through the page layout');
+  });
+
+  it('lets a theme lay the front page out on its own, over the packaged one (AC #2)', async () => {
+    const cms = await themedSite({
       'layouts/front-page.njk':
         '{% extends "layouts/base.njk" %}{% block content %}<div class="front">{{ title }}: {{ content | safe }}</div>{% endblock %}',
     });
 
     const html = await (await cms.app.request('/')).text();
     assert.match(html, /<div class="front">Welcome: <p>Hello and welcome\.<\/p>/);
+    assert.doesNotMatch(html, /Recent Posts/, 'the packaged front page is still in the way');
 
     // It is the front page's layout and nobody else's: every other page still
     // goes through `page.njk`.

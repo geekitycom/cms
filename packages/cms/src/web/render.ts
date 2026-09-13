@@ -5,6 +5,7 @@ import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { DocumentNeighbours } from '../content/store.ts';
 import { siteIcons } from '../images/icons.ts';
+import { archiveMonths, archiveOpen } from './archive.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import {
@@ -12,6 +13,7 @@ import {
   documentContext,
   frontPageSlugs,
   postsPerPage,
+  siteTimezone,
   taxonomyBases,
   termRedirects,
   themeName,
@@ -42,18 +44,21 @@ export const TEMPLATES = {
 } as const;
 
 /**
- * The two templates a theme may add for the Reading choice, neither of which
- * the default theme ships.
+ * The two templates named for the Reading choice, which a theme may write and
+ * which fall back to an ordinary layout when it has not.
  *
- * They are override points rather than layouts: a site that sets a static
- * homepage gets the page layout and a site that sets a posts page gets the
- * listing layout, until it writes one of these — which is WordPress's own
- * `front-page.php` and `home.php`, and the same reason for having them. A
- * front page is often the one page of a site that looks like nothing else, and
- * saying so should not mean overriding the layout every other page uses.
+ * They are WordPress's own `front-page.php` and `home.php`, and they exist for
+ * the same reason: a front page is often the one page of a site that looks
+ * like nothing else, and saying so should not mean overriding the layout every
+ * other page uses. The default theme ships `front-page.njk` (TASK-85) and no
+ * posts page layout, so a site that sets a posts page gets the listing layout
+ * until it writes one.
  */
 export const OPTIONAL_TEMPLATES = {
-  /** The front page alone. Falls back to {@link TEMPLATES.page}. */
+  /**
+   * The front page alone. The default theme ships one (TASK-85), so the
+   * fallback is only reached by a theme that replaced it with nothing.
+   */
   frontPage: 'layouts/front-page.njk',
   /** The listing on the posts page. Falls back to {@link TEMPLATES.home}. */
   postsPage: 'layouts/posts-page.njk',
@@ -240,6 +245,16 @@ export interface CreateRendererOptions {
    * listing never runs it at all.
    */
   recentPosts?: (() => readonly Document[]) | undefined;
+  /**
+   * Every published post, for a page whose front matter says `archive: true`
+   * (TASK-85).
+   *
+   * Injected for the reason the recent posts are, and asked per render and
+   * only for a page that asked for the list: an archive is the one listing
+   * with no paging, so a site with a thousand posts runs the query on the one
+   * page that prints a thousand links and on no other.
+   */
+  archivePosts?: (() => readonly Document[]) | undefined;
 }
 
 /**
@@ -327,6 +342,39 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   }
 
   /**
+   * The whole archive as the months an archive page heads, or nothing at all
+   * for every other document.
+   *
+   * The front matter key decides, so the list is on the context of exactly the
+   * page that asked for it and a layout writes `{% if archiveMonths %}` rather
+   * than reading front matter for itself — the way `contactForm` works.
+   */
+  function archiveContext(document: Document): Record<string, unknown> {
+    if (!archiveOpen(document)) return {};
+    const posts = options.archivePosts?.();
+    if (posts === undefined) return {};
+
+    return { archiveMonths: archiveMonths(posts, siteTimezone(siteData.read())) };
+  }
+
+  /**
+   * The page whose own URL carries the listing, as the link a front page draws
+   * to it, or nothing at all when the site names none.
+   *
+   * Resolved here rather than by the route because the renderer already holds
+   * both halves — the setting and the published pages — and because the link
+   * is the front page's alone: everywhere else the posts page is an ordinary
+   * item of the site menu.
+   */
+  function postsPageContext(): Record<string, unknown> {
+    const slug = frontPageSlugs(siteData.read()).postsPage;
+    if (slug === '') return {};
+
+    const found = pages().find((document) => document.slug === slug);
+    return found === undefined ? {} : { postsPage: { title: found.title, url: found.permalink } };
+  }
+
+  /**
    * Which template one listing renders through: whatever it named, the posts
    * page's own template when it is one and the theme ships one, and the home
    * layout otherwise.
@@ -406,6 +454,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
             activityStreams: objectId,
             commentsFeed: commentsFeedPath(document.permalink),
           }),
+      // And the whole archive, for a page whose front matter asked for it
+      // (TASK-85). On the context only for that page, so a theme asks
+      // `{% if archiveMonths %}` exactly as it asks about the contact form.
+      ...archiveContext(document),
       ...(said === undefined || said.counts.total === 0 ? {} : { conversation: said }),
       ...(form === undefined ? {} : { commentForm: form }),
       ...(contact === undefined ? {} : { contactForm: contact }),
@@ -466,7 +518,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         // page is for (decision-16). Built here rather than by the route
         // because it is the same document context every listing entry is, and
         // resolved once for the whole list the way a listing's bylines are.
-        extra: { ...recentPostsContext(), ...extra },
+        // `postsPage` goes with them: the front page is the one page that
+        // links the listing by name rather than by menu item.
+        extra: { ...recentPostsContext(), ...postsPageContext(), ...extra },
       });
     },
 
