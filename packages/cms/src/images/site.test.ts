@@ -131,7 +131,7 @@ describe('image optimization end to end', () => {
     // A remote instance cannot resolve this site's derived files, so the
     // Article it fetches carries the original and nothing else (decision-10).
     const article = await (
-      await cms.app.request('/ap/posts/a-photo', {
+      await cms.app.request(permalink, {
         headers: { accept: 'application/activity+json' },
       })
     ).json();

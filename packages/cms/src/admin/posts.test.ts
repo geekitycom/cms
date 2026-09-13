@@ -539,7 +539,7 @@ describe('editing a post', () => {
     });
   });
 
-  it('renames the file when the slug changes, and takes the permalink with it', async () => {
+  it('refuses to change a published post\u2019s slug (decision-13)', async () => {
     const contentDir = await seeded([
       {
         file: 'posts/2026-01-02-published.md',
@@ -556,22 +556,89 @@ describe('editing a post', () => {
       action: 'update',
     });
 
-    assert.equal(response.headers.get('location'), '/admin/posts/out-in-the-world');
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /permalink of a published post is permanent/);
+    // Nothing moved: the file, the URL and the object id all stand.
+    assert.deepEqual(await readdir(path.join(contentDir, 'posts')), ['2026-01-02-published.md']);
+    assert.equal((await cms.app.request('/2026/01/published/')).status, 200);
+  });
+
+  it('refuses to change a published post\u2019s permalink, and says why', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await submit(agent, '/admin/posts/published', {
+      permalink: '/a-url-i-picked/',
+      action: 'update',
+    });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /permalink of a published post is permanent/);
+    assert.equal((await cms.app.request('/a-url-i-picked/')).status, 404);
+    assert.equal((await cms.app.request('/2026/01/published/')).status, 200);
+  });
+
+  it('still renames a draft, and takes the permalink with it', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-waiting.md',
+        title: 'Still writing',
+        date: '2026-01-02',
+        permalink: '/2026/01/waiting/',
+        draft: true,
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await submit(agent, '/admin/posts/waiting', {
+      slug: 'still-writing',
+      action: 'save-draft',
+    });
+
+    assert.equal(response.headers.get('location'), '/admin/posts/still-writing');
     assert.deepEqual(await readdir(path.join(contentDir, 'posts')), [
-      '2026-01-02-out-in-the-world.md',
+      '2026-01-02-still-writing.md',
     ]);
 
     const written = await readFile(
-      path.join(contentDir, 'posts', '2026-01-02-out-in-the-world.md'),
+      path.join(contentDir, 'posts', '2026-01-02-still-writing.md'),
       'utf8',
     );
-    assert.match(written, /^permalink: \/2026\/01\/out-in-the-world\/$/m);
-
-    assert.equal((await cms.app.request('/2026/01/out-in-the-world/')).status, 200);
-    assert.equal((await cms.app.request('/2026/01/published/')).status, 404, 'the old URL is gone');
+    assert.match(written, /^permalink: \/2026\/01\/still-writing\/$/m);
   });
 
-  it('renames the file when the date changes', async () => {
+  it('still moves a draft\u2019s permalink where the author puts it', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-waiting.md',
+        title: 'Still writing',
+        date: '2026-01-02',
+        permalink: '/2026/01/waiting/',
+        draft: true,
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/posts/waiting', {
+      permalink: '/somewhere-else/',
+      action: 'save-draft',
+    });
+
+    const written = await readFile(path.join(contentDir, 'posts', '2026-01-02-waiting.md'), 'utf8');
+    assert.match(written, /^permalink: \/somewhere-else\/$/m);
+  });
+
+  it('refiles a published post when the date changes, and leaves its URL where it was', async () => {
     const contentDir = await seeded([
       {
         file: 'posts/2026-01-02-published.md',
@@ -585,17 +652,22 @@ describe('editing a post', () => {
 
     await submit(agent, '/admin/posts/published', { date: '2026-05-06', action: 'update' });
 
+    // The file follows the date, because that is how the archive is filed. The
+    // permalink does not: it was promised to the fediverse under decision-13,
+    // and correcting a date is not asking to break that.
     assert.deepEqual(await readdir(path.join(contentDir, 'posts')), ['2026-05-06-published.md']);
-    assert.equal((await cms.app.request('/2026/05/published/')).status, 200);
+    assert.equal((await cms.app.request('/2026/01/published/')).status, 200);
+    assert.equal((await cms.app.request('/2026/05/published/')).status, 404);
   });
 
-  it('leaves a permalink somebody chose alone when the slug moves', async () => {
+  it('leaves a permalink somebody chose alone when a draft\u2019s slug moves', async () => {
     const contentDir = await seeded([
       {
         file: 'posts/2026-01-02-published.md',
         title: 'Out in the world',
         date: '2026-01-02',
         permalink: '/a-url-i-picked/',
+        draft: true,
       },
     ]);
     const cms = await box.site({ contentDir });
@@ -603,15 +675,41 @@ describe('editing a post', () => {
 
     await submit(agent, '/admin/posts/a-url-i-picked', {
       slug: 'renamed',
-      action: 'update',
+      action: 'save-draft',
     });
 
     assert.deepEqual(await readdir(path.join(contentDir, 'posts')), ['2026-01-02-renamed.md']);
-    assert.equal(
-      (await cms.app.request('/a-url-i-picked/')).status,
-      200,
-      'the URL people already have still works',
+    const written = await readFile(path.join(contentDir, 'posts', '2026-01-02-renamed.md'), 'utf8');
+    assert.match(written, /^permalink: \/a-url-i-picked\/$/m);
+  });
+});
+
+describe('a post migrated from somewhere else', () => {
+  it('keeps the activitypub.id its file names through a save (decision-13)', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2011-06-06-old-news.md',
+        title: 'Old news',
+        date: '2011-06-06',
+        permalink: '/2011/06/old-news/',
+        extra: ['activitypub:', "  id: 'https://example.com/?p=813'", "  published: '2011-06-06'"],
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/posts/old-news', {
+      body: 'Rewritten, years later.',
+      action: 'update',
+    });
+
+    const written = await readFile(
+      path.join(contentDir, 'posts', '2011-06-06-old-news.md'),
+      'utf8',
     );
+    // The name its followers, its replies and its RSS subscribers hold.
+    assert.match(written, /^ {2}id: https:\/\/example\.com\/\?p=813$/m);
+    assert.equal(cms.store.getBySlug('old-news')?.activitypub?.id, 'https://example.com/?p=813');
   });
 });
 

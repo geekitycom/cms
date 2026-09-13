@@ -182,13 +182,20 @@ function slugOf(data) {
 }
 
 /**
- * The origin a site federates under: its scheme and host, with any path
- * dropped. A site at `https://example.com/blog` keeps its pages under that
- * directory, but its ActivityPub ids are host-rooted.
+ * A path on the site as an absolute URL, on the site's own base URL.
+ *
+ * A base URL carrying a path — a site served from a subdirectory — puts that
+ * path in front of a root-relative one, exactly as the CMS's own `absoluteUrl`
+ * does, so a post's object id is the same string on both sides.
  */
-function originOf(url) {
+function absoluteUrl(pathname, url) {
   try {
-    return new URL(String(url)).origin;
+    const base = new URL(String(url).endsWith('/') ? String(url) : `${String(url)}/`);
+    const directory = base.pathname === '/' ? '' : base.pathname.replace(/\/$/, '');
+    return new URL(
+      pathname.startsWith('/') ? `${directory}${pathname}` : pathname,
+      base,
+    ).toString();
   } catch {
     return undefined;
   }
@@ -707,9 +714,10 @@ export default function (eleventyConfig) {
   // in the inbox log points at. The CMS puts it on the template context as
   // `activityStreams`, and this does the same, so a layout can hand it to the
   // `conversation` filter below. It runs after the permalink preprocessor
-  // because the slug is the permalink's last segment, exactly as the CMS
-  // derives it — a post moved to a new URL keeps the id it was delivered
-  // under, so `activitypub.id` in the front matter always wins.
+  // because decision-13 makes a post's ActivityStreams id its permalink: one
+  // URL, answering a browser with the page and a peer with the Article. The
+  // exception is a post migrated from somewhere else, whose `activitypub.id`
+  // is the name its followers already hold, so a stored id always wins.
   eleventyConfig.addPreprocessor('geekity-activitypub', 'md', (data) => {
     if (!isPost(data.page?.inputPath ?? '')) return;
 
@@ -719,10 +727,10 @@ export default function (eleventyConfig) {
       return;
     }
 
-    const slug = slugOf(data);
-    const origin = originOf(data.site?.url);
-    if (slug === undefined || origin === undefined) return;
-    data.activityStreams = `${origin}/ap/posts/${encodeURIComponent(slug)}`;
+    const permalink = typeof data.permalink === 'string' ? data.permalink : undefined;
+    if (permalink === undefined) return;
+    const id = absoluteUrl(permalink, data.site?.url);
+    if (id !== undefined) data.activityStreams = id;
   });
 
   // The conversation under a post: the replies, likes and boosts the inbox log

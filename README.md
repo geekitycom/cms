@@ -298,8 +298,8 @@ Three consequences worth knowing before deleting one:
 
 The one capability decision-9 gives up is narrower than any of those: a post
 whose **file is gone entirely** cannot be withdrawn from followers' timelines,
-because the `activitypub.id` a `Delete` needs was in the file. Trashing a post
-in the admin keeps the file under `_trash/` with its id, so the ordinary way of
+because the permalink a `Delete` names was in the file. Trashing a post
+in the admin keeps the file under `_trash/`, so the ordinary way of
 unpublishing still sends the `Delete`.
 
 ### A database this version cannot use

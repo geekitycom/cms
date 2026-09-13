@@ -218,11 +218,11 @@ describe('the RSS feed', () => {
     assert.equal(child(newer, 'pubDate').text, 'Wed, 02 Sep 2026 09:00:00 GMT');
     assert.equal(child(newer, 'dc:creator').text, 'Andrew Shell');
 
-    // The guid is a name, not an address: the ActivityStreams object id, which
-    // is minted from the slug and so survives the post being moved.
+    // The guid is the ActivityStreams object id, which after decision-13 is
+    // the permalink itself.
     const guid = child(newer, 'guid');
     assert.equal(guid.attributes['isPermaLink'], 'false');
-    assert.equal(guid.text, 'https://example.com/ap/posts/newer');
+    assert.equal(guid.text, 'https://example.com/2026/09/newer/');
 
     // Both taxonomies become categories, categories before tags.
     assert.deepEqual(
@@ -979,7 +979,7 @@ describe('the HTML pages', () => {
 
     assert.ok(
       head.includes(
-        '<link rel="alternate" type="application/activity+json" href="https://example.com/ap/posts/one">',
+        '<link rel="alternate" type="application/activity+json" href="https://example.com/one/">',
       ),
       'the post still advertises its ActivityStreams object',
     );
@@ -1075,6 +1075,68 @@ function reply(cms: Cms, options: ReplyOptions): void {
   });
 }
 
+describe('a reply to a migrated post’s stored object id', () => {
+  /** The post as WordPress left it: announced under `?p=813` long ago. */
+  const MIGRATED = 'https://example.com/?p=813';
+
+  const files = {
+    '_data/site.json': JSON.stringify({ title: 'Geekity Demo' }),
+    'posts/2011-06-06-old-news.md': [
+      '---',
+      'title: Old news',
+      "date: '2011-06-06T09:00:00Z'",
+      'permalink: /2011/06/old-news/',
+      'activitypub:',
+      `  id: '${MIGRATED}'`,
+      "  published: '2011-06-06T09:00:00Z'",
+      '---',
+      '',
+      'Body.',
+      '',
+    ].join('\n'),
+  };
+
+  it('reaches the post’s comments feed, the site feed and its source:comments count', async () => {
+    const { cms } = await site(files);
+    reply(cms, { inReplyTo: MIGRATED, id: 'https://remote.example/notes/1' });
+
+    // The post's own comments feed, which is keyed by the object id.
+    const own = await rss(cms, '/2011/06/old-news/feed/');
+    assert.deepEqual(
+      childrenNamed(own.channel, 'item').map((item) => child(item, 'guid').text),
+      ['https://remote.example/notes/1'],
+    );
+
+    // The site-wide one, which resolves the id back to the post it names.
+    const siteWide = await rss(cms, '/comments/feed/');
+    assert.deepEqual(
+      childrenNamed(siteWide.channel, 'item').map((item) => child(item, 'title').text),
+      ['@ada@remote.example on Old news'],
+    );
+
+    // And the count the post feed advertises, which is the same walk again.
+    const posts = await rss(cms, '/feed/');
+    const item = childrenNamed(posts.channel, 'item')[0] as XmlElement;
+    assert.equal(child(item, 'source:comments').attributes['count'], '1');
+    // decision-12: the guid is the object id, which here is the stored one, so
+    // the migrated post's RSS subscribers see nothing new.
+    assert.equal(child(item, 'guid').text, MIGRATED);
+  });
+
+  it('shows the reply in the conversation on the page', async () => {
+    const { cms } = await site(files);
+    reply(cms, {
+      inReplyTo: MIGRATED,
+      id: 'https://remote.example/notes/1',
+      content: '<p>Still true.</p>',
+    });
+
+    const html = await (await cms.app.request('/2011/06/old-news/')).text();
+
+    assert.ok(html.includes('<p>Still true.</p>'), `the reply is on the page: ${html}`);
+  });
+});
+
 describe('a post’s comments feed', () => {
   const files = {
     '_data/site.json': JSON.stringify({ title: 'Geekity Demo', tagline: 'A file-first site' }),
@@ -1084,7 +1146,7 @@ describe('a post’s comments feed', () => {
     }),
   };
 
-  const HELLO = 'https://example.com/ap/posts/hello';
+  const HELLO = 'https://example.com/2026/09/hello/';
 
   it('serves the replies the inbox logged, newest first', async () => {
     const { cms } = await site(files);
@@ -1210,8 +1272,8 @@ describe('the site-wide comments feed', () => {
     }),
   };
 
-  const HELLO = 'https://example.com/ap/posts/hello';
-  const SECOND = 'https://example.com/ap/posts/second';
+  const HELLO = 'https://example.com/2026/09/hello/';
+  const SECOND = 'https://example.com/2026/09/second/';
 
   it('lists the replies to every post, newest first, each naming its post', async () => {
     const { cms } = await site(files);
@@ -1259,11 +1321,11 @@ describe('the site-wide comments feed', () => {
     });
     reply(cms, { inReplyTo: HELLO, id: 'https://remote.example/notes/1' });
     reply(cms, {
-      inReplyTo: 'https://example.com/ap/posts/hidden',
+      inReplyTo: 'https://example.com/2026/08/hidden/',
       id: 'https://remote.example/notes/2',
     });
     reply(cms, {
-      inReplyTo: 'https://example.com/ap/posts/gone',
+      inReplyTo: 'https://example.com/2026/08/gone/',
       id: 'https://remote.example/notes/3',
     });
 
@@ -1279,8 +1341,8 @@ describe('the site-wide comments feed', () => {
 
   it('ignores a reply to something this site never published', async () => {
     const { cms } = await site(files);
-    reply(cms, { inReplyTo: 'https://elsewhere.example/ap/posts/hello' });
-    reply(cms, { inReplyTo: 'https://example.com/ap/posts/never', id: 'https://x.test/notes/2' });
+    reply(cms, { inReplyTo: 'https://elsewhere.example/2026/09/hello/' });
+    reply(cms, { inReplyTo: 'https://example.com/2026/09/never/', id: 'https://x.test/notes/2' });
 
     const { channel } = await rss(cms, '/comments/feed/');
 
@@ -1351,7 +1413,7 @@ describe('the comment pointers on a post feed', () => {
     }),
   };
 
-  const HELLO = 'https://example.com/ap/posts/hello';
+  const HELLO = 'https://example.com/2026/09/hello/';
 
   it('points every item at its own comments, counted', async () => {
     const { cms } = await site(files);

@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-05 03:14'
+updated_date: '2026-09-13 01:28'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -51,8 +51,8 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | --- | --- |
 | `updated` | last modified date, a UTC instant, written on every admin save |
 | `author` | user login; resolved to display name at render |
-| `activitypub.id` | the ActivityStreams object id once federated, so Update/Delete reference the same object |
-| `activitypub.published` | timestamp of first delivery, a UTC instant |
+| `activitypub.published` | timestamp of first delivery, a UTC instant. The only key the CMS writes here: it records that the post has been announced and when, which is what decides `Create` against `Update` |
+| `activitypub.id` | never written by the CMS. A post's ActivityStreams object id is its permalink (decision-13); this key is read, not minted, so a post migrated from elsewhere keeps the id its followers already hold — `https://example.com/?p=813` — and every `Update` and `Delete` names it |
 | `navigationOrder` | where a page in the menu sorts; the lower numbers first, and a page with none after every page with one |
 
 Unknown keys are preserved on round trip. The writer emits YAML with a stable key order so diffs stay small.

@@ -13,7 +13,7 @@ import { Temporal as TemporalPolyfill } from '@js-temporal/polyfill';
 
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
-import { isPublicDocument } from '../web/documents.ts';
+import { isPublicDocument, postObjectId } from '../web/documents.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { categoryHref, tagHref } from '../web/taxonomy.ts';
 import type { FederationContextData } from './federation.ts';
@@ -39,11 +39,11 @@ export function isFederatedDocument(document: Document, now: Date = new Date()):
 /**
  * One post as the `Article` doc-4 describes.
  *
- * The id comes from the Fedify context rather than from string concatenation,
- * so it stays in step with the path the object dispatcher is registered under,
- * and it is built from the slug rather than from the permalink, so moving a
- * post does not mint a second object. `url` is the permalink, which is the
- * page a human should land on.
+ * Its `id` and its `url` are the same URL — the permalink — because
+ * decision-13 gives a post one name for both audiences: a browser asking for
+ * HTML gets the page, a peer asking for ActivityStreams gets this. The
+ * exception is a post whose file already names an `activitypub.id`, which
+ * keeps it; see {@link articleObjectId}.
  *
  * `source` carries the Markdown the file holds, so a peer that wants to quote
  * or re-render the post has the text rather than only the rendering of it.
@@ -172,26 +172,16 @@ export function postDeleteActivity(
 }
 
 /**
- * A post's ActivityStreams object id: the one written into its front matter if
- * it has been federated, and the one its slug implies if it has not.
+ * A post's ActivityStreams object id, off the Fedify context: its permalink,
+ * or the id its file already names (decision-13).
  *
- * The stored id is what makes a rename invisible to a follower. Ids are minted
- * from the slug, so a post renamed after it was announced would otherwise
- * become a second object and be delivered as a `Create` all over again; doc-4
- * asks the `activitypub.id` key to prevent exactly that. The object dispatcher
- * resolves a stored id back to its post, so the old URL keeps answering.
+ * A thin wrapper over {@link postObjectId} so everything in this module reads
+ * the id the same way and off the same base URL the article's `url` is built
+ * on. The rule itself lives in `web/documents.ts`, because the page, the feed
+ * item and the object are one identity now rather than three.
  */
 export function articleObjectId(context: Context<FederationContextData>, document: Document): URL {
-  const stored = document.activitypub?.id;
-  if (stored !== undefined && stored !== '') {
-    try {
-      return new URL(stored);
-    } catch {
-      // A hand-written `activitypub.id` that is not a URL is not an id. Fall
-      // back to the derived one rather than failing the delivery.
-    }
-  }
-  return context.getObjectUri(Article, { slug: document.slug });
+  return new URL(postObjectId(document, context.data.config.baseUrl));
 }
 
 /**

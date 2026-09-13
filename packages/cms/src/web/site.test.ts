@@ -653,7 +653,7 @@ describe('the conversation under a post', () => {
   };
 
   /** The object id the fediverse knows the post by. */
-  const HELLO = 'https://example.com/ap/posts/hello';
+  const HELLO = 'https://example.com/2026/09/hello/';
 
   /** A CMS whose posts are federated, so a reply can name one. */
   async function federated(): Promise<Cms> {

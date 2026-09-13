@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-04 05:21'
+updated_date: '2026-09-13 01:29'
 ---
 # Content Negotiation
 
@@ -16,14 +16,14 @@ Every public content URL serves one document in several representations. The rep
 | `text/html` | rendered through the theme | default when nothing else matches |
 | `text/markdown` | the file as stored, front matter included | `Content-Disposition: inline`, charset utf-8 |
 | `application/json` | `{ "frontMatter": {...}, "markdown": "...", "html": "...", "url": "..." }` | stable shape, versioned via `"schema": 1` |
-| `application/activity+json` | ActivityStreams object | handled by Fedify, not by this layer |
+| `application/activity+json` | the post's ActivityStreams `Article` | a published post only; its `id` is this URL (decision-13) |
 | `application/ld+json; profile="https://www.w3.org/ns/activitystreams"` | same | same |
 
 ## Selection
 
 1. If the path ends in `.md` or `.json` and the path without the extension resolves, use that representation and ignore `Accept`.
 2. Otherwise run standard `Accept` matching with q-values against the list above. `*/*` and a missing header mean HTML.
-3. ActivityStreams types are claimed by the Fedify middleware before this code runs, so they never reach the negotiator; the table lists them for completeness.
+3. ActivityStreams types are claimed before this code runs, so they never reach the negotiator. A post's object id is its permalink, so the permalink itself answers them with the `Article`: one URL, a browser and a peer, decided by `Accept`. A page and a listing federate nothing and fall through to the negotiator, which answers 406 to a request that will take nothing else.
 4. A request whose only acceptable types are unsupported returns 406 with a short JSON body listing the options.
 
 Every response includes `Vary: Accept` and a `Link` header advertising the alternates:
@@ -64,7 +64,7 @@ Pinging is a form POST of `url={feed}` to `{notifyServer}/ping`, one per feed wh
 
 ## Comments
 
-The two comments feeds carry the fediverse replies the inbox has logged: a `Create` of a `Note` whose `inReplyTo` names a post's ActivityStreams object id. They are RSS 2.0 and nothing else — `{permalink}feed/atom/` 404s — because a comments feed is what WordPress served in that one format and nothing subscribes to it in another.
+The two comments feeds carry the fediverse replies the inbox has logged: a `Create` of a `Note` whose `inReplyTo` names a post's ActivityStreams object id — its permalink, or the id its file stores. They are RSS 2.0 and nothing else — `{permalink}feed/atom/` 404s — because a comments feed is what WordPress served in that one format and nothing subscribes to it in another.
 
 A published post always has one, empty when nobody has answered: it exists, and a reader that subscribed early should keep polling. A permalink that is no published post 404s, and so does a page's, because only posts federate. A reply whose post is later unpublished or trashed leaves `/comments/feed/` with it.
 
@@ -82,10 +82,14 @@ Two more fixed routes, at the only paths a crawler looks for them:
 
 The sitemap lists the home archive and each of its pages, every public post and page, and every tag and category archive with each of its pages, under the bases the site holds at that moment. `<lastmod>` is `updated` else `date` for a document, and the newest of those on a listing page; something nothing dates carries no `<lastmod>` rather than an invented one. Drafts, the trash and posts whose date has not arrived are absent, because the sitemap is drawn from the same queries and the same `isPublicDocument` the listings use.
 
-Nothing else is disallowed in `robots.txt`. `/ap/` is left open on purpose: an actor and an object are documents meant to be fetched, and a crawler that follows one gets JSON it will ignore.
+Nothing else is disallowed in `robots.txt`. `/ap/` is left open on purpose: the actor and its collections are documents meant to be fetched, and a crawler that follows one gets JSON it will ignore.
 
 Both are registered routes rather than anything resolved from the index, so a document permalinked at `/sitemap.xml` cannot take the URL a search engine polls, and both carry `ETag` and `Last-Modified` and answer conditional requests with 304 the way the feeds do.
 
 ## Caching
 
 Responses carry `ETag` derived from the document's content hash and representation, and `Last-Modified` from `updated`. Conditional requests return 304.
+
+## A stored object id
+
+A post migrated from elsewhere carries an `activitypub.id` in its front matter, which stays its object id for the life of the post (decision-13). That URL is negotiated too, and it is the one place the two audiences are sent different ways: an ActivityStreams request is answered with the post's `Article`, and anything else — a browser following an old link — is redirected 301 to the permalink. The match is on the whole URL, so `https://example.com/?p=813` is served exactly as a path-shaped id is. A post born on the CMS has no stored id and never sees this path.

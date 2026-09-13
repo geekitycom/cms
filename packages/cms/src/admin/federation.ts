@@ -9,6 +9,7 @@ import type { DeliveryReport } from '../federation/delivery.ts';
 import type { WebmentionReport } from '../webmention/service.ts';
 import { SITE_ACTOR_IDENTIFIER } from '../federation/keys.ts';
 import { ACTOR_PATH, federationOrigin, FEDERATION_PREFIX } from '../federation/paths.ts';
+import { postObjectId } from '../web/documents.ts';
 import { editorPath, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
@@ -70,8 +71,8 @@ export interface MountFederationScreenOptions {
  *
  * The delivery panel is the one that reads two sources at once. Which posts
  * belong on it is a question for the content index — the posts carrying an
- * `activitypub.id`, which is the same thing as the posts a follower holds a
- * copy of — and how each of them last landed is a question for the outcome
+ * `activitypub.published`, which is the same thing as the posts a follower
+ * holds a copy of — and how each of them last landed is a question for the outcome
  * cache. That order matters: the cache is disposable (decision-9), so a site
  * that has just deleted its database sees every federated post listed with
  * nothing yet recorded against it, rather than an empty panel.
@@ -109,6 +110,7 @@ export function mountFederationScreen(
         .listRelays()
         .map((relay) => relayRow(relay, admin.lastDeliveryToInbox(relay.inboxId))),
       posts: deliveryRows(c.var.store.listFederated({ limit: FEDERATION_RECENT }), {
+        baseUrl,
         lastDelivery: (objectId) => admin.lastDeliveryToObject(objectId),
         counts: (activityId) => admin.countDeliveriesByStatus(activityId),
         webmentions: (slug) => admin.countSentWebmentionsByStatus(slug),
@@ -280,6 +282,8 @@ export interface DeliveryRow {
 
 /** What {@link deliveryRows} needs to fill a row in. */
 export interface DeliveryRowsContext {
+  /** The site's public origin, which a post's object id is built on. */
+  readonly baseUrl: string;
   /** The newest outcome recorded about one object id, or `undefined`. */
   readonly lastDelivery: (objectId: string) => Delivery | undefined;
   /** How one activity's deliveries ended, by status. */
@@ -294,8 +298,8 @@ export interface DeliveryRowsContext {
  * The posts come from the content index and the outcomes from the cache, in
  * that order and not the other way round, because they are answers to two
  * different questions. Which posts belong here is a fact about the files: a
- * post carrying an `activitypub.id` is one some follower holds a copy of, and
- * that stays true however often the database is thrown away. How each of them
+ * post carrying an `activitypub.published` is one some follower holds a copy
+ * of, and that stays true however often the database is thrown away. How each of them
  * landed is a fact about the last delivery, which is exactly the sort of thing
  * a cache is allowed to forget.
  *
@@ -308,7 +312,7 @@ export function deliveryRows(
   context: DeliveryRowsContext,
 ): DeliveryRow[] {
   return documents.map((document) => {
-    const last = context.lastDelivery(document.activitypub?.id ?? '');
+    const last = context.lastDelivery(postObjectId(document, context.baseUrl));
 
     return {
       post: {

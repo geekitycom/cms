@@ -380,14 +380,40 @@ async function saveFromForm(
       ? await freeSlug({ contentDir, store, type: kind.type, slug, date: filed })
       : slug;
 
-  const permalink = resolvePermalink({
-    kind,
-    form,
-    slug: finalSlug,
-    date: filed,
-    document,
-    timezone,
-  });
+  // decision-13: a published post's permalink is its name in the fediverse as
+  // well as on the web, and the two are one promise. Moving it hands every
+  // follower a second object and breaks every link somebody already shared, so
+  // the editor refuses. A draft has promised nothing yet and may still move;
+  // a site that really means to move a published post can still do it in the
+  // file, knowing what it costs.
+  const promised = promisedDocument(kind, document, store.now());
+  if (promised !== undefined) {
+    if (finalSlug !== promised.slug) {
+      return refuse(
+        `The permalink of a published post is permanent, and the slug names the file it is filed under: this ${kind.singular} keeps the slug ${promised.slug}.`,
+      );
+    }
+    // An empty field is not a request to move: it is a form that carried no
+    // permalink, and the promised one is what it keeps. Only a field naming
+    // some other URL is somebody asking for the one thing this refuses.
+    const submitted = normalizePermalink(form.permalink);
+    if (submitted !== undefined && submitted !== promised.permalink) {
+      return refuse(
+        `The permalink of a published post is permanent: this ${kind.singular} stays at ${promised.permalink}.`,
+      );
+    }
+  }
+
+  const permalink =
+    promised?.permalink ??
+    resolvePermalink({
+      kind,
+      form,
+      slug: finalSlug,
+      date: filed,
+      document,
+      timezone,
+    });
   const target = documentPath({ kind, slug: finalSlug, date: filed, trashed });
 
   if (document !== undefined) {
@@ -478,6 +504,25 @@ function documentPath(input: {
 }): string {
   const relative = contentFilePath({ type: input.kind.type, slug: input.slug, date: input.date });
   return input.trashed ? `${TRASH_DIRECTORY}/${relative}` : relative;
+}
+
+/**
+ * The document whose permalink has already been promised, or `undefined` when
+ * nothing has been promised yet.
+ *
+ * A published post, and only a published post. decision-13 makes its permalink
+ * its ActivityStreams object id, so the URL is a name its followers, its
+ * replies and its feed subscribers are all holding; a draft, a trashed post
+ * and one whose date has not arrived have been shown to nobody, and a page
+ * federates nothing at all.
+ */
+function promisedDocument(
+  kind: DocumentKind,
+  document: Document | undefined,
+  now: Date,
+): Document | undefined {
+  if (document === undefined || kind.type !== 'post') return undefined;
+  return isPublicDocument(document, now) ? document : undefined;
 }
 
 /**

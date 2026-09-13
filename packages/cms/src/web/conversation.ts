@@ -1,7 +1,6 @@
 import type { AdminStore, InboxActivity, PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
-import { FEDERATION_PREFIX } from '../federation/paths.ts';
 import { actorHandle, replyFrom, REPLY_ACTIVITY_TYPE } from '../federation/replies.ts';
 import { activityStreamsId, isPublicDocument } from './documents.ts';
 import type { FeedComment } from './feeds.ts';
@@ -513,11 +512,12 @@ function newestFirst<T extends { published: Date }>(said: T[], limit: number): T
 /**
  * The public post an ActivityStreams object id names, memoised.
  *
- * Almost every id is the one the slug implies, so the slug is tried first and
- * the answer is checked against the document's own id — a post that has been
- * renamed keeps the id it was first delivered under, which no slug spells any
- * more, and a post that is no longer public has no id at all. Only when that
- * fails is the whole index read, once, to find it.
+ * Almost every id is the post's permalink (decision-13), so the permalink is
+ * looked up first and the answer is checked against the document's own id — a
+ * post that is no longer public has no id at all. Only when that fails is the
+ * whole index read, once, to find the post whose file names this id: a post
+ * migrated from WordPress keeps the `?p=813` its followers already hold, and
+ * no permalink spells that.
  */
 class PostsByObjectId {
   readonly #context: ConversationContext;
@@ -534,9 +534,9 @@ class PostsByObjectId {
   }
 
   #resolve(objectId: string): Document | undefined {
-    const slug = slugOfObjectId(objectId, this.#context.baseUrl);
-    if (slug !== undefined) {
-      const document = this.#context.store.getBySlug(slug);
+    const permalink = permalinkOfObjectId(objectId, this.#context.baseUrl);
+    if (permalink !== undefined) {
+      const document = this.#context.store.getByPermalink(permalink);
       if (
         document !== undefined &&
         activityStreamsId(document, this.#context.baseUrl) === objectId
@@ -560,29 +560,32 @@ class PostsByObjectId {
 }
 
 /**
- * The slug an object id names, when it is one this site would have minted.
+ * The permalink an object id names, when it is one this site would have
+ * minted: the path, with the base URL's own directory taken off it.
  *
- * An id from another host, or one under some other path, belongs to no post
- * here however it is spelled.
+ * An id from another host belongs to no post here however it is spelled, and
+ * neither does one carrying a query string — a permalink has none, so an id
+ * like `?p=813` is a stored one and is found by the walk instead.
  */
-function slugOfObjectId(objectId: string, baseUrl: string): string | undefined {
+function permalinkOfObjectId(objectId: string, baseUrl: string): string | undefined {
   let url: URL;
+  let base: URL;
   try {
     url = new URL(objectId);
+    base = new URL(baseUrl);
   } catch {
     return undefined;
   }
-  if (url.origin !== new URL(baseUrl).origin) return undefined;
+  if (url.origin !== base.origin || url.search !== '') return undefined;
 
-  const prefix = `${FEDERATION_PREFIX}/posts/`;
-  if (!url.pathname.startsWith(prefix)) return undefined;
+  const directory = base.pathname === '/' ? '' : base.pathname.replace(/\/$/, '');
+  if (directory !== '' && !url.pathname.startsWith(`${directory}/`)) return undefined;
 
-  const slug = url.pathname.slice(prefix.length);
-  if (slug === '' || slug.includes('/')) return undefined;
+  const pathname = url.pathname.slice(directory.length);
   try {
-    return decodeURIComponent(slug);
+    return decodeURIComponent(pathname);
   } catch {
-    return undefined;
+    return pathname;
   }
 }
 

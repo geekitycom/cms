@@ -343,9 +343,9 @@ So four things are actually lost:
 
 The one thing the file-first design gives up is narrower than any of those: a
 post whose **file is gone entirely** can no longer be withdrawn from followers'
-timelines, because the `activitypub.id` a `Delete` needs was in the file.
-Trashing a post in the admin keeps the file under `_trash/` with its id, so the
-ordinary way of unpublishing still sends the `Delete`.
+timelines, because the permalink a `Delete` names was in the file. Trashing a
+post in the admin keeps the file under `_trash/`, so the ordinary way of
+unpublishing still sends the `Delete`.
 
 ### A database this version will not open
 
@@ -427,11 +427,28 @@ Nothing is delivered for a full scan, the boot scan included: a rebuilt index
 reports the whole archive as new, and announcing it again is not what deleting
 `data/geekity.db` should mean.
 
-The first activity about a post writes `activitypub.id` and
-`activitypub.published` into its front matter. That id is what every follower
-now holds, so it is the id the post keeps: renaming the slug afterwards sends
-an `Update` rather than a second post, and `/ap/posts/{old-slug}` goes on
-answering. Restoring a trashed post reuses it too.
+A post's ActivityStreams object id is its permalink, absolute on the site's
+base URL. One URL answers both audiences — a browser gets the page, a peer
+asking for `application/activity+json` gets the `Article` — so a shared link, a
+feed item, an object id and a reply's `inReplyTo` all name the same thing.
+Nothing else has to be minted or kept in step.
+
+The first activity about a post writes one key, `activitypub.published`, into
+its front matter: the record that the post has been announced and when, which
+is what decides `Create` against `Update` and what a resend reads. Restoring a
+trashed post reuses it too.
+
+Because that URL is a promise, the editor keeps it: **a published post's slug
+and permalink cannot be changed**. Both fields still move freely on a draft,
+and a site that really means to move a published post can edit the file,
+knowing that its followers will be handed a second object.
+
+A post whose file already names an `activitypub.id` keeps it as its object id
+for the life of the post — that is how a post migrated from WordPress keeps the
+`https://example.com/?p=813` its followers, its replies and its RSS subscribers
+already hold. The CMS serves the `Article` at that URL on an ActivityStreams
+request, redirects a browser from it to the permalink, and names it in every
+`Update` and `Delete`. The CMS never writes one itself.
 
 One POST serves a whole instance — the shared inbox is preferred — but the
 outcome is recorded per recipient, so an admin can see which one did not get it
@@ -537,8 +554,8 @@ again from its file, sends it to every follower and every accepted relay the
 site has now, and says what came of it.
 
 Which posts are listed is a question for the files — the posts carrying an
-`activitypub.id`, the trash included, which is the same thing as the posts some
-follower holds a copy of — and how each landed is a question for the outcome
+`activitypub.published`, the trash included, which is the same thing as the
+posts some follower holds a copy of — and how each landed is a question for the outcome
 cache. So a site that has just deleted `data/geekity.db` sees every federated
 post listed with nothing recorded against it, and can press Resend on any of
 them.

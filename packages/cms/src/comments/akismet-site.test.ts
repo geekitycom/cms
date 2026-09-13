@@ -305,7 +305,7 @@ describe('a site with an Akismet key in data/', () => {
           type: 'Note',
           attributedTo: 'https://remote.example/users/grace',
           content: '<p>Free money at example.biz.</p>',
-          inReplyTo: `${BASE_URL}/ap/posts/hello-world`,
+          inReplyTo: `${BASE_URL}/2026/09/hello-world/`,
           published: '2026-09-03T09:00:00Z',
         },
       }),

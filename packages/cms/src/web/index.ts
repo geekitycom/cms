@@ -39,7 +39,12 @@ export type {
   InteractionStatus,
   SiteInteraction,
 } from './conversation.ts';
-export { activityStreamsId, isPublicDocument, publicDocumentAt } from './documents.ts';
+export {
+  activityStreamsId,
+  isPublicDocument,
+  postObjectId,
+  publicDocumentAt,
+} from './documents.ts';
 export {
   atomFeed,
   cdata,

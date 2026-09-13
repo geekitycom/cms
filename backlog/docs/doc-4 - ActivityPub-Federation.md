@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-12 21:20'
+updated_date: '2026-09-13 01:29'
 ---
 # ActivityPub Federation
 
@@ -20,8 +20,8 @@ Federation is implemented with Fedify (`@fedify/fedify` 2.x) mounted into Hono t
 
 Each non-draft post maps to an `Article`:
 
-- `id`: `{baseUrl}/ap/posts/{slug}` (stable, independent of permalink changes)
-- `url`: the post permalink
+- `id`: the post permalink, absolute on `baseUrl` (decision-13). One URL for both audiences: a browser asking for HTML gets the page and a peer asking for ActivityStreams gets this object, served by the permalink middleware rather than by a host-rooted dispatcher, so a site in a subdirectory keeps that directory in its ids. There is no `/ap/posts/{slug}` route.
+- `url`: the same permalink
 - `name`: title
 - `content`: rendered HTML
 - `source`: `{ content: markdown, mediaType: "text/markdown" }`
@@ -32,6 +32,10 @@ Each non-draft post maps to an `Article`:
 
 Pages are not federated.
 
+A post whose front matter already names an `activitypub.id` keeps it as its object id for the life of the post, and the CMS never mints one. That is what lets a post migrated from WordPress keep the `https://example.com/?p=813` its followers, its replies and its RSS subscribers already hold (decision-14): the CMS serves the `Article` at that URL on an ActivityStreams request, redirects a browser from it to the permalink, and names it in every `Update` and `Delete`. The match is on the whole URL, so a stored id with a query string works exactly as one with a path.
+
+Because the id is the permalink, the permalink is a promise to two audiences at once, and the editor keeps it: renaming a published post's slug, or editing its permalink, is refused. A draft's may still change.
+
 ## Delivery
 
 | Event | Activity |
@@ -40,7 +44,7 @@ Pages are not federated.
 | non-draft post content or title changes | `Update(Article)` |
 | post becomes draft, is trashed, or file deleted | `Delete(Article)` with a `Tombstone` |
 
-The sync layer emits these events from index diffs, so editing a file on disk federates the same way an admin save does. Deliveries go through Fedify's outbox queue to every follower's inbox (shared inbox when available) and to every accepted relay's inbox. The `activitypub.id` front-matter key records that a post has been announced so a rename or restore does not create a duplicate object.
+The sync layer emits these events from index diffs, so editing a file on disk federates the same way an admin save does. Deliveries go through Fedify's outbox queue to every follower's inbox (shared inbox when available) and to every accepted relay's inbox. The `activitypub.published` front-matter key records that a post has been announced and when, which is what decides `Create` against `Update` and what a restore reuses. It is the only key a delivery writes.
 
 No activity is stored (decision-9). What SQLite keeps about anything the site has sent is one outcome row per recipient — the activity's id, type, object id and slug, the follower or relay, the inbox used, how it went, why not, and when — which is a cache and is allowed to be empty. That is what the federation screen reads to say how a post last landed.
 
@@ -106,15 +110,15 @@ Resend means "send the current state of the post": `cms.delivery.resend(slug)` r
 
 | The post now | What a resend sends |
 | --- | --- |
-| published, with no `activitypub.id` | `Create(Article)`, stamping the id into the file |
+| published, with no `activitypub.published` | `Create(Article)`, stamping the announcement into the file |
 | published, with one | `Update(Article)` under a fresh, timestamped activity id |
-| a draft, in the trash, or dated into the future | `Delete` of a `Tombstone` for that id |
+| a draft, in the trash, or dated into the future | `Delete` of a `Tombstone` for its object id |
 
 The `Update`'s id carries the moment rather than the content hash a save uses, because a resend is asking for a revision the followers have already been offered to be offered again, and an activity id a peer has seen is one it is entitled to drop.
 
-The federation screen lists one row per post carrying an `activitypub.id`, the trash included, read from the content index and joined to the newest cached outcome for that object. The posts come from the files and the outcomes from the cache, in that order: a site that has just deleted its database sees every federated post listed with nothing recorded against it, and can press Resend on any of them.
+The federation screen lists one row per post carrying an `activitypub.published`, the trash included, read from the content index and joined to the newest cached outcome for that object. The posts come from the files and the outcomes from the cache, in that order: a site that has just deleted its database sees every federated post listed with nothing recorded against it, and can press Resend on any of them.
 
-The one capability given up is tombstoning a post whose file is gone entirely rather than in the trash: there is no file left to build the `Tombstone` from.
+The one capability given up is tombstoning a post whose file is gone entirely rather than in the trash: there is no file left to build the `Tombstone` from, and no permalink left to name in it.
 
 ## Testing
 
