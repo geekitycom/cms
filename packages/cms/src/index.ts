@@ -1,3 +1,4 @@
+import { MemoryKvStore } from '@fedify/fedify';
 import { serve as serveNode } from '@hono/node-server';
 import { Hono } from 'hono';
 
@@ -33,6 +34,7 @@ import {
   createDeliveryService,
   createRelayService,
   createSiteFederation,
+  createWordPressFederation,
   migrateActorKeysToFiles,
   migrateFederationToFiles,
   mountFederation,
@@ -1458,7 +1460,33 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // moment ago puts a form on the page the next request draws (TASK-56).
     contactForm: (document) => contactFormFor({ document, now: resolved.now() }),
   });
-  const federation = createSiteFederation({ baseUrl: resolved.baseUrl, ...resolved.federation });
+  // One KV store for both federations. The compatibility one (TASK-70) shares
+  // it so that the same `Follow` redelivered to a user's own inbox and to the
+  // WordPress path it used to have is recognised as one activity rather than
+  // handled twice; both sets of inbox listeners are `per-origin` for the same
+  // reason (doc-8).
+  const federationKv = resolved.federation.kv ?? new MemoryKvStore();
+  const federation = createSiteFederation({
+    baseUrl: resolved.baseUrl,
+    ...resolved.federation,
+    kv: federationKv,
+  });
+
+  /**
+   * The WordPress compatibility federation, built the first time a request
+   * actually reaches one of the plugin's paths with the switch on.
+   *
+   * Lazy because almost no site will ever turn the switch on, and a second set
+   * of dispatchers built at every boot for a setting nobody uses is work for
+   * nothing. `mountFederation` keeps whatever this hands back.
+   */
+  const wordpressFederation = (): SiteFederation =>
+    createWordPressFederation({
+      baseUrl: resolved.baseUrl,
+      ...resolved.federation,
+      kv: federationKv,
+      canonical: federation,
+    });
 
   // Federation listens to the index rather than to the admin, so a post edited
   // on disk federates exactly as one saved through the editor does (doc-4).
@@ -1546,7 +1574,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // every other, so putting it in front costs the rest of the app nothing and
   // is the only place it can go: the public site claims every unmatched path
   // in its not-found handler.
-  mountFederation(app, federation);
+  mountFederation(app, federation, { wordpress: wordpressFederation });
 
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);

@@ -117,6 +117,21 @@ export interface User {
    * stored, query string and all, because that is what has to be matched.
    */
   readonly actorId?: string | undefined;
+  /**
+   * The number the WordPress ActivityPub plugin gave this person's actor, when
+   * they had one (TASK-70).
+   *
+   * The WordPress user id, which is what the plugin puts in the paths it
+   * publishes: `/wp-json/activitypub/1.0/actors/2/inbox` is user 2. Unlike
+   * {@link User.actorId} this is cache rather than identity — a follower's
+   * server replaces those paths the next time it refetches the actor — so it
+   * is only ever read behind the `wordpressActivityPub` site setting, and it
+   * is what maps a delivery arriving at one of those paths to a person.
+   *
+   * The CMS never mints one. It arrives with the import (TASK-71) or is typed
+   * into the file by hand, beside the stored actor id the same migration sets.
+   */
+  readonly wordpressActorId?: number | undefined;
   /** When the user was created, as an ISO 8601 instant. */
   readonly createdAt: string;
 }
@@ -593,6 +608,7 @@ function withoutHash(user: StoredUser): User {
     ...(user.notificationModes === undefined ? {} : { notificationModes: user.notificationModes }),
     ...(user.profile === undefined ? {} : { profile: user.profile }),
     ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
+    ...(user.wordpressActorId === undefined ? {} : { wordpressActorId: user.wordpressActorId }),
     createdAt: user.createdAt,
   };
 }
@@ -689,6 +705,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const modes = notificationModesFrom(record['notificationModes']);
   const profile = profileFrom(record['profile']);
   const actorId = storedActorIdFrom(record['actorId']);
+  const wordpressActorId = wordpressActorIdFrom(record['wordpressActorId']);
   const passwordHash = record['passwordHash'];
   const createdAt = record['createdAt'];
 
@@ -729,6 +746,10 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
     // own: an id that is not a URL could never be requested, so keeping it
     // would change nothing except to make a person's actor unreadable.
     ...(actorId === undefined ? {} : { actorId }),
+    // And once more: a WordPress id that is not a whole positive number could
+    // never appear in one of the plugin's paths, so keeping it would only make
+    // the compatibility switch answer for a route nobody asks for.
+    ...(wordpressActorId === undefined ? {} : { wordpressActorId }),
     passwordHash,
     createdAt: typeof createdAt === 'string' ? createdAt : '',
   };
@@ -776,6 +797,19 @@ function storedActorIdFrom(value: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * A stored WordPress actor id as this version reads it, or `undefined`.
+ *
+ * A whole number above zero, because that is what a WordPress user id is and
+ * the only thing that could ever appear in one of the plugin's paths. A string
+ * is not accepted even when it reads as a number: the file is written by the
+ * import, and a quoted id would be a sign that something else wrote it.
+ */
+function wordpressActorIdFrom(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) return undefined;
+  return value;
 }
 
 /** `{ [key]: value }` when the value is a string, and nothing when it is not. */

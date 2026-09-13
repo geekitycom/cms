@@ -339,6 +339,59 @@ describe('a user with a stored actor id (TASK-69)', () => {
   });
 });
 
+describe('a user with a WordPress actor id (TASK-70)', () => {
+  /** One hand-written users file carrying whatever the plugin's id reads as. */
+  async function fileWith(wordpressActorId: unknown): Promise<string> {
+    const dataDir = await temporaryDir();
+    await writeFile(
+      usersFile(dataDir),
+      JSON.stringify({
+        nextId: 2,
+        users: [
+          {
+            id: 1,
+            username: 'ada',
+            wordpressActorId,
+            passwordHash: hashPassword('correct horse'),
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+      'utf8',
+    );
+    return dataDir;
+  }
+
+  it('is read back as the number the plugin numbered the author', async () => {
+    const dataDir = await fileWith(2);
+
+    assert.equal(findUserById(dataDir, 1)?.wordpressActorId, 2);
+    assert.equal(listUsers(dataDir)[0]?.wordpressActorId, 2);
+  });
+
+  it('is dropped rather than refused when it is not a whole positive number', async () => {
+    for (const bad of ['2', 0, -1, 2.5, null, 'two']) {
+      const dataDir = await fileWith(bad);
+      assert.equal(
+        findUserById(dataDir, 1)?.wordpressActorId,
+        undefined,
+        `${JSON.stringify(bad)} is no actor id`,
+      );
+      assert.equal(findUserById(dataDir, 1)?.username, 'ada', 'and the user still loads');
+    }
+  });
+
+  it('survives a save of something else on the same user', async () => {
+    const dataDir = await fileWith(2);
+    const ada = findUserById(dataDir, 1);
+    assert.ok(ada !== undefined);
+
+    await setUserProfile({ dataDir, userId: ada.id, profile: { displayName: 'Ada Lovelace' } });
+
+    assert.equal(findUserById(dataDir, 1)?.wordpressActorId, 2);
+  });
+});
+
 describe('verifying a password (AC #2)', () => {
   it('accepts the password against the hash in the file and refuses everything else', async () => {
     const dataDir = await temporaryDir();

@@ -197,6 +197,19 @@ export interface SiteSettings {
    */
   relays: readonly string[];
   /**
+   * Whether the site also answers the WordPress ActivityPub plugin's inbox and
+   * collection paths (TASK-70).
+   *
+   * Off, and never written down until somebody turns it on: a site born here
+   * has no use for it, and decision-14 calls those paths cache rather than
+   * identity. A follower's server delivers to the inbox URL it cached from the
+   * actor document and replaces it only when it next refetches the actor, so a
+   * site arriving from the plugin keeps receiving at `/wp-json/…` for a while.
+   * The CMS carries them until the caches have moved on and no longer, which is
+   * why this is a switch a person turns off rather than a permanent fixture.
+   */
+  wordpressActivityPub: boolean;
+  /**
    * The site menu: an ordered list of `{ label, url }` the theme renders in
    * the header and an Eleventy build reads out of `site.json`.
    *
@@ -254,6 +267,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   mailReplyTo: '',
   contactEmail: '',
   relays: [],
+  wordpressActivityPub: false,
   navigation: [],
   taxonomyRedirects: [],
 };
@@ -282,6 +296,7 @@ export const SETTINGS_FIELDS = {
   mailReplyTo: 'mail_reply_to',
   contactEmail: 'contact_email',
   relays: 'relays',
+  wordpressActivityPub: 'wordpress_activitypub',
   navigation: 'navigation',
 } as const satisfies Record<SettingsField, string>;
 
@@ -375,6 +390,11 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
           relays: relayList(file['relays'].filter((entry) => typeof entry === 'string').join('\n')),
         }
       : {}),
+    // Absent is the ordinary state of this one, like `homepage`: a site that
+    // has never carried WordPress's paths does not write the key at all.
+    ...(typeof file['wordpressActivityPub'] === 'boolean'
+      ? { wordpressActivityPub: file['wordpressActivityPub'] }
+      : {}),
     ...(Array.isArray(file['navigation'])
       ? { navigation: navigationItemsOf(file['navigation']) }
       : {}),
@@ -442,6 +462,13 @@ export function siteJsonFor(
     if (settings[key] === '') delete file[key];
     else file[key] = settings[key];
   }
+
+  // And the WordPress switch, on the same rule and for a sharper reason: it is
+  // a temporary accommodation for one migrated site (decision-14), so a site
+  // that has never turned it on should have nothing to say about it, and one
+  // that has turned it off again should go back to saying nothing.
+  if (settings.wordpressActivityPub) file['wordpressActivityPub'] = true;
+  else delete file['wordpressActivityPub'];
 
   return file;
 }
@@ -713,6 +740,10 @@ const FIELD_CHECKS: Record<SettingsField, (form: SettingsForm) => string | undef
           `"${bad}" is not one.`;
   },
 
+  // A checkbox is either submitted or not, so there is nothing a person could
+  // get wrong about it.
+  wordpressActivityPub: () => undefined,
+
   // A menu is checked line by line like the relays, and for the same reason:
   // one message on a textarea is more use pointing at the line to fix than
   // counting how many are wrong.
@@ -803,6 +834,7 @@ export function settingsFromForm(
     mailReplyTo: form.mailReplyTo.trim(),
     contactEmail: form.contactEmail.trim(),
     relays: relayList(form.relays),
+    wordpressActivityPub: form.wordpressActivityPub !== '',
     navigation: navigationList(form.navigation),
   };
 }
@@ -832,6 +864,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     mailReplyTo: settings.mailReplyTo,
     contactEmail: settings.contactEmail,
     relays: settings.relays.join('\n'),
+    wordpressActivityPub: settings.wordpressActivityPub ? '1' : '',
     navigation: navigationText(settings.navigation),
   };
 }

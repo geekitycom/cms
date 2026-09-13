@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 05:12'
+updated_date: '2026-09-13 05:32'
 ---
 # ActivityPub Federation
 
@@ -35,6 +35,18 @@ A user record may carry an `actorId`: the ActivityStreams id that person was pub
 - Retiring one is a later, optional step by the Move protocol, and is not part of a cutover.
 
 The site actor and `/ap/` are gone. A site that federated as the site actor starts again as its users: its `actor.*.jwk` key files are left on disk, unread, and the old `content/_data/federation/followers.json` is left where it is. Neither is migrated, because a follow is an agreement with somebody and there is no honest answer to which user inherits an account that no longer exists.
+
+## WordPress ActivityPub compatibility
+
+A site that moved here from the WordPress ActivityPub plugin has followers whose servers still hold the plugin's endpoints: `/wp-json/activitypub/1.0/actors/{n}/inbox`, the shared `/wp-json/activitypub/1.0/inbox`, and the collections beside them. decision-14 calls those **cache rather than identity** — a follower's server replaces them the next time it refetches the actor — so the CMS carries them behind a switch, until the caches have moved on and no longer.
+
+- The switch is the `wordpressActivityPub` setting, on Settings > Federation. Off by default, and absent from `site.json` until somebody turns it on: a site born here never needs it, and turning it off again takes the key back out.
+- A user is mapped to one of the plugin's numeric actor ids by `wordpressActorId` on their record in `data/users.json` — the WordPress user id, a whole positive number. `geekity import wordpress-actor` sets it beside the stored actor id; no screen writes it. A user without one is not reachable through any of these paths.
+- With the switch on, the CMS serves real inbox routes at `…/actors/{n}/inbox` and `…/1.0/inbox`, signature-verified at the request path exactly as the canonical inboxes are — an unsigned or badly signed delivery is a 401 — and GET routes for the actor and its `outbox`, `followers` and `following` at `…/actors/{n}/`.
+- **What a peer reads back is always the canonical identity.** The `Person` served at `…/actors/{n}` is the same document the author URL serves: the same `id` (the stored actor id, or the author URL), the same `publicKey`, and the *canonical* `inbox`, `outbox`, `followers` and `following`. A peer refetching the actor at the old URL is exactly the peer that should learn the new endpoints, and that is what eventually makes the switch safe to turn off. An `Accept` sent from one of these inboxes comes from the canonical id and is signed with the key under it.
+- Under the hood this is a second Fedify `Federation`, mounted after the canonical middleware behind a per-request gate that reads the setting. One `Federation` may have exactly one pair of inbox listeners, and `ctx.routeActivity` re-verifies in a way a Mastodon or WordPress `Follow` cannot satisfy (doc-8). The two objects share one KV store and both set `withIdempotency('per-origin')`, because Fedify's default key folds the recipient identifier in — so the same `Follow` redelivered to `ada` and to `2` would be handled twice. The second object is built the first time a request reaches one of the paths with the switch on.
+- Because the gate is per request, **turning the switch off takes the paths away on the very next request**, with nothing restarted, and turning it on puts them back.
+- Every one of the paths records the instant it was last asked for, per user, in `data/wordpress-activitypub.json` — a file, so a deleted database (decision-9) does not forget the one question the switch is watched by. Settings > Federation lists each path beside the switch with that instant, or never, and the note that once every follower's server has refetched the actor the switch can come off.
 
 ## WebFinger
 

@@ -284,16 +284,17 @@ the same directory reads all of it, and everything in it is meant to be public:
 
 `data/` is private. It is gitignored, and it is the half to copy somewhere safe:
 
-| Path                             | What it holds                                                                                                                   |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `data/users.json`                | Usernames and argon2id password hashes. Mode `0600`.                                                                            |
-| `data/keys/`                     | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                      |
-| `data/comment-salt`              | What hides commenters' addresses in the published comment files. Mode `0600`.                                                   |
-| `data/akismet.json`              | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                         |
-| `data/mail.json`                 | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                 |
-| `data/notification-secret`       | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else. |
-| `data/comment-optouts.json`      | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                           |
-| `data/notification-digests.json` | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                         |
+| Path                              | What it holds                                                                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `data/users.json`                 | Usernames and argon2id password hashes. Mode `0600`.                                                                            |
+| `data/keys/`                      | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                      |
+| `data/comment-salt`               | What hides commenters' addresses in the published comment files. Mode `0600`.                                                   |
+| `data/akismet.json`               | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                         |
+| `data/mail.json`                  | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                 |
+| `data/notification-secret`        | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else. |
+| `data/comment-optouts.json`       | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                           |
+| `data/notification-digests.json`  | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                         |
+| `data/wordpress-activitypub.json` | When each WordPress compatibility path was last asked for. Losing it resets the answer the switch is watched by.                |
 
 Two things under `data/` may be deleted whenever the site is stopped, and
 nothing else in either directory may:
@@ -593,6 +594,47 @@ archive's children, because a peer refetches those.
 The CMS never mints one and no screen writes one. It arrives with the WordPress
 import, or is typed into the file by hand; `/admin/users` shows it read-only
 beside the account, and a value that is not an absolute URL is ignored.
+
+### WordPress ActivityPub compatibility
+
+A site that moved here from the WordPress ActivityPub plugin has followers
+whose servers still hold the plugin's endpoints — `/wp-json/activitypub/1.0/actors/2/inbox`,
+the shared `/wp-json/activitypub/1.0/inbox`, and the collections beside them.
+Those are cache rather than identity: a follower's server replaces them the
+next time it refetches the actor. So the CMS can carry them for a while, behind
+a switch, and is meant to stop.
+
+Turn **WordPress ActivityPub compatibility** on under
+`/admin/settings/federation`. It is off by default and `site.json` says nothing
+about it until it is on. It needs one thing on the user record in
+`data/users.json` besides the stored actor id above: the number WordPress gave
+that person, which is what its paths are built from.
+
+```json
+{
+  "id": 2,
+  "username": "ada",
+  "actorId": "https://example.com/?author=2",
+  "wordpressActorId": 2
+}
+```
+
+`geekity import wordpress-actor` writes both; no screen does. With the switch
+on, those paths are real inbox routes, signature-verified exactly as the
+canonical ones are — an unsigned or badly signed delivery is refused — plus GET
+routes for the actor, its outbox, its followers and its following. What a peer
+reads back is always the canonical document: the same `id`, the same key, and
+the _canonical_ inbox and collections, so a follower refetching the actor at
+the old URL is the follower that learns the new endpoints. A user with no
+`wordpressActorId` is not reachable through any of it.
+
+Every one of those paths records the instant it was last asked for, per user,
+in `data/wordpress-activitypub.json` — a file, so a deleted database does not
+forget it — and the settings page lists each path beside the switch with that
+instant, or _Never_. That is what the switch is watched by: once every
+follower's server has refetched the actor, nothing asks any more, and the
+switch can go off. Clearing it takes the paths away on the very next request,
+with no restart.
 
 ### The federation screen
 
@@ -1260,7 +1302,7 @@ shadow the login form.
 | `/admin/settings/email`                          | The mail provider, the From line, the reply-to and the contact address.                   |
 | `/admin/settings/mail`                           | `POST` only. Saves a mail credential, or forgets every one of them.                       |
 | `/admin/settings/mail/test`                      | `POST` only. Sends the theme's test message through the whole chain.                      |
-| `/admin/settings/federation`                     | The relays the site subscribes to.                                                        |
+| `/admin/settings/federation`                     | The relays the site subscribes to, and the WordPress compatibility switch.                |
 | `/admin/users`                                   | Who may sign in, and the change-password form.                                            |
 | `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                           |
 | `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                                  |
@@ -1404,10 +1446,14 @@ and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
 type is the default too: a hand-edited `site.json` cannot take the site down.
 
-`homepage` and `postsPage` are the only two written just when they have a
-value: WordPress's Reading choice, the slug of the page served at `/` and the
-slug of the page whose own URL carries the post listing, absent altogether on a
-site that shows its latest posts at `/`. A `postsPage` without a `homepage` is
+`homepage`, `postsPage` and `wordpressActivityPub` are the only three written
+just when they have a value. The first two are WordPress's Reading choice, the
+slug of the page served at `/` and the slug of the page whose own URL carries
+the post listing, absent altogether on a site that shows its latest posts at
+`/`; the third is the
+[WordPress ActivityPub compatibility](#wordpress-activitypub-compatibility)
+switch, absent until somebody turns it on and absent again when they turn it
+off. A `postsPage` without a `homepage` is
 ignored, the listing being at `/` already, and a slug naming no published page
 is a site back on its latest posts. See [The front page](#the-front-page).
 

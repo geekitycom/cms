@@ -32,6 +32,7 @@ export type {
 export {
   createSiteFederation,
   federatedPost,
+  outboxPage,
   OUTBOX_PAGE_SIZE,
   SOFTWARE_NAME,
 } from './federation.ts';
@@ -87,6 +88,7 @@ export {
 } from './records.ts';
 export type { FederationIndexReport, FederationRecords, InboxLine } from './records.ts';
 export { acctOf, mountFederation, webFingerSubject, WEBFINGER_PATH } from './mount.ts';
+export type { MountFederationOptions } from './mount.ts';
 export {
   ACTOR_PATH,
   createActivityId,
@@ -117,3 +119,25 @@ export type {
 } from './relays.ts';
 export { actorHandle, replyFrom, replyTargetOf, REPLY_ACTIVITY_TYPE } from './replies.ts';
 export type { Reply } from './replies.ts';
+export {
+  createWordPressFederation,
+  readWordPressRequests,
+  recordWordPressRequest,
+  userByWordPressActorId,
+  WORDPRESS_ACTIVITYPUB_BASE,
+  WORDPRESS_ACTOR_PATH,
+  WORDPRESS_FOLLOWERS_PATH,
+  WORDPRESS_FOLLOWING_PATH,
+  WORDPRESS_INBOX_PATH,
+  WORDPRESS_OUTBOX_PATH,
+  WORDPRESS_REQUESTS_FILE,
+  WORDPRESS_SHARED_INBOX_PATH,
+  wordPressRequestsFile,
+  wordPressRequestTarget,
+} from './wordpress.ts';
+export type {
+  CreateWordPressFederationOptions,
+  WordPressRequests,
+  WordPressRequestTarget,
+  WordPressRoute,
+} from './wordpress.ts';

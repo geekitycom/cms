@@ -3,7 +3,9 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { sandbox, signedIn } from './__testing__/harness.ts';
+import { recordWordPressRequest } from '../federation/wordpress.ts';
+import { writeUsers } from './__testing__/users.ts';
+import { sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
 import { readSiteSettings } from './settings.ts';
 
@@ -146,5 +148,82 @@ describe('the relays setting', () => {
     assert.deepEqual(readSiteSettings(cms.config.contentDir).relays, [
       'https://kept.example/inbox',
     ]);
+  });
+});
+
+describe('the WordPress ActivityPub compatibility switch', () => {
+  /** `content/_data/site.json` as it is on disk right now. */
+  async function siteJson(contentDir: string): Promise<Record<string, unknown>> {
+    return JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+  }
+
+  it('is off, and site.json says nothing about it until it is on (AC #1)', async () => {
+    const contentDir = await box.dir('geekity-settings-wordpress-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings/federation')).text();
+    assert.match(html, /name="wordpress_activitypub"/, 'the switch is on the page');
+    assert.doesNotMatch(
+      html,
+      /name="wordpress_activitypub"[^>]*\schecked/,
+      'and it starts turned off',
+    );
+
+    assert.equal((await saveSettings(agent, 'federation')).status, 303);
+    assert.equal(readSiteSettings(contentDir).wordpressActivityPub, false);
+    assert.ok(
+      !('wordpressActivityPub' in (await siteJson(contentDir))),
+      'a site that has never turned it on does not carry the key',
+    );
+
+    assert.equal(
+      (await saveSettings(agent, 'federation', { wordpress_activitypub: '1' })).status,
+      303,
+    );
+    assert.equal(readSiteSettings(contentDir).wordpressActivityPub, true);
+    assert.equal((await siteJson(contentDir))['wordpressActivityPub'], true);
+
+    assert.equal((await saveSettings(agent, 'federation')).status, 303);
+    assert.ok(
+      !('wordpressActivityPub' in (await siteJson(contentDir))),
+      'and turning it off takes the key out again',
+    );
+  });
+});
+
+describe('when the WordPress paths were last asked for (AC #3)', () => {
+  it('lists every route beside the switch, with never until one is asked for', async () => {
+    const dataDir = await box.dir('geekity-settings-wp-data-');
+    writeUsers(dataDir, [{ username: 'ada', password: 'correct horse', wordpressActorId: 2 }]);
+    const cms = await box.site({ dataDir });
+    const agent = await signIn(cms, { username: 'ada', password: 'correct horse' });
+
+    const empty = await (await agent.get('/admin/settings/federation')).text();
+    assert.match(empty, /wp-json\/activitypub\/1\.0\/actors\/2\/inbox/);
+    assert.match(empty, /wp-json\/activitypub\/1\.0\/inbox/);
+    assert.match(empty, /Never/, 'a path nobody has asked for says so');
+    assert.match(empty, /refetched the actor/, 'and the note says when to turn the switch off');
+
+    await recordWordPressRequest({
+      dataDir,
+      target: { route: 'inbox', wordpressActorId: '2' },
+      username: 'ada',
+      at: new Date('2026-09-01T10:00:00.000Z'),
+    });
+
+    const asked = await (await agent.get('/admin/settings/federation')).text();
+    assert.match(asked, /1 September 2026|September 1, 2026|2026/, 'the instant is shown');
+  });
+
+  it('says so when no user carries a WordPress actor id', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings/federation')).text();
+
+    assert.match(html, /No user carries a WordPress actor id/);
   });
 });

@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 
 import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/fedify';
-import type { Federation, FederationOptions, PageItems, RequestContext } from '@fedify/fedify';
+import type { Context, Federation, FederationOptions, PageItems } from '@fedify/fedify';
 import { Accept, Announce, Create, Delete, Follow, Like, Reject, Undo } from '@fedify/vocab';
 
 import { countUsers, listUsers } from '../admin/accounts.ts';
@@ -204,6 +204,12 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
   // which is what doc-4 asks for everything past these five.
   federation
     .setInboxListeners(INBOX_PATH, SHARED_INBOX_PATH)
+    // `per-origin` rather than Fedify's default `per-inbox`, which folds the
+    // recipient identifier into the key. The WordPress compatibility switch
+    // (TASK-70) mounts a second set of inboxes over the same KV store, where
+    // the same person is `2` rather than their username, and one `Follow`
+    // redelivered to both would otherwise be handled twice (doc-8).
+    .withIdempotency('per-origin')
     .on(Follow, handleFollow)
     .on(Accept, handleAccept)
     .on(Reject, handleReject)
@@ -253,9 +259,12 @@ export function federatedPost(store: ContentStore, slug: string): Document | und
  * page URL meaning what it meant when it was minted, which a cursor derived
  * from the site's page size would not: the size is a setting somebody may
  * change between two requests.
+ *
+ * Exported for the WordPress compatibility federation (TASK-70), which serves
+ * the same page at the plugin's own outbox path.
  */
-function outboxPage(
-  context: RequestContext<FederationContextData>,
+export function outboxPage(
+  context: Context<FederationContextData>,
   names: readonly string[],
   cursor: string | null,
 ): PageItems<Create> {
