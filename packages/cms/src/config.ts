@@ -98,8 +98,17 @@ export interface GeekityConfig {
   contentDir?: string;
   /** Directory for derived state such as the SQLite index. Default `<cwd>/data`. Overridden by `GEEKITY_DATA_DIR`. */
   dataDir?: string;
-  /** Site template overrides, resolved before the packaged default theme. Default `<cwd>/theme`. Overridden by `GEEKITY_THEME_DIR`. */
-  themeDir?: string;
+  /**
+   * Where this site's themes are, one directory per theme, each with a
+   * `theme.json` (decision-15). Default `<cwd>/themes`. Overridden by
+   * `GEEKITY_THEMES_DIR`. It need not exist: a site using the packaged theme
+   * has no themes of its own.
+   *
+   * Which one is in use is a setting rather than a deployment fact — `theme`
+   * in `content/_data/site.json`, chosen on the Appearance screen — because it
+   * is a look a site changes, not a path a host decides.
+   */
+  themesDir?: string;
   /** Public origin, used for canonical URLs, feeds and ActivityPub ids. Default `http://localhost:<port>`. Overridden by `GEEKITY_BASE_URL`. */
   baseUrl?: string;
   /**
@@ -243,7 +252,7 @@ export interface ResolvedConfig {
   port: number;
   contentDir: string;
   dataDir: string;
-  themeDir: string;
+  themesDir: string;
   baseUrl: string;
   /**
    * Where {@link ResolvedConfig.baseUrl} came from.
@@ -297,7 +306,7 @@ export interface ResolveConfigContext {
 export const DEFAULT_PORT = 3000;
 export const DEFAULT_CONTENT_DIR = 'content';
 export const DEFAULT_DATA_DIR = 'data';
-export const DEFAULT_THEME_DIR = 'theme';
+export const DEFAULT_THEMES_DIR = 'themes';
 /** How long an admin login lasts by default: fourteen days, in seconds. */
 export const DEFAULT_SESSION_LIFETIME = 14 * 24 * 60 * 60;
 /** Largest upload a site accepts by default: ten mebibytes. */
@@ -361,7 +370,7 @@ export function resolveConfig(
     port,
     contentDir: resolveDir(cwd, env['GEEKITY_CONTENT_DIR'], config.contentDir, DEFAULT_CONTENT_DIR),
     dataDir: resolveDir(cwd, env['GEEKITY_DATA_DIR'], config.dataDir, DEFAULT_DATA_DIR),
-    themeDir: resolveDir(cwd, env['GEEKITY_THEME_DIR'], config.themeDir, DEFAULT_THEME_DIR),
+    themesDir: resolveDir(cwd, env['GEEKITY_THEMES_DIR'], config.themesDir, DEFAULT_THEMES_DIR),
     baseUrl: resolveBaseUrl(env['GEEKITY_BASE_URL'], config.baseUrl, port),
     baseUrlSource: baseUrlSource(env['GEEKITY_BASE_URL'], config.baseUrl),
     watch: resolveBoolean('GEEKITY_WATCH', env['GEEKITY_WATCH'], config.watch, true),

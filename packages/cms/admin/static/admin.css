@@ -1147,3 +1147,74 @@ button[type='submit']:hover,
   padding: 0;
   list-style: none;
 }
+
+/* Appearance > Themes. One card per theme, the way WordPress lays them out,
+   because the unit here is a whole theme rather than a row in a table: it has
+   a name, a sentence about itself, the directory it is chosen by, and one
+   thing you can do to it. The grid fills the width it is given and folds to
+   one column on a narrow screen without a media query. */
+
+.admin-themes,
+.admin-broken-themes {
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-themes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+
+.admin-theme {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1rem;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+}
+
+/* The one in use, marked the way the open section of the menu is: by the same
+   blue, so "this is where you are" reads the same everywhere in the admin. */
+
+.admin-theme-current {
+  border-color: var(--admin-nav-current);
+  box-shadow: inset 0 0 0 1px var(--admin-nav-current);
+}
+
+.admin-theme h2 {
+  margin: 0;
+  font-size: 1.1em;
+}
+
+.admin-theme p {
+  margin: 0;
+}
+
+.admin-status-active {
+  color: var(--admin-nav-current);
+  font-weight: 600;
+}
+
+.admin-theme-description {
+  color: var(--admin-muted);
+}
+
+/* The directory name, which is what `site.json` holds and what a person types
+   when they are editing that file by hand rather than pressing a button. */
+
+.admin-theme-id code {
+  overflow-wrap: anywhere;
+}
+
+/* A directory that was meant to be a theme. Listed, with the reason, because a
+   theme that quietly stopped appearing is the hardest kind of typo to find. */
+
+.admin-broken-theme {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--admin-field);
+  color: var(--admin-muted);
+  overflow-wrap: anywhere;
+}

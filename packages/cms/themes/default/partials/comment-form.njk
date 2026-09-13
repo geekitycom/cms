@@ -4,9 +4,9 @@
   `commentForm` is on the context only when the post is open — the site switch,
   the closing window and the post's own `comments:` front matter all agree
   before it gets here — so a layout asks `{% if commentForm %}` and nothing
-  else. A site replaces this whole section by shipping
-  `theme/partials/comment-form.njk` of its own; the shape it is handed is
-  documented in the theme README under "The comment form".
+  else. A site replaces this whole section with a
+  `partials/comment-form.njk` of its own in the theme it wears; the shape it is
+  handed is documented in the theme README under "The comment form".
 
   It works with JavaScript switched off, and there is no script on it.
 #}

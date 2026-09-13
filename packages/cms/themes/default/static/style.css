@@ -1,7 +1,7 @@
 /*
  * The default theme's only stylesheet. Plain CSS, no build step, no
- * dependencies: a site that wants something else drops its own
- * `theme/static/style.css` in and this file is never read again.
+ * dependencies: a site that wants something else puts its own
+ * `static/style.css` in the theme it wears and this file is never read again.
  */
 
 :root {

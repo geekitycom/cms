@@ -127,7 +127,11 @@ export function mountSettingsPage(
     const stored = readSiteSettings(c.var.config.contentDir);
     const submitted = pageForm(c, page, body, stored);
 
-    const problems = settingsProblems(submitted, page.fields);
+    // The themes directory goes in because one check needs the file system:
+    // whether the name a page submitted is a theme that is actually there.
+    const problems = settingsProblems(submitted, page.fields, {
+      themesDir: c.var.config.themesDir,
+    });
     if (Object.keys(problems).length > 0) {
       c.status(400);
       return render(c, page.template, {

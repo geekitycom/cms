@@ -45,7 +45,14 @@ import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
 import { commentFormFor, createAkismetChecker, rebuildCommentIndexes } from './comments/index.ts';
 import { contactFormFor } from './contact/index.ts';
-import { createConversation, createRenderer, mountPublicSite } from './web/index.ts';
+import {
+  createConversation,
+  createRenderer,
+  createSiteDataSource,
+  createThemeSource,
+  mountPublicSite,
+  themeName,
+} from './web/index.ts';
 import { createWebmentionService } from './webmention/index.ts';
 import type { WebmentionService } from './webmention/index.ts';
 
@@ -944,6 +951,7 @@ export {
   feedSize,
   findAsset,
   findThemeAsset,
+  findThemeFile,
   findUpload,
   forgetTerm,
   formatDate,
@@ -1002,9 +1010,11 @@ export {
   ROBOTS_PATH,
   rssFeed,
   rssItem,
+  readTheme,
   sanitizeCommentHtml,
   selectRepresentation,
   SITE_DATA_FILE,
+  SITE_THEME_KIND,
   sitemapChildPath,
   sitemapDate,
   sitemapIndexXml,
@@ -1037,6 +1047,7 @@ export {
   THEME_ASSET_MAX_AGE,
   THEME_ASSET_PREFIX,
   THEME_STATIC_DIR,
+  THEME_MANIFEST_FILE,
   themeSearchPath,
   UPLOAD_ASSET_MAX_AGE,
   UPLOAD_ASSET_PREFIX,
@@ -1102,7 +1113,10 @@ export type {
   TaxonomyBases,
   TaxonomyRedirect,
   TaxonomyTerm,
+  Theme,
   ThemeAsset,
+  ThemeKind,
+  ThemeRead,
 } from './web/index.ts';
 export {
   classesOf,
@@ -1407,6 +1421,22 @@ export function createCms(config: GeekityConfig = {}): Cms {
     language: () => readSiteSettings(resolved.contentDir).language,
   });
 
+  // Which theme this site renders through (decision-15). One source for the
+  // whole CMS: the pages, the `/theme/` assets and the site's email all read
+  // it, so they cannot disagree about which theme is in use and a choice that
+  // cannot be honoured is reported once rather than three times. It reads the
+  // site data rather than holding a directory, so a theme chosen on the
+  // Appearance screen — or written into `site.json` by hand — is the one the
+  // next request renders through, with no restart and with the watcher off.
+  const siteData = createSiteDataSource(resolved);
+  const themes = createThemeSource({
+    themesDir: resolved.themesDir,
+    chosen: () => themeName(siteData.read()),
+  });
+  // Asked once here so a site whose chosen theme is missing says so at boot,
+  // rather than at whatever moment the first request happens to arrive.
+  themes.current();
+
   const content = createContentSync({
     store,
     contentDir: resolved.contentDir,
@@ -1417,7 +1447,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // read per send, so a key pasted into the settings screen sends the next
   // message and one removed stops the message after it, neither needing a
   // restart. With nothing configured, sending is a line in the log.
-  const mail = createMailService({ config: resolved, ...resolved.mail });
+  const mail = createMailService({ config: resolved, themes, ...resolved.mail });
 
   // The one reader of the two indexes a conversation is made of. The page, the
   // per-post comments feed, `/comments/feed/` and the `source:comments` count
@@ -1427,6 +1457,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
 
   const renderer = createRenderer({
     config: resolved,
+    themes,
     // The pages that put themselves in the site menu are found by asking for
     // every public page and reading their front matter, rather than by an
     // index of their own: a site has a handful of pages, the query is the

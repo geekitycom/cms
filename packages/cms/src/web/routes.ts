@@ -16,7 +16,6 @@ import {
   matchesEtag,
   themeAssetNotModified,
   themeAssetResponse,
-  themeSearchPath,
   THEME_ASSET_PREFIX,
   UPLOAD_ASSET_MAX_AGE,
   UPLOAD_ASSET_PREFIX,
@@ -1197,7 +1196,7 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
  */
 function themeAsset(c: Context<GeekityEnv>): Response {
   const relative = requestPath(c).slice(THEME_ASSET_PREFIX.length);
-  const asset = findThemeAsset(relative, themeSearchPath(c.var.config.themeDir));
+  const asset = findThemeAsset(relative, c.var.renderer.themeDirs());
   if (asset === undefined) return notFound(c);
 
   if (matchesEtag(c.req.header('if-none-match'), asset.etag)) {

@@ -9,9 +9,9 @@ import { formatDate } from '../web/templates.ts';
  * directory so they are found whether the CMS runs from `src/` under tsx or
  * from `dist/` as an installed dependency.
  *
- * They are a set of their own, not part of the theme search path: a site's
- * `theme/` may override any public template, and must not be able to shadow
- * the login form or the CSRF field inside it.
+ * They are a set of their own, not part of the theme search path: the theme a
+ * site wears may override any public template, and must not be able to shadow
+ * the login form or the CSRF field inside it (decision-4, decision-15).
  */
 export const PACKAGED_ADMIN_DIR: string = fileURLToPath(new URL('../../admin/', import.meta.url));
 
@@ -28,6 +28,7 @@ export const ADMIN_TEMPLATES = {
   documentConflict: 'layouts/document-conflict.njk',
   taxonomy: 'layouts/taxonomy.njk',
   media: 'layouts/media.njk',
+  themes: 'layouts/themes.njk',
   comments: 'layouts/comments.njk',
   messages: 'layouts/messages.njk',
   settingsGeneral: 'layouts/settings/general.njk',

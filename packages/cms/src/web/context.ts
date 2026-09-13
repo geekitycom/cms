@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
@@ -62,6 +62,12 @@ export interface SiteData {
    * rather than here, because a handshake is not the site's to decide.
    */
   relays?: readonly string[] | undefined;
+  /**
+   * The theme the site renders through: the name of one directory under the
+   * configured themes directory. Absent — the ordinary state — is the theme
+   * the package ships (decision-15).
+   */
+  theme?: string | undefined;
   /**
    * The slug of the page served at `/`, when the site shows a page there
    * rather than its latest posts. Absent for the latest posts.
@@ -196,35 +202,36 @@ export interface SiteDataSource {
  * settings screen writes that file and nothing else remembers what it said, so
  * a save and a hand edit reach the theme by exactly the same route.
  *
- * The file is read once and then only again when its `stat` changes, so a
- * render costs one `stat` rather than one parse. The modification time alone
- * is not enough: a filesystem rounds it, so two writes inside one tick would
- * look like none, and every writer replaces the file by rename, which changes
- * its inode. Size and inode go into the key with it. A file that is missing or
- * will not parse falls back to the defaults instead of failing the request: a
- * typo in `site.json` should not take the site down.
+ * The file is read on every call and parsed only when its bytes differ from
+ * the last read, so a render costs one small read rather than one parse. A
+ * `stat` key was tried first and is not enough: a filesystem rounds the
+ * modification time to its clock tick, a few milliseconds on Linux, so a
+ * second write inside one tick that keeps the size and the inode, a theme
+ * name swapped for one of the same length say, looked like no write at all.
+ * The file is a few hundred bytes; reading it is cheaper than being wrong. A
+ * file that is missing or will not parse falls back to the defaults instead
+ * of failing the request: a typo in `site.json` should not take the site down.
  */
 export function createSiteDataSource(config: ResolvedConfig): SiteDataSource {
   const file = path.join(config.contentDir, ...SITE_DATA_FILE.split('/'));
 
   let cached: Record<string, unknown> = {};
-  let cachedKey: string | undefined;
+  let cachedText: string | undefined;
 
   function fromFile(): Record<string, unknown> {
-    let key: string;
+    let text: string;
     try {
-      const stats = statSync(file);
-      key = `${stats.mtimeMs}:${stats.size}:${stats.ino}`;
+      text = readFileSync(file, 'utf8');
     } catch {
-      cachedKey = undefined;
+      cachedText = undefined;
       cached = {};
       return cached;
     }
 
-    if (key === cachedKey) return cached;
+    if (text === cachedText) return cached;
 
-    cachedKey = key;
-    cached = readSiteFile(file);
+    cachedText = text;
+    cached = parseSiteFile(text);
     return cached;
   }
 
@@ -244,9 +251,9 @@ export function createSiteDataSource(config: ResolvedConfig): SiteDataSource {
   };
 }
 
-function readSiteFile(file: string): Record<string, unknown> {
+function parseSiteFile(text: string): Record<string, unknown> {
   try {
-    const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    const parsed: unknown = JSON.parse(text);
     return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : {};
@@ -262,6 +269,20 @@ export function postsPerPage(site: SiteData): number {
     return configured;
   }
   return DEFAULT_POSTS_PER_PAGE;
+}
+
+/**
+ * The theme this site has chosen, from the site data, or the empty string for
+ * the theme the package ships.
+ *
+ * Read as tolerantly as everything else out of `site.json` — a key of the
+ * wrong type is a site on the packaged theme rather than a broken render —
+ * and read as a name rather than resolved to a directory, for the reason the
+ * front page is read as a slug: only something holding the themes directory
+ * can say whether the name still points at a theme.
+ */
+export function themeName(site: SiteData): string {
+  return typeof site['theme'] === 'string' ? site['theme'].trim() : '';
 }
 
 /** WordPress's Reading choice, as `site.json` spells it. */

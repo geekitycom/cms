@@ -1,9 +1,10 @@
 /*
  * The Geekity demo's own stylesheet.
  *
- * Assets resolve the way templates do: the site's `theme/static/` is searched
- * before the package's, so this file is what `/theme/style.css` serves and the
- * packaged stylesheet is never read. That makes a stylesheet an all-or-nothing
+ * Assets resolve the way templates do: the chosen theme's `static/` is
+ * searched before the package's, so while `site.json` says `"theme": "demo"`
+ * this file is what `/theme/style.css` serves and the packaged stylesheet is
+ * never read. That makes a stylesheet an all-or-nothing
  * override — everything the theme's markup needs has to be here — which is the
  * trade a site accepts when it wants its own look rather than a few tweaks.
  *

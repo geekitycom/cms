@@ -1,0 +1,5 @@
+{
+  "name": "Default",
+  "kind": "site",
+  "description": "The theme that ships with Geekity: plain Nunjucks and plain CSS, and the layer every other theme is laid over."
+}

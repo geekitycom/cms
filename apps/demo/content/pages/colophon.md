@@ -14,8 +14,10 @@ depend on the published package.
   three pages. Every one of them is a Markdown file with front matter.
 - `content/_data/site.json` — the title, the tagline, the author, and how many
   posts a listing page holds.
-- `theme/layouts/post.njk` and `theme/static/style.css` — the two files this
-  site overrides. Everything else comes from the package.
+- `themes/demo/` — the theme this site wears, named by `"theme": "demo"` in
+  `site.json`. A `theme.json` declares it, and `layouts/post.njk` and
+  `static/style.css` are the two files it overrides. Everything else comes from
+  the package.
 - `eleventy.config.js` — the same content directory, built as a static site.
 
 ## Typography

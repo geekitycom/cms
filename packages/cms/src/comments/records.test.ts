@@ -387,7 +387,7 @@ async function intakeSite(): Promise<IntakeSite> {
       baseUrl: BASE_URL,
       contentDir,
       dataDir,
-      themeDir: path.join(contentDir, 'theme'),
+      themesDir: path.join(contentDir, 'themes'),
       watch: false,
     },
     provider,

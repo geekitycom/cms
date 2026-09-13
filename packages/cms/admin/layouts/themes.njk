@@ -1,0 +1,69 @@
+{# /admin/appearance/themes: the theme the site is wearing, everything else on
+   disk, and the one button that changes it (decision-15).
+
+   The packaged theme comes first because it is the floor the others are laid
+   over rather than a peer in the list: a site theme ships what it changes and
+   inherits the rest. The themes directory is read on every request, so a theme
+   copied in over ssh or pulled down by git is here without a restart. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1>{{ heading }}</h1>
+
+  <ul class="admin-themes">
+    {% for theme in themes %}
+      <li class="admin-theme{% if theme.active %} admin-theme-current{% endif %}">
+        <h2>{{ theme.name }}</h2>
+
+        {% if theme.active %}
+          <p class="admin-status admin-status-active">Active</p>
+        {% endif %}
+
+        {% if theme.description %}
+          <p class="admin-theme-description">{{ theme.description }}</p>
+        {% endif %}
+
+        <p class="admin-theme-id">
+          <code>{{ theme.id }}</code>
+          {% if theme.packaged %}
+            <span class="admin-status">the theme this package ships</span>
+          {% endif %}
+        </p>
+
+        {% if not theme.active %}
+          <form method="post" action="{{ themesUrl }}">
+            <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+            <input type="hidden" name="{{ fields.theme }}" value="{{ theme.value }}" />
+            <button type="submit">Activate</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+
+  {% if unreadable.length %}
+    <h2>Not themes</h2>
+
+    <p class="admin-hint">
+      These are directories in <code>{{ themesDir }}</code> that were meant to be themes and are
+      not. They are listed rather than skipped, so a typo in a <code>theme.json</code> is something
+      you can see rather than a theme that quietly stopped appearing. None of them can be
+      activated.
+    </p>
+
+    <ul class="admin-broken-themes">
+      {% for entry in unreadable %}
+        <li class="admin-broken-theme"><code>{{ entry.id }}</code> — {{ entry.reason }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <p class="admin-hint">
+    A theme is a directory in <code>{{ themesDir }}</code> with a <code>theme.json</code> in it,
+    named by that directory. It is laid over the theme this package ships, one file at a time, so
+    it need only carry what it changes. Activating one writes the directory name into
+    <code>content/_data/site.json</code>; the next request is already wearing it.
+  </p>
+{% endblock %}

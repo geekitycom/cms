@@ -16,6 +16,7 @@
  * menu with nothing marked.
  */
 
+import { THEMES_PATH } from './appearance.ts';
 import { COMMENTS_PATH } from './comments.ts';
 import { newEditorPath, PAGE_KIND, POST_KIND } from './documents.ts';
 import { FEDERATION_PATH } from './federation.ts';
@@ -101,6 +102,10 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   section('media', 'Media', [{ child: 'library', label: 'Library', url: MEDIA_PATH }]),
   section('comments', 'Comments', [{ child: 'all', label: 'All comments', url: COMMENTS_PATH }]),
   section('messages', 'Messages', [{ child: 'all', label: 'All messages', url: MESSAGES_PATH }]),
+  // In WordPress's place, between what the site holds and who may change it.
+  // One child, because the rule is uniform: a second kind of theme, or a menu
+  // editor, slots in beside Themes without the menu changing shape.
+  section('appearance', 'Appearance', [{ child: 'themes', label: 'Themes', url: THEMES_PATH }]),
   section('users', 'Users', [
     { child: 'all', label: 'All users', url: USERS_PATH },
     { child: 'new', label: 'Add new', url: ADD_USER_PATH },

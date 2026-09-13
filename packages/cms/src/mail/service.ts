@@ -1,6 +1,8 @@
 import { readSiteSettings } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
 import type { ResolvedConfig } from '../config.ts';
+import { createThemeSource } from '../web/themes.ts';
+import type { ThemeSource } from '../web/themes.ts';
 import { createBrevoProvider } from './brevo.ts';
 import { readMailCredentials } from './credentials.ts';
 import type { MailAddress, MailProvider, MailProviderName, OutgoingMail } from './provider.ts';
@@ -113,7 +115,7 @@ export interface CreateMailServiceOptions {
    * are read from, the data directory the credentials are in, the theme
    * directory the messages are looked up in, and whether templates are cached.
    */
-  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir' | 'themeDir' | 'watch'>;
+  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir' | 'themesDir' | 'watch'>;
   /**
    * A provider named by the site, which wins outright over the settings and
    * `data/mail.json` — the way a `commentChecker` in the config wins over the
@@ -122,6 +124,13 @@ export interface CreateMailServiceOptions {
   provider?: MailProvider | undefined;
   /** The messages. Defaults to the theme's, packaged theme behind it. */
   templates?: MailTemplates | undefined;
+  /**
+   * Which theme the messages come from, when this service builds its own
+   * templates. Defaults to one over the config's themes directory and the
+   * site's `theme` setting; `createCms` hands in the one the pages use, so a
+   * site has a single answer to which theme it is running.
+   */
+  themes?: ThemeSource | undefined;
   /** Where attempts are logged. Defaults to `console`. */
   logger?: MailLogger | undefined;
   /** How many times one message is tried. Defaults to {@link DEFAULT_MAIL_ATTEMPTS}. */
@@ -175,7 +184,12 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
   const templates =
     options.templates ??
     createMailTemplates({
-      themeDir: config.themeDir,
+      themes:
+        options.themes ??
+        createThemeSource({
+          themesDir: config.themesDir,
+          chosen: () => readSiteSettings(config.contentDir).theme,
+        }),
       baseUrl: config.baseUrl,
       noCache: config.watch,
     });

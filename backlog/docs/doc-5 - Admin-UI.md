@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 03:58'
+updated_date: '2026-09-13 16:02'
 ---
 # Admin UI
 
@@ -28,6 +28,7 @@ know whether it is the only one of its kind.
 | Media      | Library                                      |
 | Comments   | All comments                                 |
 | Messages   | All messages                                 |
+| Appearance | Themes                                       |
 | Users      | All users, Add new                           |
 | Settings   | General, Reading, Permalinks, Discussion, Email, Federation |
 | Federation | Followers                                    |
@@ -67,6 +68,7 @@ instead of becoming a sliver.
 | `/admin/settings/discussion` | comments on or off and the closing window, webmentions sent and received, the Akismet key |
 | `/admin/settings/email` | the mail provider, the From line and reply-to, the contact address, the credential and the test message |
 | `/admin/settings/federation` | the actor handle and type, and the relays the site subscribes to |
+| `/admin/appearance/themes` | the packaged theme and the site's own, with the active one marked and an Activate on every other |
 | `/admin/users` | list, edit each user's public profile, set their email, which notices go to it and how often, change your own password (single role: admin) |
 | `/admin/users/new` | the add form, Users > Add new |
 | `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
@@ -95,6 +97,34 @@ instead of becoming a sliver.
 - A message is one JSON file under `data/contact/`, written **before** anything is emailed, so a provider that is down costs a notification rather than the message. There is no SQLite index over them: the screen reads the directory to sort it anyway, and a second copy of the truth would only be a second thing to keep true. They are under `data/` rather than `content/` because they carry the sender's address and were never meant to be published.
 - A message a spam checker called spam is kept, on the Spam list, and is not emailed on: a false positive on a contact form is somebody's message vanishing, which is worse than a list to glance at. One it said to discard, and one that filled the honeypot, was never stored at all.
 - **Without mail.** Submissions are still stored and still listed here. This screen is the notification, exactly as `/admin/comments` was before there was any email.
+
+## Appearance
+
+- **Themes** is the one screen under Appearance, at `/admin/appearance/themes`,
+  and the only place the theme is chosen. It is deliberately not a settings
+  page: a settings page is a form of fields somebody types into, and this is a
+  list of what a directory holds, where what you do to a row is press it.
+- A theme is a directory with a `theme.json` naming it, and the directory name
+  is its id (decision-15). The screen lists the theme the package ships first,
+  because it is the floor every other theme is laid over rather than a peer in
+  the list, then every folder under `themesDir` that is a theme, in name order.
+  Each card carries the display name, the description the manifest wrote and
+  the folder name, and the one in use is marked **Active**.
+- **Activate** writes the folder name into `content/_data/site.json` as `theme`
+  through the same update every settings page uses, with the session's CSRF
+  token like every other admin form. Nothing is cached and nothing has to be
+  told: the next request out of the public site is already wearing it.
+  Activating the packaged theme submits the empty string, which takes the key
+  out of the file rather than storing `""` — the packaged theme is not a choice
+  a site should have to write down.
+- A folder under `themesDir` with no manifest, or a broken one, is listed under
+  **Not themes** with the reason, rather than skipped. A theme that quietly
+  stopped appearing is the hardest kind of typo to find. None of them can be
+  activated, and an activation naming one, forged into the POST, is refused by
+  the same check the settings validator runs, with the reason on the flash and
+  nothing written.
+- The admin is not a theme and is not overridable (decision-4). Nothing on this
+  screen changes it.
 
 ## Settings
 

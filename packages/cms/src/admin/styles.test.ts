@@ -20,7 +20,15 @@ const ADMIN_DIR = fileURLToPath(new URL('../../admin/', import.meta.url));
  * the shell every signed-in screen is drawn inside, whose menu is the one
  * thing on every page (TASK-72).
  */
-const SCREENS = ['layouts/comments.njk', 'layouts/messages.njk', 'layouts/shell.njk'];
+const SCREENS = [
+  'layouts/comments.njk',
+  'layouts/messages.njk',
+  'layouts/shell.njk',
+  // Appearance > Themes, which is cards rather than a table and so brings
+  // styles of its own that nothing else on the admin would have caught
+  // (TASK-77).
+  'layouts/themes.njk',
+];
 
 /** Marks where a `{{ … }}` stood, so an interpolated name is not mistaken
  *  for a literal one. */

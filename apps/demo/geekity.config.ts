@@ -8,6 +8,6 @@ export default defineConfig({
   port: 3000,
   contentDir: 'content',
   dataDir: 'data',
-  themeDir: 'theme',
+  themesDir: 'themes',
   baseUrl: 'http://localhost:3000',
 });

@@ -17,8 +17,10 @@ deleting it is safe and the next boot rebuilds it.
   `content/` is left alone.
 - `content/_data/site.json` is the site title, tagline, author and how many
   posts a listing page holds. It is the `site` global in every template.
-- `theme/` does not exist yet. Create it to override one template at a time;
-  anything you do not override still comes from the package.
+- `themes/` does not exist yet. A theme is a directory in there with a
+  `theme.json` in it, overriding one template at a time; anything it does not
+  override still comes from the package. `theme` in `site.json` says which one
+  the site wears, and no theme at all is the one the package ships.
 - `geekity.config.ts` is the port, the directories and the public base URL.
 
 ## Two things to try

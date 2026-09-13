@@ -11,6 +11,7 @@ import {
   verifyUserPassword,
 } from './accounts.ts';
 import type { User } from './accounts.ts';
+import { mountAppearanceScreen } from './appearance.ts';
 import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';
 import { editorPath, mountDocumentScreens, PAGE_KIND, POST_KIND } from './documents.ts';
@@ -329,6 +330,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // What people have left on the site, and the four things that can be done
   // about it: approve, spam, delete, reply.
   mountCommentsScreen(app, { render });
+
+  // What the site is wearing: the themes on disk, and the one setting that
+  // says which of them (decision-15).
+  mountAppearanceScreen(app, { render });
 
   // The site's own settings, which are content/_data/site.json itself: the
   // screen reads that file and writes it back (decision-9).

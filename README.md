@@ -32,7 +32,7 @@ apps/demo/             private site that consumes the package via workspace:*
   server.ts
   content/           six posts, three pages and _data/site.json
     _includes/       the two layouts an Eleventy build of the same files needs
-  theme/             the two files this site overrides: post.njk and style.css
+  themes/demo/       the theme this site wears: post.njk, style.css, theme.json
   eleventy.config.js re-exports the documented example config
   test/              boots the demo over HTTP, and builds it with Eleventy
 scripts/               pack-install-smoke.sh, the body of the CI job of the same name
@@ -116,7 +116,7 @@ export default defineConfig({
   port: 3000,
   contentDir: 'content',
   dataDir: 'data',
-  themeDir: 'theme',
+  themesDir: 'themes',
   baseUrl: 'http://localhost:3000',
   watch: true,
 });
@@ -130,7 +130,7 @@ directory; absolute ones are used as given.
 | `port`       | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on.                                                                                                                                                          |
 | `contentDir` | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                         |
 | `dataDir`    | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs. |
-| `themeDir`   | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme.                                                                                                                      |
+| `themesDir`  | `<cwd>/themes`            | `GEEKITY_THEMES_DIR`        | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                       |
 | `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                |
 | `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                              |
 
@@ -923,10 +923,29 @@ base layout, home, post, page, tag archive and 404; `partials/` for the post
 list, the pager and the tag macros; `static/style.css`, served at
 `/theme/style.css`. It is plain CSS with no build step.
 
-A template is looked up in the site's `themeDir` first and in the packaged
-theme second, one file at a time, so a site that ships only
-`theme/layouts/post.njk` replaces the post layout and keeps receiving updates
-to every other template. Assets under `/theme/` resolve in the same order.
+A site keeps its own themes under `themes/` — `themesDir` in the config,
+`GEEKITY_THEMES_DIR` at boot — one directory per theme with a `theme.json` in
+it giving a display `name`, a `kind` of `site` and an optional `description`.
+The directory's name is the theme's id, and the one setting that picks a theme,
+`theme` in `content/_data/site.json`, holds that id. A template is looked up in
+the chosen theme first and in the packaged theme second, one file at a time, so
+a theme that ships only `layouts/post.njk` replaces the post layout and keeps
+receiving updates to every other template. Assets under `/theme/` resolve in
+the same order, and so do the mail templates under `mail/`.
+
+**Appearance > Themes** in the admin is where the choice is made: the packaged
+theme and everything under `themes/` with its name and description, the active
+one marked, and one Activate button. Activating the packaged theme takes the
+`theme` key out of `site.json` rather than writing an empty one, which is why a
+site running the default has no such key. A change takes effect on the next
+request with no restart, a folder whose manifest will not read is listed under
+"Not themes" with the reason, and a `theme` naming a theme that is not there
+falls back to the packaged one with a warning in the log rather than a broken
+site. Nothing scaffolds `themes/`: a site has one once it writes a theme.
+
+The admin is not themed (decision-4, decision-15). Its templates are a tree of
+their own with their own loader, off the theme search path, so no theme can
+shadow the login form or the CSRF field inside it.
 
 The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`,
 `categories`, `content`, `page.url`, and every front matter key the file carried — so a
@@ -935,14 +954,18 @@ context, the blocks and the filter set (`date`, `url`, `absoluteUrl`) are part
 of the semver contract; they are documented in
 [`packages/cms/themes/default/README.md`](packages/cms/themes/default/README.md).
 
-`apps/demo/theme/` is the worked example. It holds two files:
+`apps/demo/themes/demo/` is the worked example, and the demo's
+`content/_data/site.json` says `"theme": "demo"`, so the demo proves the choice
+rather than the default. Beside its `theme.json` it holds two files:
 `layouts/post.njk`, which extends the packaged base layout and adds a byline
 and a reading time, and `static/style.css`, which replaces the packaged
 stylesheet at `/theme/style.css`. Everything else the demo serves still comes
-from the package, which is what `apps/demo/test/site.test.ts` asserts over
-HTTP. A stylesheet is the one all-or-nothing override: assets resolve file by
-file the way templates do, so a site's `style.css` is served instead of the
-packaged one, not after it.
+from the package. `apps/demo/test/site.test.ts` asserts both halves over HTTP:
+the byline, the reading time and the demo stylesheet while the theme is chosen,
+and — against a copy of the content with the setting taken out — the packaged
+post layout and the packaged stylesheet when it is not. A stylesheet is the one
+all-or-nothing override: assets resolve file by file the way templates do, so a
+site's `style.css` is served instead of the packaged one, not after it.
 
 `apps/demo/content/pages/contact.md` is the worked example of the other kind of
 opt-in: `contact: true` puts the contact form under the page and

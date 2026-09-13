@@ -5,6 +5,7 @@ without copying anything.
 
 ```
 themes/default/
+  theme.json     the manifest: name, kind and description
   layouts/
     base.njk     the page every other layout extends
     home.njk     the post archive, paginated
@@ -38,18 +39,62 @@ themes/default/
 Plain Nunjucks and plain CSS. There is no build step and no dependency: a site
 that wants Tailwind or anything else brings its own.
 
+## The manifest
+
+`theme.json` is what makes a directory a theme:
+
+```json
+{
+  "name": "Default",
+  "kind": "site",
+  "description": "One line about the theme."
+}
+```
+
+`name` is what a person sees, `kind` is `site` — the only kind there is, and
+the field exists so another can be added later without the format changing —
+and `description` is optional. The directory name is the theme's id. A
+directory without a readable manifest, or one naming a kind this CMS does not
+have, is not a theme.
+
 ## Overriding a template
 
-Resolution order for any template is the site's own `themeDir` (`theme/` by
-default) first, then this directory, one file at a time. A site that ships only
+A site keeps its themes under one directory, `themes/` by default and
+`themesDir` in the config, with one folder per theme and a `theme.json` in
+each. Which one it wears is one setting, `theme` in `content/_data/site.json`,
+holding the folder's name:
 
 ```
-theme/layouts/post.njk
+themes/
+  midnight/
+    theme.json
+    layouts/post.njk
+    static/style.css
 ```
 
-replaces the post layout and keeps receiving updates to every other template.
-`theme/static/style.css` replaces the stylesheet the same way — assets under
-`/theme/` resolve in the same order.
+```json
+{ "theme": "midnight" }
+```
+
+The setting is what **Appearance > Themes** in the admin writes: the screen
+lists this theme and every folder under `themes/`, marks the one in use, and
+Activate on another writes its name — or, on the packaged theme, takes the key
+out again. A change takes effect on the next request, with no restart, and a
+folder whose manifest will not read is listed under "Not themes" with the
+reason rather than quietly left out.
+
+Resolution order for any template is then that theme first, this directory
+second, one file at a time. The theme above replaces the post layout and keeps
+receiving updates to every other template, and `static/style.css` replaces the
+stylesheet the same way — assets under `/theme/` resolve in the same order. A
+site that has chosen no theme reads this one and nothing else, and a theme
+sitting in `themes/` that the setting does not name is never on the path at
+all. A `theme` naming a folder that is not there, or is not a theme, falls back
+to this one with a warning in the log rather than a broken site.
+
+The admin is not a theme and has no setting. Its templates live in their own
+tree with a loader of their own, off this search path entirely, so no theme can
+shadow the login form or the CSRF field inside it.
 
 An override is a normal Nunjucks template, so it can extend or include the
 packaged ones by name:
@@ -78,7 +123,7 @@ the Reading settings name:
 
 Neither is needed: a site that sets a homepage gets the page layout for it and
 a site that sets a posts page gets the listing layout, until it writes one.
-Writing `theme/layouts/front-page.njk` is how a front page is laid out
+Writing `layouts/front-page.njk` into the theme is how a front page is laid out
 differently from every other page without overriding the layout they all use.
 On the posts page the page's own front matter and rendered body are on the
 context beside the listing, so `{{ content | safe }}` prints its words above
@@ -86,9 +131,9 @@ the posts; `layouts/home.njk` already does.
 
 ## Mail templates
 
-The messages the CMS sends live under `mail/` and resolve the same way, so
-`theme/mail/test.txt.njk` replaces the text of the test message and leaves its
-subject and HTML twin coming from the package. Each message is up to three
+The messages the CMS sends live under `mail/` and resolve the same way, so a
+`mail/test.txt.njk` in the theme the site wears replaces the text of the test
+message and leaves its subject and HTML twin coming from the package. Each message is up to three
 files:
 
 | File                      | What it is                                                     |
@@ -142,8 +187,8 @@ whatever the feature that sent it passed as `data`. The `date`, `url` and
 `absoluteUrl` filters are the same ones a page has, so a message can write a
 link with `{{ "/admin/" | absoluteUrl }}`.
 
-Writing `theme/mail/welcome.txt.njk` is enough to add a message this package
-never shipped; nothing has to be registered.
+Writing `mail/welcome.txt.njk` into the theme is enough to add a message this
+package never shipped; nothing has to be registered.
 
 ## Template context
 
@@ -377,9 +422,9 @@ ask:
 
 That is what `layouts/post.njk` does. `partials/conversation.njk` is the whole
 section — the reply thread, and the likes, boosts and mentions as counts with
-the people behind them inside a `<details>` — and a site replaces it by shipping
-`theme/partials/conversation.njk` of its own, exactly as it replaces any other
-template. It defines three macros, `comment(reply)`,
+the people behind them inside a `<details>` — and a site replaces it with a
+`partials/conversation.njk` of its own in the theme it wears, exactly as it
+replaces any other template. It defines three macros, `comment(reply)`,
 `reactions(actors, one, many)` and `mentions(items)`, and a layout that wants to
 place the pieces itself can import them:
 

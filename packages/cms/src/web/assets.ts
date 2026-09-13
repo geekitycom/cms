@@ -3,8 +3,6 @@ import type { Stats } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 
-import { PACKAGED_THEME_DIR } from './templates.ts';
-
 /** URL prefix the theme's own files are served under. */
 export const THEME_ASSET_PREFIX = '/theme/';
 
@@ -88,19 +86,20 @@ export function findAsset(relative: string, roots: string[]): StaticAsset | unde
 }
 
 /**
- * Find one asset, site theme first and packaged theme second, the same order
- * templates resolve in.
+ * Find one asset under the `static/` directory of each theme on a search path,
+ * the same order templates resolve in.
+ *
+ * The path comes from `themeSearchPath`, so an asset and a layout are always
+ * read from the same themes.
  */
-export function findThemeAsset(relative: string, themeDirs: string[]): ThemeAsset | undefined {
+export function findThemeAsset(
+  relative: string,
+  themeDirs: readonly string[],
+): ThemeAsset | undefined {
   return findAsset(
     relative,
     themeDirs.map((themeDir) => path.join(themeDir, THEME_STATIC_DIR)),
   );
-}
-
-/** The theme directories to search, in order: the site's, then the package's. */
-export function themeSearchPath(siteThemeDir: string): string[] {
-  return [siteThemeDir, PACKAGED_THEME_DIR];
 }
 
 /** How long a browser may keep an asset, when the caller does not say. */

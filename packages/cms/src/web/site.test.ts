@@ -32,6 +32,27 @@ async function writeTree(root: string, files: Record<string, string>): Promise<v
 }
 
 /**
+ * A themes directory holding one theme, `fixture`, with these files in it.
+ *
+ * A theme is a named directory a site chooses now (decision-15), so an
+ * override takes two things rather than one: the theme, and a `site.json` that
+ * names it — {@link choosing}.
+ */
+async function fixtureTheme(files: Record<string, string>): Promise<string> {
+  const themesDir = await temporaryDir('geekity-web-themes-');
+  await writeTree(path.join(themesDir, 'fixture'), {
+    'theme.json': JSON.stringify({ name: 'Fixture', kind: 'site' }),
+    ...files,
+  });
+  return themesDir;
+}
+
+/** The `content/_data/site.json` of a site that has chosen `fixture`. */
+function choosing(settings: Record<string, unknown> = {}): Record<string, string> {
+  return { '_data/site.json': JSON.stringify({ theme: 'fixture', ...settings }) };
+}
+
+/**
  * A CMS over a content directory holding `files`, already synced. Watching is
  * off so a request only ever sees what the scan indexed.
  */
@@ -797,13 +818,15 @@ describe('the conversation under a post', () => {
     assert.ok(!html.includes('conversation'), 'there is no empty conversation section');
   });
 
-  it('lets a site theme replace the partial', async () => {
-    const themeDir = await temporaryDir('geekity-web-theme-');
-    await writeTree(themeDir, {
+  it('lets the chosen theme replace the partial', async () => {
+    const themesDir = await fixtureTheme({
       'partials/conversation.njk':
         '<p class="my-own">{{ conversation.counts.total }} interactions</p>\n',
     });
-    const { cms } = await site(files, { baseUrl: 'https://example.com', themeDir });
+    const { cms } = await site(
+      { ...files, ...choosing() },
+      { baseUrl: 'https://example.com', themesDir },
+    );
     reply(cms, { id: 'https://remote.example/notes/1', inReplyTo: HELLO });
 
     const html = await (await cms.app.request('/2026/09/hello/')).text();
@@ -840,10 +863,9 @@ describe('theme assets', () => {
     assert.equal(await second.text(), '');
   });
 
-  it('prefers an asset the site theme ships over the packaged one', async () => {
-    const themeDir = await temporaryDir('geekity-web-theme-');
-    await writeTree(themeDir, { 'static/style.css': 'body { color: rebeccapurple }\n' });
-    const { cms } = await site({}, { themeDir });
+  it('prefers an asset the chosen theme ships over the packaged one', async () => {
+    const themesDir = await fixtureTheme({ 'static/style.css': 'body { color: rebeccapurple }\n' });
+    const { cms } = await site(choosing(), { themesDir });
 
     const response = await cms.app.request('/theme/style.css');
 
@@ -931,12 +953,11 @@ describe('overriding one template', () => {
     'pages/about.md': page('About', '/about/'),
   };
 
-  it('takes the overridden template from the site and the rest from the package', async () => {
-    const themeDir = await temporaryDir('geekity-web-theme-');
-    await writeTree(themeDir, {
+  it('takes the overridden template from the theme and the rest from the package', async () => {
+    const themesDir = await fixtureTheme({
       'layouts/post.njk': '<!doctype html><h1>overridden: {{ title }}</h1>{{ content | safe }}',
     });
-    const { cms } = await site(files, { themeDir });
+    const { cms } = await site({ ...files, ...choosing() }, { themesDir });
 
     const overridden = await (await cms.app.request('/notes/')).text();
     assert.ok(overridden.includes('overridden: Notes'), 'the site post layout rendered');
@@ -954,16 +975,15 @@ describe('overriding one template', () => {
     }
   });
 
-  it('is fine with a theme directory that does not exist', async () => {
-    const { cms } = await site(files, { themeDir: '/definitely/not/a/directory' });
+  it('is fine with a themes directory that does not exist', async () => {
+    const { cms } = await site(files, { themesDir: '/definitely/not/a/directory' });
 
     assert.equal((await cms.app.request('/notes/')).status, 200);
     assert.equal((await cms.app.request('/theme/style.css')).status, 200);
   });
 
   it('lets an override reach the same context an Eleventy layout gets', async () => {
-    const themeDir = await temporaryDir('geekity-web-theme-');
-    await writeTree(themeDir, {
+    const themesDir = await fixtureTheme({
       'layouts/post.njk': [
         '<!doctype html>',
         '<p id="title">{{ title }}</p>',
@@ -980,7 +1000,7 @@ describe('overriding one template', () => {
     });
     const { cms } = await site(
       {
-        '_data/site.json': JSON.stringify({ title: 'Fixture Site' }),
+        ...choosing({ title: 'Fixture Site' }),
         'posts/2026-09-02-hello.md': [
           '---',
           'title: Hello',
@@ -997,7 +1017,7 @@ describe('overriding one template', () => {
           '',
         ].join('\n'),
       },
-      { themeDir },
+      { themesDir },
     );
 
     const html = await (await cms.app.request('/2026/09/hello/')).text();

@@ -20,6 +20,7 @@ import {
   taxonomyRedirectsOf,
 } from '../web/taxonomy.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from '../web/taxonomy.ts';
+import { readTheme, themeNameProblem } from '../web/themes.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import type { AdminStore, LegacySetting } from './store.ts';
 
@@ -106,6 +107,18 @@ export interface SiteSettings {
   postsPage: string;
   /** Site author, used as the feed author. May be empty. */
   author: string;
+  /**
+   * The theme the site renders through: the name of one directory under the
+   * configured themes directory, or empty for the theme the package ships
+   * (decision-15).
+   *
+   * A setting rather than a deployment fact, for the reason the tagline is: it
+   * is a look somebody chooses on the Appearance screen, and a site moved from
+   * one host to another should arrive looking the same. A name that is not a
+   * theme is refused here and falls back to the packaged theme out on the
+   * site, so a hand-edited file is a warning in the log rather than a 500.
+   */
+  theme: string;
   /**
    * The first URL segment the tag archives live under, `tag` by default: one
    * URL-safe path segment, no slashes. WordPress's own base, so a site
@@ -254,6 +267,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   homepage: '',
   postsPage: '',
   author: '',
+  theme: '',
   tagBase: DEFAULT_TAXONOMY_BASES.tag,
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
   comments: true,
@@ -283,6 +297,7 @@ export const SETTINGS_FIELDS = {
   homepage: 'homepage',
   postsPage: 'posts_page',
   author: 'author',
+  theme: 'theme',
   tagBase: 'tag_base',
   categoryBase: 'category_base',
   comments: 'comments',
@@ -349,6 +364,9 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(typeof file['language'] === 'string' && file['language'] !== ''
       ? { language: file['language'] }
       : {}),
+    // Absent is the ordinary state of this one: a site on the packaged theme
+    // has never written the key, so anything but a string is that site.
+    ...(typeof file['theme'] === 'string' ? { theme: file['theme'] } : {}),
     // Absent is the ordinary state of these two: a site showing its latest
     // posts writes neither key, so anything but a string is read as none.
     ...(typeof file['homepage'] === 'string' ? { homepage: file['homepage'] } : {}),
@@ -458,7 +476,11 @@ export function siteJsonFor(
     taxonomyRedirects: settings.taxonomyRedirects.map((entry) => ({ ...entry })),
   };
 
-  for (const key of ['homepage', 'postsPage'] as const) {
+  // `theme` is absent for a site on the packaged theme, on the same rule and
+  // for the same reason as the two above: running what the package ships is
+  // not a choice a site should have to write down, and a `theme` of `""` would
+  // be a name no directory has.
+  for (const key of ['homepage', 'postsPage', 'theme'] as const) {
     if (settings[key] === '') delete file[key];
     else file[key] = settings[key];
   }
@@ -623,6 +645,20 @@ export function effectiveBaseUrl(
 }
 
 /**
+ * What a check may need to know beyond the form itself.
+ *
+ * One field has anything here, and it is the theme: whether a name is a theme
+ * is a question about the file system rather than about the string, and only
+ * the config knows where this site's themes are. A check given no context does
+ * what it can — the theme's is still a name it can refuse — so a caller with
+ * no config in hand is not blocked.
+ */
+export interface SettingsContext {
+  /** Where the site's themes are: {@link ResolvedConfig.themesDir}. */
+  themesDir?: string | undefined;
+}
+
+/**
  * What is wrong with each field of a submitted form: one check per field, so a
  * page can run the checks for the fields it carries and no others.
  *
@@ -630,7 +666,10 @@ export function effectiveBaseUrl(
  * check all the same, because a table with a hole in it is a field somebody
  * added and forgot to think about.
  */
-const FIELD_CHECKS: Record<SettingsField, (form: SettingsForm) => string | undefined> = {
+const FIELD_CHECKS: Record<
+  SettingsField,
+  (form: SettingsForm, context: SettingsContext) => string | undefined
+> = {
   title: (form) => (form.title.trim() === '' ? 'The site needs a title.' : undefined),
 
   tagline: () => undefined,
@@ -676,6 +715,24 @@ const FIELD_CHECKS: Record<SettingsField, (form: SettingsForm) => string | undef
     LANGUAGE_TAG_PATTERN.test(form.language.trim())
       ? undefined
       : 'That is not a language tag, such as en, en-GB or pt-BR.',
+
+  // Empty is a value here — it is how a site says "the theme the package
+  // ships" — so only a name has anything to check. A name that is not a theme
+  // is refused rather than saved and warned about later: the screen has a list
+  // of the themes that are there, so the only way to type one that is not is a
+  // theme deleted between drawing the list and saving it, and the person is in
+  // front of the form and can be told.
+  theme: (form, context) => {
+    const name = form.theme.trim();
+    if (name === '') return undefined;
+
+    const badName = themeNameProblem(name);
+    if (badName !== undefined) return badName;
+    if (context.themesDir === undefined) return undefined;
+
+    const read = readTheme(path.join(context.themesDir, name));
+    return read.ok ? undefined : `There is no theme called "${name}": ${read.reason}`;
+  },
 
   comments: () => undefined,
 
@@ -775,16 +832,18 @@ export const SETTINGS_FIELD_NAMES: readonly SettingsField[] = Object.keys(
  *
  * `fields` is what a page carries: it validates its own fields and says
  * nothing about the rest, so a page cannot refuse a save over a field it does
- * not show and gives no way to fix.
+ * not show and gives no way to fix. `context` is what a check needs beyond the
+ * form; see {@link SettingsContext}.
  */
 export function settingsProblems(
   form: SettingsForm,
   fields: readonly SettingsField[] = SETTINGS_FIELD_NAMES,
+  context: SettingsContext = {},
 ): SettingsProblems {
   const problems: SettingsProblems = {};
 
   for (const name of fields) {
-    const problem = FIELD_CHECKS[name](form);
+    const problem = FIELD_CHECKS[name](form, context);
     if (problem !== undefined) problems[name] = problem;
   }
 
@@ -817,6 +876,7 @@ export function settingsFromForm(
     // the listing's own page with it rather than leave it stranded.
     postsPage: form.homepage.trim() === '' ? '' : form.postsPage.trim(),
     author: form.author.trim(),
+    theme: form.theme.trim(),
     tagBase: form.tagBase.trim(),
     categoryBase: form.categoryBase.trim(),
     // A checkbox submits nothing at all when it is clear, which is what the
@@ -851,6 +911,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     homepage: settings.homepage,
     postsPage: settings.postsPage,
     author: settings.author,
+    theme: settings.theme,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
     comments: settings.comments ? '1' : '',
