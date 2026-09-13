@@ -1,17 +1,7 @@
-import { fileURLToPath } from 'node:url';
-
 import { Environment, FileSystemLoader } from 'nunjucks';
 
 import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
-
-/**
- * The theme that ships inside the package, resolved from this module rather
- * than from the working directory, so it is found whether the CMS is running
- * from `src/` under tsx or from `dist/` as an installed dependency.
- */
-export const PACKAGED_THEME_DIR: string = fileURLToPath(
-  new URL('../../themes/default/', import.meta.url),
-);
+import { themeSearchPath } from './themes.ts';
 
 /** Where a {@link createTemplateEnvironment} looks, and how it caches. */
 export interface CreateTemplateEnvironmentOptions {
@@ -35,15 +25,15 @@ export interface CreateTemplateEnvironmentOptions {
 }
 
 /**
- * A Nunjucks environment whose loader searches the site theme first and the
- * packaged default theme second, one file at a time.
+ * A Nunjucks environment whose loader searches the theme directories in the
+ * order {@link themeSearchPath} gives them, one file at a time.
  *
  * That is the whole override mechanism: a site that ships only
  * `theme/layouts/post.njk` replaces the post layout and keeps receiving
  * updates to every other template.
  */
 export function createTemplateEnvironment(options: CreateTemplateEnvironmentOptions): Environment {
-  const loader = new FileSystemLoader([options.themeDir, PACKAGED_THEME_DIR], {
+  const loader = new FileSystemLoader(themeSearchPath(options.themeDir), {
     noCache: options.noCache === true,
   });
 

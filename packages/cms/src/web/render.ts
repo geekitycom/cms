@@ -1,12 +1,8 @@
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-
 import type { Environment } from 'nunjucks';
 
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { themeSearchPath } from './assets.ts';
 import { authorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import {
@@ -27,6 +23,7 @@ import { navigationMenu } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 import { createTemplateEnvironment } from './templates.ts';
+import { findThemeFile, themeSearchPath } from './themes.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 
 /** Templates the default theme ships and the public routes ask for by name. */
@@ -419,11 +416,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
  * at all.
  */
 function themeTemplate(themeDir: string, preferred: string, fallback: string): string {
-  const relative = preferred.split('/');
-  const found = themeSearchPath(themeDir).some((directory) =>
-    existsSync(path.join(directory, ...relative)),
-  );
-  return found ? preferred : fallback;
+  return findThemeFile(themeSearchPath(themeDir), preferred) === undefined ? fallback : preferred;
 }
 
 /**

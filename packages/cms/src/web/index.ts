@@ -7,7 +7,6 @@ export {
   matchesEtag,
   themeAssetNotModified,
   themeAssetResponse,
-  themeSearchPath,
   THEME_ASSET_MAX_AGE,
   THEME_ASSET_PREFIX,
   THEME_STATIC_DIR,
@@ -226,5 +225,14 @@ export type {
   TaxonomyRedirect,
   TaxonomyTerm,
 } from './taxonomy.ts';
-export { createTemplateEnvironment, formatDate, PACKAGED_THEME_DIR } from './templates.ts';
+export { createTemplateEnvironment, formatDate } from './templates.ts';
 export type { CreateTemplateEnvironmentOptions, DateFormat } from './templates.ts';
+export {
+  findThemeFile,
+  PACKAGED_THEME_DIR,
+  readTheme,
+  SITE_THEME_KIND,
+  THEME_MANIFEST_FILE,
+  themeSearchPath,
+} from './themes.ts';
+export type { Theme, ThemeKind, ThemeRead } from './themes.ts';

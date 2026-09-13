@@ -5,6 +5,7 @@ without copying anything.
 
 ```
 themes/default/
+  theme.json     the manifest: name, kind and description
   layouts/
     base.njk     the page every other layout extends
     home.njk     the post archive, paginated
@@ -37,6 +38,24 @@ themes/default/
 
 Plain Nunjucks and plain CSS. There is no build step and no dependency: a site
 that wants Tailwind or anything else brings its own.
+
+## The manifest
+
+`theme.json` is what makes a directory a theme:
+
+```json
+{
+  "name": "Default",
+  "kind": "site",
+  "description": "One line about the theme."
+}
+```
+
+`name` is what a person sees, `kind` is `site` — the only kind there is, and
+the field exists so another can be added later without the format changing —
+and `description` is optional. The directory name is the theme's id. A
+directory without a readable manifest, or one naming a kind this CMS does not
+have, is not a theme.
 
 ## Overriding a template
 

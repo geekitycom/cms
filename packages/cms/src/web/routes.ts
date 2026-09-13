@@ -16,7 +16,6 @@ import {
   matchesEtag,
   themeAssetNotModified,
   themeAssetResponse,
-  themeSearchPath,
   THEME_ASSET_PREFIX,
   UPLOAD_ASSET_MAX_AGE,
   UPLOAD_ASSET_PREFIX,
@@ -76,6 +75,7 @@ import {
 import type { SitemapUrl } from './sitemap.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
+import { themeSearchPath } from './themes.ts';
 
 /**
  * Register the public site on a Hono app.

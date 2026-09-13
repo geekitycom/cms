@@ -1,9 +1,7 @@
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-
 import type { Environment } from 'nunjucks';
 
-import { createTemplateEnvironment, PACKAGED_THEME_DIR } from '../web/templates.ts';
+import { createTemplateEnvironment } from '../web/templates.ts';
+import { findThemeFile, themeSearchPath } from '../web/themes.ts';
 
 /**
  * What a message looks like before it is addressed: a subject, a plain text
@@ -116,11 +114,14 @@ export function createMailTemplates(options: CreateMailTemplatesOptions): MailTe
     ...(options.noCache === undefined ? {} : { noCache: options.noCache }),
   });
 
-  const searchPath = [options.themeDir, PACKAGED_THEME_DIR];
+  // The same directories, in the same order, that the two environments above
+  // resolve a template through: which halves of a message exist has to be the
+  // same question as which file a render would read.
+  const searchPath = themeSearchPath(options.themeDir);
 
-  /** Whether any directory on the search path has that template. */
+  /** Whether any theme on the search path has that template. */
   function present(template: string): boolean {
-    return searchPath.some((dir) => existsSync(path.join(dir, ...template.split('/'))));
+    return findThemeFile(searchPath, template) !== undefined;
   }
 
   return {
