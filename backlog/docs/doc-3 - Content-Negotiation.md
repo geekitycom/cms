@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 01:29'
+updated_date: '2026-09-13 01:49'
 ---
 # Content Negotiation
 
@@ -49,6 +49,8 @@ Feeds are routes, not representations, because feed readers do not send useful `
 | `/{tagBase}/{tag}/feed/`, `/{categoryBase}/{name}/feed/` | The same three over one archive |
 | `/comments/feed/` | Every reply the inbox has been sent, as RSS 2.0 |
 | `{permalink}feed/` | One post's replies, the same way |
+
+Every format renders the same **feed item**: one shape derived once per post and site, carrying the post's name — its ActivityStreams object id — beside its permalink, and its title, published and updated instants, author, categories, tags, summary and rendered body. The RSS, Atom and JSON Feed serialisers write that item rather than reading the document again, so what a feed says about a post is decided in one place; decision-12 is what it decides.
 
 `/feed/` is RSS because that is the format nearly every existing subscriber holds. The site's three are registered routes; the per-archive ones are resolved in the not-found handler, because the two bases are a setting and a route table is fixed when the app is built.
 
