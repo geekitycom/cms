@@ -93,6 +93,29 @@
   --color-code-background: #f6f3f1;
   --color-code-text: #240b00;
   --color-error: #b3261e;
+
+  /* Syntax highlighting: the Tomorrow palette, light member (TASK-86). The
+     names are what each colour marks up, and the base16 slot they come from is
+     in the comment; the highlighter is highlight.js, whose base16 Tomorrow
+     theme is the mapping these follow.
+
+     Five of them are not the stock colour. Tomorrow was drawn for an editor,
+     where a faint comment is a feature; on this paper the stock greys, orange,
+     yellow, green and teal read at 1.7:1 to 3.5:1, so each was darkened along
+     its own hue until it made 4.5:1 and no further. `src/web/theme-colors.test.ts`
+     is what keeps that true. */
+  --color-code-comment: #6c6d6a; /* base03, stock #8e908c */
+  --color-code-tag: #6b6d6b; /* base04, stock #969896 */
+  --color-code-name: #c82829; /* base08 */
+  --color-code-literal: #a95608; /* base09, stock #f5871f */
+  --color-code-class: #846700; /* base0A, stock #eab700 */
+  --color-code-string: #5e7500; /* base0B, stock #718c00 */
+  --color-code-support: #30767a; /* base0C, stock #3e999f */
+  --color-code-function: #4271ae; /* base0D */
+  --color-code-keyword: #8959a8; /* base0E */
+  --color-code-meta: #945f52; /* base0F, stock #a3685a */
+  --color-code-added-background: #dff0d8;
+  --color-code-removed-background: #f8dcdc;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -107,6 +130,22 @@
     --color-code-background: rgb(30 24 22);
     --color-code-text: #f4ece7;
     --color-error: #ff8093;
+
+    /* The other member of the family, Tomorrow Night — the palette both source
+       sites highlighted with, and the one highlight.js ships under that name.
+       Only base0F needed lifting off this darker paper. */
+    --color-code-comment: #999999; /* base03 */
+    --color-code-tag: #b4b7b4; /* base04 */
+    --color-code-name: #f2777a; /* base08 */
+    --color-code-literal: #f99157; /* base09 */
+    --color-code-class: #ffcc66; /* base0A */
+    --color-code-string: #99cc99; /* base0B */
+    --color-code-support: #66cccc; /* base0C */
+    --color-code-function: #6699cc; /* base0D */
+    --color-code-keyword: #cc99cc; /* base0E */
+    --color-code-meta: #ae786b; /* base0F, stock #a3685a */
+    --color-code-added-background: rgb(32 54 34);
+    --color-code-removed-background: rgb(64 30 30);
   }
 }
 
@@ -394,6 +433,127 @@ pre code {
   border-radius: 0;
   background: none;
   font-size: inherit;
+}
+
+/* Syntax highlighting (TASK-86).
+ *
+ * The CMS renders a fenced block as `pre > code.language-x` and highlights
+ * nothing; `static/highlight.js` marks the tokens up on the client, and these
+ * are its colours. The scopes and the slots they map to are highlight.js's own
+ * base16 Tomorrow theme, so a token it invents later lands somewhere sensible
+ * rather than nowhere.
+ *
+ * Every colour is a custom property, so a site that wants another palette
+ * redefines a dozen tokens instead of writing a syntax theme. Delimiters,
+ * operators and substitutions are deliberately the block's own ink: they are
+ * most of the characters on screen and a colour there is noise.
+ */
+
+.hljs-comment {
+  color: var(--color-code-comment);
+}
+
+.hljs-tag {
+  color: var(--color-code-tag);
+}
+
+.hljs-subst,
+.hljs-punctuation,
+.hljs-operator {
+  color: var(--color-code-text);
+}
+
+.hljs-bullet,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-tag,
+.hljs-name {
+  color: var(--color-code-name);
+}
+
+.hljs-symbol,
+.hljs-number,
+.hljs-link,
+.hljs-attr,
+.hljs-variable.constant_,
+.hljs-literal {
+  color: var(--color-code-literal);
+}
+
+.hljs-title,
+.hljs-class .hljs-title,
+.hljs-title.class_ {
+  color: var(--color-code-class);
+}
+
+.hljs-strong {
+  color: var(--color-code-class);
+  font-weight: var(--fontWeight-bold);
+}
+
+.hljs-code,
+.hljs-string,
+.hljs-title.class_.inherited__ {
+  color: var(--color-code-string);
+}
+
+.hljs-built_in,
+.hljs-doctag,
+.hljs-quote,
+.hljs-regexp,
+.hljs-keyword.hljs-atrule {
+  color: var(--color-code-support);
+}
+
+.hljs-attribute,
+.hljs-function .hljs-title,
+.hljs-section,
+.hljs-title.function_ {
+  color: var(--color-code-function);
+}
+
+.hljs-keyword,
+.hljs-template-tag,
+.hljs-type {
+  color: var(--color-code-keyword);
+}
+
+.hljs-emphasis {
+  color: var(--color-code-keyword);
+  font-style: italic;
+}
+
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-meta .hljs-string {
+  color: var(--color-code-meta);
+}
+
+/* A diff reads by the line, not by the token, which is what prism-diff.css did
+ * on the site this design comes from: the whole line takes a tint out to the
+ * edges of the block — the negative margin cancels the `pre` padding and the
+ * padding puts it back — and keeps the block's own ink, which is the pair the
+ * contrast test checks. The `+` and the `-` stay in the text, so the meaning
+ * does not rest on the colour alone.
+ */
+
+.hljs-addition,
+.hljs-deletion {
+  display: block;
+  margin-right: calc(-1 * var(--spacing-4));
+  margin-left: calc(-1 * var(--spacing-4));
+  padding-right: var(--spacing-4);
+  padding-left: var(--spacing-4);
+  color: var(--color-code-text);
+  text-decoration: none;
+}
+
+.hljs-addition {
+  background-color: var(--color-code-added-background);
+}
+
+.hljs-deletion {
+  background-color: var(--color-code-removed-background);
 }
 
 /* Screen reader text. The skip link is this until it is focused, and then it

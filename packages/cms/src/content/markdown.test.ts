@@ -39,14 +39,28 @@ describe('renderMarkdown', () => {
   it('tags a fenced code block with its language', () => {
     const html = renderMarkdown('```js\nconst x = 1;\n```\n');
 
-    assert.match(html, /<pre><code class="language-js">/);
+    assert.match(html, /<pre tabindex="0"><code class="language-js">/);
     assert.match(html, /const x = 1;/);
   });
 
   it('leaves a fenced block with no language unclassed', () => {
     const html = renderMarkdown('```\nplain\n```\n');
 
-    assert.match(html, /<pre><code>plain/);
+    assert.match(html, /<pre tabindex="0"><code>plain/);
+  });
+
+  it('leaves an unknown language classed and unhighlighted (TASK-86)', () => {
+    const html = renderMarkdown('```nosuchlanguage\n<< not code >>\n```\n');
+
+    assert.match(html, /<pre tabindex="0"><code class="language-nosuchlanguage">/);
+    assert.match(html, /&lt;&lt; not code &gt;&gt;/);
+    assert.doesNotMatch(html, /hljs/, 'the renderer highlighted something');
+  });
+
+  it('gives an indented code block a tabindex too (TASK-86)', () => {
+    const html = renderMarkdown('    indented\n');
+
+    assert.match(html, /<pre tabindex="0"><code>indented/);
   });
 
   it('escapes the contents of a code block', () => {

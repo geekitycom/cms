@@ -1004,4 +1004,17 @@ const MIGRATIONS: readonly Migration[] = [
       DELETE FROM documents;
     `,
   },
+  {
+    version: 3,
+    sql: `
+      -- The renderer now puts \`tabindex="0"\` on every \`<pre>\` (TASK-86), so a
+      -- wide block of code can be scrolled from the keyboard. The HTML in this
+      -- table was rendered by the old one, and the hash covers the file rather
+      -- than what was made of it, so a scan would find every row up to date and
+      -- serve the old markup for as long as nobody edited the post. Emptying
+      -- the index is what makes the next scan render them all again; the files
+      -- are the source of truth, so nothing is lost (decision-1).
+      DELETE FROM documents;
+    `,
+  },
 ];

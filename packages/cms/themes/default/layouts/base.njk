@@ -158,6 +158,27 @@
       {% endblock %}
     </div>
 
-    {% block scripts %}{% endblock %}
+    {% block scripts %}
+    {#
+      The code highlighter, and only where there is code to highlight.
+
+      The CMS renders a fenced block as `pre > code.language-x` and highlights
+      nothing, so that a theme picks its own highlighter and runs it on the
+      client (decision-16). This one is highlight.js, self-hosted in
+      `static/highlight.js` at a pinned version — nothing is loaded from a CDN.
+
+      The test is the rendered body: a page whose `content` holds a
+      `language-` class has a code block on it, and every other page — a
+      listing, an entry with only prose — ships no JavaScript at all. `defer`
+      so it waits for the markup it works on rather than blocking it.
+
+      A site theme that wants a different highlighter, or none, overrides this
+      block; one that wants a different set of languages rebuilds the bundle.
+      See the theme README.
+    #}
+    {% if content and "language-" in content %}
+    <script src="{{ "/theme/highlight.js" | url }}" defer></script>
+    {% endif %}
+    {% endblock %}
   </body>
 </html>

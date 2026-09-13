@@ -261,6 +261,89 @@ a colour changed here that breaks one fails the build.
 | `--color-code-text`       | Code with no highlighting on it.                   |
 | `--color-error`           | A form field that will not do.                     |
 
+### Code highlighting
+
+The CMS renders a fenced block as `<pre tabindex="0"><code
+class="language-x">` and highlights nothing: highlighting is a theme's, and it
+happens on the client (decision-16). The `tabindex` is the core's doing and is
+there on every `<pre>`, because a block wider than the measure scrolls sideways
+and a scroll container nothing can focus cannot be read from a keyboard.
+
+This theme highlights with **[highlight.js](https://highlightjs.org/)**,
+self-hosted at `static/highlight.js` and pinned — nothing is fetched from a
+CDN. The `scripts` block of `layouts/base.njk` loads it, deferred, **only on a
+page whose rendered body holds a `language-` class**, so a page with no code on
+it ships no JavaScript at all. Auto-detection is off: a block with no language,
+or one naming a language the bundle does not carry, is left exactly as the
+renderer wrote it — its class, its plain text, no highlighting.
+
+The bundle carries the core and eighteen grammars — `bash`, `css`, `diff`,
+`dockerfile`, `go`, `ini`, `javascript`, `json`, `markdown`, `nginx`, `php`,
+`python`, `rust`, `shell`, `sql`, `typescript`, `xml` and `yaml`, with their
+aliases, so `js`, `ts`, `html`, `yml` and `sh` all work. It is a build product
+that is nevertheless committed, so a site gets a working highlighter out of the
+package with no build step. Rebuilding it is one command:
+
+```
+pnpm --filter @geekity/cms build:highlight
+```
+
+Run that after bumping the `highlight.js` devDependency or editing the language
+list in `scripts/build-highlight.js`, and commit what it writes.
+`src/web/highlight-bundle.test.ts` fails when the committed file was built from
+a different version of highlight.js than the one installed.
+
+**The palette is Tomorrow**, the one both of the sites this design comes from
+used: Chris Kempson's Tomorrow on light paper and Tomorrow Night on dark, from
+highlight.js's own base16 themes, which is also what decides which `hljs-`
+scope takes which slot. Five of the light colours are not the stock ones — a
+syntax theme is drawn for an editor, where a faint comment is a feature, and on
+this paper the stock greys, orange, yellow, green and teal read between 1.7:1
+and 3.5:1. Each was darkened along its own hue until it made 4.5:1 and no
+further; on the dark scheme only the `base0F` brown needed lifting. Every one
+of them is in the contrast test beside the rest of the palette.
+
+| Token                             | base16   | What it colours                            |
+| --------------------------------- | -------- | ------------------------------------------ |
+| `--color-code-comment`            | `base03` | Comments.                                  |
+| `--color-code-tag`                | `base04` | Markup tags.                               |
+| `--color-code-name`               | `base08` | Variables, names, selectors, list bullets. |
+| `--color-code-literal`            | `base09` | Numbers, constants, attributes, links.     |
+| `--color-code-class`              | `base0A` | Class names, bold.                         |
+| `--color-code-string`             | `base0B` | Strings and inline code.                   |
+| `--color-code-support`            | `base0C` | Built-ins, regexps, quotes.                |
+| `--color-code-function`           | `base0D` | Function names, headings, attributes.      |
+| `--color-code-keyword`            | `base0E` | Keywords, types, italic.                   |
+| `--color-code-meta`               | `base0F` | Preprocessor and embedded-language lines.  |
+| `--color-code-added-background`   | —        | An added line in a diff.                   |
+| `--color-code-removed-background` | —        | A removed line in a diff.                  |
+
+Delimiters, operators and substitutions are deliberately `--color-code-text`,
+the block's own ink: they are most of the characters on screen and a colour
+there is noise. A `diff` block reads by the line rather than by the token, the
+way the source site's `prism-diff.css` did: `.hljs-addition` and
+`.hljs-deletion` take a tint out to the edges of the block and keep the ink, so
+the `+` and the `-` in the text carry the meaning as well as the colour does.
+
+**Swapping it.** Four sizes of change, smallest first:
+
+- _Another palette, same highlighter._ Redefine the dozen `--color-code-*`
+  tokens. Note that `static/style.css` is an all-or-nothing override: a theme
+  that ships its own stylesheet owns these rules too, and a fenced block on it
+  is unhighlighted until it writes them.
+- _Other languages._ Edit `LANGUAGES` in `scripts/build-highlight.js`, rebuild,
+  and commit — or put your own `static/highlight.js` in your theme, which the
+  `/theme/` route resolves before the packaged one.
+- _Another highlighter._ Override the `scripts` block with your own tag. The
+  markup is `pre > code.language-x`, which is what every highlighter reads.
+- _None._ Override the `scripts` block with nothing in it.
+
+```njk
+{% extends "layouts/base.njk" %}
+
+{% block scripts %}{% endblock %}
+```
+
 ## Mail templates
 
 The messages the CMS sends live under `mail/` and resolve the same way, so a

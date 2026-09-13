@@ -1,6 +1,7 @@
 /**
  * The shell of the default theme: the wrapper, the header, the footer
- * (decision-16, TASK-80) and the head (TASK-81).
+ * (decision-16, TASK-80), the head (TASK-81) and the one script it ever loads,
+ * the code highlighter (TASK-86).
  *
  * The source design puts the site title and the tagline on the front page as a
  * heading and a small link home on every other page, keeps the whole page in
@@ -58,6 +59,9 @@ const CONTENT: Record<string, string> = {
     "---\ntitle: A photo\ndate: '2026-09-03T09:00:00Z'\npermalink: /2026/09/photo/\nimage: /uploads/2026/09/hero.png\n---\n\nLook at it.\n",
   'pages/about.md':
     '---\ntitle: About\npermalink: /about/\ndescription: What this site is about.\n---\n\nAbout us.\n',
+  // A page with a fenced block on it, which is the one page the shell loads a
+  // script for (TASK-86).
+  'pages/code.md': '---\ntitle: Code\npermalink: /code/\n---\n\n```js\nconst answer = 42;\n```\n',
 };
 
 /** A CMS wearing the packaged theme, with whatever `site.json` says. */
@@ -632,5 +636,68 @@ describe('a site theme replaces the graph (TASK-81 AC #5)', () => {
     const nodes = graph(await body(cms, '/2026/09/hello/'));
 
     assert.deepEqual(nodes, [{ '@type': 'WebPage', name: 'A Site' }]);
+  });
+});
+
+describe('the code highlighter in the shell (TASK-86 AC #2)', () => {
+  /** Every `<script>` on a page, as `{ src, type }`. */
+  function scripts(html: string): { src: string; type: string }[] {
+    return [...html.matchAll(/<script\b([^>]*)>/g)].map((match) => {
+      const attributes = match[1] ?? '';
+      const value = (name: string): string =>
+        new RegExp(`${name}="([^"]*)"`).exec(attributes)?.[1] ?? '';
+      return { src: value('src'), type: value('type') };
+    });
+  }
+
+  it('loads the highlighter, deferred, on a page that has a code block', async () => {
+    const html = await body(await site(), '/code/');
+
+    assert.match(
+      html,
+      /<script src="\/theme\/highlight\.js" defer><\/script>/,
+      'the page with code on it loads no highlighter',
+    );
+    assert.match(html, /<pre tabindex="0"><code class="language-js">/, 'nothing to highlight');
+
+    // At the end of the body, after the content it is going to work on.
+    assert.ok(
+      html.indexOf('highlight.js') > html.indexOf('</main>'),
+      'the highlighter is not at the end of the body',
+    );
+  });
+
+  it('ships no JavaScript at all on a page without one', async () => {
+    const cms = await site();
+
+    for (const pathname of ['/', '/about/', '/2026/09/hello/', '/tag/notes/']) {
+      const other = scripts(await body(cms, pathname)).filter(
+        (script) => script.type !== 'application/ld+json',
+      );
+      assert.deepEqual(other, [], `${pathname} ships JavaScript and has no code on it`);
+    }
+  });
+
+  it('serves the bundle the script tag points at', async () => {
+    const cms = await site();
+    const response = await cms.app.request('/theme/highlight.js');
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /text\/javascript/);
+    assert.match(await response.text(), /hljs/);
+  });
+
+  it('lets a site theme drop it by overriding the scripts block', async () => {
+    const themesDir = await box.dir('geekity-shell-themes-');
+    await writeTree(path.join(themesDir, 'quiet'), {
+      'theme.json': JSON.stringify({ name: 'Quiet', kind: 'site' }),
+      'layouts/page.njk':
+        '{% extends "layouts/base.njk" %}\n' +
+        '{% block content %}{{ content | safe }}{% endblock %}\n' +
+        '{% block scripts %}{% endblock %}\n',
+    });
+
+    const cms = await site({ theme: 'quiet' }, { themesDir });
+    assert.doesNotMatch(await body(cms, '/code/'), /highlight\.js/);
   });
 });

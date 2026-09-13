@@ -6,6 +6,10 @@ data/
 *.tsbuildinfo
 *.tgz
 packages/cms/admin/static/editor.js
+# esbuild's other output, committed rather than gitignored so a site gets a
+# highlighter without a build step. Written by `pnpm --filter @geekity/cms
+# build:highlight`.
+packages/cms/themes/default/static/highlight.js
 
 # Written by tools, not by hand.
 pnpm-lock.yaml

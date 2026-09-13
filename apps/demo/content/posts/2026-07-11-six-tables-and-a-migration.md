@@ -44,6 +44,33 @@ create table if not exists migrations (
 );
 ```
 
+A migration is a version and the statements that take the schema to it, so the
+list in the code is the history:
+
+```typescript
+const MIGRATIONS: readonly Migration[] = [
+  { version: 1, sql: 'create table documents (...);' },
+  { version: 2, sql: 'create table document_categories (...);' },
+];
+```
+
+Nothing that has shipped is ever edited — a site that upgrades has to land on
+the same schema as a site that starts today — so a change is always an
+appended version:
+
+```diff
+ const MIGRATIONS: readonly Migration[] = [
+   { version: 1, sql: 'create table documents (...);' },
+   { version: 2, sql: 'create table document_categories (...);' },
+-];
++  { version: 3, sql: 'delete from documents;' },
++];
+```
+
+That last one empties the index rather than changing a column: the rendered
+HTML in it was made by an older renderer, and the files it came from have not
+changed, so the only way to get the new markup is to read them again.
+
 Delete `data/geekity.db` and the next boot rebuilds every row from the files.
 That is the test of whether the index is really derived, and it is worth
 running now and then.

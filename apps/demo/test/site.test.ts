@@ -204,6 +204,26 @@ describe('the demo with its theme unchosen', () => {
     assert.match(await bareText('/'), /<div class="global-wrapper" data-is-root-path="true">/);
     assert.match(await bareText('/colophon/'), /<a class="header-link-home" href="\/">/);
   });
+
+  it('loads the highlighter only on the post with code on it (TASK-86)', async () => {
+    const withCode = await bareText('/2026/07/six-tables-and-a-migration/');
+
+    assert.match(withCode, /<pre tabindex="0"><code class="language-sql">/);
+    assert.match(withCode, /<pre tabindex="0"><code class="language-typescript">/);
+    assert.match(withCode, /<pre tabindex="0"><code class="language-diff">/);
+    assert.match(withCode, /<script src="\/theme\/highlight\.js" defer><\/script>/);
+
+    const withoutCode = await bareText('/2026/08/one-url-many-representations/');
+    assert.doesNotMatch(withoutCode, /highlight\.js/, 'a post with no code ships JavaScript');
+    assert.doesNotMatch(withoutCode, /<script(?![^>]*application\/ld\+json)/, 'and any script');
+  });
+
+  it('serves the packaged token colours with the packaged stylesheet', async () => {
+    const css = await bareText('/theme/style.css');
+
+    assert.match(css, /--color-code-keyword:/, 'the stylesheet has no highlighting palette');
+    assert.match(css, /\.hljs-addition \{/, 'the stylesheet has no diff treatment');
+  });
 });
 
 describe('the demo content', () => {
@@ -346,5 +366,60 @@ describe('the demo contact page', () => {
     // the address is read when a submission arrives and reaches no template.
     assert.doesNotMatch(await text('/contact/'), new RegExp(contactEmail));
     assert.doesNotMatch(await text('/'), new RegExp(contactEmail));
+  });
+});
+
+/**
+ * Code highlighting (TASK-86), on the two sites this file boots.
+ *
+ * The packaged base layout loads `/theme/highlight.js` on a page whose rendered
+ * body holds a `language-` class and on no other page, so the demo is where
+ * that is worth proving end to end: one post has three fenced blocks on it and
+ * another has none, and both are served by the same layout.
+ */
+describe('the demo highlights code where there is code', () => {
+  /** The post with fenced SQL, TypeScript and a diff in it. */
+  const WITH_CODE = '/2026/07/six-tables-and-a-migration/';
+
+  /** A post of the same shape with nothing fenced in it. */
+  const WITHOUT_CODE = '/2026/08/one-url-many-representations/';
+
+  it('marks the fenced blocks up for the highlighter to find', async () => {
+    const body = await text(WITH_CODE);
+
+    for (const language of ['sql', 'typescript', 'diff']) {
+      assert.match(
+        body,
+        new RegExp(`<pre tabindex="0"><code class="language-${language}">`),
+        `the post has no ${language} block, or it lost its class`,
+      );
+    }
+  });
+
+  it('loads the highlighter there and nowhere else, on the theme the demo chose', async () => {
+    assert.match(await text(WITH_CODE), /<script src="\/theme\/highlight\.js" defer><\/script>/);
+    assert.doesNotMatch(await text(WITHOUT_CODE), /highlight\.js/);
+    assert.doesNotMatch(await text('/'), /highlight\.js/);
+  });
+
+  it('gives the demo stylesheet its own token colours for what the bundle marks up', async () => {
+    // A stylesheet is an all-or-nothing override, so the theme that ships one
+    // owns the highlighter's colours too. Without these the bundle would still
+    // run and every token would come out the colour of the code around it.
+    const css = await text('/theme/style.css');
+
+    assert.match(css, /--code-keyword:/, 'the demo stylesheet has no highlighting palette');
+    assert.match(css, /\.hljs-addition \{/, 'the demo stylesheet has no diff treatment');
+  });
+
+  it('serves the packaged bundle, because the demo theme has no static of its own', async () => {
+    const response = await get('/theme/highlight.js');
+    assert.equal(response.status, 200);
+
+    const packaged = await readFile(
+      path.join(PACKAGED_THEME_DIR, 'static', 'highlight.js'),
+      'utf8',
+    );
+    assert.equal(await response.text(), packaged);
   });
 });

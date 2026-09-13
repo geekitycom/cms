@@ -92,6 +92,45 @@ const PAIRS: readonly Pair[] = [
     background: 'color-code-background',
     minimum: 4.5,
   },
+  // The highlighter's token colours (TASK-86): Tomorrow on light paper and
+  // Tomorrow Night on dark, every one of them on the block background. A
+  // syntax theme is drawn for a reader looking at code for an hour, and some of
+  // its colours — the comment grey above all — are far too faint for that here;
+  // where a stock colour missed, it was darkened or lifted until it made 4.5:1,
+  // and this is where that is kept honest.
+  ...(
+    [
+      ['a comment', 'color-code-comment'],
+      ['a markup tag', 'color-code-tag'],
+      ['a variable or a list bullet', 'color-code-name'],
+      ['a number or a constant', 'color-code-literal'],
+      ['a class name', 'color-code-class'],
+      ['a string', 'color-code-string'],
+      ['a built-in or a regexp', 'color-code-support'],
+      ['a function name or a heading', 'color-code-function'],
+      ['a keyword', 'color-code-keyword'],
+      ['a preprocessor line', 'color-code-meta'],
+    ] as const
+  ).map(([what, foreground]) => ({
+    what: `${what} in a code block`,
+    foreground,
+    background: 'color-code-background',
+    minimum: 4.5 as const,
+  })),
+  // A diff's added and removed lines keep the block's own ink on a tinted
+  // line, the way prism-diff.css did, so the tint is the pair to check.
+  {
+    what: 'an added line in a diff',
+    foreground: 'color-code-text',
+    background: 'color-code-added-background',
+    minimum: 4.5,
+  },
+  {
+    what: 'a removed line in a diff',
+    foreground: 'color-code-text',
+    background: 'color-code-removed-background',
+    minimum: 4.5,
+  },
   { what: 'an error message', foreground: 'color-error', background: 'color-body', minimum: 4.5 },
   { what: 'a heading', foreground: 'color-text', background: 'color-body', minimum: 3 },
   { what: 'the primary rule', foreground: 'color-primary', background: 'color-body', minimum: 3 },

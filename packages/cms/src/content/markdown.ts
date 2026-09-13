@@ -7,15 +7,40 @@ import { slugify } from './slug.ts';
 /**
  * The renderer: markdown-it with Eleventy's default option (`html: true`),
  * plus footnotes and heading anchors. Code blocks get a language class and no
- * highlighting, so a theme can pick its own highlighter on the client.
+ * highlighting and a `tabindex` on the `<pre>`, so a theme can pick its own
+ * highlighter on the client and a wide block scrolls by keyboard.
  */
 const markdown: MarkdownItInstance = new MarkdownIt({ html: true })
   .use(footnote)
-  .use(headingAnchors);
+  .use(headingAnchors)
+  .use(focusableCodeBlocks);
 
 /** Render a Markdown body to the HTML the site and the feeds serve. */
 export function renderMarkdown(body: string): string {
   return markdown.render(body);
+}
+
+/**
+ * Put `tabindex="0"` on every `<pre>`, so a block of code wider than the
+ * measure can be scrolled from the keyboard.
+ *
+ * A `<pre>` scrolls sideways rather than wrapping, and a scroll container that
+ * nothing can focus is unreachable without a pointer — WCAG 2.2's keyboard
+ * criterion, and the reason the Eleventy site this design comes from passed
+ * `preAttributes: { tabindex: 0 }` to its highlighter. There is no highlighter
+ * here (a theme highlights on the client), so the renderer does it.
+ *
+ * Both block rules are wrapped: `fence` for a ``` block and `code_block` for an
+ * indented one.
+ */
+function focusableCodeBlocks(md: MarkdownItInstance): void {
+  for (const rule of ['fence', 'code_block'] as const) {
+    const original = md.renderer.rules[rule]?.bind(md.renderer.rules);
+    const render = original ?? md.renderer.renderToken.bind(md.renderer);
+
+    md.renderer.rules[rule] = (tokens, index, options, env, self) =>
+      render(tokens, index, options, env, self).replace('<pre>', '<pre tabindex="0">');
+  }
 }
 
 /**

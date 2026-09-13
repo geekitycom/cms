@@ -168,14 +168,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -204,7 +204,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3]);
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -212,6 +212,29 @@ describe('migrations', () => {
 
       upgraded.upsert(post({ path: 'posts/old.md', permalink: '/old/', slug: 'old' }));
       assert.deepEqual(upgraded.getByPath('posts/old.md')?.categories, ['general']);
+    } finally {
+      upgraded.close();
+    }
+  });
+
+  it('empties an index whose HTML predates the focusable code block (TASK-86)', async () => {
+    const dir = await dataDir();
+
+    // A version 2 database holding a row rendered before `<pre>` carried a
+    // tabindex. Its file hashes the same as it always did, so nothing but an
+    // empty index makes the next scan render it again.
+    const before = openContentStore({ dataDir: dir });
+    before.upsert(post({ html: '<pre><code class="language-js">const x = 1;\n</code></pre>\n' }));
+    before.close();
+
+    const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
+    legacy.exec('DELETE FROM migrations WHERE version = 3');
+    legacy.close();
+
+    const upgraded = openContentStore({ dataDir: dir });
+    try {
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3]);
+      assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
     } finally {
       upgraded.close();
     }

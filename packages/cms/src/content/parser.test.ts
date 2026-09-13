@@ -18,7 +18,7 @@ one Node process.</p>
 <li>Serves one URL as HTML, Markdown or ActivityStreams JSON.</li>
 <li>Writes files; the database is only an index.</li>
 </ul>
-<pre><code class="language-js">const cms = createCms({ baseUrl: 'https://example.com' });
+<pre tabindex="0"><code class="language-js">const cms = createCms({ baseUrl: 'https://example.com' });
 await cms.serve();
 </code></pre>
 <aside class="note">
