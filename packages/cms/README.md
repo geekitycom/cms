@@ -561,11 +561,38 @@ built from the posts the content index holds.
 
 `/.well-known/webfinger` is the CMS's own route rather than Fedify's, because
 Fedify computes its `self` link and its `aliases` from the dispatcher path and
-neither can be added to. It answers for four spellings of the same person — the
-`acct:{username}@{host}` handle, the bare `{username}@{host}`, the author URL
-and `/@{username}` — with the actor id as `self`, the archive as
-`profile-page`, and the archive and `/@{username}` as `aliases`. A username
-nobody has is a 404. `/@{username}` itself is a 301 to the archive.
+neither can be added to. It answers for every spelling of the same person — the
+`acct:{username}@{host}` handle, the bare `{username}@{host}`, the author URL,
+`/@{username}` and the stored actor id of somebody who has one — with the actor
+id as `self`, the archive as `profile-page`, and all of the person's URLs as
+`aliases`. A username nobody has is a 404. `/@{username}` itself is a 301 to
+the archive.
+
+### A user's stored actor id
+
+A user record in `data/users.json` may carry an `actorId`: the ActivityStreams
+id that person was published under somewhere else, such as the
+`https://example.com/?author=2` the WordPress ActivityPub plugin publishes.
+That is identity, not cache — a follower's server keys the account by the URL
+it first saw — so the CMS serves the person under it for the life of the
+account, the way a post keeps its `activitypub.id`:
+
+```json
+{ "id": 2, "username": "ada", "actorId": "https://example.com/?author=2" }
+```
+
+The actor document's `id` is then that URL and its keys hang off it
+(`…?author=2#main-key`), every activity the user sends names it as `actor` and
+is signed with a key id under it, and the URL itself — query string and all —
+answers with the `Person` for a peer and a 301 to the author archive for a
+browser. WebFinger publishes it as `self` and resolves a lookup by it, and the
+actor lists it in `alsoKnownAs` beside the archive and `/@{username}`. Nothing
+else moves: `url` is still the archive and the collections are still the
+archive's children, because a peer refetches those.
+
+The CMS never mints one and no screen writes one. It arrives with the WordPress
+import, or is typed into the file by hand; `/admin/users` shows it read-only
+beside the account, and a value that is not an absolute URL is ignored.
 
 ### The federation screen
 
@@ -1285,9 +1312,11 @@ A screen naming a section or a child the registry does not hold throws
 so the mistake is a failed test instead of a menu that quietly marks nothing.
 
 Who may sign in is `data/users.json`: one entry per user with an id, a
-username, an argon2 hash and a created time, written atomically with `0600`
-permissions and serialised against itself, so two admins adding the same name
-at once cannot both succeed. It is in `data/` rather than `content/` because
+username, an argon2 hash and a created time — and, for a user who has them, an
+email address, notification preferences, a public profile and the
+[stored actor id](#a-users-stored-actor-id) they were published under
+elsewhere. Written atomically with `0600` permissions and serialised against
+itself, so two admins adding the same name at once cannot both succeed. It is in `data/` rather than `content/` because
 `content/` is published with the site, and it is one of the two things under
 `dataDir` that must be backed up — the users' actor keys are the other.
 

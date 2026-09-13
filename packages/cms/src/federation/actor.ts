@@ -11,11 +11,12 @@ import { handleHref } from './paths.ts';
 /**
  * A user as the fediverse sees them (decision-14).
  *
- * Everything a peer reads about a person is built here, off one rule: the
- * actor's id is the author URL, and every other id — the key, the multikey,
- * the aliases — hangs off that same value rather than being spelled again.
- * {@link actorId} is where that value is decided, and it is the only thing
- * TASK-69 has to change to serve a user under the id they had elsewhere.
+ * Everything a peer reads about a person is built here, off one rule: an
+ * actor's id is decided once, in {@link actorId}, and every other id — the
+ * key, the multikey, the aliases, the `actor` of every activity — hangs off
+ * that same value rather than being spelled again. That is what lets a user
+ * published elsewhere be served under the id their followers already hold
+ * (decision-14) without a second spelling of anything.
  */
 
 /**
@@ -55,16 +56,31 @@ export function avatarUrl(avatar: string, baseUrl: string): string | undefined {
 /**
  * One user's ActivityStreams id.
  *
- * The author URL, which is what Fedify derives from the dispatcher path, so
- * today this is `ctx.getActorUri(user.username)` and nothing else. It is a
- * function of its own because decision-14 says a user record may carry the
- * actor id they had elsewhere, and that id is identity rather than cache: when
- * TASK-69 lands, this answers the stored id where there is one and the derived
- * one where there is not, and every id built from it — the key id, the
- * multikey, the `actor` of every activity, the sender key pairs — follows
- * without another line changing (doc-8).
+ * The author URL, which is what Fedify derives from the dispatcher path —
+ * unless the user's record carries the id they were published under somewhere
+ * else, in which case that is who they are (decision-14). A stored id is
+ * identity rather than cache: a follower's server keys the account by it, and
+ * answering under a different one would read as a different person rather than
+ * as the same person moved.
+ *
+ * This is the only place that choice is made, and every id built from it — the
+ * key id, the multikeys, the `actor` of every activity, the sender key pairs,
+ * the WebFinger `self` — follows from here without spelling the rule again
+ * (doc-8). What does *not* follow is `url`: the archive is still where a
+ * person is sent, and the actor's collections are still its dispatcher path's
+ * children, because those are cache and a peer refetches them.
  */
 export function actorId(context: Context<unknown>, user: User): URL {
+  const stored = user.actorId;
+  if (stored !== undefined) {
+    try {
+      return new URL(stored);
+    } catch {
+      // Unreachable through the users file, which drops an id that is not a
+      // URL on the way in; a caller that built a `User` by hand falls back to
+      // the derived id rather than taking the actor down.
+    }
+  }
   return context.getActorUri(user.username);
 }
 

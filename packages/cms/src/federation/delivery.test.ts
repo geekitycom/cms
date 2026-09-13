@@ -10,6 +10,7 @@ import { CryptographicKey, Endpoints, Image, Person } from '@fedify/vocab';
 import { csrfField, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
+import { listUsers } from '../admin/accounts.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
@@ -47,6 +48,11 @@ interface Delivery {
   url: string;
   /** Its body, as the JSON-LD the peer would read. */
   body: Record<string, unknown>;
+  /**
+   * What it was signed with: the `Signature-Input` header RFC 9421 asks for,
+   * which names the key id a receiving server has to dereference.
+   */
+  signature: string;
 }
 
 const started: Cms[] = [];
@@ -115,6 +121,7 @@ function routeRemoteHost(): () => void {
     if (request.method === 'POST') {
       deliveries.push({
         url: request.url,
+        signature: request.headers.get('signature-input') ?? request.headers.get('signature') ?? '',
         body: (await request.json()) as Record<string, unknown>,
       });
       return new Response('', { status: 202 });
@@ -170,6 +177,12 @@ async function site(
      * no accounts and it creates this same name.
      */
     account?: boolean;
+    /**
+     * The id the account was published under somewhere else (TASK-69), which
+     * is then what every activity it sends names as its actor. Implies
+     * `account`, because a stored id is a field of a user record.
+     */
+    actorId?: string;
   } = {},
 ): Promise<Site> {
   const dataDir = await temporaryDir('geekity-delivery-data-');
@@ -192,7 +205,11 @@ async function site(
     },
   });
 
-  if (options.account === true) writeUsers(dataDir, [{ username: ADA }]);
+  if (options.account === true || options.actorId !== undefined) {
+    writeUsers(dataDir, [
+      { username: ADA, ...(options.actorId === undefined ? {} : { actorId: options.actorId }) },
+    ]);
+  }
 
   deliveries.length = 0;
   const cms = createCms({
@@ -337,6 +354,26 @@ draft: true
 ---
 
 Still thinking about it.
+`;
+}
+
+/**
+ * The same post after somebody took it back to a draft, still carrying the
+ * stamp that says the followers were once told about it — which is what makes
+ * a resend a `Delete` rather than nothing at all.
+ */
+function draftedPost(): string {
+  return `---
+title: On watching files
+date: 2026-03-04T10:00:00.000Z
+permalink: /2026/03/watched/
+author: ${ADA}
+draft: true
+activitypub:
+  published: '2026-03-04T10:00:00Z'
+---
+
+Back to the drawing board.
 `;
 }
 
@@ -679,6 +716,83 @@ describe('the delivery log', () => {
       .listDeliveries(activity.activityId)
       .find((delivery) => delivery.actorId === REMOTE_ACTOR);
     assert.equal(reached?.status, 'sent', 'one bad inbox does not stop the others');
+  });
+});
+
+describe('a user whose record carries a stored actor id', () => {
+  /** What the WordPress ActivityPub plugin published this person as. */
+  const STORED = `${BASE_URL}/?author=2`;
+  const POST_FILE = 'posts/2026-03-04-watched.md';
+  const WATCHED_OBJECT = `${BASE_URL}/2026/03/watched/`;
+
+  /** A site whose one account was published under {@link STORED} elsewhere. */
+  async function migrated(): Promise<Site> {
+    return await site({ actorId: STORED, files: { [POST_FILE]: publishedPost('A first post.') } });
+  }
+
+  it('names the stored id as the actor of a Create, and signs with its key (AC #3)', async () => {
+    const { cms } = await migrated();
+
+    const report = await cms.delivery.resend('watched');
+    await cms.delivery.settled();
+
+    assert.equal(report?.activityType, 'Create');
+    const create = delivered('Create')[0] as Delivery;
+    assert.equal(create.body['actor'], STORED);
+    assert.match(
+      create.signature,
+      new RegExp(`keyid="${STORED.replaceAll('?', '\\?')}#main-key"`),
+      `the signature names a key the actor publishes: ${create.signature}`,
+    );
+    // FEP-8b32, the proof a peer verifies when it does not use the HTTP
+    // signature. Fedify numbers the Ed25519 multikey 1 (doc-8).
+    const proof = create.body['proof'] as { verificationMethod?: string } | undefined;
+    assert.equal(proof?.verificationMethod, `${STORED}#multikey-1`);
+  });
+
+  it('names it on an Update and on a Delete as well (AC #3)', async () => {
+    const { cms, contentDir } = await migrated();
+    await cms.delivery.resend('watched');
+    await cms.delivery.settled();
+    // The Create stamped the announcement into the file; the index re-reads it,
+    // so the next resend knows the followers already hold this post.
+    await cms.sync();
+    deliveries.length = 0;
+
+    // A post the followers already hold goes out again as an Update.
+    await cms.delivery.resend('watched');
+    await cms.delivery.settled();
+    assert.equal((delivered('Update')[0] as Delivery).body['actor'], STORED);
+
+    // And one that has become a draft is withdrawn with a Delete.
+    deliveries.length = 0;
+    await writeDocument(contentDir, POST_FILE, draftedPost());
+    await cms.sync();
+    await cms.delivery.resend('watched');
+    await cms.delivery.settled();
+
+    const withdrawal = delivered('Delete')[0] as Delivery;
+    assert.equal(withdrawal.body['actor'], STORED);
+    assert.equal((withdrawal.body['object'] as Record<string, unknown>)['id'], WATCHED_OBJECT);
+  });
+
+  it('sends an Update of the actor under the stored id itself (AC #3)', async () => {
+    const { cms, dataDir } = await migrated();
+    const user = listUsers(dataDir)[0];
+    assert.ok(user !== undefined);
+
+    await cms.delivery.updateActor(user);
+    await cms.delivery.settled();
+
+    const update = delivered('Update')[0] as Delivery;
+    assert.equal(update.body['actor'], STORED);
+    const object = update.body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], STORED, 'the object is the actor, under the id followers hold');
+    assert.equal(
+      (object['publicKey'] as { id?: string } | undefined)?.id,
+      `${STORED}#main-key`,
+      'and the key a peer verifies the signature with hangs off it',
+    );
   });
 });
 

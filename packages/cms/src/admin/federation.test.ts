@@ -3,7 +3,8 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
+import { writeUsers } from './__testing__/users.ts';
+import { csrfField, FIRST_ADMIN, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 
@@ -226,6 +227,33 @@ describe('the actor panels', () => {
       await federationScreen(agent),
       new RegExp(`<img class="admin-avatar[^"]*" src="${BASE_URL}/uploads/2026/09/me\\.png"`),
       'and the avatar itself once there is one',
+    );
+  });
+
+  it('shows a stored actor id as the id, because that is what a peer gets', async () => {
+    const stored = `${BASE_URL}/?author=2`;
+    const dataDir = await box.dir('geekity-fed-admin-data-');
+    writeUsers(dataDir, [{ username: ADA, password: FIRST_ADMIN.password, actorId: stored }]);
+    deliveries.length = 0;
+    const cms = await box.open({
+      contentDir: await box.dir('geekity-fed-admin-content-'),
+      dataDir,
+      baseUrl: BASE_URL,
+      federation: { queue: null, allowPrivateAddress: true },
+    });
+    const agent = await signIn(cms);
+
+    const html = await federationScreen(agent);
+
+    assert.match(
+      html,
+      /<dt>Actor<\/dt>[\s\S]{0,120}https:\/\/blog\.example\/\?author=2/,
+      'the Actor row is the id a follower holds, not the dispatcher path',
+    );
+    assert.match(
+      html,
+      new RegExp(`<dt>Profile</dt>[\\s\\S]{0,120}${ACTOR_URL.replaceAll('/', '\\/')}`),
+      'and the archive is still where a person is sent',
     );
   });
 

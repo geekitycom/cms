@@ -285,6 +285,60 @@ describe('a user with a profile (TASK-67 AC #1)', () => {
   });
 });
 
+describe('a user with a stored actor id (TASK-69)', () => {
+  /** One hand-written users file, written straight rather than through a form. */
+  async function fileWith(actorId: unknown): Promise<string> {
+    const dataDir = await temporaryDir();
+    await writeFile(
+      usersFile(dataDir),
+      JSON.stringify({
+        nextId: 2,
+        users: [
+          {
+            id: 1,
+            username: 'ada',
+            actorId,
+            passwordHash: hashPassword('correct horse'),
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+      'utf8',
+    );
+    return dataDir;
+  }
+
+  it('is read back whole, query string and all', async () => {
+    const dataDir = await fileWith('https://andrewshell.org/?author=2');
+
+    assert.equal(findUserById(dataDir, 1)?.actorId, 'https://andrewshell.org/?author=2');
+    assert.equal(listUsers(dataDir)[0]?.actorId, 'https://andrewshell.org/?author=2');
+  });
+
+  it('is dropped rather than refused when it is not a URL a peer could fetch', async () => {
+    // Each of these would be an id nothing could ever dereference, so the user
+    // is served under their author URL instead of the admin refusing to load.
+    for (const bad of ['not a url', '/author/ada/', 'mailto:ada@example.com', '   ', 42, null]) {
+      const dataDir = await fileWith(bad);
+      assert.equal(findUserById(dataDir, 1)?.actorId, undefined, `${JSON.stringify(bad)} is no id`);
+      assert.equal(findUserById(dataDir, 1)?.username, 'ada', 'and the user still loads');
+    }
+  });
+
+  it('survives a save of something else on the same user', async () => {
+    const dataDir = await fileWith('https://andrewshell.org/?author=2');
+    const ada = findUserById(dataDir, 1);
+    assert.ok(ada !== undefined);
+
+    await setUserProfile({ dataDir, userId: ada.id, profile: { displayName: 'Ada Lovelace' } });
+    await setUserEmail({ dataDir, userId: ada.id, email: 'ada@example.com' });
+
+    // Nothing writes a stored id and nothing may quietly drop one: it is the
+    // name every follower this person has holds them under.
+    assert.equal(findUserById(dataDir, 1)?.actorId, 'https://andrewshell.org/?author=2');
+  });
+});
+
 describe('verifying a password (AC #2)', () => {
   it('accepts the password against the hash in the file and refuses everything else', async () => {
     const dataDir = await temporaryDir();

@@ -384,7 +384,10 @@ export interface ActorSummary {
  * endpoints are served: a site under `/blog` still answers `@ada@example.com`.
  * The id is built from {@link ACTOR_PATH} rather than from `authorHref` for
  * the same reason — it is the path Fedify dispatches the actor at, and the
- * screen should say what a peer would get.
+ * screen should say what a peer would get. Which is also why a user with a
+ * stored actor id (TASK-69) is shown under that: it is the id their followers
+ * hold, and a screen naming the other one would be describing a document
+ * nobody fetches.
  */
 export function actorSummary(
   user: User,
@@ -405,10 +408,12 @@ export function actorSummary(
     avatarUrl: profile.avatar === undefined ? null : (avatarUrl(profile.avatar, baseUrl) ?? null),
     name: profile.name,
     summary: profile.bio ?? '',
-    actorId: new URL(
-      ACTOR_PATH.replace('{identifier}', encodeURIComponent(user.username)),
-      origin.webOrigin,
-    ).href,
+    actorId:
+      user.actorId ??
+      new URL(
+        ACTOR_PATH.replace('{identifier}', encodeURIComponent(user.username)),
+        origin.webOrigin,
+      ).href,
     url: absoluteUrl(authorHref(user.username), baseUrl),
     followerCount: context.followerCount,
     followers: context.followers,

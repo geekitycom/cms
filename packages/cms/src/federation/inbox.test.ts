@@ -145,7 +145,10 @@ async function temporaryDir(prefix: string): Promise<string> {
  * delivered before the inbox request is answered, and with the private-address
  * guard off, because neither host in this file resolves.
  */
-async function site(): Promise<Cms> {
+async function site(
+  /** The id the account was published under elsewhere, when it has one. */
+  storedActorId?: string,
+): Promise<Cms> {
   const dataDir = await temporaryDir('geekity-inbox-data-');
   const contentDir = await temporaryDir('geekity-inbox-content-');
 
@@ -161,7 +164,13 @@ async function site(): Promise<Cms> {
       author: LOCAL_USER,
     },
   });
-  writeUsers(dataDir, [{ username: LOCAL_USER, profile: { displayName: 'Geekity' } }]);
+  writeUsers(dataDir, [
+    {
+      username: LOCAL_USER,
+      profile: { displayName: 'Geekity' },
+      ...(storedActorId === undefined ? {} : { actorId: storedActorId }),
+    },
+  ]);
 
   deliveries.length = 0;
   const instance = createCms({
@@ -257,6 +266,44 @@ describe('a Follow', () => {
     const accepted = accept.body['object'] as Record<string, unknown> | string;
     const acceptedId = typeof accepted === 'string' ? accepted : accepted['id'];
     assert.equal(acceptedId, `${REMOTE_ORIGIN}/follows/1`);
+  });
+
+  it('answers from the stored actor id when the user has one (AC #3)', async () => {
+    const stored = `${BASE_URL}/?author=2`;
+    const instance = await site(stored);
+
+    await deliver(instance, follow());
+
+    const accept = deliveries.find((delivery) => delivery.url === REMOTE_INBOX);
+    assert.ok(accept !== undefined, `nothing was delivered to ${REMOTE_INBOX}`);
+    assert.equal(accept.body['type'], 'Accept');
+    assert.equal(accept.body['actor'], stored, 'the Accept comes from the id the peer followed');
+    assert.match(
+      String(accept.body['id']),
+      /^https:\/\/blog\.example\/\?author=2#accept\//,
+      'and its own id hangs off that actor',
+    );
+  });
+
+  it('accepts a Follow addressed to the stored actor id itself', async () => {
+    const stored = `${BASE_URL}/?author=2`;
+    const instance = await site(stored);
+
+    // What a peer that read the actor document actually sends: the `id` it
+    // found there, which under a stored id is not the dispatcher path.
+    const response = await deliver(
+      instance,
+      new Follow({
+        id: new URL(`${REMOTE_ORIGIN}/follows/1`),
+        actor: new URL(REMOTE_ACTOR),
+        object: new URL(stored),
+      }),
+    );
+
+    assert.equal(response.status, 202, await response.text());
+    assert.equal(instance.admin.getFollower(LOCAL_USER, REMOTE_ACTOR)?.inboxId, REMOTE_INBOX);
+    const accept = deliveries.find((delivery) => delivery.url === REMOTE_INBOX);
+    assert.equal(accept?.body['actor'], stored);
   });
 
   it('ignores a Follow of something that is not the site actor', async () => {

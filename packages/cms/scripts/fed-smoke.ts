@@ -21,6 +21,10 @@
  *      `Accept`, and store the follower.
  *   5. A new post file is copied into the watched content directory, and the
  *      `Create(Article)` that follows has to reach both inboxes.
+ *   6. A second account carries the actor id it was published under elsewhere
+ *      (decision-14). That URL has to serve the actor, redirect a browser,
+ *      answer WebFinger, and — the part only a socket can prove — sign an
+ *      activity the peer verifies by dereferencing the key id it names.
  *
  * It is `pnpm fed:smoke` from the workspace root and the `fed-smoke` job in
  * CI. Nothing here writes inside the repository: the fixture is copied into a
@@ -75,6 +79,7 @@ import {
 } from '@fedify/vocab';
 
 import { writeUsers } from '../src/admin/__testing__/users.ts';
+import { listUsers } from '../src/admin/accounts.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../src/admin/settings.ts';
 import { addFollower, readFollowers, readInboxLog } from '../src/federation/records.ts';
 import { createCms } from '../src/index.ts';
@@ -92,6 +97,13 @@ const PENDING_POST = '2026-03-05-hot-off-the-press.md';
  * their author URL, so this is the handle, the identifier and the path.
  */
 const USERNAME = 'andrew';
+
+/**
+ * A second account, standing in for one that arrived from somewhere else: its
+ * record carries the actor id it was published under before (TASK-69), so
+ * every id it answers by is that URL rather than its author URL.
+ */
+const MIGRATED_USERNAME = 'oldblog';
 
 /** How long any one wait may take before the run is called a failure. */
 const STEP_TIMEOUT_MS = 30_000;
@@ -149,8 +161,19 @@ async function main(): Promise<void> {
       },
     });
 
-    // The actor is a user, so the account exists before the site boots.
-    writeUsers(dataDir, [{ username: USERNAME, profile: { displayName: 'Andrew Shell' } }]);
+    // The actor is a user, so the accounts exist before the site boots. The
+    // second one is the WordPress case decision-14 is built around: a person
+    // whose followers know them as `?author=2` and must go on doing so.
+    const storedActorId = `${baseUrl}/?author=2`;
+    writeUsers(dataDir, [
+      { username: USERNAME, profile: { displayName: 'Andrew Shell' } },
+      {
+        username: MIGRATED_USERNAME,
+        id: 2,
+        profile: { displayName: 'The Old Blog' },
+        actorId: storedActorId,
+      },
+    ]);
 
     log(`booting the site on ${baseUrl}`);
     const cms: Cms = createCms({
@@ -415,6 +438,81 @@ async function main(): Promise<void> {
     const afterResend = cms.admin.lastDeliveryToObject(publishedObject);
     assert.equal(afterResend?.activityType, 'Update', 'and the outcome cache says so');
     assert.equal(afterResend?.slug, 'hot-off-the-press', 'against the post it was about');
+
+    // ------------------------------------------------------ a stored actor id
+    // decision-14: a user published elsewhere keeps the id their followers
+    // hold. Everything below is that URL doing the work the author URL does
+    // for everybody else — served, redirected from, discoverable, and signed
+    // with.
+    const migratedArchive = `${baseUrl}/author/${MIGRATED_USERNAME}/`;
+    log(`fedify lookup ${storedActorId}`);
+    const migrated = await lookup(storedActorId);
+    assert.equal(migrated['id'], storedActorId, 'the stored id is the actor’s own id');
+    assert.equal(migrated['type'], 'Person');
+    assert.equal(migrated['url'], migratedArchive, 'and the archive is still where a person goes');
+    assert.equal(
+      (migrated['publicKey'] as { id?: string } | undefined)?.id,
+      `${storedActorId}#main-key`,
+      'the key id hangs off the stored id, or no peer could dereference it',
+    );
+    ok(`the actor at ${storedActorId} is a Person with its key`);
+
+    const redirected = await fetch(storedActorId, {
+      headers: { accept: 'text/html' },
+      redirect: 'manual',
+    });
+    assert.equal(redirected.status, 301, 'a browser at the stored id is redirected');
+    assert.equal(redirected.headers.get('location'), `/author/${MIGRATED_USERNAME}/`);
+    ok(`a browser at ${storedActorId} is sent to the archive`);
+
+    const migratedJrd = (await (
+      await fetch(`${baseUrl}/.well-known/webfinger?resource=${encodeURIComponent(storedActorId)}`)
+    ).json()) as { subject: string; aliases: string[]; links: { rel: string; href?: string }[] };
+    assert.equal(migratedJrd.subject, `acct:${MIGRATED_USERNAME}@localhost:${String(port)}`);
+    assert.equal(
+      migratedJrd.links.find((link) => link.rel === 'self')?.href,
+      storedActorId,
+      'WebFinger points a peer at the stored id',
+    );
+    assert.ok(migratedJrd.aliases.includes(migratedArchive), 'and lists the archive beside it');
+    ok(`WebFinger resolves ${storedActorId}`);
+
+    // The proof that matters: an activity signed under the stored key id has
+    // to verify at a peer that has never heard of this site. The peer
+    // dereferences the key id in the signature, which is the stored URL, and
+    // refuses the delivery with a 401 if what it finds does not own the key.
+    await addFollower({ admin: cms.admin, contentDir }, MIGRATED_USERNAME, {
+      actorId: peer.actorId,
+      inboxId: peer.inboxId,
+      sharedInboxId: peer.sharedInboxId,
+      handle: null,
+      name: 'Smoke Test Peer',
+      iconUrl: null,
+      url: null,
+    });
+    const migratedUser = listUsers(dataDir).find((user) => user.username === MIGRATED_USERNAME);
+    assert.ok(migratedUser !== undefined, 'the migrated account is in the users file');
+
+    log(`sending an Update of ${storedActorId} to the peer`);
+    const actorUpdate = await cms.delivery.updateActor(migratedUser);
+    assert.ok(actorUpdate !== undefined, 'the actor update was built');
+    await cms.delivery.settled();
+
+    const toPeerFromMigrated = cms.admin
+      .listDeliveries(actorUpdate.activityId)
+      .find((delivery) => delivery.actorId === peer.actorId);
+    assert.equal(
+      toPeerFromMigrated?.status,
+      'sent',
+      `the peer accepted the Update${toPeerFromMigrated?.error === null ? '' : `: ${String(toPeerFromMigrated?.error)}`}`,
+    );
+    const actorUpdateAtPeer = await waitFor({
+      what: 'the peer to receive the Update of the migrated actor',
+      poll: () => peer.received().find((entry) => entry.objectId === storedActorId),
+      timeoutMs: 5000,
+    });
+    assert.equal(actorUpdateAtPeer.type, 'Update');
+    ok(`the peer verified a signature made under ${storedActorId}#main-key`);
 
     log('federation smoke passed');
   } finally {

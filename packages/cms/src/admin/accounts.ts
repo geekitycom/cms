@@ -100,6 +100,23 @@ export interface User {
    * user with no profile still has an archive under their username.
    */
   readonly profile?: UserProfile | undefined;
+  /**
+   * The ActivityStreams id this person was published under somewhere else,
+   * when they were (TASK-69).
+   *
+   * decision-14 calls this identity rather than cache: a follower's server
+   * keys the account by it for as long as the follow lasts, and a document
+   * served under it with a different `id` reads as a different person, not as
+   * a moved one. So a site arriving from the WordPress ActivityPub plugin
+   * keeps the `https://example.com/?author=2` its followers already hold, for
+   * the life of the user.
+   *
+   * The CMS never mints one — a user born here is an actor at their author URL
+   * and has no second name to keep — and no screen writes one: it arrives with
+   * the import (TASK-71) or is typed into the file by hand. The whole URL is
+   * stored, query string and all, because that is what has to be matched.
+   */
+  readonly actorId?: string | undefined;
   /** When the user was created, as an ISO 8601 instant. */
   readonly createdAt: string;
 }
@@ -575,6 +592,7 @@ function withoutHash(user: StoredUser): User {
     ...(user.notifications === undefined ? {} : { notifications: user.notifications }),
     ...(user.notificationModes === undefined ? {} : { notificationModes: user.notificationModes }),
     ...(user.profile === undefined ? {} : { profile: user.profile }),
+    ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
     createdAt: user.createdAt,
   };
 }
@@ -670,6 +688,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const preferences = notificationsFrom(record['notifications']);
   const modes = notificationModesFrom(record['notificationModes']);
   const profile = profileFrom(record['profile']);
+  const actorId = storedActorIdFrom(record['actorId']);
   const passwordHash = record['passwordHash'];
   const createdAt = record['createdAt'];
 
@@ -706,6 +725,10 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
     // a bio that is a number is not a bio, and refusing to load the users file
     // over one would take the whole admin down.
     ...(profile === undefined ? {} : { profile }),
+    // Dropped rather than refused on the same rule again, and one more of its
+    // own: an id that is not a URL could never be requested, so keeping it
+    // would change nothing except to make a person's actor unreadable.
+    ...(actorId === undefined ? {} : { actorId }),
     passwordHash,
     createdAt: typeof createdAt === 'string' ? createdAt : '',
   };
@@ -730,6 +753,29 @@ function profileFrom(value: unknown): UserProfile | undefined {
     ...optionalText('avatar', record['avatar']),
     links: linksFrom(record['links']),
   });
+}
+
+/**
+ * A stored actor id as this version reads it, or `undefined` when the file
+ * says nothing usable.
+ *
+ * It has to be an absolute `http`/`https` URL, because that is the only kind
+ * of thing a peer can dereference and the only kind the request middleware
+ * could ever match: a relative path or a bare word is not an id anybody holds.
+ * Anything else is dropped rather than refused, so a mistyped line leaves one
+ * person served under their author URL instead of taking the whole admin down.
+ */
+function storedActorIdFrom(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const wanted = value.trim();
+  if (wanted === '') return undefined;
+
+  try {
+    const url = new URL(wanted);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? wanted : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** `{ [key]: value }` when the value is a string, and nothing when it is not. */

@@ -29,6 +29,12 @@
           <td>
             {{ entry.username }}{% if entry.you %} <span class="admin-status">(you)</span>{% endif %}
             <br /><a href="{{ entry.archiveUrl }}">{{ entry.archiveUrl }}</a>
+            {# The id they were published under somewhere else (TASK-69).
+               Read-only on purpose: it is what the fediverse already holds,
+               and changing it would orphan every follow. #}
+            {% if entry.storedActorId %}
+              <br /><span class="admin-status">Also <code>{{ entry.storedActorId }}</code> — what the fediverse knows this user by. Set by the import or by hand in <code>data/users.json</code>, never here.</span>
+            {% endif %}
           </td>
           <td>
             {# The public face of this person (TASK-67). Any row, not only your

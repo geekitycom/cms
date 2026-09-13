@@ -651,6 +651,13 @@ function row(
       links: formatProfileLinks(user.profile?.links),
     },
     archiveUrl: authorHref(user.username),
+    // The id this person was published under before they were here (TASK-69).
+    // Shown rather than edited: it is identity, not a preference — the import
+    // writes it, or somebody editing `data/users.json` does — and a box that
+    // let it be changed would be a box that could break every follow this
+    // person has. Empty for almost everybody, and then the screen says nothing
+    // about it at all.
+    storedActorId: user.actorId ?? '',
     // One switch per registered event, so the template loops rather than
     // naming the notices it happens to know about (TASK-55).
     notifications: notificationSwitches(user),

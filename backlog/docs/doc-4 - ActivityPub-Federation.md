@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 04:51'
+updated_date: '2026-09-13 05:12'
 ---
 # ActivityPub Federation
 
@@ -15,18 +15,30 @@ Federation is implemented with Fedify (`@fedify/fedify` 2.x) mounted into Hono t
 - Handle: `@{username}@{host}`. There is no handle setting: a login is unique, and an id a settings field could move would be a different account to every follower holding it.
 - Type: `Person`, always. A user is a person, and there is nothing left for the old `actorType` setting to choose between.
 - Profile fields come from the user's profile in `data/users.json`: `name` is the display name (their username when they have written none), `summary` the bio, `icon` the avatar, `attachment` the links as `PropertyValue`s. `preferredUsername` is the username, `url` the archive, `manuallyApprovesFollowers` false, `discoverable` and `indexable` true.
-- `alsoKnownAs` lists every URL the person answers to: the actor id, the archive and `/@{username}`.
+- `alsoKnownAs` lists every URL the person answers to: the actor id, the archive and `/@{username}` — three URLs when the id is a stored one, two when the id is the archive.
 - Collections are the archive's children: `/author/{username}/inbox/`, `/outbox/`, `/followers/` and `/following/`, with the author feeds at `/author/{username}/feed/` as WordPress serves them. The shared inbox is `/inbox/`. `author` and `inbox` are reserved top-level paths.
 - `/@{username}` is a 301 to the archive.
 - Key pairs (RSA-PKCS#1-v1.5 and Ed25519) are generated on first need and stored as JWK files under `data/keys/`, one per algorithm per user, named after the username (`ada.rsassa-pkcs1-v1_5.jwk`, `ada.ed25519.jwk`) and written `0600` in a `0700` directory. Each file holds the private key alone; the public half is derived from it. Fedify's `setKeyPairsDispatcher` reads them, and every user's files are checked at boot: one that is there and will not import stops the boot rather than being replaced, because regenerating would change that person's identity and every follower's cached public key would stop verifying, and Fedify answers a throwing key pairs dispatcher with an actor document that has no `publicKey` at all, which peers would cache.
 - The actor publishes the RSA key as `publicKey` with id `{actor}#main-key`, and both pairs as `assertionMethod` multikeys at `{actor}#multikey-0` and `#multikey-1`. The key objects are built by hand from the actor's id rather than taken from `getActorKeyPairs`, whose ids Fedify derives from the dispatcher path (doc-8); every outgoing activity is signed with an explicit `SenderKeyPair[]` built from the same id, so what a signature names is always what the document publishes.
-- `src/federation/actor.ts`'s `actorId(context, user)` is the single place an actor's id is decided. TASK-69 makes it answer a stored id where a user record carries one; everything built from it follows without another line changing.
+- `src/federation/actor.ts`'s `actorId(context, user)` is the single place an actor's id is decided: the stored id where the user record carries one, the author URL otherwise. Everything built from it — the key ids, the multikeys, `alsoKnownAs`, the `actor` of every activity, the sender key pairs, WebFinger's `self` — follows from that one function.
+
+### A stored actor id
+
+A user record may carry an `actorId`: the ActivityStreams id that person was published under somewhere else, such as the `https://example.com/?author=2` the WordPress ActivityPub plugin publishes. It is identity rather than cache (decision-14) — a follower's server keys the account by it, and a document served under it with a different `id` reads as a different person rather than as the same one moved — so the CMS keeps it for the life of the user. This is the rule a post's `activitypub.id` follows, done for people.
+
+- The CMS never mints one, and no screen writes one: it arrives with `geekity import wordpress-actor` or is typed into `data/users.json` by hand. A value that is not an absolute `http`/`https` URL is dropped on the way in rather than refused, and that user is served under their author URL as before.
+- The actor document's `id` is the stored id, its `publicKey` is `{storedId}#main-key` and its multikeys `{storedId}#multikey-0` and `#multikey-1`. `url` is still the archive, and the collections are still the archive's children: those are cache, and a peer refetches them.
+- That exact URL — path **and** query string, matched against `baseUrl` — answers with the `Person` on an ActivityStreams request and with a 301 to the author archive on any other. It is served by CMS middleware ahead of the public site, not by Fedify, whose router cannot match a query string (doc-8), and by the same middleware that serves a post's stored `activitypub.id`. Every other request for that path is untouched: `/` is still the home page, and so is `/?author=9`.
+- WebFinger lists it first among the `aliases`, publishes it as the `self` link, and resolves a lookup by it; the actor document carries the same three URLs as `alsoKnownAs`.
+- Every activity the user sends names it as `actor` and is signed with a key id under it, so a peer that dereferences the key id finds the document that owns it. A `Follow` addressed to the stored id is accepted as a follow of that user, and the `Accept` comes from the stored id too.
+- The users screen shows a stored id read-only beside the account, and the federation screen shows it as the actor's id, because it is what a peer gets.
+- Retiring one is a later, optional step by the Move protocol, and is not part of a cutover.
 
 The site actor and `/ap/` are gone. A site that federated as the site actor starts again as its users: its `actor.*.jwk` key files are left on disk, unread, and the old `content/_data/federation/followers.json` is left where it is. Neither is migrated, because a follow is an agreement with somebody and there is no honest answer to which user inherits an account that no longer exists.
 
 ## WebFinger
 
-`/.well-known/webfinger` is the CMS's own Hono route, registered before the Fedify middleware. Fedify's own hard-codes the `self` link to the dispatcher path and computes `aliases` from the resource, and neither can be added to (doc-8), so the CMS owns the document: `subject` is `acct:{username}@{host}`, `aliases` are the archive and `/@{username}`, `links` are `self` (the actor id, `application/activity+json`) and `profile-page` (the archive, `text/html`). It answers for the `acct:` handle, the bare `{username}@{host}`, the author URL and `/@{username}`; anything else is a 404. `application/jrd+json`, with `access-control-allow-origin: *`.
+`/.well-known/webfinger` is the CMS's own Hono route, registered before the Fedify middleware. Fedify's own hard-codes the `self` link to the dispatcher path and computes `aliases` from the resource, and neither can be added to (doc-8), so the CMS owns the document: `subject` is `acct:{username}@{host}`, `aliases` are the actor id, the archive and `/@{username}`, `links` are `self` (the actor id, `application/activity+json`) and `profile-page` (the archive, `text/html`). It answers for the `acct:` handle, the bare `{username}@{host}`, the author URL, `/@{username}` and the user's stored actor id when they have one; anything else is a 404. `application/jrd+json`, with `access-control-allow-origin: *`.
 
 ## Objects
 
@@ -46,7 +58,7 @@ Which user that is follows TASK-67's one rule: a username exactly, else a displa
 
 Pages are not federated.
 
-A post whose front matter already names an `activitypub.id` keeps it as its object id for the life of the post, and the CMS never mints one. That is what lets a post migrated from WordPress keep the `https://example.com/?p=813` its followers, its replies and its RSS subscribers already hold (decision-14): the CMS serves the `Article` at that URL on an ActivityStreams request, redirects a browser from it to the permalink, and names it in every `Update` and `Delete`. The match is on the whole URL, so a stored id with a query string works exactly as one with a path.
+A post whose front matter already names an `activitypub.id` keeps it as its object id for the life of the post, and the CMS never mints one. That is what lets a post migrated from WordPress keep the `https://example.com/?p=813` its followers, its replies and its RSS subscribers already hold (decision-14): the CMS serves the `Article` at that URL on an ActivityStreams request, redirects a browser from it to the permalink, and names it in every `Update` and `Delete`. The match is on the whole URL, so a stored id with a query string works exactly as one with a path. A user's stored actor id, above, is the same rule for people.
 
 Because the id is the permalink, the permalink is a promise to two audiences at once, and the editor keeps it: renaming a published post's slug, or editing its permalink, is refused. A draft's may still change.
 

@@ -7,6 +7,7 @@ import {
   notificationWanted,
 } from '../notifications/preferences.ts';
 import { countUsers, createUser, findUser, findUserById, verifyUserPassword } from './accounts.ts';
+import { writeUsers } from './__testing__/users.ts';
 import {
   browser,
   csrfField,
@@ -265,6 +266,66 @@ describe('a user profile (TASK-67 AC #1)', () => {
 
     assert.equal(response.status, 303);
     assert.match(await (await agent.get('/admin/users')).text(), /already gone/i);
+  });
+});
+
+describe('a stored actor id (TASK-69 AC #5)', () => {
+  /** What the WordPress ActivityPub plugin published this person as. */
+  const STORED = 'https://andrewshell.org/?author=2';
+
+  /**
+   * A site whose admin was published under {@link STORED} elsewhere, signed
+   * in. The account is written before the boot because no screen sets a stored
+   * id — the import does (TASK-71), or somebody editing the file.
+   */
+  async function migrated(): Promise<{ agent: Browser; dataDir: string }> {
+    const dataDir = await box.dir('geekity-users-data-');
+    writeUsers(dataDir, [
+      { username: FIRST_ADMIN.username, password: FIRST_ADMIN.password, actorId: STORED },
+    ]);
+    const cms = await box.open({
+      contentDir: await box.dir('geekity-users-content-'),
+      dataDir,
+    });
+    return { agent: await signIn(cms), dataDir };
+  }
+
+  it('is shown on the row, read-only, with what it means', async () => {
+    const { agent } = await migrated();
+
+    const { html } = await usersScreen(agent);
+
+    assert.match(html, /https:\/\/andrewshell\.org\/\?author=2/, 'the id is on the screen');
+    assert.match(html, /the fediverse knows/i, 'and the screen says what it is');
+    assert.doesNotMatch(
+      html,
+      /<input[^>]+value="https:\/\/andrewshell\.org\/\?author=2"/,
+      'it is not an editable field: only the import or the file sets one',
+    );
+  });
+
+  it('is left alone by a profile save, and absent for a user without one', async () => {
+    const { agent, dataDir } = await migrated();
+    const { token } = await usersScreen(agent);
+    const ada = findUser(dataDir, FIRST_ADMIN.username);
+    assert.ok(ada !== undefined);
+
+    await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      display_name: 'Ada Lovelace',
+      bio: '',
+      avatar: '',
+      links: '',
+    });
+
+    assert.equal(findUser(dataDir, FIRST_ADMIN.username)?.actorId, STORED);
+
+    // A site nobody migrated says nothing about one at all.
+    const plain = await box.site();
+    const other = await signedIn(plain);
+    const { html } = await usersScreen(other);
+    assert.doesNotMatch(html, /the fediverse knows/i);
   });
 });
 

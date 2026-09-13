@@ -10,7 +10,7 @@ import { authorHref, parseAuthorPath } from '../web/authors.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { absoluteUrl, prefersActivityStreams } from '../web/negotiate.ts';
 import { requestPath } from '../web/routes.ts';
-import { actorAliases, actorId } from './actor.ts';
+import { actorAliases, actorId, userActor } from './actor.ts';
 import { isFederatedDocument, postArticle } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { federationOrigin, handleHref } from './paths.ts';
@@ -114,12 +114,66 @@ export function mountFederation(app: Hono<GeekityEnv>, federation: SiteFederatio
   // Named, and typed as a middleware, so the Hono context arrives with its
   // path parameters resolved rather than as `any`.
   const activityStreams: MiddlewareHandler<GeekityEnv> = async (c, next) => {
-    const response = await activityStreamsDocument(c, federation);
+    const response =
+      (await activityStreamsActor(c, federation)) ?? (await activityStreamsDocument(c, federation));
     if (response !== undefined) return response;
     await next();
   };
 
   app.use('*', activityStreams);
+}
+
+/**
+ * The person this request is about, when it asks at the id they were published
+ * under somewhere else: the `Person` for a peer, a redirect to the author
+ * archive for a browser, and `undefined` for everything else.
+ *
+ * The twin of {@link activityStreamsDocument}, and for the same reason
+ * (decision-14): a stored actor id is identity. A follower's server keys the
+ * account by the URL it first saw, so that URL has to keep answering with this
+ * person's actor for as long as the account exists, or every follow out there
+ * points at nothing.
+ *
+ * Fedify cannot serve it — its router matches paths, and a stored id is
+ * commonly a query string on the site root (doc-8) — so it is served here,
+ * ahead of the public site, exactly as a post's stored `activitypub.id` is.
+ */
+async function activityStreamsActor(
+  c: Context<GeekityEnv>,
+  federation: SiteFederation,
+): Promise<Response | undefined> {
+  const user = storedActorAt(c);
+  if (user === undefined) return undefined;
+  if (!prefersActivityStreams(c.req.header('accept'))) {
+    return c.redirect(authorHref(user.username), 301);
+  }
+
+  const context = federation.createContext(c.req.raw, contextData(c));
+  const actor = await userActor(context, user, { baseUrl: c.var.config.baseUrl });
+  return await respondWithObject(actor, { contextLoader: context.contextLoader });
+}
+
+/**
+ * The user whose stored actor id is the URL this request asks for, or
+ * `undefined`.
+ *
+ * Built the way {@link storedObjectAt} builds a post's candidate — the
+ * request's path and query on the site's base URL, rather than `request.url`,
+ * which behind a proxy is the internal address — and matched on the whole URL,
+ * query string and all, which is what decision-14 asks for.
+ *
+ * A user whose stored id happens to be their author URL is not one of these:
+ * the actor dispatcher has already answered for that URL, and answering again
+ * here would only redirect a browser to where it already is.
+ */
+function storedActorAt(c: Context<GeekityEnv>): User | undefined {
+  const { search } = new URL(c.req.url);
+  const candidate = `${absoluteUrl(requestPath(c), c.var.config.baseUrl)}${search}`;
+
+  const user = listUsers(c.var.config.dataDir).find((entry) => entry.actorId === candidate);
+  if (user === undefined) return undefined;
+  if (absoluteUrl(authorHref(user.username), c.var.config.baseUrl) === candidate) return undefined;
+  return user;
 }
 
 /**
@@ -209,11 +263,13 @@ export function acctOf(username: string, baseUrl: string): string {
  * The user a WebFinger `resource` asks about, or `undefined` for one this site
  * answers for nobody.
  *
- * Four spellings resolve, and they are the same four decision-14 lists as a
- * user's aliases: the `acct:` handle, the actor id, the author archive and
- * `/@{username}`. Matching every one of them is what lets a peer that holds
- * any one URL for this person find the others — which is the whole job of
- * WebFinger, and what TASK-69's stored id will lean on when it joins the list.
+ * Every spelling of a person resolves, and they are the ones decision-14 lists
+ * as their aliases: the `acct:` handle, the author archive, `/@{username}` and
+ * — for somebody who was published elsewhere first — the id they were
+ * published under. Matching every one of them is what lets a peer that holds
+ * any one URL for this person find the others, which is the whole job of
+ * WebFinger, and it is how a server holding only `?author=2` discovers that
+ * the account it follows is still here.
  */
 export function webFingerSubject(c: Context<GeekityEnv>, resource: string): User | undefined {
   const wanted = resource.trim();
@@ -227,7 +283,8 @@ export function webFingerSubject(c: Context<GeekityEnv>, resource: string): User
     if (wanted === acctOf(user.username, baseUrl).slice('acct:'.length)) return true;
     return (
       wanted === absoluteUrl(authorHref(user.username), baseUrl) ||
-      wanted === absoluteUrl(handleHref(user.username), baseUrl)
+      wanted === absoluteUrl(handleHref(user.username), baseUrl) ||
+      wanted === user.actorId
     );
   });
 }

@@ -26,6 +26,8 @@ export function writeUsers(
     email?: string;
     password?: string;
     profile?: UserProfile;
+    /** The id this person was published under elsewhere (TASK-69). */
+    actorId?: string;
   }[],
 ): void {
   mkdirSync(dataDir, { recursive: true });
@@ -35,6 +37,7 @@ export function writeUsers(
     username: user.username,
     ...(user.email === undefined ? {} : { email: user.email }),
     ...(user.profile === undefined ? {} : { profile: user.profile }),
+    ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
     passwordHash: user.password === undefined ? 'not-a-hash' : hashPassword(user.password),
     createdAt: '2026-01-01T00:00:00.000Z',
   }));

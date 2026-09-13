@@ -14,6 +14,7 @@ import type {
   Undo,
 } from '@fedify/vocab';
 
+import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import type { NewFollower } from '../admin/store.ts';
 import { actorId, senderKeyPairs, userByUsername } from './actor.ts';
@@ -60,7 +61,13 @@ export async function handleFollow(context: SiteInboxContext, follow: Follow): P
       // A fresh id every time: an actor may follow, unfollow and follow again,
       // and those are three activities rather than one repeated.
       id: new URL(`#accept/${randomUUID()}`, actorId(context, followed)),
-      actor: follow.objectId,
+      // The user's own id rather than the URL the `Follow` happened to name.
+      // They are the same thing for almost everybody, but a user with a stored
+      // actor id may be followed at either of two URLs, and the `Accept` has to
+      // come from the one their actor document publishes — it is what a peer
+      // matches against the account it is waiting to hear about, and the owner
+      // of the key that signed the reply.
+      actor: actorId(context, followed),
       object: follow,
     }),
   );
@@ -73,12 +80,23 @@ export async function handleFollow(context: SiteInboxContext, follow: Follow): P
  * comparing strings would have to know how Fedify spells an actor's URL, and
  * this asks Fedify instead. The identifier it answers with is the username
  * (decision-14), and a username nobody has is not a follow of anybody.
+ *
+ * A stored actor id is the other way in, and the commoner one for a migrated
+ * site: it is the `id` the actor document publishes, so it is what a peer that
+ * just read the document names, and Fedify's router cannot parse it because it
+ * is not a path Fedify dispatches (doc-8). Matched on the whole URL, as it is
+ * everywhere else.
  */
 function followedUser(context: SiteInboxContext, follow: Follow): User | undefined {
   if (follow.objectId === null) return undefined;
+
   const parsed = context.parseUri(follow.objectId);
-  if (parsed?.type !== 'actor') return undefined;
-  return userByUsername(context.data.config.dataDir, parsed.identifier);
+  if (parsed?.type === 'actor') {
+    return userByUsername(context.data.config.dataDir, parsed.identifier);
+  }
+
+  const wanted = follow.objectId.href;
+  return listUsers(context.data.config.dataDir).find((user) => user.actorId === wanted);
 }
 
 /**

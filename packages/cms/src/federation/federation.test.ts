@@ -48,6 +48,8 @@ async function temporaryDir(prefix: string): Promise<string> {
 async function site(
   settings: Partial<SiteSettings> = {},
   profile: UserProfile = { displayName: 'Ada Lovelace', bio: 'Writes about engines.' },
+  /** The id this person was published under elsewhere, when they have one. */
+  storedActorId?: string,
 ): Promise<Cms> {
   const dataDir = await temporaryDir('geekity-fed-data-');
   const contentDir = await temporaryDir('geekity-fed-content-');
@@ -66,7 +68,9 @@ async function site(
     },
   });
   // decision-14: the actor is a user, so the account exists before the boot.
-  writeUsers(dataDir, [{ username: ADA, profile }]);
+  writeUsers(dataDir, [
+    { username: ADA, profile, ...(storedActorId === undefined ? {} : { actorId: storedActorId }) },
+  ]);
 
   const instance = createCms({ dataDir, contentDir, watch: false, baseUrl: BASE_URL });
   started.push(instance);
@@ -320,6 +324,137 @@ describe('a user actor', () => {
       const response = await get(instance, gone, 'application/activity+json');
       assert.equal(response.status, 404, `${gone} is unregistered`);
     }
+  });
+});
+
+describe('a user whose record carries a stored actor id', () => {
+  /** What WordPress published andrewshell.org's author as (decision-14). */
+  const STORED = `${BASE_URL}/?author=2`;
+
+  /** A site whose one account was published under {@link STORED} elsewhere. */
+  async function migrated(): Promise<Cms> {
+    return await site({}, { displayName: 'Ada Lovelace', bio: 'Writes about engines.' }, STORED);
+  }
+
+  it('publishes the stored id as the actor’s id, and its keys under it (AC #1)', async () => {
+    const instance = await migrated();
+
+    const actor = (await (
+      await get(instance, `/author/${ADA}/`, 'application/activity+json')
+    ).json()) as Record<string, unknown>;
+
+    assert.equal(actor['id'], STORED, 'the id its followers already hold');
+    assert.equal(actor['url'], ACTOR_URL, 'the archive is still where a person is sent');
+    const publicKey = actor['publicKey'] as { id?: string; owner?: string };
+    assert.equal(publicKey.id, `${STORED}#main-key`);
+    assert.equal(publicKey.owner, STORED);
+    const methods = actor['assertionMethod'];
+    const list = (Array.isArray(methods) ? methods : [methods]) as { id?: string }[];
+    assert.deepEqual(
+      list.map((method) => method.id),
+      [`${STORED}#multikey-0`, `${STORED}#multikey-1`],
+    );
+  });
+
+  it('lists the stored id, the archive and /@{username} as alsoKnownAs', async () => {
+    const instance = await migrated();
+
+    const actor = (await (
+      await get(instance, `/author/${ADA}/`, 'application/activity+json')
+    ).json()) as Record<string, unknown>;
+
+    assert.deepEqual(actor['alsoKnownAs'], [STORED, ACTOR_URL, `${BASE_URL}/@${ADA}`]);
+  });
+
+  it('serves the Person at the stored URL, query string and all (AC #1)', async () => {
+    const instance = await migrated();
+
+    const response = await get(instance, '/?author=2', 'application/activity+json');
+
+    assert.equal(response.status, 200);
+    assert.match(
+      response.headers.get('content-type') ?? '',
+      /application\/(activity\+json|ld\+json)/,
+    );
+    const actor = (await response.json()) as Record<string, unknown>;
+    assert.equal(actor['type'], 'Person');
+    assert.equal(actor['id'], STORED);
+    assert.equal(actor['preferredUsername'], ADA);
+    assert.equal((actor['publicKey'] as { id?: string }).id, `${STORED}#main-key`);
+  });
+
+  it('redirects a browser from the stored URL to the author archive (AC #1)', async () => {
+    const instance = await migrated();
+
+    const response = await get(instance, '/?author=2', 'text/html');
+
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), `/author/${ADA}/`);
+  });
+
+  it('leaves the home page alone for every other request (AC #4)', async () => {
+    const instance = await migrated();
+
+    assert.equal((await get(instance, '/', 'text/html')).status, 200);
+    assert.equal((await get(instance, '/?author=9', 'text/html')).status, 200);
+    assert.equal((await get(instance, '/?p=2', 'text/html')).status, 200);
+  });
+
+  it('answers WebFinger with the stored id as self and all three as aliases (AC #2)', async () => {
+    const instance = await migrated();
+
+    const document = (await (
+      await get(
+        instance,
+        `/.well-known/webfinger?resource=${encodeURIComponent(`acct:${ADA}@blog.example`)}`,
+      )
+    ).json()) as {
+      subject: string;
+      aliases: string[];
+      links: { rel: string; href?: string }[];
+    };
+
+    // WordPress's own document: the handle is still the subject, but `self` is
+    // the id, because that is the document a peer should fetch (doc-8).
+    assert.equal(document.subject, `acct:${ADA}@blog.example`);
+    assert.deepEqual(document.aliases, [STORED, ACTOR_URL, `${BASE_URL}/@${ADA}`]);
+    assert.equal(document.links.find((link) => link.rel === 'self')?.href, STORED);
+    assert.equal(
+      document.links.find((link) => link.rel === 'http://webfinger.net/rel/profile-page')?.href,
+      ACTOR_URL,
+    );
+  });
+
+  it('resolves a WebFinger lookup by the stored id to the same person (AC #2)', async () => {
+    const instance = await migrated();
+
+    for (const resource of [STORED, ACTOR_URL, `${BASE_URL}/@${ADA}`, `acct:${ADA}@blog.example`]) {
+      const response = await get(
+        instance,
+        `/.well-known/webfinger?resource=${encodeURIComponent(resource)}`,
+      );
+      assert.equal(response.status, 200, `${resource} resolves`);
+      const document = (await response.json()) as { subject: string; links: { href?: string }[] };
+      assert.equal(document.subject, `acct:${ADA}@blog.example`);
+      assert.equal(document.links[0]?.href, STORED, `${resource} points at the stored id`);
+    }
+  });
+
+  it('serves a path-shaped stored id the same way (AC #4)', async () => {
+    const stored = `${BASE_URL}/wp-json/activitypub/1.0/actors/2`;
+    const instance = await site({}, { displayName: 'Ada Lovelace' }, stored);
+
+    const object = await get(
+      instance,
+      '/wp-json/activitypub/1.0/actors/2',
+      'application/activity+json',
+    );
+    assert.equal(object.status, 200);
+    assert.equal(((await object.json()) as Record<string, unknown>)['id'], stored);
+
+    const browser = await get(instance, '/wp-json/activitypub/1.0/actors/2', 'text/html');
+    assert.equal(browser.status, 301);
+    assert.equal(browser.headers.get('location'), `/author/${ADA}/`);
   });
 });
 
