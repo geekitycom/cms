@@ -8,8 +8,9 @@ import { absoluteUrl } from './negotiate.ts';
  * JSON Feed 1.1: the document, its items, and the vocabulary they are spelled
  * in.
  *
- * Like Atom, and unlike RSS, a JSON Feed item is keyed by the permalink and
- * lists the post's tags alone. decision-12 settles that; TASK-64 changes it.
+ * An item is keyed by the post's object id and lists every term it carries,
+ * which is what the two XML formats do with the same item: decision-12 leaves
+ * the three formats nothing to disagree about.
  */
 
 /** The `version` every JSON Feed this CMS writes declares. */
@@ -59,21 +60,24 @@ export interface JsonFeedAuthor {
 
 /** One entry of a {@link JsonFeed}. */
 export interface JsonFeedItem {
-  /** Permanent identifier: the item's absolute URL. */
+  /**
+   * Permanent identifier: the post's ActivityStreams object id, which is its
+   * permalink unless the post carries a stored one.
+   */
   id: string;
-  /** Where the entry can be read. */
+  /** Where the entry can be read: the permalink. */
   url: string;
   /** Display title. */
   title: string;
   /** The rendered body. */
   content_html: string;
-  /** The post's description, when it has one. */
+  /** The post's summary, unless there is nothing to summarise. */
   summary?: string;
   /** Publish date, RFC 3339. */
   date_published?: string;
   /** Last modification date, RFC 3339. */
   date_modified?: string;
-  /** The post's tags, in file order. */
+  /** The post's terms — its categories and then its tags, in file order. */
   tags?: string[];
   /** The post's own author, when it names one. */
   authors?: JsonFeedAuthor[];
@@ -99,16 +103,18 @@ export function jsonFeed(source: FeedSource): JsonFeed {
 /** One item as a JSON Feed item. */
 export function jsonFeedItem(item: FeedItem): JsonFeedItem {
   const entry: JsonFeedItem = {
-    id: item.link,
+    id: item.id,
     url: item.link,
     title: item.title,
     content_html: item.html,
   };
 
-  if (item.description !== undefined) entry.summary = item.description;
+  // A key with nothing behind it is left out rather than sent empty: a JSON
+  // Feed reader treats absent and empty differently.
+  if (item.summary !== '') entry.summary = item.summary;
   if (item.published !== undefined) entry.date_published = item.published.toISOString();
   if (item.updated !== undefined) entry.date_modified = item.updated.toISOString();
-  if (item.tags.length > 0) entry.tags = [...item.tags];
+  if (item.terms.length > 0) entry.tags = [...item.terms];
   if (item.author !== undefined) entry.authors = [{ name: item.author }];
 
   return entry;

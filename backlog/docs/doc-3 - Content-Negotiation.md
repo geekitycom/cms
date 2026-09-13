@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 01:49'
+updated_date: '2026-09-13 02:03'
 ---
 # Content Negotiation
 
@@ -50,7 +50,9 @@ Feeds are routes, not representations, because feed readers do not send useful `
 | `/comments/feed/` | Every reply the inbox has been sent, as RSS 2.0 |
 | `{permalink}feed/` | One post's replies, the same way |
 
-Every format renders the same **feed item**: one shape derived once per post and site, carrying the post's name — its ActivityStreams object id — beside its permalink, and its title, published and updated instants, author, categories, tags, summary and rendered body. The RSS, Atom and JSON Feed serialisers write that item rather than reading the document again, so what a feed says about a post is decided in one place; decision-12 is what it decides.
+Every format renders the same **feed item**: one shape derived once per post and site, carrying the post's name — its ActivityStreams object id — beside its permalink, and its title, published and updated instants, author, terms, summary and rendered body. The RSS, Atom and JSON Feed serialisers write that item rather than reading the document again, so what a feed says about a post is decided in one place; decision-12 is what it decides, and the item carries one of each thing so no format can print a second-best version of it.
+
+The three answers, on the wire. **Identity**: the object id is RSS's `guid`, Atom's `<id>` and JSON Feed's `id`, and the permalink is always the link — RSS's `<link>`, Atom's `rel="alternate"` and JSON Feed's `url`. The two are the same URL for a post born here and differ only for one carrying a stored id, which is what `guid`'s `isPermaLink` reports: `true` for the permalink, `false` for a stored id such as `https://example.com/?p=813`. **Terms**: the post's categories and then its tags, in file order, as one flat list in all three — no feed format can say which vocabulary a term came from, and neither does WordPress. **Summary**: the document's `description` when it has one, else an excerpt of the rendered HTML cut at 55 words, printed by all three and left out only when there is nothing to summarise.
 
 `/feed/` is RSS because that is the format nearly every existing subscriber holds. The site's three are registered routes; the per-archive ones are resolved in the not-found handler, because the two bases are a setting and a route table is fixed when the app is built.
 
@@ -91,6 +93,8 @@ Both are registered routes rather than anything resolved from the index, so a do
 ## Caching
 
 Responses carry `ETag` derived from the document's content hash and representation, and `Last-Modified` from `updated`. Conditional requests return 304.
+
+A feed's `ETag` covers the revision of the item format as well as the documents and the site's metadata. A release that changes what a feed says about a post — decision-12's was one — therefore moves every post feed's validator exactly once, rather than handing a polling reader a 304 that hides the new bytes. The comments feeds do not carry the revision, because a comment is not a feed item.
 
 ## A stored object id
 

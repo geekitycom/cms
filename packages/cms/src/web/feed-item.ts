@@ -15,22 +15,28 @@ import { absoluteUrl, lastModifiedOf } from './negotiate.ts';
  * others printed nothing. One derivation, done once per post and site, means
  * there is one answer to each of those questions and one place to change it.
  *
- * A few fields are still pairs — {@link FeedItem.id} beside
- * {@link FeedItem.link}, {@link FeedItem.categories} beside
- * {@link FeedItem.tags}, {@link FeedItem.description} beside
- * {@link FeedItem.summary} — because TASK-63 is the refactor and each format
- * keeps printing exactly what it printed before. TASK-64 is what settles
- * decision-12 on the wire, after which every format reads the same half of
- * each pair.
+ * decision-12 is what each of those answers is, and the shape here is what
+ * makes it unavoidable: there is one {@link FeedItem.id}, one
+ * {@link FeedItem.terms} list and one {@link FeedItem.summary}, so a format
+ * cannot print a second-best version of any of them. The one pair left,
+ * {@link FeedItem.id} beside {@link FeedItem.link}, is two real things: what
+ * the post is called and where it is read, which differ only for a post
+ * carrying a stored id.
  */
 export interface FeedItem {
   /**
    * The post's name: its ActivityStreams object id, which after decision-13 is
    * the permalink, or the stored id a migrated post carries. decision-12 makes
-   * this every feed's key for the post; today only RSS's `guid` prints it.
+   * this every feed's key for the post, so all three formats print it: RSS as
+   * `guid`, Atom as `<id>` and JSON Feed as `id`.
    */
   id: string;
-  /** Where the post is read: its permalink, absolute on the site's base URL. */
+  /**
+   * Where the post is read: its permalink, absolute on the site's base URL.
+   * The same in every format — RSS's `link`, Atom's `rel="alternate"` and JSON
+   * Feed's `url` — and equal to {@link FeedItem.id} unless the post carries a
+   * stored one.
+   */
   link: string;
   /** Display title. */
   title: string;
@@ -45,15 +51,23 @@ export interface FeedItem {
    * `dc:creator` prints it, because an RSS item has nowhere else to say it.
    */
   creator?: string | undefined;
-  /** What the post is filed under, in file order. */
-  categories: readonly string[];
-  /** What the post is tagged with, in file order. */
-  tags: readonly string[];
-  /** The description the author wrote, when there is one. */
-  description?: string | undefined;
   /**
-   * What a feed prints as the summary: the description, else an excerpt of the
-   * rendered body. Never the whole post — the content is where that goes.
+   * What the post is filed under and tagged with, categories first and each in
+   * file order, as one list.
+   *
+   * One list rather than two because no feed format distinguishes them: RSS has
+   * a single `<category>`, Atom a single `<category term>` and JSON Feed a
+   * single `tags`, which is exactly how WordPress publishes both taxonomies
+   * too. decision-12 says every format lists every term, and a model that
+   * cannot say which vocabulary a term came from is a model no format can
+   * quietly list half of.
+   */
+  terms: readonly string[];
+  /**
+   * What every format prints as the summary: the description the author wrote,
+   * else an excerpt of the rendered body. Never the whole post — the content is
+   * where that goes — and empty only for a post with nothing to summarise,
+   * which is the one case a format leaves the element out.
    */
   summary: string;
   /** The rendered body. */
@@ -67,6 +81,22 @@ export interface FeedItem {
    */
   comments?: FeedItemComments | undefined;
 }
+
+/**
+ * Which revision of the item's serialisation a feed's validator is keyed by.
+ *
+ * A feed's ETag is a hash of the documents and the site's metadata, because
+ * those are what usually move it. The rules for turning a document into an item
+ * are not in that hash, so a release that changes them — this one, which
+ * changes every RSS `guid`, both the other formats' ids, the terms they list
+ * and their summaries — would leave the validator where it was, and a reader
+ * polling with `If-None-Match` would be handed a 304 that hides the new bytes.
+ *
+ * Bumping this moves every post feed's ETag exactly once, at the upgrade, and
+ * never again until the next such change. The comments feeds do not carry it:
+ * a comment is not a {@link FeedItem} and its bytes are untouched.
+ */
+export const FEED_ITEM_REVISION = 2;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -107,8 +137,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     id: activityStreamsId(document, baseUrl) ?? link,
     link,
     title: document.title,
-    categories: document.categories,
-    tags: document.tags,
+    terms: [...document.categories, ...document.tags],
     summary: feedExcerpt(document),
     html: document.html,
     markdown: document.body,
@@ -123,8 +152,6 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
 
   const creator = document.author ?? context.site.author;
   if (creator !== undefined && creator !== '') item.creator = creator;
-
-  if (document.description !== undefined) item.description = document.description;
 
   const counts = context.commentCounts;
   if (counts !== undefined) {

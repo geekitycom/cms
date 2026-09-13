@@ -53,17 +53,21 @@ describe('a feed item', () => {
     assert.equal(item.link, 'https://example.com/2026/09/hello/');
   });
 
-  it('carries both taxonomies, in file order, without merging them', () => {
+  it('carries both taxonomies as one list of terms, categories first, in file order', () => {
     const item = feedItem(post({ categories: ['engineering', 'notes'], tags: ['web'] }), CONTEXT);
 
-    assert.deepEqual([...item.categories], ['engineering', 'notes']);
-    assert.deepEqual([...item.tags], ['web']);
+    assert.deepEqual([...item.terms], ['engineering', 'notes', 'web']);
   });
 
-  it('summarises with the description the author wrote, and keeps it as the description', () => {
+  it('has no terms at all for a post filed under nothing', () => {
+    const item = feedItem(post({ categories: [], tags: [] }), CONTEXT);
+
+    assert.deepEqual([...item.terms], []);
+  });
+
+  it('summarises with the description the author wrote', () => {
     const item = feedItem(post({ description: 'A short summary.' }), CONTEXT);
 
-    assert.equal(item.description, 'A short summary.');
     assert.equal(item.summary, 'A short summary.');
   });
 
@@ -73,7 +77,6 @@ describe('a feed item', () => {
       CONTEXT,
     );
 
-    assert.equal(item.description, undefined);
     assert.equal(item.summary, 'Fish & chips, twice.');
   });
 

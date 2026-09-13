@@ -25,7 +25,9 @@ import { sanitizeCommentHtml } from './sanitize.ts';
  * RSS 2.0: the post feed, the comments feed, and the channel they share.
  *
  * The items come from {@link FeedItem}s rather than from documents, so what an
- * RSS item says about a post is decided in one place and read here.
+ * RSS item says about a post is decided in one place and read here — and says
+ * the same as what Atom and JSON Feed say about it, because there is only one
+ * id, one term list and one summary on the item to print.
  */
 
 /** One feed as an RSS 2.0 document. */
@@ -115,24 +117,24 @@ function channelImage(source: FeedSource, link: string): string[] {
  *
  * The `guid` is the item's id, which decision-12 makes every feed's key for
  * the post: after decision-13 that is the permalink itself, or the stored id a
- * migrated post carries. `isPermaLink="false"` is what says it is a name
- * rather than an address — true of both, and the safe thing to say about
- * either. TASK-64 is what makes the attribute tell the truth about which it is.
+ * migrated post carries. `isPermaLink` tells a reader which of the two it is
+ * looking at — `true` when the id is the permalink, so a reader that resolves
+ * a guid finds the post, and `false` when it is a stored name like WordPress's
+ * `?p=813`, which is the id that post's subscribers already hold.
  */
 export function rssItem(item: FeedItem): string[] {
   return [
     '    <item>',
     element('title', item.title, 3),
     element('link', item.link, 3),
-    `      <guid isPermaLink="false">${escapeXml(item.id)}</guid>`,
+    `      <guid isPermaLink="${item.id === item.link ? 'true' : 'false'}">` +
+      `${escapeXml(item.id)}</guid>`,
     ...(item.published === undefined ? [] : [element('pubDate', rfc822(item.published), 3)]),
     ...(item.creator === undefined ? [] : [element('dc:creator', item.creator, 3)]),
-    // Both taxonomies become categories. RSS has one `<category>` and no way
-    // to say which vocabulary a term came from, which is exactly how WordPress
+    // Every term becomes a category. RSS has one `<category>` and no way to say
+    // which vocabulary a term came from, which is exactly how WordPress
     // publishes tags and categories too.
-    ...[...item.categories, ...item.tags].map(
-      (term) => `      <category>${escapeXml(term)}</category>`,
-    ),
+    ...item.terms.map((term) => `      <category>${escapeXml(term)}</category>`),
     ...commentPointers(item),
     element('description', item.summary, 3),
     `      <content:encoded>${cdata(item.html)}</content:encoded>`,
