@@ -2,13 +2,18 @@ import { respondWithObject } from '@fedify/fedify';
 import { federation as federationMiddleware } from '@fedify/hono';
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
+import { listUsers } from '../admin/accounts.ts';
+import type { User } from '../admin/accounts.ts';
 import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
+import { authorHref, parseAuthorPath } from '../web/authors.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { absoluteUrl, prefersActivityStreams } from '../web/negotiate.ts';
 import { requestPath } from '../web/routes.ts';
+import { actorAliases, actorId } from './actor.ts';
 import { isFederatedDocument, postArticle } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
+import { federationOrigin, handleHref } from './paths.ts';
 
 /**
  * Put Fedify in front of the rest of the app.
@@ -30,15 +35,81 @@ import type { FederationContextData, SiteFederation } from './federation.ts';
  * and so a dispatcher is never reading a store the request did not come with.
  */
 export function mountFederation(app: Hono<GeekityEnv>, federation: SiteFederation): void {
+  // WebFinger is ours rather than Fedify's, and so has to be registered before
+  // the middleware that would otherwise answer it. Fedify hard-codes the
+  // `self` link to the dispatcher path and computes `aliases` from the
+  // resource, neither of which can be added to, so an actor served under the
+  // id it had elsewhere could never be discovered by it (doc-8). Owning the
+  // route is a dozen lines and gives complete control of `subject`, `aliases`
+  // and `links`.
+  app.get(WEBFINGER_PATH, (c) => {
+    const resource = c.req.query('resource') ?? '';
+    const user = webFingerSubject(c, resource);
+    if (user === undefined) return c.notFound();
+
+    const context = federation.createContext(c.req.raw, contextData(c));
+    const { baseUrl } = c.var.config;
+    const aliases = actorAliases(context, user, baseUrl);
+
+    return c.json(
+      {
+        subject: acctOf(user.username, c.var.config.baseUrl),
+        aliases: aliases.map((alias) => alias.href),
+        links: [
+          {
+            rel: 'self',
+            type: 'application/activity+json',
+            href: actorId(context, user).href,
+          },
+          {
+            rel: 'http://webfinger.net/rel/profile-page',
+            type: 'text/html',
+            href: absoluteUrl(authorHref(user.username), baseUrl),
+          },
+        ],
+      },
+      200,
+      {
+        // The media type RFC 7033 defines, and the header that lets a browser
+        // application read the answer, which is what every other WebFinger
+        // server sends.
+        'content-type': 'application/jrd+json; charset=utf-8',
+        'access-control-allow-origin': '*',
+      },
+    );
+  });
+
+  // `/@ada`, the short URL WordPress publishes beside the author archive and
+  // the one a person is most likely to type. It is an alias rather than a
+  // second identity, so it goes where the identity is.
+  app.get('/:handle{@.+}', (c) => {
+    // The pattern is a regex rather than `/@:username`, because Hono's path
+    // parameters are whole segments: the `@` has to be matched inside one.
+    const handle = c.req.param('handle') ?? '';
+    return c.redirect(authorHref(decodeURIComponent(handle.slice(1))), 301);
+  });
+
   // `@fedify/hono` types its context as the two properties it actually reads,
   // which is looser than Hono's own; the cast is what puts `c.var` back.
-  app.use(
-    '*',
-    federationMiddleware(federation, (context) => {
-      const c = context as unknown as Context<GeekityEnv>;
-      return contextData(c);
-    }),
-  );
+  const fedify = federationMiddleware(federation, (context) => {
+    const c = context as unknown as Context<GeekityEnv>;
+    return contextData(c);
+  }) as MiddlewareHandler<GeekityEnv>;
+
+  // The one path where Fedify and the public site both have a claim: a user's
+  // author archive is their actor id (decision-14), and Fedify answers a bare
+  // `Accept: application/json` as an ActivityStreams request while doc-3 gives
+  // that spelling the listing's own JSON. The CMS's rule decides, so a peer
+  // asking for `activity+json` or `ld+json` gets the actor and everything else
+  // — a browser, a reader, a feed tool — reaches the archive it asked for.
+  // Every other Fedify path is left exactly as it was.
+  const federationGate: MiddlewareHandler<GeekityEnv> = async (c, next) => {
+    const isArchive = parseAuthorPath(requestPath(c)) !== undefined;
+    if (isArchive && !prefersActivityStreams(c.req.header('accept'))) return await next();
+    return await fedify(c, next);
+  };
+
+  app.use('*', federationGate);
 
   // Named, and typed as a middleware, so the Hono context arrives with its
   // path parameters resolved rather than as `any`.
@@ -123,6 +194,41 @@ async function article(
   const context = federation.createContext(c.req.raw, contextData(c));
   return await respondWithObject(postArticle(context, document), {
     contextLoader: context.contextLoader,
+  });
+}
+
+/** Where WebFinger lives, which is defined on the host rather than under a site. */
+export const WEBFINGER_PATH = '/.well-known/webfinger';
+
+/** `acct:{username}@{host}`, the handle a person types into a search box. */
+export function acctOf(username: string, baseUrl: string): string {
+  return `acct:${username}@${federationOrigin(baseUrl === '' ? 'http://localhost' : baseUrl).handleHost}`;
+}
+
+/**
+ * The user a WebFinger `resource` asks about, or `undefined` for one this site
+ * answers for nobody.
+ *
+ * Four spellings resolve, and they are the same four decision-14 lists as a
+ * user's aliases: the `acct:` handle, the actor id, the author archive and
+ * `/@{username}`. Matching every one of them is what lets a peer that holds
+ * any one URL for this person find the others — which is the whole job of
+ * WebFinger, and what TASK-69's stored id will lean on when it joins the list.
+ */
+export function webFingerSubject(c: Context<GeekityEnv>, resource: string): User | undefined {
+  const wanted = resource.trim();
+  if (wanted === '') return undefined;
+
+  const { baseUrl } = c.var.config;
+  return listUsers(c.var.config.dataDir).find((user) => {
+    if (wanted === acctOf(user.username, baseUrl)) return true;
+    // A bare `user@host` is not what RFC 7033 asks for, but it is what enough
+    // clients send that refusing it would only look like a missing account.
+    if (wanted === acctOf(user.username, baseUrl).slice('acct:'.length)) return true;
+    return (
+      wanted === absoluteUrl(authorHref(user.username), baseUrl) ||
+      wanted === absoluteUrl(handleHref(user.username), baseUrl)
+    );
   });
 }
 

@@ -1327,6 +1327,7 @@ describe('a post’s comments feed', () => {
   it('names the reply’s author by the follower it knows, when it knows one', async () => {
     const { cms } = await site(files);
     cms.admin.putFollower({
+      username: 'ada',
       actorId: 'https://remote.example/users/ada',
       inboxId: 'https://remote.example/users/ada/inbox',
       sharedInboxId: null,

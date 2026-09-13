@@ -37,7 +37,6 @@ import {
   migrateFederationToFiles,
   mountFederation,
   rebuildFederationIndexes,
-  SITE_ACTOR_IDENTIFIER,
 } from './federation/index.ts';
 import type { DeliveryService, RelayService, SiteFederation } from './federation/index.ts';
 import { createFeedNotifier } from './notify.ts';
@@ -58,9 +57,7 @@ export type {
 } from './notify.ts';
 
 export {
-  ACTOR_HANDLE_PATTERN,
   LANGUAGE_TAG_PATTERN,
-  ACTOR_TYPES,
   COMMENT_ACTIONS,
   COMMENT_ADMIN_FIELDS,
   COMMENT_KINDS,
@@ -111,9 +108,6 @@ export {
   MAIL_TEST_TEMPLATE,
   mailPanel,
   ARGON2_PARAMETERS,
-  AVATAR_FIELDS,
-  AVATAR_PATH,
-  AVATAR_REMOVE,
   baselineSecurityHeaders,
   blankForm,
   CHANGE_PASSWORD_PATH,
@@ -200,8 +194,8 @@ export {
   passwordProblem,
   postEditorPath,
   POST_KIND,
+  primaryUser,
   PREVIEW_PATH,
-  profileChanged,
   readSiteSettings,
   RECOVERY_ANSWER,
   RECOVERY_FIELDS,
@@ -778,27 +772,39 @@ export type {
 export {
   acceptedRelays,
   acceptRelay,
-  ACTOR_CLASSES,
   addFollower,
   appendInboxActivity,
   ACTOR_KEY_ALGORITHMS,
   ACTOR_PATH,
-  actorClassFor,
   assertActorKeysUsable,
   actorKeyFile,
   actorKeysDir,
   articleObjectId,
+  actorAliases,
+  actorId,
   avatarUrl,
+  keyIdFor,
+  mainKeyId,
+  multikeyId,
+  senderKeyPairs,
+  userActor,
+  userByUsername,
   createActivityId,
   createDeliveryService,
   createRelayService,
   createSiteFederation,
   deleteActivityId,
   deliveryTargets,
+  documentAuthor,
   federatedPost,
+  federatedUsernames,
   FEDERATION_DATA_DIRECTORY,
-  FEDERATION_PREFIX,
   federationOrigin,
+  acctOf,
+  handleHref,
+  userDirectory,
+  webFingerSubject,
+  WEBFINGER_PATH,
   followerFrom,
   followerRecipient,
   FOLLOWERS_FILE,
@@ -845,8 +851,6 @@ export {
   replyFrom,
   replyTargetOf,
   SHARED_INBOX_PATH,
-  SITE_ACTOR_IDENTIFIER,
-  siteActor,
   SOFTWARE_NAME,
   SOURCE_MEDIA_TYPE,
   toInstant,
@@ -857,6 +861,7 @@ export type {
   CreateDeliveryServiceOptions,
   FederationIndexReport,
   FederationRecords,
+  UserActorOptions,
   InboxLine,
   CreateRelayServiceOptions,
   CreateSiteFederationOptions,
@@ -868,7 +873,6 @@ export type {
   RelayLogger,
   RelayService,
   RelaySyncReport,
-  SiteActorOptions,
   SiteFederation,
   Reply,
   SiteInboxContext,
@@ -1349,11 +1353,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // for, and the file wins where there already is one.
   migrateUsersToFile({ admin, dataDir: resolved.dataDir });
 
-  // And the followers and the log of what the inbox was told, which become
-  // content/_data/federation/followers.json and inbox/{yyyy}-{mm}.jsonl.
-  // Unlike the three above, no table is dropped: `followers` and `ap_inbox`
-  // stay as indexes of those files, which is why the rebuild is next and runs
-  // on every boot rather than once.
+  // And the log of what the inbox was told, which becomes
+  // content/_data/federation/inbox/{yyyy}-{mm}.jsonl. Unlike the three above,
+  // no table is dropped: `ap_inbox` and `followers` stay as indexes of the
+  // files, which is why the rebuild is next and runs on every boot rather than
+  // once. The site actor's followers are not migrated: decision-14 replaced it
+  // with one actor per user, and nobody inherits a follow made with somebody
+  // who no longer exists.
   migrateFederationToFiles({ admin, contentDir: resolved.contentDir });
   rebuildFederationIndexes({ admin, contentDir: resolved.contentDir });
 
@@ -1364,12 +1370,15 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // one does.
   rebuildCommentIndexes({ admin, contentDir: resolved.contentDir });
 
-  // And, once the files are the whole story, that they are readable. This is
-  // the one thing here that can stop a boot: an actor that publishes no key
-  // is one no follower can verify, and Fedify would serve exactly that rather
-  // than complain. A minute of downtime with the file named is the better
-  // failure.
-  assertActorKeysUsable(resolved.dataDir, SITE_ACTOR_IDENTIFIER);
+  // And, once the files are the whole story, that every user's keys are
+  // readable. This is the one thing here that can stop a boot: an actor that
+  // publishes no key is one no follower can verify, and Fedify would serve
+  // exactly that rather than complain. A minute of downtime with the file
+  // named is the better failure. A user who has never federated has no key
+  // files at all, which is not damage and does not stop anything.
+  for (const user of listUsers(resolved.dataDir)) {
+    assertActorKeysUsable(resolved.dataDir, user.username);
+  }
 
   // The one thing the settings decide before a request arrives. It is settled
   // here, at boot, rather than per request: `baseUrl` also decides whether the

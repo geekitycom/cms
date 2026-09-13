@@ -11,14 +11,62 @@ import {
 } from '@fedify/vocab';
 import { Temporal as TemporalPolyfill } from '@js-temporal/polyfill';
 
+import { listUsers, primaryUser } from '../admin/accounts.ts';
+import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
+import { userForAuthor } from '../web/authors.ts';
 import { isPublicDocument, postObjectId } from '../web/documents.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { categoryHref, tagHref } from '../web/taxonomy.ts';
+import { actorId } from './actor.ts';
 import type { FederationContextData } from './federation.ts';
-import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
 import { createActivityId, deleteActivityId, updateActivityId } from './paths.ts';
+
+/**
+ * The user a post is announced by: the one its `author` names, and the site's
+ * first account for one that names nobody.
+ *
+ * decision-14 attributes a post to a person rather than to the site, and
+ * `userForAuthor` is the one rule that decides which — a username exactly, a
+ * display name only when exactly one person answers to it (TASK-67). The
+ * fallback matters because an `author` is free text in a file: a post that
+ * names a person who has since been deleted, or names nobody at all, is still
+ * a post this site has to be able to announce, and the first account is the
+ * only actor that can be chosen without guessing between people.
+ *
+ * `undefined` only for a site with no accounts, which is one in first-run
+ * setup and federates nothing.
+ */
+export function documentAuthor(
+  context: Context<FederationContextData>,
+  document: Document,
+): User | undefined {
+  const { dataDir } = context.data.config;
+  return userForAuthor(listUsers(dataDir), document.author) ?? primaryUser(dataDir);
+}
+
+/**
+ * The actor id and followers collection a post's activities are addressed
+ * with, or a thrown error for a site with no accounts.
+ *
+ * Every activity in this module names the same two URLs, and they have to be
+ * the same two: an `Article` attributed to one actor and `cc`'d to another's
+ * followers would be a post nobody could place.
+ */
+function attribution(
+  context: Context<FederationContextData>,
+  document: Document,
+): { actor: URL; followers: URL } {
+  const user = documentAuthor(context, document);
+  if (user === undefined) {
+    throw new Error(
+      `The post "${document.slug}" cannot be federated: the site has no accounts, ` +
+        'and decision-14 makes a user the actor a post is announced by.',
+    );
+  }
+  return { actor: actorId(context, user), followers: context.getFollowersUri(user.username) };
+}
 
 /** The media type an `Article`'s `source` is labelled with. */
 export const SOURCE_MEDIA_TYPE = 'text/markdown';
@@ -47,9 +95,14 @@ export function isFederatedDocument(document: Document, now: Date = new Date()):
  *
  * `source` carries the Markdown the file holds, so a peer that wants to quote
  * or re-render the post has the text rather than only the rendering of it.
+ *
+ * `attributedTo` is the actor of the user the post's `author` names
+ * (decision-14), and `cc` is that user's followers: a post belongs to a person
+ * on this site, not to the site.
  */
 export function postArticle(context: Context<FederationContextData>, document: Document): Article {
   const { baseUrl } = context.data.config;
+  const { actor, followers } = attribution(context, document);
   // The archives an activity points at are wherever the site currently serves
   // them, which is a setting rather than a constant (TASK-36).
   const bases = taxonomyBasesFromSettings(readSiteSettings(context.data.config.contentDir));
@@ -62,11 +115,11 @@ export function postArticle(context: Context<FederationContextData>, document: D
     source: new Source({ content: document.body, mediaType: SOURCE_MEDIA_TYPE }),
     published: toInstant(document.date) ?? null,
     updated: toInstant(document.updated) ?? null,
-    attribution: context.getActorUri(SITE_ACTOR_IDENTIFIER),
+    attribution: actor,
     // Public addressing, as a blog post is: anybody may fetch it, and every
-    // follower is told about it.
+    // follower of its author is told about it.
     to: PUBLIC_COLLECTION,
-    cc: context.getFollowersUri(SITE_ACTOR_IDENTIFIER),
+    cc: followers,
     // Both taxonomies become hashtags: a relay or a search that keys on a
     // hashtag has no reason to care which of the two a term came from, and
     // each one points at the archive the site serves for it.
@@ -97,14 +150,15 @@ export function postCreateActivity(
   document: Document,
 ): Create {
   const article = postArticle(context, document);
+  const { actor, followers } = attribution(context, document);
 
   return new Create({
     id: createActivityId(articleObjectId(context, document)),
-    actor: context.getActorUri(SITE_ACTOR_IDENTIFIER),
+    actor,
     object: article,
     published: toInstant(document.date) ?? null,
     to: PUBLIC_COLLECTION,
-    cc: context.getFollowersUri(SITE_ACTOR_IDENTIFIER),
+    cc: followers,
   });
 }
 
@@ -128,14 +182,15 @@ export function postUpdateActivity(
   revision: string = revisionOf(document),
 ): Update {
   const article = postArticle(context, document);
+  const { actor, followers } = attribution(context, document);
 
   return new Update({
     id: updateActivityId(articleObjectId(context, document), revision),
-    actor: context.getActorUri(SITE_ACTOR_IDENTIFIER),
+    actor,
     object: article,
     published: toInstant(document.updated ?? document.date) ?? null,
     to: PUBLIC_COLLECTION,
-    cc: context.getFollowersUri(SITE_ACTOR_IDENTIFIER),
+    cc: followers,
   });
 }
 
@@ -157,17 +212,18 @@ export function postDeleteActivity(
   deleted: string,
 ): Delete {
   const objectId = articleObjectId(context, document);
+  const { actor, followers } = attribution(context, document);
 
   return new Delete({
     id: deleteActivityId(objectId, deleted),
-    actor: context.getActorUri(SITE_ACTOR_IDENTIFIER),
+    actor,
     object: new Tombstone({
       id: objectId,
       formerType: Article,
       deleted: toInstant(deleted) ?? null,
     }),
     to: PUBLIC_COLLECTION,
-    cc: context.getFollowersUri(SITE_ACTOR_IDENTIFIER),
+    cc: followers,
   });
 }
 

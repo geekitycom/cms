@@ -30,27 +30,6 @@ import type { AdminStore, LegacySetting } from './store.ts';
 export const SETTINGS_PATH = `${ADMIN_PREFIX}/settings`;
 
 /**
- * The ActivityPub actor types doc-4 allows a site to be.
- *
- * `Person` is first because it is the default: some clients hide `Service`
- * actors from timelines, which is the wrong thing for a personal blog.
- */
-export const ACTOR_TYPES: readonly string[] = [
-  'Person',
-  'Organization',
-  'Service',
-  'Group',
-  'Application',
-];
-
-/**
- * What an actor handle may be made of. Tighter than a username: the handle
- * becomes the local part of `@handle@host` in WebFinger and in every mention
- * somebody types, so it holds no punctuation that would need escaping there.
- */
-export const ACTOR_HANDLE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
-
-/**
  * What a language tag may look like: BCP 47's shape rather than its registry —
  * a two or three letter primary subtag followed by dash-separated subtags of
  * letters and digits.
@@ -127,10 +106,6 @@ export interface SiteSettings {
   postsPage: string;
   /** Site author, used as the feed author. May be empty. */
   author: string;
-  /** The local part of the ActivityPub handle, `@{handle}@{host}` (doc-4). */
-  actorHandle: string;
-  /** Which ActivityPub actor type the site is, one of {@link ACTOR_TYPES}. */
-  actorType: string;
   /**
    * The first URL segment the tag archives live under, `tag` by default: one
    * URL-safe path segment, no slashes. WordPress's own base, so a site
@@ -231,23 +206,12 @@ export interface SiteSettings {
    */
   navigation: readonly NavigationItem[];
   /**
-   * The site's avatar, as the public path the upload endpoint handed back —
-   * `/uploads/2026/09/me.png` — or an absolute URL for one hosted elsewhere.
-   * Empty when the site has none.
-   *
-   * It is not a field of the settings form: an image is uploaded and removed
-   * through {@link AVATAR_PATH}, because a file cannot travel in a urlencoded
-   * body and because a save of the other fields must not silently drop it.
-   */
-  avatar: string;
-  /**
    * The taxonomy archives that have moved: one `{ taxonomy, from, to }` per
    * term the taxonomy screens renamed or merged away, so the URL it used to
    * live at can point at the one it lives at now.
    *
-   * Not a field of the settings form either, and for a stronger reason than
-   * the avatar: it is a record of what happened rather than a preference, and
-   * the taxonomy screens are what write it. Chains are collapsed as they are
+   * Not a field of the settings form: it is a record of what happened rather
+   * than a preference, and the taxonomy screens are what write it. Chains are collapsed as they are
    * recorded, so the list answers every old URL in one hop.
    */
   taxonomyRedirects: readonly TaxonomyRedirect[];
@@ -256,11 +220,10 @@ export interface SiteSettings {
 /**
  * The settings the form on the settings screen carries.
  *
- * Every setting but the avatar, which is a file rather than a field, and the
- * recorded archive renames, which the taxonomy screens write; see
- * {@link SiteSettings.avatar} and {@link SiteSettings.taxonomyRedirects}.
+ * Every setting but the recorded archive renames, which the taxonomy screens
+ * write; see {@link SiteSettings.taxonomyRedirects}.
  */
-export type SettingsField = Exclude<keyof SiteSettings, 'avatar' | 'taxonomyRedirects'>;
+export type SettingsField = Exclude<keyof SiteSettings, 'taxonomyRedirects'>;
 
 /**
  * What a site is worth before anybody has said otherwise.
@@ -278,9 +241,6 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   homepage: '',
   postsPage: '',
   author: '',
-  actorHandle: 'blog',
-  actorType: 'Person',
-  avatar: '',
   tagBase: DEFAULT_TAXONOMY_BASES.tag,
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
   comments: true,
@@ -309,8 +269,6 @@ export const SETTINGS_FIELDS = {
   homepage: 'homepage',
   postsPage: 'posts_page',
   author: 'author',
-  actorHandle: 'actor_handle',
-  actorType: 'actor_type',
   tagBase: 'tag_base',
   categoryBase: 'category_base',
   comments: 'comments',
@@ -356,8 +314,8 @@ export function readSiteSettings(contentDir: string): SiteSettings {
  * Read tolerantly, key by key, because the file is public, in git and editable
  * by hand: a key of the wrong type, or one a site has never written, falls
  * back to the default rather than taking the site down. The empty string is a
- * value of its own for `tagline`, `author`, `avatar` and `notifyServer`, where
- * empty is a decision — no tagline, no avatar, notifications off — and not for
+ * value of its own for `tagline`, `author` and `notifyServer`, where empty is
+ * a decision — no tagline, no author, notifications off — and not for
  * `title`, `timezone`, `language` or the two archive bases, where it is a hole
  * only a default can fill.
  */
@@ -376,20 +334,10 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(typeof file['language'] === 'string' && file['language'] !== ''
       ? { language: file['language'] }
       : {}),
-    ...(typeof file['avatar'] === 'string' ? { avatar: file['avatar'] } : {}),
     // Absent is the ordinary state of these two: a site showing its latest
     // posts writes neither key, so anything but a string is read as none.
     ...(typeof file['homepage'] === 'string' ? { homepage: file['homepage'] } : {}),
     ...(typeof file['postsPage'] === 'string' ? { postsPage: file['postsPage'] } : {}),
-    ...(typeof file['actorHandle'] === 'string' && file['actorHandle'] !== ''
-      ? { actorHandle: file['actorHandle'] }
-      : {}),
-    // Only a type this version knows, because it becomes a vocabulary class: a
-    // file naming one it does not is the default actor rather than a 500 on
-    // the actor URL.
-    ...(typeof file['actorType'] === 'string' && ACTOR_TYPES.includes(file['actorType'])
-      ? { actorType: file['actorType'] }
-      : {}),
     ...(typeof file['tagBase'] === 'string' && file['tagBase'] !== ''
       ? { tagBase: file['tagBase'] }
       : {}),
@@ -473,13 +421,6 @@ export function siteJsonFor(
     postsPerPage: settings.postsPerPage,
     timezone: settings.timezone,
     language: settings.language,
-    avatar: settings.avatar,
-    // The two the file did not carry while SQLite held the settings. It has to
-    // now: nothing else remembers which handle `@you@example.com` resolves to,
-    // and an actor whose handle changed is one every follower has to find
-    // again.
-    actorHandle: settings.actorHandle,
-    actorType: settings.actorType,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
     comments: settings.comments,
@@ -582,13 +523,7 @@ export function migrateSettingsToFile(options: { admin: AdminStore; contentDir: 
     const stored = settingsFromRows(rows);
     const file = siteDataPath(contentDir);
     const existing = parseSiteJson(readFileIfPresentSync(file) ?? '');
-    const settings = fileWasEditedLast(file, rows)
-      ? {
-          ...settingsFromSiteJson(existing),
-          actorHandle: stored.actorHandle,
-          actorType: stored.actorType,
-        }
-      : stored;
+    const settings = fileWasEditedLast(file, rows) ? settingsFromSiteJson(existing) : stored;
 
     writeFileAtomicallySync(file, siteJsonText(settings, existing));
   }
@@ -715,16 +650,6 @@ const FIELD_CHECKS: Record<SettingsField, (form: SettingsForm) => string | undef
       ? undefined
       : 'That is not a language tag, such as en, en-GB or pt-BR.',
 
-  actorHandle: (form) =>
-    ACTOR_HANDLE_PATTERN.test(form.actorHandle)
-      ? undefined
-      : 'An actor handle is 1 to 64 letters, digits, dashes or underscores, with no @ and no dots.',
-
-  actorType: (form) =>
-    ACTOR_TYPES.includes(form.actorType)
-      ? undefined
-      : `An actor type is one of ${ACTOR_TYPES.join(', ')}.`,
-
   comments: () => undefined,
 
   // The empty string is refused rather than read as zero, which is what
@@ -839,18 +764,15 @@ export function settingsProblems(
  * A validated form as settings. Only call it on a form
  * {@link settingsProblems} found nothing wrong with.
  *
- * The avatar and the recorded archive renames are carried in rather than read
- * off the form, because neither is on it: the image is uploaded and removed
- * through {@link AVATAR_PATH}, the renames are written by the taxonomy
- * screens, and a save of the other fields keeps whatever is stored.
+ * The recorded archive renames are carried in rather than read off the form,
+ * because they are not on it: the taxonomy screens write them, and a save of
+ * the other fields keeps whatever is stored.
  */
 export function settingsFromForm(
   form: SettingsForm,
-  avatar: string = DEFAULT_SITE_SETTINGS.avatar,
   taxonomyRedirects: readonly TaxonomyRedirect[] = DEFAULT_SITE_SETTINGS.taxonomyRedirects,
 ): SiteSettings {
   return {
-    avatar,
     taxonomyRedirects,
     title: form.title.trim(),
     tagline: form.tagline.trim(),
@@ -864,8 +786,6 @@ export function settingsFromForm(
     // the listing's own page with it rather than leave it stranded.
     postsPage: form.homepage.trim() === '' ? '' : form.postsPage.trim(),
     author: form.author.trim(),
-    actorHandle: form.actorHandle.trim(),
-    actorType: form.actorType,
     tagBase: form.tagBase.trim(),
     categoryBase: form.categoryBase.trim(),
     // A checkbox submits nothing at all when it is clear, which is what the
@@ -899,8 +819,6 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     homepage: settings.homepage,
     postsPage: settings.postsPage,
     author: settings.author,
-    actorHandle: settings.actorHandle,
-    actorType: settings.actorType,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
     comments: settings.comments ? '1' : '',
@@ -939,26 +857,6 @@ function redirectList(value: string): TaxonomyRedirect[] {
   // Through the same reader `site.json` goes through, so the two spellings of
   // the list cannot mean different things.
   return taxonomyRedirectsOf(entries);
-}
-
-/**
- * Whether a save moved something the ActivityPub actor carries, which is what
- * decides whether the followers are told (doc-4: the profile fields come from
- * the settings). The rest — the time zone, the page size — is the site's own
- * business and nobody else's.
- *
- * The base URL is not here either, though the profile is built on it: it is
- * settled at boot ({@link effectiveBaseUrl}), so an actor built the moment it
- * is saved would carry the old one and say nothing new.
- */
-export function profileChanged(before: SiteSettings, after: SiteSettings): boolean {
-  return (
-    before.title !== after.title ||
-    before.tagline !== after.tagline ||
-    before.actorHandle !== after.actorHandle ||
-    before.actorType !== after.actorType ||
-    before.avatar !== after.avatar
-  );
 }
 
 /**

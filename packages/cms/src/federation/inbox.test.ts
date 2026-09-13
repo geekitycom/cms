@@ -19,17 +19,22 @@ import {
   Undo,
 } from '@fedify/vocab';
 
+import { writeUsers } from '../admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
-import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
 import { followersFile, inboxFile, readFollowers, readInboxLog } from './records.ts';
 
 /** The site under test. Fedify answers by origin, so every request uses this one. */
 const BASE_URL = 'https://blog.example';
-const SITE_ACTOR = `${BASE_URL}/ap/${SITE_ACTOR_IDENTIFIER}`;
-const SITE_INBOX = `${BASE_URL}/ap/${SITE_ACTOR_IDENTIFIER}/inbox`;
+
+/** The one account this site has, and so the one actor it publishes. */
+const LOCAL_USER = 'blog';
+const SITE_ACTOR = `${BASE_URL}/author/${LOCAL_USER}/`;
+const SITE_INBOX = `${SITE_ACTOR}inbox/`;
+/** The instance-wide inbox, which a peer may deliver to instead (decision-14). */
+const SHARED_INBOX = `${BASE_URL}/inbox/`;
 
 /** The peer that follows, likes and boosts. It exists only in the fetch stub. */
 const REMOTE_ORIGIN = 'https://remote.example';
@@ -153,12 +158,10 @@ async function site(): Promise<Cms> {
       baseUrl: BASE_URL,
       timezone: 'UTC',
       postsPerPage: 10,
-      author: 'Ada',
-      actorHandle: 'blog',
-      actorType: 'Person',
-      avatar: '',
+      author: LOCAL_USER,
     },
   });
+  writeUsers(dataDir, [{ username: LOCAL_USER, profile: { displayName: 'Geekity' } }]);
 
   deliveries.length = 0;
   const instance = createCms({
@@ -187,14 +190,20 @@ interface PostOptions {
   unsigned?: boolean;
 }
 
+/** How a POST to the inbox is addressed, signed and delivered. */
+interface DeliverOptions extends PostOptions {
+  /** Which inbox to deliver to. The user's own, by default. */
+  inbox?: string;
+}
+
 /** Deliver one activity to the site's inbox, signed as a real peer would. */
 async function deliver(
   instance: Cms,
   activity: { toJsonLd(): Promise<unknown> },
-  options: PostOptions = {},
+  options: DeliverOptions = {},
 ): Promise<Response> {
   const body = JSON.stringify(await activity.toJsonLd());
-  const request = new Request(SITE_INBOX, {
+  const request = new Request(options.inbox ?? SITE_INBOX, {
     method: 'POST',
     headers: { 'content-type': 'application/activity+json' },
     body,
@@ -226,7 +235,7 @@ describe('a Follow', () => {
     const response = await deliver(instance, follow());
 
     assert.equal(response.status, 202, await response.text());
-    const stored = instance.admin.getFollower(REMOTE_ACTOR);
+    const stored = instance.admin.getFollower(LOCAL_USER, REMOTE_ACTOR);
     assert.equal(stored?.inboxId, REMOTE_INBOX);
     assert.equal(stored?.sharedInboxId, REMOTE_SHARED_INBOX);
     assert.equal(stored?.handle, '@ada@remote.example');
@@ -258,11 +267,11 @@ describe('a Follow', () => {
       new Follow({
         id: new URL(`${REMOTE_ORIGIN}/follows/elsewhere`),
         actor: new URL(REMOTE_ACTOR),
-        object: new URL(`${BASE_URL}/ap/posts/hello`),
+        object: new URL(`${BASE_URL}/2026/03/hello/`),
       }),
     );
 
-    assert.equal(instance.admin.countFollowers(), 0);
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
     assert.deepEqual(deliveries, []);
   });
 
@@ -272,7 +281,37 @@ describe('a Follow', () => {
     await deliver(instance, follow(`${REMOTE_ORIGIN}/follows/1`));
     await deliver(instance, follow(`${REMOTE_ORIGIN}/follows/2`));
 
-    assert.equal(instance.admin.countFollowers(), 1);
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 1);
+  });
+
+  it('is accepted at the shared inbox too, and lands on the user it named (AC #2)', async () => {
+    // decision-14 puts the shared inbox at `/inbox/`, where a delivery names
+    // no actor in the path: the addressee is read out of the activity, which
+    // is what every instance-wide delivery relies on.
+    const instance = await site();
+
+    const response = await deliver(instance, follow(), { inbox: SHARED_INBOX });
+
+    assert.equal(response.status, 202, await response.text());
+    assert.equal(instance.admin.getFollower(LOCAL_USER, REMOTE_ACTOR)?.inboxId, REMOTE_INBOX);
+    assert.deepEqual(
+      readFollowers(contentOf(instance), LOCAL_USER).map((entry) => entry.actorId),
+      [REMOTE_ACTOR],
+      'and the file the site publishes says so',
+    );
+  });
+
+  it('records which user the inbox was told about', async () => {
+    const instance = await site();
+
+    await deliver(instance, follow());
+
+    assert.deepEqual(
+      readInboxLog(contentOf(instance)).map((line) => line.recipient),
+      [LOCAL_USER],
+      'the log attributes the activity to the actor it was addressed to',
+    );
+    assert.equal(instance.admin.listInboxActivities()[0]?.recipient, LOCAL_USER);
   });
 });
 
@@ -280,7 +319,7 @@ describe('an Undo of a Follow', () => {
   it('removes the follower', async () => {
     const instance = await site();
     await deliver(instance, follow());
-    assert.equal(instance.admin.countFollowers(), 1);
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 1);
 
     const response = await deliver(
       instance,
@@ -292,8 +331,8 @@ describe('an Undo of a Follow', () => {
     );
 
     assert.equal(response.status, 202, await response.text());
-    assert.equal(instance.admin.countFollowers(), 0);
-    assert.equal(instance.admin.getFollower(REMOTE_ACTOR), undefined);
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
+    assert.equal(instance.admin.getFollower(LOCAL_USER, REMOTE_ACTOR), undefined);
   });
 
   it('will not let one actor undo another actor’s follow', async () => {
@@ -309,7 +348,11 @@ describe('an Undo of a Follow', () => {
       }),
     );
 
-    assert.equal(instance.admin.countFollowers(), 1, 'the follow that was not undone stands');
+    assert.equal(
+      instance.admin.countFollowers(LOCAL_USER),
+      1,
+      'the follow that was not undone stands',
+    );
   });
 });
 
@@ -328,7 +371,7 @@ describe('a Delete of an actor', () => {
     );
 
     assert.equal(response.status, 202, await response.text());
-    assert.equal(instance.admin.countFollowers(), 0);
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
   });
 
   it('leaves the follower alone when something other than the actor is deleted', async () => {
@@ -344,7 +387,7 @@ describe('a Delete of an actor', () => {
       }),
     );
 
-    assert.equal(instance.admin.countFollowers(), 1);
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 1);
   });
 });
 
@@ -357,7 +400,7 @@ describe('the inbound activity log', () => {
       new Like({
         id: new URL(`${REMOTE_ORIGIN}/likes/1`),
         actor: new URL(REMOTE_ACTOR),
-        object: new URL(`${BASE_URL}/ap/posts/hello`),
+        object: new URL(`${BASE_URL}/2026/03/hello/`),
       }),
     );
 
@@ -366,7 +409,7 @@ describe('the inbound activity log', () => {
       .find((entry) => entry.activityType === 'Like');
     assert.ok(logged !== undefined, 'the Like was logged');
     assert.equal(logged.actorId, REMOTE_ACTOR);
-    assert.equal(logged.objectId, `${BASE_URL}/ap/posts/hello`);
+    assert.equal(logged.objectId, `${BASE_URL}/2026/03/hello/`);
     assert.equal(logged.activityId, `${REMOTE_ORIGIN}/likes/1`);
     assert.ok(logged.receivedAt !== '', 'the arrival was timed');
     assert.match(logged.json, /"Like"/);
@@ -380,7 +423,7 @@ describe('the inbound activity log', () => {
       new Announce({
         id: new URL(`${REMOTE_ORIGIN}/announces/1`),
         actor: new URL(REMOTE_ACTOR),
-        object: new URL(`${BASE_URL}/ap/posts/hello`),
+        object: new URL(`${BASE_URL}/2026/03/hello/`),
       }),
     );
 
@@ -388,7 +431,7 @@ describe('the inbound activity log', () => {
       .listInboxActivities()
       .find((entry) => entry.activityType === 'Announce');
     assert.equal(logged?.actorId, REMOTE_ACTOR);
-    assert.equal(logged?.objectId, `${BASE_URL}/ap/posts/hello`);
+    assert.equal(logged?.objectId, `${BASE_URL}/2026/03/hello/`);
   });
 
   it('records a reply, which arrives as a Create of a Note', async () => {
@@ -403,7 +446,7 @@ describe('the inbound activity log', () => {
           id: new URL(`${REMOTE_ORIGIN}/notes/1`),
           attribution: new URL(REMOTE_ACTOR),
           content: 'Good post.',
-          replyTarget: new URL(`${BASE_URL}/ap/posts/hello`),
+          replyTarget: new URL(`${BASE_URL}/2026/03/hello/`),
         }),
       }),
     );
@@ -418,8 +461,8 @@ describe('the inbound activity log', () => {
 
     // And it is indexed as a reply to that post, which is what makes the
     // comments feeds possible without reading every activity ever received.
-    assert.equal(logged.inReplyTo, `${BASE_URL}/ap/posts/hello`);
-    assert.equal(instance.admin.countRepliesTo(`${BASE_URL}/ap/posts/hello`), 1);
+    assert.equal(logged.inReplyTo, `${BASE_URL}/2026/03/hello/`);
+    assert.equal(instance.admin.countRepliesTo(`${BASE_URL}/2026/03/hello/`), 1);
     assert.deepEqual(
       instance.admin.listReplies().map((entry) => entry.objectId),
       [`${REMOTE_ORIGIN}/notes/1`],
@@ -434,7 +477,7 @@ describe('the inbound activity log', () => {
       new Like({
         id: new URL(`${REMOTE_ORIGIN}/likes/3`),
         actor: new URL(REMOTE_ACTOR),
-        object: new URL(`${BASE_URL}/ap/posts/hello`),
+        object: new URL(`${BASE_URL}/2026/03/hello/`),
       }),
     );
 
@@ -449,11 +492,11 @@ describe('the inbound activity log', () => {
       new Like({
         id: new URL(`${REMOTE_ORIGIN}/likes/2`),
         actor: new URL(REMOTE_ACTOR),
-        object: new URL(`${BASE_URL}/ap/posts/hello`),
+        object: new URL(`${BASE_URL}/2026/03/hello/`),
       }),
     );
 
-    assert.equal(instance.admin.countFollowers(), 0);
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
     assert.deepEqual(deliveries, []);
   });
 
@@ -476,7 +519,7 @@ describe('an invalid HTTP signature', () => {
     const response = await deliver(instance, follow(), { unsigned: true });
 
     assert.ok(!response.ok, `an unsigned Follow was answered ${String(response.status)}`);
-    assert.equal(instance.admin.countFollowers(), 0);
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
     assert.equal(instance.admin.countInboxActivities(), 0);
     assert.deepEqual(deliveries, []);
   });
@@ -487,7 +530,7 @@ describe('an invalid HTTP signature', () => {
     const response = await deliver(instance, follow(), { key: strangerKeys.privateKey });
 
     assert.ok(!response.ok, `a forged Follow was answered ${String(response.status)}`);
-    assert.equal(instance.admin.countFollowers(), 0);
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
     assert.equal(instance.admin.countInboxActivities(), 0);
     assert.deepEqual(deliveries, []);
   });
@@ -503,7 +546,7 @@ describe('an invalid HTTP signature', () => {
       !response.ok,
       `a Follow signed by an unknown key was answered ${String(response.status)}`,
     );
-    assert.equal(instance.admin.countFollowers(), 0);
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
   });
 });
 
@@ -513,7 +556,7 @@ describe('the federation files', () => {
 
     await deliver(instance, follow());
 
-    const held = readFollowers(contentOf(instance));
+    const held = readFollowers(contentOf(instance), LOCAL_USER);
     assert.deepEqual(
       held.map((follower) => [follower.actorId, follower.inboxId, follower.handle]),
       [[REMOTE_ACTOR, REMOTE_INBOX, '@ada@remote.example']],
@@ -532,9 +575,9 @@ describe('the federation files', () => {
       }),
     );
 
-    assert.deepEqual(readFollowers(contentOf(instance)), []);
+    assert.deepEqual(readFollowers(contentOf(instance), LOCAL_USER), []);
     assert.deepEqual(
-      JSON.parse(readFileIfPresentSync(followersFile(contentOf(instance))) ?? 'null'),
+      JSON.parse(readFileIfPresentSync(followersFile(contentOf(instance), LOCAL_USER)) ?? 'null'),
       [],
     );
   });
@@ -552,7 +595,7 @@ describe('the federation files', () => {
       }),
     );
 
-    assert.deepEqual(readFollowers(contentOf(instance)), []);
+    assert.deepEqual(readFollowers(contentOf(instance), LOCAL_USER), []);
   });
 
   it('gains a line per like, boost and reply, in the month they arrived in', async () => {
@@ -563,7 +606,7 @@ describe('the federation files', () => {
       new Like({
         id: new URL(`${REMOTE_ORIGIN}/likes/file`),
         actor: new URL(REMOTE_ACTOR),
-        object: new URL(`${BASE_URL}/ap/posts/hello`),
+        object: new URL(`${BASE_URL}/2026/03/hello/`),
       }),
     );
     await deliver(
@@ -571,7 +614,7 @@ describe('the federation files', () => {
       new Announce({
         id: new URL(`${REMOTE_ORIGIN}/announces/file`),
         actor: new URL(REMOTE_ACTOR),
-        object: new URL(`${BASE_URL}/ap/posts/hello`),
+        object: new URL(`${BASE_URL}/2026/03/hello/`),
       }),
     );
     await deliver(
@@ -583,7 +626,7 @@ describe('the federation files', () => {
           id: new URL(`${REMOTE_ORIGIN}/notes/file`),
           attribution: new URL(REMOTE_ACTOR),
           content: 'Good post.',
-          replyTarget: new URL(`${BASE_URL}/ap/posts/hello`),
+          replyTarget: new URL(`${BASE_URL}/2026/03/hello/`),
         }),
       }),
     );

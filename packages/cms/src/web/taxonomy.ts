@@ -102,7 +102,6 @@ export const RESERVED_TOP_LEVEL_PATHS: readonly string[] = [
   'feed',
   'comments',
   'admin',
-  'ap',
   'theme',
   'uploads',
   'nodeinfo',

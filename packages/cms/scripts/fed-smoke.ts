@@ -74,6 +74,7 @@ import {
   Update,
 } from '@fedify/vocab';
 
+import { writeUsers } from '../src/admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../src/admin/settings.ts';
 import { addFollower, readFollowers, readInboxLog } from '../src/federation/records.ts';
 import { createCms } from '../src/index.ts';
@@ -86,8 +87,11 @@ const PACKAGE_DIR = path.resolve(fileURLToPath(import.meta.url), '../..');
 const FIXTURE_DIR = path.join(PACKAGE_DIR, 'test', 'fixtures', 'federation');
 const PENDING_POST = '2026-03-05-hot-off-the-press.md';
 
-/** The handle the site answers to. `blog` is the default; it is named to assert on it. */
-const ACTOR_HANDLE = 'blog';
+/**
+ * The one account this site has. decision-14 makes every user an actor at
+ * their author URL, so this is the handle, the identifier and the path.
+ */
+const USERNAME = 'andrew';
 
 /** How long any one wait may take before the run is called a failure. */
 const STEP_TIMEOUT_MS = 30_000;
@@ -141,12 +145,12 @@ async function main(): Promise<void> {
         baseUrl,
         timezone: 'UTC',
         postsPerPage: 10,
-        author: 'andrew',
-        actorHandle: ACTOR_HANDLE,
-        actorType: 'Person',
-        avatar: '',
+        author: USERNAME,
       },
     });
+
+    // The actor is a user, so the account exists before the site boots.
+    writeUsers(dataDir, [{ username: USERNAME, profile: { displayName: 'Andrew Shell' } }]);
 
     log(`booting the site on ${baseUrl}`);
     const cms: Cms = createCms({
@@ -168,18 +172,40 @@ async function main(): Promise<void> {
     assert.equal(bound.port, port, 'the site bound the port its base URL names');
     ok(`the site is listening on ${baseUrl}`);
 
-    const actorUrl = `${baseUrl}/ap/actor`;
+    const actorUrl = `${baseUrl}/author/${USERNAME}/`;
 
     // ------------------------------------------------------- fedify lookup ×2
     log(`fedify lookup ${actorUrl}`);
     const actor = await lookup(actorUrl);
     assert.equal(actor['id'], actorUrl, 'the actor document names the actor URL as its id');
     assert.equal(actor['type'], 'Person', 'the actor is a Person');
-    assert.equal(actor['preferredUsername'], ACTOR_HANDLE, 'the actor keeps its handle');
-    for (const key of ['inbox', 'outbox', 'followers', 'publicKey'] as const) {
+    assert.equal(actor['preferredUsername'], USERNAME, 'the actor keeps its username');
+    for (const key of ['inbox', 'outbox', 'followers', 'following', 'publicKey'] as const) {
       assert.ok(actor[key] !== undefined, `the actor document carries ${key}`);
     }
-    ok(`the actor is @${ACTOR_HANDLE}@localhost:${String(port)} (${String(actor['name'])})`);
+    assert.equal(actor['inbox'], `${actorUrl}inbox/`, 'the inbox is a child of the actor');
+    assert.equal(
+      (actor['endpoints'] as { sharedInbox?: string } | undefined)?.sharedInbox,
+      `${baseUrl}/inbox/`,
+      'and the shared inbox is /inbox/ (decision-14)',
+    );
+    ok(`the actor is @${USERNAME}@localhost:${String(port)} (${String(actor['name'])})`);
+
+    // WebFinger is the CMS's own route rather than Fedify's (doc-8), and it is
+    // what a peer holding any one of a user's URLs uses to find the others.
+    const jrd = (await (
+      await fetch(
+        `${baseUrl}/.well-known/webfinger?resource=${encodeURIComponent(`acct:${USERNAME}@localhost:${String(port)}`)}`,
+      )
+    ).json()) as { subject: string; aliases: string[]; links: { rel: string; href?: string }[] };
+    assert.equal(jrd.subject, `acct:${USERNAME}@localhost:${String(port)}`);
+    assert.equal(
+      jrd.links.find((link) => link.rel === 'self')?.href,
+      actorUrl,
+      'WebFinger points at the actor',
+    );
+    assert.ok(jrd.aliases.includes(`${baseUrl}/@${USERNAME}`), 'and lists /@{username}');
+    ok(`WebFinger answers acct:${USERNAME}@localhost:${String(port)}`);
 
     // The object id of the post the fixture shipped, which the boot scan has
     // just indexed. decision-13 makes that its permalink, and reading the
@@ -193,7 +219,7 @@ async function main(): Promise<void> {
     const article = await lookup(objectUrl);
     assert.equal(article['id'], objectUrl, 'the post object names its own permalink as its id');
     assert.equal(article['type'], 'Article', 'a published post is an Article');
-    assert.equal(article['attributedTo'], actorUrl, 'the post is attributed to the site actor');
+    assert.equal(article['attributedTo'], actorUrl, 'the post is attributed to its author');
     assert.equal(article['name'], existing.title, 'the post object carries the post title');
     ok(`the post object is an Article titled ${JSON.stringify(existing.title)}`);
 
@@ -215,18 +241,15 @@ async function main(): Promise<void> {
     // `Follow` from that actor would have written — through the same
     // `addFollower` the inbox handler calls, so the followers file is the one
     // thing that decides who is delivered to here as well.
-    await addFollower(
-      { admin: cms.admin, contentDir },
-      {
-        actorId: cliActor,
-        inboxId: cliInbox,
-        sharedInboxId: null,
-        handle: null,
-        name: 'Fedify Ephemeral Inbox',
-        iconUrl: null,
-        url: null,
-      },
-    );
+    await addFollower({ admin: cms.admin, contentDir }, USERNAME, {
+      actorId: cliActor,
+      inboxId: cliInbox,
+      sharedInboxId: null,
+      handle: null,
+      name: 'Fedify Ephemeral Inbox',
+      iconUrl: null,
+      url: null,
+    });
     ok(`the ephemeral inbox is ${cliActor}, delivering to ${cliInbox}`);
 
     // ------------------------------------------------------ a real Follow
@@ -240,7 +263,7 @@ async function main(): Promise<void> {
     // `Accept` it answered with reached the peer and verified there too.
     const follower = await waitFor({
       what: 'the Follow to be accepted and the follower stored',
-      poll: () => cms.admin.getFollower(peer.actorId),
+      poll: () => cms.admin.getFollower(USERNAME, peer.actorId),
     });
     assert.equal(follower.inboxId, peer.inboxId, 'the stored follower names the peer’s inbox');
     await waitFor({
@@ -253,18 +276,18 @@ async function main(): Promise<void> {
     // The follow that just crossed a socket has to be in the file the site
     // publishes, not only in the index: decision-9 makes the file the source
     // and the table a cache of it.
-    const followers = readFollowers(contentDir);
+    const followers = readFollowers(contentDir, USERNAME);
     assert.deepEqual(
       followers.map((entry) => entry.actorId).sort(),
       [cliActor, peer.actorId].sort(),
-      'content/_data/federation/followers.json names both followers',
+      `content/_data/federation/${USERNAME}/followers.json names both followers`,
     );
     assert.equal(
       followers.find((entry) => entry.actorId === peer.actorId)?.inboxId,
       peer.inboxId,
       'the file names the peer’s inbox',
     );
-    ok('content/_data/federation/followers.json holds both followers');
+    ok(`content/_data/federation/${USERNAME}/followers.json holds both followers`);
 
     // ----------------------------------------------------------- a Like
     log('liking a published post from the peer');

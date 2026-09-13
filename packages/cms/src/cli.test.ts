@@ -769,7 +769,7 @@ describe('geekity rebuild', () => {
     return await site({
       'posts/2026-01-01-one.md': '---\ntitle: One\npermalink: /one/\n---\n\nOne.\n',
       'posts/2026-01-02-two.md': '---\ntitle: Two\npermalink: /two/\n---\n\nTwo.\n',
-      '_data/federation/followers.json': `${JSON.stringify(
+      '_data/federation/ada/followers.json': `${JSON.stringify(
         [
           {
             actorId: ADA,

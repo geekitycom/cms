@@ -459,9 +459,13 @@ describe('the users table an older version wrote', () => {
 });
 
 describe('followers', () => {
+  /** The user every follower here follows: decision-14 makes followers a user's. */
+  const BLOG = 'blog';
+
   /** A follower with every optional column filled, so nothing is left untested. */
   function ada(overrides: Partial<NewFollower> = {}): NewFollower {
     return {
+      username: BLOG,
       actorId: 'https://remote.example/users/ada',
       inboxId: 'https://remote.example/users/ada/inbox',
       sharedInboxId: 'https://remote.example/inbox',
@@ -493,7 +497,7 @@ describe('followers', () => {
     assert.equal(stored.iconUrl, 'https://remote.example/avatars/ada.png');
     assert.equal(stored.url, 'https://remote.example/@ada');
     assert.ok(stored.followedAt !== '', 'the row records when the follow arrived');
-    assert.deepEqual(admin.getFollower('https://remote.example/users/ada'), stored);
+    assert.deepEqual(admin.getFollower(BLOG, 'https://remote.example/users/ada'), stored);
     assert.equal(admin.countFollowers(), 1);
   });
 
@@ -501,6 +505,7 @@ describe('followers', () => {
     const admin = await store();
 
     const stored = admin.putFollower({
+      username: BLOG,
       actorId: 'https://remote.example/users/bare',
       inboxId: 'https://remote.example/users/bare/inbox',
       sharedInboxId: null,
@@ -548,19 +553,37 @@ describe('followers', () => {
       ],
     );
     assert.deepEqual(
-      admin.listFollowers({ limit: 2, offset: 1 }).map((follower) => follower.actorId),
+      admin.listFollowers(BLOG, { limit: 2, offset: 1 }).map((follower) => follower.actorId),
       ['https://remote.example/users/1', 'https://remote.example/users/0'],
     );
+  });
+
+  it('keeps one user’s followers apart from another’s (decision-14)', async () => {
+    const admin = await store();
+    // The same actor follows two of this site's people, which is two follows
+    // and two rows: unfollowing one must not unfollow the other.
+    admin.putFollower(ada());
+    admin.putFollower(ada({ username: 'grace' }));
+
+    assert.equal(admin.countFollowers(), 2, 'the site has two follows');
+    assert.equal(admin.countFollowers(BLOG), 1, 'and one of them is this user’s');
+    assert.deepEqual(
+      admin.listFollowers('grace').map((follower) => follower.username),
+      ['grace'],
+    );
+
+    assert.equal(admin.deleteFollower(BLOG, 'https://remote.example/users/ada'), true);
+    assert.equal(admin.countFollowers('grace'), 1, 'the other follow stands');
   });
 
   it('deletes a follower, and says so when there was none to delete', async () => {
     const admin = await store();
     admin.putFollower(ada());
 
-    assert.equal(admin.deleteFollower('https://remote.example/users/ada'), true);
-    assert.equal(admin.deleteFollower('https://remote.example/users/ada'), false);
+    assert.equal(admin.deleteFollower(BLOG, 'https://remote.example/users/ada'), true);
+    assert.equal(admin.deleteFollower(BLOG, 'https://remote.example/users/ada'), false);
     assert.equal(admin.countFollowers(), 0);
-    assert.equal(admin.getFollower('https://remote.example/users/ada'), undefined);
+    assert.equal(admin.getFollower(BLOG, 'https://remote.example/users/ada'), undefined);
   });
 });
 
@@ -571,7 +594,7 @@ describe('the inbound activity log', () => {
       activityId: 'https://remote.example/likes/1',
       activityType: 'Like',
       actorId: 'https://remote.example/users/ada',
-      objectId: 'https://blog.example/ap/posts/hello',
+      objectId: 'https://blog.example/2026/03/hello/',
       json: '{"type":"Like"}',
       ...overrides,
     };
@@ -593,7 +616,7 @@ describe('the inbound activity log', () => {
     assert.equal(logged.activityId, 'https://remote.example/likes/1');
     assert.equal(logged.activityType, 'Like');
     assert.equal(logged.actorId, 'https://remote.example/users/ada');
-    assert.equal(logged.objectId, 'https://blog.example/ap/posts/hello');
+    assert.equal(logged.objectId, 'https://blog.example/2026/03/hello/');
     assert.equal(logged.json, '{"type":"Like"}');
     assert.ok(logged.receivedAt !== '', 'the row records when it arrived');
     assert.deepEqual(admin.listInboxActivities(), [logged]);
@@ -640,7 +663,7 @@ describe('the inbound activity log', () => {
 });
 
 describe('the reply index', () => {
-  const POST = 'https://blog.example/ap/posts/hello';
+  const POST = 'https://blog.example/2026/03/hello/';
 
   /** A `Create` of a `Note` replying to a post, as the inbox compacts one. */
   function reply(
@@ -814,11 +837,12 @@ describe('the reply index', () => {
 });
 
 describe('replacing an index from the files it is derived from', () => {
-  const REPLY_TARGET = 'https://blog.example/ap/posts/hello';
+  const REPLY_TARGET = 'https://blog.example/2026/03/hello/';
 
   it('makes the followers exactly what it is handed, and nothing that was there before', async () => {
     const admin = await store();
     admin.putFollower({
+      username: 'blog',
       actorId: 'https://remote.example/users/ghost',
       inboxId: 'https://remote.example/users/ghost/inbox',
       sharedInboxId: null,
@@ -830,6 +854,7 @@ describe('replacing an index from the files it is derived from', () => {
 
     admin.replaceFollowers([
       {
+        username: 'blog',
         actorId: 'https://remote.example/users/ada',
         inboxId: 'https://remote.example/users/ada/inbox',
         sharedInboxId: null,
@@ -855,7 +880,7 @@ describe('replacing an index from the files it is derived from', () => {
         activityId: `https://remote.example/likes/old-${String(index)}`,
         activityType: 'Like',
         actorId: 'https://remote.example/users/ada',
-        objectId: 'https://blog.example/ap/posts/hello',
+        objectId: 'https://blog.example/2026/03/hello/',
         json: '{"type":"Like"}',
       });
     }
@@ -865,7 +890,7 @@ describe('replacing an index from the files it is derived from', () => {
         activityId: 'https://remote.example/likes/1',
         activityType: 'Like',
         actorId: 'https://remote.example/users/ada',
-        objectId: 'https://blog.example/ap/posts/hello',
+        objectId: 'https://blog.example/2026/03/hello/',
         receivedAt: '2026-09-03T10:00:00.000Z',
         json: '{"type":"Like"}',
       },
@@ -901,7 +926,7 @@ describe('replacing an index from the files it is derived from', () => {
 });
 
 describe('the delivery outcome cache', () => {
-  const OBJECT_ID = 'https://blog.example/ap/posts/hello';
+  const OBJECT_ID = 'https://blog.example/2026/03/hello/';
   const ACTIVITY_ID = `${OBJECT_ID}#create`;
 
   /** One follower's outcome for one activity about `hello`. */
@@ -952,16 +977,16 @@ describe('the delivery outcome cache', () => {
 
     const recorded = admin.recordDelivery(
       outcome({
-        activityId: 'https://blog.example/ap/actor#update/2026-03-04T10:00:00.000Z',
+        activityId: 'https://blog.example/author/ada/#update/2026-03-04T10:00:00.000Z',
         activityType: 'Update',
-        objectId: 'https://blog.example/ap/actor',
+        objectId: 'https://blog.example/author/ada/',
         slug: null,
       }),
     );
 
     assert.equal(recorded.slug, null);
     assert.equal(
-      admin.lastDeliveryToObject('https://blog.example/ap/actor')?.activityType,
+      admin.lastDeliveryToObject('https://blog.example/author/ada/')?.activityType,
       'Update',
     );
   });
@@ -1065,12 +1090,12 @@ describe('the outbound activity table an older version wrote', () => {
       );
 
       INSERT INTO ap_outbound VALUES (
-        'https://blog.example/ap/posts/hello#create', 'Create',
-        'https://blog.example/ap/posts/hello', 'hello',
+        'https://blog.example/2026/03/hello/#create', 'Create',
+        'https://blog.example/2026/03/hello/', 'hello',
         '2026-09-01T10:00:00.000Z', '{"type":"Create"}'
       );
       INSERT INTO ap_deliveries VALUES (
-        'https://blog.example/ap/posts/hello#create',
+        'https://blog.example/2026/03/hello/#create',
         'https://remote.example/users/ada', 'https://remote.example/inbox',
         'sent', NULL, '2026-09-01T10:00:01.000Z'
       );
@@ -1080,7 +1105,7 @@ describe('the outbound activity table an older version wrote', () => {
     const admin = openAdminStore({ dataDir });
     openStores.push(admin);
 
-    const last = admin.lastDeliveryToObject('https://blog.example/ap/posts/hello');
+    const last = admin.lastDeliveryToObject('https://blog.example/2026/03/hello/');
     assert.equal(last?.activityType, 'Create', 'the type moved onto the outcome row');
     assert.equal(last?.slug, 'hello', 'and so did the slug');
     assert.equal(last?.status, 'sent');
@@ -1111,7 +1136,7 @@ describe('relay subscriptions', () => {
       actorId: null,
       state: 'pending',
       reason: null,
-      followId: 'https://blog.example/ap/actor#relay-follow/1',
+      followId: 'https://blog.example/author/ada/#relay-follow/1',
       ...overrides,
     };
   }
@@ -1131,11 +1156,11 @@ describe('relay subscriptions', () => {
     assert.equal(stored.inboxId, RELAY_INBOX);
     assert.equal(stored.state, 'pending');
     assert.equal(stored.actorId, null);
-    assert.equal(stored.followId, 'https://blog.example/ap/actor#relay-follow/1');
+    assert.equal(stored.followId, 'https://blog.example/author/ada/#relay-follow/1');
     assert.ok(stored.createdAt !== '', 'the subscription was timed');
     assert.deepEqual(admin.getRelay(RELAY_INBOX), stored);
     assert.deepEqual(
-      admin.getRelayByFollow('https://blog.example/ap/actor#relay-follow/1'),
+      admin.getRelayByFollow('https://blog.example/author/ada/#relay-follow/1'),
       stored,
     );
   });
@@ -1174,9 +1199,9 @@ describe('relay subscriptions', () => {
     assert.equal(admin.lastDeliveryToInbox(RELAY_INBOX), undefined);
 
     admin.recordDelivery({
-      activityId: 'https://blog.example/ap/posts/hello#create',
+      activityId: 'https://blog.example/2026/03/hello/#create',
       activityType: 'Create',
-      objectId: 'https://blog.example/ap/posts/hello',
+      objectId: 'https://blog.example/2026/03/hello/',
       slug: 'hello',
       actorId: 'https://relay.example/user/_____relay_____',
       inboxId: RELAY_INBOX,
@@ -1187,6 +1212,6 @@ describe('relay subscriptions', () => {
 
     const last = admin.lastDeliveryToInbox(RELAY_INBOX);
     assert.equal(last?.status, 'sent');
-    assert.equal(last?.activityId, 'https://blog.example/ap/posts/hello#create');
+    assert.equal(last?.activityId, 'https://blog.example/2026/03/hello/#create');
   });
 });

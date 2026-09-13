@@ -1,4 +1,4 @@
-import type { AdminStore, InboxActivity, PostComment } from '../admin/store.ts';
+import type { AdminStore, Follower, InboxActivity, PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import { actorHandle, replyFrom, REPLY_ACTIVITY_TYPE } from '../federation/replies.ts';
@@ -761,12 +761,18 @@ function withdrawnBy(activities: readonly InboxActivity[]): Set<string> {
  */
 function authorNaming(admin: AdminStore): (actorId: string) => InteractionAuthor {
   const known = new Map<string, InteractionAuthor>();
+  // Read once, on the first unknown actor, rather than per actor: the
+  // followers are one row per (user, actor) now (decision-14), so the same
+  // stranger may be on the list several times and any of those rows names them
+  // the same way — the columns read here are the actor's own name and picture.
+  let profiles: Map<string, Follower> | undefined;
 
   return (actorId) => {
     const held = known.get(actorId);
     if (held !== undefined) return held;
 
-    const follower = admin.getFollower(actorId);
+    profiles ??= new Map(admin.listFollowers().map((entry) => [entry.actorId, entry]));
+    const follower = profiles.get(actorId);
     const handle = follower?.handle ?? actorHandle(actorId) ?? null;
     const author: InteractionAuthor = {
       name: follower?.name ?? handle ?? actorId,

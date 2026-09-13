@@ -6,10 +6,16 @@ import { after, before, describe, it } from 'node:test';
 import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { readSiteSettings } from './settings.ts';
 
 /** The site under test. Its origin is what an ActivityStreams id is built on. */
 const BASE_URL = 'https://blog.example';
+
+/** The account the setup form creates, and so the site's one actor. */
+const ADA = 'ada';
+const ACTOR_URL = `${BASE_URL}/author/${ADA}/`;
+
+/** A post's ActivityStreams id is its permalink (decision-13). */
+const HELLO_WORLD = `${BASE_URL}/2026/03/hello-world/`;
 
 /** The peer whose likes, boosts and replies the screen shows. */
 const REMOTE_ORIGIN = 'https://remote.example';
@@ -127,7 +133,7 @@ async function writePost(cms: Cms, slug: string, title: string): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(
     file,
-    `---\ntitle: ${title}\ndate: 2026-03-04T10:00:00.000Z\n---\n\nThe first post.\n`,
+    `---\ntitle: ${title}\ndate: 2026-03-04T10:00:00.000Z\nauthor: ${ADA}\n---\n\nThe first post.\n`,
     'utf8',
   );
   await cms.sync();
@@ -136,6 +142,7 @@ async function writePost(cms: Cms, slug: string, title: string): Promise<void> {
 /** One follower, with everything the screen has to show about them. */
 function follow(cms: Cms, overrides: Record<string, unknown> = {}): void {
   cms.admin.putFollower({
+    username: ADA,
     actorId: 'https://remote.example/users/ada',
     inboxId: 'https://remote.example/users/ada/inbox',
     sharedInboxId: 'https://remote.example/inbox',
@@ -181,45 +188,56 @@ describe('the follower list', () => {
   });
 });
 
-describe('the actor summary', () => {
-  it('shows the handle, the type, the profile fields and the follower count', async () => {
+describe('the actor panels', () => {
+  it('shows one actor per user, with the handle, the id and the follower count', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);
     follow(cms);
 
     const html = await federationScreen(agent);
 
-    assert.match(html, /@blog@blog\.example/, 'the handle is built from the settings and the host');
-    assert.match(html, /Person/, 'the actor type is shown');
-    assert.match(html, /https:\/\/blog\.example\/ap\/actor/, 'the actor id is shown');
+    assert.match(html, /@ada@blog\.example/, 'the handle is the username and the host');
+    assert.match(html, new RegExp(ACTOR_URL.replaceAll('/', '\\/')), 'the actor id is shown');
     assert.match(html, /Followers[\s\S]{0,120}>1</, 'the follower count is shown');
   });
 
-  it('shows the site’s avatar beside it, and a placeholder without one (AC #5)', async () => {
+  it('shows the user’s avatar beside them, and a placeholder without one (AC #5)', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);
 
     assert.match(
       await federationScreen(agent),
       /admin-avatar-blank/,
-      'a site with no avatar gets the placeholder',
+      'a user with no avatar gets the placeholder',
     );
 
-    const token = csrfField(await (await agent.get('/admin/settings')).text());
+    const token = csrfField(await (await agent.get('/admin/users')).text());
     assert.ok(token !== undefined);
-    await agent.upload(
-      '/admin/settings/avatar',
-      token,
-      { name: 'me.png', type: 'image/png', bytes: png() },
-      'avatar',
-    );
+    await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: '1',
+      display_name: 'Ada Lovelace',
+      bio: '',
+      avatar: '/uploads/2026/09/me.png',
+      links: '',
+    });
 
-    const avatar = readSiteSettings(cms.config.contentDir).avatar;
     assert.match(
       await federationScreen(agent),
-      new RegExp(`<img class="admin-avatar[^"]*" src="${BASE_URL}${avatar}"`),
+      new RegExp(`<img class="admin-avatar[^"]*" src="${BASE_URL}/uploads/2026/09/me\\.png"`),
       'and the avatar itself once there is one',
     );
+  });
+
+  it('names the user each announced post was announced by', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
+    await publishPost(agent, cms);
+
+    const html = await federationScreen(agent);
+    assert.match(html, /Announced by/, 'the delivery table has a column for it');
+    assert.match(html, /<td>@ada<\/td>/, 'and the row says whose post it was');
   });
 });
 
@@ -229,23 +247,25 @@ describe('an actor update in the delivery log', () => {
     const agent = await signedIn(cms);
     follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
 
-    const token = csrfField(await (await agent.get('/admin/settings')).text());
+    const token = csrfField(await (await agent.get('/admin/users')).text());
     assert.ok(token !== undefined);
-    await agent.upload(
-      '/admin/settings/avatar',
-      token,
-      { name: 'me.png', type: 'image/png', bytes: png() },
-      'avatar',
-    );
+    await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: '1',
+      display_name: 'Ada Lovelace',
+      bio: '',
+      avatar: '',
+      links: '',
+    });
     await cms.delivery.settled();
 
-    const recorded = cms.admin.lastDeliveryToObject(`${BASE_URL}/ap/actor`);
+    const recorded = cms.admin.lastDeliveryToObject(ACTOR_URL);
     assert.equal(recorded?.activityType, 'Update', 'the actor update was recorded');
     assert.equal(recorded?.slug, null, 'against no post');
 
     const html = await federationScreen(agent);
     assert.match(html, /No post has been announced/, 'the delivery table is still about posts');
-    assert.doesNotMatch(html, /ap\/actor#update/, 'and the actor update is not a row in it');
+    assert.doesNotMatch(html, /author\/ada\/#update/, 'and the actor update is not a row in it');
   });
 });
 
@@ -286,7 +306,7 @@ describe('recent inbox activity', () => {
       activityId: 'https://remote.example/follows/1',
       activityType: 'Follow',
       actorId: REMOTE_ACTOR,
-      objectId: 'https://blog.example/ap/actor',
+      objectId: ACTOR_URL,
       json: '{}',
     });
 
@@ -434,12 +454,12 @@ function logLike(cms: Cms): void {
     activityId: 'https://remote.example/likes/1',
     activityType: 'Like',
     actorId: REMOTE_ACTOR,
-    objectId: `${BASE_URL}/ap/posts/hello-world`,
+    objectId: HELLO_WORLD,
     json: JSON.stringify({
       id: 'https://remote.example/likes/1',
       type: 'Like',
       actor: REMOTE_ACTOR,
-      object: `${BASE_URL}/ap/posts/hello-world`,
+      object: HELLO_WORLD,
     }),
   });
 }
@@ -450,12 +470,12 @@ function logAnnounce(cms: Cms): void {
     activityId: 'https://remote.example/users/ada/statuses/8/activity',
     activityType: 'Announce',
     actorId: REMOTE_ACTOR,
-    objectId: `${BASE_URL}/ap/posts/hello-world`,
+    objectId: HELLO_WORLD,
     json: JSON.stringify({
       id: 'https://remote.example/users/ada/statuses/8/activity',
       type: 'Announce',
       actor: REMOTE_ACTOR,
-      object: `${BASE_URL}/ap/posts/hello-world`,
+      object: HELLO_WORLD,
     }),
   });
 }
@@ -476,15 +496,10 @@ function logReply(cms: Cms): void {
         type: 'Note',
         url: 'https://remote.example/@ada/9',
         content: '<p>Lovely post.</p>',
-        inReplyTo: `${BASE_URL}/ap/posts/hello-world`,
+        inReplyTo: HELLO_WORLD,
       },
     }),
   });
-}
-
-/** The first bytes of a PNG, which is all the signature check reads. */
-function png(): Uint8Array {
-  return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 }
 
 describe('the relays panel', () => {
@@ -509,12 +524,12 @@ describe('the relays panel', () => {
       actorId: RELAY_ACTOR,
       state: 'accepted',
       reason: null,
-      followId: `${BASE_URL}/ap/actor#relay-follow/1`,
+      followId: `${ACTOR_URL}#relay-follow/1`,
     });
     cms.admin.recordDelivery({
-      activityId: `${BASE_URL}/ap/posts/hello#create`,
+      activityId: `${BASE_URL}/2026/03/hello/#create`,
       activityType: 'Create',
-      objectId: `${BASE_URL}/ap/posts/hello`,
+      objectId: `${BASE_URL}/2026/03/hello/`,
       slug: 'hello',
       actorId: RELAY_ACTOR,
       inboxId: RELAY_INBOX,
@@ -537,7 +552,7 @@ describe('the relays panel', () => {
       actorId: RELAY_ACTOR,
       state: 'rejected',
       reason: 'This relay is invitation only.',
-      followId: `${BASE_URL}/ap/actor#relay-follow/1`,
+      followId: `${ACTOR_URL}#relay-follow/1`,
     });
 
     const html = await federationScreen(agent);
@@ -554,7 +569,7 @@ describe('the relays panel', () => {
       actorId: null,
       state: 'pending',
       reason: null,
-      followId: `${BASE_URL}/ap/actor#relay-follow/1`,
+      followId: `${ACTOR_URL}#relay-follow/1`,
     });
 
     const { html, token } = await federationForm(agent);
@@ -578,7 +593,7 @@ describe('the relays panel', () => {
     );
     assert.notEqual(
       cms.admin.getRelay(RELAY_INBOX)?.followId,
-      `${BASE_URL}/ap/actor#relay-follow/1`,
+      `${ACTOR_URL}#relay-follow/1`,
       'and the retry is a follow of its own',
     );
   });

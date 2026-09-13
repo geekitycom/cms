@@ -182,6 +182,27 @@ export function listUsers(dataDir: string): User[] {
     );
 }
 
+/**
+ * The site's first account: the lowest id, which is the one the first run
+ * made.
+ *
+ * decision-14 leaves the site with no actor of its own, and two things still
+ * have to be somebody's: a relay subscription, which is an instance-wide
+ * agreement rather than one person's, and a post whose `author` names nobody
+ * this site knows. Both fall to the first account, because a site's first
+ * account is the one that has always existed and the only one that can be
+ * chosen without asking. `undefined` before anybody has signed up, which is
+ * first-run setup and federates nothing.
+ */
+export function primaryUser(dataDir: string): User | undefined {
+  return readUsersFile(dataDir)
+    .users.map(withoutHash)
+    .reduce<User | undefined>(
+      (lowest, user) => (lowest === undefined || user.id < lowest.id ? user : lowest),
+      undefined,
+    );
+}
+
 /** How many users exist. Zero is what puts the admin into first-run setup. */
 export function countUsers(dataDir: string): number {
   return readUsersFile(dataDir).users.length;

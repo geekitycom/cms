@@ -33,7 +33,8 @@ export function followerRecipient(follower: Follower): Recipient {
 }
 
 /**
- * The followers collection, newest follow first: one page of it, or all of it.
+ * One user's followers collection, newest follow first: one page of it, or all
+ * of it.
  *
  * A cursor is the offset into the list as a decimal string, exactly as the
  * outbox's is, so the two collections page the same way and a cursor keeps
@@ -48,17 +49,18 @@ export function followerRecipient(follower: Follower): Recipient {
  */
 export function followersPage(
   context: Context<FederationContextData>,
+  username: string,
   cursor: string | null,
 ): PageItems<Recipient> {
   const { admin } = context.data;
 
   if (cursor === null) {
-    return { items: admin.listFollowers().map(followerRecipient) };
+    return { items: admin.listFollowers(username).map(followerRecipient) };
   }
 
   const offset = cursorOffset(cursor);
-  const followers = admin.listFollowers({ limit: FOLLOWERS_PAGE_SIZE, offset });
-  const total = admin.countFollowers();
+  const followers = admin.listFollowers(username, { limit: FOLLOWERS_PAGE_SIZE, offset });
+  const total = admin.countFollowers(username);
   const next = offset + FOLLOWERS_PAGE_SIZE;
 
   return {

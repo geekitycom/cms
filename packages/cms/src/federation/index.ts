@@ -1,7 +1,18 @@
-export { ACTOR_CLASSES, actorClassFor, avatarUrl, siteActor } from './actor.ts';
-export type { SiteActorOptions } from './actor.ts';
+export {
+  actorAliases,
+  actorId,
+  avatarUrl,
+  keyIdFor,
+  mainKeyId,
+  multikeyId,
+  senderKeyPairs,
+  userActor,
+  userByUsername,
+} from './actor.ts';
+export type { UserActorOptions } from './actor.ts';
 export {
   articleObjectId,
+  documentAuthor,
   isFederatedDocument,
   postArticle,
   postCreateActivity,
@@ -53,13 +64,13 @@ export {
   assertActorKeysUsable,
   loadActorKeyPairs,
   migrateActorKeysToFiles,
-  SITE_ACTOR_IDENTIFIER,
 } from './keys.ts';
 export type { ActorKeyAlgorithm } from './keys.ts';
 export {
   addFollower,
   appendInboxActivity,
   FEDERATION_DATA_DIRECTORY,
+  federatedUsernames,
   followersFile,
   FOLLOWERS_FILE,
   inboxDirectory,
@@ -72,17 +83,18 @@ export {
   readInboxLog,
   rebuildFederationIndexes,
   removeFollower,
+  userDirectory,
 } from './records.ts';
 export type { FederationIndexReport, FederationRecords, InboxLine } from './records.ts';
-export { mountFederation } from './mount.ts';
+export { acctOf, mountFederation, webFingerSubject, WEBFINGER_PATH } from './mount.ts';
 export {
   ACTOR_PATH,
   createActivityId,
   deleteActivityId,
-  FEDERATION_PREFIX,
   federationOrigin,
   FOLLOWERS_PATH,
   FOLLOWING_PATH,
+  handleHref,
   INBOX_PATH,
   NODEINFO_PATH,
   OUTBOX_PATH,

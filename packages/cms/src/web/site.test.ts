@@ -704,6 +704,7 @@ describe('the conversation under a post', () => {
   it('shows the replies the inbox logged, with author, avatar, time and a link', async () => {
     const cms = await federated();
     cms.admin.putFollower({
+      username: 'ada',
       actorId: 'https://remote.example/users/ada',
       inboxId: 'https://remote.example/users/ada/inbox',
       sharedInboxId: null,

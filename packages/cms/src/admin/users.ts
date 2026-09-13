@@ -29,6 +29,7 @@ import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
+import { toldFollowers } from './settings-page.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** Where the users screen lives. */
@@ -290,7 +291,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       return c.redirect(USERS_PATH, 303);
     }
 
-    await setUserProfile({
+    const changed = await setUserProfile({
       dataDir,
       userId: target.id,
       profile: {
@@ -301,7 +302,15 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       },
     });
 
-    flash(c, 'notice', `Saved ${target.username}’s profile.`);
+    // The profile is the actor's profile now (decision-14), so saving it is
+    // also an announcement: a follower's copy of somebody's name, bio and
+    // picture is only as fresh as the last `Update` they were sent. The user
+    // is read back rather than assumed, so the actor that goes out is built
+    // from the file exactly as a peer fetching it would be.
+    const saved = changed ? findUserById(dataDir, target.id) : undefined;
+    const told = saved === undefined ? undefined : await c.var.delivery.updateActor(saved);
+
+    flash(c, 'notice', `Saved ${target.username}’s profile.${toldFollowers(told)}`);
     return c.redirect(USERS_PATH, 303);
   });
 

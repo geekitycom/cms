@@ -4,12 +4,14 @@ import type { Context } from '@fedify/fedify';
 import { Accept, Follow, PUBLIC_COLLECTION, Reject, Undo } from '@fedify/vocab';
 import type { Recipient } from '@fedify/vocab';
 
+import { primaryUser } from '../admin/accounts.ts';
+import type { User } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore, Relay } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { ContentStore } from '../content/store.ts';
+import { actorId, senderKeyPairs } from './actor.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
-import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
 
 /** Where a relay reports what it could not do. `console` will do. */
 export interface RelayLogger {
@@ -127,19 +129,34 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
   }
 
   /**
+   * Who subscribes to a relay: the site's first account (decision-14).
+   *
+   * A relay subscription is an instance-wide agreement — it boosts everything
+   * public this site sends, whoever wrote it — and after decision-14 there is
+   * no site actor left to make one. The first account is the one actor that
+   * can be chosen without asking, and it is the account a one-person blog has
+   * anyway. `undefined` before anybody has signed up, and then nothing is
+   * sent: a site in first-run setup has no identity to sign with.
+   */
+  function subscriber(): User | undefined {
+    return primaryUser(config.dataDir);
+  }
+
+  /**
    * Send one activity to one relay inbox.
    *
-   * The key that signs the request is the site actor's whether or not the
+   * The key that signs the request is the subscriber's whether or not the
    * relay has answered yet; see {@link relayRecipient} for what stands in for
    * the id until it has.
    */
   async function send(
     context: Context<FederationContextData>,
+    user: User,
     relay: Relay,
     activity: Follow | Undo,
   ): Promise<void> {
     await context.sendActivity(
-      { identifier: SITE_ACTOR_IDENTIFIER },
+      await senderKeyPairs(context, user),
       relayRecipient(relay),
       activity,
       {
@@ -160,10 +177,16 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
    */
   async function follow(relay: Relay): Promise<Relay> {
     const context = relayContext();
-    const followId = new URL(
-      `#relay-follow/${randomUUID()}`,
-      context.getActorUri(SITE_ACTOR_IDENTIFIER),
-    );
+    const user = subscriber();
+    if (user === undefined) {
+      logger.warn(
+        `Could not follow the relay at ${relay.inboxId}: the site has no accounts, ` +
+          'and decision-14 makes a user the actor a subscription is made by.',
+      );
+      return admin.putRelay({ ...relay, reason: 'The site has no account to subscribe with.' });
+    }
+    const id = actorId(context, user);
+    const followId = new URL(`#relay-follow/${randomUUID()}`, id);
 
     const stored = admin.putRelay({
       inboxId: relay.inboxId,
@@ -177,10 +200,11 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     try {
       await send(
         context,
+        user,
         stored,
         new Follow({
           id: followId,
-          actor: context.getActorUri(SITE_ACTOR_IDENTIFIER),
+          actor: id,
           // The literal Public collection, expanded, which is what FEP-ae0c
           // says a relay looks for and what tells it this is a subscription
           // rather than somebody following an account.
@@ -200,15 +224,18 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
 
   /** Undo one relay's follow and forget it. */
   async function unfollow(relay: Relay): Promise<void> {
-    if (relay.followId !== null) {
+    const user = subscriber();
+    if (relay.followId !== null && user !== undefined) {
       try {
         const context = relayContext();
+        const id = actorId(context, user);
         await send(
           context,
+          user,
           relay,
           new Undo({
-            id: new URL(`#undo/${randomUUID()}`, context.getActorUri(SITE_ACTOR_IDENTIFIER)),
-            actor: context.getActorUri(SITE_ACTOR_IDENTIFIER),
+            id: new URL(`#undo/${randomUUID()}`, id),
+            actor: id,
             // The follow by id rather than embedded, which FEP-ae0c allows and
             // which is what the relay matched its own record on.
             object: new URL(relay.followId),

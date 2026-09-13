@@ -9,12 +9,11 @@ import { saveSettings, SETTINGS_PAGE_FORMS } from './__testing__/settings.ts';
 import { readSiteSettings } from './settings.ts';
 
 /**
- * The General settings page: what the site is called, where it lives, and its
- * picture.
+ * The General settings page: what the site is called and where it lives.
  *
- * The avatar is here because it is the site's picture everywhere, and it is
- * its own pair of forms because a file cannot travel in the urlencoded body
- * the General form posts.
+ * There is no picture here any more. decision-14 made every user an actor with
+ * an avatar of their own, so the picture the fediverse sees is a user's,
+ * edited beside the rest of their profile on the users screen.
  */
 
 const box = sandbox();
@@ -170,150 +169,6 @@ describe('a General form the validator refuses', () => {
   });
 });
 
-describe('the site avatar', () => {
-  it('is a placeholder until one is uploaded, then the stored image (AC #1, #2)', async () => {
-    const contentDir = await box.dir('geekity-settings-avatar-');
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    const before = await (await agent.get('/admin/settings')).text();
-    assert.match(before, /admin-avatar-blank/, 'the screen shows a placeholder');
-    assert.doesNotMatch(before, /<img[^>]+class="admin-avatar"/, 'and no image');
-
-    const token = csrfField(before);
-    assert.ok(token !== undefined, 'the avatar form carried a CSRF token');
-
-    const uploaded = await agent.upload(
-      '/admin/settings/avatar',
-      token,
-      { name: 'Me At The Beach.PNG', type: 'image/png', bytes: png() },
-      'avatar',
-    );
-    assert.equal(uploaded.status, 303, await uploaded.text());
-    assert.equal(uploaded.headers.get('location'), '/admin/settings');
-
-    const stored = readSiteSettings(cms.config.contentDir).avatar;
-    assert.match(
-      stored,
-      /^\/uploads\/\d{4}\/\d{2}\/me-at-the-beach\.png$/,
-      'the setting holds the public URL',
-    );
-
-    const file = path.join(contentDir, 'uploads', ...stored.slice('/uploads/'.length).split('/'));
-    assert.deepEqual(new Uint8Array(await readFile(file)), png(), 'the bytes are under content/');
-
-    const served = await cms.app.request(stored);
-    assert.equal(served.status, 200, 'and the site serves them at that URL');
-    assert.equal(served.headers.get('content-type'), 'image/png');
-
-    const written = JSON.parse(
-      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
-    ) as Record<string, unknown>;
-    assert.equal(written['avatar'], stored, 'site.json carries it');
-
-    const after = await (await agent.get('/admin/settings')).text();
-    assert.match(after, new RegExp(`<img[^>]+src="${stored}"`), 'and the screen shows it');
-  });
-
-  it('is taken down again by the Remove button (AC #1)', async () => {
-    const contentDir = await box.dir('geekity-settings-avatar-remove-');
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-    const token = await avatarToken(agent);
-
-    await agent.upload(
-      '/admin/settings/avatar',
-      token,
-      { name: 'me.png', type: 'image/png', bytes: png() },
-      'avatar',
-    );
-    const uploaded = readSiteSettings(cms.config.contentDir).avatar;
-    assert.notEqual(uploaded, '');
-
-    const html = await (await agent.get('/admin/settings')).text();
-    assert.match(html, /value="remove"/, 'the screen offers a way to take it down');
-
-    const removed = await agent.post('/admin/settings/avatar', {
-      csrf_token: token,
-      action: 'remove',
-    });
-    assert.equal(removed.status, 303);
-
-    assert.equal(readSiteSettings(cms.config.contentDir).avatar, '', 'the setting is empty again');
-    const written = JSON.parse(
-      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
-    ) as Record<string, unknown>;
-    assert.equal(written['avatar'], '', 'and so is site.json');
-
-    const screen = await (await agent.get('/admin/settings')).text();
-    assert.match(screen, /admin-avatar-blank/, 'the placeholder is back');
-    assert.doesNotMatch(screen, new RegExp(`src="${uploaded}"`));
-
-    const file = path.join(contentDir, 'uploads', ...uploaded.slice('/uploads/'.length).split('/'));
-    assert.deepEqual(
-      new Uint8Array(await readFile(file)),
-      png(),
-      'the file itself stays, as an upload rather than an avatar',
-    );
-  });
-
-  it('keeps the avatar it has when an upload is refused, and says why (AC #6)', async () => {
-    const cms = await box.site({ uploadMaxBytes: 512 });
-    const agent = await signedIn(cms);
-    const token = await avatarToken(agent);
-
-    await agent.upload(
-      '/admin/settings/avatar',
-      token,
-      { name: 'good.png', type: 'image/png', bytes: png() },
-      'avatar',
-    );
-    const kept = readSiteSettings(cms.config.contentDir).avatar;
-    assert.notEqual(kept, '', 'there is an avatar to lose');
-
-    const refusals: [string, { name: string; type: string; bytes: Uint8Array }, RegExp][] = [
-      [
-        'a file the site does not accept at all',
-        { name: 'me.exe', type: 'application/octet-stream', bytes: png() },
-        /Uploads of \.exe are not allowed/,
-      ],
-      [
-        'a file that is not an image',
-        { name: 'me.pdf', type: 'application/pdf', bytes: pdf() },
-        /A \.pdf is not an image/,
-      ],
-      [
-        'a file whose bytes are not what its name says',
-        { name: 'me.png', type: 'image/png', bytes: pdf() },
-        /does not look like a \.png inside/,
-      ],
-      [
-        'a file over the site’s limit',
-        { name: 'huge.png', type: 'image/png', bytes: oversizedPng(600) },
-        /too big/,
-      ],
-    ];
-
-    for (const [what, file, message] of refusals) {
-      const response = await agent.upload('/admin/settings/avatar', token, file, 'avatar');
-      assert.equal(response.status, 303, what);
-
-      const html = await (await agent.get('/admin/settings')).text();
-      assert.match(html, message, what);
-      assert.match(html, /The avatar is unchanged/, what);
-      assert.equal(readSiteSettings(cms.config.contentDir).avatar, kept, what);
-      assert.match(html, new RegExp(`<img[^>]+src="${kept}"`), what);
-    }
-  });
-});
-
-/** The CSRF token off the General page, which both avatar forms carry. */
-async function avatarToken(agent: Browser): Promise<string> {
-  const token = csrfField(await (await agent.get('/admin/settings')).text());
-  assert.ok(token !== undefined, 'the avatar form carried a CSRF token');
-  return token;
-}
-
 describe('the base URL', () => {
   it('is taken from the settings when the deployment names none', async () => {
     const dataDir = await box.dir('geekity-settings-base-url-data-');
@@ -360,20 +215,3 @@ describe('the base URL', () => {
     assert.equal(cms.config.baseUrl, 'https://deployed.example');
   });
 });
-
-/** The first bytes of a PNG, which is all the signature check reads. */
-function png(): Uint8Array {
-  return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-}
-
-/** The first bytes of a PDF: an upload the site accepts and an avatar it does not. */
-function pdf(): Uint8Array {
-  return new Uint8Array([...'%PDF-'].map((character) => character.charCodeAt(0)));
-}
-
-/** A PNG of `bytes` bytes, for the size limit. */
-function oversizedPng(bytes: number): Uint8Array {
-  const image = new Uint8Array(bytes);
-  image.set(png());
-  return image;
-}

@@ -2,6 +2,7 @@ import type { Context } from '@fedify/fedify';
 import { Activity, getTypeId, PUBLIC_COLLECTION, Update } from '@fedify/vocab';
 import type { Recipient } from '@fedify/vocab';
 
+import type { User } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore, Delivery, DeliveryStatus, Follower } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
@@ -10,9 +11,10 @@ import { saveDocument } from '../content/save.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { documentContent } from '../content/writer.ts';
-import { siteActor } from './actor.ts';
+import { actorId, senderKeyPairs, userActor } from './actor.ts';
 import {
   articleObjectId,
+  documentAuthor,
   isFederatedDocument,
   postCreateActivity,
   postDeleteActivity,
@@ -20,7 +22,6 @@ import {
 } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { followerRecipient } from './followers.ts';
-import { SITE_ACTOR_IDENTIFIER } from './keys.ts';
 import { updateActivityId } from './paths.ts';
 import { acceptedRelays, relayRecipient } from './relays.ts';
 
@@ -31,13 +32,13 @@ export interface DeliveryReport {
   /** `Create`, `Update` or `Delete`. */
   readonly activityType: string;
   /**
-   * The ActivityStreams id of what it was about: a post, or the site's own
-   * actor when the profile itself was what moved.
+   * The ActivityStreams id of what it was about: a post, or a user's own actor
+   * when the profile itself was what moved.
    */
   readonly objectId: string;
   /**
    * One row per follower and per accepted relay, as recorded. Empty when the
-   * site has neither.
+   * author has no followers and the site has no relay.
    */
   readonly deliveries: readonly Delivery[];
 }
@@ -78,15 +79,15 @@ export interface DeliveryService {
    */
   handle(change: DocumentChange): Promise<void>;
   /**
-   * Tell the followers that the site's own profile has moved: an `Update`
-   * whose object is the actor, which is how a peer learns that the name, the
+   * Tell one user's followers that their profile has moved: an `Update` whose
+   * object is their actor, which is how a peer learns that the name, the
    * summary or the avatar it cached is out of date.
    *
-   * `undefined` when the site has no followers and no accepted relay, in which
-   * case nothing is built and nothing is recorded: there is no cached profile
-   * anywhere to refresh.
+   * `undefined` when that user has no followers and the site has no accepted
+   * relay, in which case nothing is built and nothing is recorded: there is no
+   * cached profile anywhere to refresh.
    */
-  updateActor(): Promise<DeliveryReport | undefined>;
+  updateActor(user: User): Promise<DeliveryReport | undefined>;
   /**
    * Send one post as it now reads to every follower and every accepted relay
    * the site has.
@@ -204,8 +205,15 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     if (activityId === undefined) {
       throw new TypeError('An activity cannot be delivered without an id.');
     }
+    const author = documentAuthor(context, about);
+    if (author === undefined) {
+      throw new Error(
+        `The post "${about.slug}" cannot be delivered: the site has no accounts, ` +
+          'and decision-14 makes a user the actor a post is announced by.',
+      );
+    }
 
-    return await fanOut(context, activity, {
+    return await fanOut(context, author, activity, {
       activityId,
       activityType: typeNameOf(activity),
       objectId: articleObjectId(context, about).href,
@@ -223,10 +231,13 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
    * promised to record. So the recipients are grouped into the inboxes one
    * POST reaches — the instance shared inbox where followers publish one, and
    * a relay's own inbox — and each group's outcome is written against every
-   * actor behind it.
+   * actor behind it. It is also why the sender is an explicit key pair list
+   * rather than `{ identifier }`: doc-8 makes that the one shape a stored
+   * actor id can sign under.
    */
   async function fanOut(
     context: Context<FederationContextData>,
+    sender: User,
     activity: Activity,
     about: {
       activityId: string;
@@ -237,14 +248,15 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     },
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
+    const keys = await senderKeyPairs(context, sender);
 
-    for (const target of deliveryTargets(admin)) {
+    for (const target of deliveryTargets(admin, sender.username)) {
       let status: DeliveryStatus = synchronous ? 'sent' : 'queued';
       let error: string | null = null;
 
       try {
         await context.sendActivity(
-          { identifier: SITE_ACTOR_IDENTIFIER },
+          keys,
           target.recipients,
           activity,
           // The object id keeps a post's activities in order per server, so a
@@ -324,41 +336,38 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       }
     },
 
-    async updateActor() {
+    async updateActor(user) {
       // Building the actor loads — and on a cold database generates — the key
-      // pairs, so a site with nowhere to send a profile update does not pay
+      // pairs, so a user with nowhere to send a profile update does not pay
       // for one. A relay counts: it is holding a copy of the profile too.
-      if (deliveryTargets(admin).length === 0) return undefined;
+      if (deliveryTargets(admin, user.username).length === 0) return undefined;
 
       return await enqueue(async () => {
         const context = deliveryContext();
-        const actorId = context.getActorUri(SITE_ACTOR_IDENTIFIER);
-        const actor = await siteActor(context, SITE_ACTOR_IDENTIFIER, {
-          settings: readSiteSettings(config.contentDir),
-          baseUrl: config.baseUrl,
-        });
+        const id = actorId(context, user);
+        const actor = await userActor(context, user, { baseUrl: config.baseUrl });
 
         // The revision is the moment rather than a hash of the profile: an
         // avatar removed and put back is the same profile twice, and both
         // times the followers have to be told rather than recognise an id
         // they have already seen and skip it.
-        const activityId = updateActivityId(actorId, new Date().toISOString());
+        const activityId = updateActivityId(id, new Date().toISOString());
         const activity = new Update({
           id: activityId,
-          actor: actorId,
+          actor: id,
           object: actor,
           to: PUBLIC_COLLECTION,
-          cc: context.getFollowersUri(SITE_ACTOR_IDENTIFIER),
+          cc: context.getFollowersUri(user.username),
         });
 
-        return await fanOut(context, activity, {
+        return await fanOut(context, user, activity, {
           activityId: activityId.href,
           activityType: 'Update',
           // The object is the actor, not a post, and there is no slug to
           // record: that is what keeps an actor Update out of the federation
           // screen's per-post delivery table, which is built from the posts
           // the content index holds.
-          objectId: actorId.href,
+          objectId: id.href,
           slug: null,
         });
       }).catch((thrown: unknown) => {
@@ -447,18 +456,22 @@ export interface DeliveryTarget {
 }
 
 /**
- * Everywhere one public activity goes: the followers, grouped by the inbox
- * they share, and every accepted relay.
+ * Everywhere one public activity goes: one user's followers, grouped by the
+ * inbox they share, and every accepted relay.
+ *
+ * The followers are one person's (decision-14) and the relays are the site's:
+ * a relay subscribes to everything public this site sends, whoever wrote it,
+ * so it is a target of every author's activities.
  *
  * A relay is one target of its own rather than a member of a group, because it
  * is one inbox with one actor behind it and no shared inbox to fold into. A
  * pending or rejected relay is not here at all — {@link acceptedRelays} is
  * where that rule lives.
  */
-export function deliveryTargets(admin: AdminStore): DeliveryTarget[] {
+export function deliveryTargets(admin: AdminStore, username: string): DeliveryTarget[] {
   const targets: DeliveryTarget[] = [];
 
-  for (const [inboxId, members] of groupByInbox(admin.listFollowers())) {
+  for (const [inboxId, members] of groupByInbox(admin.listFollowers(username))) {
     targets.push({
       inboxId,
       recipients: members.map(followerRecipient),

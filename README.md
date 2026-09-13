@@ -125,14 +125,14 @@ export default defineConfig({
 Every field is optional. Relative directories resolve against the working
 directory; absolute ones are used as given.
 
-| Field        | Default                   | Environment override        | Meaning                                                                                                                                                                             |
-| ------------ | ------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `port`       | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on.                                                                                                                                                    |
-| `contentDir` | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                   |
-| `dataDir`    | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, the actor's key pairs. |
-| `themeDir`   | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme.                                                                                                                |
-| `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                          |
-| `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                        |
+| Field        | Default                   | Environment override        | Meaning                                                                                                                                                                                   |
+| ------------ | ------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port`       | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on.                                                                                                                                                          |
+| `contentDir` | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                         |
+| `dataDir`    | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs. |
+| `themeDir`   | `<cwd>/theme`             | `GEEKITY_THEME_DIR`         | Site template overrides, resolved before the packaged default theme.                                                                                                                      |
+| `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                |
+| `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                              |
 
 The admin adds eight more:
 
@@ -238,13 +238,13 @@ and nothing else has to be preserved across a deploy.
 `content/` is what the site publishes. It belongs in git, an Eleventy build
 reads the same directory, and everything in it is meant to be public:
 
-| Path                                               | What it holds                                              |
-| -------------------------------------------------- | ---------------------------------------------------------- |
-| `content/posts/`, `content/pages/`                 | The Markdown documents, `_trash/` included.                |
-| `content/uploads/`                                 | Uploaded files exactly as they arrived.                    |
-| `content/_data/site.json`                          | Every site setting, including the actor's handle and type. |
-| `content/_data/federation/followers.json`          | Who follows the site.                                      |
-| `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` | Every activity the inbox was handed, one per line.         |
+| Path                                                 | What it holds                                      |
+| ---------------------------------------------------- | -------------------------------------------------- |
+| `content/posts/`, `content/pages/`                   | The Markdown documents, `_trash/` included.        |
+| `content/uploads/`                                   | Uploaded files exactly as they arrived.            |
+| `content/_data/site.json`                            | Every site setting.                                |
+| `content/_data/federation/{username}/followers.json` | Who follows that user.                             |
+| `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`   | Every activity the inbox was handed, one per line. |
 
 `data/` is private. It is never in git, and it is the half that has to be
 copied somewhere safe:
@@ -252,7 +252,7 @@ copied somewhere safe:
 | Path              | What it holds                                                                      |
 | ----------------- | ---------------------------------------------------------------------------------- |
 | `data/users.json` | Usernames and argon2id password hashes, mode 0600.                                 |
-| `data/keys/`      | The actor's key pairs as JWK files, mode 0600. **Losing these breaks federation.** |
+| `data/keys/`      | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.** |
 
 And two things under `data/` may be deleted at any time the site is stopped:
 
@@ -321,8 +321,9 @@ files.
 
 Markdown files are the source of truth; SQLite is a derived index over them, so
 deleting `data/geekity.db` is safe and the next boot rebuilds it. The same is
-true of the two federation indexes: `content/_data/federation/followers.json`
-and `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` are the source, and the
+true of the two federation indexes:
+`content/_data/federation/{username}/followers.json` and
+`content/_data/federation/inbox/{yyyy}-{mm}.jsonl` are the source, and the
 `followers` and `ap_inbox` tables are emptied and read back from them on every
 boot.
 `createCms` opens it against `dataDir` (creating the directory) and applies the
@@ -449,7 +450,29 @@ Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
 | `/robots.txt`          | Everything but `/admin/`, and the sitemap's absolute URL.                      |
 | `/theme/…`             | The theme's own files, from its `static/` directory, cacheable and validated.  |
 | `/uploads/…`           | Files under `content/uploads/`, at the URLs an Eleventy build copies them to.  |
+| `/author/{username}/`  | One person's archive, paginated at `/author/{username}/page/2/`.               |
+| an author's `feed/`    | The same three formats over their posts, e.g. `/author/ada/feed/atom/`.        |
 | anything else          | The theme's 404.                                                               |
+
+`author` and `inbox` are reserved top-level paths: every user is an ActivityPub
+actor at their author URL, and an id a settings field could move would be a
+different account to everybody following it. The federation routes are:
+
+| Route                                    | What it serves                                                                                    |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `/author/{username}/`                    | The archive to a browser, the `Person` to an ActivityStreams request.                             |
+| `/author/{username}/inbox/`              | That user's inbox. `POST` only, signature-verified.                                               |
+| `/author/{username}/outbox/`             | Their posts as `Create` activities, paged.                                                        |
+| `/author/{username}/followers/`          | Who follows them, paged.                                                                          |
+| `/author/{username}/following/`          | Always empty; a relay is a subscription rather than a relationship.                               |
+| `/inbox/`                                | The instance-wide shared inbox, which addresses the actor in the body.                            |
+| `/@{username}`                           | A 301 to their archive, the short URL WordPress publishes.                                        |
+| `/.well-known/webfinger`                 | `acct:{username}@{host}`, the author URL or `/@{username}`, all four resolving to the same actor. |
+| `/.well-known/nodeinfo`, `/nodeinfo/2.1` | What software this is, and how much of it there is.                                               |
+
+A post's ActivityStreams object is its permalink rather than a route of its own
+(decision-13), served by the permalink with an `Accept` of
+`application/activity+json`.
 
 Drafts, documents in the trash and posts whose date is still ahead 404 and
 appear in no listing; a future-dated post is published on its date without a
@@ -553,7 +576,7 @@ copied in over ssh, pulled in by git or written by an Eleventy build is on the
 screen without a restart, and one deleted the same way is off it.
 
 The upload form on the screen goes through the same `storeUpload` the editor's
-"Add file…" and the avatar do, so what a site accepts is one answer given in
+"Add file…" does, so what a site accepts is one answer given in
 one place: the same allowlist, the same signature check, the same
 `{yyyy}/{mm}/{slug}{ext}`, and the same refusals.
 
@@ -667,13 +690,16 @@ offered.
 
 `/admin/settings` holds the values that are a site's own rather than a post's,
 on six pages under the Settings menu: **General** (title, tagline, author, base
-URL, time zone, language and the avatar), **Reading** (posts per page, the site
-menu, the notify server the feeds advertise), **Permalinks** (the tag and
-category archive bases), **Discussion** (comments and when they close,
-webmentions sent and received), **Email** (how the site sends mail and where a
-message written to it goes) and **Federation** (the ActivityPub actor handle and
-type, and the relays the site subscribes to). They live in
+URL, time zone and language), **Reading** (posts per page, the site menu, the
+notify server the feeds advertise), **Permalinks** (the tag and category
+archive bases), **Discussion** (comments and when they close, webmentions sent
+and received), **Email** (how the site sends mail and where a message written to
+it goes) and **Federation** (the relays the site subscribes to). They live in
 `content/_data/site.json`, which is published with the site and in git.
+
+Nothing on those pages is an ActivityPub profile. Every user is an actor with a
+name, a summary, a picture and links of their own, edited on `/admin/users`;
+saving one sends an `Update` of that actor to their followers.
 
 Each page is its own form saving its own fields. A page writes the settings it
 carries onto the file as it reads at that moment and validates only what it
@@ -694,16 +720,15 @@ on disk, and it cannot move a URL that already exists. The package README has
 file, validates what was typed, and writes it back — to a temporary file in the
 same directory, renamed over the old one, with the read and the write as one
 step nothing else writing that file can get between. Nothing else remembers a
-setting, so a save is on the public site, in the feeds and in the ActivityPub
-actor on the very next request, an Eleventy build of the same content directory
+setting, so a save is on the public site and in the feeds on the very next
+request, an Eleventy build of the same content directory
 renders with the same values, and a hand edit of the file while the server runs
 is picked up on the next request exactly as a save is. A site whose database
 was written by an older version has its settings rows written into the file
 once, on the first boot of this one, and the table is dropped.
 
 The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
-`timezone`, `language`, `avatar`, `actorHandle`, `actorType`, `tagBase`,
-`categoryBase`, `notifyServer`, `mailProvider`, `mailFromName`,
+`timezone`, `language`, `tagBase`, `categoryBase`, `notifyServer`, `mailProvider`, `mailFromName`,
 `mailFromAddress`, `mailReplyTo`, `contactEmail`, `relays`, `navigation` and
 `taxonomyRedirects`,
 and every other key it already had is kept — a site may put anything in there,
@@ -714,26 +739,21 @@ one is real-time notification turned off.
 Nothing is written until every field is valid, and a form with a problem comes
 back with a 400 and one message under each field that has one:
 
-| Field          | Has to be                                                                          |
-| -------------- | ---------------------------------------------------------------------------------- |
-| Title          | Not empty.                                                                         |
-| Base URL       | An absolute `http://` or `https://` URL. See [Configuration](#configuration).      |
-| Time zone      | An IANA zone name `Intl` knows, such as `Europe/London`.                           |
-| Language       | A BCP 47 tag, such as `en` or `en-GB`. It is the page's `lang` and the feeds'.     |
-| Posts per page | A whole number of one or more. It is what the home page and tag archives page by.  |
-| Menu           | One `Label \| URL` per line, the URL a path or an absolute URL. See below.         |
-| Tag base       | One URL-safe path segment. See below.                                              |
-| Category base  | The same, and not the same word as the tag base.                                   |
-| Actor handle   | 1 to 64 letters, digits, dashes or underscores — the local part of `@handle@host`. |
-| Actor type     | One of `Person`, `Organization`, `Service`, `Group` or `Application`.              |
-| Relays         | One relay inbox per line, each an absolute `http://` or `https://` URL.            |
-| Notify server  | An absolute `http://` or `https://` URL, or empty for none. See below.             |
-| Mail provider  | `none`, `brevo` or `smtp`. See below.                                              |
-| From address   | An email address, or empty for `no-reply@` at the site's host.                     |
-| Reply-to       | An email address, or empty to reply to the From address.                           |
-
-`Person` is the default actor type because some clients hide `Service` actors
-from timelines.
+| Field          | Has to be                                                                         |
+| -------------- | --------------------------------------------------------------------------------- |
+| Title          | Not empty.                                                                        |
+| Base URL       | An absolute `http://` or `https://` URL. See [Configuration](#configuration).     |
+| Time zone      | An IANA zone name `Intl` knows, such as `Europe/London`.                          |
+| Language       | A BCP 47 tag, such as `en` or `en-GB`. It is the page's `lang` and the feeds'.    |
+| Posts per page | A whole number of one or more. It is what the home page and tag archives page by. |
+| Menu           | One `Label \| URL` per line, the URL a path or an absolute URL. See below.        |
+| Tag base       | One URL-safe path segment. See below.                                             |
+| Category base  | The same, and not the same word as the tag base.                                  |
+| Relays         | One relay inbox per line, each an absolute `http://` or `https://` URL.           |
+| Notify server  | An absolute `http://` or `https://` URL, or empty for none. See below.            |
+| Mail provider  | `none`, `brevo` or `smtp`. See below.                                             |
+| From address   | An email address, or empty for `no-reply@` at the site's host.                    |
+| Reply-to       | An email address, or empty to reply to the From address.                          |
 
 The notify server is an [rssCloud][rsscloud] and [WebSub][websub] server, and
 it defaults to `https://rpc.rsscloud.io`, which speaks both. Every feed
@@ -794,17 +814,6 @@ no configuration at all nothing is sent and every feature that emails carries on
 working. See [Email][email] in the package README.
 
 [email]: packages/cms/README.md#email
-
-The avatar is not one of those fields, because it is a file: it has a pair of
-forms of its own on the General page, posting to `POST /admin/settings/avatar` —
-one multipart form uploads an image, the other takes it down again. The image
-goes through the same rules as an editor upload, with one more on top of them:
-it has to be an image, so a PDF the site is happy to accept as an upload is
-refused as a profile picture. A refusal is a message on the screen and the
-avatar the site already had, untouched. What is stored is the public path the
-upload landed at, which is `avatar` in `content/_data/site.json` and what the
-ActivityPub actor carries as its `icon`; saving or removing it
-sends an `Update` of the actor to every follower.
 
 ## Tags and categories
 

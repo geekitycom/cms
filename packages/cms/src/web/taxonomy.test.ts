@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { ADMIN_PREFIX } from '../admin/session.ts';
-import { FEDERATION_PREFIX } from '../federation/paths.ts';
 import { THEME_ASSET_PREFIX, UPLOAD_ASSET_PREFIX } from './assets.ts';
 import { AUTHOR_BASE, INBOX_BASE } from './authors.ts';
 import { COMMENTS_ROOT } from './feeds.ts';
@@ -93,7 +92,6 @@ describe('the reserved list', () => {
     const registered = [
       PAGE_SEGMENT,
       ADMIN_PREFIX,
-      FEDERATION_PREFIX,
       THEME_ASSET_PREFIX,
       UPLOAD_ASSET_PREFIX,
       COMMENTS_ROOT,

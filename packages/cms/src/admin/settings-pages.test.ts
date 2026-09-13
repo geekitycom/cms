@@ -158,7 +158,7 @@ describe('saving one settings page', () => {
     // the Reading page does not show and gives nobody a way to fix.
     await writeFile(
       path.join(contentDir, '_data', 'site.json'),
-      JSON.stringify({ title: '', actorHandle: 'blog' }),
+      JSON.stringify({ title: '' }),
       'utf8',
     );
 

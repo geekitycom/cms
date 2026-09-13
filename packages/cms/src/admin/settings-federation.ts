@@ -1,16 +1,17 @@
 /**
- * Federation: who the site is on the fediverse, and who boosts it.
+ * Federation: which relays the site subscribes to.
  *
- * The handle and the type are the actor's identity (doc-4), so a save of this
- * page tells the followers. The relay list is the only setting that is an
- * instruction as well as a value — a line added is a `Follow` to send and a
- * line removed is an `Undo` — so a save of this page reconciles them too.
+ * There is nothing else on this page any more. decision-14 replaced the site
+ * actor with one actor per user, so the handle, the type and the picture a
+ * site used to federate under are a user's profile, edited on the users
+ * screen; what is left here is the one setting that is an instruction as well
+ * as a value — a line added is a `Follow` to send and a line removed is an
+ * `Undo` — so a save of this page reconciles them.
  */
 
 import type { RelaySyncReport } from '../federation/relays.ts';
-import { settingsPagePath, toldFollowers } from './settings-page.ts';
+import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';
-import { ACTOR_TYPES, profileChanged } from './settings.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** The Federation settings page. */
@@ -19,20 +20,12 @@ export const FEDERATION_SETTINGS: SettingsPage = {
   label: 'Federation',
   path: settingsPagePath('federation'),
   template: ADMIN_TEMPLATES.settingsFederation,
-  fields: ['actorHandle', 'actorType', 'relays'],
+  fields: ['relays'],
 
-  panels: () => ({ actorTypes: ACTOR_TYPES }),
-
-  saved: async (c, before, after) => {
-    // The handle and the type are the actor's profile, and a follower's copy of
-    // it is only as fresh as the last thing it was told.
-    const told = profileChanged(before, after) ? await c.var.delivery.updateActor() : undefined;
-
+  saved: (c) => {
     // The reconciliation reads the settings that were just written, so it has
     // to come after the save rather than be derived from the form.
-    const relays = c.var.relays.sync();
-
-    return `${toldFollowers(told)}${toldRelays(relays)}`;
+    return toldRelays(c.var.relays.sync());
   },
 };
 

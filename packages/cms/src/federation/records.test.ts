@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { signedIn, signIn } from '../admin/__testing__/harness.ts';
+import { signIn } from '../admin/__testing__/harness.ts';
+import { writeUsers } from '../admin/__testing__/users.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { openAdminStore } from '../admin/store.ts';
@@ -49,8 +50,15 @@ async function records(): Promise<{ admin: AdminStore; contentDir: string }> {
 
 const ADA = 'https://remote.example/users/ada';
 
+/** The user every follower in this file follows (decision-14). */
+const BLOG = 'blog';
+
+/** What that account signs in with, for the tests that read the admin screen. */
+const PASSWORD = 'correct horse battery';
+const CREDENTIALS = { username: BLOG, password: PASSWORD };
+
 /** One follower, as a `Follow` from Ada's instance would describe her. */
-function ada(overrides: Partial<NewFollower> = {}): NewFollower {
+function ada(overrides: Partial<NewFollower> = {}): Omit<NewFollower, 'username'> {
   return {
     actorId: ADA,
     inboxId: `${ADA}/inbox`,
@@ -67,9 +75,9 @@ describe('the followers file', () => {
   it('is written by a follow, with everything the actor published', async () => {
     const site = await records();
 
-    const stored = await addFollower(site, ada({ followedAt: '2026-09-01T10:00:00.000Z' }));
+    const stored = await addFollower(site, BLOG, ada({ followedAt: '2026-09-01T10:00:00.000Z' }));
 
-    assert.deepEqual(JSON.parse(await readFile(followersFile(site.contentDir), 'utf8')), [
+    assert.deepEqual(JSON.parse(await readFile(followersFile(site.contentDir, BLOG), 'utf8')), [
       {
         actorId: ADA,
         inboxId: `${ADA}/inbox`,
@@ -88,97 +96,98 @@ describe('the followers file', () => {
     const site = await records();
 
     assert.equal(
-      path.relative(site.contentDir, followersFile(site.contentDir)),
-      path.join('_data', 'federation', 'followers.json'),
+      path.relative(site.contentDir, followersFile(site.contentDir, BLOG)),
+      path.join('_data', 'federation', BLOG, 'followers.json'),
     );
   });
 
   it('updates the index in the same step, so the collection sees the follow at once', async () => {
     const site = await records();
 
-    await addFollower(site, ada());
+    await addFollower(site, BLOG, ada());
 
-    assert.equal(site.admin.countFollowers(), 1);
-    assert.equal(site.admin.getFollower(ADA)?.inboxId, `${ADA}/inbox`);
+    assert.equal(site.admin.countFollowers(BLOG), 1);
+    assert.equal(site.admin.getFollower(BLOG, ADA)?.inboxId, `${ADA}/inbox`);
   });
 
   it('times a follow that did not say when it happened', async () => {
     const site = await records();
 
-    const stored = await addFollower(site, ada());
+    const stored = await addFollower(site, BLOG, ada());
 
     assert.ok(!Number.isNaN(new Date(stored.followedAt).getTime()), stored.followedAt);
-    assert.equal(readFollowers(site.contentDir)[0]?.followedAt, stored.followedAt);
+    assert.equal(readFollowers(site.contentDir, BLOG)[0]?.followedAt, stored.followedAt);
   });
 
   it('refreshes a profile rather than adding a second entry, keeping the follow time', async () => {
     const site = await records();
-    await addFollower(site, ada({ followedAt: '2026-09-01T10:00:00.000Z' }));
+    await addFollower(site, BLOG, ada({ followedAt: '2026-09-01T10:00:00.000Z' }));
 
-    await addFollower(site, ada({ name: 'Ada, Countess of Lovelace' }));
+    await addFollower(site, BLOG, ada({ name: 'Ada, Countess of Lovelace' }));
 
-    const held = readFollowers(site.contentDir);
+    const held = readFollowers(site.contentDir, BLOG);
     assert.equal(held.length, 1);
     assert.equal(held[0]?.name, 'Ada, Countess of Lovelace');
     assert.equal(held[0]?.followedAt, '2026-09-01T10:00:00.000Z');
-    assert.equal(site.admin.countFollowers(), 1);
+    assert.equal(site.admin.countFollowers(BLOG), 1);
   });
 
   it('keeps the followers in the order they arrived', async () => {
     const site = await records();
 
-    await addFollower(site, ada());
+    await addFollower(site, BLOG, ada());
     await addFollower(
       site,
+      BLOG,
       ada({ actorId: 'https://remote.example/users/bob', handle: '@bob@remote.example' }),
     );
 
     assert.deepEqual(
-      readFollowers(site.contentDir).map((follower) => follower.handle),
+      readFollowers(site.contentDir, BLOG).map((follower) => follower.handle),
       ['@ada@remote.example', '@bob@remote.example'],
     );
   });
 
   it('loses an entry to an unfollow, and the index with it', async () => {
     const site = await records();
-    await addFollower(site, ada());
+    await addFollower(site, BLOG, ada());
 
-    const forgotten = await removeFollower(site, ADA);
+    const forgotten = await removeFollower(site, BLOG, ADA);
 
     assert.equal(forgotten, true);
-    assert.deepEqual(readFollowers(site.contentDir), []);
-    assert.equal(site.admin.countFollowers(), 0);
+    assert.deepEqual(readFollowers(site.contentDir, BLOG), []);
+    assert.equal(site.admin.countFollowers(BLOG), 0);
     // Emptied rather than removed: an empty list is still what the file is for,
     // and an Eleventy build reads it either way.
-    assert.deepEqual(JSON.parse(await readFile(followersFile(site.contentDir), 'utf8')), []);
+    assert.deepEqual(JSON.parse(await readFile(followersFile(site.contentDir, BLOG), 'utf8')), []);
   });
 
   it('says nothing was forgotten when the actor never followed', async () => {
     const site = await records();
-    await addFollower(site, ada());
+    await addFollower(site, BLOG, ada());
 
-    assert.equal(await removeFollower(site, 'https://remote.example/users/nobody'), false);
-    assert.equal(readFollowers(site.contentDir).length, 1);
+    assert.equal(await removeFollower(site, BLOG, 'https://remote.example/users/nobody'), false);
+    assert.equal(readFollowers(site.contentDir, BLOG).length, 1);
   });
 
   it('is an empty list on a site nobody has followed yet', async () => {
     const site = await records();
 
-    assert.deepEqual(readFollowers(site.contentDir), []);
+    assert.deepEqual(readFollowers(site.contentDir, BLOG), []);
   });
 
   it('leaves valid JSON after every step of a burst of follows and unfollows', async () => {
     const site = await records();
 
     await Promise.all([
-      addFollower(site, ada({ actorId: `${ADA}-1` })),
-      addFollower(site, ada({ actorId: `${ADA}-2` })),
-      addFollower(site, ada({ actorId: `${ADA}-3` })),
-      removeFollower(site, `${ADA}-1`),
-      addFollower(site, ada({ actorId: `${ADA}-4` })),
+      addFollower(site, BLOG, ada({ actorId: `${ADA}-1` })),
+      addFollower(site, BLOG, ada({ actorId: `${ADA}-2` })),
+      addFollower(site, BLOG, ada({ actorId: `${ADA}-3` })),
+      removeFollower(site, BLOG, `${ADA}-1`),
+      addFollower(site, BLOG, ada({ actorId: `${ADA}-4` })),
     ]);
 
-    const held = readFollowers(site.contentDir);
+    const held = readFollowers(site.contentDir, BLOG);
     // Whichever order they landed in, the file and the index say the same
     // thing, because the index write is inside the same lock as the file.
     assert.deepEqual(
@@ -193,17 +202,17 @@ describe('the followers file', () => {
 
   it('is a named error when it will not parse, rather than a site with no followers', async () => {
     const site = await records();
-    await addFollower(site, ada());
-    await writeFile(followersFile(site.contentDir), '[{"actorId": "https://rem', 'utf8');
+    await addFollower(site, BLOG, ada());
+    await writeFile(followersFile(site.contentDir, BLOG), '[{"actorId": "https://rem', 'utf8');
 
-    assert.throws(() => readFollowers(site.contentDir), /followers\.json/);
+    assert.throws(() => readFollowers(site.contentDir, BLOG), /followers\.json/);
   });
 
   it('is a named error when an entry the site could never deliver to is edited in', async () => {
     const site = await records();
-    await mkdir(path.dirname(followersFile(site.contentDir)), { recursive: true });
+    await mkdir(path.dirname(followersFile(site.contentDir, BLOG)), { recursive: true });
     await writeFile(
-      followersFile(site.contentDir),
+      followersFile(site.contentDir, BLOG),
       JSON.stringify([{ actorId: ADA, handle: '@ada@remote.example' }]),
       'utf8',
     );
@@ -211,7 +220,7 @@ describe('the followers file', () => {
     // No inbox is no follower: delivering to it is the only thing a follower
     // is for, and a silent drop would leave the file and the index disagreeing
     // with nobody any the wiser.
-    assert.throws(() => readFollowers(site.contentDir), /followers\.json/);
+    assert.throws(() => readFollowers(site.contentDir, BLOG), /followers\.json/);
   });
 });
 
@@ -248,7 +257,7 @@ describe('the inbox log', () => {
   it('appends the activity to the month it arrived in, one line of JSON', async () => {
     const site = await records();
 
-    await appendInboxActivity(site, likeJson(), '2026-09-03T10:00:00.000Z');
+    await appendInboxActivity(site, likeJson(), { receivedAt: '2026-09-03T10:00:00.000Z' });
 
     const file = inboxFile(site.contentDir, '2026-09-03T10:00:00.000Z');
     assert.equal(path.basename(file), '2026-09.jsonl');
@@ -268,12 +277,10 @@ describe('the inbox log', () => {
   it('files an activity by the month it arrived in, not the month before it', async () => {
     const site = await records();
 
-    await appendInboxActivity(site, likeJson(), '2026-10-01T00:00:00.000Z');
-    await appendInboxActivity(
-      site,
-      likeJson({ id: 'https://remote.example/likes/2' }),
-      '2026-11-30T23:59:59.000Z',
-    );
+    await appendInboxActivity(site, likeJson(), { receivedAt: '2026-10-01T00:00:00.000Z' });
+    await appendInboxActivity(site, likeJson({ id: 'https://remote.example/likes/2' }), {
+      receivedAt: '2026-11-30T23:59:59.000Z',
+    });
 
     assert.deepEqual(
       (await readdir(path.join(site.contentDir, '_data', 'federation', 'inbox'))).sort(),
@@ -284,7 +291,9 @@ describe('the inbox log', () => {
   it('indexes it in the same step, deriving every column from the activity', async () => {
     const site = await records();
 
-    const logged = await appendInboxActivity(site, likeJson(), '2026-09-03T10:00:00.000Z');
+    const logged = await appendInboxActivity(site, likeJson(), {
+      receivedAt: '2026-09-03T10:00:00.000Z',
+    });
 
     assert.equal(logged?.activityId, 'https://remote.example/likes/1');
     assert.equal(logged?.activityType, 'Like');
@@ -301,7 +310,9 @@ describe('the inbox log', () => {
   it('indexes a reply by what it answers', async () => {
     const site = await records();
 
-    const logged = await appendInboxActivity(site, replyJson(), '2026-09-03T10:00:00.000Z');
+    const logged = await appendInboxActivity(site, replyJson(), {
+      receivedAt: '2026-09-03T10:00:00.000Z',
+    });
 
     assert.equal(logged?.inReplyTo, 'https://blog.example/ap/posts/hello');
     assert.equal(site.admin.countRepliesTo('https://blog.example/ap/posts/hello'), 1);
@@ -309,13 +320,11 @@ describe('the inbox log', () => {
 
   it('replaces the line a redelivered activity already has, rather than logging it twice', async () => {
     const site = await records();
-    await appendInboxActivity(site, likeJson(), '2026-09-03T10:00:00.000Z');
+    await appendInboxActivity(site, likeJson(), { receivedAt: '2026-09-03T10:00:00.000Z' });
 
-    await appendInboxActivity(
-      site,
-      likeJson({ object: 'https://blog.example/ap/posts/second' }),
-      '2026-09-04T10:00:00.000Z',
-    );
+    await appendInboxActivity(site, likeJson({ object: 'https://blog.example/ap/posts/second' }), {
+      receivedAt: '2026-09-04T10:00:00.000Z',
+    });
 
     const held = readInboxLog(site.contentDir);
     assert.equal(held.length, 1);
@@ -329,7 +338,7 @@ describe('the inbox log', () => {
     const logged = await appendInboxActivity(
       site,
       JSON.stringify({ id: 'https://remote.example/likes/9', type: 'Like' }),
-      '2026-09-03T10:00:00.000Z',
+      { receivedAt: '2026-09-03T10:00:00.000Z' },
     );
 
     assert.equal(logged, undefined);
@@ -340,16 +349,12 @@ describe('the inbox log', () => {
   it('reads the months back in order, oldest first', async () => {
     const site = await records();
 
-    await appendInboxActivity(
-      site,
-      likeJson({ id: 'https://remote.example/likes/late' }),
-      '2026-11-01T00:00:00.000Z',
-    );
-    await appendInboxActivity(
-      site,
-      likeJson({ id: 'https://remote.example/likes/early' }),
-      '2026-09-01T00:00:00.000Z',
-    );
+    await appendInboxActivity(site, likeJson({ id: 'https://remote.example/likes/late' }), {
+      receivedAt: '2026-11-01T00:00:00.000Z',
+    });
+    await appendInboxActivity(site, likeJson({ id: 'https://remote.example/likes/early' }), {
+      receivedAt: '2026-09-01T00:00:00.000Z',
+    });
 
     assert.deepEqual(
       readInboxLog(site.contentDir).map((line) => line.receivedAt),
@@ -365,7 +370,7 @@ describe('the inbox log', () => {
 
   it('is a named error when a line will not parse', async () => {
     const site = await records();
-    await appendInboxActivity(site, likeJson(), '2026-09-03T10:00:00.000Z');
+    await appendInboxActivity(site, likeJson(), { receivedAt: '2026-09-03T10:00:00.000Z' });
     await writeFile(
       inboxFile(site.contentDir, '2026-09-03T10:00:00.000Z'),
       '{"receivedAt":"2026-09-03T10:00:00.000Z","type":"Li\n',
@@ -383,7 +388,7 @@ describe('the inbox log', () => {
         appendInboxActivity(
           site,
           likeJson({ id: `https://remote.example/likes/${String(index)}` }),
-          '2026-09-03T10:00:00.000Z',
+          { receivedAt: '2026-09-03T10:00:00.000Z' },
         ),
       ),
     );
@@ -396,9 +401,9 @@ describe('the inbox log', () => {
 describe('rebuilding the indexes from the files', () => {
   it('puts the followers and the log into an empty database, and says what it indexed', async () => {
     const site = await records();
-    await addFollower(site, ada({ followedAt: '2026-09-01T10:00:00.000Z' }));
-    await appendInboxActivity(site, likeJson(), '2026-09-03T10:00:00.000Z');
-    await appendInboxActivity(site, replyJson(), '2026-09-04T10:00:00.000Z');
+    await addFollower(site, BLOG, ada({ followedAt: '2026-09-01T10:00:00.000Z' }));
+    await appendInboxActivity(site, likeJson(), { receivedAt: '2026-09-03T10:00:00.000Z' });
+    await appendInboxActivity(site, replyJson(), { receivedAt: '2026-09-04T10:00:00.000Z' });
     const before = {
       followers: site.admin.listFollowers(),
       inbox: site.admin.listInboxActivities(),
@@ -417,8 +422,9 @@ describe('rebuilding the indexes from the files', () => {
 
   it('is what the files say and nothing else: a row they do not carry goes', async () => {
     const site = await records();
-    await addFollower(site, ada());
+    await addFollower(site, BLOG, ada());
     site.admin.putFollower({
+      username: BLOG,
       actorId: 'https://remote.example/users/ghost',
       inboxId: 'https://remote.example/users/ghost/inbox',
       sharedInboxId: null,
@@ -427,7 +433,7 @@ describe('rebuilding the indexes from the files', () => {
       iconUrl: null,
       url: null,
     });
-    assert.equal(site.admin.countFollowers(), 2);
+    assert.equal(site.admin.countFollowers(BLOG), 2);
 
     rebuildFederationIndexes(site);
 
@@ -439,8 +445,8 @@ describe('rebuilding the indexes from the files', () => {
 
   it('gives the log the same row ids every time, so a rebuild is not a reshuffle', async () => {
     const site = await records();
-    await appendInboxActivity(site, likeJson(), '2026-09-03T10:00:00.000Z');
-    await appendInboxActivity(site, replyJson(), '2026-09-04T10:00:00.000Z');
+    await appendInboxActivity(site, likeJson(), { receivedAt: '2026-09-03T10:00:00.000Z' });
+    await appendInboxActivity(site, replyJson(), { receivedAt: '2026-09-04T10:00:00.000Z' });
     const first = site.admin.listInboxActivities();
 
     rebuildFederationIndexes(site);
@@ -451,10 +457,10 @@ describe('rebuilding the indexes from the files', () => {
 
   it('reflects an edit made to followers.json by hand', async () => {
     const site = await records();
-    await addFollower(site, ada());
-    const held = readFollowers(site.contentDir);
+    await addFollower(site, BLOG, ada());
+    const held = readFollowers(site.contentDir, BLOG);
     await writeFile(
-      followersFile(site.contentDir),
+      followersFile(site.contentDir, BLOG),
       JSON.stringify([
         ...held,
         {
@@ -469,27 +475,48 @@ describe('rebuilding the indexes from the files', () => {
 
     rebuildFederationIndexes(site);
 
-    assert.equal(site.admin.countFollowers(), 2);
+    assert.equal(site.admin.countFollowers(BLOG), 2);
     assert.equal(
-      site.admin.getFollower('https://remote.example/users/grace')?.handle,
+      site.admin.getFollower(BLOG, 'https://remote.example/users/grace')?.handle,
       '@grace@remote.example',
+    );
+  });
+
+  it('reads every user’s followers back, not just one’s (AC #4)', async () => {
+    const site = await records();
+    await addFollower(site, BLOG, ada());
+    await addFollower(site, 'grace', ada({ actorId: 'https://remote.example/users/bob' }));
+    site.admin.replaceFollowers([]);
+
+    const report = rebuildFederationIndexes(site);
+
+    assert.equal(report.followers, 2);
+    assert.deepEqual(
+      site.admin.listFollowers().map((follower) => [follower.username, follower.actorId]),
+      [
+        ['grace', 'https://remote.example/users/bob'],
+        [BLOG, ADA],
+      ],
     );
   });
 
   it('throws over a file it cannot read rather than emptying the index', async () => {
     const site = await records();
-    await addFollower(site, ada());
-    await writeFile(followersFile(site.contentDir), 'not json at all', 'utf8');
+    await addFollower(site, BLOG, ada());
+    await writeFile(followersFile(site.contentDir, BLOG), 'not json at all', 'utf8');
 
     assert.throws(() => rebuildFederationIndexes(site), /followers\.json/);
-    assert.equal(site.admin.countFollowers(), 1, 'the index was emptied before the read failed');
+    assert.equal(
+      site.admin.countFollowers(BLOG),
+      1,
+      'the index was emptied before the read failed',
+    );
   });
 });
 
 describe('an older database, whose rows the files do not have yet', () => {
-  it('has its followers and its log written out once, and reads back the same', async () => {
+  it('has its inbox log written out once, and reads back the same', async () => {
     const site = await records();
-    site.admin.putFollower({ ...ada(), followedAt: '2026-09-01T10:00:00.000Z' });
     site.admin.logInboxActivity({
       activityId: 'https://remote.example/likes/1',
       activityType: 'Like',
@@ -498,41 +525,53 @@ describe('an older database, whose rows the files do not have yet', () => {
       receivedAt: '2026-09-03T10:00:00.000Z',
       json: likeJson(),
     });
-    const before = {
-      followers: site.admin.listFollowers(),
-      inbox: site.admin.listInboxActivities(),
-    };
+    const before = site.admin.listInboxActivities();
 
     migrateFederationToFiles(site);
     rebuildFederationIndexes(site);
 
-    assert.deepEqual(readFollowers(site.contentDir), before.followers);
-    assert.deepEqual(site.admin.listFollowers(), before.followers);
-    assert.deepEqual(site.admin.listInboxActivities(), before.inbox);
+    assert.deepEqual(site.admin.listInboxActivities(), before);
     assert.equal(
       path.basename(inboxFile(site.contentDir, '2026-09-03T10:00:00.000Z')),
       '2026-09.jsonl',
     );
   });
 
-  it('leaves the files alone when they are already there, because the file wins', async () => {
+  it('leaves the site actor’s followers behind, because nobody inherits them', async () => {
+    // decision-14 replaced one site actor with one actor per user, and a
+    // follow is an agreement with somebody: handing the site actor's followers
+    // to whichever account happens to exist would be answering for them. The
+    // rows are simply not written out, and the rebuild empties the index of
+    // them on the same boot.
     const site = await records();
-    await addFollower(site, ada());
-    site.admin.putFollower({
-      actorId: 'https://remote.example/users/ghost',
-      inboxId: 'https://remote.example/users/ghost/inbox',
-      sharedInboxId: null,
-      handle: null,
-      name: null,
-      iconUrl: null,
-      url: null,
+    site.admin.putFollower({ username: BLOG, ...ada(), followedAt: '2026-09-01T10:00:00.000Z' });
+
+    migrateFederationToFiles(site);
+    rebuildFederationIndexes(site);
+
+    assert.equal(readFileIfPresentSync(followersFile(site.contentDir, BLOG)), undefined);
+    assert.deepEqual(site.admin.listFollowers(), []);
+  });
+
+  it('leaves the log alone when it is already there, because the file wins', async () => {
+    const site = await records();
+    await appendInboxActivity(site, likeJson(), { receivedAt: '2026-09-03T10:00:00.000Z' });
+    site.admin.logInboxActivity({
+      activityId: 'https://remote.example/likes/ghost',
+      activityType: 'Like',
+      actorId: ADA,
+      objectId: 'https://blog.example/ap/posts/hello',
+      receivedAt: '2026-09-03T11:00:00.000Z',
+      json: likeJson({ id: 'https://remote.example/likes/ghost' }),
     });
 
     migrateFederationToFiles(site);
 
     assert.deepEqual(
-      readFollowers(site.contentDir).map((follower) => follower.actorId),
-      [ADA],
+      readInboxLog(site.contentDir).map(
+        (line) => (JSON.parse(line.json) as { id?: string }).id ?? '',
+      ),
+      ['https://remote.example/likes/1'],
     );
   });
 
@@ -541,14 +580,14 @@ describe('an older database, whose rows the files do not have yet', () => {
 
     migrateFederationToFiles(site);
 
-    assert.deepEqual(readFollowers(site.contentDir), []);
-    assert.equal(readFileIfPresentSync(followersFile(site.contentDir)), undefined);
+    assert.deepEqual(readFollowers(site.contentDir, BLOG), []);
+    assert.deepEqual(readInboxLog(site.contentDir), []);
   });
 });
 
 /** The site under test in the boot tests. Fedify answers by origin. */
 const BASE_URL = 'https://blog.example';
-const FOLLOWERS_URL = `${BASE_URL}/ap/actor/followers`;
+const FOLLOWERS_URL = `${BASE_URL}/author/${BLOG}/followers/`;
 
 const booted: Cms[] = [];
 after(async () => {
@@ -578,10 +617,10 @@ async function federatedDirs(): Promise<{ contentDir: string; dataDir: string }>
       title: 'Geekity',
       baseUrl: BASE_URL,
       timezone: 'UTC',
-      actorHandle: 'blog',
-      actorType: 'Person',
     },
   });
+  // decision-14: the actor is a user, so the followers belong to one.
+  writeUsers(dataDir, [{ username: BLOG, password: PASSWORD }]);
   return { contentDir, dataDir };
 }
 
@@ -618,9 +657,10 @@ describe('a site whose database is thrown away', () => {
     const first = await boot(dirs);
     const site = { admin: first.admin, contentDir: dirs.contentDir };
 
-    await addFollower(site, ada({ followedAt: '2026-09-01T10:00:00.000Z' }));
+    await addFollower(site, BLOG, ada({ followedAt: '2026-09-01T10:00:00.000Z' }));
     await addFollower(
       site,
+      BLOG,
       ada({
         actorId: 'https://remote.example/users/grace',
         inboxId: 'https://remote.example/users/grace/inbox',
@@ -630,13 +670,13 @@ describe('a site whose database is thrown away', () => {
         followedAt: '2026-09-02T10:00:00.000Z',
       }),
     );
-    await appendInboxActivity(site, likeJson(), '2026-09-03T10:00:00.000Z');
-    await appendInboxActivity(site, replyJson(), '2026-09-04T10:00:00.000Z');
+    await appendInboxActivity(site, likeJson(), { receivedAt: '2026-09-03T10:00:00.000Z' });
+    await appendInboxActivity(site, replyJson(), { receivedAt: '2026-09-04T10:00:00.000Z' });
 
     const before = {
       collection: await followersCollection(first),
-      targets: deliveryTargets(first.admin),
-      screen: await federationScreen(await signedIn(first)),
+      targets: deliveryTargets(first.admin, BLOG),
+      screen: await federationScreen(await signIn(first, CREDENTIALS)),
     };
 
     // The comparison below is only worth making over a screen and a collection
@@ -652,19 +692,18 @@ describe('a site whose database is thrown away', () => {
     const second = await boot(dirs);
 
     assert.deepEqual(await followersCollection(second), before.collection);
-    assert.deepEqual(deliveryTargets(second.admin), before.targets);
-    assert.equal(await federationScreen(await signIn(second)), before.screen);
+    assert.deepEqual(deliveryTargets(second.admin, BLOG), before.targets);
+    assert.equal(await federationScreen(await signIn(second, CREDENTIALS)), before.screen);
   });
 });
 
 describe('a site whose files the database is ahead of', () => {
-  it('has its rows written out on the first boot, and the collection does not move', async () => {
+  it('has its inbox rows written out on the first boot', async () => {
     const dirs = await federatedDirs();
     const first = await boot(dirs);
 
     // Straight into the index, the way the version before this one stored
     // them: no file is written, so the next boot is the migrating one.
-    first.admin.putFollower({ ...ada(), followedAt: '2026-09-01T10:00:00.000Z' });
     first.admin.logInboxActivity({
       activityId: 'https://remote.example/likes/1',
       activityType: 'Like',
@@ -673,20 +712,17 @@ describe('a site whose files the database is ahead of', () => {
       receivedAt: '2026-09-03T10:00:00.000Z',
       json: likeJson(),
     });
-    const before = await followersCollection(first);
-    assert.equal(readFileIfPresentSync(followersFile(dirs.contentDir)), undefined);
 
     await first.close();
     const second = await boot(dirs);
 
-    assert.deepEqual(await followersCollection(second), before);
-    assert.deepEqual(
-      readFollowers(dirs.contentDir).map((follower) => follower.actorId),
-      [ADA],
-    );
     assert.deepEqual(
       readInboxLog(dirs.contentDir).map((line) => line.receivedAt),
       ['2026-09-03T10:00:00.000Z'],
+    );
+    assert.deepEqual(
+      second.admin.listInboxActivities().map((row) => row.activityId),
+      ['https://remote.example/likes/1'],
     );
   });
 });
@@ -695,11 +731,11 @@ describe('followers.json edited by hand', () => {
   it('is what the collection says after a restart', async () => {
     const dirs = await federatedDirs();
     const first = await boot(dirs);
-    await addFollower({ admin: first.admin, contentDir: dirs.contentDir }, ada());
+    await addFollower({ admin: first.admin, contentDir: dirs.contentDir }, BLOG, ada());
     await first.close();
 
     await writeFile(
-      followersFile(dirs.contentDir),
+      followersFile(dirs.contentDir, BLOG),
       JSON.stringify([
         {
           actorId: 'https://remote.example/users/grace',
