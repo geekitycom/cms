@@ -214,8 +214,20 @@ function siteTimezone(context: unknown): string {
   return typeof timezone === 'string' && timezone !== '' ? timezone : DEFAULT_TIMEZONE;
 }
 
+/**
+ * A value as an instant, or `undefined` when it is not one.
+ *
+ * `'now'` is the one word the filter reads rather than parses, for the thing a
+ * page has that no file carries: the year in the footer's copyright line. It is
+ * read at render time rather than at boot so a site left running over New Year
+ * says the new one, and it goes through the same zone lens as every other date,
+ * so a site in Auckland turns the year over when Auckland does. Eleventy themes
+ * spell it the same way, and `docs/eleventy.config.example.js` answers to it
+ * too, so one footer renders identically in both builds.
+ */
 function toDate(value: unknown): Date | undefined {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? undefined : value;
+  if (value === 'now') return new Date();
   if (typeof value === 'string' || typeof value === 'number') {
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;

@@ -81,9 +81,35 @@ describe('the theme the demo chose', () => {
   it('keeps the packaged layouts it did not override', async () => {
     const body = await text('/');
 
-    // `layouts/home.njk` and `partials/post-list.njk` are the package's.
+    // `layouts/home.njk` and `partials/post-list.njk` are the package's, and so
+    // is `layouts/base.njk` — the shell of the andrewshell.org design
+    // (decision-16): the skip link, the wrapper that says it is the root path,
+    // and the site title as the heading with the tagline under it.
     assert.match(body, /class="post-list"/);
-    assert.match(body, /Skip to content/);
+    assert.match(body, /<a class="screen-reader-text" href="#main">Skip to content<\/a>/);
+    assert.match(body, /<div class="global-wrapper" data-is-root-path="true">/);
+    assert.match(body, /<h1 class="main-heading">\s*<a href="\/">Geekity Demo<\/a>/);
+    assert.match(body, /A file-first site, served straight from Markdown/);
+  });
+
+  it('degrades the footer for a site author no user answers to', async () => {
+    // `site.json` says `"author": "Joe Blog"` and the demo has no such account,
+    // so `siteAuthor` is absent: the name is still in the copyright line and
+    // there are no `rel="me"` links to print (TASK-79, TASK-80).
+    const body = await text('/2026/08/markdown-on-disk/');
+    const footer = /<footer>([\s\S]*?)<\/footer>/.exec(body)?.[1] ?? '';
+
+    assert.match(footer, /&copy; \d{4}, Joe Blog/, 'no copyright line');
+    assert.match(footer, /Published with[\s\S]*Geekity/, 'no colophon');
+    assert.match(footer, /<a href="\/feed\/">RSS<\/a>/, 'no RSS link');
+    assert.doesNotMatch(footer, /rel="me"/, 'a name with no profile behind it has links');
+  });
+
+  it('heads every page but the front one with the small link home', async () => {
+    const body = await text('/2026/08/markdown-on-disk/');
+
+    assert.match(body, /<a class="header-link-home" href="\/">Geekity Demo<\/a>/);
+    assert.doesNotMatch(body, /main-heading/, 'the front page heading is on an entry');
   });
 
   it('serves the demo stylesheet at /theme/style.css', async () => {
@@ -172,6 +198,11 @@ describe('the demo with its theme unchosen', () => {
   it('serves the rest of the site exactly as before', async () => {
     assert.match(await bareText('/'), /class="post-list"/);
     assert.match(await bareText('/colophon/'), /Colophon/);
+  });
+
+  it('wears the packaged shell on every page of it', async () => {
+    assert.match(await bareText('/'), /<div class="global-wrapper" data-is-root-path="true">/);
+    assert.match(await bareText('/colophon/'), /<a class="header-link-home" href="\/">/);
   });
 });
 

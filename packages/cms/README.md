@@ -2524,6 +2524,19 @@ The admin is not themed. Its templates and its static files live in a tree of
 their own with a loader of their own, deliberately off this search path, so no
 theme can shadow the login form or the CSRF field inside it.
 
+The packaged theme is the andrewshell.org design (decision-16). `base.njk` is
+its shell: a skip link, a `.global-wrapper` carrying `data-is-root-path="true"`
+at `/` only, a header that is the site title and tagline on the front page and a
+small link home on every other, `<main id="main">`, and a footer with the
+copyright year, the site author, the colophon, an RSS link and one `rel="me"`
+link per link on the site author's profile. Nothing particular to one site is in
+it — webrings and badges belong in a site theme's `footer` block. The stylesheet
+is a serif body and sans headings at an 18px root, one column at 42rem, warm
+paper with a rust primary and a blue secondary, and a second scheme under
+`prefers-color-scheme: dark` that redefines the same `--color-*` tokens on dark
+paper. Both meet WCAG 2.2 AA, checked by a test that reads the custom properties
+out of the stylesheet and computes the ratios.
+
 The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`,
 `content`, `page.url`, and every front matter key the file carried — plus
 `site`, which is `content/_data/site.json`. It is part of the semver contract.

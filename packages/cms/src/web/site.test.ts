@@ -963,7 +963,7 @@ describe('overriding one template', () => {
     assert.ok(overridden.includes('overridden: Notes'), 'the site post layout rendered');
 
     for (const [url, marker] of [
-      ['/', 'site-header'],
+      ['/', 'global-header'],
       ['/about/', 'page-body'],
       ['/tag/eleventy/', 'Tagged'],
       ['/nothing-here/', 'Not found'],

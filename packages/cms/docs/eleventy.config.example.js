@@ -655,8 +655,12 @@ export default function (eleventyConfig) {
   //
   // This version uses Intl so the file keeps its promise of no dependencies.
   const defaultZone = siteTimezone();
+  //
+  // `'now'` is the one word the filter reads rather than parses: the default
+  // theme's footer writes `{{ "now" | date("year") }}` for its copyright line,
+  // because that is the one date a page has that no file carries.
   eleventyConfig.addFilter('date', (value, format = 'readable', zone = defaultZone) => {
-    const at = value instanceof Date ? value : new Date(value);
+    const at = value === 'now' ? new Date() : value instanceof Date ? value : new Date(value);
     if (Number.isNaN(at.getTime())) return '';
     if (format === 'iso') return at.toISOString();
 

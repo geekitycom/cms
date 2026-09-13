@@ -132,6 +132,79 @@ On the posts page the page's own front matter and rendered body are on the
 context beside the listing, so `{{ content | safe }}` prints its words above
 the posts; `layouts/home.njk` already does.
 
+## The page shell
+
+`layouts/base.njk` is the andrewshell.org design's shell (decision-16): the
+skip link, one `.global-wrapper` at the 42rem measure, `.global-header`,
+`<main id="main">` and the footer, in that order.
+
+**The header has one rule.** On the front page it is the site title as
+`h1.main-heading`, linked home, with `site.tagline` in a paragraph under it; on
+every other page it is `a.header-link-home`, the site title small and linked
+home, and no tagline. The wrapper carries `data-is-root-path="true"` at `/` and
+nothing anywhere else, which is how the stylesheet tells the two apart. There is
+no navigation in the header — see [Navigation](#navigation).
+
+**The footer** prints the copyright with the current year and `site.author`,
+`Published with Geekity`, and then one `ul.hlist` holding an RSS link to
+`/feed/` and one `rel="me"` link per entry of `siteAuthor.links`. A site whose
+`author` setting names nobody with an account here gets the line and the RSS
+link and no identity links, because `siteAuthor` is absent. The year is
+`{{ "now" | date("year") }}` — `now` is the one word the `date` filter reads
+rather than parses — so it is the year at the moment the page is rendered, in
+the site's own timezone.
+
+Webrings, badges, a licence notice and anything else particular to one site are
+deliberately not in the package. They go in a site theme's `footer` block:
+
+```njk
+{% extends "layouts/base.njk" %}
+
+{% block footer %}
+{{ super() }}
+<p class="webring">
+  <a href="https://example.ring/previous">&larr;</a>
+  An <a href="https://example.ring">example webring</a>
+  <a href="https://example.ring/next">&rarr;</a>
+</p>
+{% endblock %}
+```
+
+### Colours
+
+`static/style.css` is the source design: a serif body and sans headings at an
+18px root on a 1.2 minor-third scale, warm paper with near-black text, a rust
+primary and a blue secondary, one column, links that invert to the primary
+colour on hover, and a rule in the primary colour. Everything is a custom
+property on `:root`, so a site that only wants different colours overrides the
+half-dozen `--color-*` tokens rather than the stylesheet.
+
+The source is light only. The theme adds a second scheme under
+`@media (prefers-color-scheme: dark)` that redefines the same colour tokens on
+dark paper, with the rust and the blue lifted until they read on it, and
+`color-scheme: light dark` so a browser paints its own form controls and
+scrollbars to match. There is no toggle: the reader's system setting is the
+setting.
+
+Both schemes meet WCAG 2.2 AA — 4.5:1 for body text, 3:1 for large text, rules
+and focus outlines — and that is a test rather than a claim.
+`src/web/theme-colors.test.ts` reads the custom properties out of this
+stylesheet and computes the ratios for every pair the design puts on screen, so
+a colour changed here that breaks one fails the build.
+
+| Token                     | What it colours                                    |
+| ------------------------- | -------------------------------------------------- |
+| `--color-body`            | The paper, and the text of an inverted link.       |
+| `--color-text`            | The ink.                                           |
+| `--color-primary`         | Links, the rule, the focus outline, table headers. |
+| `--color-secondary`       | Blockquote text and its border.                    |
+| `--color-base`            | A warm sunk surface: rules between entries.        |
+| `--color-base-2`          | A cooler sunk surface.                             |
+| `--color-base-3`          | The raised surface: the focused skip link, inputs. |
+| `--color-code-background` | Behind `code` and a fenced block.                  |
+| `--color-code-text`       | Code with no highlighting on it.                   |
+| `--color-error`           | A form field that will not do.                     |
+
 ## Mail templates
 
 The messages the CMS sends live under `mail/` and resolve the same way, so a
@@ -319,15 +392,16 @@ it.
 ## Navigation
 
 `menu` is the site menu, already in order and already knowing which of its items
-is the page being looked at. Every template gets it, so a layout that overrides
-`header` renders the menu the same way `layouts/base.njk` does:
+is the page being looked at. Every template gets it. The design has no header
+navigation, so `layouts/base.njk` renders it in the `footer` block; a layout
+that overrides `header` or `footer` renders it the same way:
 
 ```njk
 {% if menu.length %}
 <nav class="site-nav" aria-label="Site">
-  <ul>
+  <ul class="hlist">
     {% for item in menu %}
-    <li><a href="{{ item.url | url }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
+    <li><a href="{{ item.url | url }}"{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
     {% endfor %}
   </ul>
 </nav>
@@ -646,6 +720,11 @@ the import above carries `with context`: a macro imported without it cannot see
 | `date(format, zone)` | Formats a `Date` or a date string. `readable` (the default) gives `2 September 2026`, `html` gives `2026-09-02` for a `<time datetime>`, `year` gives `2026`, `iso` gives the full ISO 8601 instant. A date in a file is a UTC instant; `readable`, `html` and `year` are rendered in the site's `timezone` setting, and `iso` stays the instant. Pass `zone` — an IANA name — to override the setting for one call. A value that is not a date renders as the empty string. |
 | `url`                | Prefixes a root-relative path with the base URL's path, so a site served from a subdirectory links correctly. Eleventy's filter of the same name.                                                                                                                                                                                                                                                                                                                            |
 | `absoluteUrl`        | The same path as a fully qualified URL against the site's `baseUrl`.                                                                                                                                                                                                                                                                                                                                                                                                         |
+
+`date` reads one word rather than parsing it: `{{ "now" | date("year") }}` is
+the year at the moment the page is rendered, in the site's own timezone. It is
+what the footer's copyright line is written with, and it is the one date a page
+has that no file carries.
 
 Nunjucks' own filters — `default`, `join`, `urlencode`, `safe` and the rest —
 are all available. Autoescaping is on, so rendered Markdown is the one thing

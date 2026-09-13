@@ -1,6 +1,13 @@
 {#
   The page every other layout extends.
 
+  The shell of the andrewshell.org design (decision-16): one wrapper at the
+  measure, a big site title and tagline on the front page and a small link home
+  everywhere else, and a footer holding the copyright, the colophon, the feed
+  and whoever the site is by. There is no navigation in the header — the site
+  menu belongs with the bio under an entry — and `data-is-root-path` on the
+  wrapper is how the stylesheet tells the front page from every other one.
+
   Blocks a site can override without copying the whole file:
     title       the contents of <title>
     head        extra tags at the end of <head>
@@ -9,7 +16,13 @@
     content     the page body
     footer      the site footer
     scripts     scripts at the end of <body>
-#}{% import "partials/feeds.njk" as feeds %}<!doctype html>
+#}{% import "partials/feeds.njk" as feeds %}
+{#- Whether this is the front page, which is the one page the header and the
+    stylesheet treat differently. `page.url` is the URL being served rather
+    than the document's own permalink, so a static homepage under the Reading
+    settings is the root path too. -#}
+{% set atRoot = (page.url or url or "/") == "/" %}
+<!doctype html>
 <html lang="{{ site.language | default("en") }}">
   <head>
     <meta charset="utf-8">
@@ -36,38 +49,63 @@
     {% block head %}{% endblock %}
   </head>
   <body>
-    <a class="skip-link" href="#main">Skip to content</a>
+    <a class="screen-reader-text" href="#main">Skip to content</a>
+    <div class="global-wrapper"{% if atRoot %} data-is-root-path="true"{% endif %}>
+      {% block header %}
+      <header class="global-header">
+        {% if atRoot %}
+        <h1 class="main-heading">
+          <a href="{{ "/" | url }}">{{ site.title }}</a>
+        </h1>
+        {% if site.tagline %}
+        <p>{{ site.tagline }}</p>
+        {% endif %}
+        {% else %}
+        <a class="header-link-home" href="{{ "/" | url }}">{{ site.title }}</a>
+        {% endif %}
+      </header>
+      {% endblock %}
 
-    {% block header %}
-    <header class="site-header">
-      <p class="site-title"><a href="{{ "/" | url }}">{{ site.title }}</a></p>
-      {% if site.tagline %}
-      <p class="site-tagline">{{ site.tagline }}</p>
-      {% endif %}
-      {% if menu.length %}
-      <nav class="site-nav" aria-label="Site">
-        <ul>
-          {% for item in menu %}
-          <li><a href="{{ item.url | url }}"{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
+      <main id="main">
+        {% block content %}{% endblock %}
+      </main>
+
+      {% block footer %}
+      <footer>
+        <p>&copy; {{ "now" | date("year") }}{% if site.author %}, {{ site.author }}{% endif %} &middot; Published with Geekity</p>
+        {#
+          The feed and whoever the site is by, as one horizontal list. The links
+          come from the site author's profile (decision-16), so what a reader
+          sees and what a consumer of `rel="me"` reads are the same list, and a
+          site whose author setting names nobody with an account here simply has
+          none. Webrings, badges and anything else particular to one site are
+          deliberately not here: they go in a site theme's `footer` override.
+        #}
+        <ul class="hlist">
+          <li><a href="{{ "/feed/" | url }}">RSS</a></li>
+          {% if siteAuthor.links %}
+          {% for link in siteAuthor.links %}
+          <li><a rel="me" href="{{ link.href }}">{{ link.label }}</a></li>
           {% endfor %}
+          {% endif %}
         </ul>
-      </nav>
-      {% endif %}
-    </header>
-    {% endblock %}
-
-    <main id="main" class="site-main">
-      {% block content %}{% endblock %}
-    </main>
-
-    {% block footer %}
-    <footer class="site-footer">
-      <p>
-        {% if site.author %}&copy; {{ site.author }}{% endif %}
-        <span class="site-colophon">Published with Geekity.</span>
-      </p>
-    </footer>
-    {% endblock %}
+        {#
+          The site menu, until TASK-83 moves it into the bio where the design
+          puts it. It is in the footer block rather than the header because the
+          design has no header navigation.
+        #}
+        {% if menu.length %}
+        <nav class="site-nav" aria-label="Site">
+          <ul class="hlist">
+            {% for item in menu %}
+            <li><a href="{{ item.url | url }}"{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
+            {% endfor %}
+          </ul>
+        </nav>
+        {% endif %}
+      </footer>
+      {% endblock %}
+    </div>
 
     {% block scripts %}{% endblock %}
   </body>

@@ -2,34 +2,116 @@
  * The default theme's only stylesheet. Plain CSS, no build step, no
  * dependencies: a site that wants something else puts its own
  * `static/style.css` in the theme it wears and this file is never read again.
+ *
+ * The design is the andrewshell.org one (decision-16): a serif body and sans
+ * headings at an 18px root on a 1.2 minor-third scale, warm paper, near-black
+ * text, a rust primary and a blue secondary, one column at 42rem, links that
+ * invert on hover and a rule in the primary colour.
+ *
+ * The source is light only. The dark scheme below is the same design on dark
+ * paper, with the rust and the blue lifted until every text and background pair
+ * meets WCAG 2.2 AA — 4.5:1 for body text, 3:1 for large text, rules and focus
+ * outlines — in both schemes. `src/web/theme-colors.test.ts` reads the custom
+ * properties out of this file and computes the ratios, so a colour changed here
+ * that breaks one fails the build rather than a reader.
  */
 
 :root {
+  /* Light and dark are both drawn below, so a browser may paint its own form
+     controls, scrollbars and spellcheck marks to match. */
   color-scheme: light dark;
 
-  --measure: 38rem;
-  --gutter: 1.25rem;
+  --maxWidth-xs: 20rem;
+  --maxWidth-sm: 24rem;
+  --maxWidth-md: 28rem;
+  --maxWidth-lg: 32rem;
+  --maxWidth-xl: 36rem;
+  --maxWidth-2xl: 42rem;
+  --maxWidth-3xl: 48rem;
+  --maxWidth-4xl: 56rem;
+  --maxWidth-wrapper: var(--maxWidth-2xl);
 
-  --ink: #17181c;
-  --ink-muted: #5b6070;
-  --paper: #fdfdfc;
-  --paper-sunk: #f2f2ef;
-  --rule: #dcdcd6;
-  --accent: #1c4fd8;
-  --accent-visited: #6b3fb8;
+  --spacing-0: 0;
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-10: 2.5rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+  --spacing-20: 5rem;
+  --spacing-24: 6rem;
+  --spacing-32: 8rem;
+
+  --fontFamily-sans: -apple-system, system-ui, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --fontFamily-serif: 'Iowan Old Style', 'Palatino Linotype', 'URW Palladio L', P052, serif;
+  --fontFamily-mono:
+    ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+  --font-body: var(--fontFamily-serif);
+  --font-heading: var(--fontFamily-sans);
+
+  --fontWeight-normal: 400;
+  --fontWeight-medium: 500;
+  --fontWeight-semibold: 600;
+  --fontWeight-bold: 700;
+  --fontWeight-extrabold: 800;
+  --fontWeight-black: 900;
+
+  --fontSize-root: 18px;
+  --lineHeight-none: 1;
+  --lineHeight-tight: 1.1;
+  --lineHeight-normal: 1.5;
+  --lineHeight-relaxed: 1.625;
+
+  /* 1.200 minor third type scale */
+  --fontSize-0: 0.833rem;
+  --fontSize-1: 1rem;
+  --fontSize-2: 1.15rem;
+  --fontSize-3: 1.31rem;
+  --fontSize-4: 1.5rem;
+  --fontSize-5: 1.72rem;
+  --fontSize-6: 1.97rem;
+  --fontSize-7: 2.25rem;
+
+  --content-letter-spacing: -0.01em;
+
+  /* Colours. `body` is the paper and `text` the ink; `base`, `base-2` and
+     `base-3` are the surfaces that sit on the paper, warm, cool and raised.
+     `code-background` and `code-text` are a block of code, named rather than
+     folded into `base` so a highlighting theme has something to be measured
+     against (TASK-86). */
+  --color-body: #fdfcfb;
+  --color-text: #240b00;
+  --color-primary: #b33900;
+  --color-secondary: #007ab3;
+  --color-base: rgb(245 243 243);
+  --color-base-2: rgb(247 248 249);
+  --color-base-3: rgb(255 255 255);
+  --color-code-background: #f6f3f1;
+  --color-code-text: #240b00;
+  --color-error: #b3261e;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ink: #e8e8ea;
-    --ink-muted: #a0a4b2;
-    --paper: #16171a;
-    --paper-sunk: #1e2024;
-    --rule: #32343a;
-    --accent: #86aaff;
-    --accent-visited: #c3a8f5;
+    --color-body: #191110;
+    --color-text: #f4ece7;
+    --color-primary: #ef7a48;
+    --color-secondary: #3ea0d8;
+    --color-base: rgb(38 30 28);
+    --color-base-2: rgb(34 33 36);
+    --color-base-3: rgb(45 36 33);
+    --color-code-background: rgb(30 24 22);
+    --color-code-text: #f4ece7;
+    --color-error: #ff8093;
   }
 }
+
+/* Reset. The source theme leans on a normalize file; the handful of rules it
+   actually depends on are folded in here instead, so the theme is one file. */
 
 *,
 *::before,
@@ -37,141 +119,395 @@
   box-sizing: border-box;
 }
 
+body,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+figure,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+
+/* HTML elements */
+
 html {
+  font-size: var(--fontSize-root);
+  line-height: var(--lineHeight-relaxed);
   -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  margin: 0;
-  padding: 0 var(--gutter);
-  background: var(--paper);
-  color: var(--ink);
-  font:
-    1rem/1.6 system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
-  text-rendering: optimizeLegibility;
+  background-color: var(--color-body);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--fontSize-1);
+  text-rendering: optimizeSpeed;
 }
 
-a {
-  color: var(--accent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.15em;
+footer {
+  padding: var(--spacing-6) var(--spacing-0);
+  font-family: var(--fontFamily-sans);
 }
 
-a:visited {
-  color: var(--accent-visited);
+nav,
+.bio {
+  font-family: var(--fontFamily-sans);
 }
 
-.skip-link {
-  position: absolute;
-  left: -9999px;
+hr {
+  height: 1px;
+  border: 0;
+  background: var(--color-primary);
 }
 
-.skip-link:focus {
-  position: static;
-  display: inline-block;
-  padding: 0.5rem;
+img {
+  max-width: 100%;
+  height: auto;
 }
 
-/* Header and footer */
-
-.site-header,
-.site-footer,
-.site-main {
-  max-width: var(--measure);
-  margin-inline: auto;
+figure {
+  margin: var(--spacing-0) var(--spacing-0) var(--spacing-4) var(--spacing-0);
 }
 
-.site-header {
-  padding: 2.5rem 0 1.5rem;
-  border-bottom: 1px solid var(--rule);
+figcaption {
+  font-size: var(--fontSize-0);
+  text-align: center;
 }
 
-.site-title {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+time {
+  white-space: nowrap;
 }
 
-.site-title a {
+small,
+.small {
+  font-size: var(--fontSize-0);
+}
+
+/* Headings */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin-top: var(--spacing-12);
+  margin-bottom: var(--spacing-6);
+  color: var(--color-text);
+  font-family: var(--font-heading);
+  font-weight: var(--fontWeight-bold);
+  line-height: var(--lineHeight-tight);
+  letter-spacing: -0.025em;
+}
+
+h1 {
+  font-size: var(--fontSize-6);
+  font-weight: var(--fontWeight-black);
+}
+
+h2 {
+  font-size: var(--fontSize-5);
+}
+
+h3 {
+  font-size: var(--fontSize-3);
+}
+
+h4,
+h5,
+h6 {
+  font-size: var(--fontSize-1);
+}
+
+h2 > a,
+h3 > a,
+h4 > a,
+h5 > a,
+h6 > a {
   color: inherit;
   text-decoration: none;
 }
 
-.site-tagline {
-  margin: 0.35rem 0 0;
-  color: var(--ink-muted);
+/* Links. A link inverts on hover: the primary colour behind it and the paper
+   colour on top, which is the source design's one flourish. `:focus-visible`
+   draws an outline instead, so a keyboard reader sees where they are without
+   the colour swapping under them. */
+
+a,
+a:visited {
+  color: var(--color-primary);
 }
 
-.site-nav {
-  margin-top: 0.9rem;
+a:hover,
+a:focus {
+  background-color: var(--color-primary);
+  color: var(--color-body);
+  text-decoration: none;
 }
 
-.site-nav ul {
+a:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  background-color: transparent;
+  color: var(--color-primary);
+}
+
+header a,
+header a:visited {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+header a:hover,
+header a:focus {
+  background-color: var(--color-primary);
+  color: var(--color-body);
+  text-decoration: none;
+}
+
+/* Prose */
+
+p {
+  margin: var(--spacing-0) var(--spacing-0) var(--spacing-4) var(--spacing-0);
+  padding: var(--spacing-0);
+  line-height: var(--lineHeight-relaxed);
+}
+
+ul,
+ol {
+  margin-top: var(--spacing-0);
+  margin-right: var(--spacing-0);
+  margin-bottom: var(--spacing-8);
+  margin-left: var(--spacing-4);
+  padding: var(--spacing-0);
+  list-style-position: inside;
+  list-style-image: none;
+}
+
+ul li,
+ol li {
+  margin-bottom: var(--spacing-0);
+  padding-left: var(--spacing-0);
+}
+
+li > p {
+  display: inline;
+}
+
+li *:last-child {
+  margin-bottom: var(--spacing-0);
+}
+
+details {
+  margin-left: var(--spacing-4);
+}
+
+details summary {
+  cursor: pointer;
+}
+
+.list-none {
+  list-style-type: none;
+}
+
+.hlist {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 1.1rem;
   margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
-.site-nav a {
-  color: var(--ink-muted);
+.hlist li {
+  margin: 0;
+  padding: 0 0.5em 0 0;
+  list-style-type: none;
+}
+
+blockquote {
+  margin: var(--spacing-8) var(--spacing-8) var(--spacing-8) var(--spacing-0);
+  padding: var(--spacing-0) var(--spacing-0) var(--spacing-0) var(--spacing-6);
+  border-left: var(--spacing-1) solid var(--color-secondary);
+  color: var(--color-secondary);
+  font-size: var(--fontSize-2);
+  font-style: italic;
+}
+
+blockquote > :last-child {
+  margin-bottom: var(--spacing-0);
+}
+
+blockquote > ul,
+blockquote > ol {
+  list-style-position: inside;
+}
+
+table {
+  width: 100%;
+  margin-bottom: var(--spacing-8);
+  border-collapse: collapse;
+  border-spacing: 0.25rem;
+}
+
+table thead tr th {
+  border-bottom: 1px solid var(--color-primary);
+}
+
+pre,
+code,
+kbd,
+samp {
+  font-family: var(--fontFamily-mono);
+}
+
+code {
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  background-color: var(--color-code-background);
+  color: var(--color-code-text);
+  font-size: 0.9em;
+  /* A file path or an identifier is one long word, and a narrow screen would
+     otherwise carry it off the side of the page. A block of code scrolls
+     instead — see `pre` below. */
+  overflow-wrap: break-word;
+}
+
+pre {
+  overflow-x: auto;
+  margin-bottom: var(--spacing-8);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-radius: 6px;
+  background-color: var(--color-code-background);
+  color: var(--color-code-text);
+  font-size: var(--fontSize-0);
+  line-height: var(--lineHeight-normal);
+}
+
+pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: inherit;
+}
+
+/* Screen reader text. The skip link is this until it is focused, and then it
+   is a box at the top left of the page. */
+
+.screen-reader-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  word-wrap: normal !important;
+}
+
+.screen-reader-text:focus {
+  display: block;
+  width: auto;
+  height: auto;
+  top: var(--spacing-2);
+  left: var(--spacing-2);
+  padding: var(--spacing-4);
+  clip-path: none;
+  background-color: var(--color-base-3);
+  color: var(--color-text);
+  font-size: var(--fontSize-1);
+  font-weight: var(--fontWeight-bold);
+  line-height: normal;
+  text-decoration: none;
+  z-index: 100000;
+}
+
+/* The page shell */
+
+.global-wrapper {
+  max-width: var(--maxWidth-wrapper);
+  margin: var(--spacing-0) auto;
+  padding: var(--spacing-10) var(--spacing-5);
+}
+
+.global-wrapper[data-is-root-path='true'] .bio {
+  margin-bottom: var(--spacing-20);
+}
+
+.global-header {
+  margin-bottom: var(--spacing-12);
+}
+
+.main-heading {
+  margin: 0;
+  font-size: var(--fontSize-7);
+}
+
+.header-link-home {
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-2);
+  font-weight: var(--fontWeight-bold);
   text-decoration: none;
 }
 
-.site-nav a:hover,
-.site-nav a:focus {
-  color: inherit;
-  text-decoration: underline;
+/* The bio, which the entry footer prints (TASK-83). */
+
+.bio {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--spacing-16);
 }
 
-/* The page being read. Underlined as well as coloured, so it is not the colour
-   alone that says which one it is. */
-.site-nav a.is-current {
-  color: inherit;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 0.3em;
+.bio p {
+  margin-bottom: var(--spacing-0);
 }
 
-.site-main {
-  padding: 2rem 0 3rem;
-}
-
-.site-footer {
-  padding: 1.5rem 0 3rem;
-  border-top: 1px solid var(--rule);
-  color: var(--ink-muted);
-  font-size: 0.9rem;
-}
-
-.site-colophon {
+.bio-avatar {
   display: inline-block;
+  min-width: 55px;
+  margin-right: var(--spacing-4);
+  margin-bottom: var(--spacing-0);
+  border: 3px solid var(--color-base-3);
+  border-radius: 50%;
 }
 
-/* Titles */
+.bio-avatar img {
+  display: block;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+}
+
+.circle {
+  border-radius: 50%;
+}
+
+/*
+ * What follows styles the markup the theme prints today and is rewritten as the
+ * design lands: the listings in TASK-82, the entry and its bio in TASK-83, the
+ * conversation and the forms in TASK-84. It is carried onto the tokens above
+ * rather than deleted so that nothing goes unstyled in between.
+ */
+
+/* Titles and listings */
 
 .page-title,
 .post-title {
-  margin: 0 0 0.35rem;
-  font-size: 1.9rem;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
+  margin: 0 0 var(--spacing-2);
+  font-size: var(--fontSize-6);
 }
 
 .post-meta {
-  margin: 0 0 1.75rem;
-  color: var(--ink-muted);
-  font-size: 0.9rem;
+  margin: 0 0 var(--spacing-8);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
 }
-
-/* Listings */
 
 .post-list {
   margin: 0;
@@ -180,15 +516,14 @@ a:visited {
 }
 
 .post-list-item + .post-list-item {
-  margin-top: 2.25rem;
-  padding-top: 2.25rem;
-  border-top: 1px solid var(--rule);
+  margin-top: var(--spacing-8);
+  padding-top: var(--spacing-8);
+  border-top: 1px solid var(--color-base);
 }
 
 .post-summary-title {
-  margin: 0 0 0.3rem;
-  font-size: 1.3rem;
-  line-height: 1.3;
+  margin: 0 0 var(--spacing-2);
+  font-size: var(--fontSize-3);
 }
 
 .post-summary-title a {
@@ -196,22 +531,18 @@ a:visited {
   text-decoration: none;
 }
 
-.post-summary-title a:hover,
-.post-summary-title a:focus {
-  text-decoration: underline;
-}
-
 .post-summary .post-meta {
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--spacing-2);
 }
 
 .post-summary-description {
-  margin: 0 0 0.5rem;
+  margin: 0 0 var(--spacing-2);
 }
 
 .empty,
 .tag-count {
-  color: var(--ink-muted);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
 }
 
 /* An author archive (TASK-67): the person above their posts. The same URL is
@@ -219,75 +550,73 @@ a:visited {
    through from somewhere else on the fediverse. */
 
 .author-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--spacing-6);
 }
 
 .author-avatar {
   display: block;
   width: 96px;
   height: 96px;
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--spacing-3);
   border-radius: 50%;
   object-fit: cover;
 }
 
 .author-bio {
-  margin: 0.5rem 0;
-  max-width: 42rem;
+  margin: var(--spacing-2) 0;
 }
 
 .author-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin: 0.5rem 0 0;
+  gap: var(--spacing-3);
+  margin: var(--spacing-2) 0 0;
   padding: 0;
   list-style: none;
-  font-size: 0.9rem;
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
 }
 
-/* Tags */
+/* Tags and categories */
+
+.post-categories {
+  margin-top: var(--spacing-2);
+  margin-bottom: var(--spacing-0);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
+}
+
+.post-categories a {
+  display: inline-block;
+  margin-right: var(--spacing-2);
+}
 
 .tag-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0.75rem 0 0;
+  gap: var(--spacing-2);
+  margin: var(--spacing-3) 0 0;
   padding: 0;
   list-style: none;
 }
 
 .tag {
-  display: inline-block;
-  padding: 0.1rem 0.5rem;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  background: var(--paper-sunk);
-  color: var(--ink-muted);
-  font-size: 0.8rem;
-  text-decoration: none;
-}
-
-.tag:hover,
-.tag:focus {
-  color: var(--ink);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
 }
 
 /* Pagination */
 
 .pagination {
   display: flex;
-  gap: 1rem;
+  gap: var(--spacing-4);
   align-items: baseline;
   justify-content: space-between;
-  margin-top: 3rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--rule);
-  font-size: 0.9rem;
-}
-
-.pagination-position {
-  color: var(--ink-muted);
+  margin-top: var(--spacing-12);
+  padding-top: var(--spacing-5);
+  border-top: 1px solid var(--color-base);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
 }
 
 .pagination-previous {
@@ -310,110 +639,59 @@ a:visited {
   margin-top: 0;
 }
 
-.post-body h2,
-.page-body h2 {
-  margin-top: 2.25rem;
-  font-size: 1.35rem;
-  line-height: 1.3;
-}
-
-.post-body h3,
-.page-body h3 {
-  margin-top: 1.75rem;
-  font-size: 1.1rem;
-}
-
-.post-body img,
-.page-body img {
-  max-width: 100%;
-  height: auto;
-}
-
-.post-body blockquote,
-.page-body blockquote {
-  margin-inline: 0;
-  padding-inline-start: 1rem;
-  border-inline-start: 3px solid var(--rule);
-  color: var(--ink-muted);
-}
-
-.post-body pre,
-.page-body pre {
-  overflow-x: auto;
-  padding: 0.9rem 1rem;
-  border-radius: 6px;
-  background: var(--paper-sunk);
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-
-.post-body code,
-.page-body code {
-  padding: 0.1em 0.3em;
-  border-radius: 4px;
-  background: var(--paper-sunk);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.9em;
-}
-
-.post-body pre code,
-.page-body pre code {
-  padding: 0;
-  background: none;
-  font-size: inherit;
-}
-
 .post-body table,
 .page-body table {
   display: block;
   overflow-x: auto;
-  border-collapse: collapse;
 }
 
 .post-body th,
 .post-body td,
 .page-body th,
 .page-body td {
-  padding: 0.4rem 0.75rem;
-  border: 1px solid var(--rule);
+  padding: var(--spacing-1) var(--spacing-3);
   text-align: start;
 }
 
 .footnotes {
-  margin-top: 2.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--rule);
-  color: var(--ink-muted);
-  font-size: 0.9rem;
+  margin-top: var(--spacing-10);
+  padding-top: var(--spacing-4);
+  border-top: 1px solid var(--color-base);
+  font-size: var(--fontSize-0);
+}
+
+.footnote-item p {
+  display: inline;
 }
 
 .post-footer {
-  margin-top: 2.5rem;
+  margin-top: var(--spacing-10);
 }
 
 /* The conversation: fediverse replies, likes and boosts under a post. */
 
 .conversation {
-  margin-top: 3rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--rule);
+  margin-top: var(--spacing-12);
+  padding-top: var(--spacing-6);
+  border-top: 1px solid var(--color-primary);
 }
 
 .conversation-title {
-  margin: 0 0 1rem;
-  font-size: 1.1rem;
+  margin: 0 0 var(--spacing-4);
+  font-size: var(--fontSize-4);
 }
 
 .conversation-reactions {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-6);
 }
 
 .reaction-group summary {
   cursor: pointer;
-  color: var(--ink-muted);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
 }
 
 .reaction-list,
@@ -425,14 +703,15 @@ a:visited {
 }
 
 .reaction-list {
-  margin-top: 0.5rem;
+  margin-top: var(--spacing-2);
 }
 
+.facepile a,
 .reaction a {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.15rem 0;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) 0;
 }
 
 .reaction-avatar {
@@ -441,22 +720,33 @@ a:visited {
   border-radius: 50%;
 }
 
+.reaction-icon {
+  display: inline-block;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background-color: var(--color-base);
+  line-height: 2rem;
+  text-align: center;
+}
+
 .comment {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--spacing-6);
 }
 
 .comment-replies {
-  margin-top: 1.5rem;
-  padding-inline-start: 1.25rem;
-  border-inline-start: 2px solid var(--rule);
+  margin-top: var(--spacing-6);
+  padding-inline-start: var(--spacing-5);
+  border-inline-start: 2px solid var(--color-base);
 }
 
 .comment-header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
+  gap: var(--spacing-2);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
 }
 
 .comment-avatar {
@@ -466,12 +756,7 @@ a:visited {
 }
 
 .comment-author {
-  font-weight: 600;
-}
-
-.comment-handle,
-.comment-permalink {
-  color: var(--ink-muted);
+  font-weight: var(--fontWeight-semibold);
 }
 
 .comment-permalink {
@@ -479,78 +764,122 @@ a:visited {
 }
 
 .comment-body {
-  margin-top: 0.35rem;
+  margin-top: var(--spacing-1);
 }
 
 .comment-body p {
-  margin: 0.5rem 0;
+  margin: var(--spacing-2) 0;
 }
 
 .comment-reply {
-  margin: 0.35rem 0 0;
-  font-size: 0.9rem;
+  margin: var(--spacing-1) 0 0;
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
 }
 
-/* The form under an open post. */
-.comment-form {
-  margin-top: 3rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--rule);
+/* The comment form under an open post, and the contact form on a page that
+   asked for one. Deliberately the same shapes rather than two sets of rules:
+   they are the same kind of form, and a site restyling one should not have to
+   find the other. */
+
+.comment-form,
+.contact-form {
+  margin-top: var(--spacing-12);
+  padding-top: var(--spacing-6);
+  border-top: 1px solid var(--color-primary);
 }
 
-.comment-form-title {
-  margin: 0 0 1rem;
-  font-size: 1.2rem;
+.comment-form-title,
+.contact-form-title {
+  margin: 0 0 var(--spacing-4);
+  font-size: var(--fontSize-4);
 }
 
 .comment-notice,
-.comment-error {
-  margin: 0 0 1rem;
-  padding: 0.6rem 0.8rem;
-  border-inline-start: 3px solid var(--rule);
-  background: transparent;
+.comment-error,
+.contact-notice,
+.contact-error {
+  margin: 0 0 var(--spacing-4);
+  padding: var(--spacing-2) var(--spacing-3);
+  border-inline-start: var(--spacing-1) solid var(--color-secondary);
 }
 
-.comment-error {
-  border-inline-start-color: #b3261e;
+.comment-error,
+.contact-error {
+  border-inline-start-color: var(--color-error);
 }
 
 .comment-replying-to {
-  margin: 0 0 1rem;
-  font-size: 0.9rem;
-  color: var(--ink-muted);
+  margin: 0 0 var(--spacing-4);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
 }
 
-.comment-field {
+.comment-field,
+.contact-field {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  margin: 0 0 1rem;
+  gap: var(--spacing-1);
+  margin: 0 0 var(--spacing-4);
+}
+
+.comment-field label,
+.contact-field label {
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-0);
 }
 
 .comment-field input,
-.comment-field textarea {
-  padding: 0.5rem;
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  font: inherit;
-  background: transparent;
-  color: inherit;
+.comment-field textarea,
+.contact-field input,
+.contact-field textarea {
+  padding: var(--spacing-2);
+  border: 1px solid var(--color-base);
+  background-color: var(--color-base-3);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--fontSize-1);
 }
 
-.comment-field textarea {
+.comment-field input:focus-visible,
+.comment-field textarea:focus-visible,
+.contact-field input:focus-visible,
+.contact-field textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+  border-color: var(--color-primary);
+}
+
+.comment-field textarea,
+.contact-field textarea {
+  min-height: 8rem;
   resize: vertical;
 }
 
-.comment-optional,
-.comment-hint {
-  font-size: 0.85rem;
-  color: var(--ink-muted);
+.comment-form button,
+.comment-form input[type='submit'],
+.contact-form button,
+.contact-form input[type='submit'] {
+  padding: var(--spacing-2) var(--spacing-6);
+  border: none;
+  background-color: var(--color-primary);
+  color: var(--color-body);
+  font-family: var(--font-heading);
+  font-size: var(--fontSize-1);
+  cursor: pointer;
 }
 
-.comment-field-error {
-  font-size: 0.85rem;
-  color: #b3261e;
+.comment-optional,
+.comment-hint,
+.contact-optional,
+.contact-hint {
+  font-size: var(--fontSize-0);
+}
+
+.comment-field-error,
+.contact-field-error {
+  color: var(--color-error);
+  font-size: var(--fontSize-0);
 }
 
 /*
@@ -558,79 +887,38 @@ a:visited {
   form fillers skip fields a browser would not paint at all and this one is
   meant to be filled in.
 */
-.comment-trap {
-  position: absolute;
-  left: -10000px;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-}
-
-/*
-  The contact form on a page that asked for one. Deliberately the same shapes
-  as the comment form above rather than a second set of its own: they are the
-  same kind of form, and a site restyling one should not have to find the other.
-*/
-.contact-form {
-  margin-top: 3rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--rule);
-}
-
-.contact-form-title {
-  margin: 0 0 1rem;
-  font-size: 1.2rem;
-}
-
-.contact-notice,
-.contact-error {
-  margin: 0 0 1rem;
-  padding: 0.6rem 0.8rem;
-  border-inline-start: 3px solid var(--rule);
-  background: transparent;
-}
-
-.contact-error {
-  border-inline-start-color: #b3261e;
-}
-
-.contact-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  margin: 0 0 1rem;
-}
-
-.contact-field input,
-.contact-field textarea {
-  padding: 0.5rem;
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  font: inherit;
-  background: transparent;
-  color: inherit;
-}
-
-.contact-field textarea {
-  resize: vertical;
-}
-
-.contact-optional,
-.contact-hint {
-  font-size: 0.85rem;
-  color: var(--ink-muted);
-}
-
-.contact-field-error {
-  font-size: 0.85rem;
-  color: #b3261e;
-}
-
-/* The honeypot again, hidden the same way and for the same reason. */
+.comment-trap,
 .contact-trap {
   position: absolute;
   left: -10000px;
   width: 1px;
   height: 1px;
   overflow: hidden;
+}
+
+/* Media queries */
+
+@media (max-width: 42rem) {
+  .bio {
+    flex-direction: column;
+  }
+
+  .bio-avatar {
+    margin-right: var(--spacing-0);
+    margin-bottom: var(--spacing-4);
+  }
+
+  blockquote {
+    margin-left: var(--spacing-0);
+    padding: var(--spacing-0) var(--spacing-0) var(--spacing-0) var(--spacing-4);
+  }
+
+  ul,
+  ol {
+    list-style-position: inside;
+  }
+
+  .comment-replies {
+    padding-inline-start: var(--spacing-4);
+  }
 }

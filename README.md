@@ -923,6 +923,20 @@ base layout, home, post, page, tag archive and 404; `partials/` for the post
 list, the pager and the tag macros; `static/style.css`, served at
 `/theme/style.css`. It is plain CSS with no build step.
 
+It is the andrewshell.org design (decision-16): a serif body and sans headings
+at an 18px root, warm paper, a rust primary and a blue secondary, one column at
+42rem, links that invert on hover. `layouts/base.njk` is the shell — the skip
+link, a `.global-wrapper` that says when it is at `/`, a header that is the
+site title and tagline on the front page and a small link home everywhere else,
+and a footer with the copyright, the colophon, an RSS link and the site author's
+`rel="me"` links. There is no navigation in the header, and webrings, badges and
+anything else particular to one site are not in the package: they go in a site
+theme's `footer` block. The source design is light only; the theme adds a dark
+scheme under `prefers-color-scheme: dark`, and
+`packages/cms/src/web/theme-colors.test.ts` reads the custom properties out of
+the stylesheet and proves every text and background pair in both schemes meets
+WCAG 2.2 AA, so a colour change that breaks one fails the build.
+
 A site keeps its own themes under `themes/` — `themesDir` in the config,
 `GEEKITY_THEMES_DIR` at boot — one directory per theme with a `theme.json` in
 it giving a display `name`, a `kind` of `site` and an optional `description`.
