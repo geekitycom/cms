@@ -176,7 +176,6 @@ export type { LoginThrottle, LoginThrottleOptions } from './throttle.ts';
 export { mountPreview, PREVIEW_PATH } from './preview.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from './passwords.ts';
 export {
-  ADMIN_SECTIONS,
   DASHBOARD_RECENT_POSTS,
   guard,
   LOGIN_PATH,
@@ -185,7 +184,14 @@ export {
   postEditorPath,
   SETUP_PATH,
 } from './routes.ts';
-export type { AdminSection } from './routes.ts';
+export { ADMIN_SECTIONS, adminMenu, UnknownAdminScreenError } from './menu.ts';
+export type {
+  AdminMenuChild,
+  AdminMenuCurrentChild,
+  AdminMenuSection,
+  AdminScreenLocation,
+  AdminSection,
+} from './menu.ts';
 export {
   ACTOR_HANDLE_PATTERN,
   LANGUAGE_TAG_PATTERN,

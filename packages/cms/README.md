@@ -1198,7 +1198,8 @@ shadow the login form.
 | `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                                   |
 | `/admin/settings`                                | Site title, tagline, base URL, time zone, paging, menu, archive bases, actor.             |
 | `/admin/settings/avatar`                         | `POST` only. Uploads the site's avatar, or removes it.                                    |
-| `/admin/users`                                   | Who may sign in. `POST` adds one.                                                         |
+| `/admin/users`                                   | Who may sign in, and the change-password form.                                            |
+| `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                           |
 | `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                                  |
 | `/admin/users/email`                             | `POST` only. Sets or clears the email address on the row the form names.                  |
 | `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the row the form names.                       |
@@ -1212,11 +1213,39 @@ shadow the login form.
 | `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                               |
 
 The screens behind the login share one layout: a bar across the top with the
-site name and a link to the public site, the sections down the left with the
-current one marked, and a place for flash messages. A message queued with
-`flash(c, 'notice', '…')` is kept on the session row, shown on the next page the
-browser asks for, and cleared as it is read, so it survives exactly one
-redirect.
+site name and a link to the public site, the menu down the left, and a place for
+flash messages. A message queued with `flash(c, 'notice', '…')` is kept on the
+session row, shown on the next page the browser asks for, and cleared as it is
+read, so it survives exactly one redirect.
+
+### The menu
+
+The menu is WordPress classic: nine sections — Dashboard, Posts, Pages, Media,
+Comments, Messages, Users, Settings, Federation — each a heading over one or
+more children. Clicking a heading opens the section and lands on its first
+child; the open section shows its children and the one you are on carries
+`aria-current="page"`, so Users tells you that you are on Users > All users.
+Tags and categories are children of Posts, because a tag with no post on it is
+nothing. Every section has at least one child even when it has one screen, so
+the rule never needs an exception and a second child can appear later without
+the menu changing shape. There is no JavaScript in it: the server knows which
+section is open, so expanding one is a page rather than a script.
+
+The whole menu is `ADMIN_SECTIONS` in `src/admin/menu.ts`. A site's own screen
+joins it in two steps:
+
+```ts
+// 1. One entry in the section's children, naming the screen and its URL.
+{ child: 'imports', label: 'Imports', url: '/admin/imports' }
+
+// 2. The same pair on whatever that screen renders.
+render(c, 'layouts/imports.njk', { section: 'posts', child: 'imports' });
+```
+
+Nothing else changes: the heading, the landing URL and the marking all follow.
+A screen naming a section or a child the registry does not hold throws
+`UnknownAdminScreenError` rather than rendering a menu expanded around nothing,
+so the mistake is a failed test instead of a menu that quietly marks nothing.
 
 Who may sign in is `data/users.json`: one entry per user with an id, a
 username, an argon2 hash and a created time, written atomically with `0600`

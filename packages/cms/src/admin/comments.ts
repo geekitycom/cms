@@ -131,6 +131,7 @@ export function mountCommentsScreen(
 
     return render(c, ADMIN_TEMPLATES.comments, {
       section: COMMENTS_SECTION,
+      child: 'all',
       heading: 'Comments',
       status,
       counts,

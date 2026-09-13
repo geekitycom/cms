@@ -235,6 +235,7 @@ export function mountDocumentScreens(
 
     return render(c, ADMIN_TEMPLATES.documentList, {
       section: kind.section,
+      child: 'all',
       kind,
       filter,
       filters: DOCUMENT_FILTERS.map((name) => ({
@@ -793,6 +794,8 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
   c.status(409);
   return options.render(c, ADMIN_TEMPLATES.documentConflict, {
     section: kind.section,
+    // Editing something that exists, so the listing is where the menu stands.
+    child: 'all',
     kind,
     form,
     // The hash the file has now, so resubmitting this form is a deliberate
@@ -1054,6 +1057,9 @@ function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Res
 
   return options.render(c, ADMIN_TEMPLATES.documentEditor, {
     section: kind.section,
+    // The blank form is Add new; editing one that exists is still All posts,
+    // the way WordPress leaves the listing marked while you are in the editor.
+    child: document === undefined ? 'new' : 'all',
     kind,
     form,
     actions,

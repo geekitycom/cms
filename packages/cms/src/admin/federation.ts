@@ -90,6 +90,7 @@ export function mountFederationScreen(
 
     return render(c, ADMIN_TEMPLATES.federation, {
       section: 'federation',
+      child: 'followers',
       resendUrl: RESEND_PATH,
       fields: FEDERATION_FIELDS,
       actor: actorSummary(readSiteSettings(c.var.config.contentDir), {

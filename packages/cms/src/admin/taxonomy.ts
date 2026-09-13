@@ -38,8 +38,10 @@ import { ADMIN_TEMPLATES } from './templates.ts';
 export interface TaxonomyKind {
   /** Which taxonomy the screen manages. */
   taxonomy: Taxonomy;
-  /** The navigation section it marks as current. */
+  /** The navigation section it opens: both screens live under Posts. */
   section: string;
+  /** Which child of that section it is. */
+  child: string;
   /** Root of the screen, e.g. `/admin/tags`. */
   basePath: string;
   /** How one term is named in a sentence, e.g. `tag`. */
@@ -51,7 +53,8 @@ export interface TaxonomyKind {
 /** The tags screen. */
 export const TAG_KIND: TaxonomyKind = {
   taxonomy: 'tag',
-  section: 'tags',
+  section: 'posts',
+  child: 'tags',
   basePath: `${ADMIN_PREFIX}/tags`,
   singular: 'tag',
   plural: 'Tags',
@@ -60,7 +63,8 @@ export const TAG_KIND: TaxonomyKind = {
 /** The categories screen. */
 export const CATEGORY_KIND: TaxonomyKind = {
   taxonomy: 'category',
-  section: 'categories',
+  section: 'posts',
+  child: 'categories',
   basePath: `${ADMIN_PREFIX}/categories`,
   singular: 'category',
   plural: 'Categories',
@@ -343,6 +347,7 @@ function screen(
 
   return {
     section: kind.section,
+    child: kind.child,
     kind,
     heading: kind.plural,
     listUrl: kind.basePath,

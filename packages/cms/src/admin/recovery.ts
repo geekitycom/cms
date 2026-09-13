@@ -230,7 +230,6 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
     anonymousSession(c);
     c.status(400);
     return render(c, ADMIN_TEMPLATES.reset, {
-      section: 'reset',
       forgotUrl: FORGOT_PATH,
       resetUrl: RESET_PATH,
       fields: RECOVERY_FIELDS,
@@ -244,7 +243,6 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
     extra: Record<string, unknown> = {},
   ): Record<string, unknown> {
     return {
-      section: 'forgot',
       forgotUrl: FORGOT_PATH,
       loginUrl: LOGIN_REDIRECT,
       fields: RECOVERY_FIELDS,
@@ -265,7 +263,6 @@ const LOGIN_REDIRECT = `${ADMIN_PREFIX}/login`;
 /** Everything the reset template renders for a link that is still good. */
 function resetScreen(token: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    section: 'reset',
     forgotUrl: FORGOT_PATH,
     resetUrl: RESET_PATH,
     fields: RECOVERY_FIELDS,

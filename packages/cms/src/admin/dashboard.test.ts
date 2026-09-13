@@ -67,7 +67,7 @@ async function newDraft(agent: Browser, title: string): Promise<Response> {
 }
 
 describe('the admin shell', () => {
-  it('links to every section doc-5 lists, and marks the one being shown', async () => {
+  it('lists every section doc-5 lists, each landing on its first child', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
@@ -77,41 +77,21 @@ describe('the admin shell', () => {
       ['Dashboard', '/admin'],
       ['Posts', '/admin/posts'],
       ['Pages', '/admin/pages'],
-      ['Settings', '/admin/settings'],
+      ['Media', '/admin/media'],
+      ['Comments', '/admin/comments'],
+      ['Messages', '/admin/messages'],
       ['Users', '/admin/users'],
+      ['Settings', '/admin/settings'],
       ['Federation', '/admin/federation'],
     ] as const) {
-      assert.match(html, new RegExp(`<a href="${url}"[^>]*>${label}</a>`), url);
+      assert.match(html, new RegExp(`<a[^>]*href="${url}"[^>]*>${label}</a>`), url);
     }
 
     assert.match(
       html,
-      /<a href="\/admin" aria-current="page">Dashboard<\/a>/,
-      'the dashboard link is the current one',
+      /<a href="\/admin" aria-current="page">Home<\/a>/,
+      'the dashboard is open on its own first child',
     );
-  });
-
-  it('answers every section it links to, and marks that one instead', async () => {
-    const cms = await box.site();
-    const agent = await signedIn(cms);
-
-    const sections: [url: string, label: string][] = [
-      ['/admin/posts', 'Posts'],
-      ['/admin/pages', 'Pages'],
-      ['/admin/settings', 'Settings'],
-      ['/admin/users', 'Users'],
-      ['/admin/federation', 'Federation'],
-    ];
-
-    for (const [url, label] of sections) {
-      const response = await agent.get(url);
-      assert.equal(response.status, 200, url);
-      assert.match(
-        await response.text(),
-        new RegExp(`<a href="${url}" aria-current="page">${label}</a>`),
-        url,
-      );
-    }
   });
 
   it('carries the site name, a link to the public site, the user and a logout form', async () => {

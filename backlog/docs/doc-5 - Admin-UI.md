@@ -3,11 +3,50 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-05 11:58'
+updated_date: '2026-09-13 02:19'
 ---
 # Admin UI
 
 The admin lives at `/admin` and borrows the shape of WordPress classic without its editors. Server-rendered Nunjucks pages, progressive enhancement only where it clearly helps (markdown preview, slug auto-fill).
+
+## The menu
+
+The navigation down the left is WordPress classic. A **section** is a heading
+with one or more children; clicking the heading opens the section and lands on
+the first of its children; the open section shows its children and the one you
+are on is marked with `aria-current="page"`, so clicking Users tells you that
+you are on Users > All users. Every section has at least one child even when it
+has exactly one screen, because that is what makes the rule uniform: a second
+child can appear later without the menu changing shape, and no screen has to
+know whether it is the only one of its kind.
+
+| Section    | Children                                     |
+| ---------- | -------------------------------------------- |
+| Dashboard  | Home                                         |
+| Posts      | All posts, Add new, Categories, Tags         |
+| Pages      | All pages, Add new                           |
+| Media      | Library                                      |
+| Comments   | All comments                                 |
+| Messages   | All messages                                 |
+| Users      | All users, Add new                           |
+| Settings   | General (the pages TASK-73 splits it into)   |
+| Federation | Followers                                    |
+
+The terms are under Posts rather than at the top level because that is what
+they are about: a tag with no post on it is nothing.
+
+The whole menu is one registry, `src/admin/menu.ts`. A screen names its section
+and its child — `render(c, template, { section: 'posts', child: 'tags', … })` —
+and the registry renders the list; a pair it does not hold is refused rather
+than drawn as a menu expanded around nothing, so a screen cannot ship naming a
+child that does not exist. Adding a screen to the menu is one entry in a
+section's `children` and the same `child` name on what that screen renders.
+
+The menu needs no JavaScript. The server already knows which section is open,
+so expanding one is a page the browser asks for rather than a class a script
+toggles: it is a list of links, the open section a real nested `<ul>` inside its
+section's `<li>`. On a narrow screen the column moves above the page and wraps
+instead of becoming a sliver.
 
 ## Screens
 
@@ -19,11 +58,12 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 | `/admin/posts` | table: title, author, tags, date, status; filters for all/published/draft/trash |
 | `/admin/posts/new`, `/admin/posts/:slug` | editor |
 | `/admin/pages`, `/admin/pages/new`, `/admin/pages/:slug` | same as posts, without date prefix or tags |
-| `/admin/tags`, `/admin/categories` | every term in use with its post and file counts; rename, merge, delete |
+| `/admin/tags`, `/admin/categories` | every term in use with its post and file counts; rename, merge, delete (under Posts in the menu) |
 | `/admin/comments` | pending, approved and spam, with approve, spam, delete and reply on every row |
 | `/admin/messages` | what the contact form on a page collected: read, mark read, delete |
 | `/admin/settings` | site title, tagline, base URL, timezone, posts per page, comments on/off and closing window, actor handle and type, the Akismet key, the mail provider and its credential, the contact address |
-| `/admin/users` | list, add, set each user's email, which notices go to it and how often, change your own password (single role: admin) |
+| `/admin/users` | list, set each user's email, which notices go to it and how often, change your own password (single role: admin) |
+| `/admin/users/new` | the add form, Users > Add new |
 | `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
 
 ## Editor
@@ -66,7 +106,7 @@ The admin lives at `/admin` and borrows the shape of WordPress classic without i
 
 ## User email and password recovery
 
-- **The address.** Every user may have an email address, and most will not: a login is a username and a password, and the address only buys password recovery and, later, the notices TASK-55 sends. It is set on the `/admin/users` table — one inline field per row, any row, since there is one role and every user already has every power — on the add form beside the username, and by `geekity user add <name> --email <address>`. An empty box removes it. It never appears on the public site.
+- **The address.** Every user may have an email address, and most will not: a login is a username and a password, and the address only buys password recovery and, later, the notices TASK-55 sends. It is set on the `/admin/users` table — one inline field per row, any row, since there is one role and every user already has every power — on the add form at `/admin/users/new` beside the username, and by `geekity user add <name> --email <address>`. An empty box removes it. It never appears on the public site.
 - **Asking.** `/admin/forgot` takes a username *or* an email address and always answers with the same sentence, whether the name matched, did not match, or matched somebody with no address. That is the whole point of the screen: an answer that varied would be a list of which accounts the site has. Requests are rate limited by username and by address exactly as sign-ins are, on a throttle of its own, so a flood of resets for one person cannot lock them out of logging in.
 - **The link.** A match with an address gets a message from the theme's `password-reset` template carrying `/admin/reset?token=…` — 256 random bits, hex. Only the token's SHA-256 is stored, in the `password_resets` table beside the sessions, so a copy of `geekity.db` is not a stack of working links. It expires an hour out and works once. The token is never rendered into the page of the browser that asked for it.
 - **Setting it.** The reset form holds the new password to the same rules every other door does, then deletes every reset that user had outstanding, signs out every session they had, and sends the theme's `password-changed` confirmation, which carries no link back in. Both screens are unauthenticated and carry the session CSRF token and the admin security headers like every other form.

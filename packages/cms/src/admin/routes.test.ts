@@ -3,6 +3,7 @@ import { after, describe, it } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
 import { countUsers, listUsers } from './accounts.ts';
+import { ADMIN_SECTIONS } from './menu.ts';
 import {
   browser,
   cookieValue,
@@ -545,5 +546,101 @@ describe('the login throttle', () => {
     clock.advance(61);
     await attempt(agent, 'ada', 'not the password');
     assert.equal((await attempt(agent, 'ada', 'x')).headers.get('retry-after'), '120');
+  });
+});
+
+describe('the admin menu', () => {
+  /** Just the navigation out of a rendered screen. */
+  function nav(html: string): string {
+    const start = html.indexOf('<nav class="admin-nav"');
+    const end = html.indexOf('</nav>', start);
+    assert.ok(start !== -1 && end !== -1, 'the screen rendered the admin navigation');
+    return html.slice(start, end);
+  }
+
+  /** Whether a menu marks the link to `url` as the page being looked at. */
+  function marks(menu: string, url: string): boolean {
+    return new RegExp(`<a[^>]*href="${url}"[^>]*aria-current="page"`).test(menu);
+  }
+
+  it('lands every section on its first child, with that child marked', async () => {
+    const cms = await site();
+    const agent = browser(cms);
+    await setUpFirstAdmin(agent);
+
+    for (const section of ADMIN_SECTIONS) {
+      const first = section.children[0];
+      assert.ok(first !== undefined, `${section.label} has a child to land on`);
+
+      const response = await agent.get(section.url);
+      assert.equal(response.status, 200, `${section.url} is a screen`);
+
+      const menu = nav(await response.text());
+      assert.ok(marks(menu, first.url), `${section.label} marks ${first.label} as current`);
+      for (const child of section.children) {
+        assert.match(
+          menu,
+          new RegExp(`<a[^>]*href="${child.url}"[^>]*>${child.label}</a>`),
+          `the open ${section.label} section lists ${child.label}`,
+        );
+      }
+    }
+  });
+
+  it('puts a screen behind every child, each marking itself', async () => {
+    const cms = await site();
+    const agent = browser(cms);
+    await setUpFirstAdmin(agent);
+
+    for (const section of ADMIN_SECTIONS) {
+      for (const child of section.children) {
+        const response = await agent.get(child.url);
+        assert.equal(response.status, 200, `${child.url} is a screen`);
+        assert.ok(
+          marks(nav(await response.text()), child.url),
+          `${section.label} > ${child.label} marks itself`,
+        );
+      }
+    }
+  });
+
+  it('shows the children of the open section and of no other', async () => {
+    const cms = await site();
+    const agent = browser(cms);
+    await setUpFirstAdmin(agent);
+
+    const menu = nav(await (await agent.get('/admin/posts')).text());
+
+    assert.match(
+      menu,
+      /<a[^>]*href="\/admin\/pages"[^>]*>Pages<\/a>/,
+      'every section is still listed',
+    );
+    assert.doesNotMatch(menu, />All pages</, 'a closed section keeps its children to itself');
+    assert.doesNotMatch(menu, />Add new<\/a>[\s\S]*>Add new</, 'only one Add new is rendered');
+  });
+
+  it('marks the child a screen is on rather than the first one', async () => {
+    const cms = await site();
+    const agent = browser(cms);
+    await setUpFirstAdmin(agent);
+
+    const menu = nav(await (await agent.get('/admin/tags')).text());
+
+    assert.ok(marks(menu, '/admin/tags'), 'Posts > Tags is where you are');
+    assert.ok(!marks(menu, '/admin/posts'), 'and All posts is not');
+    assert.match(menu, /Categories/, 'the Posts section is the one that opened');
+  });
+
+  it('needs no JavaScript to expand anything', async () => {
+    const cms = await site();
+    const agent = browser(cms);
+    await setUpFirstAdmin(agent);
+
+    const menu = nav(await (await agent.get('/admin/posts/new')).text());
+
+    assert.ok(marks(menu, '/admin/posts/new'), 'Posts > Add new is marked');
+    assert.doesNotMatch(menu, /<script|onclick=|<button/, 'the menu is links and lists');
+    assert.match(menu, /<ul[\s\S]*<ul/, 'the open section is a real nested list');
   });
 });

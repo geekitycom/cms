@@ -17,19 +17,10 @@ import { editorPath, mountDocumentScreens, PAGE_KIND, POST_KIND } from './docume
 import { FEDERATION_PATH, mountFederationScreen } from './federation.ts';
 import { takeFlash } from './flash.ts';
 import { adminSecurityHeaders } from './headers.ts';
-import {
-  COMMENTS_PATH,
-  COMMENTS_SECTION,
-  mountCommentsScreen,
-  pendingComments,
-} from './comments.ts';
-import { MEDIA_PATH, MEDIA_SECTION, MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
-import {
-  MESSAGES_PATH,
-  MESSAGES_SECTION,
-  mountMessagesScreen,
-  unreadMessages,
-} from './messages.ts';
+import { COMMENTS_PATH, mountCommentsScreen, pendingComments } from './comments.ts';
+import { MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
+import { adminMenu } from './menu.ts';
+import { MESSAGES_PATH, mountMessagesScreen, unreadMessages } from './messages.ts';
 import { mountPreview } from './preview.ts';
 import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
 import { AVATAR_PATH, mountSettings } from './settings.ts';
@@ -42,7 +33,7 @@ import {
   setSessionCookie,
 } from './session.ts';
 import type { AdminStore, Session } from './store.ts';
-import { CATEGORY_KIND, mountTaxonomyScreens, TAG_KIND, TAXONOMY_KINDS } from './taxonomy.ts';
+import { mountTaxonomyScreens, TAXONOMY_KINDS } from './taxonomy.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
 import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './throttle.ts';
 import type { LoginThrottle } from './throttle.ts';
@@ -55,37 +46,6 @@ export const LOGIN_PATH = `${ADMIN_PREFIX}/login`;
 export const SETUP_PATH = `${ADMIN_PREFIX}/setup`;
 /** Where the logout form posts. */
 export const LOGOUT_PATH = `${ADMIN_PREFIX}/logout`;
-/** One entry in the admin's left-hand navigation. */
-export interface AdminSection {
-  /** The name a screen passes as `section` to mark itself current. */
-  section: string;
-  /** What the link says. */
-  label: string;
-  /** Where it goes. */
-  url: string;
-}
-
-/**
- * The sections of the admin, in the order doc-5 lists them.
- *
- * Every screen renders the same list and marks one of them, so a screen added
- * later only has to name its section. The screens behind most of these links
- * are still placeholders; the navigation is the shape of the whole admin, not
- * of the part that is built.
- */
-export const ADMIN_SECTIONS: readonly AdminSection[] = [
-  { section: 'dashboard', label: 'Dashboard', url: ADMIN_PREFIX },
-  { section: 'posts', label: 'Posts', url: `${ADMIN_PREFIX}/posts` },
-  { section: 'pages', label: 'Pages', url: `${ADMIN_PREFIX}/pages` },
-  { section: TAG_KIND.section, label: TAG_KIND.plural, url: TAG_KIND.basePath },
-  { section: CATEGORY_KIND.section, label: CATEGORY_KIND.plural, url: CATEGORY_KIND.basePath },
-  { section: MEDIA_SECTION, label: 'Media', url: MEDIA_PATH },
-  { section: COMMENTS_SECTION, label: 'Comments', url: COMMENTS_PATH },
-  { section: MESSAGES_SECTION, label: 'Messages', url: MESSAGES_PATH },
-  { section: 'settings', label: 'Settings', url: `${ADMIN_PREFIX}/settings` },
-  { section: 'users', label: 'Users', url: `${ADMIN_PREFIX}/users` },
-  { section: 'federation', label: 'Federation', url: `${ADMIN_PREFIX}/federation` },
-];
 
 /** How many recent posts the dashboard lists. */
 export const DASHBOARD_RECENT_POSTS = 5;
@@ -155,8 +115,11 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
    *
    * Everything the chrome needs — who is signed in, the navigation, the CSRF
    * token, the queued flash messages — is put in the context here rather than
-   * by each handler, so a new screen is a template and a `section` name.
-   * Reading the flash is what clears it, so it shows on exactly this page.
+   * by each handler, so a new screen is a template and the pair of names that
+   * says where it is in the menu: its `section` and its `child`. A pair the
+   * registry does not hold throws rather than rendering a menu expanded around
+   * nothing. Reading the flash is what clears it, so it shows on exactly this
+   * page.
    */
   function render(
     c: Context<GeekityEnv>,
@@ -171,7 +134,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       adminUrl: ADMIN_PREFIX,
       siteUrl: '/',
       assetPrefix: ADMIN_ASSET_PREFIX,
-      navigation: ADMIN_SECTIONS,
+      navigation: adminMenu({ section: name(context['section']), child: name(context['child']) }),
       logoutUrl: LOGOUT_PATH,
       csrfToken: session?.csrfToken ?? '',
       cspNonce: c.var.cspNonce ?? '',
@@ -315,6 +278,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const store = c.var.store;
     return render(c, ADMIN_TEMPLATES.dashboard, {
       section: 'dashboard',
+      child: 'home',
       counts: store.counts(),
       recent: store.listAll({ type: 'post', limit: DASHBOARD_RECENT_POSTS }).map((document) => ({
         title: document.title,
@@ -378,30 +342,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // The fediverse side: the actor, the followers, the inbox log, and what the
   // site sent to whom.
   mountFederationScreen(app, { render });
-
-  const built = new Set([
-    POST_KIND.section,
-    PAGE_KIND.section,
-    TAG_KIND.section,
-    CATEGORY_KIND.section,
-    MEDIA_SECTION,
-    COMMENTS_SECTION,
-    MESSAGES_SECTION,
-    'dashboard',
-    'settings',
-    'users',
-    'federation',
-  ]);
-
-  // The sections doc-5 lists but no task has built yet. They are registered so
-  // the navigation goes somewhere: a link that 404s reads as a broken admin,
-  // and the guard already keeps strangers out of all of them.
-  for (const item of ADMIN_SECTIONS) {
-    if (built.has(item.section)) continue;
-    app.get(item.url, (c) =>
-      render(c, ADMIN_TEMPLATES.placeholder, { section: item.section, heading: item.label }),
-    );
-  }
 
   // `/admin/` is the same screen as `/admin`, and only one of them is the URL.
   app.get(`${ADMIN_PREFIX}/`, (c) => c.redirect(ADMIN_PREFIX, 301));
@@ -550,6 +490,11 @@ function decodePath(pathname: string): string {
   } catch {
     return pathname;
   }
+}
+
+/** A `section` or a `child` off a render context, when the screen named one. */
+function name(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 /** A form field as a string. A file upload, or a missing field, is the empty one. */

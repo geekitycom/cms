@@ -1378,6 +1378,8 @@ function screen(
 
   return {
     section: 'settings',
+    // One child until TASK-73 splits this screen into its pages.
+    child: 'general',
     settingsUrl: SETTINGS_PATH,
     fields: SETTINGS_FIELDS,
     actorTypes: ACTOR_TYPES,
