@@ -74,19 +74,21 @@ changelog.
 site (or `npx geekity`, or a `package.json` script, which is how the generated
 `sync` script calls it).
 
-| Command                   | What it does                                                                             |
-| ------------------------- | ---------------------------------------------------------------------------------------- |
-| `geekity serve`           | Boot from the config file and listen. The default when no command is given.              |
-| `geekity init <dir>`      | Create a new site in `<dir>`. Refuses a directory that is not empty.                     |
-| `geekity sync`            | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed. |
-| `geekity rebuild`         | Delete `data/geekity.db` and build it again from the files.                              |
-| `geekity user add <name>` | Create an admin account, so a site can get its first login without the setup screen.     |
-| `geekity --help`, `-h`    | The same table, on the terminal.                                                         |
-| `geekity --version`       | The installed version.                                                                   |
+| Command                                 | What it does                                                                                                                                                          |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geekity serve`                         | Boot from the config file and listen. The default when no command is given.                                                                                           |
+| `geekity init <dir>`                    | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                  |
+| `geekity sync`                          | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                              |
+| `geekity rebuild`                       | Delete `data/geekity.db` and build it again from the files.                                                                                                           |
+| `geekity user add <name>`               | Create an admin account, so a site can get its first login without the setup screen.                                                                                  |
+| `geekity import wordpress-actor <name>` | Bring one person across from the WordPress ActivityPub plugin: their key pair, the actor id their followers hold, the plugin's numeric actor id, and their followers. |
+| `geekity --help`, `-h`                  | The same table, on the terminal.                                                                                                                                      |
+| `geekity --version`                     | The installed version.                                                                                                                                                |
 
-`serve`, `sync`, `rebuild` and `user add` take `--config <file>`; without it they look for
-`geekity.config.ts`, then `geekity.config.js`, then `geekity.config.mjs` in the
-working directory, and run on defaults if there is none.
+`serve`, `sync`, `rebuild`, `user add` and `import wordpress-actor` take
+`--config <file>`; without it they look for `geekity.config.ts`, then
+`geekity.config.js`, then `geekity.config.mjs` in the working directory, and run
+on defaults if there is none.
 
 `sync` prints what the scan did and forces watching off whatever the config
 says, because a one-shot scan that then sat in a watcher would never exit:
@@ -635,6 +637,94 @@ instant, or _Never_. That is what the switch is watched by: once every
 follower's server has refetched the actor, nothing asks any more, and the
 switch can go off. Clearing it takes the paths away on the very next request,
 with no restart.
+
+### Moving a site off the WordPress ActivityPub plugin
+
+`geekity import wordpress-actor` brings one person across. It writes the three
+things the CMS cannot mint for itself — the RSA key pair the followers have
+cached, the actor id they key the account by, and the followers — and it is a
+command rather than a screen because a stored actor id is identity for the life
+of the account.
+
+```sh
+geekity import wordpress-actor ada \
+  --actor-id 'https://example.com/?author=2' \
+  --wordpress-id 2 \
+  --keypair ada.keypair.json
+```
+
+It writes `data/keys/ada.rsassa-pkcs1-v1_5.jwk` (and mints the Ed25519 pair
+beside it, which WordPress never had), puts `actorId` and `wordpressActorId` on
+the user in `data/users.json`, and fetches the plugin's public followers
+collection into `content/_data/federation/ada/followers.json`, dereferencing
+each follower for its inbox, shared inbox, handle, name, avatar and profile URL.
+
+| Option                                        | What it is                                                                                                                                            |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--actor-id <url>`                            | The id WordPress published, query string and all. The one thing the import cannot work out for itself.                                                |
+| `--wordpress-id <n>`                          | The WordPress user id, which is the number in the plugin's paths.                                                                                     |
+| `--keypair <file>`                            | The JSON the plugin's option holds: `{"private_key": …, "public_key": …}`.                                                                            |
+| `--private-key <file>`, `--public-key <file>` | The two PEMs instead, for a site still on the legacy user meta. The public key is only checked against the private half; it is derived, never stored. |
+| `--followers <url\|file\|none>`               | Where the followers come from. Left off, the plugin's own collection on the actor id's origin.                                                        |
+| `--force`                                     | Import over a key pair the user already has.                                                                                                          |
+
+**Exporting the key pair with wp-cli.** The plugin keeps a user's pair in a
+WordPress option named after their login:
+
+```sh
+# On the WordPress server. The login, not the user id, is what names the option.
+wp option get activitypub_keypair_for_ada --format=json > ada.keypair.json
+```
+
+A site old enough to still be on the plugin's legacy storage has the pair in
+user meta instead, one PEM per key:
+
+```sh
+wp user meta get 2 magic_sig_private_key > ada.private.pem
+wp user meta get 2 magic_sig_public_key  > ada.public.pem
+```
+
+Either export is accepted, and either PEM encoding — `-----BEGIN PRIVATE
+KEY-----` (PKCS#8) or `-----BEGIN RSA PRIVATE KEY-----` (PKCS#1). Treat the
+files the way you would treat a password: the private key is the account.
+
+**Running it twice changes nothing**, and says so, which is what makes it safe
+to run again after an instance that was down comes back — a follower already in
+the file keeps its place and its follow time. A follower whose server will not
+answer is listed and skipped rather than failing the import. A user who already
+has a _different_ key pair is refused: importing over one would change that
+person's identity, and every follower has cached the public half of the key
+that is there. `--force` is the way past that, and is only right when you are
+certain the pair being imported is the one the followers hold.
+
+#### The cutover, end to end
+
+1. **Export, while the WordPress site is still up.** The key pair, as above.
+   The followers can be saved too — `curl -H 'Accept: application/activity+json'
+'https://example.com/wp-json/activitypub/1.0/actors/2/followers?page=1' >
+followers.json` — which is worth doing if the old site is going away before
+   the import runs. Note the actor id and the numeric actor id off
+   `https://example.com/?author=2`, and bring the content across.
+2. **Import.** `geekity import wordpress-actor ada --actor-id … --wordpress-id
+… --keypair ada.keypair.json`, pointing `--followers` at the saved file if
+   you took one. Check the report: every follower should be added, and any that
+   were skipped should be re-run once their servers answer.
+3. **Switch on.** Turn **WordPress ActivityPub compatibility** on under
+   `/admin/settings/federation`, then move the DNS. Followers' servers go on
+   delivering to the plugin's old inbox paths until they next refetch the
+   actor, and the switch is what catches those deliveries.
+4. **Watch.** `/admin/federation` lists the users with their actor ids and
+   followers; `/admin/settings/federation` lists each compatibility path with
+   the instant it was last asked for. Deliveries should thin out as each
+   follower's server refetches the actor and learns the new endpoints.
+5. **Switch off.** Once every path says _Never_ again for long enough — weeks
+   rather than days, since a quiet instance refetches rarely — clear the switch.
+   The paths go away on the very next request, with nothing restarted, and if
+   something was still using them you can turn it back on just as quickly.
+
+Retiring the stored actor id itself is a separate, optional step by the Move
+protocol, and is not part of the cutover: not every follower's software honours
+a `Move`, and the ones that do not would simply stop following.
 
 ### The federation screen
 

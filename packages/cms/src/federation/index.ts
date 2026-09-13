@@ -42,6 +42,18 @@ export type {
   SiteFederation,
 } from './federation.ts';
 export {
+  ExistingKeyPairError,
+  importWordPressActor,
+  UnusableKeyPemError,
+} from './import-wordpress.ts';
+export type {
+  FollowersImportReport,
+  ImportedKey,
+  ImportWordPressActorOptions,
+  ImportWordPressActorReport,
+  UnreachableFollower,
+} from './import-wordpress.ts';
+export {
   followerRecipient,
   followersPage,
   FOLLOWERS_PAGE_SIZE,
@@ -65,6 +77,7 @@ export {
   assertActorKeysUsable,
   loadActorKeyPairs,
   migrateActorKeysToFiles,
+  writeActorKeyFile,
 } from './keys.ts';
 export type { ActorKeyAlgorithm } from './keys.ts';
 export {

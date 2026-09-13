@@ -59,6 +59,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import { cp, mkdtemp, rm } from 'node:fs/promises';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -81,6 +82,7 @@ import {
 import { writeUsers } from '../src/admin/__testing__/users.ts';
 import { listUsers } from '../src/admin/accounts.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../src/admin/settings.ts';
+import { importWordPressActor } from '../src/federation/import-wordpress.ts';
 import { addFollower, readFollowers, readInboxLog } from '../src/federation/records.ts';
 import { createCms } from '../src/index.ts';
 import type { Cms } from '../src/index.ts';
@@ -99,11 +101,17 @@ const PENDING_POST = '2026-03-05-hot-off-the-press.md';
 const USERNAME = 'andrew';
 
 /**
- * A second account, standing in for one that arrived from somewhere else: its
- * record carries the actor id it was published under before (TASK-69), so
- * every id it answers by is that URL rather than its author URL.
+ * A second account, standing in for one that arrived from somewhere else. It
+ * is brought across by `geekity import wordpress-actor` part way through the
+ * run (TASK-71), which is what gives it the stored actor id (TASK-69), the
+ * plugin's numeric id (TASK-70) and the RSA key its followers hold — so every
+ * id it answers by is that URL rather than its author URL, and the key a peer
+ * verifies with is the one that was imported rather than one this site minted.
  */
 const MIGRATED_USERNAME = 'oldblog';
+
+/** The number the plugin gave that person, which its paths are built from. */
+const MIGRATED_WORDPRESS_ACTOR_ID = 2;
 
 /** How long any one wait may take before the run is called a failure. */
 const STEP_TIMEOUT_MS = 30_000;
@@ -167,12 +175,9 @@ async function main(): Promise<void> {
     const storedActorId = `${baseUrl}/?author=2`;
     writeUsers(dataDir, [
       { username: USERNAME, profile: { displayName: 'Andrew Shell' } },
-      {
-        username: MIGRATED_USERNAME,
-        id: 2,
-        profile: { displayName: 'The Old Blog' },
-        actorId: storedActorId,
-      },
+      // No `actorId` and no key: both arrive with the import below, which is
+      // the only door either of them has.
+      { username: MIGRATED_USERNAME, id: 2, profile: { displayName: 'The Old Blog' } },
     ]);
 
     log(`booting the site on ${baseUrl}`);
@@ -444,18 +449,71 @@ async function main(): Promise<void> {
     // hold. Everything below is that URL doing the work the author URL does
     // for everybody else — served, redirected from, discoverable, and signed
     // with.
+    //
+    // The account gets all of it the way a real cutover does: an RSA pair
+    // exported as PEM from the plugin, the id it published, and its numeric
+    // actor id, through `geekity import wordpress-actor`. The followers step is
+    // skipped — the fake WordPress this run would have to fetch from does not
+    // exist, and `src/federation/import-wordpress.test.ts` covers it in
+    // process.
+    log(`importing ${MIGRATED_USERNAME} from the WordPress ActivityPub plugin`);
+    const exported = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    const imported = await importWordPressActor({
+      admin: cms.admin,
+      dataDir,
+      contentDir,
+      username: MIGRATED_USERNAME,
+      actorId: storedActorId,
+      wordpressActorId: MIGRATED_WORDPRESS_ACTOR_ID,
+      privateKeyPem: exported.privateKey,
+      publicKeyPem: exported.publicKey,
+      followers: false,
+    });
+    assert.ok(imported.changed, 'the import wrote the key and the ids');
+    assert.equal(imported.keys[0]?.state, 'imported', 'the RSA pair came from the PEM');
+    assert.equal(imported.keys[1]?.state, 'generated', 'and the Ed25519 pair was minted');
+    ok(`imported ${MIGRATED_USERNAME}: ${imported.keys.map((key) => key.file).join(', ')}`);
+
+    // Twice changes nothing, which is what makes a cutover a thing you can run
+    // again after an instance that was down comes back.
+    const rerun = await importWordPressActor({
+      admin: cms.admin,
+      dataDir,
+      contentDir,
+      username: MIGRATED_USERNAME,
+      actorId: storedActorId,
+      wordpressActorId: MIGRATED_WORDPRESS_ACTOR_ID,
+      privateKeyPem: exported.privateKey,
+      publicKeyPem: exported.publicKey,
+      followers: false,
+    });
+    assert.equal(rerun.changed, false, 'a second import changes nothing');
+    ok('a second import changed nothing');
+
     const migratedArchive = `${baseUrl}/author/${MIGRATED_USERNAME}/`;
     log(`fedify lookup ${storedActorId}`);
     const migrated = await lookup(storedActorId);
     assert.equal(migrated['id'], storedActorId, 'the stored id is the actor’s own id');
     assert.equal(migrated['type'], 'Person');
     assert.equal(migrated['url'], migratedArchive, 'and the archive is still where a person goes');
+    const publicKey = migrated['publicKey'] as { id?: string; publicKeyPem?: string } | undefined;
     assert.equal(
-      (migrated['publicKey'] as { id?: string } | undefined)?.id,
+      publicKey?.id,
       `${storedActorId}#main-key`,
       'the key id hangs off the stored id, or no peer could dereference it',
     );
-    ok(`the actor at ${storedActorId} is a Person with its key`);
+    // The point of the import: what a peer reads is the key the plugin held,
+    // not a key this site minted for a stranger.
+    assert.equal(
+      (publicKey?.publicKeyPem ?? '').replace(/\s+/g, ''),
+      exported.publicKey.replace(/\s+/g, ''),
+      'and it is the public half of the pair that was imported',
+    );
+    ok(`the actor at ${storedActorId} publishes the imported public key`);
 
     const redirected = await fetch(storedActorId, {
       headers: { accept: 'text/html' },

@@ -44,6 +44,33 @@ export function actorKeyFile(dataDir: string, identifier: string, algorithm: str
 }
 
 /**
+ * Put one private JWK on disk as a user's key file for an algorithm, replacing
+ * whatever was there, and answer with the path it was written to.
+ *
+ * The only door into `data/keys` that is not {@link loadActorKeyPairs}, and it
+ * exists for the import (TASK-71): a key pair that arrives from somewhere else
+ * is the one case where a file has to be written from bytes the CMS did not
+ * mint. Everything about the layout stays here rather than at the caller — the
+ * name, the `0700` directory and the `0600` file — so there is one answer to
+ * where a user's key lives.
+ *
+ * It does not decide whether writing is allowed: an existing key is somebody's
+ * identity, and the caller is the one that knows whether it was told to
+ * replace it.
+ */
+export function writeActorKeyFile(
+  dataDir: string,
+  identifier: string,
+  algorithm: ActorKeyAlgorithm,
+  privateJwk: string,
+): string {
+  const file = actorKeyFile(dataDir, identifier, algorithm);
+  ensureKeysDir(dataDir);
+  writeFileAtomicallySync(file, `${privateJwk.trimEnd()}\n`, { mode: KEY_FILE_MODE });
+  return file;
+}
+
+/**
  * One user's key pairs, generated on the first call and read from
  * `data/keys` on every one after that.
  *

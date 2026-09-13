@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, realpathSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -13,14 +14,37 @@ import { openAdminStore } from './admin/store.ts';
 import type { AdminStore } from './admin/store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
 import { resolveConfig } from './config.ts';
+import { importWordPressActor } from './federation/import-wordpress.ts';
+import type { ImportWordPressActorReport } from './federation/import-wordpress.ts';
 import { createCms } from './index.ts';
 import type { GeekityConfig } from './config.ts';
 import { initSite, ownManifest } from './init.ts';
 
-export type Command = 'serve' | 'init' | 'sync' | 'rebuild' | 'user' | 'help' | 'version';
+export type Command =
+  'serve' | 'init' | 'sync' | 'rebuild' | 'user' | 'import' | 'help' | 'version';
 
 /** The commands a site can name on the command line, as opposed to the flags. */
-const COMMANDS: readonly Command[] = ['serve', 'init', 'sync', 'rebuild', 'user'];
+const COMMANDS: readonly Command[] = ['serve', 'init', 'sync', 'rebuild', 'user', 'import'];
+
+/**
+ * The options one command reads out of {@link ParsedArgs.flags}, each of which
+ * carries a value.
+ *
+ * A table rather than a branch per flag, because `import wordpress-actor`
+ * takes six of them and a parser with six more near-identical cases in it
+ * would be six more places to get the same thing subtly wrong.
+ */
+const VALUE_FLAGS = [
+  'actor-id',
+  'wordpress-id',
+  'private-key',
+  'public-key',
+  'keypair',
+  'followers',
+] as const;
+
+/** The options that are simply on or off. */
+const SWITCH_FLAGS = ['force'] as const;
 
 export interface ParsedArgs {
   command: Command;
@@ -39,8 +63,14 @@ export interface ParsedArgs {
    */
   email: string | undefined;
   /**
+   * Every other option that was given: {@link VALUE_FLAGS} as the text after
+   * them, {@link SWITCH_FLAGS} as `true`. Empty for a command that takes none.
+   */
+  flags: Readonly<Record<string, string | true>>;
+  /**
    * Positional arguments after the command: the directory for `init`, the
-   * subcommand and its arguments for `user`. Flags are never in here.
+   * subcommand and its arguments for `user` and `import`. Flags are never in
+   * here.
    */
   args: readonly string[];
 }
@@ -55,6 +85,9 @@ Usage:
   geekity sync [--config <file>]
   geekity rebuild [--config <file>]
   geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
+  geekity import wordpress-actor <username> --actor-id <url> --wordpress-id <n>
+          (--keypair <file> | --private-key <file> [--public-key <file>])
+          [--followers <url|file|none>] [--force] [--config <file>]
 
 Commands:
   serve            Start the CMS (the default when no command is given).
@@ -65,6 +98,11 @@ Commands:
                    site stopped; sessions and delivery outcomes start empty.
   user add         Create an admin user, so a site can get its first login
                    without the setup screen.
+  import
+    wordpress-actor
+                   Bring one person across from the WordPress ActivityPub
+                   plugin: their key pair, the actor id their followers hold,
+                   the plugin's numeric actor id, and their followers.
 
 Options:
   --config <file>  Config file to load. Defaults to the first of
@@ -75,6 +113,25 @@ Options:
                    list and in shell history, so prefer being asked.
   --email <addr>   The new user's email address. Optional; it is what a
                    forgotten password is recovered through.
+  --actor-id <url> The actor id WordPress published, query string and all,
+                   for example https://example.com/?author=2
+  --wordpress-id <n>
+                   The WordPress user id, which is the number in the plugin's
+                   paths (/wp-json/activitypub/1.0/actors/<n>/inbox).
+  --keypair <file> The JSON \`wp option get activitypub_keypair_for_<login>
+                   --format=json\` prints: {"private_key": …, "public_key": …}.
+  --private-key <file>
+                   The private key as PEM, instead of --keypair.
+  --public-key <file>
+                   The public key as PEM. Optional, and only checked against
+                   the private half — it is derived, never stored.
+  --followers <url|file|none>
+                   Where the followers come from. Left off, the plugin's own
+                   public followers collection on the actor id's origin.
+  --force          Import over a key pair the user already has. Do this only
+                   when you are certain the pair being imported is the one the
+                   followers hold: a new key means none of them can verify
+                   this person again.
   -h, --help       Show this help.
   -v, --version    Show the installed version.
 
@@ -89,16 +146,17 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let configPath: string | undefined;
   let password: string | undefined;
   let email: string | undefined;
+  const flags: Record<string, string | true> = {};
   const args: string[] = [];
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i] as string;
 
     if (arg === '--help' || arg === '-h') {
-      return { command: 'help', configPath, password, email, args };
+      return { command: 'help', configPath, password, email, flags, args };
     }
     if (arg === '--version' || arg === '-v') {
-      return { command: 'version', configPath, password, email, args };
+      return { command: 'version', configPath, password, email, flags, args };
     }
 
     if (arg === '--config') {
@@ -155,6 +213,38 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       continue;
     }
 
+    // Everything else spelled as an option goes in the flags map, and an
+    // option no command has is refused here rather than left to be read as a
+    // file name by whatever command was running.
+    if (arg.startsWith('--')) {
+      const equals = arg.indexOf('=');
+      const name = equals === -1 ? arg.slice(2) : arg.slice(2, equals);
+      const inline = equals === -1 ? undefined : arg.slice(equals + 1);
+
+      if ((SWITCH_FLAGS as readonly string[]).includes(name)) {
+        if (inline !== undefined) throw new Error(`--${name} takes no value.`);
+        flags[name] = true;
+        continue;
+      }
+
+      if ((VALUE_FLAGS as readonly string[]).includes(name)) {
+        if (inline !== undefined) {
+          if (inline === '') throw new Error(`--${name} needs a value.`);
+          flags[name] = inline;
+          continue;
+        }
+        const value = argv[i + 1];
+        if (value === undefined || value.startsWith('-')) {
+          throw new Error(`--${name} needs a value.`);
+        }
+        flags[name] = value;
+        i += 1;
+        continue;
+      }
+
+      throw new Error(`Unknown option "--${name}". Run geekity --help to see what is available.`);
+    }
+
     // The first bare word is the command; everything bare after it belongs to
     // that command, so `geekity user add ada` reaches `user` with `add ada`.
     if (command === undefined) {
@@ -168,7 +258,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     args.push(arg);
   }
 
-  return { command: command ?? 'serve', configPath, password, email, args };
+  return { command: command ?? 'serve', configPath, password, email, flags, args };
 }
 
 function isCommand(value: string): value is Command {
@@ -291,7 +381,7 @@ function isModuleNotFound(error: unknown, candidate: string): boolean {
 
 /** Run one command. Resolves with the exit code the process should use. */
 async function main(argv: readonly string[]): Promise<number> {
-  const { command, configPath, password, email, args } = parseArgs(argv);
+  const { command, configPath, password, email, flags, args } = parseArgs(argv);
 
   if (command === 'help') {
     process.stdout.write(USAGE);
@@ -305,6 +395,7 @@ async function main(argv: readonly string[]): Promise<number> {
 
   if (command === 'init') return init(args);
   if (command === 'user') return userCommand(args, configPath, password, email);
+  if (command === 'import') return importCommand(args, configPath, flags);
   if (command === 'sync') return syncCommand(configPath);
   if (command === 'rebuild') return rebuildCommand(configPath);
 
@@ -568,6 +659,215 @@ async function userCommand(
 
 /** Where the success line points a new admin. Relative, because the host is the site's. */
 const LOGIN_URL = '/admin/login';
+
+/**
+ * `geekity import wordpress-actor <username>`: the cutover, for one person.
+ *
+ * Everything the plugin holds that this CMS cannot mint for itself arrives
+ * here (decision-14): the RSA pair its followers have cached, the actor id
+ * they key the account by, the number its paths are built from, and the
+ * followers themselves. It is a command rather than a screen because a stored
+ * actor id is identity for the life of the account, and it is idempotent
+ * because the cutover is a thing an owner will want to run twice — once before
+ * the DNS moves and once after an instance that was down comes back.
+ *
+ * The database is opened for the reason `user add` opens it: this is a door
+ * that can reach `data/users.json` before any server has, so a site upgrading
+ * from the version that kept its accounts in SQLite has to be migrated first
+ * or the import would write into a file holding nobody.
+ */
+async function importCommand(
+  args: readonly string[],
+  configPath: string | undefined,
+  flags: Readonly<Record<string, string | true>>,
+): Promise<number> {
+  const subcommand = args[0];
+  if (subcommand === undefined) {
+    throw new Error('geekity import <what> needs a subcommand. The only one is: wordpress-actor.');
+  }
+  if (subcommand !== 'wordpress-actor') {
+    throw new Error(`Unknown import subcommand "${subcommand}". The only one is: wordpress-actor.`);
+  }
+
+  const username = args[1];
+  if (username === undefined) {
+    throw new Error(
+      'geekity import wordpress-actor <username> needs the account on this site the ' +
+        "plugin's actor becomes.",
+    );
+  }
+
+  const actorId = text(flags, 'actor-id');
+  if (actorId === undefined) {
+    throw new Error(
+      '--actor-id is the id WordPress published this person under, query string and all, ' +
+        'for example --actor-id "https://example.com/?author=2". Its followers key the ' +
+        'account by it, so it is the one thing the import cannot work out for itself.',
+    );
+  }
+  if (!isAbsoluteHttpUrl(actorId)) {
+    throw new Error(`--actor-id must be an http or https URL; "${actorId}" is not one.`);
+  }
+
+  const number = text(flags, 'wordpress-id');
+  if (number === undefined || !/^[1-9][0-9]*$/.test(number)) {
+    throw new Error(
+      '--wordpress-id is the WordPress user id, a whole positive number: it is what the ' +
+        "plugin's paths are built from, as in /wp-json/activitypub/1.0/actors/2/inbox.",
+    );
+  }
+
+  const { privateKeyPem, publicKeyPem } = await readKeyPair(flags);
+
+  const config = resolveConfig(await loadConfig(process.cwd(), configPath));
+  const admin = openAdminStore({ dataDir: config.dataDir });
+  migrateUsersToFile({ admin, dataDir: config.dataDir });
+
+  try {
+    const report = await importWordPressActor({
+      admin,
+      dataDir: config.dataDir,
+      contentDir: config.contentDir,
+      username,
+      actorId,
+      wordpressActorId: Number(number),
+      privateKeyPem,
+      publicKeyPem,
+      followers: followersSource(flags),
+      force: flags['force'] === true,
+    });
+
+    process.stdout.write(importSummary(report));
+    return 0;
+  } finally {
+    admin.close();
+  }
+}
+
+/**
+ * The key pair, from whichever of the two exports the owner had to hand.
+ *
+ * `--keypair` is the option the current plugin stores — one option holding
+ * both halves — and the two PEM files are what `wp user meta get` prints for a
+ * site old enough to still be on the legacy meta keys. The README says which
+ * command produces which.
+ */
+async function readKeyPair(
+  flags: Readonly<Record<string, string | true>>,
+): Promise<{ privateKeyPem: string; publicKeyPem: string | undefined }> {
+  const keypair = text(flags, 'keypair');
+  const privateKey = text(flags, 'private-key');
+  const publicKey = text(flags, 'public-key');
+
+  if (keypair !== undefined) {
+    if (privateKey !== undefined) {
+      throw new Error('Pass either --keypair or --private-key, not both.');
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await readFile(path.resolve(process.cwd(), keypair), 'utf8'));
+    } catch (error) {
+      throw new Error(
+        `${keypair} could not be read as the JSON "wp option get … --format=json" prints: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
+    const held = parsed as { private_key?: unknown; public_key?: unknown } | null;
+    if (typeof held?.private_key !== 'string') {
+      throw new Error(`${keypair} has no "private_key". Check what the export wrote.`);
+    }
+    return {
+      privateKeyPem: held.private_key,
+      publicKeyPem: typeof held.public_key === 'string' ? held.public_key : undefined,
+    };
+  }
+
+  if (privateKey === undefined) {
+    throw new Error(
+      'The key pair is missing: pass --keypair with the JSON WordPress stores, or ' +
+        '--private-key with the PEM. Without it this person could not sign anything, and ' +
+        'every follower holds the public half of the key that signs it.',
+    );
+  }
+
+  return {
+    privateKeyPem: await readFile(path.resolve(process.cwd(), privateKey), 'utf8'),
+    publicKeyPem:
+      publicKey === undefined
+        ? undefined
+        : await readFile(path.resolve(process.cwd(), publicKey), 'utf8'),
+  };
+}
+
+/**
+ * What `--followers` means: a URL, a file resolved against the working
+ * directory, `none`, or the plugin's own collection when it was left off.
+ */
+function followersSource(
+  flags: Readonly<Record<string, string | true>>,
+): string | false | undefined {
+  const given = text(flags, 'followers');
+  if (given === undefined) return undefined;
+  if (given === 'none') return false;
+  return isAbsoluteHttpUrl(given) ? given : path.resolve(process.cwd(), given);
+}
+
+/** What the run did, as the operator reads it. */
+function importSummary(report: ImportWordPressActorReport): string {
+  const lines: string[] = [];
+  const { followers } = report;
+
+  lines.push(
+    report.changed
+      ? `Imported ${report.username} from ${report.actorId}`
+      : `Nothing to change: ${report.username} is already ${report.actorId}`,
+  );
+  lines.push(
+    `  ids         ${report.identity === 'set' ? 'written to' : 'already in'} ` +
+      `data/users.json (WordPress actor ${String(report.wordpressActorId)})`,
+  );
+  for (const key of report.keys) lines.push(`  key         ${key.state} ${key.file}`);
+
+  if (followers.source === undefined) {
+    lines.push('  followers   skipped');
+  } else {
+    lines.push(
+      `  followers   ${count(followers.added.length, 'added', 'added')}, ` +
+        `${String(followers.refreshed.length)} refreshed, ` +
+        `${String(followers.unchanged.length)} unchanged, ` +
+        `${String(followers.failed.length)} could not be fetched ` +
+        `(${followers.source})`,
+    );
+    for (const failure of followers.failed) {
+      lines.push(`    skipped   ${failure.actor}: ${failure.reason}`);
+    }
+    if (followers.failed.length > 0) {
+      lines.push(
+        '  Those followers were left out. Run this again once their servers answer; ' +
+          'nothing already imported is touched twice.',
+      );
+    }
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+/** One flag as the text it carries, or `undefined` when it was not given. */
+function text(flags: Readonly<Record<string, string | true>>, name: string): string | undefined {
+  const value = flags[name];
+  return typeof value === 'string' ? value : undefined;
+}
+
+/** Whether a value is a URL a peer could fetch. */
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 /** A terminal, as much of one as {@link readPassword} needs. */
 type PasswordInput = NodeJS.ReadableStream & {

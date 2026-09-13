@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 05:32'
+updated_date: '2026-09-13 05:54'
 ---
 # ActivityPub Federation
 
@@ -47,6 +47,49 @@ A site that moved here from the WordPress ActivityPub plugin has followers whose
 - Under the hood this is a second Fedify `Federation`, mounted after the canonical middleware behind a per-request gate that reads the setting. One `Federation` may have exactly one pair of inbox listeners, and `ctx.routeActivity` re-verifies in a way a Mastodon or WordPress `Follow` cannot satisfy (doc-8). The two objects share one KV store and both set `withIdempotency('per-origin')`, because Fedify's default key folds the recipient identifier in — so the same `Follow` redelivered to `ada` and to `2` would be handled twice. The second object is built the first time a request reaches one of the paths with the switch on.
 - Because the gate is per request, **turning the switch off takes the paths away on the very next request**, with nothing restarted, and turning it on puts them back.
 - Every one of the paths records the instant it was last asked for, per user, in `data/wordpress-activitypub.json` — a file, so a deleted database (decision-9) does not forget the one question the switch is watched by. Settings > Federation lists each path beside the switch with that instant, or never, and the note that once every follower's server has refetched the actor the switch can come off.
+
+### The cutover, and the command that does it
+
+`geekity import wordpress-actor <username>` brings one person across: the RSA
+key pair their followers have cached, the actor id those followers key the
+account by, the plugin's numeric actor id, and the followers themselves. It
+takes `--actor-id` (the URL WordPress published, query string and all),
+`--wordpress-id`, and the key pair as either `--keypair` (the JSON in the
+plugin's `activitypub_keypair_for_{login}` option) or `--private-key` and
+`--public-key` as PEM (the legacy `magic_sig_private_key` / `magic_sig_public_key`
+user meta); both PEM encodings are read. The public key is checked against the
+private half and then thrown away, because it is derived. `--followers` points
+at a URL, a saved collection file, or `none`; left off it is the plugin's own
+public collection on the actor id's origin, which the plugin answers as an
+`OrderedCollection` whose page lists bare actor URLs, so each follower costs one
+dereference. A follower that cannot be fetched is reported and skipped.
+
+It is idempotent: run twice it writes nothing and says so, because a follower
+already in the file keeps its place and its follow time and a key file already
+holding that key is left alone. A user who already has a *different* key pair is
+refused unless `--force`, since importing over one would change that person's
+identity and every follower has cached the public half of the key that is there.
+No screen writes any of this; `src/federation/import-wordpress.ts` is the only
+door, and `setUserWordPressActor` in `src/admin/accounts.ts` the only writer of
+the two ids.
+
+The checklist for a site leaving the plugin:
+
+1. **Export** while the old site is still up: the key pair, and optionally the
+   followers collection. Note the actor id and the numeric actor id. Bring the
+   content across; the post ids come with it (decision-13).
+2. **Import** with `geekity import wordpress-actor`, then read the report and
+   re-run for any follower whose server did not answer.
+3. **Switch on** the `wordpressActivityPub` setting, then move the DNS, so the
+   deliveries still aimed at the plugin's inbox paths land.
+4. **Watch** Settings > Federation, which dates each compatibility path, and the
+   federation screen, which shows each user's actor id and followers. The dates
+   go quiet as each follower's server refetches the actor.
+5. **Switch off** once the paths have been quiet for long enough. It takes
+   effect on the next request, and turning it back on is just as quick.
+
+Retiring the stored actor id by the Move protocol is a later, optional step, and
+is not part of the cutover.
 
 ## WebFinger
 

@@ -519,6 +519,102 @@ export async function setUserNotificationMode(input: {
 }
 
 /**
+ * Thrown when the id being imported already belongs to somebody else.
+ *
+ * Two accounts answering to one actor id is two people with one identity, and
+ * two carrying one WordPress number is a delivery to the plugin's old inbox
+ * that could go to either. Neither is something to pick a winner for, so the
+ * import stops and says whose it is.
+ */
+export class ConflictingActorIdError extends Error {
+  override readonly name = 'ConflictingActorIdError';
+  /** The user who already has it. */
+  readonly username: string;
+
+  constructor(username: string, what: string) {
+    super(`${what} already belongs to "${username}".`);
+    this.username = username;
+  }
+}
+
+/**
+ * Write the two ids a site arriving from the WordPress ActivityPub plugin
+ * carries: the actor id its followers hold, and the number its paths are built
+ * from (TASK-69, TASK-70).
+ *
+ * The only writer of either field, and it is not a screen: doc-4 makes a
+ * stored actor id identity for the life of the account, and identity is not
+ * something a form should be able to retype. `geekity import wordpress-actor`
+ * is what calls this.
+ *
+ * Both ids have to be unique across the file, and the check is inside the
+ * write for the reason {@link createUser}'s duplicate check is: it is a rule
+ * about the file rather than about one user, so it is read and acted on as one
+ * step. Returns whether anything changed — a second run with the same ids
+ * writes nothing, which is what makes the import idempotent.
+ */
+export async function setUserWordPressActor(input: {
+  /** Which site's users file to write. */
+  dataDir: string;
+  /** Whose record, by login name. */
+  username: string;
+  /** The id WordPress published them under, query string and all. */
+  actorId: string;
+  /** The WordPress user id. */
+  wordpressActorId: number;
+}): Promise<boolean> {
+  let changed = false;
+
+  await write(input.dataDir, (contents) => {
+    const mine = contents.users.find((user) => user.username === input.username);
+    if (mine === undefined) throw new UnknownUserError(input.username);
+
+    const byActorId = contents.users.find(
+      (user) => user.id !== mine.id && user.actorId === input.actorId,
+    );
+    if (byActorId !== undefined) {
+      throw new ConflictingActorIdError(byActorId.username, `The actor id ${input.actorId}`);
+    }
+
+    const byNumber = contents.users.find(
+      (user) => user.id !== mine.id && user.wordpressActorId === input.wordpressActorId,
+    );
+    if (byNumber !== undefined) {
+      throw new ConflictingActorIdError(
+        byNumber.username,
+        `WordPress actor ${String(input.wordpressActorId)}`,
+      );
+    }
+
+    changed = mine.actorId !== input.actorId || mine.wordpressActorId !== input.wordpressActorId;
+    if (!changed) return contents;
+
+    return {
+      ...contents,
+      users: contents.users.map((user) =>
+        user.id === mine.id
+          ? { ...user, actorId: input.actorId, wordpressActorId: input.wordpressActorId }
+          : user,
+      ),
+    };
+  });
+
+  return changed;
+}
+
+/** Thrown when a command names a user this site does not have. */
+export class UnknownUserError extends Error {
+  override readonly name = 'UnknownUserError';
+  /** The name that was asked for. */
+  readonly username: string;
+
+  constructor(username: string) {
+    super(`This site has no user named "${username}".`);
+    this.username = username;
+  }
+}
+
+/**
  * Take a user out of the file. Returns `false` when there was nothing to take.
  *
  * Their sessions are not ended here: sessions are in the database, and the
