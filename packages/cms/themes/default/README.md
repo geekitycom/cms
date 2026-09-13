@@ -125,6 +125,9 @@ Neither is needed: a site that sets a homepage gets the page layout for it and
 a site that sets a posts page gets the listing layout, until it writes one.
 Writing `layouts/front-page.njk` into the theme is how a front page is laid out
 differently from every other page without overriding the layout they all use.
+The front page also gets `recentPosts`, entries in the same shape a listing's
+are, so it can print its words and then the writing: the posts of the current
+month when there are at least five of them, and the five newest otherwise.
 On the posts page the page's own front matter and rendered body are on the
 context beside the listing, so `{{ content | safe }}` prints its words above
 the posts; `layouts/home.njk` already does.
@@ -197,10 +200,11 @@ an Eleventy build needs few edits. It is part of the package's semver contract.
 
 Every template gets:
 
-| Key    | What it holds                                                                                                                                                                                           |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `site` | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
-| `menu` | The site menu for this page: a list of `{ label, url, current }`. See [Navigation](#navigation).                                                                                                        |
+| Key          | What it holds                                                                                                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `site`       | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
+| `menu`       | The site menu for this page: a list of `{ label, url, current }`. See [Navigation](#navigation).                                                                                                        |
+| `siteAuthor` | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
 
 A document — one post, one page, or one entry of a listing — adds:
 
@@ -212,6 +216,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `tags`                                      | The document's tags, in file order.                                                                               |
 | `categories`                                | The document's categories, in file order.                                                                         |
 | `content`                                   | The Markdown body rendered to HTML. Print it with `\| safe`.                                                      |
+| `summary`                                   | Its `description` as plain text, else an excerpt of the body, else empty. The line the feeds publish.             |
 | `url`                                       | The document's URL path, the same value as `page.url`.                                                            |
 | `page.url`                                  | The document's URL path. Always ends in `/`.                                                                      |
 | `page.date`                                 | The same `Date` as `date`.                                                                                        |
@@ -221,6 +226,9 @@ A document — one post, one page, or one entry of a listing — adds:
 | `permalink`, `slug`, `draft`, `description` | Straight from the front matter.                                                                                   |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
+| `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |
+| `next`                                      | The published post after it. Absent on the newest post, and on a page.                                            |
+| `recentPosts`                               | The newest posts, as entries, on the front page only: this month's when it holds five, else five.                 |
 | `webmention`                                | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.      |
 | `conversation`                              | The replies, likes and boosts under the post. Only when there are any. See [The conversation](#the-conversation). |
 | everything else                             | Any front matter key the CMS does not model is on the context under its own name.                                 |
@@ -252,7 +260,8 @@ the page.
 ## Bylines and author archives
 
 `author` on a document is the person the front matter names, resolved against
-the site's users:
+the site's users. The fields come from their profile on **Users** in the admin,
+which is the one place identity is written:
 
 | Key               | What it holds                                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -261,6 +270,8 @@ the site's users:
 | `author.username` | Their login. Absent for the same reason `url` is.                                                              |
 | `author.bio`      | What they wrote about themselves, when they wrote any.                                                         |
 | `author.avatar`   | Their picture, as a path or URL. Absent when they have none.                                                   |
+| `author.jobTitle` | What they do, when their profile says.                                                                         |
+| `author.location` | Where they are, as they wrote it.                                                                              |
 | `author.links`    | `{ label, href }` for each link on their profile, in the order they listed them. Absent when they listed none. |
 
 `author` is absent altogether when the document names no author, so a byline is
@@ -280,6 +291,24 @@ their pages at `/author/{username}/page/2/` and their three feeds under
 name, the avatar, the bio and the links — and lists their published posts
 newest first. A user with no profile still has one; they are called by their
 username.
+
+`siteAuthor` is the same object on a different question: not who wrote this
+document, but who the page in front of the reader is by. It is what the bio,
+the footer's `rel="me"` links and any structured data a theme emits should all
+read, so that what a reader sees and what a machine reads cannot drift apart.
+It resolves in this order:
+
+- the document's own `author`, on a post or a page that names one;
+- the person whose archive it is, on an author archive;
+- the profile behind the site's `author` setting, everywhere else — the home
+  page, a taxonomy archive, a page that names nobody, the 404.
+
+It is **absent** when none of those name anybody this site has. The site
+setting is read more strictly than a byline is: a byline prints the name a file
+gives whether or not somebody answers to it, but a site author with no profile
+behind it has no picture, no bio and nowhere to link, so there is nothing to
+print and the key is not there. Write `{% if siteAuthor %}` around the bio and
+the identity links.
 
 The URL is not only a page. Each user is an ActivityPub actor at that address,
 so it is the page a follower lands on when they click through from the

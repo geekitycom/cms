@@ -199,7 +199,7 @@ describe('a user with an email address (AC #1)', () => {
 });
 
 describe('a user with a profile (TASK-67 AC #1)', () => {
-  it('stores the four fields and leaves the key off a user who has none', async () => {
+  it('stores every field and leaves the key off a user who has none', async () => {
     const dataDir = await temporaryDir();
     const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
     await createUser({ dataDir, username: 'grace', password: 'a password of hers' });
@@ -212,6 +212,8 @@ describe('a user with a profile (TASK-67 AC #1)', () => {
           displayName: 'Ada Lovelace',
           bio: 'Wrote the first program.',
           avatar: '/uploads/2026/09/ada.jpg',
+          jobTitle: 'Analyst',
+          location: 'London',
           links: [{ label: 'Home', href: 'https://ada.example' }],
         },
       }),
@@ -222,6 +224,8 @@ describe('a user with a profile (TASK-67 AC #1)', () => {
     assert.equal(stored?.displayName, 'Ada Lovelace');
     assert.equal(stored?.bio, 'Wrote the first program.');
     assert.equal(stored?.avatar, '/uploads/2026/09/ada.jpg');
+    assert.equal(stored?.jobTitle, 'Analyst');
+    assert.equal(stored?.location, 'London');
     assert.deepEqual(stored?.links, [{ label: 'Home', href: 'https://ada.example' }]);
 
     const file = JSON.parse(await readFile(usersFile(dataDir), 'utf8')) as {
@@ -270,6 +274,8 @@ describe('a user with a profile (TASK-67 AC #1)', () => {
             profile: {
               displayName: 42,
               bio: '  Spaced out.  ',
+              jobTitle: '  Analyst  ',
+              location: [],
               links: [{ label: 'Home', href: 'https://ada.example' }, 'nonsense', { href: '' }],
             },
           },
@@ -281,6 +287,8 @@ describe('a user with a profile (TASK-67 AC #1)', () => {
     const stored = findUserById(dataDir, 1)?.profile;
     assert.equal(stored?.displayName, undefined, 'a display name that is not a string is dropped');
     assert.equal(stored?.bio, 'Spaced out.');
+    assert.equal(stored?.jobTitle, 'Analyst');
+    assert.equal(stored?.location, undefined, 'a location that is not a string is dropped');
     assert.deepEqual(stored?.links, [{ label: 'Home', href: 'https://ada.example' }]);
   });
 });

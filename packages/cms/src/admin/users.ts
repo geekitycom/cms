@@ -108,6 +108,10 @@ export const USER_FIELDS = {
   bio: 'bio',
   /** Their picture, as a path or a URL. */
   avatar: 'avatar',
+  /** What they do, printed beside the name in a bio (TASK-79). */
+  jobTitle: 'job_title',
+  /** Where they are, as they write it. */
+  location: 'location',
   /** Somewhere else they are: one `Label | URL` per line. */
   links: 'links',
 } as const;
@@ -272,8 +276,8 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
    * Any row, for the reason the email field is any row: one role, and an admin
    * who has just added a colleague should be able to put a name and a line
    * about them on their archive without waiting for them to sign in. The whole
-   * profile at once, because that is what the form is — four boxes and a Save
-   * — and a box somebody cleared is a field they no longer want.
+   * profile at once, because that is what the form is — a row of boxes and a
+   * Save — and a box somebody cleared is a field they no longer want.
    *
    * A flash and a redirect rather than a 400 with the form redrawn, for the
    * reason the email field is: what was typed lives in a row of a table, and
@@ -298,6 +302,8 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
         displayName: field(body[USER_FIELDS.displayName]),
         bio: field(body[USER_FIELDS.bio]),
         avatar: field(body[USER_FIELDS.avatar]),
+        jobTitle: field(body[USER_FIELDS.jobTitle]),
+        location: field(body[USER_FIELDS.location]),
         links: parseProfileLinks(field(body[USER_FIELDS.links])),
       },
     });
@@ -648,6 +654,8 @@ function row(
       displayName: user.profile?.displayName ?? '',
       bio: user.profile?.bio ?? '',
       avatar: user.profile?.avatar ?? '',
+      jobTitle: user.profile?.jobTitle ?? '',
+      location: user.profile?.location ?? '',
       links: formatProfileLinks(user.profile?.links),
     },
     archiveUrl: authorHref(user.username),

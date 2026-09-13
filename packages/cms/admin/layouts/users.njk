@@ -55,6 +55,12 @@
               <label class="admin-visually-hidden" for="avatar-{{ entry.id }}">Avatar for {{ entry.username }}</label>
               <input id="avatar-{{ entry.id }}" name="{{ fields.avatar }}" type="text" value="{{ entry.profile.avatar }}" placeholder="/uploads/…" />
 
+              <label class="admin-visually-hidden" for="job-title-{{ entry.id }}">Job title for {{ entry.username }}</label>
+              <input id="job-title-{{ entry.id }}" name="{{ fields.jobTitle }}" type="text" value="{{ entry.profile.jobTitle }}" placeholder="Job title" />
+
+              <label class="admin-visually-hidden" for="location-{{ entry.id }}">Location for {{ entry.username }}</label>
+              <input id="location-{{ entry.id }}" name="{{ fields.location }}" type="text" value="{{ entry.profile.location }}" placeholder="Location" />
+
               <label class="admin-visually-hidden" for="links-{{ entry.id }}">Links for {{ entry.username }}</label>
               <textarea id="links-{{ entry.id }}" name="{{ fields.links }}" rows="2" placeholder="Label | https://example.com">{{ entry.profile.links }}</textarea>
 
@@ -126,8 +132,9 @@
 
   <p class="admin-hint">
     A profile is public: the display name heads that person's archive and is
-    what a byline under their posts prints, and the bio, the avatar and the
-    links go on the archive beside it. Links are one per line, either
+    what a byline under their posts prints, and the bio, the avatar, the job
+    title, the location and the links go on the archive beside it. Links are
+    one per line, either
     <code>Label | https://example.com</code> or a bare URL. Nothing here is
     required — a user with no profile still has an archive under their
     username.

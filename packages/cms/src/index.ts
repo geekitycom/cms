@@ -51,6 +51,7 @@ import {
   createSiteDataSource,
   createThemeSource,
   mountPublicSite,
+  recentPosts,
   themeName,
 } from './web/index.ts';
 import { createWebmentionService } from './webmention/index.ts';
@@ -995,6 +996,8 @@ export {
   prefersActivityStreams,
   profileContext,
   publicDocumentAt,
+  recentPosts,
+  RECENT_POSTS,
   recordTermRename,
   redirectedTerm,
   REPRESENTATION_EXTENSIONS,
@@ -1026,8 +1029,10 @@ export {
   SITEMAP_NAMESPACE,
   SITEMAP_PATH,
   SOURCE_NAMESPACE,
+  siteAuthorContext,
   splitFeedPath,
   splitRepresentationExtension,
+  startOfMonth,
   tagHref,
   TAXONOMIES,
   userForAuthor,
@@ -1096,9 +1101,11 @@ export type {
   MenuItem,
   NavigationItem,
   NavigationMenuOptions,
+  NeighbourContext,
   PageContext,
   PaginateOptions,
   Pagination,
+  RecentPostsSource,
   Renderer,
   Representation,
   RepresentationExtension,
@@ -1493,6 +1500,15 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // per render for the same reason: a `contact: true` saved in the editor a
     // moment ago puts a form on the page the next request draws (TASK-56).
     contactForm: (document) => contactFormFor({ document, now: resolved.now() }),
+    // The posts either side of one, for the links under an entry (TASK-79).
+    // Two indexed lookups per post rather than a walk of the archive, and
+    // asked per render for the reason the conversation is: a post published a
+    // minute ago is already the neighbour of the one before it.
+    neighbours: (document) => store.neighbours(document),
+    // And the newest posts for the front page, by the current-month-or-five
+    // rule. Only the front page asks, so a site whose `/` is its listing never
+    // runs the query at all.
+    recentPosts: () => recentPosts(store),
   });
   // One KV store for both federations. The compatibility one (TASK-70) shares
   // it so that the same `Follow` redelivered to a user's own inbox and to the

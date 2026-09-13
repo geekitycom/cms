@@ -24,6 +24,7 @@ export {
   INBOX_BASE,
   parseAuthorPath,
   profileContext,
+  siteAuthorContext,
   userForAuthor,
 } from './authors.ts';
 export type { AuthorContext, AuthorRequest } from './authors.ts';
@@ -41,6 +42,7 @@ export {
 export type {
   DocumentContext,
   FrontPageSlugs,
+  NeighbourContext,
   PageContext,
   SiteData,
   SiteDataSource,
@@ -174,6 +176,8 @@ export {
 export type { MenuItem, NavigationItem, NavigationMenuOptions } from './navigation.ts';
 export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
+export { recentPosts, RECENT_POSTS, startOfMonth } from './recent.ts';
+export type { RecentPostsSource } from './recent.ts';
 export { createRenderer, OPTIONAL_TEMPLATES, TEMPLATES } from './render.ts';
 export type { CreateRendererOptions, Listing, Renderer } from './render.ts';
 export {

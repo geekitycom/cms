@@ -549,7 +549,9 @@ bio, the avatar and the links on their user record, edited on `/admin/users`
 and stored in `data/users.json` — the same profile the author archive is headed
 with, so a page and an actor cannot say different things about somebody. Their
 `preferredUsername` is their login, and `alsoKnownAs` lists every URL they
-answer to: the actor id, the archive and `/@{username}`.
+answer to: the actor id, the archive and `/@{username}`. The profile holds two
+more fields the actor does not carry — a job title and a location — which are
+there for a theme to print beside the name.
 
 The avatar is a path like `/uploads/2026/09/me.png`, stored with the site's
 other uploads. The actor carries it as an absolute URL resolved against the
@@ -1403,7 +1405,7 @@ shadow the login form.
 | `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                           |
 | `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                                  |
 | `/admin/users/email`                             | `POST` only. Sets or clears the email address on the row the form names.                  |
-| `/admin/users/profile`                           | `POST` only. Saves the display name, bio, avatar and links on the row the form names.     |
+| `/admin/users/profile`                           | `POST` only. Saves the whole public profile on the row the form names.                    |
 | `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the row the form names.                       |
 | `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice reaches the row: as they arrive, hourly or daily. |
 | `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                             |
@@ -2528,7 +2530,12 @@ The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`
 The one key that is not the front matter's own string is `author`: it is the
 person the file names, resolved against the site's users, with `author.name` to
 print and `author.url` — their archive at `/author/{username}/` — to link to
-when the name is one of them. The full table of context keys, blocks and
+when the name is one of them. `siteAuthor` is the same object answering a
+different question — who the page in front of the reader is by, which is the
+entry's author on a document, the archive's person on an author archive and the
+profile behind the site's `author` setting everywhere else — so the bio, the
+`rel="me"` links and any structured data a theme emits all read one profile.
+The full table of context keys, blocks and
 filters is in [`themes/default/README.md`](./themes/default/README.md).
 
 Rendering is also callable without a request:

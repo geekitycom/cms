@@ -3,7 +3,8 @@ import type { Environment } from 'nunjucks';
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { authorContext } from './authors.ts';
+import type { DocumentNeighbours } from '../content/store.ts';
+import { authorContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import {
   createSiteDataSource,
@@ -19,7 +20,7 @@ import type { ContactFormContext } from '../contact/form.ts';
 import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
-import type { DocumentContext, FrontPageSlugs, SiteData } from './context.ts';
+import type { DocumentContext, FrontPageSlugs, NeighbourContext, SiteData } from './context.ts';
 import { navigationMenu } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
@@ -218,6 +219,26 @@ export interface CreateRendererOptions {
    * it simply links nowhere.
    */
   users?: (() => readonly User[]) | undefined;
+  /**
+   * The published posts either side of one, for `previous` and `next` under an
+   * entry (TASK-79).
+   *
+   * Injected for the reason the conversation is — the renderer holds no index
+   * — and asked per render rather than at boot, because a post published a
+   * minute ago is the neighbour the post before it should already be linking
+   * to. A renderer built without it draws no such links, which is what a test
+   * over one template wants.
+   */
+  neighbours?: ((document: Document) => DocumentNeighbours) | undefined;
+  /**
+   * The newest posts, for `recentPosts` on the front page (TASK-79).
+   *
+   * Which posts are recent is `web/recent.ts`'s rule and the query behind it
+   * is the index's; this is only how the answer reaches a template. Asked per
+   * render, and only while drawing the front page, so a site whose `/` is its
+   * listing never runs it at all.
+   */
+  recentPosts?: (() => readonly Document[]) | undefined;
 }
 
 /**
@@ -262,7 +283,39 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // front-matter key a page opts in with, and a document's own front matter
     // goes on top of the globals exactly as Eleventy's data cascade does.
     const menu = navigationMenu({ site, pages: pages(), url: currentUrl(context) });
-    return environment.render(template, { site, menu, ...context });
+    // Who the page is by, for the bio, the `rel="me"` links and the structured
+    // data (decision-16). It is here rather than in each caller because every
+    // page of the site carries it, for the reason the menu does — and it is
+    // the site's own author only when the page is about nobody in particular:
+    // a document's byline and an author archive's person are put on the
+    // context by the callers below, and win by going on last.
+    const owner =
+      context['siteAuthor'] === undefined ? siteAuthorContext(users(), site.author) : undefined;
+    return environment.render(template, {
+      site,
+      menu,
+      ...(owner === undefined ? {} : { siteAuthor: owner }),
+      ...context,
+    });
+  }
+
+  /**
+   * The front page's recent posts, as the entries a listing prints, or nothing
+   * at all when the renderer was built without a source for them.
+   *
+   * One read of the users file for the whole list, the way a listing does it:
+   * five posts is five bylines resolved against the same people.
+   */
+  function recentPostsContext(): Record<string, unknown> {
+    const posts = options.recentPosts?.();
+    if (posts === undefined) return {};
+
+    const people = users();
+    return {
+      recentPosts: posts.map((document) =>
+        documentContext(document, config, authorContext(people, document.author)),
+      ),
+    };
   }
 
   /**
@@ -293,7 +346,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // The profile behind the document's `author`, resolved here rather than in
     // `documentContext` for the reason the object id is: it needs the site's
     // users, which a document on its own does not carry.
-    const context = documentContext(document, config, authorContext(users(), document.author));
+    const writer = authorContext(users(), document.author);
+    const context = documentContext(document, config, writer);
     // The URL it is being served at, which is its own permalink everywhere but
     // the front page.
     const url = options_.url ?? context.url;
@@ -323,9 +377,19 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // only when the site takes them, so a theme asks `{% if webmention %}`
     // and a site that has turned them off advertises nothing.
     const webmention = webmentionEndpointFor(siteData.read());
+    // The posts either side of this one, as the two links a theme draws under
+    // an entry (TASK-79). Each is on the context only when there is one, so a
+    // theme asks `{% if previous %}` and the ends of the archive draw nothing.
+    const either = options.neighbours?.(document) ?? {};
 
     return render(template, {
       ...context,
+      // This page's own person, which is the site's author everywhere else:
+      // the byline and the identity a theme prints are one object, so what a
+      // reader sees and what the structured data says cannot drift.
+      ...(writer === undefined ? {} : { siteAuthor: writer }),
+      ...neighbourContext('previous', either.previous),
+      ...neighbourContext('next', either.next),
       url,
       page: { ...context.page, url },
       ...(objectId === undefined
@@ -390,7 +454,11 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         // should say the URL this is served at rather than the one that
         // redirects here.
         url: '/',
-        extra,
+        // The newest posts under the page's own words, which is what a front
+        // page is for (decision-16). Built here rather than by the route
+        // because it is the same document context every listing entry is, and
+        // resolved once for the whole list the way a listing's bylines are.
+        extra: { ...recentPostsContext(), ...extra },
       });
     },
 
@@ -428,8 +496,12 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         ...(listing.category === undefined ? {} : { category: listing.category }),
         // On an author archive this is the person the archive is of, and it
         // goes on last so it wins over the posts page's own `author`, which is
-        // the page's writer rather than whose archive this is.
-        ...(listing.author === undefined ? {} : { author: listing.author }),
+        // the page's writer rather than whose archive this is. They are also
+        // whose page this is, so the identity a theme prints is theirs rather
+        // than the site's.
+        ...(listing.author === undefined
+          ? {}
+          : { author: listing.author, siteAuthor: listing.author }),
       });
     },
 
@@ -443,6 +515,22 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     render,
   };
+}
+
+/**
+ * One neighbour under the name a theme reads it by, or nothing at all when
+ * there is no post on that side.
+ *
+ * The title and the URL and no more: a link is what it says and where it goes,
+ * and handing a theme a second document context would be handing it a second
+ * post to print by accident.
+ */
+function neighbourContext(
+  key: 'previous' | 'next',
+  document: Document | undefined,
+): Record<string, NeighbourContext> | object {
+  if (document === undefined) return {};
+  return { [key]: { title: document.title, url: document.permalink } };
 }
 
 /**
