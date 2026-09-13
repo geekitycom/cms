@@ -170,6 +170,104 @@ describe('a user email address (AC #1)', () => {
   });
 });
 
+describe('a user profile (TASK-67 AC #1)', () => {
+  it('is edited on a row and stored in the users file', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { token } = await usersScreen(agent);
+
+    const saved = await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      display_name: 'Ada Lovelace',
+      bio: 'Wrote the first program.',
+      avatar: '/uploads/2026/09/ada.jpg',
+      links: 'Her notes | https://ada.example\nhttps://bare.example',
+    });
+
+    assert.equal(saved.status, 303);
+    const stored = findUserById(cms.config.dataDir, ada.id)?.profile;
+    assert.equal(stored?.displayName, 'Ada Lovelace');
+    assert.equal(stored?.bio, 'Wrote the first program.');
+    assert.equal(stored?.avatar, '/uploads/2026/09/ada.jpg');
+    assert.deepEqual(stored?.links, [
+      { label: 'Her notes', href: 'https://ada.example' },
+      // A line with no label is its own label, so a bare URL still renders.
+      { label: 'https://bare.example', href: 'https://bare.example' },
+    ]);
+  });
+
+  it('shows what is stored, and links to the archive it heads', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada !== undefined);
+    const { token } = await usersScreen(agent);
+
+    await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(ada.id),
+      display_name: 'Ada Lovelace',
+      bio: 'Wrote the first program.',
+      avatar: '',
+      links: '',
+    });
+
+    const { html } = await usersScreen(agent);
+    assert.match(html, /value="Ada Lovelace"/);
+    assert.match(html, /Wrote the first program\./);
+    assert.match(html, /href="\/author\/ada\/"/);
+  });
+
+  it('is edited on somebody else’s row too, and cleared when emptied', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const grace = await createUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of her own',
+    });
+    const { token } = await usersScreen(agent);
+
+    await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(grace.id),
+      display_name: 'Grace Hopper',
+      bio: '',
+      avatar: '',
+      links: '',
+    });
+    assert.equal(findUserById(cms.config.dataDir, grace.id)?.profile?.displayName, 'Grace Hopper');
+
+    await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(grace.id),
+      display_name: '',
+      bio: '',
+      avatar: '',
+      links: '',
+    });
+    assert.equal(findUserById(cms.config.dataDir, grace.id)?.profile, undefined);
+  });
+
+  it('says so when the row is already gone', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+
+    const response = await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: '404',
+      display_name: 'Nobody',
+    });
+
+    assert.equal(response.status, 303);
+    assert.match(await (await agent.get('/admin/users')).text(), /already gone/i);
+  });
+});
+
 describe('notification preferences (AC #3)', () => {
   it('offers a switch for every event the registry knows', async () => {
     const cms = await box.site();
@@ -309,6 +407,22 @@ describe('how often a notice arrives (AC #1)', () => {
 });
 
 describe('a bad add form', () => {
+  it('refuses a name that could not be an author URL (TASK-67 AC #4)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { token } = await usersScreen(agent);
+
+    const response = await agent.post('/admin/users/new', {
+      csrf_token: token,
+      username: '..',
+      password: 'a password of their own',
+    });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /author URL/);
+    assert.equal(countUsers(cms.config.dataDir), 1, 'nothing was written');
+  });
+
   it('comes back with a 400, what was typed, and nobody created', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);

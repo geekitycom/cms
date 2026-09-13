@@ -91,6 +91,19 @@
       <label for="editor-description">Description</label>
       <input id="editor-description" name="description" type="text" value="{{ form.description }}" />
 
+      {# Who the front matter says wrote this (TASK-67). A select of the site's
+         users rather than a free box, because after decision-14 the value is a
+         person rather than a string: it decides whose archive the post is on
+         and, once the actors land, whose followers hear about it. A file that
+         still names somebody who has no account keeps an option of its own, so
+         opening the editor cannot silently reattribute it. #}
+      <label for="editor-author">Author</label>
+      <select id="editor-author" name="author">
+        {% for choice in authors %}
+          <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
+        {% endfor %}
+      </select>
+
       <p class="admin-check">
         <input id="editor-draft" name="draft" type="checkbox" value="1"{% if form.draft %} checked{% endif %} />
         <label for="editor-draft">Draft</label>

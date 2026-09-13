@@ -15,14 +15,16 @@ export {
   findUserByIdentifier,
   listUsers,
   migrateUsersToFile,
+  cleanProfile,
   setUserEmail,
   setUserPassword,
+  setUserProfile,
   USERS_FILE,
   USERS_FILE_MODE,
   usersFile,
   verifyUserPassword,
 } from './accounts.ts';
-export type { CreateUserInput, StoredUser, User } from './accounts.ts';
+export type { CreateUserInput, ProfileLink, StoredUser, User, UserProfile } from './accounts.ts';
 export {
   credentialProblem,
   emailProblem,

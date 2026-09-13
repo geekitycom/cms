@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import { ADMIN_PREFIX } from '../admin/session.ts';
 import { FEDERATION_PREFIX } from '../federation/paths.ts';
 import { THEME_ASSET_PREFIX, UPLOAD_ASSET_PREFIX } from './assets.ts';
+import { AUTHOR_BASE, INBOX_BASE } from './authors.ts';
 import { COMMENTS_ROOT } from './feeds.ts';
 import { ROBOTS_PATH, SITEMAP_PATH } from './sitemap.ts';
 import {
@@ -98,6 +99,11 @@ describe('the reserved list', () => {
       COMMENTS_ROOT,
       SITEMAP_PATH,
       ROBOTS_PATH,
+      // decision-14: the author archives and the shared inbox are the site's
+      // own, and an actor id that a settings field could move would be a
+      // different account to everybody following it.
+      AUTHOR_BASE,
+      INBOX_BASE,
     ].map((prefix) => prefix.replaceAll('/', ''));
 
     for (const segment of registered) {

@@ -493,6 +493,113 @@ describe('listByCategory', () => {
   });
 });
 
+describe('listByAuthor (TASK-67 AC #3)', () => {
+  /** Posts by two people, one of whom two files name two different ways. */
+  async function attributed(): Promise<ContentStore> {
+    const index = await store();
+    index.upsertAll([
+      post({
+        path: 'posts/2026-01-01-by-login.md',
+        slug: 'by-login',
+        permalink: '/2026/01/by-login/',
+        title: 'By Login',
+        date: '2026-01-01T00:00:00Z',
+        author: 'ada',
+      }),
+      post({
+        path: 'posts/2026-02-01-by-display-name.md',
+        slug: 'by-display-name',
+        permalink: '/2026/02/by-display-name/',
+        title: 'By Display Name',
+        date: '2026-02-01T00:00:00Z',
+        author: 'Ada Lovelace',
+      }),
+      post({
+        path: 'posts/2026-03-01-by-somebody-else.md',
+        slug: 'by-somebody-else',
+        permalink: '/2026/03/by-somebody-else/',
+        title: 'By Somebody Else',
+        date: '2026-03-01T00:00:00Z',
+        author: 'grace',
+      }),
+      post({
+        path: 'posts/2026-04-01-a-draft-of-hers.md',
+        slug: 'a-draft-of-hers',
+        permalink: '/2026/04/a-draft-of-hers/',
+        title: 'A Draft Of Hers',
+        date: '2026-04-01T00:00:00Z',
+        draft: true,
+        author: 'ada',
+      }),
+      post({
+        path: '_trash/posts/2026-05-01-thrown-away.md',
+        slug: 'thrown-away',
+        permalink: '/2026/05/thrown-away/',
+        title: 'Thrown Away',
+        date: '2026-05-01T00:00:00Z',
+        author: 'ada',
+      }),
+      post({
+        type: 'page',
+        path: 'pages/her-page.md',
+        slug: 'her-page',
+        permalink: '/her-page/',
+        title: 'Her Page',
+        date: undefined,
+        author: 'ada',
+      }),
+      post({
+        path: 'posts/2099-01-01-not-due-yet.md',
+        slug: 'not-due-yet',
+        permalink: '/2099/01/not-due-yet/',
+        title: 'Not Due Yet',
+        date: '2099-01-01T00:00:00Z',
+        author: 'ada',
+      }),
+    ]);
+    return index;
+  }
+
+  it('returns the published posts filed under any of the names, newest first', async () => {
+    const index = await attributed();
+
+    assert.deepEqual(titles(index.listByAuthor(['ada', 'Ada Lovelace'])), [
+      'By Display Name',
+      'By Login',
+    ]);
+    assert.equal(index.countByAuthor(['ada', 'Ada Lovelace']), 2);
+  });
+
+  it('leaves out drafts, the trash, pages and posts that are not due', async () => {
+    const index = await attributed();
+
+    const listed = titles(index.listByAuthor(['ada', 'Ada Lovelace']));
+    for (const hidden of ['A Draft Of Hers', 'Thrown Away', 'Her Page', 'Not Due Yet']) {
+      assert.equal(listed.includes(hidden), false, `${hidden} is not on an archive`);
+    }
+  });
+
+  it('paginates like every other listing', async () => {
+    const index = await attributed();
+
+    assert.deepEqual(titles(index.listByAuthor(['ada', 'Ada Lovelace'], { limit: 1 })), [
+      'By Display Name',
+    ]);
+    assert.deepEqual(titles(index.listByAuthor(['ada', 'Ada Lovelace'], { limit: 1, offset: 1 })), [
+      'By Login',
+    ]);
+  });
+
+  it('is empty for a name nothing carries, and for no names at all', async () => {
+    const index = await attributed();
+
+    assert.deepEqual(index.listByAuthor(['babbage']), []);
+    assert.equal(index.countByAuthor(['babbage']), 0);
+    assert.deepEqual(index.listByAuthor([]), []);
+    assert.equal(index.countByAuthor([]), 0);
+  });
+});
+
 describe('listAll', () => {
   it('shows the admin drafts alongside published documents, but not the trash', async () => {
     const index = await populated();

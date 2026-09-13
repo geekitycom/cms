@@ -104,6 +104,22 @@ export interface ContentStore {
   listByTag(tag: string, options?: ListByTagOptions): Document[];
   /** Published, untrashed documents filed under a category, newest first. */
   listByCategory(category: string, options?: ListByTagOptions): Document[];
+  /**
+   * Published, untrashed, already-due posts whose `author` is one of `names`,
+   * newest first: one user's archive (TASK-67).
+   *
+   * A list of names rather than one, because more than one string can read as
+   * the same person: doc-2's `author` holds a username, and a file written
+   * before decision-14 holds a display name that reads as the one user
+   * answering to it. `web/authors.ts` decides which names those are and hands
+   * them here, so the index matches strings and never has to know what a user
+   * is. An empty list matches nothing, which is what a user whose name nothing
+   * resolves to should get.
+   *
+   * Posts only: an author archive is what somebody wrote, and a page is part
+   * of the furniture of the site rather than of anybody's body of work.
+   */
+  listByAuthor(names: readonly string[], options?: ListOptions): Document[];
   /** Everything the admin may see, trash and drafts included unless filtered. */
   listAll(options?: ListAllOptions): Document[];
   /**
@@ -128,6 +144,8 @@ export interface ContentStore {
   listTags(): TagCount[];
   /** How many published, untrashed documents are filed under a category. */
   countByCategory(category: string, options?: ListByTagOptions): number;
+  /** How many published posts one user's archive holds. See {@link ContentStore.listByAuthor}. */
+  countByAuthor(names: readonly string[]): number;
   /** Every category in use on published, untrashed documents, with its count. */
   listCategories(): CategoryCount[];
   /**
@@ -580,6 +598,15 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       return selectByTerm('document_categories', 'category', category, options);
     },
 
+    listByAuthor(names, options = {}) {
+      if (names.length === 0) return [];
+      return select(
+        ["type = 'post'", 'draft = 0', 'trashed = 0', DUE_CLAUSE, authorClause(names)],
+        [nowKey(), ...names],
+        options,
+      );
+    },
+
     listAll(options = {}) {
       const where: string[] = [];
       const params: unknown[] = [];
@@ -640,6 +667,18 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       return countByTerm('document_categories', 'category', category, options);
     },
 
+    countByAuthor(names) {
+      if (names.length === 0) return 0;
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS count FROM documents
+           WHERE type = 'post' AND draft = 0 AND trashed = 0
+             AND ${DUE_CLAUSE} AND ${authorClause(names)}`,
+        )
+        .get(...([nowKey(), ...names] as never[])) as Record<string, unknown>;
+      return Number(row['count']);
+    },
+
     listTags() {
       return statements.tagCounts.all(nowKey()).map((row) => ({
         tag: String(row['tag']),
@@ -692,6 +731,17 @@ function termUsageSql(table: 'document_tags' | 'document_categories', column: st
     GROUP BY ${table}.${column}
     ORDER BY term ASC
   `;
+}
+
+/**
+ * `author IN (?, ?, …)`, with one placeholder per name.
+ *
+ * Only the count of the names is interpolated; every name itself is a bound
+ * parameter, so a display name holding a quote is a string to match rather
+ * than anything SQLite reads as syntax.
+ */
+function authorClause(names: readonly string[]): string {
+  return `author IN (${names.map(() => '?').join(', ')})`;
 }
 
 function limitClause(options: ListOptions): string {

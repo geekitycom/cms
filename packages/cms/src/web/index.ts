@@ -17,6 +17,18 @@ export {
 } from './assets.ts';
 export type { AssetResponseOptions, StaticAsset, ThemeAsset } from './assets.ts';
 export {
+  AUTHOR_BASE,
+  authorContext,
+  authorFeedHref,
+  authorHref,
+  authorNames,
+  INBOX_BASE,
+  parseAuthorPath,
+  profileContext,
+  userForAuthor,
+} from './authors.ts';
+export type { AuthorContext, AuthorRequest } from './authors.ts';
+export {
   createSiteDataSource,
   DEFAULT_POSTS_PER_PAGE,
   documentContext,

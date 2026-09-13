@@ -10,10 +10,11 @@
  * its own.
  */
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { createUser, setUserProfile } from './accounts.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import type { Cms } from '../index.ts';
@@ -340,6 +341,97 @@ describe('the editor page', () => {
     assert.match(html, /data-preview-url="\/admin\/preview"/);
     assert.match(html, /data-upload-url="\/admin\/uploads"/);
     assert.match(html, /data-kind="post"/);
+  });
+});
+
+describe('who a post says wrote it (TASK-67 AC #2)', () => {
+  it('offers the users, with the signed-in one chosen, on a new post', async () => {
+    const { cms, agent } = await admin();
+    await createUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of hers',
+    });
+
+    const html = await (await agent.get('/admin/posts/new')).text();
+
+    assert.match(html, /<select id="editor-author" name="author"/);
+    assert.match(html, /<option value="ada"\s+selected>/);
+    assert.match(html, /<option value="grace">/);
+  });
+
+  it('writes the chosen user’s login into the file', async () => {
+    const { cms, agent, token } = await admin();
+    await createUser({
+      dataDir: cms.config.dataDir,
+      username: 'grace',
+      password: 'a password of hers',
+    });
+
+    const saved = await agent.post('/admin/posts/new', {
+      csrf_token: token,
+      title: 'Hers',
+      date: '2026-09-02 09:00',
+      author: 'grace',
+      body: 'Body.',
+      action: 'publish',
+    });
+    assert.equal(saved.status, 303);
+
+    const document = cms.store.getBySlug('hers');
+    assert.equal(document?.author, 'grace');
+  });
+
+  it('keeps what the file said when the form names nobody this site has', async () => {
+    const { cms, agent, token } = await admin();
+
+    await agent.post('/admin/posts/new', {
+      csrf_token: token,
+      title: 'Mine',
+      date: '2026-09-02 09:00',
+      body: 'Body.',
+      action: 'publish',
+    });
+    const first = cms.store.getBySlug('mine');
+    assert.equal(first?.author, 'ada', 'a new post is the signed-in user’s');
+
+    const edit = await agent.get('/admin/posts/mine');
+    const editToken = csrfField(await edit.text());
+    await agent.post('/admin/posts/mine', {
+      csrf_token: editToken ?? '',
+      title: 'Mine',
+      date: '2026-09-02 09:00',
+      author: 'somebody-who-left',
+      body: 'Body.',
+      hash: first?.hash ?? '',
+      action: 'update',
+    });
+
+    assert.equal(
+      cms.store.getBySlug('mine')?.author,
+      'ada',
+      'a name the form invented changes nothing',
+    );
+  });
+
+  it('offers a display name from before decision-14 as the user it reads as', async () => {
+    const { cms, agent } = await admin();
+    await setUserProfile({
+      dataDir: cms.config.dataDir,
+      userId: 1,
+      profile: { displayName: 'Ada Lovelace' },
+    });
+    await mkdir(path.join(cms.config.contentDir, 'posts'), { recursive: true });
+    await writeFile(
+      path.join(cms.config.contentDir, 'posts', '2026-09-02-older.md'),
+      "---\ntitle: Older\ndate: '2026-09-02T09:00:00Z'\npermalink: /2026/09/older/\nauthor: Ada Lovelace\n---\n\nBody.\n",
+      'utf8',
+    );
+    await cms.sync();
+
+    const html = await (await agent.get('/admin/posts/older')).text();
+
+    assert.match(html, /<option value="ada"\s+selected>/);
   });
 });
 

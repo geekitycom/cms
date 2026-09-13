@@ -1211,6 +1211,7 @@ shadow the login form.
 | `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                           |
 | `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                                  |
 | `/admin/users/email`                             | `POST` only. Sets or clears the email address on the row the form names.                  |
+| `/admin/users/profile`                           | `POST` only. Saves the display name, bio, avatar and links on the row the form names.     |
 | `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the row the form names.                       |
 | `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice reaches the row: as they arrive, hourly or daily. |
 | `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                             |
@@ -1651,8 +1652,10 @@ Booting mounts the public site on the app. The routes are:
 | a document's permalink                  | The post or the page, through the theme.                                                            |
 | `/tag/{tag}/`                           | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`.                          |
 | `/category/{name}/`                     | The second taxonomy, paginated the same way.                                                        |
+| `/author/{username}/`                   | One user's published posts, headed by their profile, paginated the same way.                        |
 | `/feed/`, `/feed/atom/`, `/feed/json/`  | The recent posts as RSS 2.0, Atom and JSON Feed.                                                    |
 | `/tag/{tag}/feed/` and its two siblings | The same, for one tag; `/category/{name}/feed/` likewise.                                           |
+| `/author/{username}/feed/` and siblings | The same, for one person.                                                                           |
 | `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                                                    |
 | `{permalink}feed/`                      | One post's replies, the same way.                                                                   |
 | `/sitemap.xml`                          | Every public URL, for a search engine.                                                              |
@@ -2270,8 +2273,11 @@ can extend a packaged one by name:
 The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`,
 `content`, `page.url`, and every front matter key the file carried — plus
 `site`, which is `content/_data/site.json`. It is part of the semver contract.
-The full table of context keys, blocks and filters is in
-[`themes/default/README.md`](./themes/default/README.md).
+The one key that is not the front matter's own string is `author`: it is the
+person the file names, resolved against the site's users, with `author.name` to
+print and `author.url` — their archive at `/author/{username}/` — to link to
+when the name is one of them. The full table of context keys, blocks and
+filters is in [`themes/default/README.md`](./themes/default/README.md).
 
 Rendering is also callable without a request:
 

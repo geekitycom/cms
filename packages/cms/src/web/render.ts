@@ -3,9 +3,12 @@ import path from 'node:path';
 
 import type { Environment } from 'nunjucks';
 
+import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { themeSearchPath } from './assets.ts';
+import { authorContext } from './authors.ts';
+import type { AuthorContext } from './authors.ts';
 import {
   createSiteDataSource,
   documentContext,
@@ -33,6 +36,7 @@ export const TEMPLATES = {
   page: 'layouts/page.njk',
   tag: 'layouts/tag.njk',
   category: 'layouts/category.njk',
+  author: 'layouts/author.njk',
   notFound: 'layouts/404.njk',
 } as const;
 
@@ -68,6 +72,12 @@ export interface Listing {
   tag?: string | undefined;
   /** The category, on a category archive. Absent on the home page. */
   category?: string | undefined;
+  /**
+   * Whose archive this is, on an author archive: the same profile a post's
+   * byline is given, so a theme prints the heading of an archive with what it
+   * already knows how to print under a post.
+   */
+  author?: AuthorContext | undefined;
   /** Which template to use. Defaults to the home layout. */
   template?: string | undefined;
   /**
@@ -180,6 +190,20 @@ export interface CreateRendererOptions {
    * renders no contact form at all.
    */
   contactForm?: ((document: Document) => ContactFormContext | undefined) | undefined;
+  /**
+   * Who may sign in, for the byline (TASK-67).
+   *
+   * Injected and read per render for the reason the pages are: `data/users.json`
+   * is the truth about who exists (decision-9), a display name saved a moment
+   * ago should be on the very next page, and the renderer holds no store. It
+   * is asked once per render rather than once per document, so a listing of
+   * ten posts costs one read of the file.
+   *
+   * A renderer built without it resolves no author at all, which is what a
+   * test over one template wants: the front matter's own name is still printed,
+   * it simply links nowhere.
+   */
+  users?: (() => readonly User[]) | undefined;
 }
 
 /**
@@ -198,6 +222,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   });
   const siteData = createSiteDataSource(config);
   const pages = options.pages ?? ((): readonly Document[] => []);
+  const users = options.users ?? ((): readonly User[] => []);
 
   function render(template: string, context: Record<string, unknown> = {}): string {
     const site = siteData.read();
@@ -237,7 +262,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     options_: { template: string; url?: string | undefined; extra: Record<string, unknown> },
   ): string {
     const { template, extra } = options_;
-    const context = documentContext(document, config);
+    // The profile behind the document's `author`, resolved here rather than in
+    // `documentContext` for the reason the object id is: it needs the site's
+    // users, which a document on its own does not carry.
+    const context = documentContext(document, config, authorContext(users(), document.author));
     // The URL it is being served at, which is its own permalink everywhere but
     // the front page.
     const url = options_.url ?? context.url;
@@ -331,8 +359,11 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     },
 
     renderListing(listing) {
+      // One read of the users file for the whole page, however many posts are
+      // on it: every byline on a listing resolves against the same list.
+      const people = users();
       const items: DocumentContext[] = listing.documents.map((document) =>
-        documentContext(document, config),
+        documentContext(document, config, authorContext(people, document.author)),
       );
       // The posts page's own front matter and rendered body, under the
       // listing's title, URL and posts: a theme prints `{{ content | safe }}`
@@ -340,7 +371,13 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // listing's own keys go on after it, because this page of the listing is
       // what is being served — page two of it is not the page's own URL.
       const document =
-        listing.document === undefined ? undefined : documentContext(listing.document, config);
+        listing.document === undefined
+          ? undefined
+          : documentContext(
+              listing.document,
+              config,
+              authorContext(people, listing.document.author),
+            );
 
       return render(listingTemplate(listing), {
         ...document,
@@ -353,6 +390,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         pagination: { ...listing.pagination, items },
         ...(listing.tag === undefined ? {} : { tag: listing.tag }),
         ...(listing.category === undefined ? {} : { category: listing.category }),
+        // On an author archive this is the person the archive is of, and it
+        // goes on last so it wins over the posts page's own `author`, which is
+        // the page's writer rather than whose archive this is.
+        ...(listing.author === undefined ? {} : { author: listing.author }),
       });
     },
 

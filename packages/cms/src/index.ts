@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import {
   baselineSecurityHeaders,
   effectiveBaseUrl,
+  listUsers,
   migrateSettingsToFile,
   migrateUsersToFile,
   mountAdmin,
@@ -261,6 +262,7 @@ export {
   UPLOADS_PATH,
   setUserEmail,
   setUserPassword,
+  setUserProfile,
   USER_EMAIL_PATH,
   USER_FIELDS,
   USERNAME_PATTERN,
@@ -345,6 +347,7 @@ export type {
   SettingsForm,
   SettingsProblems,
   SiteSettings,
+  ProfileLink,
   StoredUpload,
   StoredUser,
   TaxonomyKind,
@@ -356,6 +359,7 @@ export type {
   UploadRefusal,
   UploadResult,
   User,
+  UserProfile,
 } from './admin/index.ts';
 
 // The database as a file a site may act on: where it is, how to throw it away,
@@ -879,6 +883,11 @@ export {
   assetResponse,
   atomEntry,
   atomFeed,
+  AUTHOR_BASE,
+  authorContext,
+  authorFeedHref,
+  authorHref,
+  authorNames,
   categoryHref,
   commentAnchor,
   commentsFeedHref,
@@ -931,6 +940,7 @@ export {
   formatDate,
   frontPageSlugs,
   homeHref,
+  INBOX_BASE,
   isNotModified,
   isPublicDocument,
   JSON_FEED_VERSION,
@@ -962,9 +972,11 @@ export {
   PAGE_SEGMENT,
   paginate,
   parseAccept,
+  parseAuthorPath,
   postObjectId,
   postsPerPage,
   prefersActivityStreams,
+  profileContext,
   publicDocumentAt,
   recordTermRename,
   redirectedTerm,
@@ -999,6 +1011,7 @@ export {
   splitRepresentationExtension,
   tagHref,
   TAXONOMIES,
+  userForAuthor,
   TAXONOMY_BASE_PATTERN,
   TAXONOMY_LABELS,
   taxonomyBaseProblems,
@@ -1024,6 +1037,8 @@ export {
 export type {
   AcceptRange,
   AssetResponseOptions,
+  AuthorContext,
+  AuthorRequest,
   ConditionalHeaders,
   CreateRendererOptions,
   CommentFeedSource,
@@ -1404,6 +1419,12 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // same one the listing index already serves, and doing it per render is
     // what makes a page flagged in the editor appear in the menu at once.
     pages: () => store.listAll({ type: 'page', draft: false, trashed: false, scheduled: false }),
+    // Who may sign in, for the byline under a post and the heading of an
+    // author archive (TASK-67). Read per render for the reason the pages are:
+    // `data/users.json` is the truth about who exists (decision-9), and a
+    // display name saved on the users screen a second ago belongs on the very
+    // next page drawn.
+    users: () => listUsers(resolved.dataDir),
     // What has been said about a post, from every source at once and read per
     // render for the same reason: a reply logged or a comment approved a
     // second ago is on the page the next request draws (TASK-49, TASK-50).

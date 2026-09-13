@@ -89,8 +89,51 @@ export interface User {
    * adding an event adds no field here either.
    */
   readonly notificationModes?: Readonly<Record<string, string>> | undefined;
+  /**
+   * What the public site says about this person, when somebody has filled any
+   * of it in (TASK-67).
+   *
+   * decision-14 makes a user an actor at their author URL, so the URL has to
+   * be a page before it can be an actor, and a page needs something to say.
+   * Absent for a user nobody has written a profile for, on the rule the two
+   * maps above follow: the file holds what somebody actually filled in, and a
+   * user with no profile still has an archive under their username.
+   */
+  readonly profile?: UserProfile | undefined;
   /** When the user was created, as an ISO 8601 instant. */
   readonly createdAt: string;
+}
+
+/**
+ * One thing a profile points at: somewhere else this person is.
+ *
+ * A label and a URL rather than a bare URL, because the label is what a theme
+ * prints and what an ActivityPub `attachment` calls the property (TASK-68).
+ */
+export interface ProfileLink {
+  /** What the link says. */
+  readonly label: string;
+  /** Where it goes. */
+  readonly href: string;
+}
+
+/**
+ * The public face of a user: what their archive is headed with and what their
+ * actor will carry.
+ *
+ * Every field is optional, and one that is empty is not stored at all: a
+ * profile is something somebody chose to write, and a user who has written
+ * none of it is not a user with four empty strings.
+ */
+export interface UserProfile {
+  /** The name to print instead of the username, when they gave one. */
+  readonly displayName?: string | undefined;
+  /** A few sentences about them. */
+  readonly bio?: string | undefined;
+  /** A picture, as the path or URL it is served at. */
+  readonly avatar?: string | undefined;
+  /** Somewhere else they are, in the order they listed them. */
+  readonly links?: readonly ProfileLink[] | undefined;
 }
 
 /** A user with the field no screen may render: its password hash. */
@@ -284,6 +327,70 @@ export async function setUserEmail(input: {
 }
 
 /**
+ * Write a user's profile, replacing whatever was there.
+ *
+ * The whole profile at once rather than a field at a time, because that is
+ * what the form on the users screen submits: four boxes and a Save, and a
+ * field somebody cleared is a field they no longer want. {@link cleanProfile}
+ * drops the empties, so a profile with nothing left in it leaves the user with
+ * no `profile` key rather than with an empty object. Returns `false` when
+ * there is no such user.
+ */
+export async function setUserProfile(input: {
+  /** Which site's users file to write. */
+  dataDir: string;
+  /** Whose profile. */
+  userId: number;
+  /** Everything the profile should say from now on. */
+  profile: UserProfile;
+}): Promise<boolean> {
+  const next = cleanProfile(input.profile);
+  let changed = false;
+
+  await write(input.dataDir, (contents) => {
+    changed = contents.users.some((user) => user.id === input.userId);
+    return {
+      ...contents,
+      users: contents.users.map((user) => {
+        if (user.id !== input.userId) return user;
+        const { profile: _removed, ...rest } = user;
+        return next === undefined ? rest : { ...rest, profile: next };
+      }),
+    };
+  });
+
+  return changed;
+}
+
+/**
+ * A profile with the empties taken out, or `undefined` when nothing is left.
+ *
+ * Trimming here rather than at the form is what makes a hand-edited file and a
+ * saved one read the same: a bio of three spaces is a bio nobody wrote, and a
+ * link with no URL is not somewhere this person is.
+ */
+export function cleanProfile(profile: UserProfile): UserProfile | undefined {
+  const displayName = (profile.displayName ?? '').trim();
+  const bio = (profile.bio ?? '').trim();
+  const avatar = (profile.avatar ?? '').trim();
+  const links = (profile.links ?? [])
+    .map((link) => ({ label: link.label.trim(), href: link.href.trim() }))
+    // A link needs somewhere to go; a label it does not have is the URL again,
+    // because a list of blank links is worse than a list of bare addresses.
+    .filter((link) => link.href !== '')
+    .map((link) => (link.label === '' ? { label: link.href, href: link.href } : link));
+
+  const cleaned: UserProfile = {
+    ...(displayName === '' ? {} : { displayName }),
+    ...(bio === '' ? {} : { bio }),
+    ...(avatar === '' ? {} : { avatar }),
+    ...(links.length === 0 ? {} : { links }),
+  };
+
+  return Object.keys(cleaned).length === 0 ? undefined : cleaned;
+}
+
+/**
  * Turn one notice on or off for one user.
  *
  * The map holds only what somebody changed, so this writes through
@@ -446,6 +553,7 @@ function withoutHash(user: StoredUser): User {
     ...(user.email === undefined ? {} : { email: user.email }),
     ...(user.notifications === undefined ? {} : { notifications: user.notifications }),
     ...(user.notificationModes === undefined ? {} : { notificationModes: user.notificationModes }),
+    ...(user.profile === undefined ? {} : { profile: user.profile }),
     createdAt: user.createdAt,
   };
 }
@@ -540,6 +648,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const email = record['email'];
   const preferences = notificationsFrom(record['notifications']);
   const modes = notificationModesFrom(record['notificationModes']);
+  const profile = profileFrom(record['profile']);
   const passwordHash = record['passwordHash'];
   const createdAt = record['createdAt'];
 
@@ -571,9 +680,56 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
     // know: a stored `weekly` from a later version is read as the default
     // rather than as a window nothing here could wait for.
     ...(modes === undefined ? {} : { notificationModes: modes }),
+    // Dropped field by field on the same rule, and for the sharper reason that
+    // a profile is prose somebody may well have typed straight into the file:
+    // a bio that is a number is not a bio, and refusing to load the users file
+    // over one would take the whole admin down.
+    ...(profile === undefined ? {} : { profile }),
     passwordHash,
     createdAt: typeof createdAt === 'string' ? createdAt : '',
   };
+}
+
+/**
+ * A stored profile as this version reads it, or `undefined` when it says
+ * nothing usable.
+ *
+ * Read through the same {@link cleanProfile} a save goes through, so a file
+ * written by hand and one written by the users screen are read identically:
+ * whitespace is trimmed, an empty field is no field, and a link with no URL is
+ * no link.
+ */
+function profileFrom(value: unknown): UserProfile | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+
+  return cleanProfile({
+    ...optionalText('displayName', record['displayName']),
+    ...optionalText('bio', record['bio']),
+    ...optionalText('avatar', record['avatar']),
+    links: linksFrom(record['links']),
+  });
+}
+
+/** `{ [key]: value }` when the value is a string, and nothing when it is not. */
+function optionalText(key: string, value: unknown): Record<string, string> {
+  return typeof value === 'string' ? { [key]: value } : {};
+}
+
+/** A stored list of profile links as this version reads it. */
+function linksFrom(value: unknown): ProfileLink[] {
+  if (!Array.isArray(value)) return [];
+
+  const links: ProfileLink[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const href = record['href'];
+    const label = record['label'];
+    if (typeof href !== 'string') continue;
+    links.push({ label: typeof label === 'string' ? label : '', href });
+  }
+  return links;
 }
 
 /** A stored preference map as this version reads it, or `undefined`. */

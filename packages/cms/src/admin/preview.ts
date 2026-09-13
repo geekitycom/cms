@@ -6,8 +6,9 @@ import { defaultPermalink, slugify } from '../content/slug.ts';
 import { calendarDayIn, toUtcInstant } from '../content/time.ts';
 import { normalizeBody } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
+import { authorContext } from '../web/authors.ts';
 import { documentContext } from '../web/context.ts';
-import { findUserById } from './accounts.ts';
+import { findUserById, listUsers } from './accounts.ts';
 import { TEMPLATES } from '../web/render.ts';
 import { splitTags } from './documents.ts';
 import { readSiteSettings } from './settings.ts';
@@ -32,13 +33,20 @@ export function mountPreview(app: Hono<GeekityEnv>): void {
   app.post(PREVIEW_PATH, async (c) => {
     const body = await c.req.parseBody();
     const type: DocumentType = text(body['type']) === 'page' ? 'page' : 'post';
+    const document = previewDocument(c, { type, body });
 
     return c.html(
       c.var.renderer.render(
         type === 'post' ? TEMPLATES.post : TEMPLATES.page,
         // With the site's image config, so a preview shows the `<picture>` the
-        // published page would show rather than the plain image behind it.
-        documentContext(previewDocument(c, { type, body }), c.var.config),
+        // published page would show rather than the plain image behind it, and
+        // with the author resolved, so the byline reads the way the published
+        // page's would (TASK-67).
+        documentContext(
+          document,
+          c.var.config,
+          authorContext(listUsers(c.var.config.dataDir), document.author),
+        ),
       ),
     );
   });

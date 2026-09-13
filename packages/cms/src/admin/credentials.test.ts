@@ -26,6 +26,16 @@ describe('usernameProblem', () => {
     }
   });
 
+  it('refuses a name that would not survive as a URL segment (TASK-67 AC #4)', () => {
+    // decision-14 puts every user at `/author/{username}/`, and a segment of
+    // nothing but dots is not a segment: `.` and `..` are the current and the
+    // parent directory to every URL resolver there is.
+    for (const name of ['.', '..', '...']) {
+      assert.match(usernameProblem(name) ?? '', /author/, name);
+    }
+    assert.equal(usernameProblem('ada.lovelace'), undefined, 'a dot inside a name is fine');
+  });
+
   it('refuses a name longer than 64 characters', () => {
     assert.equal(usernameProblem('a'.repeat(64)), undefined);
     assert.notEqual(usernameProblem('a'.repeat(65)), undefined);

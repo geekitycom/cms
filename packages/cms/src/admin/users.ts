@@ -3,6 +3,7 @@ import { randomInt } from 'node:crypto';
 import type { Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
+import { authorHref } from '../web/authors.ts';
 import {
   DEFAULT_DELIVERY_MODE,
   deliveryMode,
@@ -20,9 +21,10 @@ import {
   setUserNotification,
   setUserNotificationMode,
   setUserPassword,
+  setUserProfile,
   verifyUserPassword,
 } from './accounts.ts';
-import type { User } from './accounts.ts';
+import type { ProfileLink, User } from './accounts.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
@@ -50,6 +52,17 @@ export const DELETE_USER_PATH = `${USERS_PATH}/delete`;
 
 /** Where a row's email form posts. */
 export const USER_EMAIL_PATH = `${USERS_PATH}/email`;
+
+/**
+ * Where a row's profile form posts.
+ *
+ * A path of its own rather than a second half of the email form, because the
+ * two are about different audiences: an email address is private to the site
+ * and a profile is the public face decision-14 puts at the author URL. One
+ * form that saved both would mean an admin correcting a colleague's address
+ * also republishing their bio.
+ */
+export const USER_PROFILE_PATH = `${USERS_PATH}/profile`;
 
 /** Where a row's notification switches post. */
 export const USER_NOTIFICATIONS_PATH = `${USERS_PATH}/notifications`;
@@ -88,6 +101,14 @@ export const USER_FIELDS = {
   on: 'on',
   /** How often that notice should arrive, for an event that offers a choice. */
   mode: 'mode',
+  /** The name to print instead of the login (TASK-67). */
+  displayName: 'display_name',
+  /** A few sentences about this person. */
+  bio: 'bio',
+  /** Their picture, as a path or a URL. */
+  avatar: 'avatar',
+  /** Somewhere else they are: one `Label | URL` per line. */
+  links: 'links',
 } as const;
 
 /** What {@link mountUsers} needs from the admin around it. */
@@ -241,6 +262,46 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
         ? `${target.username} has no email address any more.`
         : `${target.username} will be emailed at ${email}.`,
     );
+    return c.redirect(USERS_PATH, 303);
+  });
+
+  /**
+   * Write a row's public profile (TASK-67).
+   *
+   * Any row, for the reason the email field is any row: one role, and an admin
+   * who has just added a colleague should be able to put a name and a line
+   * about them on their archive without waiting for them to sign in. The whole
+   * profile at once, because that is what the form is — four boxes and a Save
+   * — and a box somebody cleared is a field they no longer want.
+   *
+   * A flash and a redirect rather than a 400 with the form redrawn, for the
+   * reason the email field is: what was typed lives in a row of a table, and
+   * nothing here can be wrong enough to refuse. A link line with no URL is
+   * dropped on the way in rather than reported.
+   */
+  app.post(USER_PROFILE_PATH, async (c) => {
+    const dataDir = c.var.config.dataDir;
+    const body = await c.req.parseBody();
+    const id = Number(field(body[USER_FIELDS.userId]));
+    const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
+
+    if (target === undefined) {
+      flash(c, 'error', 'That user is already gone.');
+      return c.redirect(USERS_PATH, 303);
+    }
+
+    await setUserProfile({
+      dataDir,
+      userId: target.id,
+      profile: {
+        displayName: field(body[USER_FIELDS.displayName]),
+        bio: field(body[USER_FIELDS.bio]),
+        avatar: field(body[USER_FIELDS.avatar]),
+        links: parseProfileLinks(field(body[USER_FIELDS.links])),
+      },
+    });
+
+    flash(c, 'notice', `Saved ${target.username}’s profile.`);
     return c.redirect(USERS_PATH, 303);
   });
 
@@ -499,6 +560,7 @@ function screen(
     child: 'all',
     usersUrl: USERS_PATH,
     addUserUrl: ADD_USER_PATH,
+    userProfileUrl: USER_PROFILE_PATH,
     changePasswordUrl: CHANGE_PASSWORD_PATH,
     deleteUserUrl: DELETE_USER_PATH,
     userEmailUrl: USER_EMAIL_PATH,
@@ -523,6 +585,44 @@ function field(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+/**
+ * A textarea of links as the list a profile stores: one per line, `Label |
+ * URL`, or a bare URL that labels itself.
+ *
+ * A textarea rather than a repeating fieldset because a profile has two or
+ * three links and a table row has no space for a widget; the separator is a
+ * pipe because it is the one character nobody puts in a link label by
+ * accident. Blank lines are skipped and the empties are dropped inside
+ * `setUserProfile`, so a list somebody emptied leaves no key behind.
+ */
+export function parseProfileLinks(value: string): ProfileLink[] {
+  const links: ProfileLink[] = [];
+
+  for (const line of value.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed === '') continue;
+
+    const separator = trimmed.indexOf('|');
+    if (separator === -1) {
+      links.push({ label: trimmed, href: trimmed });
+      continue;
+    }
+    links.push({
+      label: trimmed.slice(0, separator).trim(),
+      href: trimmed.slice(separator + 1).trim(),
+    });
+  }
+
+  return links;
+}
+
+/** A stored list of links back as the textarea shows it. */
+export function formatProfileLinks(links: readonly ProfileLink[] | undefined): string {
+  return (links ?? [])
+    .map((link) => (link.label === link.href ? link.href : `${link.label} | ${link.href}`))
+    .join('\n');
+}
+
 /** One user as the table renders it. */
 function row(
   user: User,
@@ -533,6 +633,15 @@ function row(
     id: user.id,
     username: user.username,
     email: user.email ?? '',
+    // The public half of the row (TASK-67): what the archive at `archiveUrl`
+    // is headed with, and — after TASK-68 — what this person's actor carries.
+    profile: {
+      displayName: user.profile?.displayName ?? '',
+      bio: user.profile?.bio ?? '',
+      avatar: user.profile?.avatar ?? '',
+      links: formatProfileLinks(user.profile?.links),
+    },
+    archiveUrl: authorHref(user.username),
     // One switch per registered event, so the template loops rather than
     // naming the notices it happens to know about (TASK-55).
     notifications: notificationSwitches(user),
