@@ -10,6 +10,8 @@ categories:
   - engineering
 description: What the derived index actually stores, and why deleting it is safe.
 author: Andrew Shell
+activitypub:
+  published: '2026-07-11T21:20:00Z'
 ---
 
 The database is not the source of truth.[^derived] It answers the questions a
