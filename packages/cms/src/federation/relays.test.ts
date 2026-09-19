@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { exportJwk, generateCryptoKeyPair, importJwk, signRequest } from '@fedify/fedify';
+import { exportJwk, importJwk, signRequest } from '@fedify/fedify';
 import { Accept, Application, CryptographicKey, Follow, Reject } from '@fedify/vocab';
 
 import { csrfField, signIn } from '../admin/__testing__/harness.ts';
@@ -14,6 +14,7 @@ import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
+import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 
 /** The site under test. Fedify answers by origin, so every request uses this one. */
 const BASE_URL = 'https://blog.example';
@@ -28,6 +29,12 @@ const SITE_INBOX = `${SITE_ACTOR}inbox/`;
 const RELAY_ORIGIN = 'https://relay.example';
 const RELAY_ACTOR = `${RELAY_ORIGIN}/actor`;
 const RELAY_INBOX = `${RELAY_ORIGIN}/user/_____relay_____/inbox`;
+/**
+ * The fixture key pair the relay signs its `Accept` with, which is not the one
+ * the site holds: a relay that signed with the site's own key would prove
+ * nothing.
+ */
+const RELAY_PAIR = 1;
 const RELAY_KEY = `${RELAY_ACTOR}#main-key`;
 
 /** A second relay, so a test can tell one subscription from another. */
@@ -53,7 +60,7 @@ let relayActorDocument: unknown;
 let restoreFetch: () => void;
 
 before(async () => {
-  relayKeys = await generateCryptoKeyPair('RSASSA-PKCS1-v1_5');
+  relayKeys = await testKeyPair(RELAY_PAIR);
   relayActorDocument = await relayActor(relayKeys.publicKey);
   restoreFetch = routeRelayHost();
 });
@@ -141,6 +148,9 @@ async function site(options: { relays?: readonly string[]; dataDir?: string } = 
     },
   });
   writeUsers(dataDir, [{ username: LOCAL_USER, password: PASSWORD }]);
+  // Before the site boots, so nothing here spends a quarter of a second
+  // minting an actor key whose value no test in this file reads.
+  seedActorKeys(dataDir, LOCAL_USER);
 
   sent.length = 0;
   const cms = createCms({

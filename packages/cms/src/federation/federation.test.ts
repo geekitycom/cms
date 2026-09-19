@@ -11,6 +11,7 @@ import type { SiteSettings } from '../admin/settings.ts';
 import type { NewFollower } from '../admin/store.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { seedActorKeys } from './__testing__/keys.ts';
 import { FOLLOWERS_PAGE_SIZE, followersPage } from './followers.ts';
 import { federationOrigin } from './paths.ts';
 
@@ -71,6 +72,11 @@ async function site(
   writeUsers(dataDir, [
     { username: ADA, profile, ...(storedActorId === undefined ? {} : { actorId: storedActorId }) },
   ]);
+  // And the key that actor publishes is the fixture's rather than a fresh one,
+  // because these tests read the shape of the actor document, not its modulus.
+  // The restart test below keeps minting its own: a key that survives a reboot
+  // has to have been minted by the boot before it.
+  seedActorKeys(dataDir, ADA);
 
   const instance = createCms({ dataDir, contentDir, watch: false, baseUrl: BASE_URL });
   started.push(instance);

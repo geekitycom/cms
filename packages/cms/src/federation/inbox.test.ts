@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { exportJwk, generateCryptoKeyPair, importJwk, signRequest } from '@fedify/fedify';
+import { exportJwk, importJwk, signRequest } from '@fedify/fedify';
 import {
   Announce,
   Create,
@@ -24,6 +24,7 @@ import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { followersFile, inboxFile, readFollowers, readInboxLog } from './records.ts';
 
 /** The site under test. Fedify answers by origin, so every request uses this one. */
@@ -46,6 +47,15 @@ const REMOTE_KEY = `${REMOTE_ACTOR}#main-key`;
 /** A second peer, so a test can tell one actor's follow from another's. */
 const OTHER_ACTOR = `${REMOTE_ORIGIN}/users/bob`;
 
+/**
+ * The fixture key pairs the two peers hold. Three identities are at play in
+ * this file — the site, the actor it believes in, and somebody signing in that
+ * actor's name — and each needs a pair of its own, or the test that refuses a
+ * stranger's signature would be refusing its own.
+ */
+const REMOTE_PAIR = 1;
+const STRANGER_PAIR = 2;
+
 /** One POST the site made while handling an inbox delivery. */
 interface Delivery {
   /** Where it went. */
@@ -65,8 +75,8 @@ let remoteActorDocument: unknown;
 let restoreFetch: () => void;
 
 before(async () => {
-  remoteKeys = await generateCryptoKeyPair('RSASSA-PKCS1-v1_5');
-  strangerKeys = await generateCryptoKeyPair('RSASSA-PKCS1-v1_5');
+  remoteKeys = await testKeyPair(REMOTE_PAIR);
+  strangerKeys = await testKeyPair(STRANGER_PAIR);
   remoteActorDocument = await remoteActor(remoteKeys.publicKey);
   restoreFetch = routeRemoteHost();
 });
@@ -151,6 +161,9 @@ async function site(
 ): Promise<Cms> {
   const dataDir = await temporaryDir('geekity-inbox-data-');
   const contentDir = await temporaryDir('geekity-inbox-content-');
+  // Before the site boots, so nothing here spends a quarter of a second
+  // minting an actor key whose value no test in this file reads.
+  seedActorKeys(dataDir, LOCAL_USER);
 
   await writeSiteJson({
     contentDir,

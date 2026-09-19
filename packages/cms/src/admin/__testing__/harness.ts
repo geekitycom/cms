@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { seedActorKeys } from '../../federation/__testing__/keys.ts';
 import { createCms } from '../../index.ts';
 import type { Cms, GeekityConfig } from '../../index.ts';
 
@@ -13,6 +14,25 @@ import type { Cms, GeekityConfig } from '../../index.ts';
  * are split by screen and every one of them needs to be logged in.
  */
 
+/**
+ * What a sandbox does about a site's actor keys, beyond booting it.
+ *
+ * An actor's RSA pair costs about a quarter of a second to mint, and the admin
+ * screens are tested by a signed-in browser rather than by anything that cares
+ * which key the site holds — so every sandbox site is born with the fixture
+ * pair already on disk for the name {@link setUpFirstAdmin} creates, and
+ * `loadActorKeyPairs` reads it rather than minting one. See
+ * `federation/__testing__/keys.ts`.
+ */
+export interface SandboxSiteOptions {
+  /**
+   * The usernames whose key files are written from the fixture before the site
+   * boots. Defaults to the first admin's. A test whose subject is the minting,
+   * rotation or storage of a key passes `[]` and lets the site do its own.
+   */
+  actorKeys?: readonly string[];
+}
+
 /** Everything a test opened, so one `after` hook can put it all back. */
 export interface Sandbox {
   /** Close every CMS and delete every temporary directory. */
@@ -20,7 +40,7 @@ export interface Sandbox {
   /** A directory that goes away with the sandbox. */
   dir(prefix: string): Promise<string>;
   /** A CMS over empty content and data directories of its own. */
-  site(config?: GeekityConfig): Promise<Cms>;
+  site(config?: GeekityConfig, options?: SandboxSiteOptions): Promise<Cms>;
   /**
    * A CMS over directories the caller names, closed with the sandbox.
    *
@@ -29,7 +49,10 @@ export interface Sandbox {
    * back is a thing decision-9 promises works, and proving it takes two boots
    * over the same content.
    */
-  open(config: GeekityConfig & { contentDir: string; dataDir: string }): Promise<Cms>;
+  open(
+    config: GeekityConfig & { contentDir: string; dataDir: string },
+    options?: SandboxSiteOptions,
+  ): Promise<Cms>;
 }
 
 /** Open a sandbox. Call {@link Sandbox.cleanup} from the file's `after` hook. */
@@ -49,15 +72,21 @@ export function sandbox(): Sandbox {
       return created;
     },
 
-    async site(config = {}) {
-      return await this.open({
-        contentDir: await this.dir('geekity-admin-content-'),
-        dataDir: await this.dir('geekity-admin-data-'),
-        ...config,
-      });
+    async site(config = {}, options = {}) {
+      return await this.open(
+        {
+          contentDir: await this.dir('geekity-admin-content-'),
+          dataDir: await this.dir('geekity-admin-data-'),
+          ...config,
+        },
+        options,
+      );
     },
 
-    async open(config) {
+    async open(config, options = {}) {
+      for (const username of options.actorKeys ?? [FIRST_ADMIN.username]) {
+        seedActorKeys(config.dataDir, username);
+      }
       const instance = createCms({ watch: false, ...config });
       started.push(instance);
       await instance.sync();
