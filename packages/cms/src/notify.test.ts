@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { csrfField, signedIn } from './admin/__testing__/harness.ts';
+import { csrfField, FIRST_ADMIN, signedIn } from './admin/__testing__/harness.ts';
 import type { Browser } from './admin/__testing__/harness.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './admin/settings.ts';
+import { seedActorKeys } from './federation/__testing__/keys.ts';
 import { createCms } from './index.ts';
 import type { Cms } from './index.ts';
 
@@ -96,6 +97,10 @@ async function site(
 ): Promise<{ cms: Cms; contentDir: string }> {
   const dataDir = await temporaryDir('geekity-notify-data-');
   const contentDir = await temporaryDir('geekity-notify-content-');
+  // The admin these tests sign in as, with their actor key already on disk:
+  // publishing a post federates, and minting a real key for it would cost a
+  // quarter of a second per test to prove nothing about a ping.
+  seedActorKeys(dataDir, FIRST_ADMIN.username);
 
   for (const [relative, source] of Object.entries(options.files ?? {})) {
     const file = path.join(contentDir, ...relative.split('/'));

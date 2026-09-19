@@ -14,6 +14,7 @@ import { listUsers } from '../admin/accounts.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { addFollower } from './records.ts';
 
 /** The site under test. Fedify answers by origin, so every request uses this one. */
@@ -32,6 +33,13 @@ const REMOTE_ACTOR = `${REMOTE_ORIGIN}/users/ada`;
 const REMOTE_INBOX = `${REMOTE_ORIGIN}/users/ada/inbox`;
 const REMOTE_SHARED_INBOX = `${REMOTE_ORIGIN}/inbox`;
 const REMOTE_KEY = `${REMOTE_ACTOR}#main-key`;
+
+/**
+ * The fixture key pair the peer signs and is verified by, which is not the one
+ * the site under test holds: two identities whose keys were the same would
+ * prove nothing about a signature.
+ */
+const REMOTE_PAIR = 1;
 
 /** A second follower on the same instance, so a shared inbox has two people behind it. */
 const OTHER_ACTOR = `${REMOTE_ORIGIN}/users/bob`;
@@ -63,7 +71,7 @@ let remoteActorDocument: unknown;
 let restoreFetch: () => void;
 
 before(async () => {
-  const keys = await generateRemoteKeys();
+  const keys = await testKeyPair(REMOTE_PAIR);
   remoteActorDocument = await remoteActor(keys.publicKey);
   restoreFetch = routeRemoteHost();
 });
@@ -73,11 +81,6 @@ after(async () => {
   for (const instance of started) await instance.close();
   await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 });
-
-async function generateRemoteKeys(): Promise<CryptoKeyPair> {
-  const { generateCryptoKeyPair } = await import('@fedify/fedify');
-  return await generateCryptoKeyPair('RSASSA-PKCS1-v1_5');
-}
 
 /** The actor document the stubbed host serves when the site dereferences the follower. */
 async function remoteActor(publicKey: CryptoKey): Promise<unknown> {
@@ -187,6 +190,9 @@ async function site(
 ): Promise<Site> {
   const dataDir = await temporaryDir('geekity-delivery-data-');
   const contentDir = await temporaryDir('geekity-delivery-content-');
+  // Before the site boots, so nothing here spends a quarter of a second
+  // minting an actor key whose value no test in this file reads.
+  seedActorKeys(dataDir, ADA);
 
   for (const [relative, source] of Object.entries(options.files ?? {})) {
     await writeDocument(contentDir, relative, source);
@@ -989,6 +995,7 @@ describe('two users', () => {
       { username: ADA, id: 1 },
       { username: 'grace', id: 2 },
     ]);
+    seedActorKeys(cms.config.dataDir, 'grace');
     await addFollower({ admin: cms.admin, contentDir }, 'grace', {
       actorId: OTHER_ACTOR,
       inboxId: OTHER_INBOX,

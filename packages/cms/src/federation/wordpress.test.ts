@@ -4,13 +4,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { exportJwk, generateCryptoKeyPair, importJwk, signRequest } from '@fedify/fedify';
+import { exportJwk, importJwk, signRequest } from '@fedify/fedify';
 import { CryptographicKey, Endpoints, Follow, Image, Person } from '@fedify/vocab';
 
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS, updateSiteSettings, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { readWordPressRequests, wordPressRequestsFile } from './wordpress.ts';
 
 /**
@@ -44,6 +45,14 @@ const REMOTE_ACTOR = `${REMOTE_ORIGIN}/users/ada`;
 const REMOTE_INBOX = `${REMOTE_ACTOR}/inbox`;
 const REMOTE_KEY = `${REMOTE_ACTOR}#main-key`;
 
+/**
+ * The fixture key pairs the peer and the impostor hold, each different from
+ * the site's own: the test that refuses a stranger's signature is only worth
+ * anything while the three keys are three keys.
+ */
+const REMOTE_PAIR = 1;
+const STRANGER_PAIR = 2;
+
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const deliveries: { url: string; body: Record<string, unknown> }[] = [];
@@ -54,8 +63,8 @@ let remoteActorDocument: unknown;
 let restoreFetch: () => void;
 
 before(async () => {
-  remoteKeys = await generateCryptoKeyPair('RSASSA-PKCS1-v1_5');
-  strangerKeys = await generateCryptoKeyPair('RSASSA-PKCS1-v1_5');
+  remoteKeys = await testKeyPair(REMOTE_PAIR);
+  strangerKeys = await testKeyPair(STRANGER_PAIR);
   remoteActorDocument = await new Person({
     id: new URL(REMOTE_ACTOR),
     preferredUsername: 'ada',
@@ -150,6 +159,9 @@ async function site(options: SiteOptions = {}): Promise<Cms> {
       ...(wordpressActorId === undefined ? {} : { wordpressActorId }),
     },
   ]);
+  // Before the site boots, so nothing here spends a quarter of a second
+  // minting an actor key whose value no test in this file reads.
+  seedActorKeys(dataDir, LOCAL_USER);
 
   deliveries.length = 0;
   const instance = createCms({
