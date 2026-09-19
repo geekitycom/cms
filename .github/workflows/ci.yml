@@ -44,9 +44,13 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - run: pnpm typecheck
 
+  # The suite is CPU-bound and `node --test` runs one file per process with a
+  # concurrency of cores minus one, which on the 2 vCPU runner every other job
+  # uses means one file at a time. The three jobs that run the whole suite get
+  # 4 vCPUs, so three files run at once.
   test:
     name: test
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -58,7 +62,7 @@ jobs:
   # the plain name `test`.
   test-node-26:
     name: test-node-26
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -127,7 +131,7 @@ jobs:
   # artifact; no third-party coverage service is involved.
   coverage:
     name: coverage
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
