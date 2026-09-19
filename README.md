@@ -11,7 +11,9 @@ site is its own repository that depends on the package.
 This file is the contributor guide: the workspace, the gates, CI and releasing.
 If you are **building a site** on the package, read
 [`packages/cms/README.md`](packages/cms/README.md) instead — it covers
-`geekity init`, the config options, the CLI, hooks and theme overrides.
+`geekity init`, the config options, the CLI, hooks and theme overrides. To
+run a site from the published Docker image, see
+[Deploying with Docker](#deploying-with-docker).
 
 ## Workspace layout
 
@@ -37,6 +39,7 @@ apps/demo/             private site that consumes the package via workspace:*
   test/              boots the demo over HTTP, and builds it with Eleventy
 scripts/               pack-install-smoke.sh and docker-smoke.sh, the bodies of those CI jobs,
                        and docker-build-push.sh, which publishes the image
+deploy/compose.yaml    the compose file a Docker deployment starts from
 backlog/               tasks, docs and decisions (Backlog.md)
 ```
 
@@ -1043,6 +1046,240 @@ renderer.renderDocument(document);
 
 Handlers reach the same renderer as `c.var.renderer`, alongside `c.var.store`
 and `c.var.config`.
+
+## Deploying with Docker
+
+The image `ghcr.io/geekitycom/cms` runs `geekity serve` over three directories
+under `/site`: `content/`, `data/` and, optionally, `themes/`. It runs as uid
+1000, listens on port 3000 and fills an empty `content/` with the starter site
+on its first start. [`deploy/compose.yaml`](deploy/compose.yaml) runs it as a
+compose stack. It is written for [dockge](https://github.com/louislam/dockge),
+but plain `docker compose` reads it the same way. Nothing else from this
+repository goes on the server.
+
+The steps below assume a Linux server with Docker, a stack directory of
+`/opt/stacks/geekity` (dockge's default layout), and a reverse proxy on the same
+machine that terminates TLS.
+
+### 1. Create the stack and its directories
+
+In dockge, create a stack called `geekity` and paste in `deploy/compose.yaml`.
+With plain compose, copy the file to `/opt/stacks/geekity/compose.yaml`.
+
+Then, in the stack directory, create `content/` and `data/` and give them to
+uid 1000 before the first start:
+
+```sh
+cd /opt/stacks/geekity
+mkdir -p content data
+sudo chown 1000:1000 content data
+```
+
+The container runs as uid 1000 and writes to both directories. If they are
+missing, Docker creates them owned by root and the site fails to start with
+`EACCES`. `content/` must be empty, or already hold a site: an empty one is
+filled with the starter site, and one with anything in it, even a dotfile, is
+left alone.
+
+To move an existing site in, copy its `content/` and `data/` here instead and
+`chown -R 1000:1000` them.
+
+### 2. Write the `.env`
+
+The `.env` sits beside `compose.yaml` (dockge edits it on the stack page).
+Compose reads it for the image tag and passes every line in it to the container.
+
+```sh
+# The image version to run. Required; there is no `latest` fallback.
+GEEKITY_TAG=0.3.0
+
+# The public address of the site. Required. Canonical URLs, feeds, ActivityPub
+# ids and the Secure flag on the session cookie all come from it, and the
+# starter site's site.json is written with it.
+GEEKITY_BASE_URL=https://blog.example.com
+
+# The port on 127.0.0.1 the reverse proxy connects to. Defaults to 3000.
+# GEEKITY_HOST_PORT=3000
+```
+
+Compose refuses to start the stack when `GEEKITY_TAG` or `GEEKITY_BASE_URL` is
+missing, and says which one.
+
+The compose file names three variables itself, and its values win over the
+`.env`:
+
+| Variable              | Value  | Why                                                                       |
+| --------------------- | ------ | ------------------------------------------------------------------------- |
+| `GEEKITY_BASE_URL`    | `.env` | Passed through, so compose can refuse to start without it.                |
+| `GEEKITY_TRUST_PROXY` | `true` | The client address comes from the proxy's `X-Forwarded-For`.              |
+| `GEEKITY_PORT`        | `3000` | The port mapping and the health check assume it. Use `GEEKITY_HOST_PORT`. |
+
+The image sets `GEEKITY_CONTENT_DIR`, `GEEKITY_DATA_DIR`, `GEEKITY_THEMES_DIR`
+and `GEEKITY_SEED_CONTENT`; leave them alone. Any other setting in
+[Configuration](#configuration) can go in the `.env`, for example
+`GEEKITY_UPLOAD_MAX_BYTES` or `GEEKITY_IMAGE_FORMATS=webp,avif`. Mail, comments
+and the rest of the site settings are set in the admin, not here.
+
+### 3. Start it and point the proxy at it
+
+Deploy the stack in dockge, or:
+
+```sh
+docker compose up -d
+docker compose ps       # (healthy) once /healthz answers 200
+```
+
+The port is published on `127.0.0.1` only. Docker writes its own firewall
+rules ahead of ufw and firewalld, so a port published on every interface would
+be reachable from the internet even with the firewall closed, and anyone
+connecting to it directly could put any address in `X-Forwarded-For`. Do not
+change the mapping to `3000:3000`.
+
+The proxy forwards to `http://127.0.0.1:3000`. Geekity reads the **first**
+address in `X-Forwarded-For`, so the proxy must replace that header with the
+address it saw rather than append to one the client sent. For nginx:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    client_max_body_size 10m;  # at least GEEKITY_UPLOAD_MAX_BYTES
+}
+```
+
+`GET /healthz` is also what an uptime monitor should poll; see
+[Health check](#health-check).
+
+### 4. Sign in for the first time
+
+A site with no users sends `/admin` to `/admin/setup`, where the first person
+to arrive creates the admin account. Do this as soon as the site is reachable.
+
+To create the account from the server instead, and close the setup screen
+before anyone else reaches it:
+
+```sh
+docker compose exec geekity geekity user add ada --email ada@example.com
+```
+
+It prompts for the password without echoing it. Run from the stack directory,
+`docker compose exec` finds the container by its service name, `geekity`; plain
+`docker exec -it <container> geekity user add ada` works as well. The command
+writes `data/users.json` through the same mount as the server, and the new
+account can sign in straight away.
+
+### 5. Bring a WordPress author across
+
+[Moving a site off the WordPress ActivityPub plugin](packages/cms/README.md#moving-a-site-off-the-wordpress-activitypub-plugin)
+describes the cutover. In a container, the user has to exist first, and the
+exported key pair is read from standard input so no copy of the private key is
+left inside the container:
+
+```sh
+docker compose exec geekity geekity user add ada
+docker compose exec -T geekity geekity import wordpress-actor ada \
+  --actor-id 'https://blog.example.com/?author=2' \
+  --wordpress-id 2 \
+  --keypair /dev/stdin < ada.keypair.json
+shred -u ada.keypair.json
+```
+
+`-T` stops compose allocating a terminal, which would swallow the redirected
+file. Left to itself, the import fetches the followers from the plugin on the
+actor id's origin. A saved followers file has to be copied in first:
+
+```sh
+docker compose cp followers.json geekity:/tmp/followers.json
+```
+
+and then passed as `--followers /tmp/followers.json`.
+
+### Backups
+
+Everything the site cannot rebuild is under the stack directory
+([Two directories](packages/cms/README.md#two-directories-content-and-data) in
+the package README has the full list):
+
+- **All of `content/`**: posts, pages, uploads, `site.json`, followers, the
+  inbox log and comments.
+- **`data/`, apart from what is derived.** `data/users.json` and `data/keys/`
+  matter most: the accounts, and the key pairs every follower has cached.
+  Losing the keys breaks federation. The rest (`mail.json`, `akismet.json`,
+  `contact/`, `comment-salt`, `notification-secret` and the other small files)
+  is credentials and records that are also not rebuilt.
+- **`compose.yaml` and `.env`**, so the stack can be recreated.
+
+`data/geekity.db` (with `-wal` and `-shm`) and `data/images/` are derived and
+need not be copied: the database is rebuilt on the next start, and an image
+variant the next time it is asked for. The site writes its files by renaming a
+finished copy over the old one, so a copy taken while it runs gets whole files;
+stop the stack first if the copy has to be of one moment. For example:
+
+```sh
+tar -C /opt/stacks -czf geekity-$(date +%F).tar.gz \
+  --exclude='geekity/data/geekity.db*' --exclude='geekity/data/images' geekity
+```
+
+Restore by unpacking it into `/opt/stacks`, checking `content/` and `data/` are
+still owned by uid 1000, and starting the stack.
+
+### Upgrading and rolling back
+
+Every published version is a tag (see
+[Publishing the Docker image](#publishing-the-docker-image)). To upgrade, set
+`GEEKITY_TAG` in the `.env` to the new version and redeploy, which in dockge is
+Save then Deploy, and with plain compose is:
+
+```sh
+docker compose pull
+docker compose up -d
+```
+
+Database migrations run on start, so there is no other step. Read the
+[changelog](packages/cms/CHANGELOG.md) for the versions in between first; a
+breaking change carries a note there.
+
+To roll back, set `GEEKITY_TAG` to the version you came from and redeploy the
+same way. If the newer version migrated the database, the older one refuses to
+start and says the database was written by a newer `@geekity/cms` (the logs in
+dockge, or `docker compose logs`, show it). The database is a cache, so rebuild
+it with the old version:
+
+```sh
+docker compose stop
+docker compose run --rm geekity geekity rebuild
+docker compose start
+```
+
+`geekity rebuild` refuses to run while the server has the database open, so
+`docker compose exec` will not do; the one-off container from `run` uses the
+same image, `.env` and mounts with the server stopped. A rebuild signs everyone
+out; [what else it costs](#what-is-in-the-database-and-what-a-rebuild-loses) is
+listed above. The same three commands fix a damaged database.
+
+### A custom theme
+
+With no `theme` in `content/_data/site.json`, the site wears the default theme
+that ships in the image. To use one of your own:
+
+1. Create `themes/` in the stack directory and put the theme in it, one
+   directory per theme with a `theme.json` in it (see [The theme](#the-theme)):
+
+   ```sh
+   mkdir -p themes
+   cp -r ~/my-theme themes/my-theme
+   sudo chown -R 1000:1000 themes
+   ```
+
+2. Uncomment the `./themes:/site/themes:ro` line under `volumes` in
+   `compose.yaml` and redeploy. The site only reads this directory, so it is
+   mounted read-only.
+3. In the admin, choose the theme on **Appearance > Themes**. That writes
+   `theme` into `site.json`, and it takes effect on the next request.
+
+A theme can replace a single template or `style.css` and take everything else
+from the default theme.
 
 ## Continuous integration
 
