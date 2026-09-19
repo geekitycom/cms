@@ -141,7 +141,13 @@ describe('the front page a homepage is given (AC #1)', () => {
     assert.match(withPosts, /<p class="front-links">[\s\S]*?href="\/posts\/"[\s\S]*?Posts/);
 
     const without = await body(await site({ homepage: 'about' }), '/');
-    assert.doesNotMatch(without, /front-links/, 'a site with no posts page links one anyway');
+    const links = /<p class="front-links">([\s\S]*?)<\/p>/.exec(without)?.[1] ?? '';
+    assert.doesNotMatch(links, /href="\/posts\/"/, 'a site with no posts page links one anyway');
+  });
+
+  it('links the search whether or not there is a posts page (TASK-22)', async () => {
+    const html = await body(await site({ homepage: 'about' }), '/');
+    assert.match(html, /<p class="front-links">[\s\S]*?href="\/search\/"[\s\S]*?Search/);
   });
 
   it('still redirects the page’s own permalink to /', async () => {

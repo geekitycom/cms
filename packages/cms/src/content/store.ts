@@ -3,6 +3,7 @@ import type { StatementSync } from 'node:sqlite';
 import { databaseFile, openDatabase } from '../cache.ts';
 import type { Migration } from '../cache.ts';
 import type { ActivityPubMetadata, Document, DocumentType } from './document.ts';
+import { searchExpression, searchText, SNIPPET_CLOSE, SNIPPET_OPEN } from './search.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
 
@@ -188,6 +189,20 @@ export interface ContentStore {
    * {@link ContentStore.listTags} is for.
    */
   listTermUsage(taxonomy: TaxonomyName): TermUsage[];
+  /**
+   * Published, untrashed, already-due posts and pages matching a reader's
+   * query, best match first (TASK-22).
+   *
+   * `query` is what somebody typed, not FTS5 syntax: see `searchExpression`
+   * for what it understands. A query with nothing searchable in it finds
+   * nothing rather than everything. Relevance is BM25 with a title match
+   * counting for more than a match in the description or the taxonomy, and
+   * those for more than one in the body; documents that tie are in the order
+   * every listing is in, newest first.
+   */
+  search(query: string, options?: ListOptions): SearchHit[];
+  /** How many documents {@link ContentStore.search} would find, for the pager. */
+  countSearch(query: string): number;
   /** Close the database. Safe to call twice. */
   close(): void;
 }
@@ -204,6 +219,18 @@ export interface DocumentNeighbours {
   previous?: Document | undefined;
   /** The post after this one by date, absent at the front of it. */
   next?: Document | undefined;
+}
+
+/** One document a search found, and the passage it was found in. */
+export interface SearchHit {
+  /** The document. */
+  document: Document;
+  /**
+   * A few words around the match, as plain text, with every matched word
+   * between `SNIPPET_OPEN` and `SNIPPET_CLOSE`. Whoever prints it escapes it
+   * first and turns the marks into markup second.
+   */
+  snippet: string;
 }
 
 /** Paging for the public listings. */
@@ -363,6 +390,30 @@ const SCHEDULED_CLAUSE = '(date_sort IS NOT NULL AND date_sort > ?)';
 const FEDERATED_CLAUSE = `COALESCE(json_extract(activitypub, '$.published'), '') <> ''`;
 
 /**
+ * The public side of a search: the full-text match joined to the documents it
+ * indexes, held to exactly what every public listing is held to.
+ *
+ * The draft, trash and due clauses are applied to the documents table rather
+ * than indexed alongside the words, so a post that is drafted, trashed or
+ * pushed into the future drops out of the results the moment the listings drop
+ * it, with no second write to keep in step.
+ */
+const SEARCH_FROM = `
+  FROM documents_fts
+  JOIN documents ON documents.path = documents_fts.path
+  WHERE documents_fts MATCH ?
+    AND documents.draft = 0 AND documents.trashed = 0
+    AND (documents.date_sort IS NULL OR documents.date_sort <= ?)
+`;
+
+/**
+ * How much a match in each column of the index counts, in the order the table
+ * declares them: the path is not indexed, a title match counts for most, the
+ * description and the taxonomy for half as much, and the body for least.
+ */
+const SEARCH_WEIGHTS = '0.0, 10.0, 5.0, 5.0, 1.0';
+
+/**
  * Open (and if needed create) the index in `dataDir`, applying every migration
  * the package ships. Applying them is idempotent, so reopening an up-to-date
  * database does nothing.
@@ -460,6 +511,18 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       SELECT MIN(date_sort) AS due FROM documents
       WHERE draft = 0 AND trashed = 0 AND ${SCHEDULED_CLAUSE}
     `),
+    deleteText: db.prepare('DELETE FROM documents_fts WHERE path = ?'),
+    insertText: db.prepare(
+      'INSERT INTO documents_fts (path, title, description, terms, body) VALUES (?, ?, ?, ?, ?)',
+    ),
+    search: db.prepare(`
+      SELECT documents.*,
+        snippet(documents_fts, -1, '${SNIPPET_OPEN}', '${SNIPPET_CLOSE}', '…', 24) AS snippet
+      ${SEARCH_FROM}
+      ORDER BY bm25(documents_fts, ${SEARCH_WEIGHTS}), documents.date_sort DESC, documents.path DESC
+      LIMIT ? OFFSET ?
+    `),
+    countSearch: db.prepare(`SELECT COUNT(*) AS count ${SEARCH_FROM}`),
     dueSince: db.prepare(`
       SELECT * FROM documents
       WHERE draft = 0 AND trashed = 0
@@ -507,6 +570,11 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     document.categories.forEach((category, position) => {
       statements.insertCategory.run(contentPath, category, position);
     });
+    // The words it is found by. Replaced rather than updated, because an FTS5
+    // table has no key to conflict on: the path is only a column in it.
+    const words = searchText(document);
+    statements.deleteText.run(contentPath);
+    statements.insertText.run(contentPath, words.title, words.description, words.terms, words.body);
   }
 
   /**
@@ -621,6 +689,8 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     remove(contentPath) {
+      // Nothing cascades into a virtual table, so the words go by hand.
+      statements.deleteText.run(contentPath);
       return statements.remove.run(contentPath).changes > 0;
     },
 
@@ -798,6 +868,25 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         published: Number(row['published']),
         total: Number(row['total']),
       }));
+    },
+
+    search(query, options = {}) {
+      const expression = searchExpression(query);
+      if (expression === undefined) return [];
+      const rows = statements.search.all(
+        expression,
+        nowKey(),
+        options.limit ?? -1,
+        options.offset ?? 0,
+      ) as Record<string, unknown>[];
+      return rows.map((row) => ({ document: hydrateOne(row), snippet: String(row['snippet']) }));
+    },
+
+    countSearch(query) {
+      const expression = searchExpression(query);
+      if (expression === undefined) return 0;
+      const row = statements.countSearch.get(expression, nowKey()) as Record<string, unknown>;
+      return Number(row['count']);
     },
 
     close() {
@@ -1014,6 +1103,29 @@ const MIGRATIONS: readonly Migration[] = [
       -- serve the old markup for as long as nobody edited the post. Emptying
       -- the index is what makes the next scan render them all again; the files
       -- are the source of truth, so nothing is lost (decision-1).
+      DELETE FROM documents;
+    `,
+  },
+  {
+    version: 4,
+    sql: `
+      -- The full-text index (TASK-22): one row per document, keyed by path,
+      -- holding the words it is found by. \`porter\` so "running" finds "run",
+      -- \`remove_diacritics\` so "cafe" finds "café".
+      CREATE VIRTUAL TABLE documents_fts USING fts5 (
+        path UNINDEXED,
+        title,
+        description,
+        terms,
+        body,
+        tokenize = 'porter unicode61 remove_diacritics 2'
+      );
+
+      -- The body is indexed as the text of its rendered HTML, which SQL cannot
+      -- work out from the row, and the hash covers the file rather than the
+      -- index, so a scan would find every row up to date and never fill the
+      -- table. Emptying the index is what makes the next scan index them all;
+      -- the files are the source of truth, so nothing is lost (decision-1).
       DELETE FROM documents;
     `,
   },

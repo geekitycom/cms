@@ -43,8 +43,10 @@ backlog/               tasks, docs and decisions (Backlog.md)
 
 Node 24 or newer and pnpm. Node 24 is the active LTS line, and it is the first
 one where `node:sqlite`, which the content index is built on, boots without an
-`ExperimentalWarning`. CI also runs the suite on the current line so the next
-LTS holds no surprises. The pnpm version is pinned in `packageManager`, so
+`ExperimentalWarning`. It is also the development target: `.node-version` pins
+24, so fnm, nvm and similar tools pick it in this checkout, and CI reads the same
+file. CI also runs the suite on the current line so the next LTS holds no
+surprises. The pnpm version is pinned in `packageManager`, so
 Corepack picks the right one:
 
 ```sh

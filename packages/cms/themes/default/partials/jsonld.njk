@@ -54,9 +54,18 @@
       {{- member("name", site.title) }}
       {{- member("description", site.tagline) }}
       {{- member("url", home) }}
-      {#- The SearchAction goes in when the site has a search to point it at
-          (TASK-22). Advertising one before then would be telling a reader's
-          client about a URL that answers 404. #}
+      {#- The site's search (TASK-22), so a client that understands a
+          SearchAction can offer a box that searches this site. The template
+          is the search page's own URL with the words in `q`, which is what
+          the form in the footer sends. #}
+      {{- member("potentialAction", {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": ("/search/" | absoluteUrl) + "?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }) }}
       {{- member("publisher", person) }}
     }{% endset %}
 {% set _ = nodes.push(website) %}

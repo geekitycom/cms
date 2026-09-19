@@ -354,7 +354,7 @@ describe('paging and the page that is not there (AC #4)', () => {
     assert.doesNotMatch(inside, /feed-item/, 'an empty listing prints an entry');
   });
 
-  it('says content is not found, with a link home', async () => {
+  it('says content is not found, with a link home and to the search', async () => {
     const cms = await site();
     const response = await cms.app.request('/nothing-here/');
     const inside = main(await response.text());
@@ -362,6 +362,10 @@ describe('paging and the page that is not there (AC #4)', () => {
     assert.equal(response.status, 404);
     assert.match(inside, /<h1[^>]*>Content not found\.<\/h1>/, 'the 404 does not say so');
     assert.match(inside, /<a href="\/">home<\/a>/, 'the 404 does not link home');
-    assert.doesNotMatch(inside, /search/i, 'the 404 links to a search that does not exist yet');
+    assert.match(
+      inside,
+      /<a href="\/search\/">search the site<\/a>/,
+      'the 404 does not link the search',
+    );
   });
 });

@@ -3,7 +3,7 @@ import type { Environment } from 'nunjucks';
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import type { DocumentNeighbours } from '../content/store.ts';
+import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { siteIcons } from '../images/icons.ts';
 import { archiveMonths, archiveOpen } from './archive.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';
@@ -26,6 +26,7 @@ import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, FrontPageSlugs, NeighbourContext, SiteData } from './context.ts';
 import { navigationMenu } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
+import { snippetHtml } from './search.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 import { createTemplateEnvironment, useThemeDirs } from './templates.ts';
 import { createThemeSource, findThemeFile } from './themes.ts';
@@ -40,6 +41,7 @@ export const TEMPLATES = {
   tag: 'layouts/tag.njk',
   category: 'layouts/category.njk',
   author: 'layouts/author.njk',
+  search: 'layouts/search.njk',
   notFound: 'layouts/404.njk',
 } as const;
 
@@ -94,6 +96,18 @@ export interface Listing {
   document?: Document | undefined;
 }
 
+/** One page of search results, ready to render (TASK-22). */
+export interface SearchPage {
+  /** What the reader searched for, as the page read it. Empty before a search. */
+  query: string;
+  /** The page's own URL, query included, for `page.url`. */
+  url: string;
+  /** The documents on this page of the results, best match first. */
+  hits: readonly SearchHit[];
+  /** Where this page sits among all the results. */
+  pagination: Pagination;
+}
+
 /**
  * The HTML side of the public site: everything that turns a document or a
  * listing into a page of the theme.
@@ -143,6 +157,12 @@ export interface Renderer {
   renderFrontPage(document: Document, extra?: Record<string, unknown>): string;
   /** A listing through the home, tag or category layout. */
   renderListing(listing: Listing): string;
+  /**
+   * A page of search results, or the empty search form, through the search
+   * layout. Each result is the document context a listing entry is, with a
+   * `snippet` of HTML showing where the words were found.
+   */
+  renderSearch(search: SearchPage): string;
   /** The 404 page, for a path that resolved to nothing. */
   renderNotFound(url: string): string;
   /** Any template by name, with the site data already in the context. */
@@ -564,6 +584,27 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         ...(listing.author === undefined
           ? {}
           : { author: listing.author, siteAuthor: listing.author }),
+      });
+    },
+
+    renderSearch(search) {
+      const people = users();
+      const items = search.hits.map((hit) => ({
+        ...documentContext(hit.document, config, authorContext(people, hit.document.author)),
+        // Escaped here and marked up here, so a theme prints it with `safe`
+        // and cannot get the order of the two wrong.
+        snippet: snippetHtml(hit.snippet),
+      }));
+
+      return render(TEMPLATES.search, {
+        title: search.query === '' ? 'Search' : `Search results for “${search.query}”`,
+        url: search.url,
+        page: { url: search.url },
+        // The words as the reader typed them, for the form to put back in the
+        // box and the heading to repeat. Autoescaped like any other string.
+        query: search.query,
+        posts: items,
+        pagination: { ...search.pagination, items },
       });
     },
 

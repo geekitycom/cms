@@ -168,14 +168,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -204,7 +204,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4]);
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -233,7 +233,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4]);
       assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
     } finally {
       upgraded.close();
@@ -1096,3 +1096,205 @@ function queryPlan(file: string, sql: string): string {
     db.close();
   }
 }
+
+describe('search (TASK-22)', () => {
+  /** What a search found, as titles in the order it ranked them. */
+  function found(index: ContentStore, query: string): string[] {
+    return index.search(query).map((hit) => hit.document.title);
+  }
+
+  it('finds published posts and pages by any word in them (AC #1)', async () => {
+    const index = await store();
+    index.upsertAll([
+      post({ title: 'On gardening', html: '<p>Tomatoes want sun.</p>' }),
+      post({
+        type: 'page',
+        path: 'pages/about.md',
+        slug: 'about',
+        permalink: '/about/',
+        title: 'About',
+        date: undefined,
+        html: '<p>I grow tomatoes.</p>',
+      }),
+    ]);
+
+    assert.deepEqual(found(index, 'tomatoes').sort(), ['About', 'On gardening']);
+    assert.deepEqual(found(index, 'sun'), ['On gardening']);
+    assert.equal(index.countSearch('tomatoes'), 2);
+  });
+
+  it('ranks a title match above a match in the body (AC #1)', async () => {
+    const index = await store();
+    index.upsertAll([
+      post({
+        path: 'posts/a.md',
+        permalink: '/a/',
+        title: 'Notes',
+        date: '2026-09-02T00:00:00Z',
+        html: '<p>Some thoughts on sqlite, among many other things.</p>',
+      }),
+      post({
+        path: 'posts/b.md',
+        permalink: '/b/',
+        title: 'Why sqlite',
+        date: '2026-01-01T00:00:00Z',
+        html: '<p>A small database.</p>',
+      }),
+    ]);
+
+    assert.deepEqual(found(index, 'sqlite'), ['Why sqlite', 'Notes']);
+  });
+
+  it('never returns a draft, a trashed document or one not yet due (AC #3)', async () => {
+    const index = openContentStore({
+      dataDir: await dataDir(),
+      now: () => new Date('2026-09-10T00:00:00Z'),
+    });
+    openStores.push(index);
+    index.upsertAll([
+      post({ path: 'posts/live.md', permalink: '/live/', title: 'Live', html: '<p>zebra</p>' }),
+      post({
+        path: 'posts/draft.md',
+        permalink: '/draft/',
+        title: 'Draft',
+        draft: true,
+        html: '<p>zebra</p>',
+      }),
+      post({
+        path: '_trash/posts/gone.md',
+        permalink: '/gone/',
+        title: 'Gone',
+        html: '<p>zebra</p>',
+      }),
+      post({
+        path: 'posts/later.md',
+        permalink: '/later/',
+        title: 'Later',
+        date: '2026-12-01T00:00:00Z',
+        html: '<p>zebra</p>',
+      }),
+    ]);
+
+    assert.deepEqual(found(index, 'zebra'), ['Live']);
+    assert.equal(index.countSearch('zebra'), 1);
+  });
+
+  it('follows a document that is rewritten or removed (AC #2)', async () => {
+    const index = await store();
+    index.upsert(post({ html: '<p>Original words.</p>' }));
+    assert.deepEqual(found(index, 'original'), ['Hello, World!']);
+
+    index.upsert(post({ html: '<p>Replacement words.</p>' }));
+    assert.deepEqual(found(index, 'original'), []);
+    assert.deepEqual(found(index, 'replacement'), ['Hello, World!']);
+
+    index.remove(post().path);
+    assert.deepEqual(found(index, 'replacement'), []);
+    assert.deepEqual(found(index, 'words'), []);
+  });
+
+  it('matches stems, prefixes, phrases and letters without their accents', async () => {
+    const index = await store();
+    index.upsert(post({ html: '<p>Running to the café for a quick coffee.</p>' }));
+
+    assert.equal(found(index, 'run').length, 1);
+    assert.equal(found(index, 'cafe').length, 1);
+    assert.equal(found(index, 'cof*').length, 1);
+    assert.equal(found(index, '"quick coffee"').length, 1);
+    assert.equal(found(index, '"coffee quick"').length, 0);
+  });
+
+  it('requires every word', async () => {
+    const index = await store();
+    index.upsert(post({ html: '<p>Apples and pears.</p>' }));
+
+    assert.equal(found(index, 'apples pears').length, 1);
+    assert.equal(found(index, 'apples plums').length, 0);
+  });
+
+  it('searches the description and the taxonomy as well as the body', async () => {
+    const index = await store();
+    index.upsert(post({ description: 'About otters', tags: ['wildlife'], categories: ['nature'] }));
+
+    assert.equal(found(index, 'otters').length, 1);
+    assert.equal(found(index, 'wildlife').length, 1);
+    assert.equal(found(index, 'nature').length, 1);
+  });
+
+  it('marks the matched words in the snippet', async () => {
+    const index = await store();
+    index.upsert(post({ html: '<p>The quick brown fox.</p>' }));
+
+    const [hit] = index.search('brown');
+    assert.equal(hit?.snippet, 'The quick \u0002brown\u0003 fox.');
+  });
+
+  it('pages through the results', async () => {
+    const index = await store();
+    index.upsertAll(
+      [1, 2, 3].map((n) =>
+        post({
+          path: `posts/${String(n)}.md`,
+          permalink: `/${String(n)}/`,
+          title: `Post ${String(n)}`,
+          date: `2026-0${String(n)}-01T00:00:00Z`,
+          html: '<p>common</p>',
+        }),
+      ),
+    );
+
+    // Equal relevance falls back to newest first.
+    assert.deepEqual(
+      index.search('common', { limit: 2 }).map((hit) => hit.document.title),
+      ['Post 3', 'Post 2'],
+    );
+    assert.deepEqual(
+      index.search('common', { limit: 2, offset: 2 }).map((hit) => hit.document.title),
+      ['Post 1'],
+    );
+  });
+
+  it('finds nothing, and does not throw, for a query that is all syntax', async () => {
+    const index = await store();
+    index.upsert(post());
+
+    for (const query of ['', '"', 'AND', 'NEAR(', '*', '-', 'title:', '^hello', '(']) {
+      assert.doesNotThrow(() => index.search(query), query);
+      assert.equal(index.countSearch(query), index.search(query).length, query);
+    }
+    assert.deepEqual(found(index, ''), []);
+  });
+
+  it('hands back documents that equal the ones it was given', async () => {
+    const index = await store();
+    index.upsert(post());
+
+    assert.deepEqual(index.search('hello')[0]?.document, post());
+  });
+});
+
+describe('the search index migration (TASK-22 AC #2)', () => {
+  it('empties an index written before search existed, so the next scan fills it', async () => {
+    const dir = await dataDir();
+
+    // A version 3 database: rows, and no full-text table to find them in.
+    const before = openContentStore({ dataDir: dir });
+    before.upsert(post());
+    before.close();
+
+    const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
+    legacy.exec('DROP TABLE documents_fts; DELETE FROM migrations WHERE version = 4');
+    legacy.close();
+
+    const upgraded = openContentStore({ dataDir: dir });
+    try {
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4]);
+      assert.equal(upgraded.counts().total, 0, 'a row survived with no words indexed for it');
+
+      upgraded.upsert(post());
+      assert.equal(upgraded.countSearch('hello'), 1);
+    } finally {
+      upgraded.close();
+    }
+  });
+});

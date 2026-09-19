@@ -109,6 +109,7 @@ export const RESERVED_TOP_LEVEL_PATHS: readonly string[] = [
   'inbox',
   'sitemap.xml',
   'robots.txt',
+  'search',
 ];
 
 /**

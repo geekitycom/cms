@@ -55,7 +55,9 @@ import {
   LISTING_REPRESENTATIONS,
   lastModifiedOf,
   latestModified,
+  MEDIA_TYPES,
   notAcceptableResponse,
+  representationHref,
   representationEtag,
   representationResponse,
   selectRepresentation,
@@ -73,6 +75,15 @@ import {
   SITEMAP_PATH,
 } from './sitemap.ts';
 import type { SitemapUrl } from './sitemap.ts';
+import {
+  searchHref,
+  searchJson,
+  searchPageIndex,
+  searchQuery,
+  SEARCH_PAGE_PARAM,
+  SEARCH_PATH,
+  SEARCH_QUERY_PARAM,
+} from './search.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
@@ -155,6 +166,18 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   app.get(SITEMAP_PATH, (c) => sitemap(c, undefined));
   app.get(SITEMAP_CHILD_ROUTE, (c) => sitemap(c, Number(c.req.param('page'))));
   app.get(ROBOTS_PATH, (c) => robotsResponse(c.var.config.baseUrl, conditionalHeaders(c)));
+
+  // The site's search (TASK-22): a route at a fixed path for the reason the
+  // feeds are, so the form in every theme's footer submits somewhere no
+  // permalink can take. It negotiates HTML and JSON like a listing, and
+  // `/search/index.json` is the same escape hatch a listing has. The path
+  // without its slash is where a hand-typed URL lands, and keeps its query on
+  // the way to the real one.
+  app.get(SEARCH_PATH, (c) => search(c, selectFromAccept(c, LISTING_REPRESENTATIONS)));
+  app.get(representationHref(SEARCH_PATH, 'json'), (c) => search(c, 'json'));
+  app.get(SEARCH_PATH.slice(0, -1), (c) =>
+    c.redirect(`${SEARCH_PATH}${new URL(c.req.url).search}`, 301),
+  );
 
   // The taxonomy archives are deliberately not routes. A route table is fixed
   // when the app is built and the bases are a setting, so an archive is
@@ -971,6 +994,69 @@ function listing(
     representation,
     href,
     available: LISTING_REPRESENTATIONS,
+    ...(validated
+      ? {
+          etag: representationEtag(
+            representation,
+            listingFingerprint(href, pagination, documents, full),
+          ),
+          lastModified: latestModified(documents),
+        }
+      : {}),
+    conditional: conditionalHeaders(c),
+  });
+}
+
+/**
+ * One page of search results, in whichever representation the request settled
+ * on.
+ *
+ * What it finds is what the listings would show: the index holds the search to
+ * published, untrashed, already-due documents, so a draft cannot be found by
+ * its words any more than it can be found by its URL. A search with no query
+ * is the page with the form on it and nothing found, rather than an error,
+ * because that is where a link to the search from a theme lands. A page past
+ * the last one 404s, as it does on a listing.
+ */
+function search(c: Context<GeekityEnv>, representation: Representation | undefined): Response {
+  const { store, renderer, config } = c.var;
+  const query = searchQuery(c.req.query(SEARCH_QUERY_PARAM));
+  const pageNumber = searchPageIndex(c.req.query(SEARCH_PAGE_PARAM));
+  if (pageNumber === undefined) return notFound(c);
+
+  const size = renderer.pageSize();
+  const pagination = paginate({
+    total: store.countSearch(query),
+    size,
+    pageNumber,
+    hrefForPage: (index) => searchHref(query, index),
+  });
+  if (pageNumber >= pagination.totalPages) return notFound(c);
+
+  const href = searchHref(query, pageNumber);
+  if (representation === undefined) return notAcceptableResponse(href, LISTING_REPRESENTATIONS);
+
+  const hits = store.search(query, { limit: size, offset: offsetForPage(pageNumber, size) });
+  const documents = hits.map((hit) => hit.document);
+  const full = wantsFullDocuments(c);
+  const body =
+    representation === 'json'
+      ? searchJson({ query, hits, pagination, baseUrl: config.baseUrl, body: full })
+      : renderer.renderSearch({ query, url: href, hits, pagination });
+
+  const validated = representation !== 'html' || !config.watch;
+
+  return representationResponse({
+    body,
+    representation,
+    href,
+    // The alternates are spelled here rather than by the negotiator, because
+    // they carry the query and a listing's never have one to carry.
+    available: [representation],
+    links: LISTING_REPRESENTATIONS.filter((other) => other !== representation).map(
+      (other) =>
+        `<${searchHref(query, pageNumber, other)}>; rel="alternate"; type="${MEDIA_TYPES[other]}"`,
+    ),
     ...(validated
       ? {
           etag: representationEtag(
