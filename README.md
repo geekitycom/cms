@@ -58,21 +58,23 @@ pnpm install
 
 Run from the repository root.
 
-| Command              | What it does                                                              |
-| -------------------- | ------------------------------------------------------------------------- |
-| `pnpm install`       | Installs both workspace packages and links `apps/demo` to `packages/cms`. |
-| `pnpm dev`           | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`).         |
-| `pnpm start`         | Starts the demo site once, without watching.                              |
-| `pnpm build`         | Compiles `packages/cms` to `dist/` and bundles the admin editor.          |
-| `pnpm test`          | Runs the `node:test` suites in every package through `tsx`.               |
-| `pnpm test:coverage` | The same suites with `--experimental-test-coverage`.                      |
-| `pnpm test:11ty`     | Builds the fixtures and the demo content with Eleventy, comparing URLs.   |
-| `pnpm typecheck`     | `tsc --noEmit` across the workspace, tests included.                      |
-| `pnpm lint`          | Fans out to each package's lint script.                                   |
-| `pnpm lint:fix`      | The same, with eslint's fixes applied.                                    |
-| `pnpm format`        | Rewrites every file prettier owns.                                        |
-| `pnpm format:check`  | Fails if any of them is not already formatted.                            |
-| `pnpm clean`         | Removes build output.                                                     |
+| Command                  | What it does                                                              |
+| ------------------------ | ------------------------------------------------------------------------- |
+| `pnpm install`           | Installs both workspace packages and links `apps/demo` to `packages/cms`. |
+| `pnpm dev`               | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`).         |
+| `pnpm start`             | Starts the demo site once, without watching.                              |
+| `pnpm build`             | Compiles `packages/cms` to `dist/` and bundles the admin editor.          |
+| `pnpm test`              | Runs the `node:test` suites in every package through `tsx`.               |
+| `pnpm test:coverage`     | The same suites with `--experimental-test-coverage`.                      |
+| `pnpm test:11ty`         | Builds the fixtures and the demo content with Eleventy, comparing URLs.   |
+| `pnpm typecheck`         | `tsc --noEmit` across the workspace, tests included.                      |
+| `pnpm lint`              | Fans out to each package's lint script.                                   |
+| `pnpm lint:fix`          | The same, with eslint's fixes applied.                                    |
+| `pnpm format`            | Rewrites every file prettier owns.                                        |
+| `pnpm format:check`      | Fails if any of them is not already formatted.                            |
+| `pnpm clean`             | Removes build output.                                                     |
+| `pnpm docker:dry-run`    | Prints the image tags a Docker publish would push, and builds nothing.    |
+| `pnpm docker:build-push` | Builds the image for amd64 and arm64 and pushes it to ghcr.io.            |
 
 Package-scoped variants work too, for example
 `pnpm --filter @geekity/cms test` or `pnpm --filter demo dev`.
@@ -1152,7 +1154,8 @@ tracked.
    release-please runs again, sees its own release commit, and creates the git
    tag and the GitHub release.
 4. Nothing is published. When the maintainer wants the release on npm they
-   follow [Publishing to npm](#publishing-to-npm) below.
+   follow [Publishing to npm](#publishing-to-npm) below, and for the Docker
+   image [Publishing the Docker image](#publishing-the-docker-image).
 
 The bumps are the pre-1.0 rules of decision-7, configured in
 `release-please-config.json`: `fix` takes a patch, `feat` takes a minor, and
@@ -1197,6 +1200,47 @@ a scoped package. Log in first with `npm login`; the npm scope `@geekity` must
 be owned by the project (decision-6). The `pack-install` CI job has already
 proven the tarball installs and boots, so the publish itself is the only
 untested step.
+
+### Publishing the Docker image
+
+The image is `ghcr.io/geekitycom/cms`, built from the `Dockerfile` at the
+repository root for `linux/amd64` and `linux/arm64`. CI never pushes it:
+GitHub's runners are amd64 only and the machine a site runs on may be arm64, so
+a CI publish could ship only half of what is needed. A maintainer publishes it
+from a workstation with `scripts/docker-build-push.sh`.
+
+Run it after a release, once the release pull request is merged:
+
+```sh
+git checkout main
+git pull
+pnpm docker:dry-run          # check the version and tags first
+pnpm docker:build-push       # pushes <version> and latest
+pnpm docker:build-push beta  # the same, plus a custom tag
+```
+
+The version tag is read from `packages/cms/package.json`, which is why the
+pull comes first: release-please bumps it in the release pull request, so main
+right after the merge is the tagged commit and carries the new version.
+
+The script refuses to run from anywhere but the repository root. It checks that
+Docker is running and that you are logged in to ghcr.io (it runs
+`docker login ghcr.io` if the Docker config has no entry for it; the password is
+a GitHub personal access token with `write:packages`), then runs the quality
+gates `pnpm lint`, `pnpm format:check`, `pnpm typecheck` and `pnpm test`. A
+failing gate stops it before anything is built. It then builds both platforms
+with `--pull --no-cache` on a buildx builder called `multiplatform`, which it
+creates with the `docker-container` driver the first time, and pushes every tag
+as one manifest list. `--dry-run` prints the image, the version and the tags,
+and builds, pushes, logs in and runs nothing.
+
+Confirm the push carried both platforms:
+
+```sh
+docker buildx imagetools inspect ghcr.io/geekitycom/cms:<version>
+```
+
+The output lists a manifest for `linux/amd64` and one for `linux/arm64`.
 
 ### Repository secrets
 
