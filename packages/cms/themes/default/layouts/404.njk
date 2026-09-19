@@ -3,8 +3,6 @@
 {% block content %}
 <article class="not-found">
   <h1 class="page-title">Content not found.</h1>
-  {#- A link to the site's search goes in beside the link home once there is
-      one to link to (TASK-22). -#}
-  <p>Go <a href="{{ "/" | url }}">home</a>.</p>
+  <p>Go <a href="{{ "/" | url }}">home</a>, or <a href="{{ "/search/" | url }}">search the site</a>.</p>
 </article>
 {% endblock %}

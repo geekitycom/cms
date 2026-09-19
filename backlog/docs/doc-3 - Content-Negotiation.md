@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 03:57'
+updated_date: '2026-09-19 14:31'
 ---
 # Content Negotiation
 
@@ -79,6 +79,14 @@ no taxonomy base can take them.
 
 Listing URLs (home, tag archives, author archives, paginated archives)
 negotiate too. HTML renders the theme's list template. JSON returns an array of the same document shape with `markdown` and `html` omitted unless `?full=1`. Markdown is not offered for listings.
+
+## Search
+
+`/search/?q=term` is a route rather than a document, so no permalink can take the URL the theme's search form submits to; `/search?q=term` redirects there with its query kept. It negotiates HTML and JSON like a listing, and `/search/index.json?q=term` is the same escape hatch. The `Link` header advertises the other representation with the query carried over.
+
+HTML renders `layouts/search.njk`. JSON is an object rather than a listing's bare array, because a result means nothing without the query that found it: `{ schema, query, pagination, results }`, where each result is the listing document shape plus a `snippet` of escaped HTML with the matched words in `<mark>`, and `?full=1` adds the bodies as it does on a listing. `?page=N` pages the results at the site's page size; a page past the last, or a `page` that is not a positive integer, is a 404. A missing or empty `q` is the form with nothing found, not an error.
+
+Results come from an FTS5 table in the content index, ranked by BM25 with the title weighted above the description and the taxonomy, and those above the body. Only published, untrashed, already-due posts and pages are ever returned, because the search joins to the same clauses every listing uses. The reader's words are quoted term by term before they reach FTS5, so no query can be a syntax error: `"double quotes"` make a phrase and a trailing `*` a prefix, and nothing else is syntax.
 
 ## Feeds
 

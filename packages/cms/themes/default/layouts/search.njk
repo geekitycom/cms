@@ -1,0 +1,57 @@
+{% extends "layouts/base.njk" %}
+
+{#
+  The search page (TASK-22): the form, and then whatever it found.
+
+  Expects `query`, the words searched for, empty before a search; `posts`, the
+  results on this page, best match first, each a listing entry with a
+  `snippet` of HTML marking where the words were found; and `pagination`, as a
+  listing has it.
+
+  The page asks not to be indexed: a results page is a question somebody asked
+  rather than something the site published, and a search engine that followed
+  every one would be crawling the site's archive once per word in it.
+#}
+
+{% block title %}{% if query %}Search results for &ldquo;{{ query }}&rdquo;{% if pagination.pageNumber > 0 %}, page {{ pagination.pageNumber + 1 }}{% endif %}{% else %}Search{% endif %} &middot; {{ site.title }}{% endblock %}
+
+{% block head %}
+{{ super() }}
+    <meta name="robots" content="noindex">
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Search</h1>
+{% include "partials/search-form.njk" %}
+{% if query %}
+<p class="search-summary" role="status">
+  {%- if pagination.total == 0 -%}
+  Nothing found for &ldquo;{{ query }}&rdquo;.
+  {%- elif pagination.total == 1 -%}
+  One result for &ldquo;{{ query }}&rdquo;.
+  {%- else -%}
+  {{ pagination.total }} results for &ldquo;{{ query }}&rdquo;.
+  {%- endif -%}
+</p>
+{% if posts.length %}
+<div class="search-results">
+  {% for post in posts %}
+  <article class="search-result h-entry">
+    <h2 class="feed-title p-name">
+      <a href="{{ post.url | url }}" class="u-url">{{ post.title }}</a>
+    </h2>
+    {% if post.snippet %}
+    <p class="search-snippet">{{ post.snippet | safe }}</p>
+    {% endif %}
+    {% if post.date %}
+    <p class="feed-meta">
+      <time class="feed-date dt-published" datetime="{{ post.date | date("iso") }}">{{ post.date | date }}</time>
+    </p>
+    {% endif %}
+  </article>
+  {% endfor %}
+</div>
+{% endif %}
+{% include "partials/pagination.njk" %}
+{% endif %}
+{% endblock %}

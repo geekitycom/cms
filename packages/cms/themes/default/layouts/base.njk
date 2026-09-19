@@ -15,7 +15,7 @@
     alternates  <link rel="alternate"> tags, where the feeds go
     header      the site header
     content     the page body
-    footer      the site footer
+    footer      the site footer, with the search box
     scripts     scripts at the end of <body>
 
   One variable crosses between a layout and this file: `bioAuthor`, whoever an
@@ -153,6 +153,14 @@
           layout that renders a bio sets `bioAuthor`, and this prints the menu
           only where nothing else did — the menu is on every page, once.
         #}
+        {#
+          The search box, on every page but the one that already has it at the
+          top: `query` is on the context of the search page alone, empty or
+          not, so its being defined is what says this is that page.
+        #}
+        {% if query is not defined %}
+        {% include "partials/search-form.njk" %}
+        {% endif %}
         {% if menu.length and not bioAuthor %}
         <nav class="site-nav" aria-label="Site">
           <ul class="hlist">

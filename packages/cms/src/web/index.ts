@@ -182,7 +182,7 @@ export type { Pagination, PaginateOptions } from './pagination.ts';
 export { recentPosts, RECENT_POSTS, startOfMonth } from './recent.ts';
 export type { RecentPostsSource } from './recent.ts';
 export { createRenderer, OPTIONAL_TEMPLATES, TEMPLATES } from './render.ts';
-export type { CreateRendererOptions, Listing, Renderer } from './render.ts';
+export type { CreateRendererOptions, Listing, Renderer, SearchPage } from './render.ts';
 export {
   commentsFeedHref,
   feedHref,
@@ -191,6 +191,18 @@ export {
   mountPublicSite,
 } from './routes.ts';
 export { sanitizeCommentHtml } from './sanitize.ts';
+export {
+  MAXIMUM_QUERY_LENGTH,
+  searchHref,
+  searchJson,
+  searchPageIndex,
+  searchQuery,
+  SEARCH_PAGE_PARAM,
+  SEARCH_PATH,
+  SEARCH_QUERY_PARAM,
+  snippetHtml,
+} from './search.ts';
+export type { SearchJson, SearchJsonOptions, SearchResultJson } from './search.ts';
 export {
   robotsResponse,
   robotsTxt,

@@ -35,13 +35,13 @@
 
 {#- Where to go next. The posts page is here only when the site has one — on a
     site without one there is no second URL for the archive, and a link to one
-    would be a link to nothing. Search belongs on this line too and is not
-    written yet: TASK-22. -#}
-{% if postsPage %}
+    would be a link to nothing. Search is always here (TASK-22). -#}
 <p class="front-links">
+  {% if postsPage %}
   <a href="{{ postsPage.url | url }}">{{ postsPage.title }}<span aria-hidden="true"> &rarr;</span></a>
+  {% endif %}
+  <a href="{{ "/search/" | url }}">Search<span aria-hidden="true"> &rarr;</span></a>
 </p>
-{% endif %}
 
 {% if bioAuthor %}
 <hr>

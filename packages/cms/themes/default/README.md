@@ -15,6 +15,7 @@ themes/default/
     tag.njk      a tag archive, paginated
     category.njk a category archive, paginated
     author.njk   one person's archive, paginated
+    search.njk   the search form and what it found, paginated
     404.njk      nothing at this URL
   partials/
     post-list.njk     the h-feed a listing is made of
@@ -26,6 +27,7 @@ themes/default/
     comment-form.njk  the form under a post that is taking comments
     contact-form.njk  the form on a page whose front matter says contact: true
     archive.njk       every post by month, on a page that says archive: true
+    search-form.njk   the search box, in the footer and on the search page
   mail/
     test.*.njk              the Send test email message
     password-reset.*.njk    the forgot-password link
@@ -350,8 +352,28 @@ under it when the context carries a `categoryDescription`; the CMS has no store
 of term descriptions, so nothing writes one today and the header is the heading
 alone.
 
-`layouts/404.njk` says `Content not found.` and links home. A link to the site's
-search goes in beside it once there is a search to link to.
+`layouts/404.njk` says `Content not found.` and links home and to the search.
+
+### Search
+
+`layouts/search.njk` is the page at `/search/` (TASK-22). It prints
+`partials/search-form.njk`, and once there is a `query` a `p.search-summary`
+saying how many documents matched, a `div.search-results` of
+`article.search-result` entries, and the ordinary pager. It asks not to be
+indexed with `<meta name="robots" content="noindex">` in its `head` block.
+
+The context is a listing's with two differences. `query` is the words searched
+for, trimmed, and an empty string on the page before a search; it is defined
+only on this page, which is how `layouts/base.njk` knows to leave the footer's
+search box off it. Each entry in `posts` carries a `snippet`: a few words of
+HTML around the match, escaped, with every matched word in `<mark>`. Print it
+with `safe`. The results are best match first rather than newest first, and
+only what the public site would serve is ever among them.
+
+`partials/search-form.njk` is a `GET` form to `/search/` with the words in `q`,
+so it needs no JavaScript and a search is a URL. `layouts/base.njk` puts it in
+the footer of every other page. The search page takes the path `/search/` ahead
+of any document permalinked there.
 
 ### The front page
 
@@ -369,8 +391,8 @@ It draws the page's own words and then what the site has been writing:
 2. `<h2>Recent Posts</h2>` over `partials/post-list.njk` with `feedHeading` set
    to 3, so the entries sit under that heading rather than beside it.
 3. `p.front-links`, a line of links to where the writing is. The posts page is
-   linked by its own title when the site names one; a search link joins it once
-   there is a search to link to (TASK-22).
+   linked by its own title when the site names one, and the search always is
+   (TASK-22).
 4. The bio, under a rule, exactly as an entry ends — so the site menu is there
    too, because that is where this design keeps it.
 
@@ -463,8 +485,8 @@ decision-16, because the visible markup already carries microformats2 for the
 IndieWeb. The graph holds:
 
 - `WebSite`, always, with the site's title, tagline and URL, and a `publisher`
-  pointing at the Person. Its `SearchAction` goes in when the site has a search
-  to point it at.
+  pointing at the Person, and a `potentialAction` that is a `SearchAction` on
+  `/search/?q={search_term_string}`.
 - `Person`, from `siteAuthor`: their name, archive URL, avatar, bio, job title
   and location, and a `sameAs` of their profile links and their actor id, which
   is what asserts that the schema.org Person and the fediverse actor are one

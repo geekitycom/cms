@@ -807,3 +807,52 @@ describe('the events', () => {
     assert.match(warnings.join('\n'), /subscriber blew up/);
   });
 });
+
+describe('the search index (TASK-22 AC #2)', () => {
+  it('is filled by the boot scan and follows every edit, trashing and deletion', async () => {
+    const dir = await contentDir({
+      'posts/2026-09-02-hello.md': markdown({
+        title: 'Hello',
+        permalink: '/2026/09/hello/',
+        date: '2026-09-02T09:00:00Z',
+        body: 'Aardvarks at dawn.',
+      }),
+    });
+    const { sync: content, store: index } = await sync(dir, { watch: true });
+    await content.start();
+
+    assert.equal(index.countSearch('aardvarks'), 1, 'the boot scan did not index the words');
+
+    const rewrite = () =>
+      writeFiles(dir, {
+        'posts/2026-09-02-hello.md': markdown({
+          title: 'Hello',
+          permalink: '/2026/09/hello/',
+          date: '2026-09-02T09:00:00Z',
+          body: 'Badgers at dusk.',
+        }),
+      });
+    await rewrite();
+    await eventually(
+      () => index.countSearch('badgers') === 1,
+      'the edit to be searchable',
+      rewrite,
+    );
+    assert.equal(index.countSearch('aardvarks'), 0);
+
+    await mkdir(path.join(dir, '_trash/posts'), { recursive: true });
+    await rename(
+      path.join(dir, 'posts/2026-09-02-hello.md'),
+      path.join(dir, '_trash/posts/2026-09-02-hello.md'),
+    );
+    await eventually(
+      () => index.getByPath('_trash/posts/2026-09-02-hello.md') !== undefined,
+      'the trashed file to be indexed',
+    );
+    assert.equal(index.countSearch('badgers'), 0, 'a trashed post is still found');
+
+    await rm(path.join(dir, '_trash/posts/2026-09-02-hello.md'));
+    await eventually(() => index.listPaths().length === 0, 'the deleted file to leave the index');
+    assert.equal(index.countSearch('badgers'), 0);
+  });
+});

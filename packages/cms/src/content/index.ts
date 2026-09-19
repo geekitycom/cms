@@ -12,6 +12,15 @@ export { hashDocument, parseDocument, typeForPath } from './parser.ts';
 export type { ParseDocumentOptions } from './parser.ts';
 export { contentFilePath, freeSlug, saveDocument } from './save.ts';
 export type { ContentFilePathInput, FreeSlugOptions, SaveDocumentOptions } from './save.ts';
+export {
+  htmlToText,
+  MAXIMUM_QUERY_TERMS,
+  searchExpression,
+  searchText,
+  SNIPPET_CLOSE,
+  SNIPPET_OPEN,
+} from './search.ts';
+export type { SearchText } from './search.ts';
 export { defaultPermalink, slugify } from './slug.ts';
 export type { DefaultPermalinkInput } from './slug.ts';
 export {
@@ -53,6 +62,7 @@ export type {
   ListByTagOptions,
   ListOptions,
   OpenContentStoreOptions,
+  SearchHit,
   TagCount,
 } from './store.ts';
 export { calendarDayIn, DEFAULT_TIMEZONE, toUtcInstant, wallClockIn, zoneLabel } from './time.ts';
