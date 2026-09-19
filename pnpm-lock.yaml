@@ -33,8 +33,8 @@ importers:
         specifier: ^9.1.7
         version: 9.1.7
       lint-staged:
-        specifier: ^17.5.0
-        version: 17.5.0
+        specifier: ^17.5.1
+        version: 17.5.1
       prettier:
         specifier: ^3.9.6
         version: 3.9.6
@@ -94,17 +94,17 @@ importers:
         specifier: ^4.13.7
         version: 4.13.7
       js-yaml:
-        specifier: ^5.4.1
-        version: 5.4.1
+        specifier: ^5.4.2
+        version: 5.4.2
       markdown-it:
-        specifier: ^15.0.1
-        version: 15.0.1
+        specifier: ^15.0.2
+        version: 15.0.2
       markdown-it-footnote:
         specifier: ^4.0.0
         version: 4.0.0
       nodemailer:
-        specifier: ^10.0.2
-        version: 10.0.2
+        specifier: ^10.0.9
+        version: 10.0.9
       nunjucks:
         specifier: ^3.2.4
         version: 3.2.4(chokidar@5.0.0)
@@ -2249,8 +2249,8 @@ packages:
     resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
     hasBin: true
 
-  js-yaml@5.4.1:
-    resolution: {integrity: sha512-28R/k+NAjeuf7+CKlTxWZVExJGwVVLwY06DgEnOMz2gEpfNkDcD7QvyiVPT0xy0XXhU8vHsd4Ot42OOPdJG7dQ==}
+  js-yaml@5.4.2:
+    resolution: {integrity: sha512-m+aqu+LwO1O6sIopafj8HUVl5aawITwZQe/yHpMCKjaWBaA/d07B/QdMb3529REftiU+RMMHL3Vlsw3hON7vWg==}
     hasBin: true
 
   jsbi@4.3.2:
@@ -2310,8 +2310,8 @@ packages:
   linkify-it@6.1.0:
     resolution: {integrity: sha512-wJ/TwpSDTLepCrQoYWYIExIKg5Zchex2Nn5yk2mFnB+6PtdkHtyLx742md9csRjjOnGkKIS/RrbY7l8D6gT9Vw==}
 
-  lint-staged@17.5.0:
-    resolution: {integrity: sha512-ah2qsNtvKP1+Ak4rAvEEIvcXDLjjbr/xmxCvlequxqEOFYk0qINcZcRxD3Ic8wRn7/oQ8+wC9s0DfDrdMVCRFg==}
+  lint-staged@17.5.1:
+    resolution: {integrity: sha512-7EDuco1xnBMeVpvAbeMq1U5KXwJGLmY8q6l+Ye78r36C4mPc+Vg1Z2SK8gHyRTyvPro90A0q5/FAZ+Au23d6QQ==}
     engines: {node: '>=22.22.1'}
     hasBin: true
 
@@ -2346,8 +2346,8 @@ packages:
     resolution: {integrity: sha512-4Ej49aYTDFIQ+uBkfX8GBvJGccoARxxPep+7aWTs55ozbjQJpW9M26Fe53vnGgvLeVzva/amzjQQaQu9w0vMhA==}
     hasBin: true
 
-  markdown-it@15.0.1:
-    resolution: {integrity: sha512-9/7gE95FNPkfUWrjJIoHZza2iLmuJlPD0UNMxPi7bxUrbCR525YZY0r+zyfes0dZI5ZZ/uNIXUJca0pJvtw41g==}
+  markdown-it@15.0.2:
+    resolution: {integrity: sha512-q4IGxMv56jCqT4OCRCADBoDP3LO4MhmTXjFbphHPXs4g3j9Xg5RDnxqN8IF/3vIWEU+VCnUq+7JUg/cfy2E6Qw==}
     hasBin: true
 
   mdast-util-to-hast@13.2.1:
@@ -2440,8 +2440,8 @@ packages:
   node-retrieve-globals@6.0.1:
     resolution: {integrity: sha512-j0DeFuZ/Wg3VlklfbxUgZF/mdHMTEiEipBb3q0SpMMbHaV3AVfoUQF8UGxh1s/yjqO0TgRZd4Pi/x2yRqoQ4Eg==}
 
-  nodemailer@10.0.2:
-    resolution: {integrity: sha512-83mO0TnWXySiJXdMAIUYmlXYdJ2KUq/w8EJgc4ogKU2UssaHf7ZPeuHcb4YCxeNiM0DDshnm291U0/ClrSZZsg==}
+  nodemailer@10.0.9:
+    resolution: {integrity: sha512-BF0qcyplCwp+jMk6HCjFykBz/YhhZSsxrARhOldLwFWH+8kGjQsd2WIMIZhqEuyXRoGFi0ONbDeWDMDoL8MhLw==}
     engines: {node: '>=20.0.0'}
 
   normalize-path@3.0.0:
@@ -3404,7 +3404,7 @@ snapshots:
       '@commitlint/top-level': 21.2.0
       '@commitlint/types': 21.2.0
       '@conventional-changelog/git-client': 3.1.2(conventional-commits-parser@7.1.2)
-      tinyexec: 1.3.0
+      tinyexec: 1.3.1
     transitivePeerDependencies:
       - conventional-commits-filter
       - conventional-commits-parser
@@ -5458,7 +5458,7 @@ snapshots:
     dependencies:
       argparse: 2.0.1
 
-  js-yaml@5.4.1:
+  js-yaml@5.4.2:
     dependencies:
       argparse: 2.0.1
 
@@ -5510,7 +5510,7 @@ snapshots:
     dependencies:
       uc.micro: 3.0.0
 
-  lint-staged@17.5.0:
+  lint-staged@17.5.1:
     dependencies:
       picomatch: 4.0.7
       string-argv: 0.3.2
@@ -5550,7 +5550,7 @@ snapshots:
       punycode.js: 2.3.1
       uc.micro: 2.1.0
 
-  markdown-it@15.0.1:
+  markdown-it@15.0.2:
     dependencies:
       argparse: 3.0.1
       entities: 8.0.0
@@ -5642,7 +5642,7 @@ snapshots:
       acorn-walk: 8.3.5
       esm-import-transformer: 3.0.5
 
-  nodemailer@10.0.2: {}
+  nodemailer@10.0.9: {}
 
   normalize-path@3.0.0: {}
 
