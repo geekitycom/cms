@@ -35,7 +35,8 @@ apps/demo/             private site that consumes the package via workspace:*
   themes/demo/       the theme this site wears: post.njk, style.css, theme.json
   eleventy.config.js re-exports the documented example config
   test/              boots the demo over HTTP, and builds it with Eleventy
-scripts/               pack-install-smoke.sh, the body of the CI job of the same name
+scripts/               pack-install-smoke.sh and docker-smoke.sh, the bodies of those CI jobs,
+                       and docker-build-push.sh, which publishes the image
 backlog/               tasks, docs and decisions (Backlog.md)
 ```
 
@@ -75,6 +76,7 @@ Run from the repository root.
 | `pnpm clean`             | Removes build output.                                                     |
 | `pnpm docker:dry-run`    | Prints the image tags a Docker publish would push, and builds nothing.    |
 | `pnpm docker:build-push` | Builds the image for amd64 and arm64 and pushes it to ghcr.io.            |
+| `pnpm docker:smoke`      | Builds the image locally, boots it on empty volumes and checks it serves. |
 
 Package-scoped variants work too, for example
 `pnpm --filter @geekity/cms test` or `pnpm --filter demo dev`.
@@ -1056,6 +1058,7 @@ Each gate is its own job so it can be named as a required status check:
 | `build`        | `pnpm build`.                                          |
 | `test-11ty`    | `pnpm test:11ty`, the Eleventy compatibility suite.    |
 | `pack-install` | `scripts/pack-install-smoke.sh`.                       |
+| `docker-smoke` | Builds the image, then `scripts/docker-smoke.sh`.      |
 | `coverage`     | `pnpm test:coverage`, summary uploaded as an artifact. |
 | `pr-title`     | The pull request title, as a Conventional Commit.      |
 
@@ -1087,6 +1090,25 @@ scripts/pack-install-smoke.sh          # or: … /some/scratch/directory
 The script builds the package first, makes its scratch directory, and removes
 it and the tarball on the way out however it exits. `GEEKITY_SMOKE_PORT`
 changes the port it boots on, which defaults to 3456.
+
+`docker-smoke` builds the Docker image for `linux/amd64` on an amd64 runner,
+loads it into the runner's Docker and pushes it nowhere, with the buildx GitHub
+Actions cache keeping the rebuild quick. `scripts/docker-smoke.sh` then starts
+it on two fresh, empty named volumes for `/site/content` and `/site/data`,
+waits for `GET /healthz` to answer 200, and checks that `/` is the seeded
+starter site in the default theme and that `/theme/style.css` is byte for byte
+`packages/cms/themes/default/static/style.css`. A Dockerfile that does not
+build, a container that exits, or a site that does not answer fails the job,
+and the container's log is printed. On a laptop, with Docker running:
+
+```sh
+pnpm docker:smoke                  # builds linux/amd64 from the Dockerfile
+GEEKITY_SMOKE_PLATFORM=linux/arm64 pnpm docker:smoke   # native on Apple silicon
+pnpm docker:smoke some-image:tag   # tests an image that is already built
+```
+
+The script removes its container, its volumes and any image it built however it
+exits.
 
 `pr-title` exists because a squash merge takes the pull request title as the
 commit message, and release-please reads that message. It accepts the types and
@@ -1207,7 +1229,9 @@ The image is `ghcr.io/geekitycom/cms`, built from the `Dockerfile` at the
 repository root for `linux/amd64` and `linux/arm64`. CI never pushes it:
 GitHub's runners are amd64 only and the machine a site runs on may be arm64, so
 a CI publish could ship only half of what is needed. A maintainer publishes it
-from a workstation with `scripts/docker-build-push.sh`.
+from a workstation with `scripts/docker-build-push.sh`. What CI does do is
+build the amd64 image on every pull request and boot it (the `docker-smoke`
+job), so a broken Dockerfile fails on its pull request rather than at release.
 
 Run it after a release, once the release pull request is merged:
 

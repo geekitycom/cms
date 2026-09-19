@@ -126,6 +126,43 @@ jobs:
         # install cannot see this repository's workspace.
         run: bash scripts/pack-install-smoke.sh "$RUNNER_TEMP"
 
+  # The Docker image. It is published by hand with scripts/docker-build-push.sh,
+  # so without this a broken Dockerfile would surface only at release time on a
+  # maintainer's workstation. The image is built for linux/amd64 and loaded into
+  # the runner's Docker; then scripts/docker-smoke.sh boots it on empty content
+  # and data volumes, waits for /healthz to answer 200 and checks the home page
+  # is the seeded starter site in the packaged default theme.
+  #
+  # This job pushes nothing: `push: false`, no registry login, and the token
+  # stays at `contents: read`. The layer cache is the buildx GitHub Actions
+  # cache, which lives in the Actions cache rather than in any registry.
+  #
+  # An amd64 runner, unlike the arm64 runners above, because amd64 is the
+  # platform checked here and building it on arm64 would mean QEMU emulation.
+  # Node and pnpm are not installed: the build happens inside the Dockerfile,
+  # and the script needs only bash, curl and docker.
+  docker-smoke:
+    name: docker-smoke
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build the image for linux/amd64 without pushing it
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          tags: geekity-smoke:ci
+          load: true
+          push: false
+          provenance: false
+          cache-from: type=gha,scope=docker-smoke
+          cache-to: type=gha,mode=max,scope=docker-smoke
+      - name: Boot it on empty volumes and check /healthz and the home page
+        shell: bash
+        run: bash scripts/docker-smoke.sh geekity-smoke:ci
+
   # Node's own `--experimental-test-coverage`, kept out of the `test` job so a
   # coverage hiccup never blocks a merge. The summary is uploaded as an
   # artifact; no third-party coverage service is involved.
