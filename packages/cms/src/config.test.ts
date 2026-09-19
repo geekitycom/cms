@@ -426,4 +426,26 @@ describe('baseUrlSource', () => {
       /GEEKITY_TRUST_PROXY/,
     );
   });
+  it('seeds nothing unless the site or the environment asks it to', () => {
+    assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).seedContent, false);
+    assert.equal(
+      resolveConfig({ seedContent: true }, { cwd: '/srv/site', env: {} }).seedContent,
+      true,
+    );
+    assert.equal(
+      resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_SEED_CONTENT: 'true' } }).seedContent,
+      true,
+    );
+    assert.equal(
+      resolveConfig(
+        { seedContent: true },
+        { cwd: '/srv/site', env: { GEEKITY_SEED_CONTENT: 'false' } },
+      ).seedContent,
+      false,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_SEED_CONTENT: 'sometimes' } }),
+      /GEEKITY_SEED_CONTENT/,
+    );
+  });
 });

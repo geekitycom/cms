@@ -1,0 +1,42 @@
+# Keep the build context small and keep host state out of the image.
+#
+# The build stage copies named paths only, so most of this is about the context
+# a workstation sends, not what lands in a layer. The secrets and the data
+# directories are listed anyway, because a file that never enters the context
+# cannot be copied in by a later COPY that is wider than it should be.
+
+# Version control and project management.
+.git
+.github
+.husky
+backlog
+
+# Installed and built output. The build stage installs from the lockfile and
+# builds for the target platform; a host's node_modules holds native binaries
+# for the wrong OS, and its dist/ may be stale.
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/coverage
+**/_site
+packages/cms/admin/static/editor.js
+*.tgz
+
+# Secrets.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Site state: the SQLite index, users, keys and image variants. None of it is
+# the image's; a container gets its own through the data volume.
+**/data
+
+# Editor and OS noise.
+.claude
+.DS_Store
+**/.DS_Store
+npm-debug.log*
+
+# The image files themselves.
+Dockerfile
+.dockerignore

@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { cp, mkdir, readdir, rename, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -68,8 +68,7 @@ export async function initSite(options: InitSiteOptions): Promise<InitSiteResult
 
   if (!(await isEmptyOrMissing(directory))) throw new DirectoryNotEmptyError(directory);
 
-  await mkdir(directory, { recursive: true });
-  await cp(SITE_TEMPLATE_DIR, directory, { recursive: true });
+  await copyTemplate('.', directory);
 
   for (const [packed, real] of DOTFILES) {
     await rename(path.join(directory, packed), path.join(directory, real));
@@ -87,6 +86,50 @@ export async function initSite(options: InitSiteOptions): Promise<InitSiteResult
   await writeFile(path.join(directory, 'pnpm-workspace.yaml'), pnpmSettings(), 'utf8');
 
   return { directory, files: (await readdir(directory)).sort() };
+}
+
+/** What {@link seedStarterContent} needs to know. */
+export interface SeedStarterContentOptions {
+  /** The site's content directory, absolute. */
+  contentDir: string;
+  /** The resolved base URL, written into the seeded `site.json` as its `url`. */
+  baseUrl: string;
+}
+
+/**
+ * Fill a missing or empty content directory with the starter site: the same
+ * `content/` that `geekity init` writes, copied from the same template by the
+ * same routine. `geekity serve` calls it when `seedContent` is on, which is
+ * how the Docker image boots a new box with an empty content volume.
+ *
+ * A directory counts as empty only when it has no entries at all. Anything
+ * else, even a lone dotfile, is left exactly as it is, so a mounted site is
+ * never written over. Returns whether it seeded.
+ */
+export async function seedStarterContent(options: SeedStarterContentOptions): Promise<boolean> {
+  const { contentDir, baseUrl } = options;
+  if (!(await isEmptyOrMissing(contentDir))) return false;
+
+  await copyTemplate('content', contentDir);
+
+  // The template's url is the localhost default. The settings screen shows
+  // this value, so it should be the address the site is actually served at.
+  const siteJson = path.join(contentDir, '_data', 'site.json');
+  const settings = JSON.parse(await readFile(siteJson, 'utf8')) as Record<string, unknown>;
+  settings['url'] = baseUrl;
+  await writeFile(siteJson, `${JSON.stringify(settings, undefined, 2)}\n`, 'utf8');
+
+  return true;
+}
+
+/**
+ * Copy part of the site template, `.` for the whole of it, into a directory,
+ * creating the directory first. The one copy routine both {@link initSite}
+ * and {@link seedStarterContent} go through.
+ */
+async function copyTemplate(part: string, destination: string): Promise<void> {
+  await mkdir(destination, { recursive: true });
+  await cp(path.join(SITE_TEMPLATE_DIR, part), destination, { recursive: true });
 }
 
 /**

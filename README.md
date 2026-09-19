@@ -11,7 +11,9 @@ site is its own repository that depends on the package.
 This file is the contributor guide: the workspace, the gates, CI and releasing.
 If you are **building a site** on the package, read
 [`packages/cms/README.md`](packages/cms/README.md) instead — it covers
-`geekity init`, the config options, the CLI, hooks and theme overrides.
+`geekity init`, the config options, the CLI, hooks and theme overrides. To
+run a site from the published Docker image, see
+[Deploying with Docker](#deploying-with-docker).
 
 ## Workspace layout
 
@@ -35,7 +37,9 @@ apps/demo/             private site that consumes the package via workspace:*
   themes/demo/       the theme this site wears: post.njk, style.css, theme.json
   eleventy.config.js re-exports the documented example config
   test/              boots the demo over HTTP, and builds it with Eleventy
-scripts/               pack-install-smoke.sh, the body of the CI job of the same name
+scripts/               pack-install-smoke.sh and docker-smoke.sh, the bodies of those CI jobs,
+                       and docker-build-push.sh, which publishes the image
+deploy/compose.yaml    the compose file a Docker deployment starts from
 backlog/               tasks, docs and decisions (Backlog.md)
 ```
 
@@ -58,21 +62,24 @@ pnpm install
 
 Run from the repository root.
 
-| Command              | What it does                                                              |
-| -------------------- | ------------------------------------------------------------------------- |
-| `pnpm install`       | Installs both workspace packages and links `apps/demo` to `packages/cms`. |
-| `pnpm dev`           | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`).         |
-| `pnpm start`         | Starts the demo site once, without watching.                              |
-| `pnpm build`         | Compiles `packages/cms` to `dist/` and bundles the admin editor.          |
-| `pnpm test`          | Runs the `node:test` suites in every package through `tsx`.               |
-| `pnpm test:coverage` | The same suites with `--experimental-test-coverage`.                      |
-| `pnpm test:11ty`     | Builds the fixtures and the demo content with Eleventy, comparing URLs.   |
-| `pnpm typecheck`     | `tsc --noEmit` across the workspace, tests included.                      |
-| `pnpm lint`          | Fans out to each package's lint script.                                   |
-| `pnpm lint:fix`      | The same, with eslint's fixes applied.                                    |
-| `pnpm format`        | Rewrites every file prettier owns.                                        |
-| `pnpm format:check`  | Fails if any of them is not already formatted.                            |
-| `pnpm clean`         | Removes build output.                                                     |
+| Command                  | What it does                                                              |
+| ------------------------ | ------------------------------------------------------------------------- |
+| `pnpm install`           | Installs both workspace packages and links `apps/demo` to `packages/cms`. |
+| `pnpm dev`               | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`).         |
+| `pnpm start`             | Starts the demo site once, without watching.                              |
+| `pnpm build`             | Compiles `packages/cms` to `dist/` and bundles the admin editor.          |
+| `pnpm test`              | Runs the `node:test` suites in every package through `tsx`.               |
+| `pnpm test:coverage`     | The same suites with `--experimental-test-coverage`.                      |
+| `pnpm test:11ty`         | Builds the fixtures and the demo content with Eleventy, comparing URLs.   |
+| `pnpm typecheck`         | `tsc --noEmit` across the workspace, tests included.                      |
+| `pnpm lint`              | Fans out to each package's lint script.                                   |
+| `pnpm lint:fix`          | The same, with eslint's fixes applied.                                    |
+| `pnpm format`            | Rewrites every file prettier owns.                                        |
+| `pnpm format:check`      | Fails if any of them is not already formatted.                            |
+| `pnpm clean`             | Removes build output.                                                     |
+| `pnpm docker:dry-run`    | Prints the image tags a Docker publish would push, and builds nothing.    |
+| `pnpm docker:build-push` | Builds the image for amd64 and arm64 and pushes it to ghcr.io.            |
+| `pnpm docker:smoke`      | Builds the image locally, boots it on empty volumes and checks it serves. |
 
 Package-scoped variants work too, for example
 `pnpm --filter @geekity/cms test` or `pnpm --filter demo dev`.
@@ -127,14 +134,15 @@ export default defineConfig({
 Every field is optional. Relative directories resolve against the working
 directory; absolute ones are used as given.
 
-| Field        | Default                   | Environment override        | Meaning                                                                                                                                                                                   |
-| ------------ | ------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `port`       | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on.                                                                                                                                                          |
-| `contentDir` | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                         |
-| `dataDir`    | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs. |
-| `themesDir`  | `<cwd>/themes`            | `GEEKITY_THEMES_DIR`        | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                       |
-| `baseUrl`    | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                |
-| `watch`      | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                              |
+| Field         | Default                   | Environment override        | Meaning                                                                                                                                                                                                                                                                                                      |
+| ------------- | ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `port`        | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on.                                                                                                                                                                                                                                                                             |
+| `contentDir`  | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                                                                                                                                            |
+| `dataDir`     | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs.                                                                                                                    |
+| `themesDir`   | `<cwd>/themes`            | `GEEKITY_THEMES_DIR`        | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                                                                                                                                          |
+| `baseUrl`     | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                                                                                                                                   |
+| `watch`       | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                                                                                                                                                 |
+| `seedContent` | `false`                   | `GEEKITY_SEED_CONTENT`      | When `geekity serve` starts and `contentDir` is missing or has no entries at all, fill it with the starter site `geekity init` writes, its `site.json` `url` set to the base URL. A directory with anything in it, even a dotfile, is never touched. Off so a site run from npm is never written to unasked. |
 
 The admin adds eight more:
 
@@ -450,6 +458,7 @@ Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
 | an archive's `feed/`   | The same three over one tag or category, e.g. `/tag/{tag}/feed/atom/`.         |
 | `/sitemap.xml`         | Every public URL with its `lastmod`, split into an index past 50,000 of them.  |
 | `/robots.txt`          | Everything but `/admin/`, and the sitemap's absolute URL.                      |
+| `/healthz`             | 200 when the site can serve, 503 when it cannot; see below.                    |
 | `/theme/…`             | The theme's own files, from its `static/` directory, cacheable and validated.  |
 | `/uploads/…`           | Files under `content/uploads/`, at the URLs an Eleventy build copies them to.  |
 | `/author/{username}/`  | One person's archive, paginated at `/author/{username}/page/2/`.               |
@@ -494,6 +503,30 @@ always win over a permalink that would collide with them.
 How many posts a listing page holds comes from `postsPerPage` in
 `content/_data/site.json`, and defaults to 10. The same file is the `site`
 global in every template.
+
+### Health check
+
+`GET /healthz` is the one URL a Docker `HEALTHCHECK`, dockge or an uptime
+monitor needs. It runs two checks: one query against the content index in
+`data/geekity.db`, and opening the content directory for reading. When both
+pass it answers 200:
+
+```json
+{ "status": "ok", "checks": { "database": "ok", "content": "ok" } }
+```
+
+When either fails it answers 503, with that check reading `"fail"` and
+`status` reading `"fail"`. A checker looks only at the status code, which is
+why a failure is never a 200 carrying `"fail"`. The body names each check and
+its outcome and nothing else: no paths, versions or error messages, since
+anybody can request it.
+
+The route is registered before federation, the admin and the public site, so a
+post or page whose permalink is `/healthz/` cannot shadow it. The response
+carries `Cache-Control: no-store`, sets no cookie, and the login throttle does
+not count it, so probing it every few seconds costs nothing but the two checks.
+The older `/_geekity/health` still answers `{ "status": "ok" }` without
+checking anything.
 
 ## The admin editor
 
@@ -1014,6 +1047,240 @@ renderer.renderDocument(document);
 Handlers reach the same renderer as `c.var.renderer`, alongside `c.var.store`
 and `c.var.config`.
 
+## Deploying with Docker
+
+The image `ghcr.io/geekitycom/cms` runs `geekity serve` over three directories
+under `/site`: `content/`, `data/` and, optionally, `themes/`. It runs as uid
+1000, listens on port 3000 and fills an empty `content/` with the starter site
+on its first start. [`deploy/compose.yaml`](deploy/compose.yaml) runs it as a
+compose stack. It is written for [dockge](https://github.com/louislam/dockge),
+but plain `docker compose` reads it the same way. Nothing else from this
+repository goes on the server.
+
+The steps below assume a Linux server with Docker, a stack directory of
+`/opt/stacks/geekity` (dockge's default layout), and a reverse proxy on the same
+machine that terminates TLS.
+
+### 1. Create the stack and its directories
+
+In dockge, create a stack called `geekity` and paste in `deploy/compose.yaml`.
+With plain compose, copy the file to `/opt/stacks/geekity/compose.yaml`.
+
+Then, in the stack directory, create `content/` and `data/` and give them to
+uid 1000 before the first start:
+
+```sh
+cd /opt/stacks/geekity
+mkdir -p content data
+sudo chown 1000:1000 content data
+```
+
+The container runs as uid 1000 and writes to both directories. If they are
+missing, Docker creates them owned by root and the site fails to start with
+`EACCES`. `content/` must be empty, or already hold a site: an empty one is
+filled with the starter site, and one with anything in it, even a dotfile, is
+left alone.
+
+To move an existing site in, copy its `content/` and `data/` here instead and
+`chown -R 1000:1000` them.
+
+### 2. Write the `.env`
+
+The `.env` sits beside `compose.yaml` (dockge edits it on the stack page).
+Compose reads it for the image tag and passes every line in it to the container.
+
+```sh
+# The image version to run. Required; there is no `latest` fallback.
+GEEKITY_TAG=0.3.0
+
+# The public address of the site. Required. Canonical URLs, feeds, ActivityPub
+# ids and the Secure flag on the session cookie all come from it, and the
+# starter site's site.json is written with it.
+GEEKITY_BASE_URL=https://blog.example.com
+
+# The port on 127.0.0.1 the reverse proxy connects to. Defaults to 3000.
+# GEEKITY_HOST_PORT=3000
+```
+
+Compose refuses to start the stack when `GEEKITY_TAG` or `GEEKITY_BASE_URL` is
+missing, and says which one.
+
+The compose file names three variables itself, and its values win over the
+`.env`:
+
+| Variable              | Value  | Why                                                                       |
+| --------------------- | ------ | ------------------------------------------------------------------------- |
+| `GEEKITY_BASE_URL`    | `.env` | Passed through, so compose can refuse to start without it.                |
+| `GEEKITY_TRUST_PROXY` | `true` | The client address comes from the proxy's `X-Forwarded-For`.              |
+| `GEEKITY_PORT`        | `3000` | The port mapping and the health check assume it. Use `GEEKITY_HOST_PORT`. |
+
+The image sets `GEEKITY_CONTENT_DIR`, `GEEKITY_DATA_DIR`, `GEEKITY_THEMES_DIR`
+and `GEEKITY_SEED_CONTENT`; leave them alone. Any other setting in
+[Configuration](#configuration) can go in the `.env`, for example
+`GEEKITY_UPLOAD_MAX_BYTES` or `GEEKITY_IMAGE_FORMATS=webp,avif`. Mail, comments
+and the rest of the site settings are set in the admin, not here.
+
+### 3. Start it and point the proxy at it
+
+Deploy the stack in dockge, or:
+
+```sh
+docker compose up -d
+docker compose ps       # (healthy) once /healthz answers 200
+```
+
+The port is published on `127.0.0.1` only. Docker writes its own firewall
+rules ahead of ufw and firewalld, so a port published on every interface would
+be reachable from the internet even with the firewall closed, and anyone
+connecting to it directly could put any address in `X-Forwarded-For`. Do not
+change the mapping to `3000:3000`.
+
+The proxy forwards to `http://127.0.0.1:3000`. Geekity reads the **first**
+address in `X-Forwarded-For`, so the proxy must replace that header with the
+address it saw rather than append to one the client sent. For nginx:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    client_max_body_size 10m;  # at least GEEKITY_UPLOAD_MAX_BYTES
+}
+```
+
+`GET /healthz` is also what an uptime monitor should poll; see
+[Health check](#health-check).
+
+### 4. Sign in for the first time
+
+A site with no users sends `/admin` to `/admin/setup`, where the first person
+to arrive creates the admin account. Do this as soon as the site is reachable.
+
+To create the account from the server instead, and close the setup screen
+before anyone else reaches it:
+
+```sh
+docker compose exec geekity geekity user add ada --email ada@example.com
+```
+
+It prompts for the password without echoing it. Run from the stack directory,
+`docker compose exec` finds the container by its service name, `geekity`; plain
+`docker exec -it <container> geekity user add ada` works as well. The command
+writes `data/users.json` through the same mount as the server, and the new
+account can sign in straight away.
+
+### 5. Bring a WordPress author across
+
+[Moving a site off the WordPress ActivityPub plugin](packages/cms/README.md#moving-a-site-off-the-wordpress-activitypub-plugin)
+describes the cutover. In a container, the user has to exist first, and the
+exported key pair is read from standard input so no copy of the private key is
+left inside the container:
+
+```sh
+docker compose exec geekity geekity user add ada
+docker compose exec -T geekity geekity import wordpress-actor ada \
+  --actor-id 'https://blog.example.com/?author=2' \
+  --wordpress-id 2 \
+  --keypair /dev/stdin < ada.keypair.json
+shred -u ada.keypair.json
+```
+
+`-T` stops compose allocating a terminal, which would swallow the redirected
+file. Left to itself, the import fetches the followers from the plugin on the
+actor id's origin. A saved followers file has to be copied in first:
+
+```sh
+docker compose cp followers.json geekity:/tmp/followers.json
+```
+
+and then passed as `--followers /tmp/followers.json`.
+
+### Backups
+
+Everything the site cannot rebuild is under the stack directory
+([Two directories](packages/cms/README.md#two-directories-content-and-data) in
+the package README has the full list):
+
+- **All of `content/`**: posts, pages, uploads, `site.json`, followers, the
+  inbox log and comments.
+- **`data/`, apart from what is derived.** `data/users.json` and `data/keys/`
+  matter most: the accounts, and the key pairs every follower has cached.
+  Losing the keys breaks federation. The rest (`mail.json`, `akismet.json`,
+  `contact/`, `comment-salt`, `notification-secret` and the other small files)
+  is credentials and records that are also not rebuilt.
+- **`compose.yaml` and `.env`**, so the stack can be recreated.
+
+`data/geekity.db` (with `-wal` and `-shm`) and `data/images/` are derived and
+need not be copied: the database is rebuilt on the next start, and an image
+variant the next time it is asked for. The site writes its files by renaming a
+finished copy over the old one, so a copy taken while it runs gets whole files;
+stop the stack first if the copy has to be of one moment. For example:
+
+```sh
+tar -C /opt/stacks -czf geekity-$(date +%F).tar.gz \
+  --exclude='geekity/data/geekity.db*' --exclude='geekity/data/images' geekity
+```
+
+Restore by unpacking it into `/opt/stacks`, checking `content/` and `data/` are
+still owned by uid 1000, and starting the stack.
+
+### Upgrading and rolling back
+
+Every published version is a tag (see
+[Publishing the Docker image](#publishing-the-docker-image)). To upgrade, set
+`GEEKITY_TAG` in the `.env` to the new version and redeploy, which in dockge is
+Save then Deploy, and with plain compose is:
+
+```sh
+docker compose pull
+docker compose up -d
+```
+
+Database migrations run on start, so there is no other step. Read the
+[changelog](packages/cms/CHANGELOG.md) for the versions in between first; a
+breaking change carries a note there.
+
+To roll back, set `GEEKITY_TAG` to the version you came from and redeploy the
+same way. If the newer version migrated the database, the older one refuses to
+start and says the database was written by a newer `@geekity/cms` (the logs in
+dockge, or `docker compose logs`, show it). The database is a cache, so rebuild
+it with the old version:
+
+```sh
+docker compose stop
+docker compose run --rm geekity geekity rebuild
+docker compose start
+```
+
+`geekity rebuild` refuses to run while the server has the database open, so
+`docker compose exec` will not do; the one-off container from `run` uses the
+same image, `.env` and mounts with the server stopped. A rebuild signs everyone
+out; [what else it costs](#what-is-in-the-database-and-what-a-rebuild-loses) is
+listed above. The same three commands fix a damaged database.
+
+### A custom theme
+
+With no `theme` in `content/_data/site.json`, the site wears the default theme
+that ships in the image. To use one of your own:
+
+1. Create `themes/` in the stack directory and put the theme in it, one
+   directory per theme with a `theme.json` in it (see [The theme](#the-theme)):
+
+   ```sh
+   mkdir -p themes
+   cp -r ~/my-theme themes/my-theme
+   sudo chown -R 1000:1000 themes
+   ```
+
+2. Uncomment the `./themes:/site/themes:ro` line under `volumes` in
+   `compose.yaml` and redeploy. The site only reads this directory, so it is
+   mounted read-only.
+3. In the admin, choose the theme on **Appearance > Themes**. That writes
+   `theme` into `site.json`, and it takes effect on the next request.
+
+A theme can replace a single template or `style.css` and take everything else
+from the default theme.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every pull request and every push to `main`.
@@ -1028,6 +1295,7 @@ Each gate is its own job so it can be named as a required status check:
 | `build`        | `pnpm build`.                                          |
 | `test-11ty`    | `pnpm test:11ty`, the Eleventy compatibility suite.    |
 | `pack-install` | `scripts/pack-install-smoke.sh`.                       |
+| `docker-smoke` | Builds the image, then `scripts/docker-smoke.sh`.      |
 | `coverage`     | `pnpm test:coverage`, summary uploaded as an artifact. |
 | `pr-title`     | The pull request title, as a Conventional Commit.      |
 
@@ -1059,6 +1327,25 @@ scripts/pack-install-smoke.sh          # or: … /some/scratch/directory
 The script builds the package first, makes its scratch directory, and removes
 it and the tarball on the way out however it exits. `GEEKITY_SMOKE_PORT`
 changes the port it boots on, which defaults to 3456.
+
+`docker-smoke` builds the Docker image for `linux/amd64` on an amd64 runner,
+loads it into the runner's Docker and pushes it nowhere, with the buildx GitHub
+Actions cache keeping the rebuild quick. `scripts/docker-smoke.sh` then starts
+it on two fresh, empty named volumes for `/site/content` and `/site/data`,
+waits for `GET /healthz` to answer 200, and checks that `/` is the seeded
+starter site in the default theme and that `/theme/style.css` is byte for byte
+`packages/cms/themes/default/static/style.css`. A Dockerfile that does not
+build, a container that exits, or a site that does not answer fails the job,
+and the container's log is printed. On a laptop, with Docker running:
+
+```sh
+pnpm docker:smoke                  # builds linux/amd64 from the Dockerfile
+GEEKITY_SMOKE_PLATFORM=linux/arm64 pnpm docker:smoke   # native on Apple silicon
+pnpm docker:smoke some-image:tag   # tests an image that is already built
+```
+
+The script removes its container, its volumes and any image it built however it
+exits.
 
 `pr-title` exists because a squash merge takes the pull request title as the
 commit message, and release-please reads that message. It accepts the types and
@@ -1126,7 +1413,8 @@ tracked.
    release-please runs again, sees its own release commit, and creates the git
    tag and the GitHub release.
 4. Nothing is published. When the maintainer wants the release on npm they
-   follow [Publishing to npm](#publishing-to-npm) below.
+   follow [Publishing to npm](#publishing-to-npm) below, and for the Docker
+   image [Publishing the Docker image](#publishing-the-docker-image).
 
 The bumps are the pre-1.0 rules of decision-7, configured in
 `release-please-config.json`: `fix` takes a patch, `feat` takes a minor, and
@@ -1171,6 +1459,49 @@ a scoped package. Log in first with `npm login`; the npm scope `@geekity` must
 be owned by the project (decision-6). The `pack-install` CI job has already
 proven the tarball installs and boots, so the publish itself is the only
 untested step.
+
+### Publishing the Docker image
+
+The image is `ghcr.io/geekitycom/cms`, built from the `Dockerfile` at the
+repository root for `linux/amd64` and `linux/arm64`. CI never pushes it:
+GitHub's runners are amd64 only and the machine a site runs on may be arm64, so
+a CI publish could ship only half of what is needed. A maintainer publishes it
+from a workstation with `scripts/docker-build-push.sh`. What CI does do is
+build the amd64 image on every pull request and boot it (the `docker-smoke`
+job), so a broken Dockerfile fails on its pull request rather than at release.
+
+Run it after a release, once the release pull request is merged:
+
+```sh
+git checkout main
+git pull
+pnpm docker:dry-run          # check the version and tags first
+pnpm docker:build-push       # pushes <version> and latest
+pnpm docker:build-push beta  # the same, plus a custom tag
+```
+
+The version tag is read from `packages/cms/package.json`, which is why the
+pull comes first: release-please bumps it in the release pull request, so main
+right after the merge is the tagged commit and carries the new version.
+
+The script refuses to run from anywhere but the repository root. It checks that
+Docker is running and that you are logged in to ghcr.io (it runs
+`docker login ghcr.io` if the Docker config has no entry for it; the password is
+a GitHub personal access token with `write:packages`), then runs the quality
+gates `pnpm lint`, `pnpm format:check`, `pnpm typecheck` and `pnpm test`. A
+failing gate stops it before anything is built. It then builds both platforms
+with `--pull --no-cache` on a buildx builder called `multiplatform`, which it
+creates with the `docker-container` driver the first time, and pushes every tag
+as one manifest list. `--dry-run` prints the image, the version and the tags,
+and builds, pushes, logs in and runs nothing.
+
+Confirm the push carried both platforms:
+
+```sh
+docker buildx imagetools inspect ghcr.io/geekitycom/cms:<version>
+```
+
+The output lists a manifest for `linux/amd64` and one for `linux/arm64`.
 
 ### Repository secrets
 

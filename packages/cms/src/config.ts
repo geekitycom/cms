@@ -191,6 +191,17 @@ export interface GeekityConfig {
    */
   trustProxy?: boolean;
   /**
+   * Fill a missing or empty content directory with the starter site
+   * `geekity init` writes, when `geekity serve` starts. Default `false`.
+   * Overridden by `GEEKITY_SEED_CONTENT`.
+   *
+   * Off by default so a site run from npm never has content written that it
+   * did not ask for. The Docker image turns it on, because its content volume
+   * is empty on a new box. A directory with anything in it at all, even a lone
+   * dotfile, is never touched.
+   */
+  seedContent?: boolean;
+  /**
    * Called for every `created`, `updated` and `deleted` the index records.
    *
    * The boot scan reports a cold index as a directory full of creations, so a
@@ -276,6 +287,7 @@ export interface ResolvedConfig {
   loginAttempts: number;
   loginLockout: number;
   trustProxy: boolean;
+  seedContent: boolean;
   onDocumentChange: DocumentChangeHook | undefined;
   onPublish: DocumentChangeHook | undefined;
   /**
@@ -406,6 +418,12 @@ export function resolveConfig(
       'GEEKITY_TRUST_PROXY',
       env['GEEKITY_TRUST_PROXY'],
       config.trustProxy,
+      false,
+    ),
+    seedContent: resolveBoolean(
+      'GEEKITY_SEED_CONTENT',
+      env['GEEKITY_SEED_CONTENT'],
+      config.seedContent,
       false,
     ),
     onDocumentChange: config.onDocumentChange,

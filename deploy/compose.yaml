@@ -1,0 +1,99 @@
+# A Geekity site as a dockge stack.
+#
+# Dockge is a web UI over docker compose. Create a stack, paste this file in as
+# its compose.yaml and put the .env beside it (dockge has an editor for both).
+# There is no checkout of this repository on the server, so the image is
+# pulled from ghcr.io and never built there.
+#
+# Before the first start, in the stack directory (for example
+# /opt/stacks/geekity), create the two directories the site keeps its files in
+# and give them to uid 1000, the user the container runs as:
+#
+#   mkdir -p content data && sudo chown 1000:1000 content data
+#
+# Docker creates a missing bind-mount source owned by root, and the site then
+# fails to start with EACCES. An empty content/ is filled with the starter
+# site on the first start.
+#
+# The .env needs two lines at least:
+#
+#   GEEKITY_TAG=0.3.0
+#   GEEKITY_BASE_URL=https://example.com
+#
+# See README.md, "Deploying with Docker".
+
+services:
+  geekity:
+    # Pinned to a version from .env, and required: there is no `latest`
+    # fallback, because rolling back means naming the version you came from.
+    image: ghcr.io/geekitycom/cms:${GEEKITY_TAG:?set GEEKITY_TAG in .env to the version to run}
+    restart: unless-stopped
+
+    # A small init as PID 1 reaps zombies and forwards signals to node.
+    init: true
+
+    # Deriving the resized copies of an upload with sharp takes memory in
+    # proportion to the image; 1g leaves room for a large photograph.
+    mem_limit: 1g
+    pids_limit: 256
+    security_opt: ['no-new-privileges:true']
+    cap_drop: [ALL]
+
+    # The json-file driver keeps every line forever unless it is told not to.
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+    ports:
+      # 127.0.0.1 only. Docker writes its own firewall rules ahead of ufw and
+      # firewalld, so publishing on every interface would put the site on the
+      # internet beside the reverse proxy instead of behind it. With
+      # GEEKITY_TRUST_PROXY on, a direct client could then name any address in
+      # X-Forwarded-For and walk past the login throttle.
+      #
+      # The container always listens on 3000 (GEEKITY_PORT below); only the
+      # host side is configurable.
+      - '127.0.0.1:${GEEKITY_HOST_PORT:-3000}:3000'
+
+    # Every variable in .env reaches the container, so any GEEKITY_* setting in
+    # README.md, "Configuration", can be set there.
+    env_file:
+      - .env
+
+    # Values that belong to running in this container, not to the operator.
+    # `environment` wins over `env_file`.
+    environment:
+      GEEKITY_BASE_URL: ${GEEKITY_BASE_URL:?set GEEKITY_BASE_URL in .env to the public https URL}
+      # The reverse proxy in front terminates TLS and sets X-Forwarded-For.
+      GEEKITY_TRUST_PROXY: 'true'
+      # Fixed so the port mapping above and the healthcheck agree with it. A
+      # GEEKITY_PORT or PORT in .env would otherwise move the server.
+      GEEKITY_PORT: '3000'
+
+    volumes:
+      # Must exist and be owned by uid 1000 before the first start.
+      - ./content:/site/content
+      - ./data:/site/data
+      # Optional: a directory of site themes, one subdirectory per theme. The
+      # site only reads it. Uncomment once ./themes exists.
+      # - ./themes:/site/themes:ro
+
+    # The image carries the same check. It is repeated here so it is visible in
+    # the stack. Only the status code counts: /healthz answers 503 when the
+    # site cannot serve. The port is read inside node on purpose: compose would
+    # substitute a `$PORT` here from the host's environment.
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:'+(process.env.GEEKITY_PORT||process.env.PORT||3000)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 5s

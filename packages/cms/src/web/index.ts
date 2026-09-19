@@ -177,6 +177,7 @@ export {
   NAVIGATION_ORDER_KEY,
 } from './navigation.ts';
 export type { MenuItem, NavigationItem, NavigationMenuOptions } from './navigation.ts';
+export { HEALTH_PATH, mountHealth } from './health.ts';
 export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
 export { recentPosts, RECENT_POSTS, startOfMonth } from './recent.ts';

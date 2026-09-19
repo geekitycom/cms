@@ -18,7 +18,7 @@ import { importWordPressActor } from './federation/import-wordpress.ts';
 import type { ImportWordPressActorReport } from './federation/import-wordpress.ts';
 import { createCms } from './index.ts';
 import type { GeekityConfig } from './config.ts';
-import { initSite, ownManifest } from './init.ts';
+import { initSite, ownManifest, seedStarterContent } from './init.ts';
 
 export type Command =
   'serve' | 'init' | 'sync' | 'rebuild' | 'user' | 'import' | 'help' | 'version';
@@ -575,9 +575,25 @@ function databaseInUse(dataDir: string): boolean {
 const SQLITE_BUSY = 5;
 const SQLITE_LOCKED = 6;
 
-/** `geekity serve`: the default. Runs until it is signalled. */
+/**
+ * `geekity serve`: the default. Runs until it is signalled.
+ *
+ * With `seedContent` on, a missing or empty content directory is given the
+ * starter site before the CMS opens it, so a new box boots into something to
+ * show and the setup screen. It happens here rather than in `createCms` so a
+ * site that builds its own server never has content written for it.
+ */
 async function serveCommand(configPath: string | undefined): Promise<number> {
-  const cms = createCms(await loadConfig(process.cwd(), configPath));
+  const config = await loadConfig(process.cwd(), configPath);
+  const resolved = resolveConfig(config);
+  if (
+    resolved.seedContent &&
+    (await seedStarterContent({ contentDir: resolved.contentDir, baseUrl: resolved.baseUrl }))
+  ) {
+    process.stdout.write(`Seeded ${resolved.contentDir} with the starter site\n`);
+  }
+
+  const cms = createCms(config);
   const { port } = await cms.serve();
   process.stdout.write(`Geekity is serving ${cms.config.baseUrl} on port ${String(port)}\n`);
 
