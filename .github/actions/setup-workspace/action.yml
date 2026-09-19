@@ -12,9 +12,11 @@ description: Installs the pinned pnpm and the requested Node, then runs a frozen
 
 inputs:
   node-version:
-    description: Node version to install. `24` resolves to the latest 24.x.
+    description: >-
+      Node version to install, overriding `.node-version`. Leave it empty for
+      the development target that file pins; `26` resolves to the latest 26.x.
     required: false
-    default: '24'
+    default: ''
 
 runs:
   using: composite
@@ -23,7 +25,9 @@ runs:
 
     - uses: actions/setup-node@v7
       with:
+        # `node-version` wins when both are set, so the input overrides the file.
         node-version: ${{ inputs.node-version }}
+        node-version-file: .node-version
         cache: pnpm
 
     # The root `prepare` script is `husky && pnpm build`. husky is happy in a

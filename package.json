@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Workspace root for Geekity CMS: the published @geekity/cms package and a demo site that consumes it.",
   "license": "MIT",
-  "packageManager": "pnpm@11.25.0",
+  "packageManager": "pnpm@12.4.2",
   "engines": {
     "node": ">=24"
   },
