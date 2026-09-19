@@ -50,6 +50,7 @@ import {
   createRenderer,
   createSiteDataSource,
   createThemeSource,
+  mountHealth,
   mountPublicSite,
   recentPosts,
   themeName,
@@ -1655,6 +1656,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
   app.use('*', baselineSecurityHeaders);
 
   app.get('/_geekity/health', (c) => c.json({ status: 'ok' }));
+
+  // The health check a container orchestrator or an uptime monitor probes
+  // (TASK-87). It goes on before federation, the admin and the public site,
+  // so no permalink can ever shadow it.
+  mountHealth(app);
 
   // Federation goes on first. It answers its own paths and falls through on
   // every other, so putting it in front costs the rest of the app nothing and

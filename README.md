@@ -450,6 +450,7 @@ Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
 | an archive's `feed/`   | The same three over one tag or category, e.g. `/tag/{tag}/feed/atom/`.         |
 | `/sitemap.xml`         | Every public URL with its `lastmod`, split into an index past 50,000 of them.  |
 | `/robots.txt`          | Everything but `/admin/`, and the sitemap's absolute URL.                      |
+| `/healthz`             | 200 when the site can serve, 503 when it cannot; see below.                    |
 | `/theme/…`             | The theme's own files, from its `static/` directory, cacheable and validated.  |
 | `/uploads/…`           | Files under `content/uploads/`, at the URLs an Eleventy build copies them to.  |
 | `/author/{username}/`  | One person's archive, paginated at `/author/{username}/page/2/`.               |
@@ -494,6 +495,30 @@ always win over a permalink that would collide with them.
 How many posts a listing page holds comes from `postsPerPage` in
 `content/_data/site.json`, and defaults to 10. The same file is the `site`
 global in every template.
+
+### Health check
+
+`GET /healthz` is the one URL a Docker `HEALTHCHECK`, dockge or an uptime
+monitor needs. It runs two checks: one query against the content index in
+`data/geekity.db`, and opening the content directory for reading. When both
+pass it answers 200:
+
+```json
+{ "status": "ok", "checks": { "database": "ok", "content": "ok" } }
+```
+
+When either fails it answers 503, with that check reading `"fail"` and
+`status` reading `"fail"`. A checker looks only at the status code, which is
+why a failure is never a 200 carrying `"fail"`. The body names each check and
+its outcome and nothing else: no paths, versions or error messages, since
+anybody can request it.
+
+The route is registered before federation, the admin and the public site, so a
+post or page whose permalink is `/healthz/` cannot shadow it. The response
+carries `Cache-Control: no-store`, sets no cookie, and the login throttle does
+not count it, so probing it every few seconds costs nothing but the two checks.
+The older `/_geekity/health` still answers `{ "status": "ok" }` without
+checking anything.
 
 ## The admin editor
 
