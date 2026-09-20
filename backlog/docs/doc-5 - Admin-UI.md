@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-20 10:44'
+updated_date: '2026-09-20 13:07'
 ---
 # Admin UI
 
@@ -30,6 +30,7 @@ know whether it is the only one of its kind.
 | Messages   | All messages                                 |
 | Appearance | Themes                                       |
 | Users      | All users, Add new                           |
+| Tools      | Content index                                |
 | Settings   | General, Reading, Permalinks, Discussion, Email, Federation |
 | Federation | Followers                                    |
 
@@ -69,6 +70,7 @@ instead of becoming a sliver.
 | `/admin/settings/email` | the mail provider, the From line and reply-to, the contact address, the credential and the test message |
 | `/admin/settings/federation` | the actor handle and type, and the relays the site subscribes to |
 | `/admin/appearance/themes` | the packaged theme and the site's own, with the active one marked and an Activate on every other |
+| `/admin/tools` | Tools > Content index: what the index holds, and the button that empties it and reads every file again on the running site (`POST /admin/tools/rebuild-index`, behind a confirm step) |
 | `/admin/users` | list, edit each user's public profile, set their email, which notices go to it and how often, change your own password (single role: admin) |
 | `/admin/users/new` | the add form, Users > Add new |
 | `/admin/federation` | follower list, recent inbox activity, manual re-deliver |

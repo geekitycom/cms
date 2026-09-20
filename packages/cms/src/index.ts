@@ -1657,6 +1657,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('renderer', renderer);
     c.set('conversation', conversation);
     c.set('announce', (change) => content.announce(change));
+    c.set('rescan', () => content.sync());
     c.set('delivery', delivery);
     c.set('relays', relays);
     c.set('webmentions', webmentions);

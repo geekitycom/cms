@@ -1,10 +1,11 @@
 ---
 id: TASK-95
 title: 'Rebuild the content index from the admin, without stopping the server'
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@claude'
 created_date: '2026-09-19 23:32'
-updated_date: '2026-09-20 12:20'
+updated_date: '2026-09-20 13:10'
 labels:
   - admin
   - web
@@ -44,11 +45,177 @@ Open decisions for whoever builds it:
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A ContentStore.clear() empties documents, document_tags, document_categories and documents_fts, proven by a test that indexes documents, clears, and finds the index and a full-text search both empty
-- [ ] #2 An admin action rebuilds the index in place: clear, then rebuildFederationIndexes, rebuildCommentIndexes and content.sync(), proven by a test that corrupts or empties the index behind a running CMS and finds every post served again afterwards
-- [ ] #3 The session that started the rebuild is still signed in when it finishes, and the delivery log, ap_relays rows and the cms_state scheduler watermark all survive it, proven by a test
-- [ ] #4 The rebuild federates nothing: no delivery, webmention or feed notification is sent for a document the scan re-indexes, proven by a test
-- [ ] #5 The action is behind a confirm step, in the shape admin/taxonomy.ts:143 uses for a merge, and a second rebuild started while one is running is refused rather than run concurrently
-- [ ] #6 geekity rebuild is unchanged and still refuses while the database is in use
-- [ ] #7 The README documents the admin action, and the Deploying with Docker section points at it instead of leading with the stop-and-run-rm route
+- [x] #1 A ContentStore.clear() empties documents, document_tags, document_categories and documents_fts, proven by a test that indexes documents, clears, and finds the index and a full-text search both empty
+- [x] #2 An admin action rebuilds the index in place: clear, then rebuildFederationIndexes, rebuildCommentIndexes and content.sync(), proven by a test that corrupts or empties the index behind a running CMS and finds every post served again afterwards
+- [x] #3 The session that started the rebuild is still signed in when it finishes, and the delivery log, ap_relays rows and the cms_state scheduler watermark all survive it, proven by a test
+- [x] #4 The rebuild federates nothing: no delivery, webmention or feed notification is sent for a document the scan re-indexes, proven by a test
+- [x] #5 The action is behind a confirm step, in the shape admin/taxonomy.ts:143 uses for a merge, and a second rebuild started while one is running is refused rather than run concurrently
+- [x] #6 geekity rebuild is unchanged and still refuses while the database is in use
+- [x] #7 The README documents the admin action, and the Deploying with Docker section points at it instead of leading with the stop-and-run-rm route
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+The three open decisions, settled before anything is written:
+
+1. **Where it lives: a top-level Tools section, between Users and Settings,
+   with one child, Content index, at `/admin/tools`.** Not the seventh
+   Settings child the description suggested. Settings' children *are* the
+   settings pages — `settings-pages.test.ts` asserts exactly that, and a
+   settings page is one shared form with a Save button, which a button that
+   runs a job is not. WordPress classic, which `menu.ts` names as the shape of
+   this menu, has a top-level Tools for precisely this kind of thing, in
+   precisely that position, and it is where the import command and a site
+   health screen would join later. The child's URL is `/admin/tools` itself,
+   the way General is `/admin/settings` itself.
+2. **The clear and the scan are not one transaction.** One `ContentStore`
+   connection serves every request, so an open write transaction is not
+   isolation: a save made by somebody else during the scan would land *inside*
+   the rebuild's transaction and be rolled back with it if the scan threw.
+   `clear()` is its own transaction; the scan runs as the boot scan does. The
+   404 window between them is named on the confirm screen.
+3. **The scan runs inside the POST, with no progress feedback**, as the
+   taxonomy rewrite does. `node:sqlite` is synchronous, so moving it off the
+   request would block the same event loop from somewhere the admin cannot
+   see; and progress would need state the database is not allowed to hold
+   (decision-9). The flash reports what the scan did.
+
+Then, test first for each criterion:
+
+1. `ContentStore.clear()` — empties `documents`, `document_tags`,
+   `document_categories` and `documents_fts` in one transaction. Test in
+   `content/store.test.ts`: index documents with tags, categories and words,
+   clear, assert `counts()`, `listPaths()`, `listTags()`, `listCategories()`
+   and `search()` are all empty.
+2. `rescan` on the request context (`c.set('rescan', () => content.sync())`),
+   so a handler can run the boot scan; `admin/tools.ts` holds
+   `rebuildContentIndex({ store, admin, contentDir, rescan })`: clear,
+   `rebuildFederationIndexes`, `rebuildCommentIndexes`, then the scan.
+3. `mountToolsScreen` in `admin/tools.ts`, `pages/tools/content-index.njk`,
+   the menu entry, the mount in `routes.ts`, the exports.
+4. `admin/tools.test.ts` over HTTP through the signed-in harness: the screen,
+   the confirm step, a rebuild after the index is emptied behind the running
+   CMS, the session and the `ap_deliveries`/`ap_relays`/`cms_state` rows
+   surviving it, nothing federated, and a second rebuild refused while one
+   runs.
+5. `cli-rebuild.test.ts` is left alone and still passes: the CLI command is
+   not touched.
+6. README: a section under Keeping the index in step, and the Docker section
+   pointing at the admin action for a routine repair while keeping
+   stop-and-run-rm for the database this version cannot open. doc-5 and
+   `menu.test.ts` learn the new section.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+## The three decisions
+
+**1. Where it lives: a new top-level Tools section, not a seventh Settings child.**
+`menu.ts` says the menu is WordPress classic, and WordPress keeps a top-level
+Tools between Users and Settings for exactly this kind of thing — a job you
+run, not a setting you type. Settings' children are the settings pages, an
+invariant `settings-pages.test.ts` asserts outright ("are the six the Settings
+menu lists"); a Tools page there would either be a `SettingsPage` with no
+fields, rendering a Save button over an empty form and a POST that writes
+nothing, or a child that breaks the rule the test states. Tools is also where
+the next such screen goes — an import, a site health page — and it shows the
+index's counts, which is how somebody notices the index is wrong at all. The
+section has one child, Content index, whose URL is `/admin/tools` itself, the
+way General is `/admin/settings` itself. The cost was one existing assertion
+(`menu.test.ts`, the section-label list) and two rows in doc-5.
+
+**2. The clear and the scan are not one transaction.** One `ContentStore`
+connection serves every request, so a write transaction held open across the
+scan would not isolate the rebuild from anybody: another request's save during
+it would land *inside* the rebuild's transaction and be rolled back with it if
+the scan threw. `clear()` is one transaction over its four tables; the scan
+runs outside it, exactly as the boot scan does. The 404 window that leaves is
+named on the confirm screen, in the sentence the admin has to read before the
+button appears.
+
+**3. The scan runs inside the POST, with no progress feedback.** Same shape as
+the taxonomy rewrite. `node:sqlite` is synchronous, so moving the scan off the
+request would block the same event loop from somewhere the admin cannot see,
+and progress would need state the database is not allowed to hold
+(decision-9). What the admin gets instead is the confirm screen saying the
+scan takes a moment, and a flash that reports what it did: files scanned,
+indexed, dropped, failed, and the followers, inbox activities and comments
+read back.
+
+## What was built
+
+- `ContentStore.clear()` (`content/store.ts`): one transaction over
+  `documents_fts`, `document_tags`, `document_categories` and `documents`. All
+  four by name — the term tables would cascade, but a virtual table has no
+  foreign key to cascade through, and a clear that depended on a pragma for
+  half of what it empties would be a clear that half worked.
+- `rescan` on the request context (`env.ts`, `index.ts`): `() => content.sync()`,
+  so a handler can run the very scan boot runs rather than growing a second
+  thing that knows how to read a content directory.
+- `admin/tools.ts`: `rebuildContentIndex()` — clear, `rebuildFederationIndexes`,
+  `rebuildCommentIndexes`, then the scan, in boot's order — and
+  `mountToolsScreen()`, which is the screen, the confirm step and the one-at-a-
+  time guard (the in-flight promise is held in the mount's closure; a second
+  press is flashed a refusal and redirected, not queued).
+- `admin/pages/tools/content-index.njk`, `ADMIN_TEMPLATES.toolsContentIndex`,
+  the `tools` section in `menu.ts`, the mount in `routes.ts`.
+- README: a "Rebuilding the index from the admin" subsection under Keeping the
+  index in step, a pointer from the two-directories table, and the Docker
+  rollback passage now says the stop-and-run-rm route is only for a database
+  the running version will not open. `packages/cms/README.md`: the same split
+  under Starting the database again, the two new routes in the route table,
+  and eleven sections in the menu paragraph. doc-5: the Tools row and the
+  `/admin/tools` screen.
+
+## Verification
+
+- `pnpm build && pnpm test && pnpm typecheck && pnpm lint && pnpm format:check`
+  all pass: 2047 + 30 tests, 0 failures.
+- Over real HTTP against `geekity serve` on port 3799 with `GEEKITY_WATCH=false`
+  — the container case: a post file written behind the running site answered
+  404; the unconfirmed POST rendered "Rebuild the index now?" and left it at
+  404; the confirmed POST answered 303 and the post answered 200; the flash
+  read "Rebuilt the index from the files. Scanned 1 file: 1 indexed, 0 dropped,
+  0 failed. Read back 0 followers, 0 inbox activities and 0 comments."; the
+  admin was still signed in for all of it. `geekity rebuild` against that same
+  live site refused with its usual message and exited 1. Server stopped after.
+- The AC #4 test carries its own control: on the same site, with the same fetch
+  stub, the same post trashed through the admin *does* reach the follower. The
+  silence during the rebuild is therefore the silence of a site that could
+  have spoken.
+
+## One existing test touched
+
+`packages/cms/src/admin/menu.test.ts`, "reads the way doc-5 lists it": `'Tools'`
+added to the expected section labels, between Users and Settings. Nothing else
+in it changed, and doc-5 was updated to match. No other existing test needed a
+line.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Tools > Content index rebuilds the derived index in place, on a site that is
+serving: `ContentStore.clear()` empties the four tables in one transaction,
+then `rebuildFederationIndexes`, `rebuildCommentIndexes` and the boot scan
+(reached through a new `rescan` on the request context) read `content/` back.
+Nothing is deleted and no connection is replaced, so the admin stays signed in
+and the delivery log, the relay handshakes and the scheduler's watermark are
+kept; every change the scan makes carries `origin: 'scan'`, so no follower,
+linked page or feed server is told. The action is behind a confirm step that
+names the 404 window, and a second press while one is running is refused. It
+lives in a new top-level Tools section — where WordPress keeps one, between
+Users and Settings — rather than as a seventh settings page, because Settings'
+children are the settings pages and this is a job rather than a form.
+`geekity rebuild` is untouched and stays the door for a database this version
+will not open.
+
+Verified with `pnpm build && pnpm test && pnpm typecheck && pnpm lint &&
+pnpm format:check` (2047 + 30 tests, 0 failures) and over real HTTP against
+`geekity serve` with the watcher off: a post written behind the running site
+404ed, the unconfirmed POST only offered the rebuild, the confirmed one
+redirected and the post was served, and `geekity rebuild` against that same
+live site still refused and exited 1.
+<!-- SECTION:FINAL_SUMMARY:END -->

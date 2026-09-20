@@ -53,6 +53,7 @@ export const ADMIN_TEMPLATES = {
   settingsDiscussion: 'pages/settings/discussion.njk',
   settingsEmail: 'pages/settings/email.njk',
   settingsFederation: 'pages/settings/federation.njk',
+  toolsContentIndex: 'pages/tools/content-index.njk',
   usersList: 'pages/users/list.njk',
   usersNew: 'pages/users/new.njk',
   usersEdit: 'pages/users/edit.njk',

@@ -64,6 +64,24 @@ export interface ContentStore {
   upsertAll(documents: Iterable<Document>): void;
   /** Drop a document by path. Returns `false` when there was nothing to drop. */
   remove(path: string): boolean;
+  /**
+   * Empty the index: every document, its terms and its words.
+   *
+   * What a rebuild does before it reads the files again (TASK-95), and the
+   * counterpart of the `DELETE FROM documents` three migrations run for the
+   * same reason. The index is derived and the files are the source of truth
+   * (decision-1), so this loses nothing a scan cannot work out again — and it
+   * is the whole point: a row whose hash matches its file is a row a scan
+   * leaves alone, so nothing short of emptying the index makes it read
+   * everything.
+   *
+   * One transaction, so the four tables are never half cleared, and no wider
+   * than that: the scan that fills the index again runs outside it. One
+   * connection serves every request, so a transaction held open across a scan
+   * would not isolate the rebuild from anybody — it would swallow their writes
+   * into it.
+   */
+  clear(): void;
   /** The document at a content-relative path, or `undefined`. */
   getByPath(path: string): Document | undefined;
   /** The document a URL resolves to, or `undefined`. Permalinks are unique. */
@@ -692,6 +710,24 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       // Nothing cascades into a virtual table, so the words go by hand.
       statements.deleteText.run(contentPath);
       return statements.remove.run(contentPath).changes > 0;
+    },
+
+    clear() {
+      db.exec('BEGIN');
+      try {
+        // All four by name. The two term tables would go with the documents
+        // through their foreign keys, but a virtual table has none to cascade
+        // through — and a clear that depended on a pragma being on for half of
+        // what it empties would be a clear that half worked.
+        db.exec('DELETE FROM documents_fts');
+        db.exec('DELETE FROM document_tags');
+        db.exec('DELETE FROM document_categories');
+        db.exec('DELETE FROM documents');
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
     },
 
     getByPath(contentPath) {

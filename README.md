@@ -279,8 +279,9 @@ And two things under `data/` may be deleted at any time the site is stopped:
 Deleting either is safe with the site stopped: the next boot builds the
 database back out of the files with no manual step, and a request for a variant
 that is not there derives it and serves it. `geekity rebuild` does the database
-half on demand. There is no command for the images, because there is nothing to
-do: `rm -r data/images`.
+half on demand, and **Tools > Content index** in the admin does it [without
+stopping the site](#rebuilding-the-index-from-the-admin). There is no command
+for the images, because there is nothing to do: `rm -r data/images`.
 
 ### What is in the database, and what a rebuild loses
 
@@ -447,6 +448,35 @@ act on a rebuild should check `origin`. A `schedule` change carries no
 creation to everything downstream.
 
 Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
+
+### Rebuilding the index from the admin
+
+A scan leaves a row alone when its hash matches the file, which is the right
+rule almost always and the wrong one after the index and the files have come
+apart: content edited over ssh while the site was down, a `git pull` the
+watcher never saw, a database that was restored from an older backup than the
+content. **Tools > Content index** in the admin is the repair. It shows what
+the index holds — documents, followers, inbox activities, comments — and one
+button empties it and reads every file again, on the site as it is running.
+
+It is behind a confirm step, because between the emptying and the end of the
+scan the site answers 404 for documents whose files are perfectly fine: well
+under a second on a small site, longer on a large one, and it is serving the
+whole time. A second rebuild asked for while one is running is refused rather
+than started.
+
+Nothing is deleted and no connection is replaced, so the rebuild costs a site
+much less than the command below: you stay signed in, the delivery log, the
+relay handshakes and the scheduler's watermark are all kept, and a post that
+comes due during it is still announced. It also tells nobody: every change a
+scan makes carries `origin: 'scan'`, which delivery, the webmentions and the
+feed pings all ignore, so no follower, no linked page and no feed server hears
+about a post that was only re-indexed.
+
+`geekity rebuild` at the command line stays for the one case a screen cannot
+be the door for: a database this version refuses to open, where there is no
+site running to press a button in. See [A database this version cannot
+use](#a-database-this-version-cannot-use).
 
 ## The public site
 
@@ -1328,7 +1358,8 @@ To roll back, set `GEEKITY_TAG` to the version you came from and redeploy the
 same way. If the newer version migrated the database, the older one refuses to
 start and says the database was written by a newer `@geekity/cms` (the logs in
 dockge, or `docker compose logs`, show it). The database is a cache, so rebuild
-it with the old version:
+it with the old version — the one rebuild the admin cannot do, because there is
+no site running to press a button in:
 
 ```sh
 docker compose stop
@@ -1341,6 +1372,15 @@ docker compose start
 same image, `.env` and mounts with the server stopped. A rebuild signs everyone
 out; [what else it costs](#what-is-in-the-database-and-what-a-rebuild-loses) is
 listed above. The same three commands fix a damaged database.
+
+**Every other rebuild belongs in the admin.** When the index and the content
+files have come apart — content edited over ssh, a `git pull` while the stack
+was down, one of the two restored from a backup — **Tools > Content index**
+[reads every file again on the running site](#rebuilding-the-index-from-the-admin):
+no stopping the stack, no one-off container, nobody signed out, and none of the
+cost listed above. In a container the server is PID 1, so
+`docker exec <container> geekity rebuild` can never work; the admin is the door
+that is always open.
 
 ### A custom theme
 

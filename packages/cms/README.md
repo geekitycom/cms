@@ -131,6 +131,16 @@ It refuses while the site is running, because deleting the file under a live
 server would leave it writing to a database nothing can find. Stop the site
 first. A file that will not parse is reported and exits `1`, as with `sync`.
 
+That is why it is not the usual repair. **Tools > Content index** in the admin
+empties the index and reads every file again in place, on the live connections:
+no downtime, nobody signed out, and the delivery log, the relay handshakes and
+the scheduler's watermark all kept. It is behind a confirm step, because the
+site answers 404 for its documents between the emptying and the end of the
+scan, and it federates nothing — a change a scan makes carries `origin: 'scan'`,
+which delivery, the webmentions and the feed pings ignore. Use the command for
+the one case the screen cannot be the door for: a database this version refuses
+to open, where there is no site running to press a button in.
+
 ### Creating an admin from the command line
 
 `geekity user add <username>` writes a user straight into `data/users.json`,
@@ -1470,6 +1480,8 @@ shadow the login form.
 | `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                             |
 | `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                           |
 | `/admin/appearance/themes`                       | Appearance > Themes: the themes on disk. `POST` activates the one named.          |
+| `/admin/tools`                                   | Tools > Content index: what the index holds, and the button that rebuilds it.     |
+| `/admin/tools/rebuild-index`                     | `POST` only. Offers the rebuild, then reads every file again on the live site.    |
 | `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language.        |
 | `/admin/settings/reading`                        | Posts per page, the site menu, the notify server.                                 |
 | `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.           |
@@ -1503,8 +1515,8 @@ read, so it survives exactly one redirect.
 
 ### The menu
 
-The menu is WordPress classic: ten sections — Dashboard, Posts, Pages, Media,
-Comments, Messages, Appearance, Users, Settings, Federation — each a heading
+The menu is WordPress classic: eleven sections — Dashboard, Posts, Pages, Media,
+Comments, Messages, Appearance, Users, Tools, Settings, Federation — each a heading
 over one or more children. Clicking a heading opens the section and lands on its first
 child; the open section shows its children and the one you are on carries
 `aria-current="page"`, so Users tells you that you are on Users > All users.
