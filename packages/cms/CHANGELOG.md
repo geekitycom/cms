@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.0](https://github.com/geekitycom/cms/compare/v0.5.0...v0.6.0) (2026-09-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** a menu item stores `rel` in place of `me: true`, and a theme reads `item.rel` where it read `item.me` — a stored `me: true` is still read and rewritten as `rel` on the next save, so no site loses a flag. The package no longer exports `MENU_ITEM_FLAGS` or `MenuItemFlag`.
+
+### Features
+
+* **cms:** one command that publishes the tagged version to npm ([7a66eb7](https://github.com/geekitycom/cms/commit/7a66eb72f92d73686ee2799dba4ffff10d6c2258))
+* **cms:** one link line everywhere, whose trailing words are rel values ([d866ac1](https://github.com/geekitycom/cms/commit/d866ac1fd176c48d6a6c4ba4ef0279206b3d09ac))
+
+
+### Bug Fixes
+
+* **cms:** check a profile link the way a menu line is checked ([20e7bed](https://github.com/geekitycom/cms/commit/20e7beda566a22f214ed2f17fdf23d83c5f00a61))
+* **cms:** draw the At a glance counts on one line ([8ec000f](https://github.com/geekitycom/cms/commit/8ec000f2d6dbbfb730d048ddfd3bfc09dac82fbb))
+* **cms:** read every nav as links at the page's size ([b8dec11](https://github.com/geekitycom/cms/commit/b8dec114896b723aba94d30111d717352d11714b))
+* **cms:** start the dashboard's two panels at the same height ([faee9e2](https://github.com/geekitycom/cms/commit/faee9e2e05d335e61a06ed2d6b79e0bf06342671))
+
 ## [0.5.0](https://github.com/geekitycom/cms/compare/v0.4.0...v0.5.0) (2026-09-20)
 
 
