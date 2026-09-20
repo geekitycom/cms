@@ -22,6 +22,7 @@ themes/default/
     pagination.njk    previous/next pager
     tags.njk          macros for tag and category links
     bio.njk           who an entry is by, as an h-card, with the site menu
+    menu.njk          one named menu, as a nav of links
     feeds.njk         macros for the feed links in <head>
     conversation.njk  the replies, likes and boosts under a post
     comment-form.njk  the form under a post that is taking comments
@@ -152,8 +153,10 @@ no navigation in the header — see [Navigation](#navigation).
 `Published with Geekity`, and then one `ul.hlist` holding an RSS link to
 `/feed/` and one `rel="me"` link per entry of `siteAuthor.links`. A site whose
 `author` setting names nobody with an account here gets the line and the RSS
-link and no identity links, because `siteAuthor` is absent. The year is
-`{{ "now" | date("year") }}` — `now` is the one word the `date` filter reads
+link and no identity links, because `siteAuthor` is absent. Under that list
+comes `menus.footer`, the `footer` area this theme declares, which prints
+nothing until a site has filled it in — see [Navigation](#navigation). The year
+is `{{ "now" | date("year") }}` — `now` is the one word the `date` filter reads
 rather than parses — so it is the year at the moment the page is rendered, in
 the site's own timezone.
 
@@ -691,7 +694,7 @@ Every template gets:
 | Key          | What it holds                                                                                                                                                                                           |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `site`       | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
-| `menu`       | The site menu for this page: a list of `{ label, url, current }`. See [Navigation](#navigation).                                                                                                        |
+| `menus`      | Every menu the site stores, by name, marked for this page: `menus.primary`, `menus.footer`, and any other name. See [Navigation](#navigation).                                                          |
 | `siteAuthor` | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
 | `icons`      | The site's icons, as `{ rel, sizes, href }`. Empty until the site has an avatar to derive them from. See [The head](#the-head).                                                                         |
 
@@ -806,50 +809,107 @@ it.
 
 ## Navigation
 
-`menu` is the site menu, already in order and already knowing which of its items
-is the page being looked at. Every template gets it.
+A site stores its menus by name in `content/_data/site.json`:
 
-The design has no header navigation: the menu is the horizontal list inside
-[the bio](#the-bio). So it is printed once, in one of two places. A page with a
-bio — an entry, an author archive — carries it there. A page without one — a
-listing, the 404, a layout of a site's own — gets it from the `footer` block of
-`layouts/base.njk`. What decides is `bioAuthor`: a layout that renders the bio
-sets it, and the footer then leaves the menu out. A layout that sets nothing
-keeps the footer menu, which is why an overridden `layouts/post.njk` does not
-lose the navigation by not having a bio.
-
-The markup is the same either way, and a layout that overrides `header` or
-`footer` writes it the same way:
-
-```njk
-{% if menu.length %}
-<nav class="site-nav" aria-label="Site">
-  <ul class="hlist">
-    {% for item in menu %}
-    <li><a href="{{ item.url | url }}"{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
-    {% endfor %}
-  </ul>
-</nav>
-{% endif %}
+```json
+{
+  "menus": {
+    "primary": [
+      { "label": "Home", "url": "/" },
+      { "label": "About", "url": "/about/" }
+    ],
+    "footer": [
+      { "label": "Colophon", "url": "/colophon/" },
+      { "label": "Mastodon", "url": "https://example.social/@me", "me": true }
+    ]
+  }
+}
 ```
 
-Each item is `{ label, url, current }`. `url` is a site-root path or an absolute
-URL for somewhere else, so put it through the `url` filter as above and a site
-served from a subdirectory still links correctly. `current` is true for the item
-whose path is the one being rendered, comparing without the trailing slash; an
-item pointing off the site is never current.
+Every template gets them as `menus`, keyed by the same names, already in order
+and already knowing which item is the page being looked at:
 
-The list is the `navigation` setting and nothing else, in the order the
-settings screen names it. A page cannot put itself in the menu; a page that
-should be linked — including the one a site serves as its front page, typed
-`Home | /` — is typed into the setting.
+```njk
+{% for item in menus.footer %}
+<a href="{{ item.url | url }}">{{ item.label }}</a>
+{% endfor %}
+```
 
-It is called `menu` rather than `navigation` because `navigation` is the
-`site.json` key the raw list is stored under, and a template reading that one
-would get a list that does not know which item the reader is on. The setting is
-mirrored to `navigation` in `content/_data/site.json`, so an Eleventy build of
-the same content renders the same menu; `docs/eleventy.config.example.js` builds
-it as `collections.menu`.
+That is the whole interface, so a theme renders a menu this one has never heard
+of by looping over the name a site stored it under.
+
+### The areas a theme declares
+
+`theme.json` says where a theme renders a menu, so the Navigation screen can
+offer those places and nowhere else. This theme declares two:
+
+```json
+{
+  "name": "Default",
+  "kind": "site",
+  "areas": [
+    { "name": "primary", "label": "Site menu" },
+    { "name": "footer", "label": "Footer links" }
+  ]
+}
+```
+
+`name` is the key under `menus`, in `site.json` and on the context. `label` is
+what a person choosing an area reads; leave it out and it falls back to the
+name. Declare a third area and a site can fill it in; declare none and the
+theme renders no menu.
+
+The declaration is for the screen, not for the render. Every menu the site
+stores is on the context whether or not a theme declared an area for it — a
+menu nothing loops over is rendered nowhere and kept, which is what lets
+somebody write the menu a theme will use before switching to that theme. An
+`areas` that is missing, or that will not read, leaves the theme with none
+rather than failing to load it.
+
+### One item
+
+Each item is `{ label, url, current }`, plus `me: true` on a link that should
+carry `rel="me"`. `url` is a site-root path or an absolute URL for somewhere
+else, so put it through the `url` filter and a site served from a subdirectory
+still links correctly. `current` is true for the item whose path is the one
+being rendered, comparing without the trailing slash; an item pointing off the
+site is never current. `me` is for the IndieWeb's identity check: Mastodon
+verifies a link on a profile by looking for a `rel="me"` link back, so a footer
+link to a profile marked `me` is what makes the tick appear.
+
+### Where this theme prints them
+
+`partials/menu.njk` holds the markup, as one macro:
+
+```njk
+{% import "partials/menu.njk" as nav %}
+{{ nav.list(menus.footer, "Footer") }}
+```
+
+The second argument is the `aria-label`, which is what tells a reader on a
+screen reader which of a page's menus this one is. Nothing is printed for a
+menu with nothing in it.
+
+`menus.footer` is printed in the `footer` block of `layouts/base.njk`, beside
+the site author's identity links.
+
+`menus.primary` is printed once, in one of two places, because the design has
+no header navigation: it is the horizontal list inside [the bio](#the-bio). A
+page with a bio — an entry, an author archive — carries it there. A page
+without one — a listing, the 404, a layout of a site's own — gets it from the
+`footer` block. What decides is `bioAuthor`: a layout that renders the bio sets
+it, and the footer then leaves the menu out. A layout that sets nothing keeps
+the footer menu, which is why an overridden `layouts/post.njk` does not lose
+the navigation by not having a bio.
+
+`menus.primary` is the whole of the site menu, in the order the settings screen
+names it. A page cannot put itself in a menu; a page that should be linked —
+including the one a site serves as its front page, typed `Home | /` — is typed
+into the setting.
+
+Because the menus live in `site.json`, an Eleventy build of the same content
+renders the same ones; `docs/eleventy.config.example.js` builds them as
+`collections.menus`.
 
 ## Feeds
 

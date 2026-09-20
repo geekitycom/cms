@@ -1633,7 +1633,7 @@ The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `timezone`, `language`, `tagBase`,
 `categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
-`contactEmail`, `relays`, `navigation` and `taxonomyRedirects`,
+`contactEmail`, `relays`, `menus` and `taxonomyRedirects`,
 and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
 type is the default too: a hand-edited `site.json` cannot take the site down.
@@ -2020,31 +2020,67 @@ can put its archives at the same URLs.
 
 ### Navigation
 
-Every page carries the site menu, which the theme renders in the header. It is
-one thing: the `navigation` setting, edited on `/admin/settings/reading` as one
-`Label | URL` per line — `About | /about/`,
-`Mastodon | https://example.social/@me` — in the order it is typed. The URL is
-a site-root path or an absolute `http(s)` URL; anything else is refused with
-the offending line quoted.
+A menu is a named thing the site stores and the theme asks for.
 
-There is no second source. A page cannot put itself in the menu, so there is
-one screen to edit the menu on, one order, and no way for the same link to
-appear twice. A page that should be linked is linked by typing a line for it —
-including the page a site serves as its front page, which is typed `Home | /`,
-the URL a reader lands on, rather than at the permalink that redirects there.
+**The site stores menus by name.** `content/_data/site.json` holds a `menus`
+object keyed by the name of each menu, each an ordered list of items:
 
-Templates read it as `menu`, a list of `{ label, url, current }`, with
-`current` true for the item whose path is the one being rendered. It is `menu`
-rather than `navigation` because `navigation` is the `site.json` key the raw
-list is stored under, and a template reading that one would get a list that
-does not know which item the reader is on.
+```json
+{
+  "menus": {
+    "primary": [{ "label": "About", "url": "/about/" }],
+    "footer": [
+      { "label": "Colophon", "url": "/colophon/" },
+      { "label": "Mastodon", "url": "https://example.social/@me", "me": true }
+    ]
+  }
+}
+```
 
-The setting is `navigation` in `content/_data/site.json`, a list of
-`{ label, url }`, so an Eleventy build renders the same menu; the example
-config assembles it as `collections.menu`. A `navigation` in a hand-edited
-`site.json` that is not a list of items yields an empty menu rather than an
-error, exactly as a bad archive base falls back rather than taking the site
-down.
+An item is a label, a URL and the flags it carries. The URL is a site-root path
+or an absolute `http(s)` URL; anything else is refused. There is one flag,
+`me`, present only when it is set and read only when it is spelled exactly
+`true`: it gives the link `rel="me"`, which is how Mastodon and the rest of the
+IndieWeb verify that the site and the profile it links are the same person.
+
+**The theme declares the areas it renders.** `theme.json` carries an `areas`
+list, each entry a `name` — the key under `menus` — and a `label` a person
+reads:
+
+```json
+{ "areas": [{ "name": "primary", "label": "Site menu" }] }
+```
+
+The packaged theme declares `primary` and `footer`. A theme that wants a third
+declares it; a theme that renders none declares none; an `areas` that is
+missing or unreadable leaves a theme with none rather than failing to load it.
+
+**A theme renders a menu by name.** Every template gets `menus`, keyed by the
+same names, each item already marked `current` for the path being rendered.
+`{% for item in menus.footer %}` is the whole interface, so a site theme can
+render a menu the packaged theme has never heard of. Every stored menu is on
+the context, not only the declared ones: the declaration is what the screen
+that edits menus reads, and a menu nothing loops over is rendered nowhere and
+kept — which is how somebody writes the menu a theme will use before switching
+to that theme.
+
+`menus.primary` is edited on `/admin/settings/reading` as one `Label | URL` per
+line — `About | /about/`, `Mastodon | https://example.social/@me | me` — in the
+order it is typed, with a trailing `| me` marking the flag. Only a flag this
+CMS has is taken off the end of a line, so a URL holding a bar survives and a
+trailing word that is not a flag stays part of the URL.
+
+There is no second source. A page cannot put itself in a menu, so there is one
+screen to edit it on, one order, and no way for the same link to appear twice.
+A page that should be linked is linked by typing a line for it — including the
+page a site serves as its front page, which is typed `Home | /`, the URL a
+reader lands on, rather than at the permalink that redirects there.
+
+Because the menus live in `site.json`, an Eleventy build renders the same ones;
+the example config assembles them as `collections.menus`. A `menus` in a
+hand-edited `site.json` that is not an object of lists of items yields no menu
+rather than an error, exactly as a bad archive base falls back rather than
+taking the site down.
 
 ## Content negotiation
 
@@ -2721,9 +2757,9 @@ the rules the CMS follows that Eleventy does not know about on its own:
 It also builds two collections Eleventy has no notion of. `collections.categories`
 is the second taxonomy, one entry of `{ name, posts }` per category in use, for
 paginating into archives at `/{{ site.categoryBase }}/{name}/`.
-`collections.menu` is the site menu — the `navigation` array of `site.json`,
-and nothing else — as `{ label, url }` entries in the order the header should
-render them; a layout
+`collections.menus` is the site's named menus — the `menus` object of
+`site.json`, and nothing else — each an ordered list of `{ label, url }`
+entries, plus `me: true` on a link that should carry `rel="me"`; a layout
 marks the current one itself by comparing `item.url` with `page.url`, because a
 collection is built once for the whole site.
 

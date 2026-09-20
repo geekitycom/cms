@@ -1,0 +1,32 @@
+{#
+  One menu, drawn.
+
+  The CMS puts every menu the site stores on the context as `menus`, keyed by
+  the name it is stored under, each item already knowing whether it is the page
+  being looked at (TASK-107). This theme declares two of those names in its
+  `theme.json` — `primary` and `footer` — and draws each through this macro, so
+  the markup of a menu is written once:
+
+    {% import "partials/menu.njk" as nav %}
+    {{ nav.list(menus.footer, "Footer") }}
+
+  Nothing is printed for a menu with nothing in it: an area a site has not
+  filled in is an area with no nav element, not an empty list.
+
+  `label` is the `aria-label`, which is what tells a reader on a screen reader
+  which of a page's menus this one is. Two navs with no labels are two navs
+  called "navigation".
+
+  An item marked `me` carries `rel="me"`, which is how Mastodon and the rest of
+  the IndieWeb verify that the site and the profile it links belong to the same
+  person: the profile links back, and the pair is the proof.
+#}
+{% macro list(items, label) %}{% if items.length %}
+<nav class="site-nav" aria-label="{{ label }}">
+  <ul class="hlist">
+    {% for item in items %}
+    <li><a href="{{ item.url | url }}"{% if item.me %} rel="me"{% endif %}{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
+    {% endfor %}
+  </ul>
+</nav>
+{% endif %}{% endmacro %}

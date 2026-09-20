@@ -4,7 +4,7 @@
   "url": "http://localhost:3000",
   "author": "You",
   "language": "en",
-  "navigation": [{ "label": "About", "url": "/about/" }],
+  "menus": { "primary": [{ "label": "About", "url": "/about/" }] },
   "postsPerPage": 10,
   "feedSize": 20
 }

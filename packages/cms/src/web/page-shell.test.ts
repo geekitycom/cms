@@ -278,10 +278,12 @@ describe('the page shell (AC #1)', () => {
 
   it('puts no navigation in the header', async () => {
     const cms = await site({
-      navigation: [
-        { label: 'Home', url: '/' },
-        { label: 'About', url: '/about/' },
-      ],
+      menus: {
+        primary: [
+          { label: 'Home', url: '/' },
+          { label: 'About', url: '/about/' },
+        ],
+      },
     });
 
     for (const pathname of ['/', '/about/', '/2026/09/hello/']) {
@@ -296,7 +298,7 @@ describe('the page shell (AC #1)', () => {
   it('moves the menu into the bio on a page that has one', async () => {
     const cms = await site({
       author: 'Ada Lovelace',
-      navigation: [{ label: 'About', url: '/about/' }],
+      menus: { primary: [{ label: 'About', url: '/about/' }] },
     });
     await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
 
@@ -321,6 +323,116 @@ describe('the page shell (AC #1)', () => {
         `${pathname} has the menu in the wrong place`,
       );
     }
+  });
+});
+
+describe('the menus a theme renders by name (TASK-107)', () => {
+  /** The `<nav>` an `aria-label` names, anywhere on the page. */
+  function nav(html: string, label: string): string {
+    const found = new RegExp(`<nav class="site-nav" aria-label="${label}">([\\s\\S]*?)</nav>`).exec(
+      html,
+    );
+    return found?.[1] ?? '';
+  }
+
+  it('renders menus.primary and menus.footer, each in its own place (AC #4)', async () => {
+    const cms = await site({
+      menus: {
+        primary: [
+          { label: 'Home', url: '/' },
+          { label: 'About', url: '/about/' },
+        ],
+        footer: [
+          { label: 'Colophon', url: '/colophon/' },
+          { label: 'Sources', url: '/sources/' },
+        ],
+      },
+    });
+
+    const html = await body(cms, '/about/');
+
+    assert.deepEqual(
+      [...nav(html, 'Site').matchAll(/>([^<]+)<\/a>/g)].map((match) => match[1]),
+      ['Home', 'About'],
+      'the site menu is not menus.primary',
+    );
+    assert.deepEqual(
+      [...nav(html, 'Footer').matchAll(/>([^<]+)<\/a>/g)].map((match) => match[1]),
+      ['Colophon', 'Sources'],
+      'the footer menu is not menus.footer',
+    );
+  });
+
+  it('marks the current item of whichever menu holds this page (AC #5)', async () => {
+    const cms = await site({
+      menus: {
+        primary: [{ label: 'Home', url: '/' }],
+        footer: [
+          { label: 'About', url: '/about/' },
+          { label: 'Elsewhere', url: 'https://example.org/' },
+        ],
+      },
+    });
+
+    const printed = nav(await body(cms, '/about/'), 'Footer');
+
+    assert.match(
+      printed,
+      /<a href="\/about\/" class="is-current" aria-current="page">About<\/a>/,
+      'the footer menu does not know which page this is',
+    );
+    assert.match(
+      printed,
+      /<a href="https:\/\/example\.org\/">Elsewhere<\/a>/,
+      'a link off the site is never the current page',
+    );
+  });
+
+  it('gives an item marked me a rel="me" and an unmarked one none (AC #2)', async () => {
+    const cms = await site({
+      menus: {
+        footer: [
+          { label: 'Mastodon', url: 'https://example.social/@ada', me: true },
+          { label: 'Colophon', url: '/colophon/' },
+        ],
+      },
+    });
+
+    const printed = nav(await body(cms, '/about/'), 'Footer');
+
+    assert.match(printed, /<a href="https:\/\/example\.social\/@ada" rel="me">Mastodon<\/a>/);
+    assert.match(printed, /<a href="\/colophon\/">Colophon<\/a>/);
+    assert.equal([...printed.matchAll(/rel="me"/g)].length, 1, 'only the marked item carries it');
+  });
+
+  it('keeps a menu whose name no theme declares, and renders it nowhere (AC #6)', async () => {
+    const { cms, contentDir } = await siteWithContent({
+      menus: {
+        primary: [{ label: 'Home', url: '/' }],
+        sidebar: [{ label: 'Blogroll', url: '/blogroll/' }],
+      },
+    });
+
+    for (const pathname of ['/', '/about/', '/2026/09/hello/']) {
+      assert.doesNotMatch(
+        await body(cms, pathname),
+        /Blogroll/,
+        `${pathname} rendered a menu the theme declares no area for`,
+      );
+    }
+
+    const stored: unknown = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    );
+    assert.deepEqual((stored as { menus: Record<string, unknown> }).menus['sidebar'], [
+      { label: 'Blogroll', url: '/blogroll/' },
+    ]);
+  });
+
+  it('reads no menu at all out of the navigation key TASK-106 left behind (AC #7)', async () => {
+    const cms = await site({ navigation: [{ label: 'Anachronism', url: '/old/' }] });
+
+    assert.doesNotMatch(await body(cms, '/about/'), /Anachronism/);
   });
 });
 

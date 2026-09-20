@@ -22,6 +22,7 @@
   entry's bio credits. A layout that prints `partials/bio.njk` sets it, and the
   footer here leaves the site menu out because the bio is carrying it.
 #}{% import "partials/feeds.njk" as feeds %}
+{%- import "partials/menu.njk" as nav %}
 {#- Whether this is the front page, which is the one page the header and the
     stylesheet treat differently. `page.url` is the URL being served rather
     than the document's own permalink, so a static homepage under the Reading
@@ -145,14 +146,13 @@
           {% endif %}
         </ul>
         {#
-          The site menu, on a page that has no bio to carry it.
-
-          The design has no header navigation: the menu is the horizontal list
-          inside the bio (TASK-83), which an entry and an author archive print
-          and a listing, a 404 or a layout of a site's own does not. So a
-          layout that renders a bio sets `bioAuthor`, and this prints the menu
-          only where nothing else did — the menu is on every page, once.
+          The footer menu: the `footer` area this theme declares in its
+          `theme.json`, which a site fills in on the Navigation screen
+          (TASK-107). Nothing is printed until it has; it is the place a site
+          puts a colophon, a webring or a Mastodon link it wants verified, and
+          an item marked `me` carries `rel="me"` for that last one.
         #}
+        {{ nav.list(menus.footer, "Footer") }}
         {#
           The search box, on every page but the one that already has it at the
           top: `query` is on the context of the search page alone, empty or
@@ -161,15 +161,16 @@
         {% if query is not defined %}
         {% include "partials/search-form.njk" %}
         {% endif %}
-        {% if menu.length and not bioAuthor %}
-        <nav class="site-nav" aria-label="Site">
-          <ul class="hlist">
-            {% for item in menu %}
-            <li><a href="{{ item.url | url }}"{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
-            {% endfor %}
-          </ul>
-        </nav>
-        {% endif %}
+        {#
+          The site menu, on a page that has no bio to carry it.
+
+          The design has no header navigation: the menu is the horizontal list
+          inside the bio (TASK-83), which an entry and an author archive print
+          and a listing, a 404 or a layout of a site's own does not. So a
+          layout that renders a bio sets `bioAuthor`, and this prints the menu
+          only where nothing else did — the menu is on every page, once.
+        #}
+        {% if not bioAuthor %}{{ nav.list(menus.primary, "Site") }}{% endif %}
       </footer>
       {% endblock %}
     </div>

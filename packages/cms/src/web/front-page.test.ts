@@ -228,10 +228,12 @@ describe('the sitemap and the site menu of a site with both picks', () => {
       '_data/site.json': siteJson({
         homepage: 'welcome',
         postsPage: 'news',
-        navigation: [
-          { label: 'Welcome', url: '/' },
-          { label: 'News', url: '/news/' },
-        ],
+        menus: {
+          primary: [
+            { label: 'Welcome', url: '/' },
+            { label: 'News', url: '/news/' },
+          ],
+        },
       }),
     });
 

@@ -58,7 +58,7 @@ describe('seedStarterContent', () => {
     assert.equal(settings['title'], 'A Geekity site');
   });
 
-  it('types the About page into the navigation setting (TASK-106 AC #6)', async () => {
+  it('types the About page into the primary menu (TASK-106 AC #6, TASK-107)', async () => {
     const site = await temporaryDir('geekity-seed-menu-');
     const contentDir = path.join(site, 'content');
 
@@ -68,7 +68,7 @@ describe('seedStarterContent', () => {
     // ships is reachable because the starter site.json names it, not because
     // its front matter says anything.
     const settings = await readJson(path.join(contentDir, '_data', 'site.json'));
-    assert.deepEqual(settings['navigation'], [{ label: 'About', url: '/about/' }]);
+    assert.deepEqual(settings['menus'], { primary: [{ label: 'About', url: '/about/' }] });
 
     const about = await fs.readFile(path.join(contentDir, 'pages', 'about.md'), 'utf8');
     assert.ok(!/^navigation:/m.test(about), 'and the page opts into nothing');

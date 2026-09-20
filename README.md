@@ -843,7 +843,7 @@ once, on the first boot of this one, and the table is dropped.
 
 The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `timezone`, `language`, `tagBase`, `categoryBase`, `notifyServer`, `mailProvider`, `mailFromName`,
-`mailFromAddress`, `mailReplyTo`, `contactEmail`, `relays`, `navigation` and
+`mailFromAddress`, `mailReplyTo`, `contactEmail`, `relays`, `menus` and
 `taxonomyRedirects`,
 and every other key it already had is kept — a site may put anything in there,
 `feedSize` included, and reach it from its templates. A key it does not carry
@@ -890,16 +890,23 @@ one still waiting. Removing a line unfollows it. See
 [websub]: https://www.w3.org/TR/websub/
 [notify]: packages/cms/README.md#real-time-notification
 
-The menu is the site navigation, one `Label | URL` per line — `About | /about/`,
-`Mastodon | https://example.social/@me` — rendered in the site header in that
-order, with the item whose path is the one being read marked `aria-current`.
-That setting is the whole menu: a page cannot put itself in it, so there is one
-screen to edit it on, one order, and no way for a link to appear twice. A page
-the site serves as its front page is typed `Home | /`, the URL a reader lands
-on, rather than at the permalink that redirects there. The setting is
-`navigation` in `content/_data/site.json`, a list of `{ label, url }`, so an
-Eleventy build renders the same menu — `docs/eleventy.config.example.js`
-assembles it as `collections.menu`. A theme reads it as `menu`; see
+The menu is the site menu, one `Label | URL` per line — `About | /about/`,
+`Mastodon | https://example.social/@me | me` — rendered in that order, with the
+item whose path is the one being read marked `aria-current` and a line ending
+`| me` given `rel="me"`. That setting is the whole menu: a page cannot put
+itself in it, so there is one screen to edit it on, one order, and no way for a
+link to appear twice. A page the site serves as its front page is typed
+`Home | /`, the URL a reader lands on, rather than at the permalink that
+redirects there.
+
+A site stores its menus by name, as `menus` in `content/_data/site.json` — the
+setting above is `menus.primary` — and a theme declares in its `theme.json`
+which names it renders. The packaged theme declares `primary` and `footer`, and
+a theme that wants a third declares that too. A menu stored under a name no
+theme declares is kept and rendered nowhere, so the menu a theme will use can
+be written before switching to it. Templates get them all as `menus`, keyed by
+name; an Eleventy build reads the same object —
+`docs/eleventy.config.example.js` assembles it as `collections.menus`. See
 [Navigation][navigation] in the theme README.
 
 [navigation]: packages/cms/themes/default/README.md#navigation
@@ -1045,9 +1052,10 @@ at an 18px root, warm paper, a rust primary and a blue secondary, one column at
 link, a `.global-wrapper` that says when it is at `/`, a header that is the
 site title and tagline on the front page and a small link home everywhere else,
 and a footer with the copyright, the colophon, an RSS link and the site author's
-`rel="me"` links. There is no navigation in the header: the site menu is the
-horizontal list in the bio under an entry, and the footer prints it only on a
-page that has no bio — a listing, the 404 — so it is on every page once.
+`rel="me"` links, and `menus.footer` under them. There is no navigation in the
+header: `menus.primary` is the horizontal list in the bio under an entry, and
+the footer prints it only on a page that has no bio — a listing, the 404 — so
+it is on every page once.
 Webrings, badges and anything else particular to one site are not in the
 package: they go in a site theme's `footer` block. The source design is light only; the theme adds a dark
 scheme under `prefers-color-scheme: dark`, and
@@ -1101,7 +1109,7 @@ site's `style.css` is served instead of the packaged one, not after it.
 
 `apps/demo/content/pages/contact.md` is the worked example of the other kind of
 opt-in: `contact: true` puts the contact form under the page, and the demo's
-`navigation` setting names it so the page is in the menu. Send it a message with the demo
+`menus.primary` names it so the page is in the menu. Send it a message with the demo
 running and the message is written to `data/contact/` before anything is
 emailed, and is waiting on **Messages** in the admin. Where it is emailed is the
 `contactEmail` setting in `content/_data/site.json`, which is read when the

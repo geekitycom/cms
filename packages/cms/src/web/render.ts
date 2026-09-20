@@ -24,7 +24,7 @@ import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, FrontPageSlugs, NeighbourContext, SiteData } from './context.ts';
-import { navigationMenu } from './navigation.ts';
+import { navigationMenus } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
 import { snippetHtml } from './search.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
@@ -326,18 +326,22 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // the next boot. It costs a comparison of two short arrays when nothing
     // has changed, which is every render of a site that is not being rethemed.
     useThemeDirs(environment, themes.current().dirs);
-    // The menu is built here rather than by each caller because every page of
-    // the site carries it: a listing, a document, the 404 and the editor's
-    // preview all go through here, and a header that appeared on some of them
-    // and not others would be a worse contract than one that is simply always
-    // there. It is `menu` rather than `navigation` because `navigation` is the
-    // site.json key the setting is stored under, and a template reading
-    // `navigation` would be reading the raw list rather than this one, which
-    // knows which item the reader is on.
-    const menu = navigationMenu({ site, url: currentUrl(context) });
+    // The menus are built here rather than by each caller because every page
+    // of the site carries them: a listing, a document, the 404 and the
+    // editor's preview all go through here, and a menu that appeared on some
+    // of them and not others would be a worse contract than one that is
+    // simply always there. It is `menus` rather than `menus` read off `site`
+    // because these items know which one the reader is on; a template reading
+    // `site.menus` would be reading the raw lists.
+    //
+    // Every menu the site stores is here, keyed by name, not only the ones the
+    // theme declares an area for: a name nothing loops over is rendered
+    // nowhere and kept (TASK-107), and the declaration in `theme.json` is for
+    // the screen that edits menus rather than a filter on the render.
+    const menus = navigationMenus({ site, url: currentUrl(context) });
     // Who the page is by, for the bio, the `rel="me"` links and the structured
     // data (decision-16). It is here rather than in each caller because every
-    // page of the site carries it, for the reason the menu does — and it is
+    // page of the site carries it, for the reason the menus do — and it is
     // the site's own author only when the page is about nobody in particular:
     // a document's byline and an author archive's person are put on the
     // context by the callers below, and win by going on last.
@@ -351,7 +355,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     const icons = siteIcons(config, site.avatar);
     return environment.render(template, {
       site,
-      menu,
+      menus,
       icons,
       ...(owner === undefined ? {} : { siteAuthor: owner }),
       ...context,

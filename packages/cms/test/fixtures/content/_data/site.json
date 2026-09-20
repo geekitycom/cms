@@ -3,24 +3,31 @@
   "tagline": "Content that has to build under Eleventy too",
   "url": "https://fixtures.example",
   "author": "andrew",
-  "navigation": [
-    {
-      "label": "Home",
-      "url": "/"
-    },
-    {
-      "label": "Elsewhere",
-      "url": "https://elsewhere.example/"
-    },
-    {
-      "label": "About",
-      "url": "/about/"
-    },
-    {
-      "label": "Colophon",
-      "url": "/colophon/"
-    }
-  ],
+  "menus": {
+    "primary": [
+      {
+        "label": "Home",
+        "url": "/"
+      },
+      {
+        "label": "Elsewhere",
+        "url": "https://elsewhere.example/"
+      },
+      {
+        "label": "About",
+        "url": "/about/"
+      },
+      {
+        "label": "Colophon",
+        "url": "/colophon/"
+      },
+      {
+        "label": "Mastodon",
+        "url": "https://elsewhere.example/@fixture",
+        "me": true
+      }
+    ]
+  },
   "homepage": "front",
   "postsPage": "journal"
 }

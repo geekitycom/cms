@@ -56,9 +56,11 @@
   {% set navigationHint %}
     One item per line, written <code>Label | URL</code> &mdash; for example
     <code>About | /about/</code> or <code>Mastodon | https://example.social/@me</code>.
-    They are the menu in the site header, in this order, and they are the whole
-    of it: nothing else puts a link there. A page serving as the front page
-    goes in as <code>Home | /</code>, where a reader lands.
+    They are the site menu, in this order, and they are the whole of it:
+    nothing else puts a link there. A page serving as the front page goes in as
+    <code>Home | /</code>, where a reader lands. End a line
+    <code>| me</code> to give that link <code>rel="me"</code>, which is how
+    Mastodon verifies that the site and the profile it links are yours.
   {% endset %}
   {{ field.textarea('settings-navigation', fields.navigation, 'Menu', form.navigation,
        error=problems.navigation, hint=navigationHint, rows='4', spellcheck='false') }}

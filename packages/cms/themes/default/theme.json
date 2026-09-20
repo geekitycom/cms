@@ -1,5 +1,9 @@
 {
   "name": "Default",
   "kind": "site",
-  "description": "The theme that ships with Geekity: plain Nunjucks and plain CSS, and the layer every other theme is laid over."
+  "description": "The theme that ships with Geekity: plain Nunjucks and plain CSS, and the layer every other theme is laid over.",
+  "areas": [
+    { "name": "primary", "label": "Site menu" },
+    { "name": "footer", "label": "Footer links" }
+  ]
 }

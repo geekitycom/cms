@@ -1,12 +1,12 @@
 {#
-  The menu the CMS puts on every page as `menu`, built here from
-  `collections.menu`, which the example config assembles out of
-  `site.navigation` — the whole of the menu, in the order it was typed.
+  The site menu, which the CMS puts on every page as `menus.primary` and the
+  example config assembles as `collections.menus.primary` out of `site.menus` —
+  the whole of that menu, in the order it was typed.
 #}
 <nav class="site-nav">
   <ul>
-    {% for item in collections.menu %}
-    <li><a href="{{ item.url }}"{% if item.url == page.url %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
+    {% for item in collections.menus.primary %}
+    <li><a href="{{ item.url }}"{% if item.me %} rel="me"{% endif %}{% if item.url == page.url %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
     {% endfor %}
   </ul>
 </nav>

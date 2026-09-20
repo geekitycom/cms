@@ -76,11 +76,13 @@ const CONTENT: Record<string, string> = {
   'pages/about.md': '---\ntitle: About\npermalink: /about/\n---\n\nAbout us.\n',
 };
 
-/** The site menu these tests read, in `site.json` order. */
-const NAVIGATION = [
-  { label: 'Home', url: '/' },
-  { label: 'About', url: '/about/' },
-];
+/** The menus these tests read, in `site.json` order. */
+const MENUS = {
+  primary: [
+    { label: 'Home', url: '/' },
+    { label: 'About', url: '/about/' },
+  ],
+};
 
 /**
  * A CMS wearing the packaged theme.
@@ -106,7 +108,7 @@ async function site(
   await writeTree(contentDir, {
     ...CONTENT,
     '_data/site.json': JSON.stringify(
-      { title: 'A Site', author: 'Ada Lovelace', navigation: NAVIGATION, ...settings },
+      { title: 'A Site', author: 'Ada Lovelace', menus: MENUS, ...settings },
       null,
       2,
     ),

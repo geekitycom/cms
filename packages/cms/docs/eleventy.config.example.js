@@ -14,7 +14,7 @@
  * 4. `content/uploads/` is copied through to `/uploads/`.
  * 5. `content/_trash/` is not built.
  * 6. `categories`, the CMS's second taxonomy, becomes `collections.categories`.
- * 7. The site menu becomes `collections.menu`.
+ * 7. The site's named menus become `collections.menus`.
  * 8. A `date` filter that reads a UTC instant through `site.timezone`.
  * 9. `content/_data/federation/` — each user's followers and the inbox log — is data.
  * 10. The Reading choice: `homepage` puts a page at `/` and `postsPage` puts
@@ -842,37 +842,49 @@ export default function (eleventyConfig) {
     }));
   });
 
-  // The site menu. The CMS puts it on every template as `menu`; here it is
-  // `collections.menu`, because a collection is the only place a build can see
-  // both the global data and every page at once.
+  // The site's menus, by name. The CMS puts them on every template as `menus`;
+  // here they are `collections.menus`, because a collection is the only place
+  // a build can see both the global data and every page at once.
   //
-  // It is the `navigation` array of `content/_data/site.json`, which the
-  // settings screen mirrors, and nothing else: one screen, one order, and no
-  // way for a page to add itself. A page that should be linked is typed into
-  // the setting, including the one a site serves as its front page, which is
-  // typed at `/` rather than at the permalink that redirects there.
+  // They are the `menus` object of `content/_data/site.json` — `primary`,
+  // `footer`, and whatever else a theme declares an area for — and nothing
+  // else: one screen, one order, and no way for a page to add itself. A page
+  // that should be linked is typed into a menu, including the one a site
+  // serves as its front page, which is typed at `/` rather than at the
+  // permalink that redirects there.
   //
-  // Each entry is `{ label, url }`; a layout marks the current one itself,
-  // because a collection is built once for the whole site and `page.url` is
-  // per template:
+  // Each entry is `{ label, url }`, plus `me: true` on a link that should
+  // carry `rel="me"`. A layout marks the current item itself, because a
+  // collection is built once for the whole site and `page.url` is per
+  // template:
   //
-  //     {% for item in collections.menu %}
-  //     <a href="{{ item.url }}"
+  //     {% for item in collections.menus.primary %}
+  //     <a href="{{ item.url }}"{% if item.me %} rel="me"{% endif %}
   //        {% if item.url == page.url %}aria-current="page"{% endif %}>{{ item.label }}</a>
   //     {% endfor %}
-  eleventyConfig.addCollection('menu', (collectionApi) => {
+  eleventyConfig.addCollection('menus', (collectionApi) => {
     const site = collectionApi.getAll()[0]?.data?.site ?? {};
+    const stored = site.menus;
+    if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) return {};
 
-    return (Array.isArray(site.navigation) ? site.navigation : [])
-      .filter(
-        (item) =>
-          item &&
-          typeof item.label === 'string' &&
-          item.label !== '' &&
-          typeof item.url === 'string' &&
-          item.url !== '',
-      )
-      .map((item) => ({ label: item.label, url: item.url }));
+    const menus = {};
+    for (const [name, items] of Object.entries(stored)) {
+      menus[name] = (Array.isArray(items) ? items : [])
+        .filter(
+          (item) =>
+            item &&
+            typeof item.label === 'string' &&
+            item.label !== '' &&
+            typeof item.url === 'string' &&
+            item.url !== '',
+        )
+        .map((item) => ({
+          label: item.label,
+          url: item.url,
+          ...(item.me === true ? { me: true } : {}),
+        }));
+    }
+    return menus;
   });
 
   // Documents are Markdown; Nunjucks and HTML are here for the layouts and for

@@ -1057,15 +1057,17 @@ describe('the site menu', () => {
     return /aria-current="page"[^>]*>([^<]*)</.exec(nav)?.[1];
   }
 
-  it('renders the setting in order on every kind of page, marking the current one (AC #1)', async () => {
+  it('renders menus.primary in order on every page, marking the current one (AC #1)', async () => {
     const { cms } = await site({
       '_data/site.json': JSON.stringify({
         title: 'Menu Site',
-        navigation: [
-          { label: 'Home', url: '/' },
-          { label: 'About', url: '/about/' },
-          { label: 'Elsewhere', url: 'https://example.org/' },
-        ],
+        menus: {
+          primary: [
+            { label: 'Home', url: '/' },
+            { label: 'About', url: '/about/' },
+            { label: 'Elsewhere', url: 'https://example.org/' },
+          ],
+        },
       }),
       'posts/2026-09-02-hello.md': post('Hello', {
         date: '2026-09-02T10:00:00Z',
@@ -1113,7 +1115,7 @@ describe('the site menu', () => {
     const { cms } = await site({
       '_data/site.json': JSON.stringify({
         title: 'Menu Site',
-        navigation: [{ label: 'Home', url: '/' }],
+        menus: { primary: [{ label: 'Home', url: '/' }] },
       }),
       'pages/about.md': `---\ntitle: About\npermalink: /about/\nnavigation: true\n---\n\nBody.\n`,
       'pages/now.md': `---\ntitle: Now\npermalink: /now/\nnavigation: true\nnavigationOrder: 1\n---\n\nBody.\n`,
@@ -1133,10 +1135,12 @@ describe('the site menu', () => {
       '_data/site.json': JSON.stringify({
         title: 'Menu Site',
         homepage: 'welcome',
-        navigation: [
-          { label: 'Home', url: '/' },
-          { label: 'Colophon', url: '/colophon/' },
-        ],
+        menus: {
+          primary: [
+            { label: 'Home', url: '/' },
+            { label: 'Colophon', url: '/colophon/' },
+          ],
+        },
       }),
       'pages/welcome.md': page('Welcome', '/welcome/'),
       'pages/colophon.md': page('Colophon', '/colophon/'),

@@ -12,7 +12,7 @@ import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
-import { navigationItemsOf } from '../web/navigation.ts';
+import { DEFAULT_MENU_NAME, MENU_ITEM_FLAGS, menusOf } from '../web/navigation.ts';
 import type { NavigationItem } from '../web/navigation.ts';
 import {
   DEFAULT_TAXONOMY_BASES,
@@ -223,12 +223,17 @@ export interface SiteSettings {
    */
   wordpressActivityPub: boolean;
   /**
-   * The site menu: an ordered list of `{ label, url }` the theme renders in
-   * the header and an Eleventy build reads out of `site.json`.
+   * The site menu: the `primary` menu of `site.json`'s `menus`, an ordered
+   * list of items the theme renders wherever it declares a `primary` area and
+   * an Eleventy build reads out of the same file.
    *
-   * The list is edited one `Label | URL` per line. A page may put itself on
-   * the menu as well, with `navigation: true` in its front matter; those come
-   * after these, so the menu a site typed out stays as it was typed.
+   * The list is edited one `Label | URL` per line, with ` | me` at the end of
+   * a line whose link should carry `rel="me"`. A page cannot put itself on it:
+   * the setting is the whole menu (TASK-106).
+   *
+   * Only this one menu is a setting. Every other menu a site stores under
+   * `menus` is carried through a save untouched and edited on the Navigation
+   * screen (TASK-108); see {@link siteJsonFor}.
    */
   navigation: readonly NavigationItem[];
   /**
@@ -413,9 +418,12 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(typeof file['wordpressActivityPub'] === 'boolean'
       ? { wordpressActivityPub: file['wordpressActivityPub'] }
       : {}),
-    ...(Array.isArray(file['navigation'])
-      ? { navigation: navigationItemsOf(file['navigation']) }
-      : {}),
+    // The primary menu, out of the `menus` object that holds every menu the
+    // site has. The `navigation` key this setting used to live under is not
+    // read at all: menus were renamed rather than migrated (TASK-107).
+    ...(file['menus'] === undefined
+      ? {}
+      : { navigation: menusOf(file['menus'])[DEFAULT_MENU_NAME] ?? [] }),
     // The renames a site has published redirects for: facts about its URLs
     // rather than preferences, which is why a content directory restored on
     // its own keeps answering the archive URLs it used to.
@@ -472,9 +480,24 @@ export function siteJsonFor(
     mailReplyTo: settings.mailReplyTo,
     contactEmail: settings.contactEmail,
     relays: [...settings.relays],
-    navigation: settings.navigation.map((item) => ({ ...item })),
+    // Every menu the site stores, with the one this form edits replaced.
+    //
+    // The others are carried through rather than modelled: a site holds a menu
+    // for an area no theme declares yet, and a save of the Reading form is not
+    // going to be the thing that throws it away (TASK-107). The Navigation
+    // screen is what edits them (TASK-108).
+    menus: {
+      ...menusOf(existing['menus']),
+      [DEFAULT_MENU_NAME]: settings.navigation.map((item) => ({ ...item })),
+    },
     taxonomyRedirects: settings.taxonomyRedirects.map((entry) => ({ ...entry })),
   };
+
+  // The key the menu lived under before menus had names. A rename leaves
+  // nothing behind: a `navigation` array sitting beside `menus` in a file
+  // nothing reads it from is the kind of thing somebody edits for an hour
+  // before noticing.
+  delete file['navigation'];
 
   // `theme` is absent for a site on the packaged theme, on the same rule and
   // for the same reason as the two above: running what the package ships is
@@ -599,7 +622,7 @@ function settingsFromRows(rows: readonly LegacySetting[]): SiteSettings {
       ? {}
       : { postsPerPage: Number(stored['postsPerPage']) }),
     relays: relayList(stored['relays'] ?? ''),
-    navigation: navigationList(stored['navigation'] ?? ''),
+    menus: { [DEFAULT_MENU_NAME]: navigationList(stored['navigation'] ?? '') },
     taxonomyRedirects: redirectList(stored['taxonomyRedirects'] ?? ''),
   });
 }
@@ -809,7 +832,8 @@ const FIELD_CHECKS: Record<
     return bad === undefined
       ? undefined
       : `A menu item is "Label | URL", one per line, where the URL is a path ` +
-          `like /about/ or an absolute http:// or https:// URL. "${bad}" is not one.`;
+          `like /about/ or an absolute http:// or https:// URL, and ends ` +
+          `"| me" for a link that should carry rel="me". "${bad}" is not one.`;
   },
 
   // The two archive bases are checked as a pair, because two of the rules —
@@ -1089,30 +1113,53 @@ function navigationLines(value: string): string[] {
 /**
  * One `Label | URL` line as a menu item, or `undefined` when it is not one.
  *
- * The split is at the first bar, so a URL holding one — a query string, say —
- * survives and a label cannot hold one. The URL is either a site-root path or
- * an absolute http(s) URL: a bare `about/` would be resolved against whatever
- * page it was printed on, which is never what a menu means.
+ * The URL is either a site-root path or an absolute http(s) URL: a bare
+ * `about/` would be resolved against whatever page it was printed on, which is
+ * never what a menu means.
+ *
+ * A line may end in the flags the item carries, one per bar — `Mastodon |
+ * https://example.social/@me | me` — and those are taken off the end first,
+ * from the right, and only while the last part is the name of a flag this CMS
+ * actually has ({@link MENU_ITEM_FLAGS}). That is what lets a URL still hold a
+ * bar, a query string say: a trailing `| elsewhere` is not a flag, so it stays
+ * part of the URL and the line is refused for not naming one, rather than
+ * being quietly read as a flag nobody asked for.
+ *
+ * What is left splits at its first bar, so a label still cannot hold one.
  */
 function navigationItem(line: string): NavigationItem | undefined {
-  const bar = line.indexOf('|');
+  const flags = new Set<string>();
+
+  let rest = line;
+  for (;;) {
+    const bar = rest.lastIndexOf('|');
+    if (bar === -1) break;
+    const flag = rest
+      .slice(bar + 1)
+      .trim()
+      .toLowerCase();
+    if (!(MENU_ITEM_FLAGS as readonly string[]).includes(flag)) break;
+    flags.add(flag);
+    rest = rest.slice(0, bar);
+  }
+
+  const bar = rest.indexOf('|');
   if (bar === -1) return undefined;
 
-  const label = line.slice(0, bar).trim();
-  const url = line.slice(bar + 1).trim();
+  const label = rest.slice(0, bar).trim();
+  const url = rest.slice(bar + 1).trim();
   if (label === '' || url === '') return undefined;
-  if (url.startsWith('/')) return { label, url };
+  if (!url.startsWith('/') && normalizeRelayInbox(url) === undefined) return undefined;
 
-  return normalizeRelayInbox(url) === undefined ? undefined : { label, url };
+  return { label, url, ...(flags.has('me') ? { me: true } : {}) };
 }
 
 /**
  * A navigation textarea as the ordered items it names.
  *
- * Exported nowhere: the same parsing turns the stored setting and the
- * submitted form into one list, and `site.json` is read by
- * {@link navigationItemsOf} instead, because the file holds objects rather
- * than lines.
+ * Exported nowhere: the same parsing turns the old settings table's rows and
+ * the submitted form into one list, and `site.json` is read by
+ * {@link menusOf} instead, because the file holds objects rather than lines.
  */
 function navigationList(value: string): NavigationItem[] {
   const items: NavigationItem[] = [];
@@ -1125,5 +1172,7 @@ function navigationList(value: string): NavigationItem[] {
 
 /** The items as the textarea shows them, and as the settings table holds them. */
 function navigationText(items: readonly NavigationItem[]): string {
-  return items.map((item) => `${item.label} | ${item.url}`).join('\n');
+  return items
+    .map((item) => `${item.label} | ${item.url}${item.me === true ? ' | me' : ''}`)
+    .join('\n');
 }

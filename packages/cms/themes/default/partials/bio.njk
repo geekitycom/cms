@@ -31,6 +31,7 @@
   prints the site's identity links, and the `rel="author me"` link above leads
   to the archive where this person's own are.
 #}
+{%- import "partials/menu.njk" as nav %}
 {% if bioAuthor %}
 <div class="bio p-author h-card">
   {%- if bioAuthor.avatar %}
@@ -55,15 +56,7 @@
     <p class="bio-note p-note">{{ bioAuthor.bio }}</p>
     {%- endif %}
 
-    {%- if menu.length %}
-    <nav class="site-nav" aria-label="Site">
-      <ul class="hlist">
-        {%- for item in menu %}
-        <li><a href="{{ item.url | url }}"{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
-        {%- endfor %}
-      </ul>
-    </nav>
-    {%- endif %}
+    {{- nav.list(menus.primary, "Site") }}
 
     {%- if bioProfile and bioAuthor.links.length %}
     <ul class="hlist bio-links">

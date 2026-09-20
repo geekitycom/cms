@@ -156,6 +156,92 @@ describe('reading a theme manifest', () => {
   });
 });
 
+describe('the menu areas a theme declares', () => {
+  it('reads the areas out of a theme.json, name and label (AC #3)', async () => {
+    const { dir } = await themeDir('midnight', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({
+        name: 'Midnight',
+        kind: 'site',
+        areas: [
+          { name: 'primary', label: 'Primary menu' },
+          { name: 'sidebar', label: 'Sidebar' },
+        ],
+      }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.areas, [
+      { name: 'primary', label: 'Primary menu' },
+      { name: 'sidebar', label: 'Sidebar' },
+    ]);
+  });
+
+  it('leaves a theme that declares none with none, rather than refusing it (AC #3)', async () => {
+    const { dir } = await themeDir('plain', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({ name: 'Plain', kind: 'site' }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.areas, []);
+  });
+
+  it('leaves a theme whose declaration is unreadable with none (AC #3)', async () => {
+    for (const areas of ['primary', 42, { primary: 'Primary' }, null] as const) {
+      const { dir } = await themeDir('odd', {
+        [THEME_MANIFEST_FILE]: JSON.stringify({ name: 'Odd', kind: 'site', areas }),
+      });
+
+      const read = readTheme(dir);
+
+      assert.ok(read.ok, read.ok ? '' : read.reason);
+      assert.deepEqual(read.theme.areas, [], `areas: ${JSON.stringify(areas)}`);
+    }
+  });
+
+  it('drops the entries it cannot read and names one area once', async () => {
+    const { dir } = await themeDir('mixed', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({
+        name: 'Mixed',
+        kind: 'site',
+        areas: [
+          { name: 'primary', label: '  Primary menu  ' },
+          { name: '  ', label: 'Nameless' },
+          { label: 'Labelled only' },
+          'footer',
+          null,
+          { name: 'footer' },
+          { name: 'primary', label: 'Said twice' },
+        ],
+      }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.areas, [
+      { name: 'primary', label: 'Primary menu' },
+      { name: 'footer', label: 'footer' },
+    ]);
+  });
+
+  it('is what the packaged theme declares: primary and footer (AC #4)', () => {
+    const read = readTheme(PACKAGED_THEME_DIR);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(
+      read.theme.areas.map((area) => area.name),
+      ['primary', 'footer'],
+    );
+    for (const area of read.theme.areas) {
+      assert.ok(area.label.length > 0, `${area.name} has a label a person reads`);
+    }
+  });
+});
+
 describe('the site theme search path', () => {
   it('is the site theme first and the packaged theme second', () => {
     assert.deepEqual(themeSearchPath('/srv/site/theme'), ['/srv/site/theme', PACKAGED_THEME_DIR]);

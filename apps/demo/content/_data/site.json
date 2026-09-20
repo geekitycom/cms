@@ -15,11 +15,17 @@
   "contactEmail": "hello@example.com",
   "notifyServer": "https://rpc.rsscloud.io",
   "relays": [],
-  "navigation": [
-    { "label": "Home", "url": "/" },
-    { "label": "Posts", "url": "/posts/" },
-    { "label": "Archive", "url": "/archive/" },
-    { "label": "Contact", "url": "/contact/" }
-  ],
+  "menus": {
+    "primary": [
+      { "label": "Home", "url": "/" },
+      { "label": "Posts", "url": "/posts/" },
+      { "label": "Archive", "url": "/archive/" },
+      { "label": "Contact", "url": "/contact/" }
+    ],
+    "footer": [
+      { "label": "Colophon", "url": "/colophon/" },
+      { "label": "Now", "url": "/now/" }
+    ]
+  },
   "taxonomyRedirects": []
 }

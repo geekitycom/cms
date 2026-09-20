@@ -73,7 +73,9 @@ describe('content/_data/site.json', () => {
       mailReplyTo: '',
       contactEmail: '',
       relays: [],
-      navigation: [],
+      // Every menu the site stores, by name (TASK-107). A site that has typed
+      // none has the one the theme's primary area reads, empty.
+      menus: { primary: [] },
       taxonomyRedirects: [],
     });
   });
