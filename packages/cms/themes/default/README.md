@@ -920,6 +920,16 @@ account: it used to print one `rel="me"` link per entry of `siteAuthor.links`,
 which meant one nominated user's links stood for the site and nobody else's
 appeared at all.
 
+Every menu reads the same: a link in one is the colour, the underline and the
+size of a link in the page's prose, in the sans heading font a `nav` is set in
+(TASK-111). A menu is navigation somebody is meant to use rather than a
+footnote, so none of them is set smaller than the words around it, and the same
+goes for the `rel="me"` links `partials/bio.njk` prints under a post. The two
+links that read as plain text instead are the site title and
+`a.header-link-home`, which are the page saying where it is rather than
+somewhere to go, and the stylesheet names those two rather than reaching for
+every link that happens to sit in a `<header>`.
+
 `menus.primary` is the whole of the site menu, in the order the Navigation
 screen names it. Both areas are declared in this theme's `theme.json`, which is
 what puts them on `/admin/navigation` with those labels; a theme that renders a

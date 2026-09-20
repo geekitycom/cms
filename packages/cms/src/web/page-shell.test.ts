@@ -11,8 +11,14 @@
  * tags, icons derived from the site avatar and one JSON-LD graph. None of that
  * is a function's return value, so all of it is asserted over HTTP against the
  * packaged theme.
+ *
+ * How the shell's three navigation lists read — the header menu, the bio links
+ * and the footer menu (TASK-111) — is the one thing here that lives in the
+ * stylesheet rather than in the markup, so those tests read the rendered page
+ * and `static/style.css` together. See {@link themeRules}.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -929,5 +935,321 @@ describe('the code highlighter in the shell (TASK-86 AC #2)', () => {
 
     const cms = await site({ theme: 'quiet' }, { themesDir });
     assert.doesNotMatch(await body(cms, '/code/'), /highlight\.js/);
+  });
+});
+
+/**
+ * Every rule of the packaged stylesheet, as its selector and its declarations.
+ *
+ * Not a CSS parser: the sheet nests nothing but `@media`, so matching the
+ * innermost `selector { declarations }` pairs finds every rule there is, and an
+ * `@media` line never matches one because its own block holds braces. The
+ * selector is whatever follows the last brace before it, with comments dropped
+ * and whitespace collapsed, so a rule is named by its selector rather than by
+ * the wrapping and the line breaks around it.
+ */
+function themeRules(): { selector: string; declarations: string }[] {
+  const css = readFileSync(path.join(PACKAGED_THEME_DIR, 'static', 'style.css'), 'utf8').replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+
+  return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((rule) => ({
+    selector: (rule[1] ?? '')
+      .replace(/^[\s\S]*\}/, '')
+      .trim()
+      .replace(/\s+/g, ' '),
+    declarations: rule[2] ?? '',
+  }));
+}
+
+/**
+ * The simple selectors one selector is built from: `.bio a:hover` is `.bio`,
+ * `a` and `:hover`. Combinators are not simple selectors and drop out, which is
+ * what makes {@link rulesReaching} an over-approximation — it asks what a rule
+ * names, not how those names are arranged.
+ */
+function simpleSelectors(selector: string): string[] {
+  return [...selector.matchAll(/::?[\w-]+(?:\([^)]*\))?|\[[^\]]*\]|[.#]?[\w-]+|\*/g)].map(
+    (found) => found[0],
+  );
+}
+
+/** The states a rule may name about a link without ceasing to be about it. */
+const LINK_STATES = [':link', ':visited', ':hover', ':focus', ':active', ':focus-visible'];
+
+/**
+ * The rules of the stylesheet that can reach a link sitting under `hooks`.
+ *
+ * `hooks` is every element name and class name on the path from the document to
+ * the link, read off the rendered page by {@link hooksToLinks}. A rule reaches
+ * that link only if one of its comma-separated branches names nothing else: a
+ * branch mentioning a class or an element that is not on the path cannot match
+ * it, whatever the arrangement. The answer errs towards too many rules rather
+ * than too few, which is the safe direction for a test asking what may style
+ * something.
+ */
+function rulesReaching(hooks: readonly string[]): { selector: string; declarations: string }[] {
+  const reachable = new Set([...hooks, ...LINK_STATES]);
+
+  return themeRules().filter((rule) =>
+    rule.selector
+      .split(',')
+      .some((branch) => simpleSelectors(branch).every((simple) => reachable.has(simple))),
+  );
+}
+
+/**
+ * Which anchors of a page a test means: the open elements above one, outermost
+ * first, and the anchor itself, each as its tag name followed by its classes.
+ */
+type Anchor = (stack: readonly string[][], link: readonly string[]) => boolean;
+
+/**
+ * Every element name and class name on the path from the document down to each
+ * `<a>` the predicate picks, read off rendered markup.
+ *
+ * A tag scanner over well-formed markup rather than a DOM: it keeps a stack of
+ * the open elements, and hands `inside` that stack when it meets an anchor so a
+ * caller can say which anchors it means — the header menu's, the bio's or the
+ * footer menu's.
+ */
+function hooksToLinks(html: string, inside: Anchor): string[] {
+  /** The tags that never hold anything and so never open a level. */
+  const voids = new Set(['area', 'base', 'br', 'col', 'hr', 'img', 'input', 'link', 'meta']);
+  const stack: string[][] = [];
+  const hooks = new Set<string>();
+
+  for (const tag of html.matchAll(/<(\/?)([a-zA-Z][\w-]*)([^>]*)>/g)) {
+    const [, closing, name = '', attributes = ''] = tag;
+    if (closing) {
+      if (stack.at(-1)?.[0] === name) stack.pop();
+      continue;
+    }
+
+    const classes = (/class="([^"]*)"/.exec(attributes)?.[1] ?? '')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((one) => `.${one}`);
+    const element = [name, ...classes];
+
+    if (name === 'a' && inside(stack, element))
+      for (const hook of [...stack.flat(), ...element]) hooks.add(hook);
+    if (!voids.has(name) && !attributes.endsWith('/')) stack.push(element);
+  }
+
+  return [...hooks];
+}
+
+/** Whether a rule declares `property` — `font-size` rather than `font-family`. */
+function declares(rule: { declarations: string }, property: string): boolean {
+  return new RegExp(`(?:^|;)\\s*${property}\\s*:`).test(rule.declarations);
+}
+
+/**
+ * The rules that decide how the links `inside` picks read: their colour, their
+ * underline and their size, which is what TASK-111 is about. Two sets of links
+ * that read by the same rules read the same.
+ */
+function readsBy(html: string, inside: Anchor): string[] {
+  return rulesReaching(hooksToLinks(html, inside))
+    .filter(
+      (rule) =>
+        declares(rule, 'color') || declares(rule, 'text-decoration') || declares(rule, 'font-size'),
+    )
+    .map((rule) => rule.selector);
+}
+
+/**
+ * What `property` settles at for the links `inside` picks, before anybody
+ * hovers or tabs: the last rule that reaches them and says so.
+ *
+ * Source order rather than specificity, which is right for this sheet — it is
+ * written so that the rule meant to win is the one written last — and wrong in
+ * general. A state other than `:visited` is not at rest and drops out.
+ */
+function atRest(html: string, inside: Anchor, property: string): string | undefined {
+  const resting = rulesReaching(hooksToLinks(html, inside)).filter((rule) =>
+    simpleSelectors(rule.selector).every(
+      (simple) => !simple.startsWith(':') || simple === ':visited' || simple === ':link',
+    ),
+  );
+
+  return [...resting]
+    .reverse()
+    .map((rule) => new RegExp(`(?:^|;)\\s*${property}\\s*:([^;]*)`).exec(rule.declarations)?.[1])
+    .find((value) => value !== undefined)
+    ?.trim();
+}
+
+describe('every nav reads as links, at the page’s size (TASK-111)', () => {
+  /**
+   * One post carrying all three navigation lists at once — the site menu in
+   * the header, the person's own links in the bio, the site's list in the page
+   * footer — and a link in its own words to measure them against. Every
+   * assertion below is about this one page, because the complaint was that its
+   * three navs look like three different things.
+   */
+  async function postWithEveryNav(): Promise<string> {
+    const { cms, contentDir } = await siteWithContent({
+      author: 'Ada Lovelace',
+      menus: {
+        primary: [{ label: 'About', url: '/about/' }],
+        footer: [{ label: 'Colophon', url: '/colophon/' }],
+      },
+    });
+    await writeTree(contentDir, {
+      'posts/linked.md':
+        "---\ntitle: Test 001\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/test-001/\n---\n\nBody with [a link](https://example.com/) in it.\n",
+    });
+    await cms.sync();
+    await addUser(cms, 'ada', {
+      displayName: 'Ada Lovelace',
+      links: [{ label: 'Site', href: 'https://ada.example' }],
+    });
+
+    return body(cms, '/2026/09/test-001/');
+  }
+
+  /** The three navs, and how an anchor of each is told from the others. */
+  const NAVS: { what: string; inside: (stack: readonly string[][]) => boolean }[] = [
+    {
+      what: 'the header menu',
+      inside: (stack) =>
+        stack.some((open) => open.includes('.global-header')) &&
+        stack.some((open) => open.includes('.site-nav')),
+    },
+    {
+      what: 'the bio links',
+      inside: (stack) => stack.some((open) => open.includes('.bio-links')),
+    },
+    {
+      what: 'the footer menu',
+      inside: (stack) =>
+        stack.some((open) => open[0] === 'footer') &&
+        stack.some((open) => open.includes('.site-nav')),
+    },
+  ];
+
+  /** A link in the post's own words, which is what the three are measured against. */
+  const PROSE = (stack: readonly string[][]): boolean =>
+    stack.some((open) => open.includes('.e-content')) && stack.at(-1)?.[0] === 'p';
+
+  it('carries all three navs, and a prose link, on one post (AC #1)', async () => {
+    const html = await postWithEveryNav();
+
+    for (const { what, inside } of [...NAVS, { what: 'the post’s words', inside: PROSE }]) {
+      assert.ok(
+        hooksToLinks(html, inside).includes('a'),
+        `${what} has no links on the page these tests read`,
+      );
+    }
+  });
+
+  it('reads a link in any nav by the same rules as one in the prose (AC #1)', async () => {
+    const html = await postWithEveryNav();
+    const prose = readsBy(html, PROSE);
+
+    // The generic link rules and the page's own colour and size, and nothing
+    // between the document and the link that changes any of the three.
+    assert.deepEqual(
+      prose,
+      ['html', 'body', 'a, a:visited', 'a:hover, a:focus', 'a:focus-visible'],
+      'a link in the post’s words is not read by the generic link rules alone',
+    );
+
+    // Which comes out as the link colour, the browser's own underline, and the
+    // body's size rather than the small print's.
+    assert.equal(atRest(html, PROSE, 'color'), 'var(--color-primary)');
+    assert.equal(atRest(html, PROSE, 'text-decoration'), undefined);
+    assert.equal(atRest(html, PROSE, 'font-size'), 'var(--fontSize-1)');
+
+    for (const { what, inside } of NAVS) {
+      assert.deepEqual(
+        readsBy(html, inside),
+        prose,
+        `${what} is coloured, underlined or sized by something a link in the prose is not`,
+      );
+
+      for (const property of ['color', 'text-decoration', 'font-size']) {
+        assert.equal(
+          atRest(html, inside, property),
+          atRest(html, PROSE, property),
+          `${what} settles on a different ${property} than a link in the prose`,
+        );
+      }
+    }
+  });
+
+  it('keeps the site title and the small link home reading as plain text (AC #2)', async () => {
+    const cms = await site();
+    const front = await body(cms, '/');
+    const elsewhere = await body(cms, '/about/');
+
+    assert.match(
+      header(front),
+      /<h1 class="main-heading">\s*<a href="\/">A Site<\/a>/,
+      'the front page does not head itself with the site title, linked',
+    );
+    assert.match(
+      header(elsewhere),
+      /<a class="header-link-home" href="\/">A Site<\/a>/,
+      'an inside page does not head itself with the small link home',
+    );
+
+    // The body colour with no underline is what reading as plain text is.
+    const title: Anchor = (stack) => stack.at(-1)?.includes('.main-heading') ?? false;
+    const home: Anchor = (_stack, link) => link.includes('.header-link-home');
+
+    for (const [what, page, which] of [
+      ['the site title', front, title],
+      ['the small link home', elsewhere, home],
+    ] as const) {
+      assert.equal(
+        atRest(page, which, 'color'),
+        'var(--color-text)',
+        `${what} is no longer the body colour`,
+      );
+      assert.equal(atRest(page, which, 'text-decoration'), 'none', `${what} is underlined`);
+    }
+  });
+
+  it('leaves a link inside a post’s own header a normal link (AC #3)', async () => {
+    assert.match(
+      await postWithEveryNav(),
+      /<article class="blog-post h-entry">\s*<header>/,
+      'a post no longer heads itself with a bare header',
+    );
+
+    const reaching = themeRules().filter((rule) =>
+      rule.selector.split(',').some((branch) => /^\s*header\b/.test(branch)),
+    );
+    assert.deepEqual(
+      reaching.map((rule) => rule.selector),
+      [],
+      'the stylesheet still reaches into every header on the page',
+    );
+  });
+
+  it('leaves the hover flourish and the focus outline alone (AC #4)', () => {
+    const bySelector = new Map(themeRules().map((rule) => [rule.selector, rule.declarations]));
+
+    assert.match(
+      bySelector.get('a:hover, a:focus') ?? '',
+      /background-color:\s*var\(--color-primary\);\s*color:\s*var\(--color-body\);\s*text-decoration:\s*none;/,
+      'a link no longer inverts to the primary colour on hover',
+    );
+    assert.match(
+      bySelector.get('a:focus-visible') ?? '',
+      /outline:\s*2px solid var\(--color-primary\);/,
+      'a keyboard reader no longer gets an outline',
+    );
+    assert.match(
+      bySelector.get(
+        '.main-heading a:hover, .main-heading a:focus, .header-link-home:hover, .header-link-home:focus',
+      ) ?? '',
+      /background-color:\s*var\(--color-primary\);\s*color:\s*var\(--color-body\);/,
+      'the site title and the link home no longer invert on hover',
+    );
   });
 });
