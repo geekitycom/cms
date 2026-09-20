@@ -455,6 +455,8 @@ export {
   refilledCommentForm,
   removeAkismetKey,
   renderCommentMarkdown,
+  signedInCommenter,
+  signedInCommentForm,
   submitComment,
   updateComment,
   valuesOf,
@@ -481,12 +483,14 @@ export type {
   CommentSubmission,
   CommentThrottle,
   CommentVerdict,
+  CommentViewer,
   IntakeCommentOptions,
   ModerateCommentOptions,
   ModerationAction,
   ModerationOutcome,
   NewComment,
   ProposedComment,
+  SignedInAuthor,
   SubmissionType,
   SubmitCommentOptions,
   VerifyAkismetKeyOptions,
@@ -1520,11 +1524,16 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // And the form under it, when the post is still taking comments. Asked per
     // render because whether it is depends on the clock: a post that closed an
     // hour ago stops offering one on the very next request.
-    commentForm: (document) =>
+    commentForm: (document, viewer) =>
       commentFormFor({
         document,
         site: renderer.site(),
         now: resolved.now(),
+        // And who is reading it, when a session says: the short form for
+        // somebody signed in to this site, the stranger's form for everybody
+        // else (TASK-103). The route reads the session and hands it down, so
+        // one render of one request cannot disagree with itself.
+        viewer,
         // Whether "tell me about replies" is worth offering, asked per render
         // for the same reason: a credential pasted into the settings screen
         // puts the box on the next page drawn (TASK-55).

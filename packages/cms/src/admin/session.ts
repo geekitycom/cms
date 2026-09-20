@@ -35,11 +35,26 @@ export function usesSecureCookies(config: Pick<ResolvedConfig, 'baseUrl'>): bool
 }
 
 /**
+ * Where the session cookie is scoped.
+ *
+ * It was `/admin`, which kept it off every public request. TASK-103 needs the
+ * public site to know who is reading it — the comment form under a post is
+ * drawn for the person signed in rather than for a stranger — and a cookie
+ * scoped to `/admin` is one a browser never sends to a permalink, so the
+ * feature could only ever have worked in a test. `SameSite=Lax` still keeps it
+ * off cross-site POSTs, and both forms that act on a session now carry a CSRF
+ * token, so what the narrow path was buying is bought twice over. What it
+ * costs is that a public response may now be drawn for one named reader, which
+ * is why such a response says `Cache-Control: private` and carries no
+ * validator.
+ */
+export const SESSION_COOKIE_PATH = '/';
+
+/**
  * Put the session id in the response's cookie.
  *
- * `HttpOnly` keeps it away from scripts, `SameSite=Lax` keeps it off
- * cross-site POSTs (belt to the CSRF token's braces), and `Path=/admin` keeps
- * it off every public request, so a cached public page can never carry it.
+ * `HttpOnly` keeps it away from scripts and `SameSite=Lax` keeps it off
+ * cross-site POSTs, belt to the CSRF token's braces.
  */
 export function setSessionCookie(
   c: Context<GeekityEnv>,
@@ -47,7 +62,7 @@ export function setSessionCookie(
   options: { config: ResolvedConfig; expiresAt: string },
 ): void {
   setCookie(c, SESSION_COOKIE, sessionId, {
-    path: ADMIN_PREFIX,
+    path: SESSION_COOKIE_PATH,
     httpOnly: true,
     sameSite: 'Lax',
     secure: usesSecureCookies(options.config),
@@ -58,7 +73,7 @@ export function setSessionCookie(
 /** Drop the session cookie. The attributes have to match the ones it was set with. */
 export function clearSessionCookie(c: Context<GeekityEnv>, config: ResolvedConfig): void {
   deleteCookie(c, SESSION_COOKIE, {
-    path: ADMIN_PREFIX,
+    path: SESSION_COOKIE_PATH,
     httpOnly: true,
     sameSite: 'Lax',
     secure: usesSecureCookies(config),

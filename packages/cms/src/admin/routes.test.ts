@@ -289,7 +289,7 @@ describe('logout', () => {
 });
 
 describe('the session cookie', () => {
-  it('is HttpOnly, SameSite=Lax and scoped to /admin', async () => {
+  it('is HttpOnly, SameSite=Lax and scoped to the whole site', async () => {
     const cms = await site();
     const response = await cms.app.request('/admin/setup');
     const header = setCookie(response, 'geekity_session');
@@ -297,7 +297,10 @@ describe('the session cookie', () => {
     assert.ok(header !== undefined);
     assert.match(header, /HttpOnly/);
     assert.match(header, /SameSite=Lax/);
-    assert.match(header, /Path=\/admin/);
+    // `Path=/` rather than `Path=/admin`: the public site draws the comment
+    // form for whoever is signed in (TASK-103), and a cookie scoped to the
+    // admin is one a browser never sends to a permalink.
+    assert.match(header, /Path=\/(;|$)/);
     assert.ok(!/Secure/.test(header), 'plain http keeps Secure off, or the cookie is dropped');
   });
 

@@ -24,9 +24,10 @@ export {
   COMMENT_REPLY_PARAM,
   commentForm,
   refilledCommentForm,
+  signedInCommentForm,
   valuesOf,
 } from './form.ts';
-export type { CommentFormContext } from './form.ts';
+export type { CommentFormContext, CommentViewer } from './form.ts';
 export { renderCommentMarkdown } from './markdown.ts';
 export { isModerationAction, moderateComment, MODERATION_ACTIONS } from './moderate.ts';
 export type { ModerateCommentOptions, ModerationAction, ModerationOutcome } from './moderate.ts';
@@ -87,5 +88,7 @@ export type {
   SubmissionType,
   CommentThrottle,
   CommentVerdict,
+  SignedInAuthor,
   SubmitCommentOptions,
 } from './submission.ts';
+export { signedInCommenter } from './viewer.ts';

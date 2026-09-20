@@ -1,20 +1,23 @@
 import type { Context, Hono } from 'hono';
 
+import { csrfTokenMatches } from '../admin/session.ts';
 import type { AdminStore } from '../admin/store.ts';
 import { clientAddress, createLoginThrottle } from '../admin/throttle.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
 import { isPublicDocument } from '../web/documents.ts';
+import { PRIVATE_CACHE_CONTROL } from '../web/negotiate.ts';
 import {
   COMMENT_NOTICE_PARAM,
   COMMENT_NOTICES,
   COMMENT_POST_PATH,
   commentForm,
   refilledCommentForm,
+  signedInCommentForm,
   valuesOf,
 } from './form.ts';
-import type { CommentFormContext } from './form.ts';
+import type { CommentFormContext, CommentViewer } from './form.ts';
 import { commentPolicyOf, commentsOpen } from './policy.ts';
 import { commentAnchor } from '../web/conversation.ts';
 import {
@@ -24,6 +27,7 @@ import {
   submitComment,
 } from './submission.ts';
 import type { CommentForm, CommentThrottle } from './submission.ts';
+import { signedInCommenter } from './viewer.ts';
 
 /**
  * The one public endpoint comments add: where the form under a post posts to.
@@ -62,6 +66,18 @@ export function mountComments(app: Hono<GeekityEnv>): void {
     const { store, admin, renderer, config } = c.var;
     const body = await c.req.parseBody();
     const form = formOf(body);
+    // Who the session says this is, read before anything else is decided: it
+    // settles the token, the attribution and where the comment lands.
+    const viewer = signedInCommenter(c);
+
+    // A form that acts on nobody's behalf needs no token, and the public one
+    // still carries none. This one posts under somebody's name, so without a
+    // matching token a page on another site could make them say something they
+    // never typed. Refused in the words and with the status the admin guard
+    // uses, because it is the same check on the same token.
+    if (viewer !== undefined && !csrfTokenMatches(viewer.csrfToken, form.csrf)) {
+      return c.text('That form was stale or came from somewhere else. Reload and try again.', 403);
+    }
 
     const document = store.getBySlug(form.post);
     if (document === undefined || !isPublicDocument(document, store.now())) {
@@ -73,8 +89,8 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       // 403 rather than 404: the post is there, and the reader can see for
       // themselves that it is. Saying so is more honest than pretending the
       // URL is wrong, and a closed post is a state rather than a mistake.
-      return page(c, document, 403, {
-        ...refilledCommentForm(document, valuesOf(form), {}, now),
+      return page(c, document, 403, viewer, {
+        ...drawnFor(refilledCommentForm(document, valuesOf(form), {}, now), viewer),
         error: 'This post is not taking comments any more.',
       });
     }
@@ -86,6 +102,10 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       dataDir: config.dataDir,
       baseUrl: config.baseUrl,
       checker: config.commentChecker,
+      // Who the site knows is writing, when it knows (TASK-103). Set, it is
+      // the whole of the comment's attribution and the reason it is approved
+      // on arrival.
+      author: viewer,
       // Who hears about what lands is the intake's to decide, and neither
       // message is awaited: the reader is redirected now and they go out
       // behind them (TASK-55).
@@ -121,8 +141,8 @@ export function mountComments(app: Hono<GeekityEnv>): void {
 
     if (refusal.kind === 'rate-limited') {
       c.header('Retry-After', String(refusal.retryAfter));
-      return page(c, document, 429, {
-        ...refilledCommentForm(document, valuesOf(form), {}, now),
+      return page(c, document, 429, viewer, {
+        ...drawnFor(refilledCommentForm(document, valuesOf(form), {}, now), viewer),
         error: 'That is a lot of comments in a short time. Try again in a few minutes.',
       });
     }
@@ -134,8 +154,8 @@ export function mountComments(app: Hono<GeekityEnv>): void {
           ? 'That form had been open a long time. Here it is again — the words are still there.'
           : undefined;
 
-    return page(c, document, 400, {
-      ...refilledCommentForm(document, valuesOf(form), problemsOf(refusal), now),
+    return page(c, document, 400, viewer, {
+      ...drawnFor(refilledCommentForm(document, valuesOf(form), problemsOf(refusal), now), viewer),
       ...(message === undefined ? {} : { error: message }),
     });
   });
@@ -144,15 +164,31 @@ export function mountComments(app: Hono<GeekityEnv>): void {
 /** The statuses a refused submission is answered with. */
 type RefusalStatus = 400 | 403 | 429;
 
-/** The post's own page, rendered again with this form on it. */
+/**
+ * The same form drawn for whoever is filling it in: the short one when the
+ * site knows them, and the stranger's one when it does not.
+ */
+function drawnFor(form: CommentFormContext, viewer: CommentViewer | undefined): CommentFormContext {
+  return viewer === undefined ? form : signedInCommentForm(form, viewer);
+}
+
+/**
+ * The post's own page, rendered again with this form on it.
+ *
+ * A page drawn for a named reader says so, for the reason the rendered post
+ * does: it is one person's page rather than the post, and nothing in front of
+ * the site may hold it and hand it to the next reader.
+ */
 function page(
   c: Context<GeekityEnv>,
   document: Document,
   status: RefusalStatus,
+  viewer: CommentViewer | undefined,
   form: CommentFormContext,
 ): Response {
   c.status(status);
-  return c.html(c.var.renderer.renderDocument(document, { commentForm: form }));
+  if (viewer !== undefined) c.header('cache-control', PRIVATE_CACHE_CONTROL);
+  return c.html(c.var.renderer.renderDocument(document, { commentForm: form }, viewer));
 }
 
 /** The per-field messages a refusal carries, if it carries any. */
@@ -207,9 +243,13 @@ export function commentFormFor(options: {
   now: Date;
   /** Whether the site can send mail, which is whether the box is offered. */
   notifiable?: boolean | undefined;
+  /** Who the request's session says is reading, when it says anybody. */
+  viewer?: CommentViewer | undefined;
 }): CommentFormContext | undefined {
   if (!commentsOpen(options.document, commentPolicyOf(options.site), options.now)) return undefined;
-  return commentForm(options.document, options.now, options.notifiable ?? false);
+
+  const form = commentForm(options.document, options.now, options.notifiable ?? false);
+  return drawnFor(form, options.viewer);
 }
 
 /** A submitted body as the form it is, every field a string. */
@@ -224,6 +264,7 @@ function formOf(body: Record<string, unknown>): CommentForm {
     trap: text(body[COMMENT_FIELDS.trap]),
     loaded: text(body[COMMENT_FIELDS.loaded]),
     notify: text(body[COMMENT_FIELDS.notify]),
+    csrf: text(body[COMMENT_FIELDS.csrf]),
   };
 }
 

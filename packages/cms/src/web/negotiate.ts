@@ -297,6 +297,19 @@ export interface RepresentationResponseOptions {
    * business beyond joining them to the header.
    */
   links?: readonly string[] | undefined;
+  /**
+   * Whether this response was drawn for one named reader rather than for
+   * everybody (TASK-103).
+   *
+   * A post page is the same for every reader, which is what lets a CDN or a
+   * reverse proxy — the Docker deployment documents one — hold it and hand it
+   * out. The moment it says "Commenting as ada" it is one person's page, and
+   * anything in front of the site holding it would hand her name to the next
+   * reader. Such a response says so, and carries no validator either: a
+   * browser revalidating its own copy would otherwise be told a page drawn for
+   * somebody signed in is still fresh after they signed out.
+   */
+  private?: boolean | undefined;
   /** Validator for this representation. Omit when one cannot be trusted. */
   etag?: string | undefined;
   /** When the resource last changed. */
@@ -325,18 +338,23 @@ export function representationResponse(options: RepresentationResponseOptions): 
       .join(', '),
   });
 
-  if (options.etag !== undefined) headers.set('etag', options.etag);
-  if (options.lastModified !== undefined) {
-    headers.set('last-modified', options.lastModified.toUTCString());
-  }
-  // A validator without a directive leaves the browser to guess how long the
-  // response stays fresh. `no-cache` keeps the validator's value — a cheap 304
-  // — without ever letting a stale page through.
-  if (options.etag !== undefined || options.lastModified !== undefined) {
-    headers.set('cache-control', 'no-cache');
+  const personal = options.private === true;
+  if (!personal) {
+    if (options.etag !== undefined) headers.set('etag', options.etag);
+    if (options.lastModified !== undefined) {
+      headers.set('last-modified', options.lastModified.toUTCString());
+    }
+    // A validator without a directive leaves the browser to guess how long the
+    // response stays fresh. `no-cache` keeps the validator's value — a cheap
+    // 304 — without ever letting a stale page through.
+    if (options.etag !== undefined || options.lastModified !== undefined) {
+      headers.set('cache-control', 'no-cache');
+    }
+  } else {
+    headers.set('cache-control', PRIVATE_CACHE_CONTROL);
   }
 
-  if (isNotModified(options.conditional, options.etag, options.lastModified)) {
+  if (!personal && isNotModified(options.conditional, options.etag, options.lastModified)) {
     return new Response(null, { status: 304, headers });
   }
 
@@ -353,6 +371,16 @@ export function representationResponse(options: RepresentationResponseOptions): 
 
   return new Response(body, { headers });
 }
+
+/**
+ * What a response drawn for one named reader says about itself.
+ *
+ * `private` is the part that matters: it tells a shared cache this belongs to
+ * one reader and must not be handed to another. `no-store` is the belt to its
+ * braces, and keeps the page off the disk of a browser somebody else uses
+ * after them.
+ */
+export const PRIVATE_CACHE_CONTROL = 'private, no-store';
 
 /**
  * The 406 a request earns when it accepts none of the representations on

@@ -1084,7 +1084,7 @@ that has CSS for the WordPress theme can bring it.
 | Key                        | What it holds                                                                                                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `action`                   | Where the form posts. One fixed path; the post travels as a field.                                                                                                        |
-| `fields`                   | The name each field is submitted under: `post`, `name`, `email`, `url`, `body`, `inReplyTo`, `trap`, `loaded`, `notify`. Use these rather than typing the names.          |
+| `fields`                   | The name each field is submitted under: `post`, `name`, `email`, `url`, `body`, `inReplyTo`, `trap`, `loaded`, `notify`, `csrf`. Use these rather than typing the names.  |
 | `post`                     | The post's slug, for the hidden field.                                                                                                                                    |
 | `loaded`                   | When this form was rendered, in epoch milliseconds, for the hidden field. A submission that comes back too fast is refused.                                               |
 | `values`                   | What is in the fields: empty on a fresh form, what was typed on a refused one.                                                                                            |
@@ -1097,6 +1097,46 @@ that has CSS for the WordPress theme can bring it.
 technology, and give it `tabindex="-1"` and `autocomplete="off"`. A submission
 that filled it is dropped. **Do not** remove it from a replacement partial —
 it is one of three things standing between the site and a spam queue.
+
+### When somebody is signed in
+
+Two more keys are on `commentForm` when — and only when — the request carries a
+valid session for this site's admin:
+
+| Key          | What it holds                                                                                                                       |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `signedInAs` | Who the comment will be posted as: `name`, which is their display name or their username, and `url`, which is their author archive. |
+| `csrfToken`  | The value for a hidden `fields.csrf`, without which the submission is refused.                                                      |
+
+**A replacement partial has to draw both forms**, because the site draws this
+one for its own author and the stranger's one for everybody else:
+
+```njk
+{% if commentForm.signedInAs %}
+<input type="hidden" name="{{ commentForm.fields.csrf }}" value="{{ commentForm.csrfToken }}" />
+<p class="comment-signed-in">
+  Commenting as <a href="{{ commentForm.signedInAs.url }}">{{ commentForm.signedInAs.name }}</a>.
+</p>
+{% else %}
+{# fields.loaded, fields.trap, and the name, email and website boxes #}
+{% endif %}
+```
+
+The signed-in branch renders **no** name, email or website box, **no**
+`fields.trap` and **no** `fields.loaded`: the site already knows all three
+answers, and a session is better evidence that this is a person than a honeypot
+or a stopwatch. It renders `fields.csrf` instead, because this is the one form
+on the public site that acts on somebody's behalf — without the token, a page
+on another site could make them post under their own name. The comment box, the
+reply-to field and the notify box are the same in both branches.
+
+The account's email address is **never** on the context. The comment is stored
+with it, exactly as a stranger's is, and it is no more printable than theirs.
+
+A page carrying this form is one reader's page rather than the post, so the CMS
+answers it `Cache-Control: private, no-store` and with no ETag. A theme does
+not have to do anything about that, but it is why printing somebody's name into
+a page is safe here.
 
 Two more keys travel beside it, both from the URL rather than from the post:
 

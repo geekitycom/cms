@@ -13,6 +13,13 @@
   every label, field and button through them — so the contact form wears the
   same class rather than repeating the rules.
 
+  It draws two forms. For a stranger: the name, email and website boxes, the
+  honeypot and the loaded-at stamp. For somebody signed in to this site's
+  admin — `commentForm.signedInAs` — none of those, because the site already
+  knows all three and a session is better evidence than a honeypot, and a
+  hidden CSRF token instead, because this form posts under somebody's name.
+  A theme that replaces this partial has to draw both.
+
   It works with JavaScript switched off, and there is no script on it.
 #}
 <section class="comment-respond" id="respond">
@@ -28,7 +35,6 @@
 
   <form method="post" action="{{ commentForm.action }}">
     <input type="hidden" name="{{ commentForm.fields.post }}" value="{{ commentForm.post }}" />
-    <input type="hidden" name="{{ commentForm.fields.loaded }}" value="{{ commentForm.loaded }}" />
     {#
       What this comment answers. `commentReplyTo` is the `?reply_to=` on the
       URL, which a Reply link put there and the CMS has already checked names
@@ -44,6 +50,26 @@
       <a href="{{ page.url }}#respond">Comment on the post instead</a>
     </p>
     {% endif %}
+
+    {% if commentForm.signedInAs %}
+    {#
+      Signed in to this site. The comment is attributed from the account, so
+      there is nothing to type and nothing to get wrong; the token is what
+      stops a page on another site posting under this name without them
+      knowing.
+    #}
+    <input type="hidden" name="{{ commentForm.fields.csrf }}" value="{{ commentForm.csrfToken }}" />
+
+    <p class="comment-signed-in">
+      Commenting as <a href="{{ commentForm.signedInAs.url }}">{{ commentForm.signedInAs.name }}</a>.
+    </p>
+    {% else %}
+    {#
+      When this form was drawn, which is what the minimum submit time is
+      measured against. A signed-in form carries none: a session says more
+      about whether this is a person than a stopwatch does.
+    #}
+    <input type="hidden" name="{{ commentForm.fields.loaded }}" value="{{ commentForm.loaded }}" />
 
     {#
       The honeypot. Hidden from sight and from assistive technology, out of the
@@ -78,6 +104,7 @@
       <span class="comment-field-error">{{ commentForm.problems.url }}</span>
       {% endif %}
     </p>
+    {% endif %}
 
     <p class="comment-field">
       <label for="comment-body">Comment</label>
@@ -92,8 +119,9 @@
       "Tell me about replies". Only on a site that can actually send mail —
       `notifiable` is false otherwise — because a box that promised a message
       nothing would ever send would be a lie on a form. The address is the one
-      typed above, is never shown anywhere, and every message it sends carries
-      a one-click unsubscribe link.
+      typed above — or the account's, for somebody signed in — is never shown
+      anywhere, and every message it sends carries a one-click unsubscribe
+      link.
     #}
     {% if commentForm.notifiable %}
     <p class="comment-check">

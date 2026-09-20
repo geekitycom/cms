@@ -18,7 +18,7 @@ import {
   termRedirects,
   themeName,
 } from './context.ts';
-import type { CommentFormContext } from '../comments/form.ts';
+import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
 import type { ContactFormContext } from '../contact/form.ts';
 import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
@@ -147,14 +147,28 @@ export interface Renderer {
    * `extra` goes on the context last and so wins: it is how the comment
    * endpoint puts a refused form back on the page it came from, and how the
    * redirect after a submission gets its thank-you onto the post.
+   *
+   * `viewer` is who the request's session says is reading, when it says
+   * anybody (TASK-103). The only thing it changes is the comment form, which
+   * is drawn for them rather than for a stranger; a caller with no request —
+   * a feed, a preview, an email — passes nothing and gets the page everybody
+   * else gets.
    */
-  renderDocument(document: Document, extra?: Record<string, unknown>): string;
+  renderDocument(
+    document: Document,
+    extra?: Record<string, unknown>,
+    viewer?: CommentViewer,
+  ): string;
   /**
    * One page as the site's front page: the same context its own URL would give
    * it, at `/`, through the theme's front-page template if it has one and its
    * page layout if it has not.
    */
-  renderFrontPage(document: Document, extra?: Record<string, unknown>): string;
+  renderFrontPage(
+    document: Document,
+    extra?: Record<string, unknown>,
+    viewer?: CommentViewer,
+  ): string;
   /** A listing through the home, tag or category layout. */
   renderListing(listing: Listing): string;
   /**
@@ -220,7 +234,8 @@ export interface CreateRendererOptions {
    * form decided at boot would go on being offered for a post that closed an
    * hour ago. A renderer built without it renders no form at all.
    */
-  commentForm?: ((document: Document) => CommentFormContext | undefined) | undefined;
+  commentForm?:
+    ((document: Document, viewer?: CommentViewer) => CommentFormContext | undefined) | undefined;
   /**
    * The contact form for a page whose front matter asks for one, and
    * `undefined` for every other document (TASK-56).
@@ -416,7 +431,12 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
    */
   function documentPage(
     document: Document,
-    options_: { template: string; url?: string | undefined; extra: Record<string, unknown> },
+    options_: {
+      template: string;
+      url?: string | undefined;
+      extra: Record<string, unknown>;
+      viewer?: CommentViewer | undefined;
+    },
   ): string {
     const { template, extra } = options_;
     // The profile behind the document's `author`, resolved here rather than in
@@ -443,7 +463,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // `commentForm` is on the context only when the post is open, so the
     // theme asks `{% if commentForm %}` rather than working the rules out
     // for itself — and a closed post shows the thread with no form.
-    const form = options.commentForm?.(document);
+    const form = options.commentForm?.(document, options_.viewer);
     // And the contact form, when the page's front matter asked for one
     // (TASK-56). Nothing about where a message would go is on the context:
     // the address is read when a submission arrives, so a theme cannot
@@ -513,14 +533,15 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       return frontPageSlugs(siteData.read());
     },
 
-    renderDocument(document, extra = {}) {
+    renderDocument(document, extra = {}, viewer = undefined) {
       return documentPage(document, {
         template: document.type === 'post' ? TEMPLATES.post : TEMPLATES.page,
         extra,
+        viewer,
       });
     },
 
-    renderFrontPage(document, extra = {}) {
+    renderFrontPage(document, extra = {}, viewer = undefined) {
       return documentPage(document, {
         // A theme's own front page if it has written one, and the layout every
         // other page uses if it has not.
@@ -541,6 +562,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         // `postsPage` goes with them: the front page is the one page that
         // links the listing by name rather than by menu item.
         extra: { ...recentPostsContext(), ...postsPageContext(), ...extra },
+        viewer,
       });
     },
 
