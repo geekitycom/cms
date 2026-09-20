@@ -205,13 +205,13 @@ export interface CreateRendererOptions {
    */
   themes?: ThemeSource | undefined;
   /**
-   * The public pages, for the ones that put themselves in the site menu. Read
-   * per render rather than at boot, because a page saved in the editor should
-   * be in the menu on the very next request.
+   * The public pages, for the one a site names as its posts page. Read per
+   * render rather than at boot, because a page renamed in the editor should be
+   * linked under its new title on the very next request.
    *
-   * A renderer built without it has a menu of exactly what the setting names,
-   * which is what the tests over one template want and what a site with no
-   * index would get anyway.
+   * A renderer built without it draws no link to a posts page, which is what
+   * the tests over one template want and what a site with no index would get
+   * anyway.
    */
   pages?: (() => readonly Document[]) | undefined;
   /**
@@ -331,9 +331,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // preview all go through here, and a header that appeared on some of them
     // and not others would be a worse contract than one that is simply always
     // there. It is `menu` rather than `navigation` because `navigation` is the
-    // front-matter key a page opts in with, and a document's own front matter
-    // goes on top of the globals exactly as Eleventy's data cascade does.
-    const menu = navigationMenu({ site, pages: pages(), url: currentUrl(context) });
+    // site.json key the setting is stored under, and a template reading
+    // `navigation` would be reading the raw list rather than this one, which
+    // knows which item the reader is on.
+    const menu = navigationMenu({ site, url: currentUrl(context) });
     // Who the page is by, for the bio, the `rel="me"` links and the structured
     // data (decision-16). It is here rather than in each caller because every
     // page of the site carries it, for the reason the menu does — and it is

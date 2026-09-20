@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 03:57'
+updated_date: '2026-09-20 14:41'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -53,7 +53,6 @@ Keys the CMS reads and writes. Eleventy semantics are preserved.
 | `description` | no | data | meta description and excerpt fallback |
 | `layout` | no | template | not written per file; comes from directory data |
 | `eleventyExcludeFromCollections` | no | hides from collections | mirrored for pages that should not list |
-| `navigation` | no | data | `true` puts a page in the site menu, after the items the settings screen names |
 | `contact` | no | data | `true` renders a contact form under a page: name, email, subject, message. Messages land under `data/contact/` and on `/admin/messages`, and are emailed to the site's `contactEmail`. The destination address is never in the page |
 
 Extra keys, ignored by Eleventy, prefixed to avoid collisions:
@@ -64,7 +63,6 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | `author` | the username of a user; see below |
 | `activitypub.published` | timestamp of first delivery, a UTC instant. The only key the CMS writes here: it records that the post has been announced and when, which is what decides `Create` against `Update` |
 | `activitypub.id` | never written by the CMS. A post's ActivityStreams object id is its permalink (decision-13); this key is read, not minted, so a post migrated from elsewhere keeps the id its followers already hold — `https://example.com/?p=813` — and every `Update` and `Delete` names it |
-| `navigationOrder` | where a page in the menu sorts; the lower numbers first, and a page with none after every page with one |
 
 Unknown keys are preserved on round trip. The writer emits YAML with a stable key order so diffs stay small.
 

@@ -2,8 +2,6 @@
 title: Posts
 permalink: /posts/
 description: Where the demo's post listing lives, now that a page is the front page.
-navigation: true
-navigationOrder: 1
 ---
 
 `site.json` names this page as the `postsPage`, so the paginated listing is

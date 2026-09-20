@@ -839,14 +839,14 @@ served from a subdirectory still links correctly. `current` is true for the item
 whose path is the one being rendered, comparing without the trailing slash; an
 item pointing off the site is never current.
 
-The list is the `navigation` setting first, in the order the settings screen
-names it, and then every published page whose front matter says
-`navigation: true`, ordered by `navigationOrder` and then by title. A page that
-names no order sorts after every page that does.
+The list is the `navigation` setting and nothing else, in the order the
+settings screen names it. A page cannot put itself in the menu; a page that
+should be linked — including the one a site serves as its front page, typed
+`Home | /` — is typed into the setting.
 
 It is called `menu` rather than `navigation` because `navigation` is the
-front-matter key a page opts in with, and a document's own front matter goes on
-top of the globals exactly as Eleventy's data cascade does. The setting is
+`site.json` key the raw list is stored under, and a template reading that one
+would get a list that does not know which item the reader is on. The setting is
 mirrored to `navigation` in `content/_data/site.json`, so an Eleventy build of
 the same content renders the same menu; `docs/eleventy.config.example.js` builds
 it as `collections.menu`.

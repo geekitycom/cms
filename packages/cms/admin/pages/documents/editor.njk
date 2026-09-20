@@ -133,19 +133,6 @@
         <p class="admin-hint">Keeps the {{ kind.singular }} out of listings that gather content, without unpublishing it.</p>
       {% endif %}
 
-      {% if kind.navigable %}
-        {# The page puts itself in the site menu, after the items the settings
-           screen names. #}
-        <p class="admin-check">
-          <input id="editor-navigation" name="navigation" type="checkbox" value="1"{% if form.navigation %} checked{% endif %} />
-          <label for="editor-navigation">Show in navigation</label>
-        </p>
-
-        <label for="editor-navigation-order">Menu order</label>
-        <input id="editor-navigation-order" name="navigation_order" type="text" inputmode="numeric" value="{{ form.navigationOrder }}" />
-        <p class="admin-hint">Puts this {{ kind.singular }} in the site header, after the items on the settings screen. A lower order comes first; leave it empty and it sorts by title after the ordered ones.</p>
-      {% endif %}
-
       {% if kind.contactable %}
         {# The page offers a contact form under its content (TASK-56). Where a
            message goes is the contact address on the Settings screen; it is

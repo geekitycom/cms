@@ -15,6 +15,11 @@
   "contactEmail": "hello@example.com",
   "notifyServer": "https://rpc.rsscloud.io",
   "relays": [],
-  "navigation": [],
+  "navigation": [
+    { "label": "Home", "url": "/" },
+    { "label": "Posts", "url": "/posts/" },
+    { "label": "Archive", "url": "/archive/" },
+    { "label": "Contact", "url": "/contact/" }
+  ],
   "taxonomyRedirects": []
 }

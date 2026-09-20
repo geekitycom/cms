@@ -56,8 +56,9 @@
   {% set navigationHint %}
     One item per line, written <code>Label | URL</code> &mdash; for example
     <code>About | /about/</code> or <code>Mastodon | https://example.social/@me</code>.
-    They are the menu in the site header, in this order. A page can put itself
-    on the end of it by ticking <em>Show in navigation</em> in the editor.
+    They are the menu in the site header, in this order, and they are the whole
+    of it: nothing else puts a link there. A page serving as the front page
+    goes in as <code>Home | /</code>, where a reader lands.
   {% endset %}
   {{ field.textarea('settings-navigation', fields.navigation, 'Menu', form.navigation,
        error=problems.navigation, hint=navigationHint, rows='4', spellcheck='false') }}

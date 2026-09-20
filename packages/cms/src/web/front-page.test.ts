@@ -221,9 +221,18 @@ describe('the sitemap and the site menu of a site with both picks', () => {
   it('links the homepage at / and the posts page at its own URL (AC #5)', async () => {
     const { cms } = await site({
       'posts/2026-09-02-newest.md': post('Newest', '09', 'newest'),
-      'pages/welcome.md': `---\ntitle: Welcome\npermalink: /welcome/\nnavigation: true\nnavigationOrder: 1\n---\n\nHello.\n`,
-      'pages/news.md': `---\ntitle: News\npermalink: /news/\nnavigation: true\n---\n\nThe latest.\n`,
-      '_data/site.json': siteJson({ homepage: 'welcome', postsPage: 'news' }),
+      'pages/welcome.md': `---\ntitle: Welcome\npermalink: /welcome/\n---\n\nHello.\n`,
+      'pages/news.md': `---\ntitle: News\npermalink: /news/\n---\n\nThe latest.\n`,
+      // The menu is the setting and nothing else (TASK-106), so the page
+      // serving as the front page is typed at the URL a reader lands on.
+      '_data/site.json': siteJson({
+        homepage: 'welcome',
+        postsPage: 'news',
+        navigation: [
+          { label: 'Welcome', url: '/' },
+          { label: 'News', url: '/news/' },
+        ],
+      }),
     });
 
     const html = await (await cms.app.request('/')).text();

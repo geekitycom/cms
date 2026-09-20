@@ -1,30 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { Document } from '../content/document.ts';
 import type { SiteData } from './context.ts';
 import { navigationItems, navigationMenu } from './navigation.ts';
 
-/** A page as the index holds one, with whatever front matter a test names. */
-function page(title: string, permalink: string, extra: Record<string, unknown> = {}): Document {
-  return {
-    type: 'page',
-    path: `pages${permalink}index.md`,
-    slug: title.toLowerCase(),
-    permalink,
-    title,
-    tags: [],
-    categories: [],
-    draft: false,
-    extra,
-    body: '',
-    html: '',
-    hash: 'x',
-  };
-}
-
 describe('navigationMenu', () => {
-  it('lists the items the setting names, in the order it names them', () => {
+  it('lists the items the setting names, in the order it names them (AC #1)', () => {
     const menu = navigationMenu({
       site: {
         title: 'A Site',
@@ -34,7 +15,6 @@ describe('navigationMenu', () => {
           { label: 'Elsewhere', url: 'https://example.org/' },
         ],
       },
-      pages: [],
       url: '/',
     });
 
@@ -56,7 +36,7 @@ describe('navigationMenu', () => {
     };
 
     const current = (url: string): string[] =>
-      navigationMenu({ site, pages: [], url })
+      navigationMenu({ site, url })
         .filter((item) => item.current)
         .map((item) => item.label);
 
@@ -67,34 +47,11 @@ describe('navigationMenu', () => {
     assert.deepEqual(current('https://example.org/'), [], 'a path is never an absolute URL');
   });
 
-  it('adds the pages that opted in after the items, ordered then titled', () => {
-    const menu = navigationMenu({
-      site: {
-        title: 'A Site',
-        url: 'https://example.com',
-        navigation: [{ label: 'Home', url: '/' }],
-      },
-      pages: [
-        page('Uses', '/uses/', { navigation: true }),
-        page('Colophon', '/colophon/', { navigation: true, navigationOrder: 2 }),
-        page('Now', '/now/', { navigation: true, navigationOrder: 1 }),
-        page('About', '/about/', { navigation: true }),
-        page('Secret', '/secret/', {}),
-        page('Also secret', '/also-secret/', { navigation: 'yes' }),
-      ],
-      url: '/now/',
-    });
-
+  it('has nothing in it for a site whose setting is empty', () => {
     assert.deepEqual(
-      menu.map((item) => item.label),
-      ['Home', 'Now', 'Colophon', 'About', 'Uses'],
+      navigationMenu({ site: { title: 'A Site', url: 'https://example.com' }, url: '/' }),
+      [],
     );
-    assert.deepEqual(
-      menu.filter((item) => item.current).map((item) => item.label),
-      ['Now'],
-      'a page in the menu is marked when it is the page being read',
-    );
-    assert.equal(menu[1]?.url, '/now/', 'a page links to its own permalink');
   });
 });
 

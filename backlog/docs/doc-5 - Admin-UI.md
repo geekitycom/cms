@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-20 13:07'
+updated_date: '2026-09-20 14:41'
 ---
 # Admin UI
 
@@ -77,7 +77,7 @@ instead of becoming a sliver.
 
 ## Editor
 
-- Fields: title, slug (auto from title until touched), permalink preview, date, tags (comma separated), description, **author**, draft checkbox, comments (follow the site settings / open / closed), body. A page also carries **Show in navigation** with its menu order, and **Contact form**, which writes `contact: true` and puts a contact form under the page.
+- Fields: title, slug (auto from title until touched), permalink preview, date, tags (comma separated), description, **author**, draft checkbox, comments (follow the site settings / open / closed), body. A page also carries **Contact form**, which writes `contact: true` and puts a contact form under the page. The site menu is not here: it is the Navigation setting on Settings → Reading and nothing else (TASK-106).
 - Body is a plain `<textarea>` enhanced with CodeMirror 6 in markdown mode. A preview tab posts the body to `/admin/preview` and shows rendered HTML in the theme's post template.
 - Save writes the file (see doc-1 sync model). The form carries the file hash it was loaded with; a mismatch on save returns the form with a warning and both versions.
 - **Author** is a select of the site's users, not a free box: doc-2's `author` names a user, and after decision-14 that decides whose archive the post lands on and, once the actors land, whose followers hear about it. A new document starts on whoever is signed in; an existing one opens on the user the file names, which for a file written before decision-14 is the one its display name reads as. A file naming somebody with no account here keeps an option of its own, marked, so opening the editor and pressing Update cannot quietly reattribute the post.

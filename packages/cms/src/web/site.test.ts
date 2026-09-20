@@ -1109,7 +1109,7 @@ describe('the site menu', () => {
     assert.ok(!home.includes('site-nav'), 'and no empty <nav> either');
   });
 
-  it('puts a page that opted in on the menu, after the items (AC #2)', async () => {
+  it('leaves out a page whose front matter still says navigation (TASK-106 AC #2)', async () => {
     const { cms } = await site({
       '_data/site.json': JSON.stringify({
         title: 'Menu Site',
@@ -1121,14 +1121,33 @@ describe('the site menu', () => {
     });
 
     const home = await (await cms.app.request('/')).text();
-    assert.deepEqual(menu(home), [
-      ['Home', '/'],
-      ['Now', '/now/'],
-      ['About', '/about/'],
-    ]);
+    assert.deepEqual(menu(home), [['Home', '/']], 'the setting is the whole menu');
 
     const now = await (await cms.app.request('/now/')).text();
-    assert.equal(current(now), 'Now');
+    assert.deepEqual(menu(now), [['Home', '/']], 'on the opted-in page itself as well');
+    assert.equal(current(now), undefined, 'and it is on no item of it');
+  });
+
+  it('links the page serving as the front page by typing Home | / (TASK-106 AC #5)', async () => {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({
+        title: 'Menu Site',
+        homepage: 'welcome',
+        navigation: [
+          { label: 'Home', url: '/' },
+          { label: 'Colophon', url: '/colophon/' },
+        ],
+      }),
+      'pages/welcome.md': page('Welcome', '/welcome/'),
+      'pages/colophon.md': page('Colophon', '/colophon/'),
+    });
+
+    const home = await (await cms.app.request('/')).text();
+    assert.deepEqual(menu(home), [
+      ['Home', '/'],
+      ['Colophon', '/colophon/'],
+    ]);
+    assert.equal(current(home), 'Home', 'and the typed line is the page being read');
   });
 });
 

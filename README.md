@@ -892,14 +892,14 @@ one still waiting. Removing a line unfollows it. See
 
 The menu is the site navigation, one `Label | URL` per line — `About | /about/`,
 `Mastodon | https://example.social/@me` — rendered in the site header in that
-order, with the item whose path is the one being read marked `aria-current`. A
-page can put itself on the end of it by ticking **Show in navigation** in the
-editor, which writes `navigation: true` into its front matter; **Menu order**
-writes `navigationOrder`, and the flagged pages sort by it and then by title
-after every item the setting names. The setting is `navigation` in
-`content/_data/site.json`, a list of `{ label, url }`, so an Eleventy build
-renders the same menu — `docs/eleventy.config.example.js` assembles it as
-`collections.menu`. A theme reads it as `menu`; see
+order, with the item whose path is the one being read marked `aria-current`.
+That setting is the whole menu: a page cannot put itself in it, so there is one
+screen to edit it on, one order, and no way for a link to appear twice. A page
+the site serves as its front page is typed `Home | /`, the URL a reader lands
+on, rather than at the permalink that redirects there. The setting is
+`navigation` in `content/_data/site.json`, a list of `{ label, url }`, so an
+Eleventy build renders the same menu — `docs/eleventy.config.example.js`
+assembles it as `collections.menu`. A theme reads it as `menu`; see
 [Navigation][navigation] in the theme README.
 
 [navigation]: packages/cms/themes/default/README.md#navigation
@@ -1100,8 +1100,8 @@ all-or-nothing override: assets resolve file by file the way templates do, so a
 site's `style.css` is served instead of the packaged one, not after it.
 
 `apps/demo/content/pages/contact.md` is the worked example of the other kind of
-opt-in: `contact: true` puts the contact form under the page and
-`navigation: true` puts the page in the menu. Send it a message with the demo
+opt-in: `contact: true` puts the contact form under the page, and the demo's
+`navigation` setting names it so the page is in the menu. Send it a message with the demo
 running and the message is written to `data/contact/` before anything is
 emailed, and is waiting on **Messages** in the admin. Where it is emailed is the
 `contactEmail` setting in `content/_data/site.json`, which is read when the

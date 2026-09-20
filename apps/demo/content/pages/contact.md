@@ -3,12 +3,13 @@ title: Contact
 permalink: /contact/
 description: The page that carries the demo's contact form, and where a message sent from it ends up.
 contact: true
-navigation: true
 ---
 
 `contact: true` in this page's front matter is the whole of it. One key, which
-Eleventy ignores, puts the form below — the same shape as the `navigation: true`
-beside it, which is what makes this page appear in the menu at the top.
+Eleventy ignores, puts the form below. What the menu at the top says is a
+separate matter entirely: it is the Navigation setting on **Settings → Reading**
+and nothing else, so this page is in it because somebody typed
+`Contact | /contact/` there.
 
 Send yourself a message and follow it. It is written to `data/contact/` as a
 JSON file before anything is emailed, and it is waiting on **Messages** in the

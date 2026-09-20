@@ -11,6 +11,14 @@
     {
       "label": "Elsewhere",
       "url": "https://elsewhere.example/"
+    },
+    {
+      "label": "About",
+      "url": "/about/"
+    },
+    {
+      "label": "Colophon",
+      "url": "/colophon/"
     }
   ],
   "homepage": "front",

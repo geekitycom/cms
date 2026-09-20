@@ -22,7 +22,6 @@ import type { GeekityEnv } from '../env.ts';
 import { isPublicDocument } from '../web/documents.ts';
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
 import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
-import { NAVIGATION_KEY, NAVIGATION_ORDER_KEY, navigationOrder } from '../web/navigation.ts';
 import { userForAuthor } from '../web/authors.ts';
 import { findUserById, listUsers } from './accounts.ts';
 import type { User } from './accounts.ts';
@@ -66,15 +65,9 @@ export interface DocumentKind {
    */
   excludable: boolean;
   /**
-   * Whether the editor offers the site menu. Pages only: a post is in the
-   * archive and in the feeds, and putting one in the header beside About is
-   * not what a menu is for.
-   */
-  navigable: boolean;
-  /**
-   * Whether the editor offers the contact form (TASK-56). Pages only, for the
-   * reason the menu is: a form for writing to the site belongs on a standing
-   * page rather than under one post out of a thousand.
+   * Whether the editor offers the contact form (TASK-56). Pages only: a form
+   * for writing to the site belongs on a standing page rather than under one
+   * post out of a thousand.
    *
    * The front matter key itself is honoured wherever it is written, so a theme
    * that includes the partial in its post layout is free to; this only decides
@@ -127,7 +120,6 @@ export const POST_KIND: DocumentKind = {
   tagged: true,
   categorised: true,
   excludable: false,
-  navigable: false,
   contactable: false,
 };
 
@@ -142,7 +134,6 @@ export const PAGE_KIND: DocumentKind = {
   tagged: false,
   categorised: false,
   excludable: true,
-  navigable: true,
   contactable: true,
 };
 
@@ -329,8 +320,6 @@ async function saveFromForm(
     author: text(body['author']).trim(),
     draft: body['draft'] !== undefined,
     exclude: body['exclude'] !== undefined,
-    navigation: body['navigation'] !== undefined,
-    navigationOrder: text(body['navigation_order']).trim(),
     contact: body['contact'] !== undefined,
     comments: commentSetting(text(body['comments'])),
     body: normalizeBody(text(body['body'])),
@@ -354,10 +343,6 @@ async function saveFromForm(
   }
 
   if (form.title === '') return refuse(`A ${kind.singular} needs a title.`);
-
-  if (form.navigationOrder !== '' && !Number.isFinite(Number(form.navigationOrder))) {
-    return refuse('A menu order is a number, and pulls the lower numbers to the front.');
-  }
 
   const timezone = siteTimezone(c);
 
@@ -655,7 +640,7 @@ function normalizePermalink(value: string): string | undefined {
 function resolveExtra(
   kind: DocumentKind,
   document: Document | undefined,
-  form: Pick<EditorForm, 'exclude' | 'navigation' | 'navigationOrder' | 'comments' | 'contact'>,
+  form: Pick<EditorForm, 'exclude' | 'comments' | 'contact'>,
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
 
@@ -672,27 +657,9 @@ function resolveExtra(
     else if (EXCLUDE_KEY in extra) extra[EXCLUDE_KEY] = false;
   }
 
-  if (kind.navigable) {
-    if (form.navigation) {
-      extra[NAVIGATION_KEY] = true;
-      if (form.navigationOrder === '') delete extra[NAVIGATION_ORDER_KEY];
-      else extra[NAVIGATION_ORDER_KEY] = Number(form.navigationOrder);
-    } else {
-      // Both keys go rather than being written `false`, which is where this
-      // parts company with `eleventyExcludeFromCollections` above. That one is
-      // Eleventy's key and a site may have written it by hand for a build of
-      // its own, so a `false` says something; these two are the CMS's own, and
-      // absent and false mean the same thing to everything that reads them. An
-      // order on a page that is not in the menu means nothing at all.
-      delete extra[NAVIGATION_KEY];
-      delete extra[NAVIGATION_ORDER_KEY];
-    }
-  }
-
   if (kind.contactable) {
-    // Written or removed, never `false`, for the reason the menu keys are: it
-    // is the CMS's own key, and absent and false mean the same thing to
-    // everything that reads it (TASK-56).
+    // Written or removed, never `false`: it is the CMS's own key, and absent
+    // and false mean the same thing to everything that reads it (TASK-56).
     if (form.contact) extra[CONTACT_FRONT_MATTER_KEY] = true;
     else delete extra[CONTACT_FRONT_MATTER_KEY];
   }
@@ -1015,10 +982,6 @@ export interface EditorForm {
   draft: boolean;
   /** Whether `eleventyExcludeFromCollections` is set. Pages only. */
   exclude: boolean;
-  /** Whether the page put itself in the site menu. Pages only. */
-  navigation: boolean;
-  /** Where in the menu it goes, as typed. Empty for "after the ordered ones". */
-  navigationOrder: string;
   /** Whether the page offers a contact form. Pages only. */
   contact: boolean;
   /**
@@ -1061,8 +1024,6 @@ export function blankForm(
     author: '',
     draft: false,
     exclude: false,
-    navigation: false,
-    navigationOrder: '',
     contact: false,
     comments: COMMENT_SETTINGS.site,
     body: '',
@@ -1090,8 +1051,6 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     author: document.author ?? '',
     draft: document.draft,
     exclude: document.extra[EXCLUDE_KEY] === true,
-    navigation: document.extra[NAVIGATION_KEY] === true,
-    navigationOrder: navigationOrder(document)?.toString() ?? '',
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
     comments: commentSettingOf(document),
     body: document.body,

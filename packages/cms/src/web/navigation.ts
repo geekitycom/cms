@@ -1,20 +1,4 @@
-import type { Document } from '../content/document.ts';
-import { frontPageSlugs } from './context.ts';
 import type { SiteData } from './context.ts';
-
-/**
- * The front-matter key a page opts into the menu with, and the one that orders
- * it among the others.
- *
- * Neither is in `KNOWN_FRONT_MATTER_KEYS`, so the parser leaves both in
- * {@link Document.extra} and the editor reads and writes them there, exactly
- * as it does `eleventyExcludeFromCollections`. Eleventy sees them as ordinary
- * data keys, which is what lets a build render the same menu.
- */
-export const NAVIGATION_KEY = 'navigation';
-
-/** @see {@link NAVIGATION_KEY} */
-export const NAVIGATION_ORDER_KEY = 'navigationOrder';
 
 /** One entry of the site menu, as the setting and `site.json` spell it. */
 export interface NavigationItem {
@@ -32,64 +16,30 @@ export interface MenuItem extends NavigationItem {
 
 /** What {@link navigationMenu} builds a menu out of. */
 export interface NavigationMenuOptions {
-  /** The site data, whose `navigation` holds the explicit items. */
+  /** The site data, whose `navigation` holds the whole menu. */
   site: SiteData;
-  /** The public pages, of which the ones that opted in join the menu. */
-  pages: readonly Document[];
   /** The path being rendered, which is what marks an item current. */
   url: string;
 }
 
-/** The menu for one request: the explicit items, then the pages that opted in. */
+/**
+ * The menu for one request: the items the setting names, with the one the
+ * request is on marked.
+ *
+ * The setting is the only source of the menu (TASK-106). A page cannot put
+ * itself in it, so there is one screen to edit the menu on, one order — the
+ * order the lines were typed in — and no way for one link to appear twice. A
+ * page that should be linked is linked by typing a line for it, including the
+ * page a site serves as its front page: that one is typed `Home | /`, the URL
+ * a reader lands on, rather than the permalink that redirects there.
+ */
 export function navigationMenu(options: NavigationMenuOptions): MenuItem[] {
   const here = comparablePath(options.url);
-  const items = [
-    ...navigationItems(options.site),
-    // The page serving as the front page is linked at `/`, not at the URL that
-    // redirects there: a menu should point at where a reader lands.
-    ...navigationPages(options.pages, frontPageSlugs(options.site).homepage),
-  ];
 
-  return items.map((item) => ({
+  return navigationItems(options.site).map((item) => ({
     ...item,
     current: here !== undefined && comparablePath(item.url) === here,
   }));
-}
-
-/**
- * The pages that put themselves in the menu, in the order they belong in.
- *
- * They come after the items the setting names, so the menu a site typed out
- * stays as it was typed and a page opting in appends itself rather than
- * landing in the middle of it. Among themselves they go by
- * `navigationOrder` and then by title, and a page that names no order sorts
- * after every page that does: an order is a way of pulling one page to the
- * front, not something every page has to carry before any of them can.
- *
- * `homepage` is the slug of the page the site serves at `/`, if it has one:
- * that page is linked at `/` rather than at its own permalink, which redirects
- * there.
- */
-export function navigationPages(pages: readonly Document[], homepage = ''): NavigationItem[] {
-  return pages
-    .filter((document) => document.extra[NAVIGATION_KEY] === true)
-    .map((document) => ({
-      label: document.title,
-      url: homepage !== '' && document.slug === homepage ? '/' : document.permalink,
-      order: navigationOrder(document),
-    }))
-    .sort(
-      (a, b) =>
-        (a.order ?? Number.POSITIVE_INFINITY) - (b.order ?? Number.POSITIVE_INFINITY) ||
-        a.label.localeCompare(b.label),
-    )
-    .map(({ label, url }) => ({ label, url }));
-}
-
-/** A page's `navigationOrder`, when it carries a usable one. */
-export function navigationOrder(document: Document): number | undefined {
-  const value = document.extra[NAVIGATION_ORDER_KEY];
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 /**

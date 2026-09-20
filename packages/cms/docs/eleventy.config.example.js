@@ -847,20 +847,23 @@ export default function (eleventyConfig) {
   // both the global data and every page at once.
   //
   // It is the `navigation` array of `content/_data/site.json`, which the
-  // settings screen mirrors, followed by every page whose front matter says
-  // `navigation: true`, ordered by `navigationOrder` and then by title. Each
-  // entry is `{ label, url }`; a layout marks the current one itself, because a
-  // collection is built once for the whole site and `page.url` is per template:
+  // settings screen mirrors, and nothing else: one screen, one order, and no
+  // way for a page to add itself. A page that should be linked is typed into
+  // the setting, including the one a site serves as its front page, which is
+  // typed at `/` rather than at the permalink that redirects there.
+  //
+  // Each entry is `{ label, url }`; a layout marks the current one itself,
+  // because a collection is built once for the whole site and `page.url` is
+  // per template:
   //
   //     {% for item in collections.menu %}
   //     <a href="{{ item.url }}"
   //        {% if item.url == page.url %}aria-current="page"{% endif %}>{{ item.label }}</a>
   //     {% endfor %}
   eleventyConfig.addCollection('menu', (collectionApi) => {
-    const all = collectionApi.getAll();
-    const site = all[0]?.data?.site ?? {};
+    const site = collectionApi.getAll()[0]?.data?.site ?? {};
 
-    const items = (Array.isArray(site.navigation) ? site.navigation : [])
+    return (Array.isArray(site.navigation) ? site.navigation : [])
       .filter(
         (item) =>
           item &&
@@ -870,22 +873,6 @@ export default function (eleventyConfig) {
           item.url !== '',
       )
       .map((item) => ({ label: item.label, url: item.url }));
-
-    const pages = all
-      .filter((item) => item.data.navigation === true && !isPost(item.data.page?.inputPath ?? ''))
-      .map((item) => ({
-        label: String(item.data.title ?? ''),
-        url: item.url,
-        order:
-          typeof item.data.navigationOrder === 'number' &&
-          Number.isFinite(item.data.navigationOrder)
-            ? item.data.navigationOrder
-            : Number.POSITIVE_INFINITY,
-      }))
-      .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label))
-      .map(({ label, url }) => ({ label, url }));
-
-    return [...items, ...pages];
   });
 
   // Documents are Markdown; Nunjucks and HTML are here for the layouts and for

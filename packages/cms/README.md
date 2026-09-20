@@ -2021,29 +2021,23 @@ can put its archives at the same URLs.
 ### Navigation
 
 Every page carries the site menu, which the theme renders in the header. It is
-two things joined:
+one thing: the `navigation` setting, edited on `/admin/settings/reading` as one
+`Label | URL` per line — `About | /about/`,
+`Mastodon | https://example.social/@me` — in the order it is typed. The URL is
+a site-root path or an absolute `http(s)` URL; anything else is refused with
+the offending line quoted.
 
-1. The `navigation` setting, edited on `/admin/settings/reading` as one
-   `Label | URL`
-   per line — `About | /about/`, `Mastodon | https://example.social/@me` — in
-   the order it is typed. The URL is a site-root path or an absolute
-   `http(s)` URL; anything else is refused with the offending line quoted.
-2. Every published page whose front matter says `navigation: true`, ordered by
-   `navigationOrder` and then by title. A page that names no order sorts after
-   every page that does, and the flagged pages always come after the items the
-   setting names.
-
-The editor writes both keys: **Show in navigation** on a page's editor writes
-`navigation: true`, **Menu order** writes `navigationOrder`, and clearing the
-box takes both back out of the file. Posts have neither field — a post is in
-the archive and in the feeds, which is where a post belongs.
+There is no second source. A page cannot put itself in the menu, so there is
+one screen to edit the menu on, one order, and no way for the same link to
+appear twice. A page that should be linked is linked by typing a line for it —
+including the page a site serves as its front page, which is typed `Home | /`,
+the URL a reader lands on, rather than at the permalink that redirects there.
 
 Templates read it as `menu`, a list of `{ label, url, current }`, with
 `current` true for the item whose path is the one being rendered. It is `menu`
-rather than `navigation` because `navigation` is the front-matter key a page
-opts in with, and a document's own front matter goes on top of the globals as
-Eleventy's data cascade does. The scheduled, drafted and trashed pages are not
-in it, for the same reason they are not on the site.
+rather than `navigation` because `navigation` is the `site.json` key the raw
+list is stored under, and a template reading that one would get a list that
+does not know which item the reader is on.
 
 The setting is `navigation` in `content/_data/site.json`, a list of
 `{ label, url }`, so an Eleventy build renders the same menu; the example
@@ -2727,9 +2721,9 @@ the rules the CMS follows that Eleventy does not know about on its own:
 It also builds two collections Eleventy has no notion of. `collections.categories`
 is the second taxonomy, one entry of `{ name, posts }` per category in use, for
 paginating into archives at `/{{ site.categoryBase }}/{name}/`.
-`collections.menu` is the site menu — the `navigation` array of `site.json`
-followed by the pages whose front matter says `navigation: true` — as
-`{ label, url }` entries in the order the header should render them; a layout
+`collections.menu` is the site menu — the `navigation` array of `site.json`,
+and nothing else — as `{ label, url }` entries in the order the header should
+render them; a layout
 marks the current one itself by comparing `item.url` with `page.url`, because a
 collection is built once for the whole site.
 
