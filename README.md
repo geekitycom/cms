@@ -1090,7 +1090,9 @@ The `.env` sits beside `compose.yaml` (dockge edits it on the stack page).
 Compose reads it for the image tag and passes every line in it to the container.
 
 ```sh
-# The image version to run. Required; there is no `latest` fallback.
+# The image tag to run, which is the @geekity/cms version in it. Required: it
+# has no default, so the stack never picks a version by itself. `latest` is
+# published too, and works here.
 GEEKITY_TAG=0.3.0
 
 # The public address of the site. Required. Canonical URLs, feeds, ActivityPub
@@ -1239,6 +1241,12 @@ docker compose up -d
 Database migrations run on start, so there is no other step. Read the
 [changelog](packages/cms/CHANGELOG.md) for the versions in between first; a
 breaking change carries a note there.
+
+`GEEKITY_TAG=latest` is the other way to run this. Every push moves that tag,
+so an upgrade is `pull` and `up -d` with nothing to edit — at the cost of the
+site not saying which version it is on, and of the rollback below starting with
+finding that out. `docker compose exec geekity geekity --version` answers it.
+Pin the version if the site matters; the tags stay published either way.
 
 To roll back, set `GEEKITY_TAG` to the version you came from and redeploy the
 same way. If the newer version migrated the database, the older one refuses to

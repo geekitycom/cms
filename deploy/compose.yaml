@@ -24,8 +24,11 @@
 
 services:
   geekity:
-    # Pinned to a version from .env, and required: there is no `latest`
-    # fallback, because rolling back means naming the version you came from.
+    # The tag comes from .env, and is required: unset, compose refuses to
+    # start rather than defaulting to anything, because a stack that chooses
+    # its own version is one you cannot roll back by naming the one you came
+    # from. `GEEKITY_TAG=latest` is a fine answer — ghcr.io carries that tag
+    # too — as long as it is written down here rather than assumed.
     image: ghcr.io/geekitycom/cms:${GEEKITY_TAG:?set GEEKITY_TAG in .env to the version to run}
     restart: unless-stopped
 
