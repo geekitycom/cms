@@ -26,12 +26,14 @@
         <tr>
           <td>
             <a href="{{ entry.editUrl }}">{{ entry.username }}</a>{% if entry.you %} <span class="admin-status">(you)</span>{% endif %}
-            <br /><a href="{{ entry.archiveUrl }}">{{ entry.archiveUrl }}</a>
           </td>
           <td>{% if entry.email %}{{ entry.email }}{% else %}<span class="admin-status">None</span>{% endif %}</td>
           <td>{{ entry.createdAt | date('html') }}</td>
+          {# Edit, then what can be done, then View: the order and the shape
+             `pages/documents/list.njk` uses, down to Edit being a plain link
+             rather than a button. A row here is a row there. #}
           <td class="admin-actions">
-            <a class="admin-button admin-button-small" href="{{ entry.editUrl }}">Edit</a>
+            <a href="{{ entry.editUrl }}">Edit</a>
             {% if entry.deletable %}
               <form method="post" action="{{ deleteUserUrl }}">
                 <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
@@ -39,6 +41,7 @@
                 <button type="submit">Delete</button>
               </form>
             {% endif %}
+            <a href="{{ entry.archiveUrl }}">View</a>
           </td>
         </tr>
       {% endfor %}

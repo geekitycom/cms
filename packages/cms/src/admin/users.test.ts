@@ -123,6 +123,72 @@ describe('the users screen', () => {
   });
 });
 
+describe('the users list (TASK-110)', () => {
+  it('holds Edit, Delete and View in its actions, the way a post listing does', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const grace = (
+      await createUser({
+        dataDir: cms.config.dataDir,
+        username: 'grace',
+        password: 'a password of her own',
+      })
+    ).id;
+
+    const { html } = await usersScreen(agent);
+    const cells = [...html.matchAll(/<td class="admin-actions">([\s\S]*?)<\/td>/g)].map(
+      (match) => match[1] ?? '',
+    );
+    const actions = cells.at(-1);
+    assert.ok(actions !== undefined, 'the last row has an actions cell');
+
+    assert.match(
+      actions,
+      new RegExp(`<a href="/admin/users/${String(grace)}">Edit</a>`),
+      'Edit is a plain link to the edit screen',
+    );
+    assert.match(actions, /<button type="submit">Delete<\/button>/, 'Delete is offered');
+    assert.match(actions, /<a href="\/author\/grace\/">View<\/a>/, 'View opens the archive');
+    assert.ok(
+      actions.indexOf('Edit') < actions.indexOf('Delete') &&
+        actions.indexOf('Delete') < actions.indexOf('View'),
+      'Edit, then what can be done, then View',
+    );
+  });
+
+  it('prints nothing under the username, which links to the edit screen', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = idOf(cms.config.dataDir, 'ada');
+
+    const { html } = await usersScreen(agent);
+    const cell = /<tbody>\s*<tr>\s*<td>([\s\S]*?)<\/td>/.exec(html)?.[1];
+    assert.ok(cell !== undefined, 'the first row has a username cell');
+
+    assert.match(
+      cell,
+      new RegExp(`<a href="/admin/users/${String(ada)}">ada</a>`),
+      'the username links to the edit screen',
+    );
+    assert.doesNotMatch(cell, /\/author\//, 'the archive URL is printed under the name');
+    assert.doesNotMatch(cell, /<br/, 'the row is two lines tall');
+  });
+
+  it('styles Edit as a link rather than a button, as every other listing does', async () => {
+    const { html } = await usersScreen(await signedIn(await box.site()));
+    const table = /<table class="admin-list">([\s\S]*?)<\/table>/.exec(html)?.[1];
+    assert.ok(table !== undefined, 'the screen has a listing');
+
+    // Add new above the table is a button on every listing; a row's actions
+    // are not.
+    assert.doesNotMatch(
+      table,
+      /admin-button/,
+      'an action here is styled unlike the ones elsewhere',
+    );
+  });
+});
+
 describe('the edit user screen (TASK-97 AC #1, #7)', () => {
   it('is a screen of its own that the list links to', async () => {
     const cms = await box.site();
@@ -175,12 +241,12 @@ describe('the edit user screen (TASK-97 AC #1, #7)', () => {
 
     const { html } = await usersScreen(agent);
 
-    // Username with the archive under it, email, created, and the actions.
+    // Username, email, created, and the actions.
     assert.match(html, /<th scope="col">Username<\/th>/);
     assert.match(html, /<th scope="col">Email<\/th>/);
     assert.match(html, /<th scope="col">Created<\/th>/);
     assert.match(html, /grace@example\.com/, 'the address is shown, not offered as a box');
-    assert.match(html, /href="\/author\/grace\/"/, 'the archive URL is still under the name');
+    assert.match(html, /href="\/author\/grace\/"/, 'the archive is still reachable');
 
     for (const name of ['display_name', 'bio', 'avatar', 'job_title', 'location', 'links']) {
       assert.doesNotMatch(html, new RegExp(`name="${name}"`), `no ${name} box in the table`);
