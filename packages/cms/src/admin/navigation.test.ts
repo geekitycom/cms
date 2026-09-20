@@ -309,7 +309,8 @@ describe('editing a menu (AC #5)', () => {
       csrf_token: await token(agent),
       [NAVIGATION_FIELDS.menu]: 'primary',
       [NAVIGATION_FIELDS.items]:
-        'Home | /\n\n  About | /about/  \nMastodon | https://example.social/@me | me',
+        'Home | /\n\n  About | /about/  \nMastodon | https://example.social/@me | me\n' +
+        'A source | https://example.com/thing | nofollow noopener',
     });
 
     assert.equal(response.status, 303);
@@ -317,13 +318,15 @@ describe('editing a menu (AC #5)', () => {
       primary: [
         { label: 'Home', url: '/' },
         { label: 'About', url: '/about/' },
-        { label: 'Mastodon', url: 'https://example.social/@me', me: true },
+        { label: 'Mastodon', url: 'https://example.social/@me', rel: 'me' },
+        { label: 'A source', url: 'https://example.com/thing', rel: 'nofollow noopener' },
       ],
     });
 
     const page = await (await cms.app.request('/')).text();
     assert.match(page, /href="\/about\/"/, 'the menu is on the public site on the next request');
-    assert.match(page, /rel="me"/, 'with the flag the line carried');
+    assert.match(page, /rel="me"/, 'with the rel value the line carried');
+    assert.match(page, /rel="nofollow noopener"/, 'every value, in one attribute (TASK-114)');
   });
 
   it('refuses a malformed item without losing the rest of the box', async () => {
@@ -365,14 +368,19 @@ describe('editing a menu (AC #5)', () => {
   });
 });
 
-describe('the me flag (AC #6)', () => {
-  it('is offered on every box with a label saying what it is for', async () => {
+describe('what the Items box says about itself (AC #6, TASK-114)', () => {
+  it('describes the same line the Links box on a profile does', async () => {
     const { agent } = await site();
     const html = await screen(agent);
 
-    assert.match(html, /a profile that is you/, 'the flag has a label a person can read');
-    assert.match(html, /rel="me"/, 'and says what it writes');
-    assert.match(html, /Mastodon and the rest of the\s+IndieWeb verify/, 'and what that is for');
-    assert.match(html, /End a line\s+<code>\| me<\/code>/, 'and how to set it');
+    assert.match(
+      html,
+      /End a line with the\s+<code>rel<\/code> values the link carries, a word each/,
+      'the two boxes describe the trailing part differently',
+    );
+    assert.match(html, /a profile that is you/, 'nothing says what rel="me" is for');
+    assert.match(html, /Mastodon and the rest of the\s+IndieWeb verify/, 'nor what it buys');
+    assert.match(html, /nofollow noopener/, 'nothing shows a second value');
+    assert.doesNotMatch(html, /flag/, 'a rel value is not a flag this CMS keeps a list of');
   });
 });

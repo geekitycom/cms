@@ -149,8 +149,24 @@ describe('what a theme is given as `author`', () => {
       url: '/author/ada/',
       bio: 'Wrote the first program.',
       avatar: '/uploads/ada.jpg',
-      links: [{ label: 'Home', href: 'https://ada.example' }],
+      // Every profile link is published rel="me" whether or not the Links box
+      // typed it, which is what that box is for (TASK-114).
+      links: [{ label: 'Home', href: 'https://ada.example', rel: 'me' }],
     });
+  });
+
+  it('adds rel="me" to a profile link, once, whatever it was typed with (TASK-114)', () => {
+    const typed = [
+      { label: 'Home', href: 'https://ada.example' },
+      { label: 'Mastodon', href: 'https://example.social/@ada', rel: 'me' },
+      { label: 'Their post', href: 'https://example.com/post', rel: 'nofollow author' },
+    ];
+
+    assert.deepEqual(profileContext(user('ada', { links: typed })).links, [
+      { label: 'Home', href: 'https://ada.example', rel: 'me' },
+      { label: 'Mastodon', href: 'https://example.social/@ada', rel: 'me' },
+      { label: 'Their post', href: 'https://example.com/post', rel: 'me nofollow author' },
+    ]);
   });
 
   it('is the username when the user wrote no display name', () => {

@@ -24,7 +24,7 @@
       {
         "label": "Mastodon",
         "url": "https://elsewhere.example/@fixture",
-        "me": true
+        "rel": "me"
       }
     ]
   },

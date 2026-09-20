@@ -853,13 +853,14 @@ export default function (eleventyConfig) {
   // serves as its front page, which is typed at `/` rather than at the
   // permalink that redirects there.
   //
-  // Each entry is `{ label, url }`, plus `me: true` on a link that should
-  // carry `rel="me"`. A layout marks the current item itself, because a
-  // collection is built once for the whole site and `page.url` is per
-  // template:
+  // Each entry is `{ label, url }`, plus `rel` on a link that carries `rel`
+  // values: one string holding all of them — `"me"`, `"nofollow noopener"` —
+  // printed as the whole attribute. A layout marks the current item itself,
+  // because a collection is built once for the whole site and `page.url` is
+  // per template:
   //
   //     {% for item in collections.menus.primary %}
-  //     <a href="{{ item.url }}"{% if item.me %} rel="me"{% endif %}
+  //     <a href="{{ item.url }}"{% if item.rel %} rel="{{ item.rel }}"{% endif %}
   //        {% if item.url == page.url %}aria-current="page"{% endif %}>{{ item.label }}</a>
   //     {% endfor %}
   eleventyConfig.addCollection('menus', (collectionApi) => {
@@ -881,7 +882,13 @@ export default function (eleventyConfig) {
         .map((item) => ({
           label: item.label,
           url: item.url,
-          ...(item.me === true ? { me: true } : {}),
+          // `me: true` is how the flag was spelled before `rel` held a list of
+          // values; a site.json written then still renders the same link.
+          ...(typeof item.rel === 'string' && item.rel !== ''
+            ? { rel: item.rel }
+            : item.me === true
+              ? { rel: 'me' }
+              : {}),
         }));
     }
     return menus;

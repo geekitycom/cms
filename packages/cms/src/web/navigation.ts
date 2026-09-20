@@ -7,18 +7,99 @@ import type { SiteData } from './context.ts';
 export const DEFAULT_MENU_NAME = 'primary';
 
 /**
- * The flags one menu item may carry, as `site.json` spells them and as the
- * settings screen writes them at the end of a line.
+ * What one `rel` value may be spelled with: letters and dashes, which is what
+ * every HTML link type is spelled with.
  *
- * A flag is a word rather than a value, and the list is here rather than
- * spread through the parsers so that a second one — `nofollow`, say, or a flag
- * that opens a link in its own tab — is one entry and its handling in the
- * theme, not a new shape for an item.
+ * Deliberately not a list of the values this CMS knows about (TASK-114). The
+ * trailing part of a link line is whatever `rel` values the person typed —
+ * `me`, `nofollow`, `author`, `noopener`, one somebody's own reader looks for
+ * — and all of them reach the rendered attribute. A closed list would mean
+ * every value anybody wanted had to be added here first, and `me` was never a
+ * flag in the first place: it is a `rel` value that this CMS happened to be
+ * the only one to know.
  */
-export const MENU_ITEM_FLAGS = ['me'] as const;
+export const REL_VALUE_PATTERN = /^[a-z-]+$/i;
 
-/** One of {@link MENU_ITEM_FLAGS}. */
-export type MenuItemFlag = (typeof MENU_ITEM_FLAGS)[number];
+/**
+ * What a link line's trailing part may be, in the words both boxes explain it
+ * in, beside {@link LINK_URL_RULE}.
+ */
+export const LINK_REL_RULE =
+  'the rel values the link carries, a word each — "| me", "| nofollow noopener"';
+
+/**
+ * One bar-separated part as the `rel` values it names, or `undefined` when it
+ * is not a list of them.
+ *
+ * Every word has to be one: `nofollow noopener` is a list, `a=1|2`'s `2` is
+ * not, and that is what keeps a bar inside a URL a bar. An empty part names no
+ * values rather than an empty list, because `About | /about/ |` is a line with
+ * a trailing bar, not a line with a rel.
+ */
+export function relValuesOf(text: string): string[] | undefined {
+  const words = text
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word !== '');
+  if (words.length === 0) return undefined;
+  return words.every((word) => REL_VALUE_PATTERN.test(word)) ? words : undefined;
+}
+
+/**
+ * Some `rel` values as one attribute holds them: lower case, each said once,
+ * in the order they were first typed.
+ *
+ * A theme prints this string and nothing else, so it never joins a list itself
+ * and never emits two `rel` attributes on one link. Lower case is what makes
+ * saying a value twice — `me` typed on a profile link that already carries it
+ * — a no-op rather than `rel="me ME"`.
+ */
+export function relText(values: Iterable<string>): string {
+  const said = new Set<string>();
+  for (const value of values) {
+    for (const word of value.trim().toLowerCase().split(/\s+/)) {
+      if (word !== '') said.add(word);
+    }
+  }
+  return [...said].join(' ');
+}
+
+/** A link line split at the point where its `rel` values begin. */
+export interface LinkLine {
+  /** The line with its trailing `rel` values taken off: the label and the URL. */
+  text: string;
+  /** The values that were typed, as one attribute holds them. Empty for none. */
+  rel: string;
+}
+
+/**
+ * One typed link line, with the `rel` values taken off the end of it.
+ *
+ * The values come off the right, one bar-separated part at a time, and only
+ * while the last part is a list of rel values — so `Mastodon |
+ * https://example.social/@me | me | nofollow` and `... | me nofollow` are the
+ * same line, and `Odd | /odd/?a=1|2` keeps its bar because `2` is not one.
+ *
+ * The one place a link line is split, for the reason the URL rule is worded
+ * once (TASK-114): the menu box on the Navigation screen and the Links box on
+ * a profile take the same line, so somebody who learns one box has learned the
+ * other.
+ */
+export function splitLinkRel(line: string): LinkLine {
+  const values: string[] = [];
+
+  let text = line;
+  for (;;) {
+    const bar = text.lastIndexOf('|');
+    if (bar === -1) break;
+    const rel = relValuesOf(text.slice(bar + 1));
+    if (rel === undefined) break;
+    values.unshift(...rel);
+    text = text.slice(0, bar);
+  }
+
+  return { text: text.trim(), rel: relText(values) };
+}
 
 /**
  * What a menu name may be spelled with.
@@ -77,16 +158,17 @@ export interface NavigationItem {
   /** Where it goes: a site-root path, or an absolute URL for somewhere else. */
   url: string;
   /**
-   * Whether the link carries `rel="me"`, which is how Mastodon and the rest of
-   * the IndieWeb verify that the site and the profile it links are the same
-   * person.
+   * What the link's `rel` attribute says, as one string holding every value:
+   * `me` for a profile that is you, `nofollow noopener` for somewhere you are
+   * only pointing at, whatever else a reader of this site looks for.
    *
-   * Present only when it is set. An unmarked item is spelled exactly as every
-   * item was before flags existed, so a `site.json` holding a plain
-   * `{ label, url }` is a complete item rather than one missing a key, and a
-   * flag added later never has to be written across a file to mean nothing.
+   * Present only when there is something to say, so a `site.json` holding a
+   * plain `{ label, url }` is a complete item rather than one missing a key.
+   * Already lower case and deduplicated ({@link relText}), because a theme
+   * prints it as it stands and no theme should be joining a list or emitting
+   * two `rel` attributes on one link.
    */
-  me?: true;
+  rel?: string;
 }
 
 /** Every menu one site stores, by name. */
@@ -209,10 +291,15 @@ export function menusOf(value: unknown): NavigationMenus {
  * One menu's stored value as the items it names, ignoring anything that is not
  * one.
  *
- * A flag is read only when it is spelled exactly `true`: `"yes"`, `1` and
- * `false` all leave the item unmarked, so a flag is either set or it is not
- * and a theme writes `{% if item.me %}` without wondering what else the file
- * might have put there.
+ * `rel` is read through {@link relText}, so a file that wrote it in capitals
+ * or said a value twice renders one attribute either way, and a `rel` that is
+ * not a string is an item with none rather than an item dropped.
+ *
+ * `me: true` is still read, as `rel: "me"`. It is how every marked item was
+ * spelled before the trailing part of a line was a list of rel values
+ * (TASK-107, TASK-114), and a site that had set the only flag there was must
+ * not lose it on upgrade; the Navigation screen writes `rel` the next time
+ * that menu is saved. Only the literal `true` counts, the way it always did.
  */
 export function navigationItemsOf(value: unknown): NavigationItem[] {
   if (!Array.isArray(value)) return [];
@@ -220,10 +307,14 @@ export function navigationItemsOf(value: unknown): NavigationItem[] {
   const items: NavigationItem[] = [];
   for (const entry of value) {
     if (typeof entry !== 'object' || entry === null) continue;
-    const { label, url, me } = entry as Record<string, unknown>;
+    const { label, url, rel, me } = entry as Record<string, unknown>;
     if (typeof label !== 'string' || label === '') continue;
     if (typeof url !== 'string' || url === '') continue;
-    items.push({ label, url, ...(me === true ? { me: true } : {}) });
+    const values = relText([
+      ...(me === true ? ['me'] : []),
+      ...(typeof rel === 'string' ? [rel] : []),
+    ]);
+    items.push({ label, url, ...(values === '' ? {} : { rel: values }) });
   }
   return items;
 }
@@ -248,41 +339,23 @@ function menuLines(value: string): string[] {
  * `about/` would be resolved against whatever page it was printed on, which is
  * never what a menu means.
  *
- * A line may end in the flags the item carries, one per bar — `Mastodon |
- * https://example.social/@me | me` — and those are taken off the end first,
- * from the right, and only while the last part is the name of a flag this CMS
- * actually has ({@link MENU_ITEM_FLAGS}). That is what lets a URL still hold a
- * bar, a query string say: a trailing `| elsewhere` is not a flag, so it stays
- * part of the URL and the line is refused for not naming one, rather than
- * being quietly read as a flag nobody asked for.
+ * A line may end in the `rel` values the link carries — `Mastodon |
+ * https://example.social/@me | me`, `A source | https://example.com/thing |
+ * nofollow noopener` — which {@link splitLinkRel} takes off the end first.
  *
  * What is left splits at its first bar, so a label still cannot hold one.
  */
 export function menuItemOf(line: string): NavigationItem | undefined {
-  const flags = new Set<string>();
+  const { text, rel } = splitLinkRel(line);
 
-  let rest = line;
-  for (;;) {
-    const bar = rest.lastIndexOf('|');
-    if (bar === -1) break;
-    const flag = rest
-      .slice(bar + 1)
-      .trim()
-      .toLowerCase();
-    if (!(MENU_ITEM_FLAGS as readonly string[]).includes(flag)) break;
-    flags.add(flag);
-    rest = rest.slice(0, bar);
-  }
-
-  const bar = rest.indexOf('|');
+  const bar = text.indexOf('|');
   if (bar === -1) return undefined;
 
-  const label = rest.slice(0, bar).trim();
-  const url = rest.slice(bar + 1).trim();
-  if (label === '' || url === '') return undefined;
-  if (!url.startsWith('/') && !isAbsoluteHttpUrl(url)) return undefined;
+  const label = text.slice(0, bar).trim();
+  const url = text.slice(bar + 1).trim();
+  if (label === '' || !isLinkUrl(url)) return undefined;
 
-  return { label, url, ...(flags.has('me') ? { me: true } : {}) };
+  return { label, url, ...(rel === '' ? {} : { rel }) };
 }
 
 /**
@@ -306,7 +379,7 @@ export function menuItemsFromText(value: string): NavigationItem[] {
 /** The items as a box shows them: one line each, in order. */
 export function menuItemsText(items: readonly NavigationItem[]): string {
   return items
-    .map((item) => `${item.label} | ${item.url}${item.me === true ? ' | me' : ''}`)
+    .map((item) => `${item.label} | ${item.url}${item.rel === undefined ? '' : ` | ${item.rel}`}`)
     .join('\n');
 }
 
@@ -321,19 +394,44 @@ export function menuItemLineProblem(value: string): string | undefined {
   const bad = menuLines(value).find((line) => menuItemOf(line) === undefined);
   return bad === undefined
     ? undefined
-    : `A menu item is "Label | URL", one per line, where the URL is a path ` +
-        `like /about/ or an absolute http:// or https:// URL, and ends ` +
-        `"| me" for a link that should carry rel="me". "${bad}" is not one.`;
+    : `A menu item is "Label | URL", one per line, where the URL is ` +
+        `${LINK_URL_RULE}, and may end in ${LINK_REL_RULE}. "${bad}" is not one.`;
 }
 
 /**
- * Whether a menu URL is an absolute http(s) one.
+ * What a URL typed into a link box may be, in the words both boxes explain it
+ * in: the menu on the Navigation screen and the Links on a user's profile.
  *
- * Deliberately a test rather than a normaliser: a menu keeps the URL as it was
+ * One sentence fragment rather than two, so the rule {@link isLinkUrl} applies
+ * is worded the same wherever somebody is told about it (TASK-112). Somebody
+ * who learns one box should not be taught the wrong thing about the other.
+ */
+export const LINK_URL_RULE =
+  'a path like /about/ or an absolute http:// or https:// URL, with no spaces in it';
+
+/**
+ * Whether a typed URL is one a link box accepts: a site-root path, or an
+ * absolute http(s) URL, and no whitespace either way.
+ *
+ * A bare `about/` would be resolved against whatever page it was printed on,
+ * which is never what a link box means, and a `javascript:` or `data:` URL is
+ * not somewhere a reader goes.
+ *
+ * The whitespace half is not decoration. `new URL` does not throw on
+ * `https://shll.me/@a | me`: it reads the space and the bar as path
+ * characters and percent-encodes them, so a check that only asked the parser
+ * took a label, a URL and a trailing word as one URL and stored it — which is
+ * how a reader of shll.me ended up at `/author/a%20%7C%20me/` (TASK-112). A
+ * URL somebody types has no spaces in it; a space means they typed two things.
+ *
+ * Deliberately a test rather than a normaliser: a link keeps the URL as it was
  * typed, so `https://example.social/@me` is what the link says and what the
  * box shows it back as.
  */
-function isAbsoluteHttpUrl(url: string): boolean {
+export function isLinkUrl(url: string): boolean {
+  if (url === '' || /\s/.test(url)) return false;
+  if (url.startsWith('/')) return true;
+
   let parsed: URL;
   try {
     parsed = new URL(url);

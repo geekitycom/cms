@@ -299,14 +299,29 @@ a:focus-visible {
   color: var(--color-primary);
 }
 
-header a,
-header a:visited {
+/* The two links that are the page saying where it is rather than somewhere to
+   go: the site title at the root and the small link home everywhere else. Both
+   read as plain text, in the heading font the rules below give them.
+
+   Named rather than reached for through the element they sit in (TASK-111). A
+   bare `header a` also caught the site menu, which is navigation somebody is
+   meant to use, and every link inside a post's own `<header>`. The `:visited`
+   halves are here because `a:visited` outweighs a bare class, and the hover
+   and focus halves because `a:focus-visible` outweighs one too: without them
+   these two would take the outline rather than the flourish. */
+
+.main-heading a,
+.main-heading a:visited,
+.header-link-home,
+.header-link-home:visited {
   color: var(--color-text);
   text-decoration: none;
 }
 
-header a:hover,
-header a:focus {
+.main-heading a:hover,
+.main-heading a:focus,
+.header-link-home:hover,
+.header-link-home:focus {
   background-color: var(--color-primary);
   color: var(--color-body);
   text-decoration: none;
@@ -618,10 +633,13 @@ pre code {
 
 /* The site menu, which the header carries on every page (TASK-105). At the
    root the header is the site title with the tagline under it, and the menu
-   is a line of its own under that. */
+   is a line of its own under that.
+
+   No size of its own (TASK-111): a menu is navigation somebody is meant to
+   use rather than a footnote, so it reads at the page's size, like the footer
+   menu, which never had one. */
 .global-header .site-nav {
   margin-top: var(--spacing-2);
-  font-size: var(--fontSize-0);
 }
 
 /* Everywhere else the header is the small link home, and the menu sits beside
@@ -690,12 +708,12 @@ pre code {
   font-style: italic;
 }
 
-/* The links the person calls their own, under the credit: a horizontal list,
-   small, in the heading font. The site menu used to share this rule; it is in
-   the header now (TASK-105) and the bio carries nobody but the person. */
+/* The links the person calls their own, under the credit: a horizontal list in
+   the heading font, at the page's size like every other nav (TASK-111). The
+   site menu used to share this rule; it is in the header now (TASK-105) and
+   the bio carries nobody but the person. */
 .bio-links {
   margin-top: var(--spacing-2);
-  font-size: var(--fontSize-0);
 }
 
 .bio-avatar {

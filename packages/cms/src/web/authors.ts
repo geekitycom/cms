@@ -1,6 +1,7 @@
 import type { ProfileLink, User } from '../admin/accounts.ts';
 import { feedPathUnder } from './feed-source.ts';
 import type { FeedFormat } from './feed-source.ts';
+import { relText } from './navigation.ts';
 import { PAGE_SEGMENT } from './taxonomy.ts';
 
 /**
@@ -156,7 +157,30 @@ export interface AuthorContext {
   /** Where they are, as they wrote it. */
   location?: string | undefined;
   /** Somewhere else they are, in the order they listed them. */
-  links?: readonly ProfileLink[] | undefined;
+  links?: readonly PublishedProfileLink[] | undefined;
+}
+
+/** One of a profile's links as a theme prints it. */
+export interface PublishedProfileLink extends ProfileLink {
+  /**
+   * The whole of the link's `rel`, ready to print: `me` and whatever else was
+   * typed after the URL, each said once.
+   *
+   * Always something, because `rel="me"` is what the Links box is for — it is
+   * how Mastodon verifies a profile field pointing back at this site and how
+   * IndieAuth knows the link is theirs — and it is added whether or not
+   * anybody typed it (TASK-114). A theme prints this attribute and nothing
+   * else, so a typed `me` is not a second one.
+   */
+  readonly rel: string;
+}
+
+/**
+ * One stored profile link as the page renders it: what was typed, with
+ * `rel="me"` on the front of whatever `rel` values it carries.
+ */
+function publishedProfileLink(link: ProfileLink): PublishedProfileLink {
+  return { ...link, rel: relText(['me', link.rel ?? '']) };
 }
 
 /**
@@ -177,7 +201,7 @@ export function profileContext(user: User): AuthorContext {
     ...(profile?.avatar === undefined ? {} : { avatar: profile.avatar }),
     ...(profile?.jobTitle === undefined ? {} : { jobTitle: profile.jobTitle }),
     ...(profile?.location === undefined ? {} : { location: profile.location }),
-    ...(profile?.links === undefined ? {} : { links: profile.links }),
+    ...(profile?.links === undefined ? {} : { links: profile.links.map(publishedProfileLink) }),
   };
 }
 

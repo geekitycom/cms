@@ -29,7 +29,7 @@ export {
   siteAuthorContext,
   userForAuthor,
 } from './authors.ts';
-export type { AuthorContext, AuthorRequest } from './authors.ts';
+export type { AuthorContext, AuthorRequest, PublishedProfileLink } from './authors.ts';
 export {
   createSiteDataSource,
   DEFAULT_POSTS_PER_PAGE,
@@ -169,7 +169,9 @@ export type {
 } from './negotiate.ts';
 export {
   DEFAULT_MENU_NAME,
-  MENU_ITEM_FLAGS,
+  isLinkUrl,
+  LINK_REL_RULE,
+  LINK_URL_RULE,
   MENU_NAME_MAX_LENGTH,
   MENU_NAME_PATTERN,
   menuItemLineProblem,
@@ -182,11 +184,15 @@ export {
   navigationItemsOf,
   navigationMenu,
   navigationMenus,
+  REL_VALUE_PATTERN,
+  relText,
+  relValuesOf,
   siteMenus,
+  splitLinkRel,
 } from './navigation.ts';
 export type {
+  LinkLine,
   MenuItem,
-  MenuItemFlag,
   MenuList,
   NavigationItem,
   NavigationMenuOptions,

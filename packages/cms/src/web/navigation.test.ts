@@ -186,25 +186,33 @@ describe('navigationItems', () => {
     assert.deepEqual(items, [{ label: 'About', url: '/about/' }]);
   });
 
-  it('reads the me flag, and only when it is spelled true (AC #2)', () => {
+  it('reads the rel a stored item carries, however the file spells it (TASK-114)', () => {
     const items = navigationItems({
       title: 'A Site',
       url: 'https://example.com',
       menus: {
         primary: [
-          { label: 'Mastodon', url: 'https://example.social/@me', me: true },
+          { label: 'Mastodon', url: 'https://example.social/@me', rel: 'me' },
+          { label: 'Source', url: 'https://example.com/thing', rel: 'NoFollow noopener' },
           { label: 'About', url: '/about/' },
+          { label: 'Empty', url: '/empty/', rel: '' },
+          { label: 'Listed', url: '/listed/', rel: ['me'] },
+          // How every marked item was spelled before a line's tail was a list
+          // of rel values: a site that set the only flag there was keeps it.
+          { label: 'Older', url: '/older/', me: true },
           { label: 'Unset', url: '/unset/', me: false },
-          { label: 'Wordy', url: '/wordy/', me: 'yes' },
         ],
       },
     });
 
     assert.deepEqual(items, [
-      { label: 'Mastodon', url: 'https://example.social/@me', me: true },
+      { label: 'Mastodon', url: 'https://example.social/@me', rel: 'me' },
+      { label: 'Source', url: 'https://example.com/thing', rel: 'nofollow noopener' },
       { label: 'About', url: '/about/' },
+      { label: 'Empty', url: '/empty/' },
+      { label: 'Listed', url: '/listed/' },
+      { label: 'Older', url: '/older/', rel: 'me' },
       { label: 'Unset', url: '/unset/' },
-      { label: 'Wordy', url: '/wordy/' },
     ]);
   });
 });
@@ -245,26 +253,61 @@ describe('the Label | URL line format (TASK-108)', () => {
     );
   });
 
-  it('reads a trailing flag, and only a flag this CMS has', () => {
+  it('reads the trailing rel values, however many were typed (TASK-114)', () => {
     assert.deepEqual(menuItemsFromText('Mastodon | https://example.social/@me | me'), [
-      { label: 'Mastodon', url: 'https://example.social/@me', me: true },
+      { label: 'Mastodon', url: 'https://example.social/@me', rel: 'me' },
     ]);
-    // A bar in the URL survives, because a trailing word that is not a flag is
-    // part of the URL rather than a flag nobody asked for.
+    // Whatever HTML link types somebody types, not a list this CMS keeps: all
+    // of them reach the rendered rel, in one attribute, in the order typed.
+    assert.deepEqual(
+      menuItemsFromText('Their post | https://example.com/post | me nofollow author'),
+      [{ label: 'Their post', url: 'https://example.com/post', rel: 'me nofollow author' }],
+    );
+    // A bar in the URL survives, because a trailing part that is not a list of
+    // rel values — `2` is not a word of letters — is part of the URL rather
+    // than a rel nobody asked for.
     assert.deepEqual(menuItemsFromText('Odd | /odd/?a=1|2'), [
       { label: 'Odd', url: '/odd/?a=1|2' },
     ]);
   });
 
+  it('says a value once, however it was typed and however often (TASK-114)', () => {
+    assert.deepEqual(
+      menuItemsFromText('Mastodon | https://example.social/@me | me | ME nofollow'),
+      [{ label: 'Mastodon', url: 'https://example.social/@me', rel: 'me nofollow' }],
+    );
+  });
+
   it('writes the items back as the lines they were typed as', () => {
     const text = 'Mastodon | https://example.social/@me | me\nAbout | /about/';
     assert.equal(menuItemsText(menuItemsFromText(text)), text);
+    assert.equal(
+      menuItemsText(menuItemsFromText('A source | https://example.com/thing | nofollow noopener')),
+      'A source | https://example.com/thing | nofollow noopener',
+    );
+  });
+
+  it('refuses a URL with a space in it, whatever the URL parser makes of it (TASK-112)', () => {
+    // `new URL('https://shll.me/@a | 2 of them')` does not throw: it takes the
+    // space and the bar as path characters and percent-encodes them, so a
+    // check that only asked the parser accepted the whole tail as a URL. A
+    // typed URL has no spaces in it; a space means two things were typed. The
+    // tail here is not a list of rel values — `2` is not a word — so it is
+    // part of the URL, and that is where the rule catches it.
+    const trailing = 'Mastodon | https://shll.me/@a | 2 of them';
+
+    assert.equal(menuItemsFromText(trailing).length, 0, 'the tail was read as a URL');
+    assert.match(menuItemLineProblem(trailing) ?? '', /Label \| URL/);
+    assert.match(menuItemLineProblem('About | /about page/') ?? '', /Label \| URL/);
+    // And a bar with no space around it is still a URL character, which is
+    // what the query-string case above depends on.
+    assert.equal(menuItemLineProblem('Odd | /odd/?a=1|2'), undefined);
   });
 
   it('names the first line that is not an item, and says what one is', () => {
     for (const bad of ['About', 'About |', '| /about/', '  | ', 'About | not a url', 'me | me']) {
       assert.match(menuItemLineProblem(bad) ?? '', /Label \| URL/, JSON.stringify(bad));
-      assert.match(menuItemLineProblem(bad) ?? '', /rel="me"/, JSON.stringify(bad));
+      assert.match(menuItemLineProblem(bad) ?? '', /rel values/, JSON.stringify(bad));
     }
     assert.equal(menuItemLineProblem('Home | /\nAbout | /about/'), undefined);
     assert.equal(menuItemLineProblem(''), undefined, 'an empty menu is a menu');

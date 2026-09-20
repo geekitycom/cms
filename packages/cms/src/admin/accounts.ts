@@ -11,6 +11,7 @@ import {
   withNotification,
   withNotificationMode,
 } from '../notifications/preferences.ts';
+import { relText } from '../web/navigation.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
 import type { AdminStore } from './store.ts';
 
@@ -147,6 +148,16 @@ export interface ProfileLink {
   readonly label: string;
   /** Where it goes. */
   readonly href: string;
+  /**
+   * The `rel` values typed after the URL, as one string, or absent when none
+   * were (TASK-114).
+   *
+   * What was typed and only that. `rel="me"` is added to every profile link
+   * when it is published, which is what the box is for, so a link that says
+   * nothing here is still rendered `rel="me"` and one that says `me` is
+   * rendered it once.
+   */
+  readonly rel?: string | undefined;
 }
 
 /**
@@ -436,11 +447,16 @@ export function cleanProfile(profile: UserProfile): UserProfile | undefined {
   const jobTitle = (profile.jobTitle ?? '').trim();
   const location = (profile.location ?? '').trim();
   const links = (profile.links ?? [])
-    .map((link) => ({ label: link.label.trim(), href: link.href.trim() }))
+    .map((link) => {
+      // The rel values go through the same normaliser a menu item's do, so a
+      // hand-edited file and a saved box store one spelling (TASK-114).
+      const rel = relText([link.rel ?? '']);
+      return { label: link.label.trim(), href: link.href.trim(), ...(rel === '' ? {} : { rel }) };
+    })
     // A link needs somewhere to go; a label it does not have is the URL again,
     // because a list of blank links is worse than a list of bare addresses.
     .filter((link) => link.href !== '')
-    .map((link) => (link.label === '' ? { label: link.href, href: link.href } : link));
+    .map((link) => (link.label === '' ? { ...link, label: link.href } : link));
 
   const cleaned: UserProfile = {
     ...(displayName === '' ? {} : { displayName }),
@@ -936,8 +952,14 @@ function linksFrom(value: unknown): ProfileLink[] {
     const record = entry as Record<string, unknown>;
     const href = record['href'];
     const label = record['label'];
+    const rel = record['rel'];
     if (typeof href !== 'string') continue;
-    links.push({ label: typeof label === 'string' ? label : '', href });
+    const carried = typeof rel === 'string' ? relText([rel]) : '';
+    links.push({
+      label: typeof label === 'string' ? label : '',
+      href,
+      ...(carried === '' ? {} : { rel: carried }),
+    });
   }
   return links;
 }

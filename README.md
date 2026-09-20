@@ -512,7 +512,7 @@ different account to everybody following it. The federation routes are:
 | `/author/{username}/followers/`          | Who follows them, paged.                                                                          |
 | `/author/{username}/following/`          | Always empty; a relay is a subscription rather than a relationship.                               |
 | `/inbox/`                                | The instance-wide shared inbox, which addresses the actor in the body.                            |
-| `/@{username}`                           | A 301 to their archive, the short URL WordPress publishes.                                        |
+| `/@{username}`                           | A 301 to their archive, the short URL WordPress publishes; a 404 for a handle nobody answers to.  |
 | `/.well-known/webfinger`                 | `acct:{username}@{host}`, the author URL or `/@{username}`, all four resolving to the same actor. |
 | `/.well-known/nodeinfo`, `/nodeinfo/2.1` | What software this is, and how much of it there is.                                               |
 
@@ -947,9 +947,12 @@ emptied rather than deleted.
 
 **A menu's items** are typed one `Label | URL` per line — `About | /about/`,
 `Mastodon | https://example.social/@me | me` — rendered in that order, with the
-item whose path is the one being read marked `aria-current` and a line ending
-`| me` given `rel="me"`, which is how Mastodon verifies that the site and the
-profile it links are yours. The menu is the whole of itself: a page cannot put
+item whose path is the one being read marked `aria-current`. A line may end in
+the `rel` values the link carries, a word each: `| me`, which is how Mastodon
+verifies that the site and the profile it links are yours, or anything else
+HTML has, as in `A source | https://example.com/thing | nofollow noopener`.
+They are taken off the end only while the last part reads as a list of values,
+so `Odd | /odd/?a=1|2` keeps its query string. The menu is the whole of itself: a page cannot put
 itself in one, so there is one screen to edit it on, one order, and no way for
 a link to appear twice. A page the site serves as its front page is typed
 `Home | /`, the URL a reader lands on, rather than at the permalink that
@@ -1043,6 +1046,20 @@ refused, and the table only renders a button for rows that are neither:
   setup, and the next person to reach `/admin` becomes its admin.
 - **Your own account.** It would end the session doing the deleting, and there
   is no undo. Another admin can do it for you.
+
+**A profile's links** are typed one per line, either `Label | URL` or a bare
+URL that labels itself, and the URL is a path or an absolute `http(s)` one with
+no spaces in it — the rule a menu item's URL is held to. It is the same line in
+both boxes, down to the `rel` values it may end in, so
+`Mastodon | https://example.social/@me | me` means here what it means on the
+Navigation screen. Every one of these links is published `rel="me"` whether or
+not it is typed, which is how Mastodon verifies a profile field pointing back
+at this site and how IndieAuth knows the link is yours; nothing else in Geekity
+asks for it. Typing `| me` is therefore a no-op rather than a second value, and
+`| me nofollow author` puts all three on the rendered `rel`. A link stored
+before the box was checked still renders and still comes back in the box; a
+line that is still not a link is refused when the panel is saved, with the line
+to fix named.
 
 A form with a problem comes back with a 400, one message under each field, and
 nothing written. The add form keeps the username that was typed; the password

@@ -293,6 +293,64 @@ describe('the bio (AC #2)', () => {
       'the person’s own links are not under the post',
     );
   });
+
+  it('prints every rel value a link carries, in one attribute (TASK-114 AC #1, #2)', async () => {
+    // What the Links box took is what the page says, with rel="me" on the
+    // front of it: the box is for the profiles that are you, so the value is
+    // there whether or not anybody typed it, and typing it is not a second
+    // one.
+    const cms = await site(
+      {},
+      {
+        displayName: 'Ada Lovelace',
+        links: [
+          { label: 'Mastodon', href: 'https://example.social/@ada', rel: 'me' },
+          { label: 'Their post', href: 'https://example.com/post', rel: 'me nofollow author' },
+          { label: 'Site', href: 'https://ada.example' },
+        ],
+      },
+    );
+
+    const inside = bio(await body(cms, '/2026/09/hello/'));
+
+    assert.match(
+      inside,
+      /<a class="u-url" rel="me" href="https:\/\/example\.social\/@ada">Mastodon<\/a>/,
+      'a typed me is said twice',
+    );
+    assert.match(
+      inside,
+      /<a class="u-url" rel="me nofollow author" href="https:\/\/example\.com\/post">Their post<\/a>/,
+      'the values the line carried are not all on the link',
+    );
+    assert.match(
+      inside,
+      /<a class="u-url" rel="me" href="https:\/\/ada\.example">Site<\/a>/,
+      'a link that typed nothing lost its rel="me"',
+    );
+  });
+
+  it('prints a link the Links box would now refuse (TASK-112 AC #5)', async () => {
+    // What shll.me's file held before the box was checked. The check is on the
+    // way in, not on the way out: a profile written under an older version
+    // still renders, because a page that dropped somebody's link — or refused
+    // to render at all — would break a site on upgrade to report a typo.
+    const cms = await site(
+      {},
+      {
+        displayName: 'Ada Lovelace',
+        links: [{ label: 'Mastodon', href: 'https://shll.me/@a | me' }],
+      },
+    );
+
+    const inside = bio(await body(cms, '/2026/09/hello/'));
+
+    assert.match(
+      inside,
+      /<a class="u-url" rel="me" href="https:\/\/shll\.me\/@a \| me">Mastodon<\/a>/,
+      'a link stored before the check was dropped from the page',
+    );
+  });
 });
 
 describe('the site menu (AC #2, TASK-105)', () => {

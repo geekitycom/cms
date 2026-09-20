@@ -79,6 +79,13 @@
       field they do not have.
     </p>
 
+    {% if profileProblems.links %}
+      <p class="admin-error">
+        Nothing was saved. Fix the Links box below and save again; every other
+        box here still holds what you typed.
+      </p>
+    {% endif %}
+
     {{ field.text('profile-display-name', fields.displayName, 'Display name',
          account.profile.displayName,
          hint='Printed instead of the login: it heads the archive and is the byline under their posts.') }}
@@ -96,12 +103,28 @@
     {{ field.text('profile-location', fields.location, 'Location', account.profile.location,
          hint='Where they are, as they write it.') }}
 
+    {# What the box takes — the same line a menu item is written on, down to
+       the rel values it may end in (TASK-114) — and the one thing about it
+       nothing on the screen used to say (TASK-112): these links are published
+       with rel="me", which is what a person deciding what to put here needs to
+       know. #}
     {% set linksHint %}
       One per line, either <code>Label | https://example.com</code> or a bare
-      URL that labels itself.
+      URL that labels itself. A URL is a path like <code>/about/</code> or a
+      full <code>http://</code> or <code>https://</code> one, with no spaces in
+      it. End a line with the
+      <code>rel</code> values the link carries, a word each &mdash;
+      <code>Mastodon | https://example.social/@me | me</code>,
+      <code>Their post | https://example.com/post | me nofollow author</code>.
+      It is the same line the menu boxes on
+      <a href="{{ adminUrl }}/navigation">Navigation</a> take.
+      Every link here is published with <code>rel="me"</code> whether or not
+      you type it: it is how Mastodon verifies a profile field that points back
+      at this site, and how IndieAuth knows these are yours. Nothing else in
+      Geekity needs it.
     {% endset %}
     {{ field.textarea('profile-links', fields.links, 'Links', account.profile.links, rows='4',
-         hint=linksHint) }}
+         hint=linksHint, error=profileProblems.links) }}
 
     <p class="admin-settings-buttons">
       <button type="submit">Save profile</button>

@@ -634,7 +634,9 @@ neither can be added to. It answers for every spelling of the same person — th
 `/@{username}` and the stored actor id of somebody who has one — with the actor
 id as `self`, the archive as `profile-page`, and all of the person's URLs as
 `aliases`. A username nobody has is a 404. `/@{username}` itself is a 301 to
-the archive.
+the archive of the user of exactly that name, and a 404 for a handle nobody
+answers to: it is an alias of somebody, so a handle that is not anybody's is
+nowhere rather than a redirect to an archive that does not exist either.
 
 ### A user's stored actor id
 
@@ -1989,7 +1991,7 @@ The federation routes go on before it, and answer only their own paths:
 | `/author/{username}/followers/` | Who follows them, paged 20 at a time.                                                 |
 | `/author/{username}/following/` | Always empty: a relay is a subscription rather than a relationship.                   |
 | `/inbox/`                       | `POST` only. The instance-wide shared inbox; the addressee is read out of the body.   |
-| `/@{username}`                  | A 301 to their archive.                                                               |
+| `/@{username}`                  | A 301 to their archive; a 404 for a handle nobody answers to.                         |
 | `/.well-known/webfinger`        | The handle, the author URL or `/@{username}`, all resolving to the same actor.        |
 | `/.well-known/nodeinfo`         | A link to the NodeInfo document.                                                      |
 | `/nodeinfo/2.1`                 | What software this is, how many users and how many posts.                             |
@@ -2036,17 +2038,21 @@ object keyed by the name of each menu, each an ordered list of items:
     "primary": [{ "label": "About", "url": "/about/" }],
     "footer": [
       { "label": "Colophon", "url": "/colophon/" },
-      { "label": "Mastodon", "url": "https://example.social/@me", "me": true }
+      { "label": "Mastodon", "url": "https://example.social/@me", "rel": "me" }
     ]
   }
 }
 ```
 
-An item is a label, a URL and the flags it carries. The URL is a site-root path
-or an absolute `http(s)` URL; anything else is refused. There is one flag,
-`me`, present only when it is set and read only when it is spelled exactly
-`true`: it gives the link `rel="me"`, which is how Mastodon and the rest of the
-IndieWeb verify that the site and the profile it links are the same person.
+An item is a label, a URL and the `rel` values it carries. The URL is a
+site-root path or an absolute `http(s)` URL; anything else is refused. `rel` is
+one string holding every value — `"me"`, `"nofollow noopener"` — present only
+when there is one, lower case and each value said once, and a theme prints it
+as the whole of the link's `rel` attribute. The values are whatever HTML link
+types the site wants; `me` is the one most menus have, because it is how
+Mastodon and the rest of the IndieWeb verify that the site and the profile it
+links are the same person. An item written `"me": true`, the spelling before
+`rel` held a list, is still read as `"rel": "me"`.
 
 **The theme declares the areas it renders.** `theme.json` carries an `areas`
 list, each entry a `name` — the key under `menus` — and a `label` a person
@@ -2085,11 +2091,15 @@ the Delete that is the only way a menu is removed. An area the theme declares
 is emptied rather than deleted: the theme goes on asking for the name, and the
 box has to stay for the next thing typed into it.
 
-Each menu is one box of `Label | URL` lines, in the order they are typed, with
-a trailing `| me` marking the flag. Only a flag this CMS has is taken off the
-end of a line, so a URL holding a bar survives and a trailing word that is not
-a flag stays part of the URL. A line that is not an item is refused by name,
-with the box still holding every line of what was typed, and nothing written.
+Each menu is one box of `Label | URL` lines, in the order they are typed, and a
+line may end in the `rel` values the link carries, a word each — `Mastodon |
+https://example.social/@me | me`, `A source | https://example.com/thing |
+nofollow noopener`. The values come off the end of the line only while the last
+bar-separated part reads as a list of them, so a URL holding a bar survives:
+`Odd | /odd/?a=1|2` keeps its query string, because `2` is not a word. A line
+that is not an item is refused by name, with the box still holding every line of
+what was typed, and nothing written. It is the same line the Links box on a
+profile takes.
 
 **A menu name** is lower-case ASCII letters, digits and underscores, starting
 with a letter, at most 32 characters. It is the word a theme writes after the
@@ -2796,7 +2806,7 @@ is the second taxonomy, one entry of `{ name, posts }` per category in use, for
 paginating into archives at `/{{ site.categoryBase }}/{name}/`.
 `collections.menus` is the site's named menus — the `menus` object of
 `site.json`, and nothing else — each an ordered list of `{ label, url }`
-entries, plus `me: true` on a link that should carry `rel="me"`; a layout
+entries, plus `rel` on a link that carries `rel` values; a layout
 marks the current one itself by comparing `item.url` with `page.url`, because a
 collection is built once for the whole site.
 
