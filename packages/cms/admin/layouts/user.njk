@@ -110,12 +110,13 @@
     </p>
   </form>
 
-  {# Only once there is somewhere to write to. These switches decide what is
-     sent to the address above, so with that box empty they are settings about
-     nothing: every one of them could be on and the site would still send this
-     person no mail. The line below says so where the panel would have been,
-     rather than letting it vanish without explanation. #}
-  {% if account.email %}
+  {# Only once there is both somewhere to write to and something to write
+     with. These switches decide what is sent to the address above, so without
+     an address, or without a mail provider on Settings > Email, every one of
+     them could be on and the site would still send this person nothing. The
+     lines below say which is missing where the panel would have been, rather
+     than letting it vanish without explanation. #}
+  {% if account.email and mailConfigured %}
   <section class="admin-settings">
     <h2>Email {{ account.username }} about</h2>
 
@@ -171,11 +172,19 @@
   <section class="admin-settings">
     <h2>Email {{ account.username }} about</h2>
 
-    <p class="admin-hint">
-      Nothing, while the box above is empty: there is nowhere to write to. Give
-      {% if account.you %}yourself{% else %}this account{% endif %} an address
-      and what to send comes back here.
-    </p>
+    {% if not mailConfigured %}
+      <p class="admin-hint">
+        Nothing, while this site has no mail provider: there is nothing to send
+        with. Choose one on <a href="{{ adminUrl }}/settings/email">Settings
+        &rsaquo; Email</a> and what to send comes back here.
+      </p>
+    {% else %}
+      <p class="admin-hint">
+        Nothing, while the box above is empty: there is nowhere to write to.
+        Give {% if account.you %}yourself{% else %}this account{% endif %} an
+        address and what to send comes back here.
+      </p>
+    {% endif %}
   </section>
   {% endif %}
 

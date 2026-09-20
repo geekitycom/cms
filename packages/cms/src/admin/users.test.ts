@@ -6,7 +6,9 @@ import {
   notificationMode,
   notificationWanted,
 } from '../notifications/preferences.ts';
+import { writeMailCredentials } from '../mail/credentials.ts';
 import { countUsers, createUser, findUser, findUserById, verifyUserPassword } from './accounts.ts';
+import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './settings.ts';
 import { writeUsers } from './__testing__/users.ts';
 import {
   browser,
@@ -17,6 +19,7 @@ import {
   signedIn,
 } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
+import type { Cms } from '../index.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -37,6 +40,27 @@ async function editScreen(agent: Browser, id: number): Promise<{ html: string; t
   const token = csrfField(html);
   assert.ok(token !== undefined, 'the edit screen carried a CSRF token');
   return { html, token };
+}
+
+/**
+ * A site that could actually send a message: a provider named and its
+ * credential on disk.
+ *
+ * The notice switches are drawn only where there is something to send with, so
+ * a test about them needs this rather than {@link Sandbox.site}. Nothing is
+ * sent by rendering a screen, so the key is never used.
+ */
+async function siteSendingMail(): Promise<Cms> {
+  const contentDir = await box.dir('geekity-users-content-');
+  const dataDir = await box.dir('geekity-users-data-');
+
+  await writeSiteJson({
+    contentDir,
+    settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', mailProvider: 'brevo' },
+  });
+  await writeMailCredentials(dataDir, { brevo: { apiKey: 'xkeysib-not-used' } });
+
+  return box.open({ contentDir, dataDir });
 }
 
 /**
@@ -188,7 +212,7 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
   });
 
   it('holds the account, the profile and what this person is emailed about', async () => {
-    const cms = await box.site();
+    const cms = await siteSendingMail();
     const agent = await signedIn(cms);
     const ada = idOf(cms.config.dataDir, 'ada');
 
@@ -232,11 +256,11 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
   });
 
   it('offers no notice switches until there is an address to send to', async () => {
-    const cms = await box.site();
+    const cms = await siteSendingMail();
     const agent = await signedIn(cms);
     const ada = idOf(cms.config.dataDir, 'ada');
 
-    const { html, token } = await editScreen(agent, ada);
+    const { html } = await editScreen(agent, ada);
     const [notice] = NOTIFICATION_EVENTS;
     assert.ok(notice !== undefined);
 
@@ -244,15 +268,24 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     assert.doesNotMatch(html, /name="event"/, 'a switch is offered with nowhere to write to');
     assert.match(html, /Nothing, while the box above is empty/, 'and nothing says why');
 
-    await agent.post('/admin/users/email', {
-      csrf_token: token,
-      user_id: String(ada),
-      email: 'ada@example.com',
-    });
-
-    const after = (await editScreen(agent, ada)).html;
+    const after = (await withEmail(agent, ada, 'ada@example.com')).html;
     assert.match(after, new RegExp(notice.label), 'the switches come back with the address');
     assert.match(after, /<code>ada@example\.com<\/code>/, 'named with where they are sent');
+  });
+
+  it('offers none either while the site has no way of sending mail', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = idOf(cms.config.dataDir, 'ada');
+
+    // An address, and still nothing to send with: the switches would decide
+    // what goes out of a site that cannot put anything out at all.
+    const { html } = await withEmail(agent, ada, 'ada@example.com');
+
+    assert.match(html, /<h2>Email ada about<\/h2>/, 'the panel still says what it is for');
+    assert.doesNotMatch(html, /name="event"/, 'a switch is offered with nothing to send with');
+    assert.match(html, /no mail provider/, 'and nothing says which piece is missing');
+    assert.match(html, /href="\/admin\/settings\/email"/, 'or where to go and fix it');
   });
 
   it('shows what is already stored, in the boxes that hold it', async () => {
@@ -350,7 +383,7 @@ describe('saving from the edit user screen (TASK-97 AC #3)', () => {
   });
 
   it('puts a notice switch and a how-often back on that page', async () => {
-    const cms = await box.site();
+    const cms = await siteSendingMail();
     const agent = await signedIn(cms);
     const ada = idOf(cms.config.dataDir, 'ada');
     const { token } = await withEmail(agent, ada);
@@ -680,7 +713,7 @@ describe('a stored actor id (TASK-69 AC #5)', () => {
 
 describe('notification preferences (AC #3)', () => {
   it('offers a switch for every event the registry knows', async () => {
-    const cms = await box.site();
+    const cms = await siteSendingMail();
     const agent = await signedIn(cms);
 
     const { html } = await withEmail(agent, idOf(cms.config.dataDir, 'ada'));
@@ -738,7 +771,7 @@ describe('notification preferences (AC #3)', () => {
 
 describe('how often a notice arrives (AC #1)', () => {
   it('offers immediately, hourly and daily for an event that can be batched', async () => {
-    const cms = await box.site();
+    const cms = await siteSendingMail();
     const agent = await signedIn(cms);
 
     const { html } = await withEmail(agent, idOf(cms.config.dataDir, 'ada'));

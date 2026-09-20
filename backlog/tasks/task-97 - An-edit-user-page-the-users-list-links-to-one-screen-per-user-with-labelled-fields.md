@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-20 01:02'
-updated_date: '2026-09-20 01:44'
+updated_date: '2026-09-20 01:51'
 labels:
   - admin
   - web
@@ -89,6 +89,10 @@ Validation: `pnpm build && pnpm test && pnpm typecheck && pnpm lint && pnpm form
 Follow-up from the maintainer, same day: the notices panel is now headed 'Email <username> about' rather than 'Email me about', which read oddly when you were editing somebody else, and the switches are only drawn once the account has an address. With the box empty the panel keeps its heading and says why there is nothing in it, rather than vanishing: the switches decide what is sent to that address, so without one every switch could be on and the site would still send this person nothing.
 
 Three older tests rendered the switches for a user with no address and had to give it one first; they share a withEmail helper now. One new test covers both states.
+
+Second follow-up: the notices panel is also kept back while the site has no mail provider. A switch there would decide what goes out of a site that can put nothing out at all — c.var.mail.configured() is already on the screen, and the email hint above already said the site sends no mail yet. The panel now names which piece is missing, the address or the provider, and links to Settings > Email for the second.
+
+Tests for the switches needed a site that could really send, so users.test.ts has a siteSendingMail helper: a provider in site.json and a credential on disk. Rendering sends nothing, so the key is never used.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
