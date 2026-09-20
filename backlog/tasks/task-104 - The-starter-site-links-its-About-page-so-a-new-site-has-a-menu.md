@@ -4,11 +4,14 @@ title: 'The starter site links its About page, so a new site has a menu'
 status: To Do
 assignee: []
 created_date: '2026-09-20 11:54'
-updated_date: '2026-09-20 12:18'
+updated_date: '2026-09-20 12:21'
 labels:
   - web
   - content
-dependencies: []
+milestone: m-16
+dependencies:
+  - TASK-105
+  - TASK-106
 references:
   - packages/cms/templates/site/content/pages/about.md
   - packages/cms/templates/site/content/_data/site.json

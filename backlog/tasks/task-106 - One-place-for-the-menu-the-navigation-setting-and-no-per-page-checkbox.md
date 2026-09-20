@@ -4,9 +4,11 @@ title: 'One place for the menu: the navigation setting, and no per-page checkbox
 status: To Do
 assignee: []
 created_date: '2026-09-20 12:18'
+updated_date: '2026-09-20 12:20'
 labels:
   - web
   - admin
+milestone: m-16
 dependencies: []
 references:
   - packages/cms/src/web/navigation.ts

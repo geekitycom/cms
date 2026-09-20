@@ -6,11 +6,13 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-20 12:05'
-updated_date: '2026-09-20 12:18'
+updated_date: '2026-09-20 12:21'
 labels:
   - web
   - theme
-dependencies: []
+milestone: m-16
+dependencies:
+  - TASK-106
 references:
   - packages/cms/themes/default/layouts/base.njk
   - packages/cms/themes/default/partials/bio.njk

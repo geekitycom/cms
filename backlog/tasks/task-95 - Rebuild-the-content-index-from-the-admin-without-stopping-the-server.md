@@ -4,9 +4,11 @@ title: 'Rebuild the content index from the admin, without stopping the server'
 status: To Do
 assignee: []
 created_date: '2026-09-19 23:32'
+updated_date: '2026-09-20 12:20'
 labels:
   - admin
   - web
+milestone: m-16
 dependencies: []
 references:
   - packages/cms/src/content/store.ts

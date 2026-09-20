@@ -4,9 +4,11 @@ title: 'A signed-in commenter comments as themselves, with the form to match'
 status: To Do
 assignee: []
 created_date: '2026-09-20 11:52'
+updated_date: '2026-09-20 12:20'
 labels:
   - web
   - comments
+milestone: m-16
 dependencies: []
 references:
   - packages/cms/themes/default/partials/comment-form.njk
