@@ -152,6 +152,7 @@ export {
   FEDERATION_FIELDS,
   FEDERATION_PATH,
   FEDERATION_RECENT,
+  FEDERATION_SETTINGS_PATH,
   findAdminAsset,
   findBySlug,
   findUser,

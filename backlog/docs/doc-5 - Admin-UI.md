@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-20 15:44'
+updated_date: '2026-09-20 15:55'
 ---
 # Admin UI
 
@@ -32,8 +32,8 @@ know whether it is the only one of its kind.
 | Appearance | Themes                                       |
 | Users      | All users, Add new                           |
 | Tools      | Content index                                |
-| Settings   | General, Reading, Permalinks, Discussion, Email, Federation |
-| Federation | Followers                                    |
+| Settings   | General, Reading, Permalinks, Discussion, Email |
+| Federation | Followers, Settings                          |
 
 The terms are under Posts rather than at the top level because that is what
 they are about: a tag with no post on it is nothing.
@@ -70,12 +70,12 @@ instead of becoming a sliver.
 | `/admin/settings/permalinks` | the tag and category bases, and the archive redirects the taxonomy screens recorded |
 | `/admin/settings/discussion` | comments on or off and the closing window, webmentions sent and received, the Akismet key |
 | `/admin/settings/email` | the mail provider, the From line and reply-to, the contact address, the credential and the test message |
-| `/admin/settings/federation` | the actor handle and type, and the relays the site subscribes to |
 | `/admin/appearance/themes` | the packaged theme and the site's own, with the active one marked and an Activate on every other |
 | `/admin/tools` | Tools > Content index: what the index holds, and the button that empties it and reads every file again on the running site (`POST /admin/tools/rebuild-index`, behind a confirm step) |
 | `/admin/users` | list, edit each user's public profile, set their email, which notices go to it and how often, change your own password (single role: admin) |
 | `/admin/users/new` | the add form, Users > Add new |
-| `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
+| `/admin/federation` | Federation > Followers: follower list, recent inbox activity, manual re-deliver |
+| `/admin/federation/settings` | Federation > Settings: the relays the site subscribes to, and the WordPress ActivityPub compatibility switch |
 
 ## Editor
 
@@ -173,15 +173,15 @@ instead of becoming a sliver.
 
 ## Settings
 
-- Settings is six pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (what the homepage displays, posts per page, the site menu, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message) and **Federation** (the actor handle and type, and the relays). `/admin/settings` is the General page, which is where the Settings heading lands.
+- Settings is five pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (what the homepage displays, posts per page, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), and **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message). `/admin/settings` is the General page, which is where the Settings heading lands. A sixth page of exactly the same kind, **Federation** (the relays the site subscribes to and the WordPress ActivityPub compatibility switch), is filed under the Federation section at `/admin/federation/settings` rather than here: a screen belongs to the section its subject belongs to, and the admin used to carry two menu entries called Federation with neither saying the other existed (TASK-109).
 - Every page is one form of its own with its own POST, and every one of them rewrites `content/_data/site.json` through the same update (decision-9). A page writes the fields it carries and no others, onto the file as re-read inside the write, so two people saving two different pages at the same moment both land and a key the settings do not model is kept. A page validates its own fields and no others: a refused save comes back on the page it was sent from, with the problems on the fields that have them, having written nothing at all.
 - Three things are not fields of any form, and each is its own pair of forms — save and remove — because none can travel in that body and because a rejected one must not lose an edit beside it: the **avatar**, on General; the **Akismet key**, on Discussion; and the **mail credential**, on Email.
 - **Spam checking.** The Akismet key lives in `data/akismet.json` at mode `0600` rather than in `site.json`, which is public and in git. Saving one checks it with Akismet's `verify-key` first; the panel then says connected, "does not recognise this key", "could not be reached", or not connected, and shows the last four characters rather than the key. Remove key turns Akismet off. See doc-6.
 - **Email.** How the site sends mail is four settings on the Email form — `mailProvider` (`none`, `brevo` or `smtp`), the From name and address, and the reply-to — and one credential below it. The Brevo API key and the SMTP host, port, TLS flag, user and password live in `data/mail.json` at mode `0600`, never in `site.json`. Neither secret is printed back: the panel shows the last four characters of the key and the non-secret half of the SMTP connection, and a blank secret keeps the stored one. The panel draws the boxes of the provider that is saved and no others — the API key on a Brevo site, the connection on an SMTP one, neither where the provider is `none` — and says so, because the Provider select above it belongs to the settings form and nothing it shows is true until **Save settings** is pressed; a credential stored for the provider that is not chosen keeps a line of its own, so nothing on disk goes unreported and **Remove credentials** still reaches it. **Send test email** takes an address and sends the theme's `test` message through the whole chain, reporting the provider's own answer and its message id on the flash, and is drawn only where the site can actually send. With no configuration, nothing is sent and every feature that emails still succeeds. See the Email section of the package README.
 - **What the homepage displays.** WordPress's own question, and its two answers: **Your latest posts**, the archive at `/`, or a page picked from the site's published pages, which is then served at `/` while its own URL redirects there. A second pick, the **Posts page**, gives the listing a page of its own: that page's URL carries it, under the page's title and words, paginated beneath it, and `/page/N/` at the root redirects there. A posts page with no homepage is refused, as WordPress refuses it, and so is one page picked as both. The two are stored in `site.json` as the slugs `homepage` and `postsPage` — absent altogether for the latest posts — so an Eleventy build of the same directory shows the same front page. A pick whose page is later drafted, trashed or deleted is off the list and the site is back to its latest posts; the setting keeps the slug and the page says which one has gone, because a select that had quietly reset itself would be the screen lying about what is stored. The pages list marks both rows the way WordPress does, **Front Page** and **Posts Page**, and the feeds stay at `/feed/` and its siblings whatever is chosen.
 - **The contact address.** `contactEmail`, on the Email page, is where a message from a page's contact form is sent, with reply-to set to whoever wrote it. Empty falls back to the first admin with an email address, by username, so a fresh site with a mail credential takes messages without anybody visiting the field. It is read when a message arrives and is never put on a render context, so it cannot appear in the HTML of the page the form is on however a theme is written.
-- **Side effects stay with the field.** Saving General or Federation tells the followers when what it changed is part of the actor's profile; saving Federation reconciles the relay list, sending a `Follow` for a line added and an `Undo` for one removed; saving or removing the avatar tells the followers too. The flash says what was sent.
-- The code follows the same seam: `src/admin/settings.ts` is the settings themselves and nothing about a screen, `settings-page.ts` is what every page is made of, `settings-pages.ts` is the list, and each page is its own module beside its own template under `admin/pages/settings/`, which extends `admin/layouts/settings-page.njk`.
+- **Side effects stay with the field.** Saving General tells the followers when what it changed is part of the actor's profile; saving Federation > Settings reconciles the relay list, sending a `Follow` for a line added and an `Undo` for one removed; saving or removing the avatar tells the followers too. The flash says what was sent.
+- The code follows the same seam: `src/admin/settings.ts` is the settings themselves and nothing about a screen, `settings-page.ts` is what every page is made of, `settings-pages.ts` is the list, and each page is its own module beside its own template under `admin/pages/`, which extends `admin/layouts/settings-page.njk`. A page says which section files it — `section` and `heading` are what the Federation one sets, and `settings-pages.ts` carries two lists: `SETTINGS_PAGES`, which the Settings menu has to agree with, and `ALL_SETTINGS_PAGES`, which the mount registers. The old `/admin/settings/federation` answers a 301 to the new URL, because it was in the README and it is where a bookmark points.
 
 ## Auth
 

@@ -2,11 +2,12 @@
  * What every settings page is made of.
  *
  * The settings used to be one form with twelve headings. They are six pages
- * now — General, Reading, Permalinks, Discussion, Email and Federation — and
- * this is what they have in common: a description of the page, and the one
- * pair of routes that turns it into a screen you can read and a form you can
- * save. A page module describes itself and writes its own template; nothing
- * about how a page is wired lives in the page.
+ * now — General, Reading, Permalinks, Discussion and Email under Settings, and
+ * Federation under its own section (TASK-109) — and this is what they have in
+ * common: a description of the page, and the one pair of routes that turns it
+ * into a screen you can read and a form you can save. A page module describes
+ * itself and writes its own template; nothing about how a page is wired lives
+ * in the page.
  *
  * The save is the part worth reading twice. A page writes only the fields it
  * carries, and it writes them onto `content/_data/site.json` as re-read inside
@@ -43,13 +44,29 @@ export interface MountSettingsOptions {
 /** A submitted form, before anything has been read out of it. */
 export type SubmittedBody = Record<string, unknown>;
 
-/** One page under Settings. */
+/** One settings page, wherever the menu files it. */
 export interface SettingsPage {
-  /** The child of the Settings section it is, as `src/admin/menu.ts` names it. */
+  /** The child of its section it is, as `src/admin/menu.ts` names it. */
   child: string;
-  /** What the menu calls it, and what the page is headed. */
+  /** What the menu calls it. */
   label: string;
-  /** Where it is: {@link settingsPagePath}. */
+  /**
+   * The section it is under, when it is not Settings.
+   *
+   * Five of the six are Settings' own children. Federation's is a child of
+   * the Federation section instead (TASK-109): what a settings page is has
+   * nothing to do with where the menu files it, so the page says where it is
+   * and the rest of this module carries on as before.
+   */
+  section?: string;
+  /**
+   * What the page is headed and what a save says it saved, when the menu's
+   * label is not that on its own. Only Federation has one: under its own
+   * section it is listed as Settings, and "Settings settings saved" is not a
+   * sentence.
+   */
+  heading?: string;
+  /** Where it is: {@link settingsPagePath}, or its own section's path. */
   path: string;
   /** The template it renders, from {@link ADMIN_TEMPLATES}. */
   template: string;
@@ -154,7 +171,7 @@ export function mountSettingsPage(
     });
 
     const note = page.saved === undefined ? '' : await page.saved(c, stored, settings);
-    flash(c, 'notice', `${page.label} settings saved.${note}`);
+    flash(c, 'notice', `${pageHeading(page)} settings saved.${note}`);
     return c.redirect(page.path, 303);
   });
 
@@ -170,10 +187,10 @@ export function settingsScreen(
   const shown = page.shown === undefined ? settings : page.shown(c.var.config, settings);
 
   return {
-    section: 'settings',
+    section: page.section ?? 'settings',
     child: page.child,
     settingsUrl: page.path,
-    settingsLabel: page.label,
+    settingsLabel: pageHeading(page),
     fields: SETTINGS_FIELDS,
     form: formFromSettings(shown),
     problems: {},
@@ -183,6 +200,11 @@ export function settingsScreen(
     hasProblems: false,
     ...page.panels?.(c, settings),
   };
+}
+
+/** What the page is headed, and what a save of it says it saved. */
+function pageHeading(page: SettingsPage): string {
+  return page.heading ?? page.label;
 }
 
 /**

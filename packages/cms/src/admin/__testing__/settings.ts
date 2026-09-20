@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 
 import { csrfField } from './harness.ts';
 import type { Browser } from './harness.ts';
-import { SETTINGS_PAGES } from '../settings-pages.ts';
+import { ALL_SETTINGS_PAGES } from '../settings-pages.ts';
+import type { SettingsPage } from '../settings-page.ts';
 
 /**
  * Saving one settings page the way a browser would.
@@ -54,9 +55,21 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
   },
 };
 
+/**
+ * What a test calls one settings page: the child it is under Settings, or the
+ * section it belongs to when it is filed somewhere else.
+ *
+ * Federation's page is a child called Settings, under the Federation section
+ * (TASK-109). A test still asks for 'federation', because that is what the
+ * page is about and what the form it submits is.
+ */
+function pageName(page: SettingsPage): string {
+  return page.section ?? page.child;
+}
+
 /** Where one settings page lives, by the name it is known by here. */
 export function settingsPageUrl(page: string): string {
-  const found = SETTINGS_PAGES.find((one) => one.child === page);
+  const found = ALL_SETTINGS_PAGES.find((one) => pageName(one) === page);
   assert.ok(found !== undefined, `${page} is a settings page`);
   return found.path;
 }

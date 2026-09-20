@@ -4,6 +4,8 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
 import { recordWordPressRequest } from '../federation/wordpress.ts';
+import { ADMIN_SECTIONS } from './menu.ts';
+import { FEDERATION_SETTINGS } from './settings-federation.ts';
 import { writeUsers } from './__testing__/users.ts';
 import { sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
@@ -19,12 +21,61 @@ import { readSiteSettings } from './settings.ts';
 const box = sandbox();
 after(() => box.cleanup());
 
+describe('where the Federation settings live', () => {
+  it('is a child of the Federation section, second, behind Followers (AC #1, AC #3)', () => {
+    const federation = ADMIN_SECTIONS.find((section) => section.section === 'federation');
+
+    assert.deepEqual(
+      federation?.children.map((child) => [child.child, child.label, child.url]),
+      [
+        ['followers', 'Followers', '/admin/federation'],
+        ['settings', 'Settings', '/admin/federation/settings'],
+      ],
+    );
+    assert.equal(
+      federation?.url,
+      '/admin/federation',
+      'the heading lands on Followers, which is what the section is opened to look at',
+    );
+    assert.equal(FEDERATION_SETTINGS.path, '/admin/federation/settings');
+    assert.equal(FEDERATION_SETTINGS.section, 'federation');
+  });
+
+  it('marks itself under Federation rather than under Settings (AC #1)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/federation/settings')).text();
+
+    assert.match(
+      html,
+      /<a[^>]*href="\/admin\/federation\/settings"[^>]*aria-current="page"/,
+      'the menu marks Federation > Settings',
+    );
+    assert.doesNotMatch(
+      html,
+      /<a[^>]*href="\/admin\/settings\/federation"/,
+      'and nothing links to the old place',
+    );
+  });
+
+  it('answers the old /admin/settings/federation with a redirect, not a 404 (AC #4)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    const response = await agent.get('/admin/settings/federation');
+
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), '/admin/federation/settings');
+  });
+});
+
 describe('the Federation page', () => {
   it('carries the relay list and nothing about an actor (decision-14)', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
-    const html = await (await agent.get('/admin/settings/federation')).text();
+    const html = await (await agent.get('/admin/federation/settings')).text();
 
     assert.match(html, /name="relays"/);
     // The handle, the type and the picture a site used to federate under are a
@@ -78,7 +129,7 @@ describe('the relays setting', () => {
     const cms = await relaySite(contentDir);
     const agent = await signedIn(cms);
 
-    const html = await (await agent.get('/admin/settings/federation')).text();
+    const html = await (await agent.get('/admin/federation/settings')).text();
     assert.equal(textarea(html, 'relays'), '', 'a new site subscribes to no relay');
 
     assert.equal(
@@ -103,7 +154,7 @@ describe('the relays setting', () => {
       'https://tags.example/user/_____relay_____/inbox',
     ]);
 
-    const back = await (await agent.get('/admin/settings/federation')).text();
+    const back = await (await agent.get('/admin/federation/settings')).text();
     assert.equal(
       textarea(back, 'relays'),
       'https://relay.example/inbox\nhttps://tags.example/user/_____relay_____/inbox',
@@ -164,7 +215,7 @@ describe('the WordPress ActivityPub compatibility switch', () => {
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
 
-    const html = await (await agent.get('/admin/settings/federation')).text();
+    const html = await (await agent.get('/admin/federation/settings')).text();
     assert.match(html, /name="wordpress_activitypub"/, 'the switch is on the page');
     assert.doesNotMatch(
       html,
@@ -201,7 +252,7 @@ describe('when the WordPress paths were last asked for (AC #3)', () => {
     const cms = await box.site({ dataDir });
     const agent = await signIn(cms, { username: 'ada', password: 'correct horse' });
 
-    const empty = await (await agent.get('/admin/settings/federation')).text();
+    const empty = await (await agent.get('/admin/federation/settings')).text();
     assert.match(empty, /wp-json\/activitypub\/1\.0\/actors\/2\/inbox/);
     assert.match(empty, /wp-json\/activitypub\/1\.0\/inbox/);
     assert.match(empty, /Never/, 'a path nobody has asked for says so');
@@ -214,7 +265,7 @@ describe('when the WordPress paths were last asked for (AC #3)', () => {
       at: new Date('2026-09-01T10:00:00.000Z'),
     });
 
-    const asked = await (await agent.get('/admin/settings/federation')).text();
+    const asked = await (await agent.get('/admin/federation/settings')).text();
     assert.match(asked, /1 September 2026|September 1, 2026|2026/, 'the instant is shown');
   });
 
@@ -222,7 +273,7 @@ describe('when the WordPress paths were last asked for (AC #3)', () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
-    const html = await (await agent.get('/admin/settings/federation')).text();
+    const html = await (await agent.get('/admin/federation/settings')).text();
 
     assert.match(html, /No user carries a WordPress actor id/);
   });

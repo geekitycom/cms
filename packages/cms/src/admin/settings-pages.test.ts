@@ -6,14 +6,14 @@ import { after, describe, it } from 'node:test';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
-import { SETTINGS_PAGES } from './settings-pages.ts';
+import { ALL_SETTINGS_PAGES, SETTINGS_PAGES } from './settings-pages.ts';
 import { readSiteSettings, SETTINGS_FIELDS } from './settings.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
 
 describe('the settings pages', () => {
-  it('are the six the Settings menu lists, General first (AC #1)', () => {
+  it('are the five the Settings menu lists, General first (AC #1)', () => {
     const settings = ADMIN_SECTIONS.find((section) => section.section === 'settings');
 
     assert.deepEqual(
@@ -24,17 +24,22 @@ describe('the settings pages', () => {
         ['permalinks', 'Permalinks', '/admin/settings/permalinks'],
         ['discussion', 'Discussion', '/admin/settings/discussion'],
         ['email', 'Email', '/admin/settings/email'],
-        ['federation', 'Federation', '/admin/settings/federation'],
       ],
+      'Settings no longer lists Federation (TASK-109)',
     );
     assert.equal(settings?.url, '/admin/settings', 'the heading lands on General');
+    assert.deepEqual(
+      SETTINGS_PAGES.map((page) => page.path),
+      settings?.children.map((child) => child.url),
+      'and the pages under Settings are exactly what it lists',
+    );
   });
 
   it('each answer with a form of their own that posts to their own URL (AC #1)', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
-    for (const page of SETTINGS_PAGES) {
+    for (const page of ALL_SETTINGS_PAGES) {
       const response = await agent.get(page.path);
       assert.equal(response.status, 200, page.path);
 
@@ -49,7 +54,7 @@ describe('the settings pages', () => {
   });
 
   it('carry every setting the one screen had, each on exactly one page (AC #2)', () => {
-    const seen = SETTINGS_PAGES.flatMap((page) => [...page.fields]);
+    const seen = ALL_SETTINGS_PAGES.flatMap((page) => [...page.fields]);
 
     assert.equal(new Set(seen).size, seen.length, 'no field is on two pages');
     assert.deepEqual(

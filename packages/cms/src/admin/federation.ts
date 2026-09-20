@@ -31,6 +31,17 @@ import { ADMIN_TEMPLATES } from './templates.ts';
 /** Where the federation screen lives. */
 export const FEDERATION_PATH = `${ADMIN_PREFIX}/federation`;
 
+/**
+ * Where Federation's own settings live: Federation > Settings.
+ *
+ * The relays and the WordPress compatibility switch used to be a child of
+ * Settings, which meant two menu entries called Federation, neither saying the
+ * other existed (TASK-109). It is here instead, beside the followers it is
+ * about; the constant is here rather than beside the page so the section's URL
+ * is written once.
+ */
+export const FEDERATION_SETTINGS_PATH = `${FEDERATION_PATH}/settings`;
+
 /** Where a post's Resend button posts. */
 export const RESEND_PATH = `${FEDERATION_PATH}/resend`;
 
