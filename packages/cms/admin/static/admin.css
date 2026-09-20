@@ -697,7 +697,12 @@ button[type='submit']:hover,
    and how what went out landed. Four panels down the page rather than the
    dashboard's grid, because three of them hold tables. */
 
-.admin-panel + .admin-panel {
+/* Panels that stack, which is what this screen's do. A panel inside
+   `.admin-panels` is in a grid whose `gap` is already the space between its
+   cells, in both directions and however the row wraps, so the margin is not
+   only unnecessary there but pushes a panel down inside its own cell — which
+   is what made the dashboard's two boxes start at different heights. */
+:not(.admin-panels) > .admin-panel + .admin-panel {
   margin-top: 1.5rem;
 }
 

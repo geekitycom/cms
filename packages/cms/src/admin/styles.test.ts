@@ -162,6 +162,30 @@ describe('the At a glance counts (TASK-115)', () => {
     assert.equal(declaration('.admin-counts', 'flex-wrap'), 'wrap');
   });
 
+  it('leaves a panel in the grid to the grid, and spaces the ones that stack', () => {
+    // The dashboard's two panels are siblings in `.admin-panels`, whose `gap`
+    // is already the space between them; an unscoped adjacent-sibling margin
+    // also matched there and pushed Recent posts down inside its own cell.
+    // The Followers screen stacks its panels in normal flow and still needs it.
+    const stacking = adminRules().filter(
+      (rule) =>
+        /\.admin-panel \+ \.admin-panel/.test(rule.selector) &&
+        /margin-top/.test(rule.declarations),
+    );
+
+    assert.equal(stacking.length, 1, 'one rule spaces stacked panels');
+    assert.match(
+      stacking[0]?.selector ?? '',
+      /:not\(\.admin-panels\) >/,
+      'and it does not reach a panel the dashboard grid is laying out',
+    );
+
+    // The grid spaces its cells in both directions, so a wrapped row is spaced
+    // too, which is what the margin would otherwise have been covering.
+    assert.equal(declaration('.admin-panels', 'gap'), '1rem');
+    assert.equal(declaration('.admin-panels', 'align-items'), 'start');
+  });
+
   it('stays a dl whose every cell is a dt then its dd', async () => {
     const home = await readFile(`${ADMIN_DIR}pages/dashboard/home.njk`, 'utf8');
     const list = /<dl class="admin-counts">([\s\S]*?)<\/dl>/.exec(home)?.[1];
