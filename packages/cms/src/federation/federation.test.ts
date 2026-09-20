@@ -142,6 +142,74 @@ describe('WebFinger', () => {
     }
   });
 
+  it('answers a handle whose host is spelled in another case (AC #1)', async () => {
+    const instance = await site();
+
+    const response = await webFinger(instance, `acct:${ADA}@BLOG.EXAMPLE`);
+
+    assert.equal(response.status, 200);
+    const document = (await response.json()) as { subject: string; links: { href?: string }[] };
+    assert.equal(document.subject, `acct:${ADA}@blog.example`);
+    assert.equal(document.links[0]?.href, ACTOR_URL);
+  });
+
+  it('answers a handle written with the leading @ a person reads (AC #2)', async () => {
+    const instance = await site();
+
+    for (const resource of [`acct:@${ADA}@blog.example`, `@${ADA}@blog.example`]) {
+      const response = await webFinger(instance, resource);
+      assert.equal(response.status, 200, `${resource} resolves`);
+      const document = (await response.json()) as { subject: string };
+      assert.equal(document.subject, `acct:${ADA}@blog.example`);
+    }
+  });
+
+  it('answers an actor URL whose host is spelled in another case (AC #4)', async () => {
+    const instance = await site();
+
+    const response = await webFinger(instance, `https://BLOG.EXAMPLE/author/${ADA}/`);
+
+    assert.equal(response.status, 200);
+    const document = (await response.json()) as { subject: string; links: { href?: string }[] };
+    assert.equal(document.subject, `acct:${ADA}@blog.example`);
+    assert.equal(document.links[0]?.href, ACTOR_URL);
+  });
+
+  // A host is case-insensitive and a username is not: `findUser` compares a
+  // username exactly, so `Ada` is somebody else, and WebFinger must not be the
+  // one place where two accounts quietly become one.
+  it('does not answer for a username spelled in another case (AC #3)', async () => {
+    const instance = await site();
+
+    for (const resource of [
+      `acct:Ada@blog.example`,
+      `acct:@ADA@blog.example`,
+      `Ada@blog.example`,
+      `${BASE_URL}/@Ada`,
+      `${BASE_URL}/author/Ada/`,
+    ]) {
+      assert.equal((await webFinger(instance, resource)).status, 404, `${resource} is nobody`);
+    }
+  });
+
+  it("carries the site's own spelling as the subject, whatever was asked for (AC #5)", async () => {
+    const instance = await site();
+
+    for (const resource of [
+      `acct:${ADA}@BLOG.EXAMPLE`,
+      `acct:@${ADA}@Blog.Example`,
+      `@${ADA}@blog.example`,
+      `  acct:${ADA}@blog.example  `,
+      `https://BLOG.EXAMPLE/@${ADA}`,
+    ]) {
+      const response = await webFinger(instance, resource);
+      assert.equal(response.status, 200, `${resource} resolves`);
+      const document = (await response.json()) as { subject: string; aliases: string[] };
+      assert.equal(document.subject, `acct:${ADA}@blog.example`);
+      assert.deepEqual(document.aliases, [ACTOR_URL, `${BASE_URL}/@${ADA}`]);
+    }
+  });
+
   it('is a 404 for a username nobody has', async () => {
     const instance = await site();
 
