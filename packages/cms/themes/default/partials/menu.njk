@@ -17,15 +17,17 @@
   which of a page's menus this one is. Two navs with no labels are two navs
   called "navigation".
 
-  An item marked `me` carries `rel="me"`, which is how Mastodon and the rest of
-  the IndieWeb verify that the site and the profile it links belong to the same
-  person: the profile links back, and the pair is the proof.
+  An item's `rel` is whatever `rel` values its line carried, already lower case
+  and each said once, so it is printed as one attribute and nothing is joined
+  here. `me` is the one most menus want: it is how Mastodon and the rest of the
+  IndieWeb verify that the site and the profile it links belong to the same
+  person — the profile links back, and the pair is the proof.
 #}
 {% macro list(items, label) %}{% if items.length %}
 <nav class="site-nav" aria-label="{{ label }}">
   <ul class="hlist">
     {% for item in items %}
-    <li><a href="{{ item.url | url }}"{% if item.me %} rel="me"{% endif %}{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
+    <li><a href="{{ item.url | url }}"{% if item.rel %} rel="{{ item.rel }}"{% endif %}{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
     {% endfor %}
   </ul>
 </nav>

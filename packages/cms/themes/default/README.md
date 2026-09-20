@@ -262,7 +262,9 @@ person on an author archive.
 What the bio prints: a round `u-photo` at 50px when they have an avatar,
 "Written by" and their name as a `p-name u-url` linked `rel="author me"` to
 their archive, then `p-job-title` and `p-locality` when the profile says, then
-their `p-note` and their `rel="me"` links as a `ul.hlist.bio-links`. Each of
+their `p-note` and their `rel="me"` links as a `ul.hlist.bio-links` — each
+link's `rel` is on it ready to print, `me` first and then whatever else the
+Links box typed. Each of
 those is printed only when the profile says it, so a profile holding a name
 alone prints a name alone. A name this site has no account for is printed
 unlinked, because the file still said somebody wrote this.
@@ -834,7 +836,7 @@ A site stores its menus by name in `content/_data/site.json`:
     ],
     "footer": [
       { "label": "Colophon", "url": "/colophon/" },
-      { "label": "Mastodon", "url": "https://example.social/@me", "me": true }
+      { "label": "Mastodon", "url": "https://example.social/@me", "rel": "me" }
     ]
   }
 }
@@ -882,14 +884,17 @@ rather than failing to load it.
 
 ### One item
 
-Each item is `{ label, url, current }`, plus `me: true` on a link that should
-carry `rel="me"`. `url` is a site-root path or an absolute URL for somewhere
-else, so put it through the `url` filter and a site served from a subdirectory
-still links correctly. `current` is true for the item whose path is the one
-being rendered, comparing without the trailing slash; an item pointing off the
-site is never current. `me` is for the IndieWeb's identity check: Mastodon
-verifies a link on a profile by looking for a `rel="me"` link back, so a footer
-link to a profile marked `me` is what makes the tick appear.
+Each item is `{ label, url, current }`, plus `rel` on a link that carries `rel`
+values. `url` is a site-root path or an absolute URL for somewhere else, so put
+it through the `url` filter and a site served from a subdirectory still links
+correctly. `current` is true for the item whose path is the one being rendered,
+comparing without the trailing slash; an item pointing off the site is never
+current. `rel` is one string holding every value the line carried, already
+lower case and each said once — print it as the whole attribute,
+`rel="{{ item.rel }}"`, rather than building one of your own. `me` is the value
+most menus have, for the IndieWeb's identity check: Mastodon verifies a link on
+a profile by looking for a `rel="me"` link back, so a footer link to a profile
+marked `me` is what makes the tick appear.
 
 ### Where this theme prints them
 

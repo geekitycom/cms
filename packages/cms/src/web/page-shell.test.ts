@@ -417,11 +417,14 @@ describe('the menus a theme renders by name (TASK-107)', () => {
     );
   });
 
-  it('gives an item marked me a rel="me" and an unmarked one none (AC #2)', async () => {
+  it('gives an item the rel values it carries, and an unmarked one none (AC #2, TASK-114)', async () => {
     const cms = await site({
       menus: {
         footer: [
-          { label: 'Mastodon', url: 'https://example.social/@ada', me: true },
+          { label: 'Mastodon', url: 'https://example.social/@ada', rel: 'me' },
+          // Every value the line carried reaches the page, in one attribute:
+          // a theme prints what the item says rather than a list of its own.
+          { label: 'A source', url: 'https://example.com/thing', rel: 'nofollow noopener' },
           { label: 'Colophon', url: '/colophon/' },
         ],
       },
@@ -430,8 +433,12 @@ describe('the menus a theme renders by name (TASK-107)', () => {
     const printed = nav(await body(cms, '/about/'), 'Footer');
 
     assert.match(printed, /<a href="https:\/\/example\.social\/@ada" rel="me">Mastodon<\/a>/);
+    assert.match(
+      printed,
+      /<a href="https:\/\/example\.com\/thing" rel="nofollow noopener">A source<\/a>/,
+    );
     assert.match(printed, /<a href="\/colophon\/">Colophon<\/a>/);
-    assert.equal([...printed.matchAll(/rel="me"/g)].length, 1, 'only the marked item carries it');
+    assert.equal([...printed.matchAll(/rel="/g)].length, 2, 'an unmarked item carries one');
   });
 
   it('keeps a menu whose name no theme declares, and renders it nowhere (AC #6)', async () => {

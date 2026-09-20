@@ -36,11 +36,14 @@
         <code>Mastodon | https://example.social/@me</code>. They are the whole of
         this menu, in this order: nothing else puts a link in it. A page serving
         as the front page goes in as <code>Home | /</code>, where a reader lands.
-        End a line <code>| me</code> to mark the link
-        <strong>a profile that is you</strong>: it is given
-        <code>rel="me"</code>, which is how Mastodon and the rest of the
-        IndieWeb verify that the site and the profile it links are the same
-        person.
+        End a line with the
+        <code>rel</code> values the link carries, a word each &mdash;
+        <code>Mastodon | https://example.social/@me | me</code>,
+        <code>A source | https://example.com/thing | nofollow noopener</code>.
+        <code>me</code> marks <strong>a profile that is you</strong>, which is
+        how Mastodon and the rest of the IndieWeb verify that the site and the
+        profile it links are the same person; the rest are whatever HTML link
+        types you want on it.
       {% endset %}
       {{ field.textarea('menu-' + menu.name, fields.items, 'Items', menu.items,
            error=menu.problem, hint=itemsHint, rows='5', spellcheck='false') }}

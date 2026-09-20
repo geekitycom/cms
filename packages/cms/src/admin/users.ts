@@ -4,7 +4,7 @@ import type { Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
 import { authorHref } from '../web/authors.ts';
-import { isLinkUrl, LINK_URL_RULE, MENU_ITEM_FLAGS } from '../web/navigation.ts';
+import { isLinkUrl, LINK_REL_RULE, LINK_URL_RULE, splitLinkRel } from '../web/navigation.ts';
 import {
   DEFAULT_DELIVERY_MODE,
   deliveryMode,
@@ -738,12 +738,12 @@ export function parseProfileLinks(value: string): ProfileLink[] {
  * message names one: a box is fixed a line at a time, and the line to fix is
  * the useful half of the sentence.
  *
- * A line ending in a menu item's flag gets a sentence of its own, because that
- * is the mistake that was actually made — a line learned from the Navigation
- * screen, typed here, stored whole and served to a reader as
- * `/author/a%20%7C%20me/`. A profile link takes no flags: `partials/bio.njk`
- * renders every one of them with `rel="me"` already, so `| me` here would be
- * either nothing or a way to turn off the only thing this box is for.
+ * The same line as a menu item's, down to the `rel` values it may end in
+ * (TASK-114): somebody who learns one box has learned the other, and a
+ * trailing `| me` — the line that started all this — is a link rather than a
+ * mistake. A profile link is published `rel="me"` either way, so typing it is
+ * a no-op; typing `| me nofollow author` is three values on the rendered
+ * attribute.
  *
  * Tolerant on the way out and strict on the way in: {@link parseProfileLinks}
  * and the file's own reader still take anything, so a link stored before this
@@ -754,18 +754,10 @@ export function profileLinkLineProblem(value: string): string | undefined {
   const bad = profileLinkLines(value).find((line) => !isProfileLink(profileLinkFields(line)));
   if (bad === undefined) return undefined;
 
-  const withoutFlag = withoutMenuItemFlag(bad);
-  if (withoutFlag !== undefined && isProfileLink(profileLinkFields(withoutFlag))) {
-    return (
-      `Every link on a profile already carries rel="me", so a profile link ` +
-      `does not end "| me" the way a menu item does. Take the flag off ` +
-      `"${bad}" and it is one.`
-    );
-  }
-
   return (
     `A profile link is "Label | URL", or a bare URL that labels itself, one ` +
-    `per line, where the URL is ${LINK_URL_RULE}. "${bad}" is not one.`
+    `per line, where the URL is ${LINK_URL_RULE}, and may end in ` +
+    `${LINK_REL_RULE}. "${bad}" is not one.`
   );
 }
 
@@ -778,17 +770,23 @@ function profileLinkLines(value: string): string[] {
 }
 
 /**
- * One typed line split where a profile link splits: at its first bar, so a
- * label cannot hold one, and a line with no bar is a URL that labels itself.
+ * One typed line split where a profile link splits: its `rel` values off the
+ * end, then at its first bar, so a label cannot hold one and a line with no
+ * bar left is a URL that labels itself.
  *
  * The split alone, with nothing said about whether what came out is a link:
  * one spelling for the line the box reads back and the line it checks, so the
- * two can never disagree about which half is the URL.
+ * two can never disagree about which half is the URL. The tail comes off
+ * through {@link splitLinkRel}, the same call the menu box makes, which is
+ * what makes the two boxes one line format (TASK-114).
  */
 function profileLinkFields(line: string): ProfileLink {
-  const bar = line.indexOf('|');
-  if (bar === -1) return { label: line, href: line };
-  return { label: line.slice(0, bar).trim(), href: line.slice(bar + 1).trim() };
+  const { text, rel } = splitLinkRel(line);
+  const carried = rel === '' ? {} : { rel };
+
+  const bar = text.indexOf('|');
+  if (bar === -1) return { label: text, href: text, ...carried };
+  return { label: text.slice(0, bar).trim(), href: text.slice(bar + 1).trim(), ...carried };
 }
 
 /** Whether a split line is a link: somewhere to go, and something to call it. */
@@ -796,32 +794,13 @@ function isProfileLink(link: ProfileLink): boolean {
   return link.label !== '' && isLinkUrl(link.href);
 }
 
-/**
- * A line with a menu item's flag taken off the end of it, or `undefined` when
- * it does not end in one.
- *
- * Read off {@link MENU_ITEM_FLAGS} rather than spelled out here, so a second
- * flag on the Navigation screen is a flag this box knows to say no to without
- * anybody remembering to come back. What is left is handed back rather than
- * thrown away, because the sentence about a flag is only the right sentence
- * when taking the flag off leaves a link: `Mastodon | me` ends in the word,
- * but the trouble with it is that `me` is not a URL.
- */
-function withoutMenuItemFlag(line: string): string | undefined {
-  const bar = line.lastIndexOf('|');
-  if (bar === -1) return undefined;
-  const word = line
-    .slice(bar + 1)
-    .trim()
-    .toLowerCase();
-  if (!(MENU_ITEM_FLAGS as readonly string[]).includes(word)) return undefined;
-  return line.slice(0, bar).trim();
-}
-
 /** A stored list of links back as the textarea shows it. */
 export function formatProfileLinks(links: readonly ProfileLink[] | undefined): string {
   return (links ?? [])
-    .map((link) => (link.label === link.href ? link.href : `${link.label} | ${link.href}`))
+    .map((link) => {
+      const line = link.label === link.href ? link.href : `${link.label} | ${link.href}`;
+      return link.rel === undefined || link.rel === '' ? line : `${line} | ${link.rel}`;
+    })
     .join('\n');
 }
 

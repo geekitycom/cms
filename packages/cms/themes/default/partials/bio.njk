@@ -29,6 +29,10 @@
   otherwise. An author archive sets "Posts by", because the card there heads a
   list of somebody's writing rather than crediting one piece of it.
 
+  A link's `rel` always holds `me` — the CMS puts it there whether or not the
+  Links box typed it — followed by whatever else that line carried, so this
+  prints one attribute rather than one of its own beside one of theirs.
+
   The `p-note` and the `rel="me"` links are printed wherever the card is, which
   is what `bioProfile` used to ask for on an author archive alone. An entry
   left that switch unset because the page footer carried the site's identity
@@ -62,7 +66,7 @@
     {%- if bioAuthor.links.length %}
     <ul class="hlist bio-links">
       {%- for link in bioAuthor.links %}
-      <li><a class="u-url" rel="me" href="{{ link.href }}">{{ link.label }}</a></li>
+      <li><a class="u-url" rel="{{ link.rel }}" href="{{ link.href }}">{{ link.label }}</a></li>
       {%- endfor %}
     </ul>
     {%- endif %}
