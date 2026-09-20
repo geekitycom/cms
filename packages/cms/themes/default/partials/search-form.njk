@@ -2,6 +2,11 @@
   The site's search box (TASK-22): a plain GET form, so a search is a URL a
   reader can bookmark or share and the box needs no JavaScript.
 
+  `layouts/search.njk` is the only thing that includes it (TASK-105): the box
+  was in the footer of every page as well, and search is a menu item now —
+  a `Search | /search/` line like any other — so the page about searching is
+  where the box is.
+
   Expects nothing. `query`, when the page has one, goes back in the box, so the
   results page shows what was searched for. The label is read out rather than
   shown, because the button beside the box already says what it is for, and it

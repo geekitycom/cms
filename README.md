@@ -1051,11 +1051,12 @@ at an 18px root, warm paper, a rust primary and a blue secondary, one column at
 42rem, links that invert on hover. `layouts/base.njk` is the shell — the skip
 link, a `.global-wrapper` that says when it is at `/`, a header that is the
 site title and tagline on the front page and a small link home everywhere else,
-and a footer with the copyright, the colophon, an RSS link and the site author's
-`rel="me"` links, and `menus.footer` under them. There is no navigation in the
-header: `menus.primary` is the horizontal list in the bio under an entry, and
-the footer prints it only on a page that has no bio — a listing, the 404 — so
-it is on every page once.
+and a footer with the copyright, the colophon and `menus.footer`. The header
+carries `menus.primary` on every page — a line of its own under the tagline at
+the root, beside the small link home everywhere else — so a reader looks in one
+place whatever they are reading. The bio under an entry carries the person it
+is by and nothing else, and the footer links what a site typed into its footer
+menu rather than anything read off an account.
 Webrings, badges and anything else particular to one site are not in the
 package: they go in a site theme's `footer` block. The source design is light only; the theme adds a dark
 scheme under `prefers-color-scheme: dark`, and

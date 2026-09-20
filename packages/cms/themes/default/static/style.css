@@ -616,6 +616,29 @@ pre code {
   text-decoration: none;
 }
 
+/* The site menu, which the header carries on every page (TASK-105). At the
+   root the header is the site title with the tagline under it, and the menu
+   is a line of its own under that. */
+.global-header .site-nav {
+  margin-top: var(--spacing-2);
+  font-size: var(--fontSize-0);
+}
+
+/* Everywhere else the header is the small link home, and the menu sits beside
+   it on the same line — the two wrap onto a second line together rather than
+   the menu dropping under the link on a narrow screen. */
+.global-wrapper:not([data-is-root-path='true']) .global-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--spacing-5);
+  row-gap: var(--spacing-1);
+}
+
+.global-wrapper:not([data-is-root-path='true']) .global-header .site-nav {
+  margin-top: var(--spacing-0);
+}
+
 /* An entry: a post or a page (TASK-83). The source design's own rules — the
    title tight against the words under it, a subtitle in the heading font —
    plus the small line the `e-content` ends on, which carries the permalink,
@@ -667,10 +690,9 @@ pre code {
   font-style: italic;
 }
 
-/* The site menu, and an author archive's `rel="me"` links: both horizontal
-   lists under the credit, small, in the heading font like every other piece
-   of navigation. */
-.bio .site-nav,
+/* The links the person calls their own, under the credit: a horizontal list,
+   small, in the heading font. The site menu used to share this rule; it is in
+   the header now (TASK-105) and the bio carries nobody but the person. */
 .bio-links {
   margin-top: var(--spacing-2);
   font-size: var(--fontSize-0);
@@ -803,9 +825,9 @@ pre code {
   font-size: var(--fontSize-0);
 }
 
-/* The search box (TASK-22): a field and a button on one line, in the footer
-   of every page and at the top of the search page. The field is drawn the way
-   the comment form's are, so the site has one look for a place to type. */
+/* The search box (TASK-22): a field and a button on one line, at the top of
+   the search page and nowhere else (TASK-105). The field is drawn the way the
+   comment form's are, so the site has one look for a place to type. */
 
 .search-form {
   display: flex;

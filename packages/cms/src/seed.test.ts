@@ -58,7 +58,7 @@ describe('seedStarterContent', () => {
     assert.equal(settings['title'], 'A Geekity site');
   });
 
-  it('types the About page into the primary menu (TASK-106 AC #6, TASK-107)', async () => {
+  it('types the About page into the primary menu and the feed into the footer (TASK-106 AC #6, TASK-107, TASK-105)', async () => {
     const site = await temporaryDir('geekity-seed-menu-');
     const contentDir = path.join(site, 'content');
 
@@ -66,9 +66,13 @@ describe('seedStarterContent', () => {
 
     // The menu is the setting and nothing else, so the one page a new site
     // ships is reachable because the starter site.json names it, not because
-    // its front matter says anything.
+    // its front matter says anything. The footer prints its menu and nothing
+    // of its own (TASK-105), so the RSS link a new site wants is a line in it.
     const settings = await readJson(path.join(contentDir, '_data', 'site.json'));
-    assert.deepEqual(settings['menus'], { primary: [{ label: 'About', url: '/about/' }] });
+    assert.deepEqual(settings['menus'], {
+      primary: [{ label: 'About', url: '/about/' }],
+      footer: [{ label: 'RSS', url: '/feed/' }],
+    });
 
     const about = await fs.readFile(path.join(contentDir, 'pages', 'about.md'), 'utf8');
     assert.ok(!/^navigation:/m.test(about), 'and the page opts into nothing');

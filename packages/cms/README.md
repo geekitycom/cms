@@ -2661,10 +2661,13 @@ theme can shadow the login form or the CSRF field inside it.
 The packaged theme is the andrewshell.org design (decision-16). `base.njk` is
 its shell: a skip link, a `.global-wrapper` carrying `data-is-root-path="true"`
 at `/` only, a header that is the site title and tagline on the front page and a
-small link home on every other, `<main id="main">`, and a footer with the
-copyright year, the site author, the colophon, an RSS link and one `rel="me"`
-link per link on the site author's profile. Nothing particular to one site is in
-it — webrings and badges belong in a site theme's `footer` block. Its head
+small link home on every other — with `menus.primary` inside it on every page
+— `<main id="main">`, and a footer with the copyright year, the site author,
+the colophon and `menus.footer`. The footer reads nothing off an account: it
+used to print an RSS link and one `rel="me"` link per link on the site author's
+profile, and a site that wants either types it into its footer menu. Nothing
+particular to one site is in it — webrings and badges belong in a site theme's
+`footer` block. Its head
 carries a description, Open Graph and Twitter card tags, icons derived from the
 site's avatar, and one JSON-LD `@graph` from `partials/jsonld.njk`: that partial
 is all the structured data the theme emits, there is no Microdata anywhere, and

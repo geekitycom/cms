@@ -4,10 +4,14 @@
 
   It replaces `partials/byline.njk`, which printed a name in a meta line. This
   is the whole credit — a round photo, "Written by" linked to their archive
-  with `rel="author me"`, what they do, where they are — and under it the site
-  menu, because the design has no navigation in the header and this is where it
-  reads it. The menu is here and not in the page footer whenever a page has a
-  bio; `layouts/base.njk` prints it in the footer on the pages that have none.
+  with `rel="author me"`, what they do, where they are, what they wrote about
+  themselves and the links they call their own.
+
+  The person and only the person (TASK-105). The site menu used to be printed
+  here as well, because the design had no header navigation; it is in
+  `header.global-header` on every page now, so this card says nothing about
+  the site and a reader looking for the way around never has to find the bio
+  first.
 
   Set `bioAuthor` before including it and nothing renders when that is absent:
 
@@ -25,13 +29,12 @@
   otherwise. An author archive sets "Posts by", because the card there heads a
   list of somebody's writing rather than crediting one piece of it.
 
-  `bioProfile` is the second switch. Set it and the bio also prints their
-  `p-note` and their `rel="me"` links, which is what an author archive wants —
-  the page is about them. An entry leaves it unset: the page footer already
-  prints the site's identity links, and the `rel="author me"` link above leads
-  to the archive where this person's own are.
+  The `p-note` and the `rel="me"` links are printed wherever the card is, which
+  is what `bioProfile` used to ask for on an author archive alone. An entry
+  left that switch unset because the page footer carried the site's identity
+  links; it carries nobody's now, so somebody's links belong under what they
+  wrote rather than one page further on.
 #}
-{%- import "partials/menu.njk" as nav %}
 {% if bioAuthor %}
 <div class="bio p-author h-card">
   {%- if bioAuthor.avatar %}
@@ -52,13 +55,11 @@
       {%- if bioAuthor.location %} from <span class="p-locality">{{ bioAuthor.location }}</span>{% endif %}.
     </p>
 
-    {%- if bioProfile and bioAuthor.bio %}
+    {%- if bioAuthor.bio %}
     <p class="bio-note p-note">{{ bioAuthor.bio }}</p>
     {%- endif %}
 
-    {{- nav.list(menus.primary, "Site") }}
-
-    {%- if bioProfile and bioAuthor.links.length %}
+    {%- if bioAuthor.links.length %}
     <ul class="hlist bio-links">
       {%- for link in bioAuthor.links %}
       <li><a class="u-url" rel="me" href="{{ link.href }}">{{ link.label }}</a></li>

@@ -21,14 +21,14 @@ themes/default/
     post-list.njk     the h-feed a listing is made of
     pagination.njk    previous/next pager
     tags.njk          macros for tag and category links
-    bio.njk           who an entry is by, as an h-card, with the site menu
+    bio.njk           who an entry is by, as an h-card
     menu.njk          one named menu, as a nav of links
     feeds.njk         macros for the feed links in <head>
     conversation.njk  the replies, likes and boosts under a post
     comment-form.njk  the form under a post that is taking comments
     contact-form.njk  the form on a page whose front matter says contact: true
     archive.njk       every post by month, on a page that says archive: true
-    search-form.njk   the search box, in the footer and on the search page
+    search-form.njk   the search box, on the search page
   mail/
     test.*.njk              the Send test email message
     password-reset.*.njk    the forgot-password link
@@ -142,26 +142,36 @@ words above the posts; `layouts/home.njk` already does.
 skip link, one `.global-wrapper` at the 42rem measure, `.global-header`,
 `<main id="main">` and the footer, in that order.
 
-**The header has one rule.** On the front page it is the site title as
-`h1.main-heading`, linked home, with `site.tagline` in a paragraph under it; on
-every other page it is `a.header-link-home`, the site title small and linked
-home, and no tagline. The wrapper carries `data-is-root-path="true"` at `/` and
-nothing anywhere else, which is how the stylesheet tells the two apart. There is
-no navigation in the header — see [Navigation](#navigation).
+**One home for each kind of link.** The header carries the site menu, on every
+page. [The bio](#the-bio) carries the person whose page or post it is. The
+footer carries the site's own links. The search box is on the search page and
+nowhere else.
+
+**The header has one rule, and the menu under it.** On the front page it is the
+site title as `h1.main-heading`, linked home, with `site.tagline` in a
+paragraph under it; on every other page it is `a.header-link-home`, the site
+title small and linked home, and no tagline. The wrapper carries
+`data-is-root-path="true"` at `/` and nothing anywhere else, which is how the
+stylesheet tells the two apart. `menus.primary` is printed inside the
+`.global-header` on both: at the root it is a line of its own under the
+tagline, and everywhere else the stylesheet lays the header out as one line so
+it sits beside the link home. See [Navigation](#navigation).
 
 **The footer** prints the copyright with the current year and `site.author`,
-`Published with Geekity`, and then one `ul.hlist` holding an RSS link to
-`/feed/` and one `rel="me"` link per entry of `siteAuthor.links`. A site whose
-`author` setting names nobody with an account here gets the line and the RSS
-link and no identity links, because `siteAuthor` is absent. Under that list
-comes `menus.footer`, the `footer` area this theme declares, which prints
-nothing until a site has filled it in — see [Navigation](#navigation). The year
-is `{{ "now" | date("year") }}` — `now` is the one word the `date` filter reads
+`Published with Geekity`, and then `menus.footer` — the `footer` area this
+theme declares, and the whole of what the footer links. A site that wants its
+feed there types an `RSS | /feed/` line into it, the way the starter site does.
+Nothing in the footer is read off an account: it used to hold one `rel="me"`
+link per entry of `siteAuthor.links`, which was one nominated user's profile
+presented as the site's. An empty or missing footer menu prints no list at all,
+and the copyright line stands on its own. The year is
+`{{ "now" | date("year") }}` — `now` is the one word the `date` filter reads
 rather than parses — so it is the year at the moment the page is rendered, in
 the site's own timezone.
 
-Webrings, badges, a licence notice and anything else particular to one site are
-deliberately not in the package. They go in a site theme's `footer` block:
+Webrings, badges, a licence notice and anything else that is markup rather than
+a link are deliberately not in the package. They go in a site theme's `footer`
+block:
 
 ```njk
 {% extends "layouts/base.njk" %}
@@ -247,24 +257,28 @@ meta line, and this is the whole credit.
 `bioAuthor` is the one thing to set, and nothing renders when it is absent.
 It is one of the profile objects the context already carries: `author` on a
 post, falling back to `siteAuthor`; `siteAuthor` on a page; the archive's
-person on an author archive. `layouts/base.njk` reads it too — see
-[Navigation](#navigation).
+person on an author archive.
 
 What the bio prints: a round `u-photo` at 50px when they have an avatar,
 "Written by" and their name as a `p-name u-url` linked `rel="author me"` to
-their archive, then `p-job-title` and `p-locality` when the profile says. A
-name this site has no account for is printed unlinked, because the file still
-said somebody wrote this. Then the site menu.
+their archive, then `p-job-title` and `p-locality` when the profile says, then
+their `p-note` and their `rel="me"` links as a `ul.hlist.bio-links`. Each of
+those is printed only when the profile says it, so a profile holding a name
+alone prints a name alone. A name this site has no account for is printed
+unlinked, because the file still said somebody wrote this.
+
+**The person and only the person.** The site menu used to be printed here as
+well, because the design had no header navigation; it is in the header on
+every page now — see [Navigation](#navigation) — so the bio says nothing about
+the site. The note and the links used to be behind a `bioProfile` switch that
+an author archive set and an entry did not, on the grounds that the page
+footer already carried the site's identity links. It carries nobody's, so the
+switch is gone and the card is the same wherever it appears: at the top of
+somebody's archive, and under each of their posts.
 
 `bioLead` is what the line opens with, `Written by` unless a layout sets
 another; `layouts/author.njk` sets `Posts by`, because the card there heads
 somebody's writing rather than crediting one piece of it.
-
-Set `bioProfile` as well and it also prints their `p-note` and their `rel="me"`
-links; `layouts/author.njk` does, because that page is about the person rather
-than about something they wrote. An entry leaves it unset: the page footer
-already prints the site's identity links, and the `rel="author me"` link leads
-to the archive where this person's own are.
 
 **A site that used `partials/byline.njk`** — `{{ byline.line(author) }}` from
 an overridden layout — either includes this partial instead or writes the line
@@ -366,17 +380,17 @@ saying how many documents matched, a `div.search-results` of
 indexed with `<meta name="robots" content="noindex">` in its `head` block.
 
 The context is a listing's with two differences. `query` is the words searched
-for, trimmed, and an empty string on the page before a search; it is defined
-only on this page, which is how `layouts/base.njk` knows to leave the footer's
-search box off it. Each entry in `posts` carries a `snippet`: a few words of
+for, trimmed, and an empty string on the page before a search. Each entry in
+`posts` carries a `snippet`: a few words of
 HTML around the match, escaped, with every matched word in `<mark>`. Print it
 with `safe`. The results are best match first rather than newest first, and
 only what the public site would serve is ever among them.
 
 `partials/search-form.njk` is a `GET` form to `/search/` with the words in `q`,
-so it needs no JavaScript and a search is a URL. `layouts/base.njk` puts it in
-the footer of every other page. The search page takes the path `/search/` ahead
-of any document permalinked there.
+so it needs no JavaScript and a search is a URL. This layout is the only thing
+that includes it: the box used to be in the footer of every page as well, and
+search is a menu item now — a `Search | /search/` line like any other. The
+search page takes the path `/search/` ahead of any document permalinked there.
 
 ### The front page
 
@@ -396,8 +410,8 @@ It draws the page's own words and then what the site has been writing:
 3. `p.front-links`, a line of links to where the writing is. The posts page is
    linked by its own title when the site names one, and the search always is
    (TASK-22).
-4. The bio, under a rule, exactly as an entry ends — so the site menu is there
-   too, because that is where this design keeps it.
+4. The bio, under a rule, exactly as an entry ends: whoever the site's author
+   setting names, with their note and their own links.
 
 Two context keys are the front page's alone. `recentPosts` is the entries to
 list, in the same shape a listing's are: the posts of the current month when
@@ -777,17 +791,18 @@ the `partials/byline.njk` it used to have.
 
 `layouts/author.njk` is that person's archive, at `/author/{username}/`, with
 their pages at `/author/{username}/page/2/` and their three feeds under
-`/author/{username}/feed/`. It is headed with their name and then the bio with
-`bioProfile` set — the avatar, the note and the `rel="me"` links — and lists
-their published posts newest first. The source design has no author archive, so
+`/author/{username}/feed/`. It is headed with their name and then the bio —
+the avatar, the note and the `rel="me"` links, the same card that ends each of
+their posts — and lists their published posts newest first. The source design has no author archive, so
 the heading is the CMS's own; the h-card under it is the one partial the theme
 has. A user with no profile still has one; they are called by their username.
 
 `siteAuthor` is the same object on a different question: not who wrote this
-document, but who the page in front of the reader is by. It is what the bio,
-the footer's `rel="me"` links and any structured data a theme emits should all
-read, so that what a reader sees and what a machine reads cannot drift apart.
-It resolves in this order:
+document, but who the page in front of the reader is by. It is what the bio and
+any structured data a theme emits should both read, so that what a reader sees
+and what a machine reads cannot drift apart. The footer does not read it at
+all: the site's links are `menus.footer`, typed rather than borrowed from an
+account. It resolves in this order:
 
 - the document's own `author`, on a post or a page that names one;
 - the person whose archive it is, on an author archive;
@@ -798,8 +813,7 @@ It is **absent** when none of those name anybody this site has. The site
 setting is read more strictly than a byline is: a byline prints the name a file
 gives whether or not somebody answers to it, but a site author with no profile
 behind it has no picture, no bio and nowhere to link, so there is nothing to
-print and the key is not there. Write `{% if siteAuthor %}` around the bio and
-the identity links.
+print and the key is not there. Write `{% if siteAuthor %}` around the bio.
 
 The URL is not only a page. Each user is an ActivityPub actor at that address,
 so it is the page a follower lands on when they click through from the
@@ -890,17 +904,21 @@ The second argument is the `aria-label`, which is what tells a reader on a
 screen reader which of a page's menus this one is. Nothing is printed for a
 menu with nothing in it.
 
-`menus.footer` is printed in the `footer` block of `layouts/base.njk`, beside
-the site author's identity links.
+`menus.primary` is printed once, in `header.global-header`, on every page
+(TASK-105). At the root, where the header is the site title with the tagline
+under it, the menu is a line of its own under the tagline; everywhere else,
+where the header is the small link home, the stylesheet lays the header out as
+one line and the menu sits beside it. Nothing decides between two places any
+more: a reader looks in the same spot whatever they are reading, and a layout
+that overrides the `content` block cannot lose the navigation by not printing
+a bio.
 
-`menus.primary` is printed once, in one of two places, because the design has
-no header navigation: it is the horizontal list inside [the bio](#the-bio). A
-page with a bio — an entry, an author archive — carries it there. A page
-without one — a listing, the 404, a layout of a site's own — gets it from the
-`footer` block. What decides is `bioAuthor`: a layout that renders the bio sets
-it, and the footer then leaves the menu out. A layout that sets nothing keeps
-the footer menu, which is why an overridden `layouts/post.njk` does not lose
-the navigation by not having a bio.
+`menus.footer` is printed in the `footer` block of `layouts/base.njk`, under
+the copyright line, and is the whole of what the footer links — a feed, a
+colophon, a webring, a profile marked `me`. The footer reads nothing off an
+account: it used to print one `rel="me"` link per entry of `siteAuthor.links`,
+which meant one nominated user's links stood for the site and nobody else's
+appeared at all.
 
 `menus.primary` is the whole of the site menu, in the order the settings screen
 names it. A page cannot put itself in a menu; a page that should be linked —

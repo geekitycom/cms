@@ -20,9 +20,9 @@
   the name is one of the site's users. A post that names nobody falls back to
   the site's own author, which is a name and nothing else.
 
-  This layout renders no bio, so the packaged base layout keeps printing the
-  site menu in the page footer — that is what `bioAuthor` decides, and a
-  layout that says nothing about it gets the footer menu.
+  This layout renders no bio and loses nothing by it: the site menu is in the
+  header on every page (TASK-105), so an override is free to draw the words
+  however it likes without taking the navigation with it.
 #}
 {% extends "layouts/base.njk" %}
 {% import "partials/tags.njk" as taxonomy with context %}
