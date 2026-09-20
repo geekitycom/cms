@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.5.0](https://github.com/geekitycom/cms/compare/v0.4.0...v0.5.0) (2026-09-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** `ADMIN_TEMPLATES.settingsFederation` is now `ADMIN_TEMPLATES.federationSettings`, `SETTINGS_PAGES` no longer holds the Federation page (`ALL_SETTINGS_PAGES` does), and `/admin/settings/federation` is a 301 to `/admin/federation/settings` rather than a screen.
+* **cms:** `SiteSettings.navigation` is replaced by `SiteSettings.menus`, `SettingsField` no longer includes `navigation`, `SETTINGS_FIELDS.navigation` is gone, and `settingsFromForm`'s second parameter is a `CarriedSettings` object rather than an array of taxonomy redirects. No stored file changes shape.
+* **cms:** a site theme that relied on the packaged shell sees three changes. The footer no longer prints RSS or the site author's profile links, so a site that wants them types them into its footer menu — the starter site and the demo both do. `bioProfile` is gone: the bio prints the note and the links wherever it appears. `bioAuthor` is no longer a contract between a layout and base.njk, so an overriding layout can no longer lose the menu.
+* **cms:** a site's menu moves from the `navigation` array in content/_data/site.json to a `menus` object keyed by name, and the old key is no longer read: what was `navigation` is now `menus.primary`. Templates read `menus`, keyed by name, in place of `menu`, and an Eleventy build reads `collections.menus` in place of `collections.menu`. A theme declares the menu areas it renders in its theme.json, so `Theme` carries a required `areas`.
+* **cms:** the site menu is the navigation setting alone. A page's `navigation: true` and `navigationOrder` front matter no longer put it in the menu, and the page editor's Show in navigation checkbox and Menu order box are gone; type a `Label | URL` line into Settings > Reading instead, and `Home | /` for a page served as the front page. The keys are not stripped from existing files — they become ordinary unmodelled keys and round-trip untouched. The package no longer exports navigationPages, navigationOrder, NAVIGATION_KEY or NAVIGATION_ORDER_KEY, and navigationMenu no longer takes `pages`.
+
+### Features
+
+* **cms:** comment as yourself when you are signed in ([737a886](https://github.com/geekitycom/cms/commit/737a88616d3de315ba4132dca8e8a03937895fc9))
+* **cms:** give every menu a screen of its own ([f20148e](https://github.com/geekitycom/cms/commit/f20148eab4e82d9082179f61d7e324372d7cd61b))
+* **cms:** log one line per request ([2ff7944](https://github.com/geekitycom/cms/commit/2ff7944608589a29f987ab90b9c3068fece7ec19))
+* **cms:** make a menu a named thing the theme asks for ([120190a](https://github.com/geekitycom/cms/commit/120190a428ef7838bb87a29c20dcfcfdad394603))
+* **cms:** make the navigation setting the only source of the menu ([d7f5a3a](https://github.com/geekitycom/cms/commit/d7f5a3a76be9d0ace273be79a756662a1c95ee9d))
+* **cms:** move federation's settings under Federation ([f79ae75](https://github.com/geekitycom/cms/commit/f79ae75ec502b78fbc14210d8f8eb49a0f7925e2))
+* **cms:** put the menu in the header and the site's own links in the footer ([9639d4c](https://github.com/geekitycom/cms/commit/9639d4cc094ea24dfcc857ac63f70e369ce23171))
+* **cms:** rebuild the content index from the admin ([a06633e](https://github.com/geekitycom/cms/commit/a06633ee31edd5a2b57b7e29471595bca66b2bbc))
+
+
+### Bug Fixes
+
+* **cms:** give the users listing the shape every other listing has ([4d4968a](https://github.com/geekitycom/cms/commit/4d4968a736f049720daac401a4858fd6cb7b9718))
+* **cms:** put search in the starter menu and say how the menu works ([4711b1c](https://github.com/geekitycom/cms/commit/4711b1c5a447c19fd68e77f906a29cd4927854a7))
+* **cms:** resolve the webfinger spellings a peer actually sends ([fec6981](https://github.com/geekitycom/cms/commit/fec69810575220912ef58f6b7745cf46f08b5cab))
+
 ## [0.4.0](https://github.com/geekitycom/cms/compare/v0.3.0...v0.4.0) (2026-09-20)
 
 
