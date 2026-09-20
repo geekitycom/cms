@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-20 12:05'
+updated_date: '2026-09-20 12:06'
 labels:
   - web
   - theme
@@ -49,10 +50,21 @@ Everything here is the packaged default theme, which a site theme may override, 
 <!-- AC:BEGIN -->
 - [ ] #1 Settings > Reading has a Footer links box taking Label | url and an optional me marker, saved to site.json, proven by a test
 - [ ] #2 A link marked me renders with rel="me" and an unmarked one does not, proven by a test
-- [ ] #3 With the box filled, the footer prints exactly those links and no longer reads the site author's profile, proven by a test
-- [ ] #4 With the box empty, the footer is what it is today, proven by the existing footer tests passing unedited
-- [ ] #5 At the root the menu renders inside the global header and not in the footer, proven by a test
-- [ ] #6 On an entry the menu is still in the bio, and on a listing or a 404 still in the footer, so it appears exactly once on every page, proven by a test
-- [ ] #7 No page but the search page carries a search form, proven by a test
-- [ ] #8 The theme README describes the footer links, where the menu renders, and that the footer has no search form
+- [ ] #3 The footer prints exactly the links in the box and nothing derived from any user's profile, proven by a test
+- [ ] #4 An empty box prints no footer list at all, and the footer keeps its copyright line, proven by a test
+- [ ] #5 The starter site ships a Footer links box holding RSS, so a new site has a footer without being told to fill one in
+- [ ] #6 At the root the menu renders inside the global header and not in the footer, proven by a test
+- [ ] #7 On an entry the menu is still in the bio, and on a listing or a 404 still in the footer, so it appears exactly once on every page, proven by a test
+- [ ] #8 No page but the search page carries a search form, proven by a test
+- [ ] #9 The theme README describes the footer links, where the menu renders, and that the footer has no search form
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Scope settled on 2026-09-20: shll.me is the only live site, so there is no upgrade path to protect. The earlier plan kept today's footer — RSS plus the site author's profile links — whenever the Footer links box was empty, so that no existing site lost its footer by upgrading. That hedge is dropped. The footer prints the box and nothing else; empty means no list.
+
+The behaviour it replaces is therefore going away rather than becoming a fallback, so the existing footer tests that assert RSS and the site author's rel="me" links in the footer are expected to change. That is the one place in this task where an existing assertion should be edited rather than preserved, and the notes should say which tests moved and why.
+
+The starter site carries the links a new site needs instead: an RSS line in Footer links, and the Navigation lines TASK-104 is already adding.
+<!-- SECTION:NOTES:END -->
