@@ -92,11 +92,25 @@ export function mountFederation(
   // `/@ada`, the short URL WordPress publishes beside the author archive and
   // the one a person is most likely to type. It is an alias rather than a
   // second identity, so it goes where the identity is.
-  app.get('/:handle{@.+}', (c) => {
+  app.get('/:handle{@.+}', async (c, next) => {
     // The pattern is a regex rather than `/@:username`, because Hono's path
     // parameters are whole segments: the `@` has to be matched inside one.
-    const handle = c.req.param('handle') ?? '';
-    return c.redirect(authorHref(decodeURIComponent(handle.slice(1))), 301);
+    const handle = (c.req.param('handle') ?? '').slice(1);
+
+    // An alias is only an alias of somebody. The route used to send every
+    // handle to `/author/<whatever was typed>/`, so a profile link with a
+    // menu item's flag on the end of it — `https://shll.me/@a | me` — landed a
+    // reader on `/author/a%20%7C%20me/` instead of saying there is no such
+    // person (TASK-112). Spelled exactly, the way WebFinger matches: `Ada` and
+    // `ada` are two accounts on a screen that can tell them apart, and only
+    // one of them exists.
+    const user = listUsers(c.var.config.dataDir).find((account) => account.username === handle);
+    // The site's own not-found handler answers rather than a bare 404 here, so
+    // a handle nobody has gets the theme's 404 page like any other URL that is
+    // not there.
+    if (user === undefined) return await next();
+
+    return c.redirect(authorHref(user.username), 301);
   });
 
   // `@fedify/hono` types its context as the two properties it actually reads,

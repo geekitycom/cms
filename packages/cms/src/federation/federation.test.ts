@@ -227,6 +227,28 @@ describe('/@{username}', () => {
     assert.equal(response.status, 301);
     assert.equal(response.headers.get('location'), `/author/${ADA}/`);
   });
+
+  it('answers 404 for a handle nobody answers to (TASK-112 AC #4)', async () => {
+    const instance = await site();
+
+    for (const pathname of [
+      '/@nobody',
+      // The exact URL a reader of shll.me was sent to: a profile link that
+      // had a menu item's flag typed on the end of it, percent-encoded by the
+      // browser. It used to redirect to /author/a%20%7C%20me/, which made a
+      // bad link into a confusing one.
+      '/@a%20%7C%20me',
+      // Case is identity here, exactly as it is for WebFinger: `Ada` and `ada`
+      // are not the same account and one of them does not exist.
+      `/@${ADA.toUpperCase()}`,
+      '/@',
+    ]) {
+      const response = await get(instance, pathname);
+
+      assert.equal(response.status, 404, `${pathname} was answered for`);
+      assert.equal(response.headers.get('location'), null, `${pathname} redirected somewhere`);
+    }
+  });
 });
 
 describe('a user actor', () => {

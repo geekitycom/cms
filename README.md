@@ -512,7 +512,7 @@ different account to everybody following it. The federation routes are:
 | `/author/{username}/followers/`          | Who follows them, paged.                                                                          |
 | `/author/{username}/following/`          | Always empty; a relay is a subscription rather than a relationship.                               |
 | `/inbox/`                                | The instance-wide shared inbox, which addresses the actor in the body.                            |
-| `/@{username}`                           | A 301 to their archive, the short URL WordPress publishes.                                        |
+| `/@{username}`                           | A 301 to their archive, the short URL WordPress publishes; a 404 for a handle nobody answers to.  |
 | `/.well-known/webfinger`                 | `acct:{username}@{host}`, the author URL or `/@{username}`, all four resolving to the same actor. |
 | `/.well-known/nodeinfo`, `/nodeinfo/2.1` | What software this is, and how much of it there is.                                               |
 
@@ -1043,6 +1043,17 @@ refused, and the table only renders a button for rows that are neither:
   setup, and the next person to reach `/admin` becomes its admin.
 - **Your own account.** It would end the session doing the deleting, and there
   is no undo. Another admin can do it for you.
+
+**A profile's links** are typed one per line, either `Label | URL` or a bare
+URL that labels itself, and the URL is a path or an absolute `http(s)` one with
+no spaces in it — the rule a menu item's URL is held to. Every one of them is
+rendered `rel="me"`, which is how Mastodon verifies a profile field pointing
+back at this site and how IndieAuth knows the link is yours; nothing else in
+Geekity asks for it. That is the one way the box differs from a menu:
+`Mastodon | https://example.social/@me | me` is a menu line, and here it is
+refused, because the `| me` is already there. A link stored before the box was
+checked still renders and still comes back in the box; it is refused when the
+panel is saved, with the line to fix named.
 
 A form with a problem comes back with a 400, one message under each field, and
 nothing written. The add form keeps the username that was typed; the password

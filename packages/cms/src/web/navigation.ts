@@ -253,8 +253,8 @@ function menuLines(value: string): string[] {
  * from the right, and only while the last part is the name of a flag this CMS
  * actually has ({@link MENU_ITEM_FLAGS}). That is what lets a URL still hold a
  * bar, a query string say: a trailing `| elsewhere` is not a flag, so it stays
- * part of the URL and the line is refused for not naming one, rather than
- * being quietly read as a flag nobody asked for.
+ * part of the URL, where {@link isLinkUrl} refuses it for the space in front
+ * of the bar, rather than being quietly read as a flag nobody asked for.
  *
  * What is left splits at its first bar, so a label still cannot hold one.
  */
@@ -279,8 +279,7 @@ export function menuItemOf(line: string): NavigationItem | undefined {
 
   const label = rest.slice(0, bar).trim();
   const url = rest.slice(bar + 1).trim();
-  if (label === '' || url === '') return undefined;
-  if (!url.startsWith('/') && !isAbsoluteHttpUrl(url)) return undefined;
+  if (label === '' || !isLinkUrl(url)) return undefined;
 
   return { label, url, ...(flags.has('me') ? { me: true } : {}) };
 }
@@ -321,19 +320,45 @@ export function menuItemLineProblem(value: string): string | undefined {
   const bad = menuLines(value).find((line) => menuItemOf(line) === undefined);
   return bad === undefined
     ? undefined
-    : `A menu item is "Label | URL", one per line, where the URL is a path ` +
-        `like /about/ or an absolute http:// or https:// URL, and ends ` +
-        `"| me" for a link that should carry rel="me". "${bad}" is not one.`;
+    : `A menu item is "Label | URL", one per line, where the URL is ` +
+        `${LINK_URL_RULE}, and ends "| me" for a link that should carry ` +
+        `rel="me". "${bad}" is not one.`;
 }
 
 /**
- * Whether a menu URL is an absolute http(s) one.
+ * What a URL typed into a link box may be, in the words both boxes explain it
+ * in: the menu on the Navigation screen and the Links on a user's profile.
  *
- * Deliberately a test rather than a normaliser: a menu keeps the URL as it was
+ * One sentence fragment rather than two, so the rule {@link isLinkUrl} applies
+ * is worded the same wherever somebody is told about it (TASK-112). Somebody
+ * who learns one box should not be taught the wrong thing about the other.
+ */
+export const LINK_URL_RULE =
+  'a path like /about/ or an absolute http:// or https:// URL, with no spaces in it';
+
+/**
+ * Whether a typed URL is one a link box accepts: a site-root path, or an
+ * absolute http(s) URL, and no whitespace either way.
+ *
+ * A bare `about/` would be resolved against whatever page it was printed on,
+ * which is never what a link box means, and a `javascript:` or `data:` URL is
+ * not somewhere a reader goes.
+ *
+ * The whitespace half is not decoration. `new URL` does not throw on
+ * `https://shll.me/@a | me`: it reads the space and the bar as path
+ * characters and percent-encodes them, so a check that only asked the parser
+ * took a label, a URL and a trailing word as one URL and stored it — which is
+ * how a reader of shll.me ended up at `/author/a%20%7C%20me/` (TASK-112). A
+ * URL somebody types has no spaces in it; a space means they typed two things.
+ *
+ * Deliberately a test rather than a normaliser: a link keeps the URL as it was
  * typed, so `https://example.social/@me` is what the link says and what the
  * box shows it back as.
  */
-function isAbsoluteHttpUrl(url: string): boolean {
+export function isLinkUrl(url: string): boolean {
+  if (url === '' || /\s/.test(url)) return false;
+  if (url.startsWith('/')) return true;
+
   let parsed: URL;
   try {
     parsed = new URL(url);

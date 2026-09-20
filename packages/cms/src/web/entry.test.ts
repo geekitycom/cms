@@ -293,6 +293,28 @@ describe('the bio (AC #2)', () => {
       'the person’s own links are not under the post',
     );
   });
+
+  it('prints a link the Links box would now refuse (TASK-112 AC #5)', async () => {
+    // What shll.me's file held before the box was checked. The check is on the
+    // way in, not on the way out: a profile written under an older version
+    // still renders, because a page that dropped somebody's link — or refused
+    // to render at all — would break a site on upgrade to report a typo.
+    const cms = await site(
+      {},
+      {
+        displayName: 'Ada Lovelace',
+        links: [{ label: 'Mastodon', href: 'https://shll.me/@a | me' }],
+      },
+    );
+
+    const inside = bio(await body(cms, '/2026/09/hello/'));
+
+    assert.match(
+      inside,
+      /<a class="u-url" rel="me" href="https:\/\/shll\.me\/@a \| me">Mastodon<\/a>/,
+      'a link stored before the check was dropped from the page',
+    );
+  });
 });
 
 describe('the site menu (AC #2, TASK-105)', () => {

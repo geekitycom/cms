@@ -79,6 +79,13 @@
       field they do not have.
     </p>
 
+    {% if profileProblems.links %}
+      <p class="admin-error">
+        Nothing was saved. Fix the Links box below and save again; every other
+        box here still holds what you typed.
+      </p>
+    {% endif %}
+
     {{ field.text('profile-display-name', fields.displayName, 'Display name',
          account.profile.displayName,
          hint='Printed instead of the login: it heads the archive and is the byline under their posts.') }}
@@ -96,12 +103,24 @@
     {{ field.text('profile-location', fields.location, 'Location', account.profile.location,
          hint='Where they are, as they write it.') }}
 
+    {# What the box takes, and the one thing about it nothing on the screen
+       used to say (TASK-112): these links are published with rel="me", which
+       is what a person deciding what to put here needs to know, and why a
+       profile link is not spelled the way a menu item is. #}
     {% set linksHint %}
       One per line, either <code>Label | https://example.com</code> or a bare
-      URL that labels itself.
+      URL that labels itself. A URL is a path like <code>/about/</code> or a
+      full <code>http://</code> or <code>https://</code> one, with no spaces in
+      it.
+      Every link here is published with <code>rel="me"</code>: it is how
+      Mastodon verifies a profile field that points back at this site, and how
+      IndieAuth knows these are yours. Nothing else in Geekity needs it.
+      A menu line on <a href="{{ adminUrl }}/navigation">Navigation</a> ends
+      <code>| me</code> to ask for that; a profile link takes no flag, because
+      it already carries one.
     {% endset %}
     {{ field.textarea('profile-links', fields.links, 'Links', account.profile.links, rows='4',
-         hint=linksHint) }}
+         hint=linksHint, error=profileProblems.links) }}
 
     <p class="admin-settings-buttons">
       <button type="submit">Save profile</button>

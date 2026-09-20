@@ -4,6 +4,7 @@ import type { Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
 import { authorHref } from '../web/authors.ts';
+import { isLinkUrl, LINK_URL_RULE, MENU_ITEM_FLAGS } from '../web/navigation.ts';
 import {
   DEFAULT_DELIVERY_MODE,
   deliveryMode,
@@ -312,9 +313,11 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
    * whole profile at once, because that is what the panel is — six boxes and
    * one Save — and a box somebody cleared is a field they no longer want.
    *
-   * A flash and a redirect back to that person's screen rather than a 400,
-   * because nothing here can be wrong enough to refuse. A link line with no
-   * URL is dropped on the way in rather than reported.
+   * A flash and a redirect for everything but the Links box, because nothing
+   * else here can be wrong enough to refuse. A link line that is not a link is
+   * refused the way a menu line is (TASK-112): a 400 with the panel redrawn
+   * around what was typed, because a link nobody can follow is worse stored
+   * than reported, and because the line to fix has to still be there to fix.
    */
   app.post(USER_PROFILE_PATH, async (c) => {
     const dataDir = c.var.config.dataDir;
@@ -327,17 +330,32 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       return c.redirect(USERS_PATH, 303);
     }
 
+    const typed = {
+      displayName: field(body[USER_FIELDS.displayName]),
+      bio: field(body[USER_FIELDS.bio]),
+      avatar: field(body[USER_FIELDS.avatar]),
+      jobTitle: field(body[USER_FIELDS.jobTitle]),
+      location: field(body[USER_FIELDS.location]),
+      links: field(body[USER_FIELDS.links]),
+    };
+
+    const problem = profileLinkLineProblem(typed.links);
+    if (problem !== undefined) {
+      c.status(400);
+      // Every box comes back holding exactly what was typed into it, the way
+      // the Navigation screen's does: a refused save that emptied the panel
+      // would cost somebody their bio to report a bad link.
+      return render(
+        c,
+        ADMIN_TEMPLATES.usersEdit,
+        userScreen(c, target, { profileProblems: { links: problem } }, typed),
+      );
+    }
+
     const changed = await setUserProfile({
       dataDir,
       userId: target.id,
-      profile: {
-        displayName: field(body[USER_FIELDS.displayName]),
-        bio: field(body[USER_FIELDS.bio]),
-        avatar: field(body[USER_FIELDS.avatar]),
-        jobTitle: field(body[USER_FIELDS.jobTitle]),
-        location: field(body[USER_FIELDS.location]),
-        links: parseProfileLinks(field(body[USER_FIELDS.links])),
-      },
+      profile: { ...typed, links: parseProfileLinks(typed.links) },
     });
 
     // The profile is the actor's profile now (decision-14), so saving it is
@@ -620,6 +638,13 @@ function userScreen(
   c: Parameters<AdminRender>[0],
   user: User,
   extra: Record<string, unknown> = {},
+  /**
+   * What was typed into the Profile panel, where a save of it was refused: the
+   * boxes are drawn holding this instead of what is stored, so the line to fix
+   * is still on the screen and nothing else somebody wrote has been thrown
+   * away (TASK-112).
+   */
+  typedProfile?: Record<string, string>,
 ): Record<string, unknown> {
   const signedInAs = c.var.session?.userId ?? null;
   const total = countUsers(c.var.config.dataDir);
@@ -640,11 +665,15 @@ function userScreen(
     // `account` rather than `user`, which the chrome already holds: the bar
     // says who is signed in, and this screen is about somebody who may well be
     // anybody else.
-    account: row(user, { signedInAs, total }),
+    account: {
+      ...row(user, { signedInAs, total }),
+      ...(typedProfile === undefined ? {} : { profile: typedProfile }),
+    },
     // Why this account cannot go, where it cannot, so the screen says it
     // instead of offering a button it is about to refuse.
     deleteRefusal: deleteUserRefusal({ target: user, signedInAs, total }),
     passwordProblems: {},
+    profileProblems: {},
     mailConfigured: c.var.mail.configured(),
     ...extra,
   };
@@ -695,24 +724,98 @@ function field(value: unknown): string {
  * `setUserProfile`, so a list somebody emptied leaves no key behind.
  */
 export function parseProfileLinks(value: string): ProfileLink[] {
-  const links: ProfileLink[] = [];
+  return profileLinkLines(value).map(profileLinkFields);
+}
 
-  for (const line of value.split('\n')) {
-    const trimmed = line.trim();
-    if (trimmed === '') continue;
+/**
+ * What is wrong with a typed list of profile links, or `undefined` when
+ * nothing is.
+ *
+ * The check the box never had (TASK-112). A URL goes through
+ * {@link isLinkUrl}, the rule the Navigation screen's menu box already used,
+ * so `Elsewhere | not a url` is refused in both places and for the same
+ * reason. One message naming the first bad line, for the reason the menu box's
+ * message names one: a box is fixed a line at a time, and the line to fix is
+ * the useful half of the sentence.
+ *
+ * A line ending in a menu item's flag gets a sentence of its own, because that
+ * is the mistake that was actually made — a line learned from the Navigation
+ * screen, typed here, stored whole and served to a reader as
+ * `/author/a%20%7C%20me/`. A profile link takes no flags: `partials/bio.njk`
+ * renders every one of them with `rel="me"` already, so `| me` here would be
+ * either nothing or a way to turn off the only thing this box is for.
+ *
+ * Tolerant on the way out and strict on the way in: {@link parseProfileLinks}
+ * and the file's own reader still take anything, so a link stored before this
+ * check existed still renders and still comes back in the box. Refusing a save
+ * is not refusing a read.
+ */
+export function profileLinkLineProblem(value: string): string | undefined {
+  const bad = profileLinkLines(value).find((line) => !isProfileLink(profileLinkFields(line)));
+  if (bad === undefined) return undefined;
 
-    const separator = trimmed.indexOf('|');
-    if (separator === -1) {
-      links.push({ label: trimmed, href: trimmed });
-      continue;
-    }
-    links.push({
-      label: trimmed.slice(0, separator).trim(),
-      href: trimmed.slice(separator + 1).trim(),
-    });
+  const withoutFlag = withoutMenuItemFlag(bad);
+  if (withoutFlag !== undefined && isProfileLink(profileLinkFields(withoutFlag))) {
+    return (
+      `Every link on a profile already carries rel="me", so a profile link ` +
+      `does not end "| me" the way a menu item does. Take the flag off ` +
+      `"${bad}" and it is one.`
+    );
   }
 
-  return links;
+  return (
+    `A profile link is "Label | URL", or a bare URL that labels itself, one ` +
+    `per line, where the URL is ${LINK_URL_RULE}. "${bad}" is not one.`
+  );
+}
+
+/** The non-empty lines of the Links box, trimmed. A blank line asks for nothing. */
+function profileLinkLines(value: string): string[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+}
+
+/**
+ * One typed line split where a profile link splits: at its first bar, so a
+ * label cannot hold one, and a line with no bar is a URL that labels itself.
+ *
+ * The split alone, with nothing said about whether what came out is a link:
+ * one spelling for the line the box reads back and the line it checks, so the
+ * two can never disagree about which half is the URL.
+ */
+function profileLinkFields(line: string): ProfileLink {
+  const bar = line.indexOf('|');
+  if (bar === -1) return { label: line, href: line };
+  return { label: line.slice(0, bar).trim(), href: line.slice(bar + 1).trim() };
+}
+
+/** Whether a split line is a link: somewhere to go, and something to call it. */
+function isProfileLink(link: ProfileLink): boolean {
+  return link.label !== '' && isLinkUrl(link.href);
+}
+
+/**
+ * A line with a menu item's flag taken off the end of it, or `undefined` when
+ * it does not end in one.
+ *
+ * Read off {@link MENU_ITEM_FLAGS} rather than spelled out here, so a second
+ * flag on the Navigation screen is a flag this box knows to say no to without
+ * anybody remembering to come back. What is left is handed back rather than
+ * thrown away, because the sentence about a flag is only the right sentence
+ * when taking the flag off leaves a link: `Mastodon | me` ends in the word,
+ * but the trouble with it is that `me` is not a URL.
+ */
+function withoutMenuItemFlag(line: string): string | undefined {
+  const bar = line.lastIndexOf('|');
+  if (bar === -1) return undefined;
+  const word = line
+    .slice(bar + 1)
+    .trim()
+    .toLowerCase();
+  if (!(MENU_ITEM_FLAGS as readonly string[]).includes(word)) return undefined;
+  return line.slice(0, bar).trim();
 }
 
 /** A stored list of links back as the textarea shows it. */

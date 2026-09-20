@@ -261,6 +261,21 @@ describe('the Label | URL line format (TASK-108)', () => {
     assert.equal(menuItemsText(menuItemsFromText(text)), text);
   });
 
+  it('refuses a URL with a space in it, whatever the URL parser makes of it (TASK-112)', () => {
+    // `new URL('https://shll.me/@a | elsewhere')` does not throw: it takes the
+    // space and the bar as path characters and percent-encodes them, so a
+    // check that only asked the parser accepted the whole tail as a URL. A
+    // typed URL has no spaces in it; a space means two things were typed.
+    const trailing = 'Mastodon | https://shll.me/@a | elsewhere';
+
+    assert.equal(menuItemsFromText(trailing).length, 0, 'the tail was read as a URL');
+    assert.match(menuItemLineProblem(trailing) ?? '', /Label \| URL/);
+    assert.match(menuItemLineProblem('About | /about page/') ?? '', /Label \| URL/);
+    // And a bar with no space around it is still a URL character, which is
+    // what the query-string case above depends on.
+    assert.equal(menuItemLineProblem('Odd | /odd/?a=1|2'), undefined);
+  });
+
   it('names the first line that is not an item, and says what one is', () => {
     for (const bad of ['About', 'About |', '| /about/', '  | ', 'About | not a url', 'me | me']) {
       assert.match(menuItemLineProblem(bad) ?? '', /Label \| URL/, JSON.stringify(bad));

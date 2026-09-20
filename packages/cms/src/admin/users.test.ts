@@ -7,7 +7,14 @@ import {
   notificationWanted,
 } from '../notifications/preferences.ts';
 import { writeMailCredentials } from '../mail/credentials.ts';
-import { countUsers, createUser, findUser, findUserById, verifyUserPassword } from './accounts.ts';
+import {
+  countUsers,
+  createUser,
+  findUser,
+  findUserById,
+  setUserProfile,
+  verifyUserPassword,
+} from './accounts.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './settings.ts';
 import { writeUsers } from './__testing__/users.ts';
 import {
@@ -1248,5 +1255,111 @@ describe('deleting a user', () => {
     assert.equal(response.status, 303);
     assert.equal(findUser(cms.config.dataDir, 'ada')?.id, ada.id, 'ada is still there');
     assert.match(await (await agent.get('/admin/users')).text(), /own account/);
+  });
+});
+
+describe('a profile link is checked the way a menu line is (TASK-112)', () => {
+  /** The line the maintainer typed on shll.me, learned from the menu box. */
+  const FROM_THE_MENU_BOX = 'Mastodon | https://shll.me/@a | me';
+
+  it('refuses a line whose URL is not one, and stores nothing (AC #1)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = idOf(cms.config.dataDir, 'ada');
+    const { token } = await editScreen(agent, ada);
+    const typed = 'Her notes | https://ada.example\nElsewhere | not a url';
+
+    const response = await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(ada),
+      display_name: 'Ada Lovelace',
+      links: typed,
+    });
+
+    assert.equal(response.status, 400);
+    const html = await response.text();
+    // The same sentence the menu box names a bad line with, about the same
+    // rule: a URL is a path or an absolute http(s) one.
+    assert.match(html, /&quot;Elsewhere \| not a url&quot; is not one/, 'it names the line to fix');
+    assert.match(html, /an absolute http:\/\/ or https:\/\/ URL/, 'it says what a URL is');
+    assert.match(html, />Her notes \| https:\/\/ada\.example\nElsewhere \| not a url</, 'box');
+    assert.equal(findUserById(cms.config.dataDir, ada)?.profile, undefined, 'nothing was written');
+  });
+
+  it('refuses the “| me” a menu item takes, because the links carry it (AC #2)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = idOf(cms.config.dataDir, 'ada');
+    const { token } = await editScreen(agent, ada);
+
+    const response = await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(ada),
+      display_name: 'Ada Lovelace',
+      links: FROM_THE_MENU_BOX,
+    });
+
+    assert.equal(response.status, 400);
+    const html = await response.text();
+    assert.match(html, new RegExp(`&quot;${FROM_THE_MENU_BOX.replaceAll('|', '\\|')}&quot;`));
+    assert.match(html, /already carries rel=&quot;me&quot;/, 'it says why the flag is refused');
+    assert.equal(
+      findUserById(cms.config.dataDir, ada)?.profile,
+      undefined,
+      'the line that sent a reader to /author/a%20%7C%20me/ was stored',
+    );
+  });
+});
+
+describe('what the Links box says about itself (TASK-112)', () => {
+  it('says the links carry rel="me", what that is for, and that it takes no flag (AC #3)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const { html } = await editScreen(agent, idOf(cms.config.dataDir, 'ada'));
+
+    assert.match(html, /published with <code>rel="me"<\/code>/, 'nothing says the links carry it');
+    assert.match(html, /Mastodon verifies/, 'nothing says what rel="me" is for');
+    assert.match(html, /IndieAuth/, 'nor what else asks for it');
+    assert.match(
+      html,
+      /a profile link takes no flag, because\s+it already carries one/,
+      'nothing says whether the menu box’s "| me" belongs here',
+    );
+  });
+
+  it('keeps a link stored before the check existed, in the box and in the file (AC #5)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = idOf(cms.config.dataDir, 'ada');
+    // What shll.me had in its file when this check did not exist: a href the
+    // new rule refuses, which the reader's browser percent-encoded.
+    const stored = { label: 'Mastodon', href: 'https://shll.me/@a | me' };
+    await setUserProfile({
+      dataDir: cms.config.dataDir,
+      userId: ada,
+      profile: { bio: 'Wrote the first program.', links: [stored] },
+    });
+
+    const { html, token } = await editScreen(agent, ada);
+    assert.match(
+      html,
+      />Mastodon \| https:\/\/shll\.me\/@a \| me</,
+      'the stored line is not shown',
+    );
+
+    // And saving the panel back is refused rather than silently dropping it:
+    // what is in the file is still in the file, and the person is told which
+    // line to fix.
+    const response = await agent.post('/admin/users/profile', {
+      csrf_token: token,
+      user_id: String(ada),
+      bio: 'Wrote the first program.',
+      links: 'Mastodon | https://shll.me/@a | me',
+    });
+
+    assert.equal(response.status, 400);
+    const profile = findUserById(cms.config.dataDir, ada)?.profile;
+    assert.deepEqual(profile?.links, [stored], 'the stored link was lost on the way through');
+    assert.equal(profile?.bio, 'Wrote the first program.', 'and the rest of the profile with it');
   });
 });

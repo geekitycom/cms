@@ -169,6 +169,8 @@ export type {
 } from './negotiate.ts';
 export {
   DEFAULT_MENU_NAME,
+  isLinkUrl,
+  LINK_URL_RULE,
   MENU_ITEM_FLAGS,
   MENU_NAME_MAX_LENGTH,
   MENU_NAME_PATTERN,
