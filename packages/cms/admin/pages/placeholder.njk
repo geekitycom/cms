@@ -4,7 +4,11 @@
 
 {% block content %}
   {# A screen a later task builds. It exists so the navigation goes somewhere
-     and the guard covers it from the start. #}
+     and the guard covers it from the start.
+
+     It sits at the top of `pages/` rather than inside one of the section
+     folders because it is not any one section's screen: it stands in for
+     whichever section has nothing built yet, and the route heads it. #}
   <h1>{{ heading }}{% if slug %}: {{ slug }}{% endif %}</h1>
   <p class="admin-note">This screen is not built yet.</p>
 {% endblock %}

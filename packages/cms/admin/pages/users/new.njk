@@ -1,0 +1,41 @@
+{# /admin/users/new: add somebody who can sign in.
+
+   The other half of what the listing used to hold: one form, the same chrome,
+   and its own menu entry under Users. A refused add comes back here with what
+   was typed still in the boxes, so nothing is retyped to fix one field.
+ #}
+{% extends "layouts/shell.njk" %}
+{% import "components/fields.njk" as field %}
+
+{% block title %}Add new user{% endblock %}
+
+{% block content %}
+  <h1>Add new user</h1>
+
+  <form class="admin-settings" method="post" action="{{ addUserUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+    {% if addProblems.username or addProblems.password or addProblems.email %}
+      <p class="admin-error">Nobody was added. Fix the fields marked below and try again.</p>
+    {% endif %}
+
+    {{ field.text('add-username', fields.username, 'Username', addForm.username,
+         error=addProblems.username, required=true) }}
+
+    {{ field.text('add-email', fields.email, 'Email <span class="admin-status">(optional)</span>',
+         addForm.email, type='email', autocomplete='email', error=addProblems.email) }}
+
+    {{ field.password('add-password', fields.password, 'Password',
+         error=addProblems.password, autocomplete='new-password') }}
+
+    {{ field.checkbox('add-generate', fields.generate,
+         'Generate one instead, and show it to me once', checked=addForm.generate,
+         hint='A generated password is shown on the next page and nowhere else. Copy it before you leave.') }}
+
+    <p class="admin-settings-buttons">
+      <button type="submit">Add user</button>
+    </p>
+  </form>
+
+  <p class="admin-hint"><a href="{{ usersUrl }}">Back to all users</a></p>
+{% endblock %}

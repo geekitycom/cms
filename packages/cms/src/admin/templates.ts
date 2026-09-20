@@ -12,34 +12,51 @@ import { formatDate } from '../web/templates.ts';
  * They are a set of their own, not part of the theme search path: the theme a
  * site wears may override any public template, and must not be able to shadow
  * the login form or the CSRF field inside it (decision-4, decision-15).
+ *
+ * Under it are three siblings, and a template is in exactly one of them:
+ *
+ * - `pages/` — the screens, one folder per section of the admin menu, plus
+ *   `account/` for the four screens shown when nobody is signed in yet.
+ * - `layouts/` — the chrome a page extends: the document, the signed-in shell,
+ *   and the shared settings page.
+ * - `components/` — what a page imports or includes: the field macros and the
+ *   flash.
  */
 export const PACKAGED_ADMIN_DIR: string = fileURLToPath(new URL('../../admin/', import.meta.url));
 
-/** Templates {@link mountAdmin} asks for by name. */
+/**
+ * Templates {@link mountAdmin} asks for by name.
+ *
+ * The path of each is where the menu says it is, with one exception:
+ * `pages/documents/` holds the four entries Posts, Pages, Categories and Tags
+ * are made of, because a post and a page differ by a `kind` rather than by a
+ * screen. `pages/documents/list.njk` says why at more length.
+ */
 export const ADMIN_TEMPLATES = {
-  login: 'layouts/login.njk',
-  setup: 'layouts/setup.njk',
-  forgot: 'layouts/forgot.njk',
-  reset: 'layouts/reset.njk',
-  dashboard: 'layouts/dashboard.njk',
-  placeholder: 'layouts/placeholder.njk',
-  documentList: 'layouts/document-list.njk',
-  documentEditor: 'layouts/document-editor.njk',
-  documentConflict: 'layouts/document-conflict.njk',
-  taxonomy: 'layouts/taxonomy.njk',
-  media: 'layouts/media.njk',
-  themes: 'layouts/themes.njk',
-  comments: 'layouts/comments.njk',
-  messages: 'layouts/messages.njk',
-  settingsGeneral: 'layouts/settings/general.njk',
-  settingsReading: 'layouts/settings/reading.njk',
-  settingsPermalinks: 'layouts/settings/permalinks.njk',
-  settingsDiscussion: 'layouts/settings/discussion.njk',
-  settingsEmail: 'layouts/settings/email.njk',
-  settingsFederation: 'layouts/settings/federation.njk',
-  users: 'layouts/users.njk',
-  user: 'layouts/user.njk',
-  federation: 'layouts/federation.njk',
+  login: 'pages/account/login.njk',
+  setup: 'pages/account/setup.njk',
+  forgot: 'pages/account/forgot.njk',
+  reset: 'pages/account/reset.njk',
+  dashboard: 'pages/dashboard/home.njk',
+  placeholder: 'pages/placeholder.njk',
+  documentList: 'pages/documents/list.njk',
+  documentEditor: 'pages/documents/editor.njk',
+  documentConflict: 'pages/documents/conflict.njk',
+  taxonomy: 'pages/documents/taxonomy.njk',
+  media: 'pages/media/library.njk',
+  themes: 'pages/appearance/themes.njk',
+  comments: 'pages/comments/all.njk',
+  messages: 'pages/messages/all.njk',
+  settingsGeneral: 'pages/settings/general.njk',
+  settingsReading: 'pages/settings/reading.njk',
+  settingsPermalinks: 'pages/settings/permalinks.njk',
+  settingsDiscussion: 'pages/settings/discussion.njk',
+  settingsEmail: 'pages/settings/email.njk',
+  settingsFederation: 'pages/settings/federation.njk',
+  usersList: 'pages/users/list.njk',
+  usersNew: 'pages/users/new.njk',
+  usersEdit: 'pages/users/edit.njk',
+  federation: 'pages/federation/followers.njk',
 } as const;
 
 /** How to build an {@link createAdminTemplateEnvironment}. */

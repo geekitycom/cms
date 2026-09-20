@@ -26,6 +26,9 @@ packages/cms/          published as @geekity/cms
     *.test.ts          node:test suites, run through tsx, excluded from the build
   editor/              the admin editor's browser code, bundled by esbuild
   admin/               admin templates and static files, editor.js among them
+    pages/             one folder per admin menu section, a file per screen
+    layouts/           the chrome a page extends: base, shell, settings-page
+    components/        what a page imports or includes: field macros, the flash
   themes/default/      default theme, shipped inside the package
   templates/site/      files `geekity init` copies into a new site
   dist/                tsc output (JS + .d.ts), gitignored

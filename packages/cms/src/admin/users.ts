@@ -163,9 +163,9 @@ export interface MountUsersOptions {
 export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): void {
   const { render } = options;
 
-  app.get(USERS_PATH, (c) => render(c, ADMIN_TEMPLATES.users, screen(c)));
+  app.get(USERS_PATH, (c) => render(c, ADMIN_TEMPLATES.usersList, screen(c)));
 
-  app.get(ADD_USER_PATH, (c) => render(c, ADMIN_TEMPLATES.users, addScreen(c)));
+  app.get(ADD_USER_PATH, (c) => render(c, ADMIN_TEMPLATES.usersNew, addScreen(c)));
 
   app.post(ADD_USER_PATH, async (c) => {
     const body = await c.req.parseBody();
@@ -191,7 +191,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       // Back onto the form that was refused, with what was typed still in it.
       return render(
         c,
-        ADMIN_TEMPLATES.users,
+        ADMIN_TEMPLATES.usersNew,
         addScreen(c, { addForm: { username, email, generate }, addProblems: problems }),
       );
     }
@@ -235,7 +235,11 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       // Back onto your own page, where the form is. Nothing that was typed is
       // echoed back: every field on this form is a password, and a password
       // does not belong in rendered HTML.
-      return render(c, ADMIN_TEMPLATES.user, userScreen(c, user, { passwordProblems: problems }));
+      return render(
+        c,
+        ADMIN_TEMPLATES.usersEdit,
+        userScreen(c, user, { passwordProblems: problems }),
+      );
     }
 
     await setUserPassword({ dataDir: c.var.config.dataDir, userId: user.id, password: next });
@@ -473,7 +477,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     const id = pathId(c.req.param('id'));
     const user = id === undefined ? undefined : findUserById(c.var.config.dataDir, id);
     if (user === undefined) return c.notFound();
-    return render(c, ADMIN_TEMPLATES.user, userScreen(c, user));
+    return render(c, ADMIN_TEMPLATES.usersEdit, userScreen(c, user));
   });
 }
 
@@ -592,15 +596,16 @@ export function generatePassword(): string {
 }
 
 /**
- * The Add new screen: the same template, showing the add form instead of the
- * table. One template rather than two because the two screens are the same
- * chrome around one of two things, and a menu entry has to be somewhere to go.
+ * The Add new screen: the same context the listing is drawn from, rendered
+ * through `pages/users/new.njk` instead. The two screens are the same chrome
+ * around one of two things, and which of them it is is the route's business
+ * rather than a flag the template has to read.
  */
 function addScreen(
   c: Parameters<AdminRender>[0],
   extra: Record<string, unknown> = {},
 ): Record<string, unknown> {
-  return screen(c, { child: 'new', adding: true, ...extra });
+  return screen(c, { child: 'new', ...extra });
 }
 
 /**
@@ -646,8 +651,8 @@ function userScreen(
 }
 
 /**
- * Everything the users template renders: the listing, and the add form behind
- * `adding`.
+ * Everything the users screens render: the listing, and the fields the add
+ * form is drawn from.
  *
  * Nothing about editing a user is here any more (TASK-97). A row says who
  * somebody is and links to their screen; the only form in the table is the

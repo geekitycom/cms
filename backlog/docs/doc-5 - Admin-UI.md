@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-13 16:02'
+updated_date: '2026-09-20 10:09'
 ---
 # Admin UI
 
@@ -136,7 +136,7 @@ instead of becoming a sliver.
 - **What the homepage displays.** WordPress's own question, and its two answers: **Your latest posts**, the archive at `/`, or a page picked from the site's published pages, which is then served at `/` while its own URL redirects there. A second pick, the **Posts page**, gives the listing a page of its own: that page's URL carries it, under the page's title and words, paginated beneath it, and `/page/N/` at the root redirects there. A posts page with no homepage is refused, as WordPress refuses it, and so is one page picked as both. The two are stored in `site.json` as the slugs `homepage` and `postsPage` — absent altogether for the latest posts — so an Eleventy build of the same directory shows the same front page. A pick whose page is later drafted, trashed or deleted is off the list and the site is back to its latest posts; the setting keeps the slug and the page says which one has gone, because a select that had quietly reset itself would be the screen lying about what is stored. The pages list marks both rows the way WordPress does, **Front Page** and **Posts Page**, and the feeds stay at `/feed/` and its siblings whatever is chosen.
 - **The contact address.** `contactEmail`, on the Email page, is where a message from a page's contact form is sent, with reply-to set to whoever wrote it. Empty falls back to the first admin with an email address, by username, so a fresh site with a mail credential takes messages without anybody visiting the field. It is read when a message arrives and is never put on a render context, so it cannot appear in the HTML of the page the form is on however a theme is written.
 - **Side effects stay with the field.** Saving General or Federation tells the followers when what it changed is part of the actor's profile; saving Federation reconciles the relay list, sending a `Follow` for a line added and an `Undo` for one removed; saving or removing the avatar tells the followers too. The flash says what was sent.
-- The code follows the same seam: `src/admin/settings.ts` is the settings themselves and nothing about a screen, `settings-page.ts` is what every page is made of, `settings-pages.ts` is the list, and each page is its own module beside its own template under `admin/layouts/settings/`.
+- The code follows the same seam: `src/admin/settings.ts` is the settings themselves and nothing about a screen, `settings-page.ts` is what every page is made of, `settings-pages.ts` is the list, and each page is its own module beside its own template under `admin/pages/settings/`, which extends `admin/layouts/settings-page.njk`.
 
 ## Auth
 

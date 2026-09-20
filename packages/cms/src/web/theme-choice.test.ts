@@ -162,8 +162,8 @@ describe('a site wearing one of its themes', () => {
     // A theme claiming the admin's own template names. The admin is not a
     // theme and is not overridable (decision-4), so these must do nothing.
     await writeTree(path.join(themesDir, 'midnight'), {
-      'layouts/login.njk': '<!doctype html><p>the theme wrote the login form</p>',
-      'layouts/dashboard.njk': '<!doctype html><p>the theme wrote the dashboard</p>',
+      'pages/account/login.njk': '<!doctype html><p>the theme wrote the login form</p>',
+      'pages/dashboard/home.njk': '<!doctype html><p>the theme wrote the dashboard</p>',
     });
     await signedIn(cms);
 

@@ -1,0 +1,48 @@
+{# /admin/users: who can sign in.
+
+   A listing and nothing else (TASK-97). Every field a user has is edited on
+   that user's own screen, which the Edit link in each row goes to, so no box
+   in this table can be mistaken for another one. Adding somebody is its own
+   screen next door, `new.njk`, because Users > Add new is its own menu entry.
+ #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}Users{% endblock %}
+
+{% block content %}
+  <h1>Users <a class="admin-button admin-button-small" href="{{ addUserUrl }}">Add new</a></h1>
+
+  <table class="admin-list">
+    <thead>
+      <tr>
+        <th scope="col">Username</th>
+        <th scope="col">Email</th>
+        <th scope="col">Created</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in users %}
+        <tr>
+          <td>
+            <a href="{{ entry.editUrl }}">{{ entry.username }}</a>{% if entry.you %} <span class="admin-status">(you)</span>{% endif %}
+            <br /><a href="{{ entry.archiveUrl }}">{{ entry.archiveUrl }}</a>
+          </td>
+          <td>{% if entry.email %}{{ entry.email }}{% else %}<span class="admin-status">None</span>{% endif %}</td>
+          <td>{{ entry.createdAt | date('html') }}</td>
+          <td class="admin-actions">
+            <a class="admin-button admin-button-small" href="{{ entry.editUrl }}">Edit</a>
+            {% if entry.deletable %}
+              <form method="post" action="{{ deleteUserUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.userId }}" value="{{ entry.id }}" />
+                <button type="submit">Delete</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+{% endblock %}

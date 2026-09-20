@@ -1,6 +1,6 @@
 {# /admin/settings: what the site is called, where it lives, and its picture. #}
-{% extends "layouts/settings/page.njk" %}
-{% import "layouts/_fields.njk" as field %}
+{% extends "layouts/settings-page.njk" %}
+{% import "components/fields.njk" as field %}
 
 {% block settingsFields %}
   {{ field.text('settings-title', fields.title, 'Title', form.title,
