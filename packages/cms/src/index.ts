@@ -2,6 +2,7 @@ import { MemoryKvStore } from '@fedify/fedify';
 import { serve as serveNode } from '@hono/node-server';
 import { Hono } from 'hono';
 
+import { createAccessLog } from './access-log.ts';
 import {
   baselineSecurityHeaders,
   effectiveBaseUrl,
@@ -1634,6 +1635,20 @@ export function createCms(config: GeekityConfig = {}): Cms {
   relays.sync();
 
   const app = new Hono<GeekityEnv>();
+
+  // One line per request, before anything else is registered so that every
+  // route is on it: /healthz, the federation endpoints, the admin and the
+  // public site alike, and a request whose handler threw as well. Off unless
+  // the site asked for it; `geekity serve` asks.
+  if (resolved.accessLog) {
+    app.use(
+      '*',
+      createAccessLog({
+        config: resolved,
+        ...(resolved.accessLogWriter === undefined ? {} : { write: resolved.accessLogWriter }),
+      }),
+    );
+  }
 
   app.use('*', async (c, next) => {
     c.set('store', store);

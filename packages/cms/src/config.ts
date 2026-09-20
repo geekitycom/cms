@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import type { KvStore, MessageQueue } from '@fedify/fedify';
 
+import type { AccessLogWriter } from './access-log.ts';
 import type { CommentChecker } from './comments/submission.ts';
 import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './content/media.ts';
 import { systemClock } from './content/store.ts';
@@ -191,6 +192,36 @@ export interface GeekityConfig {
    */
   trustProxy?: boolean;
   /**
+   * Write one line per request — method, path, status, duration — to stdout.
+   * Overridden by `GEEKITY_ACCESS_LOG`.
+   *
+   * Default `false`, which is what `createCms` gets: a CMS embedded in
+   * somebody else's server has no business writing to their stdout uninvited.
+   * `geekity serve` turns it on, because a server that answers the internet
+   * should be able to say what it answered; a config that names this either
+   * way is obeyed, and the environment variable wins over both.
+   */
+  accessLog?: boolean;
+  /**
+   * Put the client address on each access-log line. Default `false`.
+   * Overridden by `GEEKITY_ACCESS_LOG_ADDRESS`.
+   *
+   * Off unless the site asks, because an address is personal data and a
+   * self-hosted blog has no retention policy for it. Which address is right is
+   * {@link GeekityConfig.trustProxy}'s answer, the same one a failed sign-in
+   * is counted against.
+   */
+  accessLogAddress?: boolean;
+  /**
+   * Where the access log's lines go. Defaults to stdout, written one line at a
+   * time exactly as the CLI writes.
+   *
+   * Config only, with no environment override: a sink is a function, and the
+   * only callers with one are a test reading the lines back and a site that
+   * has somewhere of its own to put them.
+   */
+  accessLogWriter?: AccessLogWriter;
+  /**
    * Fill a missing or empty content directory with the starter site
    * `geekity init` writes, when `geekity serve` starts. Default `false`.
    * Overridden by `GEEKITY_SEED_CONTENT`.
@@ -287,6 +318,10 @@ export interface ResolvedConfig {
   loginAttempts: number;
   loginLockout: number;
   trustProxy: boolean;
+  accessLog: boolean;
+  accessLogAddress: boolean;
+  /** The sink, when the site named one; otherwise the log writes to stdout. */
+  accessLogWriter: AccessLogWriter | undefined;
   seedContent: boolean;
   onDocumentChange: DocumentChangeHook | undefined;
   onPublish: DocumentChangeHook | undefined;
@@ -420,6 +455,19 @@ export function resolveConfig(
       config.trustProxy,
       false,
     ),
+    accessLog: resolveBoolean(
+      'GEEKITY_ACCESS_LOG',
+      env['GEEKITY_ACCESS_LOG'],
+      config.accessLog,
+      false,
+    ),
+    accessLogAddress: resolveBoolean(
+      'GEEKITY_ACCESS_LOG_ADDRESS',
+      env['GEEKITY_ACCESS_LOG_ADDRESS'],
+      config.accessLogAddress,
+      false,
+    ),
+    accessLogWriter: config.accessLogWriter,
     seedContent: resolveBoolean(
       'GEEKITY_SEED_CONTENT',
       env['GEEKITY_SEED_CONTENT'],

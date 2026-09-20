@@ -137,15 +137,17 @@ export default defineConfig({
 Every field is optional. Relative directories resolve against the working
 directory; absolute ones are used as given.
 
-| Field         | Default                   | Environment override        | Meaning                                                                                                                                                                                                                                                                                                      |
-| ------------- | ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `port`        | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on.                                                                                                                                                                                                                                                                             |
-| `contentDir`  | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                                                                                                                                            |
-| `dataDir`     | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs.                                                                                                                    |
-| `themesDir`   | `<cwd>/themes`            | `GEEKITY_THEMES_DIR`        | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                                                                                                                                          |
-| `baseUrl`     | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                                                                                                                                   |
-| `watch`       | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                                                                                                                                                 |
-| `seedContent` | `false`                   | `GEEKITY_SEED_CONTENT`      | When `geekity serve` starts and `contentDir` is missing or has no entries at all, fill it with the starter site `geekity init` writes, its `site.json` `url` set to the base URL. A directory with anything in it, even a dotfile, is never touched. Off so a site run from npm is never written to unasked. |
+| Field              | Default                                   | Environment override         | Meaning                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------ | ----------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `port`             | `3000`                                    | `GEEKITY_PORT`, then `PORT`  | Port the HTTP server listens on.                                                                                                                                                                                                                                                                                                                                                           |
+| `contentDir`       | `<cwd>/content`                           | `GEEKITY_CONTENT_DIR`        | Markdown content.                                                                                                                                                                                                                                                                                                                                                                          |
+| `dataDir`          | `<cwd>/data`                              | `GEEKITY_DATA_DIR`           | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs.                                                                                                                                                                                                  |
+| `themesDir`        | `<cwd>/themes`                            | `GEEKITY_THEMES_DIR`         | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                                                                                                                                                                                                                        |
+| `baseUrl`          | `http://localhost:<port>`                 | `GEEKITY_BASE_URL`           | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                                                                                                                                                                                                                 |
+| `watch`            | `true`                                    | `GEEKITY_WATCH`              | Watch `contentDir` while serving and keep the index in step.                                                                                                                                                                                                                                                                                                                               |
+| `accessLog`        | `false`, but `true` under `geekity serve` | `GEEKITY_ACCESS_LOG`         | Write one line per request to stdout: the method, the path with its query string, the status and how long it took. `geekity serve` and the Docker image turn it on, because a server answering the internet should be able to say what it answered; `createCms` leaves it off, so a CMS embedded in another app never writes to its stdout unasked. See [The access log](#the-access-log). |
+| `accessLogAddress` | `false`                                   | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address at the end of each access-log line. Off unless asked for: an address is personal data and needs a reason and a retention policy. Which address is right is `trustProxy`'s answer.                                                                                                                                                                                   |
+| `seedContent`      | `false`                                   | `GEEKITY_SEED_CONTENT`       | When `geekity serve` starts and `contentDir` is missing or has no entries at all, fill it with the starter site `geekity init` writes, its `site.json` `url` set to the base URL. A directory with anything in it, even a dotfile, is never touched. Off so a site run from npm is never written to unasked.                                                                               |
 
 The admin adds eight more:
 
@@ -530,6 +532,49 @@ carries `Cache-Control: no-store`, sets no cookie, and the login throttle does
 not count it, so probing it every few seconds costs nothing but the two checks.
 The older `/_geekity/health` still answers `{ "status": "ok" }` without
 checking anything.
+
+### The access log
+
+With `accessLog` on — `geekity serve` and the Docker image turn it on — every
+request the site answers writes one line to stdout:
+
+```
+GET / 200 4.2ms
+GET /posts/hello-world/ 200 6.8ms
+GET /.well-known/webfinger?resource=acct:ada@blog.example 200 1.9ms
+GET /nothing-here 404 2.1ms
+POST /admin/login 303 41.3ms
+```
+
+The fields are always in that order and separated by single spaces: the
+method, the path with its query string, the status, and how long the request
+took. So the status is always the third field, and `grep webfinger`,
+`grep ' 500 '` or `awk '$3 >= 500'` all work on it. The query string is
+logged because it is the part that says what was asked for — which account a
+Mastodon instance looked up, what somebody searched for.
+
+Nothing else is ever on the line. No request body is read, so a password
+posted to the login form cannot reach it; no cookie and no `Authorization`
+header are looked at either. The only header it can see is the forwarded
+address, and only when the site is behind a proxy it has been told to believe.
+
+With `accessLogAddress` on, the client address goes on the end, after the
+duration:
+
+```
+GET /.well-known/webfinger?resource=acct:ada@blog.example 200 1.9ms 203.0.113.9
+```
+
+It is off by default: an address is personal data, and a self-hosted blog
+collects it with no retention policy unless somebody decides otherwise. Which
+address is the right one is `trustProxy`'s answer — the leftmost
+`X-Forwarded-For` entry behind a proxy, the socket's own address otherwise —
+so the log and the login throttle can never disagree about who was asking.
+
+Every route is on it: `/healthz`, the federation endpoints, the admin and the
+public site, and a request whose handler fell over gets its `500` line too.
+The lines go to stdout because that is what a container collects, what dockge
+shows and what journald keeps; a site that wants a file redirects it.
 
 ## The admin editor
 
@@ -1202,6 +1247,31 @@ docker compose cp followers.json geekity:/tmp/followers.json
 ```
 
 and then passed as `--followers /tmp/followers.json`.
+
+### Reading the logs
+
+The container writes to stdout and nothing else — no log file inside the
+image, nothing to rotate — so Docker collects it and dockge shows it. From the
+stack directory:
+
+```sh
+docker compose logs -f              # follow everything, boot lines included
+docker compose logs -t --since 1h   # the last hour, with Docker's timestamps
+docker compose logs | grep webfinger
+```
+
+The image runs `geekity serve`, so [the access log](#the-access-log) is on:
+one line per request, `GET /path?query 200 4.2ms`. That is what answers "did
+that Mastodon instance ever ask about me?" — `docker compose logs | grep webfinger`
+shows each lookup and what it was answered with. The health check polls
+`/healthz` every 60 seconds, so those lines are the background hum; `grep -v healthz`
+drops them.
+
+The client address is not logged unless the stack asks for it. To turn it on,
+add `GEEKITY_ACCESS_LOG_ADDRESS=true` to the `.env` and redeploy; behind the
+proxy `GEEKITY_TRUST_PROXY` is already `true`, so the address logged is the
+visitor's rather than the proxy's. `GEEKITY_ACCESS_LOG=false` turns the log
+off altogether.
 
 ### Backups
 

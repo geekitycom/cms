@@ -593,7 +593,12 @@ async function serveCommand(configPath: string | undefined): Promise<number> {
     process.stdout.write(`Seeded ${resolved.contentDir} with the starter site\n`);
   }
 
-  const cms = createCms(config);
+  // The access log is on here and off in `createCms`: a server that answers
+  // the internet should be able to say what it answered, while a CMS embedded
+  // in somebody else's app has no business writing to their stdout uninvited.
+  // Named as a config value rather than forced, so `GEEKITY_ACCESS_LOG` still
+  // wins and a site that wrote `accessLog: false` still gets silence.
+  const cms = createCms({ ...config, accessLog: config.accessLog ?? true });
   const { port } = await cms.serve();
   process.stdout.write(`Geekity is serving ${cms.config.baseUrl} on port ${String(port)}\n`);
 

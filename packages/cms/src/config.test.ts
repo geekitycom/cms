@@ -426,6 +426,61 @@ describe('baseUrlSource', () => {
       /GEEKITY_TRUST_PROXY/,
     );
   });
+  it('logs no request unless the site or the environment asks it to', () => {
+    assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).accessLog, false);
+    assert.equal(resolveConfig({ accessLog: true }, { cwd: '/srv/site', env: {} }).accessLog, true);
+    assert.equal(
+      resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_ACCESS_LOG: 'yes' } }).accessLog,
+      true,
+    );
+    assert.equal(
+      resolveConfig({ accessLog: true }, { cwd: '/srv/site', env: { GEEKITY_ACCESS_LOG: 'off' } })
+        .accessLog,
+      false,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_ACCESS_LOG: 'quietly' } }),
+      /GEEKITY_ACCESS_LOG/,
+    );
+  });
+
+  it('keeps the client address off the access log unless it is asked for', () => {
+    assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).accessLogAddress, false);
+    assert.equal(
+      resolveConfig({ accessLogAddress: true }, { cwd: '/srv/site', env: {} }).accessLogAddress,
+      true,
+    );
+    assert.equal(
+      resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_ACCESS_LOG_ADDRESS: 'true' } })
+        .accessLogAddress,
+      true,
+    );
+    assert.equal(
+      resolveConfig(
+        { accessLogAddress: true },
+        { cwd: '/srv/site', env: { GEEKITY_ACCESS_LOG_ADDRESS: 'no' } },
+      ).accessLogAddress,
+      false,
+    );
+    assert.throws(
+      () =>
+        resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_ACCESS_LOG_ADDRESS: 'sometimes' } }),
+      /GEEKITY_ACCESS_LOG_ADDRESS/,
+    );
+  });
+
+  it('carries the access log sink through, since no environment variable can', () => {
+    const lines: string[] = [];
+    const write = (line: string): void => {
+      lines.push(line);
+    };
+    assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).accessLogWriter, undefined);
+    assert.equal(
+      resolveConfig({ accessLogWriter: write }, { cwd: '/srv/site', env: {} }).accessLogWriter,
+      write,
+    );
+  });
+
   it('seeds nothing unless the site or the environment asks it to', () => {
     assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).seedContent, false);
     assert.equal(

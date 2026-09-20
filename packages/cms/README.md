@@ -248,28 +248,75 @@ export default defineConfig({
 Every field is optional. Relative directories resolve against the working
 directory; absolute ones are used as given.
 
-| Field              | Default                   | Environment override        | Meaning                                                                                                                                                                                   |
-| ------------------ | ------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `port`             | `3000`                    | `GEEKITY_PORT`, then `PORT` | Port the HTTP server listens on. `0` picks a free one.                                                                                                                                    |
-| `contentDir`       | `<cwd>/content`           | `GEEKITY_CONTENT_DIR`       | Markdown content.                                                                                                                                                                         |
-| `dataDir`          | `<cwd>/data`              | `GEEKITY_DATA_DIR`          | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs. |
-| `themesDir`        | `<cwd>/themes`            | `GEEKITY_THEMES_DIR`        | The site's themes, one directory per theme, each with a `theme.json`. Which one is in use is the `theme` setting in `site.json`, not a path. Need not exist.                              |
-| `baseUrl`          | `http://localhost:<port>` | `GEEKITY_BASE_URL`          | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                |
-| `watch`            | `true`                    | `GEEKITY_WATCH`             | Watch `contentDir` while serving and keep the index in step.                                                                                                                              |
-| `sessionLifetime`  | `1209600` (14 days)       | `GEEKITY_SESSION_LIFETIME`  | How long an admin login lasts, in seconds.                                                                                                                                                |
-| `loginAttempts`    | `5`                       | `GEEKITY_LOGIN_ATTEMPTS`    | Failed sign-ins a username or an address may make before it is locked out.                                                                                                                |
-| `loginLockout`     | `900` (15 minutes)        | `GEEKITY_LOGIN_LOCKOUT`     | How long the first lockout lasts, in seconds. See [Login hardening](#login-hardening).                                                                                                    |
-| `trustProxy`       | `false`                   | `GEEKITY_TRUST_PROXY`       | Believe `X-Forwarded-For` when deciding which address a sign-in came from.                                                                                                                |
-| `onDocumentChange` | none                      | —                           | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                              |
-| `onPublish`        | none                      | —                           | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                            |
-| `federation`       | `{}`                      | —                           | Federation stores and guards. See [Federation](#federation).                                                                                                                              |
-| `commentChecker`   | Akismet                   | —                           | A spam checker of the site's own, which wins over the key in `data/akismet.json`. See [Akismet](#akismet).                                                                                |
-| `mail`             | `{}`                      | —                           | Mail provider, retries, backoff and logger. See [Email](#email).                                                                                                                          |
+| Field              | Default                               | Environment override         | Meaning                                                                                                                                                                                   |
+| ------------------ | ------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port`             | `3000`                                | `GEEKITY_PORT`, then `PORT`  | Port the HTTP server listens on. `0` picks a free one.                                                                                                                                    |
+| `contentDir`       | `<cwd>/content`                       | `GEEKITY_CONTENT_DIR`        | Markdown content.                                                                                                                                                                         |
+| `dataDir`          | `<cwd>/data`                          | `GEEKITY_DATA_DIR`           | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs. |
+| `themesDir`        | `<cwd>/themes`                        | `GEEKITY_THEMES_DIR`         | The site's themes, one directory per theme, each with a `theme.json`. Which one is in use is the `theme` setting in `site.json`, not a path. Need not exist.                              |
+| `baseUrl`          | `http://localhost:<port>`             | `GEEKITY_BASE_URL`           | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                |
+| `watch`            | `true`                                | `GEEKITY_WATCH`              | Watch `contentDir` while serving and keep the index in step.                                                                                                                              |
+| `sessionLifetime`  | `1209600` (14 days)                   | `GEEKITY_SESSION_LIFETIME`   | How long an admin login lasts, in seconds.                                                                                                                                                |
+| `loginAttempts`    | `5`                                   | `GEEKITY_LOGIN_ATTEMPTS`     | Failed sign-ins a username or an address may make before it is locked out.                                                                                                                |
+| `loginLockout`     | `900` (15 minutes)                    | `GEEKITY_LOGIN_LOCKOUT`      | How long the first lockout lasts, in seconds. See [Login hardening](#login-hardening).                                                                                                    |
+| `trustProxy`       | `false`                               | `GEEKITY_TRUST_PROXY`        | Believe `X-Forwarded-For` when deciding which address a sign-in came from.                                                                                                                |
+| `accessLog`        | `false`; `true` under `geekity serve` | `GEEKITY_ACCESS_LOG`         | One line per request on stdout: method, path with query, status, duration. See [The access log](#the-access-log).                                                                         |
+| `accessLogAddress` | `false`                               | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address on the end of each access-log line. `trustProxy` decides which address that is.                                                                                    |
+| `accessLogWriter`  | stdout                                | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                        |
+| `onDocumentChange` | none                                  | —                            | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                              |
+| `onPublish`        | none                                  | —                            | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                            |
+| `federation`       | `{}`                                  | —                            | Federation stores and guards. See [Federation](#federation).                                                                                                                              |
+| `commentChecker`   | Akismet                               | —                            | A spam checker of the site's own, which wins over the key in `data/akismet.json`. See [Akismet](#akismet).                                                                                |
+| `mail`             | `{}`                                  | —                            | Mail provider, retries, backoff and logger. See [Email](#email).                                                                                                                          |
 
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site. A boolean environment variable
 takes `true`, `1`, `yes` and `on`, or their opposites; anything else is an error
 rather than a silent `false`.
+
+## The access log
+
+`geekity serve` writes one line per request to stdout. `createCms` does not:
+a CMS mounted inside somebody else's server has no business writing to its
+stdout uninvited, so an embedder asks for it with `accessLog: true` — in the
+config, no environment variable needed:
+
+```ts
+const cms = createCms({ accessLog: true });
+```
+
+The line is the method, the path with its query string, the status and how
+long the request took, in that order, separated by single spaces:
+
+```
+GET / 200 4.2ms
+GET /.well-known/webfinger?resource=acct:ada@blog.example 200 1.9ms
+GET /nothing-here 404 2.1ms
+POST /admin/login 303 41.3ms
+```
+
+Every route is on it — `/healthz`, the federation endpoints, the admin and the
+public site — and a request whose handler threw gets its `500` line. Nothing
+but the request line is ever read: no body is touched, so a password posted to
+the login form cannot reach the log, and no cookie or `Authorization` header
+is looked at either.
+
+With `accessLogAddress: true` the client address goes on the end, after the
+duration. It is off by default because an address is personal data. Which
+address is right is `trustProxy`'s answer — the leftmost `X-Forwarded-For`
+entry behind a proxy that sets it, the socket's own address otherwise — the
+same one the login throttle counts a failed sign-in against.
+
+`accessLogWriter` takes the lines somewhere else, one call per line, without
+the newline:
+
+```ts
+const lines: string[] = [];
+const cms = createCms({
+  accessLog: true,
+  accessLogWriter: (line) => lines.push(line),
+});
+```
 
 ## Two directories: `content/` and `data/`
 

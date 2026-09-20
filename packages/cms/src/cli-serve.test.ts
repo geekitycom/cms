@@ -21,6 +21,8 @@ const TSX = import.meta.resolve('tsx');
 interface Serving {
   port: number;
   stdout: string;
+  /** Everything the server has written to stdout so far, boot lines and all. */
+  output(): string;
   stop(): Promise<void>;
 }
 
@@ -37,7 +39,9 @@ async function serve(cwd: string, env: Record<string, string>): Promise<Serving>
     env: { ...inherited, GEEKITY_PORT: '0', GEEKITY_WATCH: 'false', ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  // `close` rather than `exit`, so everything the server wrote has been read
+  // off the pipe before a test goes looking for it.
+  const exited = new Promise<void>((resolve) => child.once('close', () => resolve()));
 
   let stdout = '';
   let stderr = '';
@@ -55,6 +59,9 @@ async function serve(cwd: string, env: Record<string, string>): Promise<Serving>
   return {
     port,
     stdout,
+    output() {
+      return stdout;
+    },
     async stop() {
       child.kill('SIGTERM');
       await exited;
@@ -119,5 +126,33 @@ describe('geekity serve', () => {
 
     assert.deepEqual(await fs.readdir(content), []);
     assert.doesNotMatch(running.stdout, /seeded/i);
+  });
+
+  it('writes one access-log line per request, which serving turns on by itself', async () => {
+    const site = await temporaryDir('geekity-serve-log-');
+    await fs.mkdir(path.join(site, 'content'));
+
+    const running = await serve(site, {});
+    try {
+      await (await fetch(`http://127.0.0.1:${String(running.port)}/healthz`)).text();
+    } finally {
+      await running.stop();
+    }
+
+    assert.match(running.output(), /^GET \/healthz 200 \d+(\.\d+)?ms$/m, running.output());
+  });
+
+  it('is silenced by GEEKITY_ACCESS_LOG, which wins over that', async () => {
+    const site = await temporaryDir('geekity-serve-quiet-');
+    await fs.mkdir(path.join(site, 'content'));
+
+    const running = await serve(site, { GEEKITY_ACCESS_LOG: 'false' });
+    try {
+      await (await fetch(`http://127.0.0.1:${String(running.port)}/healthz`)).text();
+    } finally {
+      await running.stop();
+    }
+
+    assert.doesNotMatch(running.output(), /healthz/);
   });
 });
