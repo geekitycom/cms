@@ -27,7 +27,7 @@ concurrency:
 jobs:
   lint:
     name: lint
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -38,19 +38,18 @@ jobs:
 
   typecheck:
     name: typecheck
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
       - run: pnpm typecheck
 
   # The suite is CPU-bound and `node --test` runs one file per process with a
-  # concurrency of cores minus one, which on the 2 vCPU runner every other job
-  # uses means one file at a time. The three jobs that run the whole suite get
-  # 4 vCPUs, so three files run at once.
+  # concurrency of cores minus one, so on the four vCPUs a standard
+  # GitHub-hosted runner gives a public repository, three files run at once.
   test:
     name: test
-    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -62,7 +61,7 @@ jobs:
   # the plain name `test`.
   test-node-26:
     name: test-node-26
-    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -72,7 +71,7 @@ jobs:
 
   build:
     name: build
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -82,7 +81,7 @@ jobs:
   # its own job and the fast suite stays fast (decision-8).
   test-11ty:
     name: test-11ty
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -100,7 +99,7 @@ jobs:
   # loopback, and `@fedify/cli` comes out of the lockfile.
   fed-smoke:
     name: fed-smoke
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -116,7 +115,7 @@ jobs:
   # so the sequence can be run on a laptop before it is trusted here.
   pack-install:
     name: pack-install
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -143,7 +142,7 @@ jobs:
   # and the script needs only bash, curl and docker.
   docker-smoke:
     name: docker-smoke
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
@@ -168,7 +167,7 @@ jobs:
   # artifact; no third-party coverage service is involved.
   coverage:
     name: coverage
-    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-workspace
@@ -197,7 +196,7 @@ jobs:
   pr-title:
     name: pr-title
     if: github.event_name == 'pull_request'
-    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       pull-requests: read

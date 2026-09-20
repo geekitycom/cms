@@ -28,7 +28,7 @@ concurrency:
 jobs:
   release-please:
     name: release-please
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
