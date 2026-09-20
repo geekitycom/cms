@@ -4,6 +4,7 @@ title: 'The starter site links its About page, so a new site has a menu'
 status: To Do
 assignee: []
 created_date: '2026-09-20 11:54'
+updated_date: '2026-09-20 12:18'
 labels:
   - web
   - content
@@ -38,3 +39,9 @@ Check while there whether the starter post and site.json have the same shape of 
 - [ ] #3 The About page says how it put itself in the menu and how to take it out
 - [ ] #4 Any other starter file that ships unreachable is named in the implementation notes, fixed or with a reason not to
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Superseded in part by TASK-106, which removes the per-page navigation checkbox: the starter About page must be linked by typing a line into the navigation setting in the starter site.json, not by putting navigation: true in its front matter. The defaults the maintainer asked for on 2026-09-20 are Search and About in the menu and RSS in the footer, so the starter site.json carries navigation with About and Search, and footerLinks with RSS (TASK-105).
+<!-- SECTION:NOTES:END -->

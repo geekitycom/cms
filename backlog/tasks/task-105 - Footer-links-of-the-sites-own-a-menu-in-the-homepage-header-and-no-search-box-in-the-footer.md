@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-20 12:05'
-updated_date: '2026-09-20 12:13'
+updated_date: '2026-09-20 12:18'
 labels:
   - web
   - theme
@@ -75,4 +75,6 @@ The starter site carries the links a new site needs instead: an RSS line in Foot
 Arrangement revised on 2026-09-20 before any code was written. The earlier plan put the menu in the header at the root only, leaving it in the bio on an entry and in the footer elsewhere — three places, which is what prompted the rethink. It is now in the header on every page, which also means the bio stops being two things at once: it carries the person, their note and their rel="me" links, and nothing about the site's navigation.
 
 The result is one home for each kind of link. The header has the menu, the bio has the person whose page or post it is, the footer has the site's own links on every page.
+
+The menu's items come from the navigation setting alone once TASK-106 lands; this task is the theme side and does not care where they come from. Default arrangement the maintainer asked for: Search in the menu, RSS in the footer, About in the menu.
 <!-- SECTION:NOTES:END -->
