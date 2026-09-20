@@ -5,6 +5,7 @@
    for the POST. Nothing typed here is ever echoed back: both fields are
    passwords. #}
 {% extends "layouts/base.njk" %}
+{% import "layouts/_fields.njk" as field %}
 
 {% block title %}Set a new password{% endblock %}
 
@@ -23,11 +24,11 @@
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
       <input type="hidden" name="{{ fields.token }}" value="{{ token }}" />
 
-      <label for="password">New password</label>
-      <input id="password" name="{{ fields.password }}" type="password" autocomplete="new-password" required autofocus />
+      {{ field.password('password', fields.password, 'New password',
+           autocomplete='new-password', required=true, autofocus=true) }}
 
-      <label for="password_confirmation">Repeat the password</label>
-      <input id="password_confirmation" name="{{ fields.passwordConfirmation }}" type="password" autocomplete="new-password" required />
+      {{ field.password('password_confirmation', fields.passwordConfirmation,
+           'Repeat the password', autocomplete='new-password', required=true) }}
 
       <p class="admin-hint">Every browser signed in as you is signed out, and this link stops working.</p>
 

@@ -8,6 +8,7 @@
    around one of the two things below: `adding` says which of them the menu
    sent the browser to. #}
 {% extends "layouts/shell.njk" %}
+{% import "layouts/_fields.njk" as field %}
 
 {% block title %}{% if adding %}Add new user{% else %}Users{% endif %}{% endblock %}
 
@@ -58,23 +59,18 @@
       <p class="admin-error">Nobody was added. Fix the fields marked below and try again.</p>
     {% endif %}
 
-    <label for="add-username">Username</label>
-    <input id="add-username" name="{{ fields.username }}" type="text" value="{{ addForm.username }}" required />
-    {% if addProblems.username %}<p class="admin-field-error">{{ addProblems.username }}</p>{% endif %}
+    {{ field.text('add-username', fields.username, 'Username', addForm.username,
+         error=addProblems.username, required=true) }}
 
-    <label for="add-email">Email <span class="admin-status">(optional)</span></label>
-    <input id="add-email" name="{{ fields.email }}" type="email" autocomplete="email" value="{{ addForm.email }}" />
-    {% if addProblems.email %}<p class="admin-field-error">{{ addProblems.email }}</p>{% endif %}
+    {{ field.text('add-email', fields.email, 'Email <span class="admin-status">(optional)</span>',
+         addForm.email, type='email', autocomplete='email', error=addProblems.email) }}
 
-    <label for="add-password">Password</label>
-    <input id="add-password" name="{{ fields.password }}" type="password" autocomplete="new-password" />
-    {% if addProblems.password %}<p class="admin-field-error">{{ addProblems.password }}</p>{% endif %}
+    {{ field.password('add-password', fields.password, 'Password',
+         error=addProblems.password, autocomplete='new-password') }}
 
-    <p class="admin-check">
-      <input id="add-generate" name="{{ fields.generate }}" type="checkbox" value="1"{% if addForm.generate %} checked{% endif %} />
-      <label for="add-generate">Generate one instead, and show it to me once</label>
-    </p>
-    <p class="admin-hint">A generated password is shown on the next page and nowhere else. Copy it before you leave.</p>
+    {{ field.checkbox('add-generate', fields.generate,
+         'Generate one instead, and show it to me once', checked=addForm.generate,
+         hint='A generated password is shown on the next page and nowhere else. Copy it before you leave.') }}
 
     <p class="admin-settings-buttons">
       <button type="submit">Add user</button>

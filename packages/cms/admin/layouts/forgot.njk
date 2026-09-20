@@ -5,6 +5,7 @@
    whoever asked and whatever was found, so this form cannot be used to find
    out which accounts a site has. #}
 {% extends "layouts/base.njk" %}
+{% import "layouts/_fields.njk" as field %}
 
 {% block title %}Forgotten password{% endblock %}
 
@@ -35,8 +36,8 @@
     <form method="post" action="{{ forgotUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
 
-      <label for="identifier">Username or email address</label>
-      <input id="identifier" name="{{ fields.identifier }}" type="text" autocomplete="username" required autofocus />
+      {{ field.text('identifier', fields.identifier, 'Username or email address',
+           autocomplete='username', required=true, autofocus=true) }}
 
       <button type="submit">Send a reset link</button>
     </form>

@@ -1,51 +1,46 @@
 {# /admin/settings/discussion: comments, webmentions, and what checks them. #}
 {% extends "layouts/settings/page.njk" %}
+{% import "layouts/_fields.njk" as field %}
 
 {% block settingsFields %}
   <h2>Comments</h2>
 
-  <p class="admin-check">
-    <input id="settings-comments" name="{{ fields.comments }}" type="checkbox" value="1"{% if form.comments %} checked{% endif %} />
-    <label for="settings-comments">Take comments on this site</label>
-  </p>
-  <p class="admin-hint">
+  {% set commentsHint %}
     Clear this and no post shows a comment form and every submission is
     refused. Fediverse replies keep arriving and keep being shown either way:
     a remote server sends those, and nothing here can stop it.
-  </p>
+  {% endset %}
+  {{ field.checkbox('settings-comments', fields.comments, 'Take comments on this site',
+       checked=form.comments, hint=commentsHint) }}
 
-  <label for="settings-comments-close">Close comments after</label>
-  <input id="settings-comments-close" name="{{ fields.commentsCloseAfterDays }}" type="number" min="0" step="1" value="{{ form.commentsCloseAfterDays }}" />
-  {% if problems.commentsCloseAfterDays %}<p class="admin-field-error">{{ problems.commentsCloseAfterDays }}</p>{% endif %}
-  <p class="admin-hint">
+  {% set closeHint %}
     Days after a post's date that it stops taking comments; <code>0</code>
     never closes one. A post overrides this for itself with
     <code>comments: true</code> or <code>comments: false</code>, which the
     editor offers as a field. Pages are closed unless they say otherwise.
-  </p>
+  {% endset %}
+  {{ field.text('settings-comments-close', fields.commentsCloseAfterDays, 'Close comments after',
+       form.commentsCloseAfterDays, type='number', min='0', step='1',
+       error=problems.commentsCloseAfterDays, hint=closeHint) }}
 
   <h2>Webmentions</h2>
 
-  <p class="admin-check">
-    <input id="settings-webmentions-send" name="{{ fields.webmentionsSend }}" type="checkbox" value="1"{% if form.webmentionsSend %} checked{% endif %} />
-    <label for="settings-webmentions-send">Tell the pages a post links to</label>
-  </p>
-  <p class="admin-hint">
+  {% set sendHint %}
     When a post is published or edited, every external page it links to is
     asked whether it takes webmentions and told about the post if it does.
     The Resend button on the federation screen sends them again.
-  </p>
+  {% endset %}
+  {{ field.checkbox('settings-webmentions-send', fields.webmentionsSend,
+       'Tell the pages a post links to', checked=form.webmentionsSend, hint=sendHint) }}
 
-  <p class="admin-check">
-    <input id="settings-webmentions-receive" name="{{ fields.webmentionsReceive }}" type="checkbox" value="1"{% if form.webmentionsReceive %} checked{% endif %} />
-    <label for="settings-webmentions-receive">Accept webmentions sent here</label>
-  </p>
-  <p class="admin-hint">
+  {% set receiveHint %}
     Every post advertises an endpoint, and a page that links to one and says
     so lands in the comment queue like a comment. Clear this and the endpoint
     is gone from the pages and answers nothing; what has already arrived
     stays where it is.
-  </p>
+  {% endset %}
+  {{ field.checkbox('settings-webmentions-receive', fields.webmentionsReceive,
+       'Accept webmentions sent here', checked=form.webmentionsReceive, hint=receiveHint) }}
 {% endblock %}
 
 {% block settingsPanels %}
@@ -70,16 +65,13 @@
 
     <form method="post" action="{{ akismetUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-      <label for="settings-akismet-key">Akismet API key</label>
-      <input
-        id="settings-akismet-key"
-        name="{{ akismetFields.key }}"
-        type="password"
-        value=""
-        autocomplete="off"
-        spellcheck="false"
-        placeholder="{% if akismetPresent %}Replace the stored key{% else %}Paste your key{% endif %}"
-      />
+      {% if akismetPresent %}
+        {% set akismetPlaceholder = 'Replace the stored key' %}
+      {% else %}
+        {% set akismetPlaceholder = 'Paste your key' %}
+      {% endif %}
+      {{ field.password('settings-akismet-key', akismetFields.key, 'Akismet API key',
+           autocomplete='off', spellcheck='false', placeholder=akismetPlaceholder) }}
       <p class="admin-settings-buttons">
         <button type="submit">{% if akismetPresent %}Replace key{% else %}Save key{% endif %}</button>
       </p>

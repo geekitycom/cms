@@ -1,47 +1,44 @@
 {# /admin/settings/email: how the site sends mail, and where a message written
    to it goes. #}
 {% extends "layouts/settings/page.njk" %}
+{% import "layouts/_fields.njk" as field %}
 
 {% block settingsFields %}
-  <label for="settings-mail-provider">Provider</label>
-  <select id="settings-mail-provider" name="{{ fields.mailProvider }}">
+  {% set providerHint %}
+    The key or password each one needs is a credential and is saved below,
+    in <code>data/mail.json</code> rather than in <code>site.json</code>.
+  {% endset %}
+  {% call field.select('settings-mail-provider', fields.mailProvider, 'Provider',
+       error=problems.mailProvider, hint=providerHint) %}
     {% for provider in mailProviders %}
       <option value="{{ provider }}"{% if form.mailProvider == provider %} selected{% endif %}>
         {% if provider == 'none' %}None &mdash; this site sends no email{% elif provider == 'brevo' %}Brevo (transactional API){% else %}SMTP{% endif %}
       </option>
     {% endfor %}
-  </select>
-  {% if problems.mailProvider %}<p class="admin-field-error">{{ problems.mailProvider }}</p>{% endif %}
-  <p class="admin-hint">
-    The key or password each one needs is a credential and is saved below,
-    in <code>data/mail.json</code> rather than in <code>site.json</code>.
-  </p>
+  {% endcall %}
 
-  <label for="settings-mail-from-name">From name</label>
-  <input id="settings-mail-from-name" name="{{ fields.mailFromName }}" type="text" value="{{ form.mailFromName }}" />
-  <p class="admin-hint">The name on the From line. Empty uses the site title.</p>
+  {{ field.text('settings-mail-from-name', fields.mailFromName, 'From name', form.mailFromName,
+       hint='The name on the From line. Empty uses the site title.') }}
 
-  <label for="settings-mail-from-address">From address</label>
-  <input id="settings-mail-from-address" name="{{ fields.mailFromAddress }}" type="text" inputmode="email" value="{{ form.mailFromAddress }}" />
-  {% if problems.mailFromAddress %}<p class="admin-field-error">{{ problems.mailFromAddress }}</p>{% endif %}
-  <p class="admin-hint">
+  {% set fromAddressHint %}
     Providers only send from an address they have verified, so this should be
     one you own. Empty falls back to <code>no-reply@</code> at the site's host.
-  </p>
+  {% endset %}
+  {{ field.text('settings-mail-from-address', fields.mailFromAddress, 'From address',
+       form.mailFromAddress, error=problems.mailFromAddress, hint=fromAddressHint,
+       inputmode='email') }}
 
-  <label for="settings-mail-reply-to">Reply-to</label>
-  <input id="settings-mail-reply-to" name="{{ fields.mailReplyTo }}" type="text" inputmode="email" value="{{ form.mailReplyTo }}" />
-  {% if problems.mailReplyTo %}<p class="admin-field-error">{{ problems.mailReplyTo }}</p>{% endif %}
-  <p class="admin-hint">Where a reply goes. Empty replies to the From address.</p>
+  {{ field.text('settings-mail-reply-to', fields.mailReplyTo, 'Reply-to', form.mailReplyTo,
+       error=problems.mailReplyTo, inputmode='email',
+       hint='Where a reply goes. Empty replies to the From address.') }}
 
-  <label for="settings-contact-email">Contact address</label>
-  <input id="settings-contact-email" name="{{ fields.contactEmail }}" type="text" inputmode="email" value="{{ form.contactEmail }}" />
-  {% if problems.contactEmail %}<p class="admin-field-error">{{ problems.contactEmail }}</p>{% endif %}
-  <p class="admin-hint">
+  {% set contactHint %}
     Where a message from a page&rsquo;s contact form is sent, with reply-to set to whoever
     wrote it. Empty writes to the first admin with an email address. It is read when a
     message arrives and never appears on the public site.
-  </p>
+  {% endset %}
+  {{ field.text('settings-contact-email', fields.contactEmail, 'Contact address',
+       form.contactEmail, error=problems.contactEmail, hint=contactHint, inputmode='email') }}
 {% endblock %}
 
 {% block settingsPanels %}
@@ -69,44 +66,38 @@
       <h3>Brevo</h3>
       {% if mailBrevoPresent %}
         <p class="admin-hint">A key is stored, ending {{ mailBrevoKeyHint }}.</p>
+        {% set brevoPlaceholder = 'Leave blank to keep the stored key' %}
+      {% else %}
+        {% set brevoPlaceholder = 'Paste your key' %}
       {% endif %}
-      <label for="settings-mail-brevo-key">API key</label>
-      <input
-        id="settings-mail-brevo-key"
-        name="{{ mailFields.brevoApiKey }}"
-        type="password"
-        value=""
-        autocomplete="off"
-        spellcheck="false"
-        placeholder="{% if mailBrevoPresent %}Leave blank to keep the stored key{% else %}Paste your key{% endif %}"
-      />
+      {{ field.password('settings-mail-brevo-key', mailFields.brevoApiKey, 'API key',
+           autocomplete='off', spellcheck='false', placeholder=brevoPlaceholder) }}
 
       <h3>SMTP</h3>
-      <label for="settings-mail-smtp-host">Host</label>
-      <input id="settings-mail-smtp-host" name="{{ mailFields.smtpHost }}" type="text" value="{{ mailSmtp.host }}" autocomplete="off" />
+      {{ field.text('settings-mail-smtp-host', mailFields.smtpHost, 'Host', mailSmtp.host,
+           autocomplete='off') }}
 
-      <label for="settings-mail-smtp-port">Port</label>
-      <input id="settings-mail-smtp-port" name="{{ mailFields.smtpPort }}" type="text" inputmode="numeric" value="{{ mailSmtp.port if mailSmtp else 587 }}" />
+      {{ field.text('settings-mail-smtp-port', mailFields.smtpPort, 'Port',
+           mailSmtp.port if mailSmtp else 587, inputmode='numeric') }}
 
-      <label class="admin-checkbox" for="settings-mail-smtp-secure">
-        <input id="settings-mail-smtp-secure" name="{{ mailFields.smtpSecure }}" type="checkbox" value="1"{% if mailSmtp.secure %} checked{% endif %} />
-        TLS from the first byte (port 465)
-      </label>
-      <p class="admin-hint">Leave this off for port 587, which upgrades with STARTTLS.</p>
+      {# Its own box with the sentence beside it, like every other switch in
+         the admin. It used to be a label wrapped round the tick in a class the
+         stylesheet has never heard of, so it was the one switch here that
+         rendered unstyled. #}
+      {{ field.checkbox('settings-mail-smtp-secure', mailFields.smtpSecure,
+           'TLS from the first byte (port 465)', checked=mailSmtp.secure,
+           hint='Leave this off for port 587, which upgrades with STARTTLS.') }}
 
-      <label for="settings-mail-smtp-user">Username</label>
-      <input id="settings-mail-smtp-user" name="{{ mailFields.smtpUser }}" type="text" value="{{ mailSmtp.user }}" autocomplete="off" />
+      {{ field.text('settings-mail-smtp-user', mailFields.smtpUser, 'Username', mailSmtp.user,
+           autocomplete='off') }}
 
-      <label for="settings-mail-smtp-password">Password</label>
-      <input
-        id="settings-mail-smtp-password"
-        name="{{ mailFields.smtpPassword }}"
-        type="password"
-        value=""
-        autocomplete="off"
-        spellcheck="false"
-        placeholder="{% if mailSmtp.hasPassword %}Leave blank to keep the stored password{% else %}The SMTP password{% endif %}"
-      />
+      {% if mailSmtp.hasPassword %}
+        {% set smtpPlaceholder = 'Leave blank to keep the stored password' %}
+      {% else %}
+        {% set smtpPlaceholder = 'The SMTP password' %}
+      {% endif %}
+      {{ field.password('settings-mail-smtp-password', mailFields.smtpPassword, 'Password',
+           autocomplete='off', spellcheck='false', placeholder=smtpPlaceholder) }}
 
       <p class="admin-settings-buttons">
         <button type="submit">Save credentials</button>
@@ -125,8 +116,8 @@
 
     <form method="post" action="{{ mailTestUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-      <label for="settings-mail-test-to">Send a test message to</label>
-      <input id="settings-mail-test-to" name="{{ mailTestFields.to }}" type="text" inputmode="email" value="" placeholder="you@example.com" />
+      {{ field.text('settings-mail-test-to', mailTestFields.to, 'Send a test message to', '',
+           inputmode='email', placeholder='you@example.com') }}
       <p class="admin-settings-buttons">
         <button type="submit">Send test email</button>
       </p>

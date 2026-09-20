@@ -1,72 +1,72 @@
 {# /admin/settings/reading: what a visitor is shown, and who is told when it
    changes. #}
 {% extends "layouts/settings/page.njk" %}
+{% import "layouts/_fields.njk" as field %}
 
 {% block settingsFields %}
   {# WordPress's "Your homepage displays": the empty option is Your latest
      posts, so the choice and the page it needs are one control rather than a
      radio and a select that can disagree with each other. #}
-  <label for="settings-homepage">Your homepage displays</label>
-  <select id="settings-homepage" name="{{ fields.homepage }}" autofocus>
+  {% set homepageGone %}
+    {% if homepageMissing %}
+      <p class="admin-field-error">
+        The homepage was <code>{{ form.homepage }}</code>, which is no longer published,
+        so the site is showing its latest posts. Publish that page again to have it back,
+        or pick another.
+      </p>
+    {% endif %}
+  {% endset %}
+  {% set homepageHint %}
+    Your latest posts is the archive at <code>/</code>. A page instead is served
+    there, and its own URL redirects to <code>/</code> so there is one front page.
+  {% endset %}
+  {% call field.select('settings-homepage', fields.homepage, 'Your homepage displays',
+       error=problems.homepage, errorHtml=homepageGone, hint=homepageHint, autofocus=true) %}
     <option value="">Your latest posts</option>
     {% for page in pageChoices %}
       <option value="{{ page.slug }}"{% if page.slug == form.homepage %} selected{% endif %}>{{ page.title }}</option>
     {% endfor %}
-  </select>
-  {% if problems.homepage %}<p class="admin-field-error">{{ problems.homepage }}</p>{% endif %}
-  {% if homepageMissing %}
-    <p class="admin-field-error">
-      The homepage was <code>{{ form.homepage }}</code>, which is no longer published,
-      so the site is showing its latest posts. Publish that page again to have it back,
-      or pick another.
-    </p>
-  {% endif %}
-  <p class="admin-hint">
-    Your latest posts is the archive at <code>/</code>. A page instead is served
-    there, and its own URL redirects to <code>/</code> so there is one front page.
-  </p>
+  {% endcall %}
 
-  <label for="settings-posts-page">Posts page</label>
-  <select id="settings-posts-page" name="{{ fields.postsPage }}">
+  {% set postsPageGone %}
+    {% if postsPageMissing %}
+      <p class="admin-field-error">
+        The posts page was <code>{{ form.postsPage }}</code>, which is no longer published,
+        so the listing has no page of its own.
+      </p>
+    {% endif %}
+  {% endset %}
+  {% set postsPageHint %}
+    Where the posts go once the homepage is a page: this page's URL carries the
+    listing, with its own title and words above it. It needs a homepage first.
+    The feeds stay at <code>/feed/</code> either way.
+  {% endset %}
+  {% call field.select('settings-posts-page', fields.postsPage, 'Posts page',
+       error=problems.postsPage, errorHtml=postsPageGone, hint=postsPageHint) %}
     <option value="">&mdash; None &mdash;</option>
     {% for page in pageChoices %}
       <option value="{{ page.slug }}"{% if page.slug == form.postsPage %} selected{% endif %}>{{ page.title }}</option>
     {% endfor %}
-  </select>
-  {% if problems.postsPage %}<p class="admin-field-error">{{ problems.postsPage }}</p>{% endif %}
-  {% if postsPageMissing %}
-    <p class="admin-field-error">
-      The posts page was <code>{{ form.postsPage }}</code>, which is no longer published,
-      so the listing has no page of its own.
-    </p>
-  {% endif %}
-  <p class="admin-hint">
-    Where the posts go once the homepage is a page: this page's URL carries the
-    listing, with its own title and words above it. It needs a homepage first.
-    The feeds stay at <code>/feed/</code> either way.
-  </p>
+  {% endcall %}
 
-  <label for="settings-posts-per-page">Posts per page</label>
-  <input id="settings-posts-per-page" name="{{ fields.postsPerPage }}" type="text" inputmode="numeric" value="{{ form.postsPerPage }}" required />
-  {% if problems.postsPerPage %}<p class="admin-field-error">{{ problems.postsPerPage }}</p>{% endif %}
-  <p class="admin-hint">How many posts a listing page holds, on the home page and on every archive.</p>
+  {{ field.text('settings-posts-per-page', fields.postsPerPage, 'Posts per page', form.postsPerPage,
+       error=problems.postsPerPage, inputmode='numeric', required=true,
+       hint='How many posts a listing page holds, on the home page and on every archive.') }}
 
-  <label for="settings-navigation">Menu</label>
-  <textarea id="settings-navigation" name="{{ fields.navigation }}" rows="4" spellcheck="false">{{ form.navigation }}</textarea>
-  {% if problems.navigation %}<p class="admin-field-error">{{ problems.navigation }}</p>{% endif %}
-  <p class="admin-hint">
+  {% set navigationHint %}
     One item per line, written <code>Label | URL</code> &mdash; for example
     <code>About | /about/</code> or <code>Mastodon | https://example.social/@me</code>.
     They are the menu in the site header, in this order. A page can put itself
     on the end of it by ticking <em>Show in navigation</em> in the editor.
-  </p>
+  {% endset %}
+  {{ field.textarea('settings-navigation', fields.navigation, 'Menu', form.navigation,
+       error=problems.navigation, hint=navigationHint, rows='4', spellcheck='false') }}
 
-  <label for="settings-notify-server">Notify server</label>
-  <input id="settings-notify-server" name="{{ fields.notifyServer }}" type="text" value="{{ form.notifyServer }}" inputmode="url" />
-  {% if problems.notifyServer %}<p class="admin-field-error">{{ problems.notifyServer }}</p>{% endif %}
-  <p class="admin-hint">
+  {% set notifyHint %}
     An rssCloud and WebSub server, told whenever a feed changes so subscribers
     hear at once instead of waiting for their next poll. Every feed advertises
     it. Leave it empty for none.
-  </p>
+  {% endset %}
+  {{ field.text('settings-notify-server', fields.notifyServer, 'Notify server', form.notifyServer,
+       error=problems.notifyServer, hint=notifyHint, inputmode='url') }}
 {% endblock %}

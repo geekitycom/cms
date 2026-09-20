@@ -3,33 +3,32 @@
    people are on the fediverse is a user's profile now (decision-14); the
    Federation section in the menu is where the actors and their followers are. #}
 {% extends "layouts/settings/page.njk" %}
+{% import "layouts/_fields.njk" as field %}
 
 {% block settingsFields %}
-  <label for="settings-relays">Relays</label>
-  <textarea id="settings-relays" name="{{ fields.relays }}" rows="3" spellcheck="false" autofocus>{{ form.relays }}</textarea>
-  {% if problems.relays %}<p class="admin-field-error">{{ problems.relays }}</p>{% endif %}
-  <p class="admin-hint">
+  {% set relaysHint %}
     One relay inbox per line, such as
     <code>https://tags.pub/user/_____relay_____/inbox</code>. Adding one sends
     it a follow; every public post then goes to it as well as to the
     followers, and it boosts them on to instances nobody here follows. The
     Federation screen says where each subscription stands.
-  </p>
+  {% endset %}
+  {{ field.textarea('settings-relays', fields.relays, 'Relays', form.relays,
+       error=problems.relays, hint=relaysHint, rows='3', spellcheck='false', autofocus=true) }}
 
   <h2>WordPress</h2>
 
-  <p class="admin-check">
-    <input id="settings-wordpress-activitypub" name="{{ fields.wordpressActivityPub }}" type="checkbox" value="1"{% if form.wordpressActivityPub %} checked{% endif %} />
-    <label for="settings-wordpress-activitypub">WordPress ActivityPub compatibility</label>
-  </p>
-  <p class="admin-hint">
+  {% set wordpressHint %}
     Answer the inbox and collection paths the WordPress ActivityPub plugin
     published, under <code>/wp-json/activitypub/1.0/</code>, for the users
     carrying its numeric actor id. Only a site that moved here from that plugin
     needs this: a follower's server keeps delivering to the inbox URL it cached
     until it next refetches the actor, and this is what catches those
     deliveries in the meantime.
-  </p>
+  {% endset %}
+  {{ field.checkbox('settings-wordpress-activitypub', fields.wordpressActivityPub,
+       'WordPress ActivityPub compatibility', checked=form.wordpressActivityPub,
+       hint=wordpressHint) }}
 {% endblock %}
 
 {% block settingsPanels %}

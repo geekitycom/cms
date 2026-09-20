@@ -1,0 +1,165 @@
+{# One labelled box, written once.
+
+   Every admin form used to spell out its own `<label for>`, control, hint and
+   error, roughly seventy-five times across sixteen templates, against a class
+   vocabulary each template had to remember. That is how /admin/users drifted
+   into hidden labels nobody else used (TASK-97): a field written by hand can
+   forget the error line, leave a label unbound, or invent a class the
+   stylesheet has never heard of, and nothing says it is wrong.
+
+   Each macro here emits the same four things in the same order:
+
+     1. the `<label for>`, bound to the control by its id,
+     2. the control,
+     3. the field error, where the form has something to say about this box,
+     4. the hint, where the field needs explaining.
+
+   Error before hint, because that is the order every screen already used: the
+   sentence about what went wrong belongs next to the box it is about, and the
+   standing explanation sits under both.
+
+   This file is under the packaged admin directory, which is the admin
+   environment's only search root (`src/admin/templates.ts`). A site's theme
+   can override any public template and cannot reach in here, so no theme can
+   shadow or break a field on the login form.
+
+   `label` and `hint` are written into the page as markup, because the admin's
+   labels and hints carry `<code>`, `<em>` and links. They are template
+   literals, never anything a visitor typed; a hint that interpolates a value
+   should be captured with `{% set … %}…{% endset %}`, which escapes what it
+   interpolates before this ever sees it. `error` is a message from the server
+   and is escaped. #}
+
+{# The field error, then the hint: the two paragraphs every macro below ends
+   with. `errorHtml` is the rare second thing a field has to say — the Reading
+   page's "that page is no longer published" — already written as its own
+   paragraph. #}
+{% macro _below(hint, error, errorHtml) %}
+{% if error %}
+  <p class="admin-field-error">{{ error }}</p>
+{% endif %}
+{% if errorHtml %}
+{{ errorHtml | safe }}
+{% endif %}
+{% if hint %}
+  <p class="admin-hint">{{ hint | safe }}</p>
+{% endif %}
+{% endmacro %}
+
+{# A box somebody types into: text, email, number, or whatever `type` says.
+
+   `value` is always written, even empty, so the control's state is on the page
+   rather than implied by its absence. #}
+{% macro text(
+  id,
+  name,
+  label,
+  value='',
+  type='text',
+  hint='',
+  error='',
+  errorHtml='',
+  min='',
+  step='',
+  inputmode='',
+  autocomplete='',
+  placeholder='',
+  spellcheck='',
+  required=false,
+  autofocus=false,
+  readonly=false,
+  disabled=false
+) %}
+  <label for="{{ id }}">{{ label | safe }}</label>
+  <input id="{{ id }}" name="{{ name }}" type="{{ type }}"{% if min %} min="{{ min }}"{% endif %}{% if step %} step="{{ step }}"{% endif %}{% if inputmode %} inputmode="{{ inputmode }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %} value="{{ value }}"{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %} />
+{{ _below(hint, error, errorHtml) }}
+{%- endmacro %}
+
+{# A password box. It carries `value=""` and no way to set one: nothing typed
+   into a password field is ever printed back into the page, and a stored
+   secret is never printed at all — the placeholder says whether there is one.
+   #}
+{% macro password(
+  id,
+  name,
+  label,
+  hint='',
+  error='',
+  errorHtml='',
+  autocomplete='',
+  placeholder='',
+  spellcheck='',
+  required=false,
+  autofocus=false
+) %}
+  <label for="{{ id }}">{{ label | safe }}</label>
+  <input id="{{ id }}" name="{{ name }}" type="password" value=""{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %} />
+{{ _below(hint, error, errorHtml) }}
+{%- endmacro %}
+
+{# A box of several lines. #}
+{% macro textarea(
+  id,
+  name,
+  label,
+  value='',
+  hint='',
+  error='',
+  errorHtml='',
+  rows='',
+  spellcheck='',
+  required=false,
+  autofocus=false,
+  readonly=false,
+  disabled=false
+) %}
+  <label for="{{ id }}">{{ label | safe }}</label>
+  <textarea id="{{ id }}" name="{{ name }}"{% if rows %} rows="{{ rows }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}>{{ value }}</textarea>
+{{ _below(hint, error, errorHtml) }}
+{%- endmacro %}
+
+{# A list to pick from. The options are the call's body, because which of them
+   is `selected` is the caller's business and an option's label is markup as
+   often as it is a word:
+
+     {% call field.select('settings-homepage', fields.homepage, 'Homepage') %}
+       <option value="">Your latest posts</option>
+     {% endcall %} #}
+{% macro select(
+  id,
+  name,
+  label,
+  hint='',
+  error='',
+  errorHtml='',
+  required=false,
+  autofocus=false,
+  disabled=false
+) %}
+  <label for="{{ id }}">{{ label | safe }}</label>
+  <select id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if disabled %} disabled{% endif %}>
+{{ caller() }}
+  </select>
+{{ _below(hint, error, errorHtml) }}
+{%- endmacro %}
+
+{# A switch. The label follows the box rather than heading it, which is what a
+   tick beside a sentence reads as, and `admin-check` is the class the
+   stylesheet lays that pair out with. #}
+{% macro checkbox(
+  id,
+  name,
+  label,
+  checked=false,
+  value='1',
+  hint='',
+  error='',
+  errorHtml='',
+  disabled=false
+) %}
+  <p class="admin-check">
+    <input id="{{ id }}" name="{{ name }}" type="checkbox" value="{{ value }}"{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %} />
+    <label for="{{ id }}">{{ label | safe }}</label>
+  </p>
+{{ _below(hint, error, errorHtml) }}
+{%- endmacro %}

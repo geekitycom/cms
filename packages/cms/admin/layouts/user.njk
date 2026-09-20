@@ -11,6 +11,7 @@
    about whoever is signed in. Each saves what its own heading is about and
    lands back here, so a Save always shows its own result. #}
 {% extends "layouts/shell.njk" %}
+{% import "layouts/_fields.njk" as field %}
 
 {% block title %}Edit {{ account.username }}{% endblock %}
 
@@ -45,15 +46,15 @@
       </p>
     {% endif %}
 
-    <label for="user-email">Email address</label>
-    <input id="user-email" name="{{ fields.email }}" type="email" autocomplete="email" value="{{ account.email }}" />
-    <p class="admin-hint">
+    {% set emailHint %}
       {% if mailConfigured %}
         Optional, and never shown on the public site. It is what a forgotten password is recovered through and where the notices below go. Empty it to stop the site writing to this person at all.
       {% else %}
         Optional, and this site sends no mail yet, so nothing will be sent to one. Choose a provider on <a href="{{ adminUrl }}/settings/email">Settings &rsaquo; Email</a> to turn password recovery on.
       {% endif %}
-    </p>
+    {% endset %}
+    {{ field.text('user-email', fields.email, 'Email address', account.email,
+         type='email', autocomplete='email', hint=emailHint) }}
 
     <p class="admin-settings-buttons">
       <button type="submit">Save email address</button>
@@ -78,32 +79,29 @@
       field they do not have.
     </p>
 
-    <label for="profile-display-name">Display name</label>
-    <input id="profile-display-name" name="{{ fields.displayName }}" type="text" value="{{ account.profile.displayName }}" />
-    <p class="admin-hint">Printed instead of the login: it heads the archive and is the byline under their posts.</p>
+    {{ field.text('profile-display-name', fields.displayName, 'Display name',
+         account.profile.displayName,
+         hint='Printed instead of the login: it heads the archive and is the byline under their posts.') }}
 
-    <label for="profile-bio">Bio</label>
-    <textarea id="profile-bio" name="{{ fields.bio }}" rows="4">{{ account.profile.bio }}</textarea>
-    <p class="admin-hint">A line or two about them, shown on the archive under the name.</p>
+    {{ field.textarea('profile-bio', fields.bio, 'Bio', account.profile.bio, rows='4',
+         hint='A line or two about them, shown on the archive under the name.') }}
 
-    <label for="profile-avatar">Avatar</label>
-    <input id="profile-avatar" name="{{ fields.avatar }}" type="text" value="{{ account.profile.avatar }}" />
-    <p class="admin-hint">A path such as <code>/uploads/2026/09/me.jpg</code>, or a full URL.</p>
+    {% set avatarHint %}A path such as <code>/uploads/2026/09/me.jpg</code>, or a full URL.{% endset %}
+    {{ field.text('profile-avatar', fields.avatar, 'Avatar', account.profile.avatar,
+         hint=avatarHint) }}
 
-    <label for="profile-job-title">Job title</label>
-    <input id="profile-job-title" name="{{ fields.jobTitle }}" type="text" value="{{ account.profile.jobTitle }}" />
-    <p class="admin-hint">What they do, printed beside the name on the archive.</p>
+    {{ field.text('profile-job-title', fields.jobTitle, 'Job title', account.profile.jobTitle,
+         hint='What they do, printed beside the name on the archive.') }}
 
-    <label for="profile-location">Location</label>
-    <input id="profile-location" name="{{ fields.location }}" type="text" value="{{ account.profile.location }}" />
-    <p class="admin-hint">Where they are, as they write it.</p>
+    {{ field.text('profile-location', fields.location, 'Location', account.profile.location,
+         hint='Where they are, as they write it.') }}
 
-    <label for="profile-links">Links</label>
-    <textarea id="profile-links" name="{{ fields.links }}" rows="4">{{ account.profile.links }}</textarea>
-    <p class="admin-hint">
+    {% set linksHint %}
       One per line, either <code>Label | https://example.com</code> or a bare
       URL that labels itself.
-    </p>
+    {% endset %}
+    {{ field.textarea('profile-links', fields.links, 'Links', account.profile.links, rows='4',
+         hint=linksHint) }}
 
     <p class="admin-settings-buttons">
       <button type="submit">Save profile</button>
@@ -151,12 +149,11 @@
             <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
             <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
             <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
-            <label for="notice-mode-{{ notice.name }}">How often</label>
-            <select id="notice-mode-{{ notice.name }}" name="{{ fields.mode }}">
+            {% call field.select('notice-mode-' + notice.name, fields.mode, 'How often') %}
               {% for choice in notice.modes %}
                 <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
               {% endfor %}
-            </select>
+            {% endcall %}
             <button type="submit">Save</button>
           </form>
           <p class="admin-hint">
@@ -202,16 +199,15 @@
         <p class="admin-error">Your password was not changed. Fix the fields marked below and try again.</p>
       {% endif %}
 
-      <label for="current-password">Current password</label>
-      <input id="current-password" name="{{ fields.currentPassword }}" type="password" autocomplete="current-password" required />
-      {% if passwordProblems.currentPassword %}<p class="admin-field-error">{{ passwordProblems.currentPassword }}</p>{% endif %}
+      {{ field.password('current-password', fields.currentPassword, 'Current password',
+           error=passwordProblems.currentPassword, autocomplete='current-password',
+           required=true) }}
 
-      <label for="new-password">New password</label>
-      <input id="new-password" name="{{ fields.newPassword }}" type="password" autocomplete="new-password" required />
-      {% if passwordProblems.newPassword %}<p class="admin-field-error">{{ passwordProblems.newPassword }}</p>{% endif %}
+      {{ field.password('new-password', fields.newPassword, 'New password',
+           error=passwordProblems.newPassword, autocomplete='new-password', required=true) }}
 
-      <label for="new-password-confirmation">New password again</label>
-      <input id="new-password-confirmation" name="{{ fields.newPasswordConfirmation }}" type="password" autocomplete="new-password" required />
+      {{ field.password('new-password-confirmation', fields.newPasswordConfirmation,
+           'New password again', autocomplete='new-password', required=true) }}
 
       <p class="admin-hint">Every other browser signed in as you is signed out. This one stays.</p>
 

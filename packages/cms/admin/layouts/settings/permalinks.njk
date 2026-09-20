@@ -1,17 +1,16 @@
 {# /admin/settings/permalinks: the URLs the archives live at, and the ones they
    used to. #}
 {% extends "layouts/settings/page.njk" %}
+{% import "layouts/_fields.njk" as field %}
 
 {% block settingsFields %}
-  <label for="settings-tag-base">Tag base</label>
-  <input id="settings-tag-base" name="{{ fields.tagBase }}" type="text" value="{{ form.tagBase }}" required autofocus />
-  {% if problems.tagBase %}<p class="admin-field-error">{{ problems.tagBase }}</p>{% endif %}
-  <p class="admin-hint">The tag archives live at <code>/{{ form.tagBase }}/{tag}/</code>. One path segment, no slashes.</p>
+  {% set tagBaseHint %}The tag archives live at <code>/{{ form.tagBase }}/{tag}/</code>. One path segment, no slashes.{% endset %}
+  {{ field.text('settings-tag-base', fields.tagBase, 'Tag base', form.tagBase,
+       error=problems.tagBase, hint=tagBaseHint, required=true, autofocus=true) }}
 
-  <label for="settings-category-base">Category base</label>
-  <input id="settings-category-base" name="{{ fields.categoryBase }}" type="text" value="{{ form.categoryBase }}" required />
-  {% if problems.categoryBase %}<p class="admin-field-error">{{ problems.categoryBase }}</p>{% endif %}
-  <p class="admin-hint">The category archives live at <code>/{{ form.categoryBase }}/{name}/</code>.</p>
+  {% set categoryBaseHint %}The category archives live at <code>/{{ form.categoryBase }}/{name}/</code>.{% endset %}
+  {{ field.text('settings-category-base', fields.categoryBase, 'Category base', form.categoryBase,
+       error=problems.categoryBase, hint=categoryBaseHint, required=true) }}
 {% endblock %}
 
 {% block settingsPanels %}
