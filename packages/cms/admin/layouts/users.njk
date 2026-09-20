@@ -1,8 +1,11 @@
-{# /admin/users and /admin/users/new: who can sign in, how to add one, and how
-   to change your own password. One role, so a row has no fields to edit.
+{# /admin/users and /admin/users/new: who can sign in, and how to add one.
+
+   A listing and nothing else (TASK-97). Every field a user has is edited on
+   that user's own screen, which the Edit link in each row goes to, so no box
+   in this table can be mistaken for another one.
 
    Two screens out of one template, because Users > Add new is the same chrome
-   around one of the two forms below: `adding` says which of them the menu
+   around one of the two things below: `adding` says which of them the menu
    sent the browser to. #}
 {% extends "layouts/shell.njk" %}
 
@@ -16,9 +19,7 @@
     <thead>
       <tr>
         <th scope="col">Username</th>
-        <th scope="col">Profile</th>
         <th scope="col">Email</th>
-        <th scope="col">Email me about</th>
         <th scope="col">Created</th>
         <th scope="col">Actions</th>
       </tr>
@@ -27,96 +28,13 @@
       {% for entry in users %}
         <tr>
           <td>
-            {{ entry.username }}{% if entry.you %} <span class="admin-status">(you)</span>{% endif %}
+            <a href="{{ entry.editUrl }}">{{ entry.username }}</a>{% if entry.you %} <span class="admin-status">(you)</span>{% endif %}
             <br /><a href="{{ entry.archiveUrl }}">{{ entry.archiveUrl }}</a>
-            {# The id they were published under somewhere else (TASK-69).
-               Read-only on purpose: it is what the fediverse already holds,
-               and changing it would orphan every follow. #}
-            {% if entry.storedActorId %}
-              <br /><span class="admin-status">Also <code>{{ entry.storedActorId }}</code> — what the fediverse knows this user by. Set by the import or by hand in <code>data/users.json</code>, never here.</span>
-            {% endif %}
           </td>
-          <td>
-            {# The public face of this person (TASK-67). Any row, not only your
-               own, for the reason the email box is any row: one role. After
-               decision-14 the same fields are what their ActivityPub actor
-               carries, which is why they live beside the account rather than
-               in the site settings. #}
-            <form class="admin-profile" method="post" action="{{ userProfileUrl }}">
-              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-              <input type="hidden" name="{{ fields.userId }}" value="{{ entry.id }}" />
-
-              <label class="admin-visually-hidden" for="display-name-{{ entry.id }}">Display name for {{ entry.username }}</label>
-              <input id="display-name-{{ entry.id }}" name="{{ fields.displayName }}" type="text" value="{{ entry.profile.displayName }}" placeholder="Display name" />
-
-              <label class="admin-visually-hidden" for="bio-{{ entry.id }}">Bio for {{ entry.username }}</label>
-              <textarea id="bio-{{ entry.id }}" name="{{ fields.bio }}" rows="2" placeholder="A line or two about them">{{ entry.profile.bio }}</textarea>
-
-              <label class="admin-visually-hidden" for="avatar-{{ entry.id }}">Avatar for {{ entry.username }}</label>
-              <input id="avatar-{{ entry.id }}" name="{{ fields.avatar }}" type="text" value="{{ entry.profile.avatar }}" placeholder="/uploads/…" />
-
-              <label class="admin-visually-hidden" for="job-title-{{ entry.id }}">Job title for {{ entry.username }}</label>
-              <input id="job-title-{{ entry.id }}" name="{{ fields.jobTitle }}" type="text" value="{{ entry.profile.jobTitle }}" placeholder="Job title" />
-
-              <label class="admin-visually-hidden" for="location-{{ entry.id }}">Location for {{ entry.username }}</label>
-              <input id="location-{{ entry.id }}" name="{{ fields.location }}" type="text" value="{{ entry.profile.location }}" placeholder="Location" />
-
-              <label class="admin-visually-hidden" for="links-{{ entry.id }}">Links for {{ entry.username }}</label>
-              <textarea id="links-{{ entry.id }}" name="{{ fields.links }}" rows="2" placeholder="Label | https://example.com">{{ entry.profile.links }}</textarea>
-
-              <button type="submit">Save profile</button>
-            </form>
-          </td>
-          <td>
-            {# Any row, not only your own: there is one role, so everybody here
-               already has every power, and TASK-55's notices need somewhere to
-               go for each of them. #}
-            <form class="admin-inline" method="post" action="{{ userEmailUrl }}">
-              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-              <input type="hidden" name="{{ fields.userId }}" value="{{ entry.id }}" />
-              <label class="admin-visually-hidden" for="email-{{ entry.id }}">Email for {{ entry.username }}</label>
-              <input id="email-{{ entry.id }}" name="{{ fields.email }}" type="email" autocomplete="email" value="{{ entry.email }}" placeholder="none" />
-              <button type="submit">Save</button>
-            </form>
-          </td>
-          <td>
-            {# One form per switch, not one form with a checkbox each: a
-               browser sends no field for an unticked box, so a single form
-               could not tell "turned this off" from "left it alone". Adding a
-               notice is one entry in the registry and no change here. #}
-            {% for notice in entry.notifications %}
-              <form class="admin-inline" method="post" action="{{ userNotificationsUrl }}">
-                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-                <input type="hidden" name="{{ fields.userId }}" value="{{ entry.id }}" />
-                <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
-                <input type="hidden" name="{{ fields.on }}" value="{% if notice.on %}{% else %}1{% endif %}" />
-                <span class="admin-status">{{ notice.label }}</span>
-                <button type="submit" title="{{ notice.description }}">
-                  {% if notice.on %}On — turn off{% else %}Off — turn on{% endif %}
-                </button>
-              </form>
-              {# And, for a notice the registry says can be batched, how often
-                 it should arrive. A second form because a select needs a Save
-                 beside it and the switch above is a button; the registry
-                 decides which rows get one. #}
-              {% if notice.batched %}
-                <form class="admin-inline" method="post" action="{{ userNotificationModeUrl }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-                  <input type="hidden" name="{{ fields.userId }}" value="{{ entry.id }}" />
-                  <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
-                  <label class="admin-visually-hidden" for="mode-{{ entry.id }}-{{ notice.name }}">How often {{ entry.username }} hears about {{ notice.label | lower }}</label>
-                  <select id="mode-{{ entry.id }}-{{ notice.name }}" name="{{ fields.mode }}">
-                    {% for choice in notice.modes %}
-                      <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
-                    {% endfor %}
-                  </select>
-                  <button type="submit">Save</button>
-                </form>
-              {% endif %}
-            {% endfor %}
-          </td>
+          <td>{% if entry.email %}{{ entry.email }}{% else %}<span class="admin-status">None</span>{% endif %}</td>
           <td>{{ entry.createdAt | date('html') }}</td>
           <td class="admin-actions">
+            <a class="admin-button admin-button-small" href="{{ entry.editUrl }}">Edit</a>
             {% if entry.deletable %}
               <form method="post" action="{{ deleteUserUrl }}">
                 <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
@@ -129,53 +47,6 @@
       {% endfor %}
     </tbody>
   </table>
-
-  <p class="admin-hint">
-    A profile is public: the display name heads that person's archive and is
-    what a byline under their posts prints, and the bio, the avatar, the job
-    title, the location and the links go on the archive beside it. Links are
-    one per line, either
-    <code>Label | https://example.com</code> or a bare URL. Nothing here is
-    required — a user with no profile still has an archive under their
-    username.
-  </p>
-
-  <p class="admin-hint">
-    {% if mailConfigured %}
-      An email address is optional. It is what a forgotten password is recovered through and where the notices above go, and it is never shown on the public site. A moderation notice carries approve, spam and delete links that work once and need no login. On an hourly or a daily digest nothing is sent as comments arrive; instead one message a window lists everything still waiting, and no message goes at all when nothing is.
-    {% else %}
-      An email address is optional, and this site sends no mail yet, so nothing will be sent to one. Choose a provider on <a href="{{ adminUrl }}/settings">Settings</a> to turn password recovery on.
-    {% endif %}
-  </p>
-
-  {# Only on the list: it is about whoever is signed in, not about anybody
-     being added. #}
-  <form class="admin-settings" method="post" action="{{ changePasswordUrl }}">
-    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-
-    <h2>Change your password</h2>
-
-    {% if passwordProblems.currentPassword or passwordProblems.newPassword %}
-      <p class="admin-error">Your password was not changed. Fix the fields marked below and try again.</p>
-    {% endif %}
-
-    <label for="current-password">Current password</label>
-    <input id="current-password" name="{{ fields.currentPassword }}" type="password" autocomplete="current-password" required />
-    {% if passwordProblems.currentPassword %}<p class="admin-field-error">{{ passwordProblems.currentPassword }}</p>{% endif %}
-
-    <label for="new-password">New password</label>
-    <input id="new-password" name="{{ fields.newPassword }}" type="password" autocomplete="new-password" required />
-    {% if passwordProblems.newPassword %}<p class="admin-field-error">{{ passwordProblems.newPassword }}</p>{% endif %}
-
-    <label for="new-password-confirmation">New password again</label>
-    <input id="new-password-confirmation" name="{{ fields.newPasswordConfirmation }}" type="password" autocomplete="new-password" required />
-
-    <p class="admin-hint">Every other browser signed in as you is signed out. This one stays.</p>
-
-    <p class="admin-settings-buttons">
-      <button type="submit">Change password</button>
-    </p>
-  </form>
 
 {% else %}
   <h1>Add new user</h1>

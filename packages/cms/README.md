@@ -173,8 +173,8 @@ illegal username, a short password and an address that is not one. Every
 refusal prints why and exits `1`.
 
 Once somebody can sign in, the [`/admin/users` screen](#the-admin) is the
-easier door: it adds users, generates passwords, deletes them, and is where an
-admin changes their own password.
+easier door: it adds users, generates passwords and deletes them, and each
+user's own screen under it is where the rest of an account is edited.
 
 ### How a TypeScript config is loaded
 
@@ -545,13 +545,14 @@ on the next boot.
 ### A user's profile
 
 An actor's `name`, `summary`, `icon` and `attachment` are the display name, the
-bio, the avatar and the links on their user record, edited on `/admin/users`
-and stored in `data/users.json` — the same profile the author archive is headed
-with, so a page and an actor cannot say different things about somebody. Their
-`preferredUsername` is their login, and `alsoKnownAs` lists every URL they
-answer to: the actor id, the archive and `/@{username}`. The profile holds two
-more fields the actor does not carry — a job title and a location — which are
-there for a theme to print beside the name.
+bio, the avatar and the links on their user record, edited on
+`/admin/users/<id>` and stored in `data/users.json` — the same profile the
+author archive is headed with, so a page and an actor cannot say different
+things about somebody. Their `preferredUsername` is their login, and
+`alsoKnownAs` lists every URL they answer to: the actor id, the archive and
+`/@{username}`. The profile holds two more fields the actor does not carry — a
+job title and a location — which are there for a theme to print beside the
+name.
 
 The avatar is a path like `/uploads/2026/09/me.png`, stored with the site's
 other uploads. The actor carries it as an absolute URL resolved against the
@@ -601,8 +602,9 @@ else moves: `url` is still the archive and the collections are still the
 archive's children, because a peer refetches those.
 
 The CMS never mints one and no screen writes one. It arrives with the WordPress
-import, or is typed into the file by hand; `/admin/users` shows it read-only
-beside the account, and a value that is not an absolute URL is ignored.
+import, or is typed into the file by hand; `/admin/users/<id>` shows it
+read-only beside the account, and a value that is not an absolute URL is
+ignored.
 
 ### WordPress ActivityPub compatibility
 
@@ -878,11 +880,11 @@ moderation queue and the dashboard carries the number waiting.
 ### Being told about one
 
 With mail configured, a comment or a webmention entering the queue emails every
-user who has an address and has not switched the notice off on `/admin/users`.
-The message carries the comment, the post it is on, and three links — approve,
-spam, delete — that work without a login. Nothing is sent about a comment
-Akismet filed as spam or told the site to discard: only what is actually
-waiting for a person.
+user who has an address and has not switched the notice off on their
+`/admin/users/<id>` screen. The message carries the comment, the post it is on,
+and three links — approve, spam, delete — that work without a login. Nothing is
+sent about a comment Akismet filed as spam or told the site to discard: only
+what is actually waiting for a person.
 
 Each link lands on a small page with a button on it, and only the button acts.
 That is not politeness. Mail readers, spam filters and corporate link scanners
@@ -904,9 +906,10 @@ replies again. The comments themselves are untouched.
 
 ### One message an hour instead of one a comment
 
-Beside each switch on `/admin/users` is how often that notice should arrive: as
-they arrive, an hourly digest, or a daily one. It is per user, and it starts as
-"as they arrive", so nothing changes for anybody who does not touch it.
+Beside each switch on a user's `/admin/users/<id>` screen is how often that
+notice should arrive: as they arrive, an hourly digest, or a daily one. It is
+per user, and it starts as "as they arrive", so nothing changes for anybody who
+does not touch it.
 
 On a digest, a comment entering the queue sends nothing at all. Instead, once a
 window has passed, one message goes out listing everything **still waiting**,
@@ -1390,46 +1393,47 @@ that ship inside the package, deliberately outside the theme search path: a
 site's theme may override any public template, and must not be able to
 shadow the login form.
 
-| Route                                            | What it does                                                                              |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.                    |
-| `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                             |
-| `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                         |
-| `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                           |
-| `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                              |
-| `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it.          |
-| `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.                   |
-| `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.               |
-| `/admin/comments`                                | Pending, approved and spam, with approve, spam, delete and reply.                         |
-| `/admin/comments/moderate`                       | `POST` only. Approves one comment, files it as spam, or deletes it.                       |
-| `/admin/comments/reply`                          | `POST` only. Posts an approved reply under the comment it answers.                        |
-| `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                                     |
-| `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                                     |
-| `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                                   |
-| `/admin/appearance/themes`                       | Appearance > Themes: the themes on disk. `POST` activates the one named.                  |
-| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language.                |
-| `/admin/settings/reading`                        | Posts per page, the site menu, the notify server.                                         |
-| `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.                   |
-| `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                        |
-| `/admin/settings/akismet`                        | `POST` only. Saves the Akismet key, or forgets it.                                        |
-| `/admin/settings/email`                          | The mail provider, the From line, the reply-to and the contact address.                   |
-| `/admin/settings/mail`                           | `POST` only. Saves a mail credential, or forgets every one of them.                       |
-| `/admin/settings/mail/test`                      | `POST` only. Sends the theme's test message through the whole chain.                      |
-| `/admin/settings/federation`                     | The relays the site subscribes to, and the WordPress compatibility switch.                |
-| `/admin/users`                                   | Who may sign in, and the change-password form.                                            |
-| `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                           |
-| `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                                  |
-| `/admin/users/email`                             | `POST` only. Sets or clears the email address on the row the form names.                  |
-| `/admin/users/profile`                           | `POST` only. Saves the whole public profile on the row the form names.                    |
-| `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the row the form names.                       |
-| `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice reaches the row: as they arrive, hourly or daily. |
-| `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                             |
-| `/admin/federation`                              | The actors, their followers, the inbox log, and per-post delivery.                        |
-| `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.                |
-| `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                            |
-| `/admin/login`                                   | Username and password.                                                                    |
-| `/admin/logout`                                  | `POST` only. Deletes the session row.                                                     |
-| `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                               |
+| Route                                            | What it does                                                                      |
+| ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.            |
+| `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                     |
+| `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                 |
+| `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                   |
+| `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                      |
+| `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it.  |
+| `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.           |
+| `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.       |
+| `/admin/comments`                                | Pending, approved and spam, with approve, spam, delete and reply.                 |
+| `/admin/comments/moderate`                       | `POST` only. Approves one comment, files it as spam, or deletes it.               |
+| `/admin/comments/reply`                          | `POST` only. Posts an approved reply under the comment it answers.                |
+| `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                             |
+| `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                             |
+| `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                           |
+| `/admin/appearance/themes`                       | Appearance > Themes: the themes on disk. `POST` activates the one named.          |
+| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language.        |
+| `/admin/settings/reading`                        | Posts per page, the site menu, the notify server.                                 |
+| `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.           |
+| `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                |
+| `/admin/settings/akismet`                        | `POST` only. Saves the Akismet key, or forgets it.                                |
+| `/admin/settings/email`                          | The mail provider, the From line, the reply-to and the contact address.           |
+| `/admin/settings/mail`                           | `POST` only. Saves a mail credential, or forgets every one of them.               |
+| `/admin/settings/mail/test`                      | `POST` only. Sends the theme's test message through the whole chain.              |
+| `/admin/settings/federation`                     | The relays the site subscribes to, and the WordPress compatibility switch.        |
+| `/admin/users`                                   | Who may sign in: a row each, with Edit and Delete. Nothing on it edits anybody.   |
+| `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                   |
+| `/admin/users/<id>`                              | One user: the account, the profile, the notices, your password, and the delete.   |
+| `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                          |
+| `/admin/users/email`                             | `POST` only. Sets or clears the email address on the user the form names.         |
+| `/admin/users/profile`                           | `POST` only. Saves the whole public profile of the user the form names.           |
+| `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the user the form names.              |
+| `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice arrives: as they arrive, hourly or daily. |
+| `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                     |
+| `/admin/federation`                              | The actors, their followers, the inbox log, and per-post delivery.                |
+| `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.        |
+| `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                    |
+| `/admin/login`                                   | Username and password.                                                            |
+| `/admin/logout`                                  | `POST` only. Deletes the session row.                                             |
+| `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                       |
 
 The screens behind the login share one layout: a bar across the top with the
 site name and a link to the public site, the menu down the left, and a place for
@@ -1496,20 +1500,23 @@ planted session id cannot become a logged-in one.
 
 The first admin comes from `/admin/setup` or from
 [`geekity user add`](#creating-an-admin-from-the-command-line). Every one after
-that comes from `/admin/users`, which lists who may sign in, adds a user with a
-password you supply or one it generates and shows once, sets each user's email
-address, deletes another user, and changes your own password — which signs out
-every other browser holding that login and leaves the one you are using alone.
-There is a single role, so an account has nothing else to edit. The last
-remaining user cannot be deleted, and nobody may delete their own account.
+that comes from `/admin/users`, which lists who may sign in and adds a user
+with a password you supply or one it generates and shows once. The list is a
+listing and nothing more: a username with the archive URL under it, the email
+address, when the account was made, and Edit and Delete. Every field lives on
+that person's own screen at `/admin/users/<id>`, where each box has a label
+beside it — the account and its email address, the public profile, what this
+person is emailed about, your own password on your own page, and the delete or
+the sentence saying why this account cannot go. Each Save lands back on that
+screen, so it shows its own result. The last remaining user cannot be deleted,
+and nobody may delete their own account.
 
-An email address is optional on a user and is one of the two things on a row
-that can be edited — any row, since with one role every user already has every
-power there is. It buys [password recovery](#forgotten-passwords) and the
-notices [a comment sets off](#being-told-about-one), and it never appears on
-the public site. The other is which of those notices go to it: one switch per
-event, on by default, stored in `data/users.json` only when somebody turns one
-off.
+An email address is optional on a user and can be set on anybody's screen,
+since with one role every user already has every power there is. It buys
+[password recovery](#forgotten-passwords) and the notices
+[a comment sets off](#being-told-about-one), and it never appears on the public
+site. Beside it is which of those notices go to it: one switch per event, on by
+default, stored in `data/users.json` only when somebody turns one off.
 
 A site whose database was written by a version that kept the accounts in a
 `users` table has those rows written into `data/users.json` on the first boot

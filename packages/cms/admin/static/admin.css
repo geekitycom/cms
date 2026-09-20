@@ -675,8 +675,8 @@ button[type='submit']:hover,
   margin: 0;
 }
 
-/* The users screen stacks the table and two panels of the same shape, so they
-   need the gap the settings screen's single panel never did. */
+/* One user's screen stacks five panels of the same shape, so they need the gap
+   the settings screen's single panel never did. */
 
 .admin-list + .admin-settings,
 .admin-settings + .admin-settings {
@@ -834,27 +834,28 @@ button[type='submit']:hover,
   margin: 0;
 }
 
-/* A row's public profile (TASK-67): four fields stacked in one cell, because
-   the display name, the bio, the avatar and the links are one Save and one
-   thing — the page at that person's author URL. Narrow on purpose: the column
-   sits in a table beside four others. */
+/* One user's screen (TASK-97): the same panels the settings pages are made of,
+   so a field here looks like a field anywhere else in the admin. What is left
+   is what a panel holds that a settings page does not — a line of prose about
+   the account, and one notice at a time. */
 
-.admin-profile {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  max-width: 18rem;
+.admin-field-static {
+  margin: 0 0 0.25rem;
 }
 
-.admin-profile input[type='text'],
-.admin-profile textarea {
-  width: 100%;
-  margin: 0;
+.admin-notice + .admin-notice {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--admin-border);
 }
 
-.admin-profile button {
-  margin: 0;
-  align-self: flex-start;
+.admin-notice h3 {
+  margin: 1rem 0 0.25rem;
+  font-size: 1rem;
+}
+
+.admin-notice .admin-inline {
+  margin-top: 0.5rem;
 }
 
 /* The how-often select beside a notification switch: narrow, so a row of

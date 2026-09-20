@@ -32,7 +32,7 @@ import { ADMIN_PREFIX } from './session.ts';
 import { toldFollowers } from './settings-page.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
-/** Where the users screen lives. */
+/** Where the list of users lives. */
 export const USERS_PATH = `${ADMIN_PREFIX}/users`;
 
 /**
@@ -45,17 +45,41 @@ export const USERS_PATH = `${ADMIN_PREFIX}/users`;
  */
 export const ADD_USER_PATH = `${USERS_PATH}/new`;
 
+/**
+ * Where one user is edited.
+ *
+ * The split documents.ts already makes between a listing and `basePath/:slug`
+ * (TASK-97): the table says who there is, and one screen per person holds
+ * every field that person has, each with a label beside it. A row of
+ * unlabelled boxes in a table cell could not.
+ */
+export function editUserPath(id: number): string {
+  return `${USERS_PATH}/${String(id)}`;
+}
+
+/**
+ * The id in `/admin/users/<id>`, or `undefined` for a segment that is not one.
+ *
+ * Digits only, so `new`, `password` and the other named paths under
+ * `/admin/users/` can never be read as somebody's id — and so a URL somebody
+ * typed answers 404 rather than `NaN`.
+ */
+function pathId(segment: string): number | undefined {
+  if (!/^\d+$/.test(segment)) return undefined;
+  return Number(segment);
+}
+
 /** Where the signed-in admin's change-password form posts. */
 export const CHANGE_PASSWORD_PATH = `${USERS_PATH}/password`;
 
-/** Where a row's delete button posts. */
+/** Where a delete button posts, on the list or on the user's own screen. */
 export const DELETE_USER_PATH = `${USERS_PATH}/delete`;
 
-/** Where a row's email form posts. */
+/** Where the email address on the Account panel posts. */
 export const USER_EMAIL_PATH = `${USERS_PATH}/email`;
 
 /**
- * Where a row's profile form posts.
+ * Where the Profile panel posts.
  *
  * A path of its own rather than a second half of the email form, because the
  * two are about different audiences: an email address is private to the site
@@ -65,11 +89,11 @@ export const USER_EMAIL_PATH = `${USERS_PATH}/email`;
  */
 export const USER_PROFILE_PATH = `${USERS_PATH}/profile`;
 
-/** Where a row's notification switches post. */
+/** Where the notice switches post. */
 export const USER_NOTIFICATIONS_PATH = `${USERS_PATH}/notifications`;
 
 /**
- * Where a row's how-often selects post.
+ * Where the how-often selects post.
  *
  * A path of its own rather than a second field on the switch, because the two
  * forms answer different questions and a switch is a button while a mode is a
@@ -78,7 +102,7 @@ export const USER_NOTIFICATIONS_PATH = `${USERS_PATH}/notifications`;
  */
 export const USER_NOTIFICATION_MODE_PATH = `${USER_NOTIFICATIONS_PATH}/mode`;
 
-/** The fields the forms on the screen submit. */
+/** The fields the forms on these screens submit. */
 export const USER_FIELDS = {
   username: 'username',
   password: 'password',
@@ -123,14 +147,18 @@ export interface MountUsersOptions {
 }
 
 /**
- * Register the users screen: the list, the add form, and the change-password
- * form for whoever is signed in.
+ * Register the users screens: the list, the add form, and one screen per user
+ * where everything about that person is edited.
  *
- * There is one role, so there is nothing to edit about somebody else: an admin
- * can add a user, delete one, and change their own password. Changing
- * somebody else's is deliberately not offered — resetting a colleague's
- * password from under them is what `geekity user add` and a fresh account are
- * for, and it keeps the current-password check honest.
+ * The same split documents.ts makes (TASK-97). The table says who there is;
+ * a person's own screen holds their email address, their public profile, what
+ * they are emailed about, and — where the account can go — the delete. Every
+ * save lands back on that screen, so it shows its own result.
+ *
+ * One thing is still only ever your own: the password. Changing somebody
+ * else's is deliberately not offered — resetting a colleague's password from
+ * under them is what `geekity user add` and a fresh account are for, and it
+ * keeps the current-password check honest.
  */
 export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): void {
   const { render } = options;
@@ -204,9 +232,10 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
 
     if (Object.keys(problems).length > 0) {
       c.status(400);
-      // Nothing that was typed is echoed back: every field on this form is a
-      // password, and a password does not belong in rendered HTML.
-      return render(c, ADMIN_TEMPLATES.users, screen(c, { passwordProblems: problems }));
+      // Back onto your own page, where the form is. Nothing that was typed is
+      // echoed back: every field on this form is a password, and a password
+      // does not belong in rendered HTML.
+      return render(c, ADMIN_TEMPLATES.user, userScreen(c, user, { passwordProblems: problems }));
     }
 
     await setUserPassword({ dataDir: c.var.config.dataDir, userId: user.id, password: next });
@@ -223,23 +252,23 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
         ? 'Your password was changed.'
         : `Your password was changed, and ${signedOut(ended)} signed out.`,
     );
-    return c.redirect(USERS_PATH, 303);
+    return c.redirect(editUserPath(user.id), 303);
   });
 
   /**
-   * Put an email address on a row, or take one off.
+   * Put an email address on a user, or take one off.
    *
-   * Any row, not only your own. There is one role, so every user already has
+   * Anybody's, not only your own. There is one role, so every user already has
    * every power there is — including deleting somebody and adding them back —
    * and a screen where an admin could see a colleague's address but not
    * correct a typo in it would be a rule with nothing behind it. It is also
    * what makes a site usable: an admin who has just added a colleague can put
    * their address in without waiting for them to sign in and do it.
    *
-   * Not a 400 with the form redrawn, unlike the two forms above: what was
-   * typed lives in a row of a table rather than in a form of its own, and a
-   * redraw would have to thread it back through a listing. The refusal is a
-   * flash, and the box goes back to what is stored.
+   * A flash and a redirect back to that person's screen rather than a 400 with
+   * the form redrawn, unlike the two forms above: nothing here is a secret, so
+   * there is no reason not to show the refusal beside the box it is about with
+   * what is stored back in it.
    */
   app.post(USER_EMAIL_PATH, async (c) => {
     const dataDir = c.var.config.dataDir;
@@ -256,7 +285,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     const problem = emailProblem(email);
     if (problem !== undefined) {
       flash(c, 'error', problem);
-      return c.redirect(USERS_PATH, 303);
+      return c.redirect(editUserPath(target.id), 303);
     }
 
     await setUserEmail({ dataDir, userId: target.id, email });
@@ -267,22 +296,21 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
         ? `${target.username} has no email address any more.`
         : `${target.username} will be emailed at ${email}.`,
     );
-    return c.redirect(USERS_PATH, 303);
+    return c.redirect(editUserPath(target.id), 303);
   });
 
   /**
-   * Write a row's public profile (TASK-67).
+   * Write a user's public profile (TASK-67).
    *
-   * Any row, for the reason the email field is any row: one role, and an admin
-   * who has just added a colleague should be able to put a name and a line
-   * about them on their archive without waiting for them to sign in. The whole
-   * profile at once, because that is what the form is — a row of boxes and a
-   * Save — and a box somebody cleared is a field they no longer want.
+   * Anybody's, for the reason the email field is anybody's: one role, and an
+   * admin who has just added a colleague should be able to put a name and a
+   * line about them on their archive without waiting for them to sign in. The
+   * whole profile at once, because that is what the panel is — six boxes and
+   * one Save — and a box somebody cleared is a field they no longer want.
    *
-   * A flash and a redirect rather than a 400 with the form redrawn, for the
-   * reason the email field is: what was typed lives in a row of a table, and
-   * nothing here can be wrong enough to refuse. A link line with no URL is
-   * dropped on the way in rather than reported.
+   * A flash and a redirect back to that person's screen rather than a 400,
+   * because nothing here can be wrong enough to refuse. A link line with no
+   * URL is dropped on the way in rather than reported.
    */
   app.post(USER_PROFILE_PATH, async (c) => {
     const dataDir = c.var.config.dataDir;
@@ -317,15 +345,15 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     const told = saved === undefined ? undefined : await c.var.delivery.updateActor(saved);
 
     flash(c, 'notice', `Saved ${target.username}’s profile.${toldFollowers(told)}`);
-    return c.redirect(USERS_PATH, 303);
+    return c.redirect(editUserPath(target.id), 303);
   });
 
   /**
-   * Turn one notice on or off for one row.
+   * Turn one notice on or off for one user.
    *
-   * Any row, for the reason the email field is any row: one role, and an admin
-   * who has just given a colleague an address should be able to say what goes
-   * to it. An event nothing in this version knows is a no-op rather than an
+   * Anybody's, for the reason the email field is anybody's: one role, and an
+   * admin who has just given a colleague an address should be able to say what
+   * goes to it. An event nothing in this version knows is a no-op rather than an
    * error, because the only way to submit one is a form this CMS did not
    * render.
    */
@@ -344,7 +372,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     const event = notificationEvent(name);
     if (event === undefined) {
       flash(c, 'error', 'That is not something this site can tell anybody about.');
-      return c.redirect(USERS_PATH, 303);
+      return c.redirect(editUserPath(target.id), 303);
     }
 
     // An unticked checkbox submits no field at all, so its absence is the
@@ -359,13 +387,13 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
         ? `${target.username} will be emailed about ${event.label.toLowerCase()}.`
         : `${target.username} will not be emailed about ${event.label.toLowerCase()}.`,
     );
-    return c.redirect(USERS_PATH, 303);
+    return c.redirect(editUserPath(target.id), 303);
   });
 
   /**
-   * Say how often one notice reaches one row.
+   * Say how often one notice reaches one user.
    *
-   * Any row, for the reason the switch beside it is any row. A mode this
+   * Anybody's, for the reason the switch beside it is anybody's. A mode this
    * version does not know, or an event that offers no choice, changes nothing
    * and says so: the only way to submit either is a form this CMS did not
    * render.
@@ -385,13 +413,13 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     const event = notificationEvent(name);
     if (event === undefined || !event.batched) {
       flash(c, 'error', 'That is not a notice this site can batch up.');
-      return c.redirect(USERS_PATH, 303);
+      return c.redirect(editUserPath(target.id), 303);
     }
 
     const wanted = deliveryMode(field(body[USER_FIELDS.mode]));
     if (wanted === undefined) {
       flash(c, 'error', 'That is not one of the choices.');
-      return c.redirect(USERS_PATH, 303);
+      return c.redirect(editUserPath(target.id), 303);
     }
 
     await setUserNotificationMode({ dataDir, userId: target.id, event: name, mode: wanted });
@@ -404,7 +432,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
         : `${target.username} will get one ${wanted === 'daily' ? 'daily' : 'hourly'} digest of ` +
             `${event.label.toLowerCase()}.`,
     );
-    return c.redirect(USERS_PATH, 303);
+    return c.redirect(editUserPath(target.id), 303);
   });
 
   app.post(DELETE_USER_PATH, async (c) => {
@@ -432,6 +460,20 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     c.var.admin.deleteSessionsForUser((target as User).id);
     flash(c, 'notice', `Deleted ${(target as User).username}.`);
     return c.redirect(USERS_PATH, 303);
+  });
+
+  /**
+   * One user's screen (TASK-97).
+   *
+   * Registered last, after every named path under `/admin/users/`, and matched
+   * only when the segment is digits — so Add new keeps its URL and a stray
+   * `/admin/users/anything` is a 404 rather than a screen about nobody.
+   */
+  app.get(`${USERS_PATH}/:id`, (c) => {
+    const id = pathId(c.req.param('id'));
+    const user = id === undefined ? undefined : findUserById(c.var.config.dataDir, id);
+    if (user === undefined) return c.notFound();
+    return render(c, ADMIN_TEMPLATES.user, userScreen(c, user));
   });
 }
 
@@ -552,8 +594,7 @@ export function generatePassword(): string {
 /**
  * The Add new screen: the same template, showing the add form instead of the
  * table. One template rather than two because the two screens are the same
- * chrome around one of two forms, and a second file would be a copy of the
- * hint about what an email address is for.
+ * chrome around one of two things, and a menu entry has to be somewhere to go.
  */
 function addScreen(
   c: Parameters<AdminRender>[0],
@@ -562,7 +603,56 @@ function addScreen(
   return screen(c, { child: 'new', adding: true, ...extra });
 }
 
-/** Everything the users template renders. */
+/**
+ * Everything one user's screen renders (TASK-97).
+ *
+ * The same forms the table used to hold, one per panel and each with its
+ * fields labelled: the account, the public profile, what this person is
+ * emailed about, the password — only on your own page — and the delete, or the
+ * sentence saying why this account cannot go.
+ */
+function userScreen(
+  c: Parameters<AdminRender>[0],
+  user: User,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const signedInAs = c.var.session?.userId ?? null;
+  const total = countUsers(c.var.config.dataDir);
+
+  return {
+    section: 'users',
+    // The list's entry stays marked: an edit screen is where a row goes, not a
+    // sixth thing in the menu.
+    child: 'all',
+    usersUrl: USERS_PATH,
+    userProfileUrl: USER_PROFILE_PATH,
+    changePasswordUrl: CHANGE_PASSWORD_PATH,
+    deleteUserUrl: DELETE_USER_PATH,
+    userEmailUrl: USER_EMAIL_PATH,
+    userNotificationsUrl: USER_NOTIFICATIONS_PATH,
+    userNotificationModeUrl: USER_NOTIFICATION_MODE_PATH,
+    fields: USER_FIELDS,
+    // `account` rather than `user`, which the chrome already holds: the bar
+    // says who is signed in, and this screen is about somebody who may well be
+    // anybody else.
+    account: row(user, { signedInAs, total }),
+    // Why this account cannot go, where it cannot, so the screen says it
+    // instead of offering a button it is about to refuse.
+    deleteRefusal: deleteUserRefusal({ target: user, signedInAs, total }),
+    passwordProblems: {},
+    mailConfigured: c.var.mail.configured(),
+    ...extra,
+  };
+}
+
+/**
+ * Everything the users template renders: the listing, and the add form behind
+ * `adding`.
+ *
+ * Nothing about editing a user is here any more (TASK-97). A row says who
+ * somebody is and links to their screen; the only form in the table is the
+ * delete, which is an action rather than a field.
+ */
 function screen(
   c: Parameters<AdminRender>[0],
   extra: Record<string, unknown> = {},
@@ -575,22 +665,11 @@ function screen(
     child: 'all',
     usersUrl: USERS_PATH,
     addUserUrl: ADD_USER_PATH,
-    userProfileUrl: USER_PROFILE_PATH,
-    changePasswordUrl: CHANGE_PASSWORD_PATH,
     deleteUserUrl: DELETE_USER_PATH,
-    userEmailUrl: USER_EMAIL_PATH,
-    userNotificationsUrl: USER_NOTIFICATIONS_PATH,
-    userNotificationModeUrl: USER_NOTIFICATION_MODE_PATH,
     fields: USER_FIELDS,
     users: users.map((user) => row(user, { signedInAs, total: users.length })),
     addForm: { username: '', email: '', generate: false },
     addProblems: {},
-    passwordProblems: {},
-    // What the screen says about email is different when nothing can be sent:
-    // an address is then a note to a human rather than somewhere the site will
-    // write, and saying so is what keeps a password reset from being promised
-    // by a form that could not deliver one.
-    mailConfigured: c.var.mail.configured(),
     ...extra,
   };
 }
@@ -638,7 +717,7 @@ export function formatProfileLinks(links: readonly ProfileLink[] | undefined): s
     .join('\n');
 }
 
-/** One user as the table renders it. */
+/** One user, as the table lists them and as their own screen edits them. */
 function row(
   user: User,
   context: { signedInAs: number | null; total: number },
@@ -648,8 +727,11 @@ function row(
     id: user.id,
     username: user.username,
     email: user.email ?? '',
-    // The public half of the row (TASK-67): what the archive at `archiveUrl`
-    // is headed with, and — after TASK-68 — what this person's actor carries.
+    // Where the row goes, and where every save about this person lands.
+    editUrl: editUserPath(user.id),
+    // The public half of this person (TASK-67): what the archive at
+    // `archiveUrl` is headed with, and — after TASK-68 — what their actor
+    // carries.
     profile: {
       displayName: user.profile?.displayName ?? '',
       bio: user.profile?.bio ?? '',
@@ -660,19 +742,19 @@ function row(
     },
     archiveUrl: authorHref(user.username),
     // The id this person was published under before they were here (TASK-69).
-    // Shown rather than edited: it is identity, not a preference — the import
-    // writes it, or somebody editing `data/users.json` does — and a box that
-    // let it be changed would be a box that could break every follow this
-    // person has. Empty for almost everybody, and then the screen says nothing
-    // about it at all.
+    // Shown on their screen rather than edited: it is identity, not a
+    // preference — the import writes it, or somebody editing
+    // `data/users.json` does — and a box that let it be changed would be a box
+    // that could break every follow this person has. Empty for almost
+    // everybody, and then the screen says nothing about it at all.
     storedActorId: user.actorId ?? '',
-    // One switch per registered event, so the template loops rather than
-    // naming the notices it happens to know about (TASK-55).
+    // One switch per registered event, so the screen loops rather than naming
+    // the notices it happens to know about (TASK-55).
     notifications: notificationSwitches(user),
     createdAt: user.createdAt,
     you,
     // The button is rendered for everybody the signed-in admin may actually
-    // delete, so the screen never offers an action it is about to refuse.
+    // delete, so neither screen offers an action it is about to refuse.
     deletable: !you && context.total > 1,
   };
 }

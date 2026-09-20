@@ -733,8 +733,9 @@ it goes) and **Federation** (the relays the site subscribes to). They live in
 `content/_data/site.json`, which is published with the site and in git.
 
 Nothing on those pages is an ActivityPub profile. Every user is an actor with a
-name, a summary, a picture and links of their own, edited on `/admin/users`;
-saving one sends an `Update` of that actor to their followers.
+name, a summary, a picture and links of their own, edited on that user's own
+screen under `/admin/users`; saving one sends an `Update` of that actor to
+their followers.
 
 Each page is its own form saving its own fields. A page writes the settings it
 carries onto the file as it reads at that moment and validates only what it
@@ -875,9 +876,11 @@ the detail.
 ## Users
 
 `/admin/users` is who may sign in. There is one role — doc-5 puts anything
-beyond admin out of scope for phase one — so the screen is the list, a form
-that adds somebody, a form that changes your own password, and one editable
-field per row: an email address.
+beyond admin out of scope for phase one — so the listing is a username, an
+email address, when the account was made, and Edit. Everything about one person
+is on their own screen at `/admin/users/<id>`: the account and its email
+address, the public profile, what they are emailed about, your own password on
+your own page, and the delete.
 
 **`data/users.json` is the source.** One entry per user — id, username, an
 optional email address, argon2 hash, created time — written the way every file this CMS owns is written: to a

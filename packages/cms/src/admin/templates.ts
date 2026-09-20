@@ -38,6 +38,7 @@ export const ADMIN_TEMPLATES = {
   settingsEmail: 'layouts/settings/email.njk',
   settingsFederation: 'layouts/settings/federation.njk',
   users: 'layouts/users.njk',
+  user: 'layouts/user.njk',
   federation: 'layouts/federation.njk',
 } as const;
 

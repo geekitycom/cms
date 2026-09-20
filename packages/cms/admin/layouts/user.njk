@@ -1,0 +1,221 @@
+{# /admin/users/<id>: everything about one person, a panel at a time.
+
+   The table behind it says who there is; this says what they are. Every box
+   here carries a label the eye can read, because these fields used to sit in
+   a row of that table where a placeholder was the only thing telling them
+   apart — and a placeholder disappears the moment somebody types.
+
+   Four forms rather than one, for the reason there were four before: an email
+   address is private to the site and a profile is the public face, a notice
+   switch is a button and how often it arrives is a select, and a password is
+   about whoever is signed in. Each saves what its own heading is about and
+   lands back here, so a Save always shows its own result. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}Edit {{ account.username }}{% endblock %}
+
+{% block content %}
+  <h1>Edit {{ account.username }}{% if account.you %} <span class="admin-status">(you)</span>{% endif %}</h1>
+
+  <p class="admin-hint"><a href="{{ usersUrl }}">Back to all users</a></p>
+
+  <form class="admin-settings" method="post" action="{{ userEmailUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+
+    <h2>Account</h2>
+
+    <p class="admin-field-static">
+      Signs in as <strong>{{ account.username }}</strong>, and writes at
+      <a href="{{ account.archiveUrl }}">{{ account.archiveUrl }}</a>.
+    </p>
+    <p class="admin-hint">
+      A username is not editable: it is the login, the author URL above, and
+      the actor a follower holds. Somebody who needs a different one is a new
+      account.
+    </p>
+    {# The id they were published under somewhere else (TASK-69). Read-only on
+       purpose: it is what the fediverse already holds, and changing it would
+       orphan every follow. #}
+    {% if account.storedActorId %}
+      <p class="admin-hint">
+        Also <code>{{ account.storedActorId }}</code> — what the fediverse knows
+        this user by. Set by the import or by hand in
+        <code>data/users.json</code>, never here.
+      </p>
+    {% endif %}
+
+    <label for="user-email">Email address</label>
+    <input id="user-email" name="{{ fields.email }}" type="email" autocomplete="email" value="{{ account.email }}" />
+    <p class="admin-hint">
+      {% if mailConfigured %}
+        Optional, and never shown on the public site. It is what a forgotten password is recovered through and where the notices below go. Empty it to stop the site writing to this person at all.
+      {% else %}
+        Optional, and this site sends no mail yet, so nothing will be sent to one. Choose a provider on <a href="{{ adminUrl }}/settings/email">Settings &rsaquo; Email</a> to turn password recovery on.
+      {% endif %}
+    </p>
+
+    <p class="admin-settings-buttons">
+      <button type="submit">Save email address</button>
+    </p>
+  </form>
+
+  {# The public face of this person (TASK-67). Anybody's, not only your own:
+     there is one role, so an admin who has just added a colleague can put a
+     name and a line about them on their archive without waiting for them to
+     sign in. After decision-14 these same fields are what their ActivityPub
+     actor carries, which is why they live beside the account rather than in
+     the site settings — and why saving them tells their followers. #}
+  <form class="admin-settings" method="post" action="{{ userProfileUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+
+    <h2>Profile</h2>
+
+    <p class="admin-hint">
+      A profile is public. Nothing in it is required — a user with no profile
+      still has an archive under their username — and a box left empty is a
+      field they do not have.
+    </p>
+
+    <label for="profile-display-name">Display name</label>
+    <input id="profile-display-name" name="{{ fields.displayName }}" type="text" value="{{ account.profile.displayName }}" />
+    <p class="admin-hint">Printed instead of the login: it heads the archive and is the byline under their posts.</p>
+
+    <label for="profile-bio">Bio</label>
+    <textarea id="profile-bio" name="{{ fields.bio }}" rows="4">{{ account.profile.bio }}</textarea>
+    <p class="admin-hint">A line or two about them, shown on the archive under the name.</p>
+
+    <label for="profile-avatar">Avatar</label>
+    <input id="profile-avatar" name="{{ fields.avatar }}" type="text" value="{{ account.profile.avatar }}" />
+    <p class="admin-hint">A path such as <code>/uploads/2026/09/me.jpg</code>, or a full URL.</p>
+
+    <label for="profile-job-title">Job title</label>
+    <input id="profile-job-title" name="{{ fields.jobTitle }}" type="text" value="{{ account.profile.jobTitle }}" />
+    <p class="admin-hint">What they do, printed beside the name on the archive.</p>
+
+    <label for="profile-location">Location</label>
+    <input id="profile-location" name="{{ fields.location }}" type="text" value="{{ account.profile.location }}" />
+    <p class="admin-hint">Where they are, as they write it.</p>
+
+    <label for="profile-links">Links</label>
+    <textarea id="profile-links" name="{{ fields.links }}" rows="4">{{ account.profile.links }}</textarea>
+    <p class="admin-hint">
+      One per line, either <code>Label | https://example.com</code> or a bare
+      URL that labels itself.
+    </p>
+
+    <p class="admin-settings-buttons">
+      <button type="submit">Save profile</button>
+    </p>
+  </form>
+
+  <section class="admin-settings">
+    <h2>Email me about</h2>
+
+    <p class="admin-hint">
+      {% if account.you %}
+        What this site writes to you about, at the address above. Nothing is sent while that box is empty.
+      {% else %}
+        What this site writes to {{ account.username }} about, at the address above. Nothing is sent while that box is empty.
+      {% endif %}
+    </p>
+
+    {# One form per switch, not one form with a checkbox each: a browser sends
+       no field for an unticked box, so a single form could not tell "turned
+       this off" from "left it alone". Adding a notice is one entry in the
+       registry and no change here. #}
+    {% for notice in account.notifications %}
+      <div class="admin-notice">
+        <h3>{{ notice.label }}</h3>
+        <p class="admin-hint">{{ notice.description }}</p>
+
+        <form class="admin-inline" method="post" action="{{ userNotificationsUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+          <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
+          <input type="hidden" name="{{ fields.on }}" value="{% if notice.on %}{% else %}1{% endif %}" />
+          <span class="admin-status">{% if notice.on %}On{% else %}Off{% endif %}</span>
+          <button type="submit">{% if notice.on %}Turn off{% else %}Turn on{% endif %}</button>
+        </form>
+
+        {# And, for a notice the registry says can be batched, how often it
+           should arrive. A second form because a select needs a Save beside
+           it and the switch above is a button; the registry decides which
+           notices get one. #}
+        {% if notice.batched %}
+          <form class="admin-inline" method="post" action="{{ userNotificationModeUrl }}">
+            <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+            <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+            <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
+            <label for="notice-mode-{{ notice.name }}">How often</label>
+            <select id="notice-mode-{{ notice.name }}" name="{{ fields.mode }}">
+              {% for choice in notice.modes %}
+                <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit">Save</button>
+          </form>
+          <p class="admin-hint">
+            On an hourly or a daily digest nothing is sent as they arrive;
+            instead one message a window lists everything still waiting, and
+            no message goes at all when nothing is.
+          </p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </section>
+
+  {# Only on your own page: it asks for the current password, so it is about
+     whoever is signed in and means nothing on somebody else's screen.
+     Resetting a colleague's password from under them is deliberately not
+     offered — a fresh account is what that is for. #}
+  {% if account.you %}
+    <form class="admin-settings" method="post" action="{{ changePasswordUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+      <h2>Change your password</h2>
+
+      {% if passwordProblems.currentPassword or passwordProblems.newPassword %}
+        <p class="admin-error">Your password was not changed. Fix the fields marked below and try again.</p>
+      {% endif %}
+
+      <label for="current-password">Current password</label>
+      <input id="current-password" name="{{ fields.currentPassword }}" type="password" autocomplete="current-password" required />
+      {% if passwordProblems.currentPassword %}<p class="admin-field-error">{{ passwordProblems.currentPassword }}</p>{% endif %}
+
+      <label for="new-password">New password</label>
+      <input id="new-password" name="{{ fields.newPassword }}" type="password" autocomplete="new-password" required />
+      {% if passwordProblems.newPassword %}<p class="admin-field-error">{{ passwordProblems.newPassword }}</p>{% endif %}
+
+      <label for="new-password-confirmation">New password again</label>
+      <input id="new-password-confirmation" name="{{ fields.newPasswordConfirmation }}" type="password" autocomplete="new-password" required />
+
+      <p class="admin-hint">Every other browser signed in as you is signed out. This one stays.</p>
+
+      <p class="admin-settings-buttons">
+        <button type="submit">Change password</button>
+      </p>
+    </form>
+  {% endif %}
+
+  <section class="admin-settings">
+    <h2>Delete</h2>
+
+    {# Either the button or the reason there is none, never both: the screen
+       does not offer an action it is about to refuse. #}
+    {% if deleteRefusal %}
+      <p class="admin-hint">{{ deleteRefusal }}</p>
+    {% else %}
+      <p class="admin-hint">
+        Deleting {{ account.username }} signs out every browser they are in and
+        cannot be undone. What they have written stays where it is.
+      </p>
+      <form method="post" action="{{ deleteUserUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+        <button type="submit">Delete {{ account.username }}</button>
+      </form>
+    {% endif %}
+  </section>
+{% endblock %}
