@@ -377,3 +377,152 @@ describe('the Send test email button with SMTP configured (AC #2)', () => {
     assert.match(screen, /test message was sent to ada@example\.com via smtp/);
   });
 });
+
+describe('which credential boxes the panel draws (AC #1, #2, #3, #4, #6)', () => {
+  /** Whether the screen carries a box that submits `field`. */
+  function hasBox(screen: string, field: string): boolean {
+    return screen.includes(`name="${field}"`);
+  }
+
+  /** Every box the credential form has ever offered, by the field it submits. */
+  const BREVO_BOXES = [MAIL_FIELDS.brevoApiKey];
+  const SMTP_BOXES = [
+    MAIL_FIELDS.smtpHost,
+    MAIL_FIELDS.smtpPort,
+    MAIL_FIELDS.smtpSecure,
+    MAIL_FIELDS.smtpUser,
+    MAIL_FIELDS.smtpPassword,
+  ];
+
+  /** The Email screen of a site with this provider saved and this stored. */
+  async function screenFor(
+    mailProvider: 'none' | 'brevo' | 'smtp',
+    stored?: MailCredentials,
+  ): Promise<string> {
+    const { agent, dataDir } = await admin({ mailProvider });
+    if (stored !== undefined) await writeMailCredentials(dataDir, stored);
+    return await (await agent.get(SETTINGS_PATH)).text();
+  }
+
+  /**
+   * Just the Mail credentials panel.
+   *
+   * What the panel says has to be read apart from the settings form above it,
+   * or "saved" and "Save settings" match that form's own words and the
+   * assertion proves nothing.
+   */
+  function panel(screen: string): string {
+    const start = screen.indexOf('admin-mail-panel');
+    assert.notEqual(start, -1, 'the Mail credentials panel was gone');
+    return screen.slice(start, screen.indexOf('</section>', start));
+  }
+
+  it('offers the API key and no SMTP box when Brevo is the saved provider', async () => {
+    const screen = await screenFor('brevo');
+
+    for (const field of BREVO_BOXES) assert.ok(hasBox(screen, field), `${field} was missing`);
+    for (const field of SMTP_BOXES) {
+      assert.equal(hasBox(screen, field), false, `${field} was drawn under Brevo`);
+    }
+  });
+
+  it('offers the whole SMTP connection and no API key box when SMTP is the saved provider', async () => {
+    const screen = await screenFor('smtp');
+
+    for (const field of SMTP_BOXES) assert.ok(hasBox(screen, field), `${field} was missing`);
+    for (const field of BREVO_BOXES) {
+      assert.equal(hasBox(screen, field), false, `${field} was drawn under SMTP`);
+    }
+  });
+
+  it('offers no credential box at all, and says the site sends nothing, when no provider is chosen', async () => {
+    const screen = await screenFor('none');
+
+    for (const field of [...BREVO_BOXES, ...SMTP_BOXES]) {
+      assert.equal(hasBox(screen, field), false, `${field} was drawn with no provider`);
+    }
+    assert.match(screen, /sends no email/);
+  });
+
+  it('still reports an SMTP server stored while Brevo is chosen, and still offers Remove', async () => {
+    const screen = await screenFor('brevo', {
+      brevo: { apiKey: 'xkeysib-secret-1234' },
+      smtp: {
+        host: 'smtp.example.com',
+        port: 587,
+        secure: false,
+        user: 'postmaster',
+        password: 'hunter2-secret',
+      },
+    });
+
+    // Hidden, but not forgotten: the only screen that says this is here.
+    assert.equal(hasBox(screen, MAIL_FIELDS.smtpHost), false);
+    assert.match(screen, /smtp\.example\.com/);
+    assert.match(screen, /postmaster/);
+    assert.ok(screen.includes(`value="${MAIL_REMOVE}"`), 'Remove credentials was out of reach');
+  });
+
+  it('still reports a Brevo key stored while SMTP is chosen, and still offers Remove', async () => {
+    const screen = await screenFor('smtp', { brevo: { apiKey: 'xkeysib-secret-1234' } });
+
+    assert.equal(hasBox(screen, MAIL_FIELDS.brevoApiKey), false);
+    assert.match(screen, /…1234/);
+    assert.ok(screen.includes(`value="${MAIL_REMOVE}"`), 'Remove credentials was out of reach');
+  });
+
+  it('reports both stored credentials, and offers Remove, when no provider is chosen', async () => {
+    const screen = await screenFor('none', {
+      brevo: { apiKey: 'xkeysib-secret-1234' },
+      smtp: {
+        host: 'smtp.example.com',
+        port: 587,
+        secure: false,
+        user: 'postmaster',
+        password: 'hunter2-secret',
+      },
+    });
+
+    assert.match(screen, /…1234/);
+    assert.match(screen, /smtp\.example\.com/);
+    assert.ok(screen.includes(`value="${MAIL_REMOVE}"`), 'Remove credentials was out of reach');
+  });
+
+  it('says the boxes follow the saved provider and that changing it takes a Save settings (AC #5)', async () => {
+    for (const provider of ['none', 'brevo', 'smtp'] as const) {
+      const here = panel(await screenFor(provider));
+      assert.match(here, /saved/i, `the ${provider} panel did not say which provider it means`);
+      assert.match(here, /Save settings/, `the ${provider} panel did not say to save first`);
+    }
+  });
+
+  it('keeps the paragraph about where credentials are kept in every state', async () => {
+    for (const provider of ['none', 'brevo', 'smtp'] as const) {
+      const here = panel(await screenFor(provider));
+      assert.match(here, /data\/mail\.json/, `the ${provider} panel lost where secrets live`);
+      assert.match(here, /Leaving a secret blank/, `the ${provider} panel lost the blank rule`);
+    }
+  });
+
+  it('draws Send a test message only where the site can actually send', async () => {
+    const test = (screen: string): boolean => screen.includes('id="settings-mail-test-to"');
+
+    assert.ok(test(await screenFor('brevo', { brevo: { apiKey: 'xkeysib-secret-1234' } })));
+    assert.equal(test(await screenFor('brevo')), false, 'offered a test with no Brevo key');
+    assert.equal(
+      test(
+        await screenFor('none', {
+          smtp: {
+            host: 'smtp.example.com',
+            port: 587,
+            secure: false,
+            user: 'postmaster',
+            password: 'hunter2-secret',
+          },
+        }),
+      ),
+      false,
+      'offered a test with no provider',
+    );
+  });
+});

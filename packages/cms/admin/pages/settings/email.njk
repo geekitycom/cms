@@ -60,49 +60,112 @@
     </p>
     <p class="admin-hint">{{ mailHint }}</p>
 
-    <form method="post" action="{{ mailUrl }}">
-      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    {# One provider's boxes, never both. A site sending through Brevo has no
+       use for an SMTP port and a site sending through SMTP has none for an API
+       key, and seven boxes where one is wanted is how a screen teaches people
+       to stop reading it.
 
-      <h3>Brevo</h3>
-      {% if mailBrevoPresent %}
-        <p class="admin-hint">A key is stored, ending {{ mailBrevoKeyHint }}.</p>
-        {% set brevoPlaceholder = 'Leave blank to keep the stored key' %}
-      {% else %}
-        {% set brevoPlaceholder = 'Paste your key' %}
-      {% endif %}
-      {{ field.password('settings-mail-brevo-key', mailFields.brevoApiKey, 'API key',
-           autocomplete='off', spellcheck='false', placeholder=brevoPlaceholder) }}
-
-      <h3>SMTP</h3>
-      {{ field.text('settings-mail-smtp-host', mailFields.smtpHost, 'Host', mailSmtp.host,
-           autocomplete='off') }}
-
-      {{ field.text('settings-mail-smtp-port', mailFields.smtpPort, 'Port',
-           mailSmtp.port if mailSmtp else 587, inputmode='numeric') }}
-
-      {# Its own box with the sentence beside it, like every other switch in
-         the admin. It used to be a label wrapped round the tick in a class the
-         stylesheet has never heard of, so it was the one switch here that
-         rendered unstyled. #}
-      {{ field.checkbox('settings-mail-smtp-secure', mailFields.smtpSecure,
-           'TLS from the first byte (port 465)', checked=mailSmtp.secure,
-           hint='Leave this off for port 587, which upgrades with STARTTLS.') }}
-
-      {{ field.text('settings-mail-smtp-user', mailFields.smtpUser, 'Username', mailSmtp.user,
-           autocomplete='off') }}
-
-      {% if mailSmtp.hasPassword %}
-        {% set smtpPlaceholder = 'Leave blank to keep the stored password' %}
-      {% else %}
-        {% set smtpPlaceholder = 'The SMTP password' %}
-      {% endif %}
-      {{ field.password('settings-mail-smtp-password', mailFields.smtpPassword, 'Password',
-           autocomplete='off', spellcheck='false', placeholder=smtpPlaceholder) }}
-
-      <p class="admin-settings-buttons">
-        <button type="submit">Save credentials</button>
+       The provider branched on is the saved one, from `site.json`, not
+       whatever the select above happens to be showing: that select belongs to
+       the settings form and nothing it shows is true until Save settings is
+       pressed. Saying so is the paragraph below — without it, somebody who
+       picks SMTP, looks straight down for a Host box and finds an API key
+       would reasonably call this broken. Doing it the other way round would
+       take JavaScript, and no other admin screen needs any. #}
+    {% if mailProvider == 'none' %}
+      <p class="admin-hint">
+        No provider is <em>saved</em>, so there is no credential to give and no
+        box here to give it in. Choose one under <strong>Provider</strong> above
+        and press <strong>Save settings</strong> &mdash; picking it in the select
+        alone changes nothing &mdash; and the boxes it needs appear here.
       </p>
-    </form>
+    {% else %}
+      <p class="admin-hint">
+        These are the boxes
+        <strong>{% if mailProvider == 'brevo' %}Brevo{% else %}SMTP{% endif %}</strong>
+        needs, and they follow the provider this site has <em>saved</em> &mdash; not
+        the one the select above is showing. Change <strong>Provider</strong> and
+        press <strong>Save settings</strong> first, and the boxes here change with it.
+      </p>
+
+      <form method="post" action="{{ mailUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+        {% if mailProvider == 'brevo' %}
+          <h3>Brevo</h3>
+          {% if mailBrevoPresent %}
+            <p class="admin-hint">A key is stored, ending {{ mailBrevoKeyHint }}.</p>
+            {% set brevoPlaceholder = 'Leave blank to keep the stored key' %}
+          {% else %}
+            {% set brevoPlaceholder = 'Paste your key' %}
+          {% endif %}
+          {{ field.password('settings-mail-brevo-key', mailFields.brevoApiKey, 'API key',
+               autocomplete='off', spellcheck='false', placeholder=brevoPlaceholder) }}
+        {% else %}
+          <h3>SMTP</h3>
+          {{ field.text('settings-mail-smtp-host', mailFields.smtpHost, 'Host', mailSmtp.host,
+               autocomplete='off') }}
+
+          {{ field.text('settings-mail-smtp-port', mailFields.smtpPort, 'Port',
+               mailSmtp.port if mailSmtp else 587, inputmode='numeric') }}
+
+          {# Its own box with the sentence beside it, like every other switch in
+             the admin. It used to be a label wrapped round the tick in a class the
+             stylesheet has never heard of, so it was the one switch here that
+             rendered unstyled. #}
+          {{ field.checkbox('settings-mail-smtp-secure', mailFields.smtpSecure,
+               'TLS from the first byte (port 465)', checked=mailSmtp.secure,
+               hint='Leave this off for port 587, which upgrades with STARTTLS.') }}
+
+          {{ field.text('settings-mail-smtp-user', mailFields.smtpUser, 'Username', mailSmtp.user,
+               autocomplete='off') }}
+
+          {% if mailSmtp.hasPassword %}
+            {% set smtpPlaceholder = 'Leave blank to keep the stored password' %}
+          {% else %}
+            {% set smtpPlaceholder = 'The SMTP password' %}
+          {% endif %}
+          {{ field.password('settings-mail-smtp-password', mailFields.smtpPassword, 'Password',
+               autocomplete='off', spellcheck='false', placeholder=smtpPlaceholder) }}
+        {% endif %}
+
+        <p class="admin-settings-buttons">
+          <button type="submit">Save credentials</button>
+        </p>
+      </form>
+    {% endif %}
+
+    {# A credential kept for a provider that is not the chosen one. Its boxes
+       are gone but the secret is still on disk, and this panel is the only
+       place in the admin that says so, so it is reported in words instead.
+       Hiding a stored API key would be the screen lying about what the site
+       holds. #}
+    {% set brevoStoredElsewhere = mailBrevoPresent and mailProvider != 'brevo' %}
+    {% set smtpStoredElsewhere = mailSmtpPresent and mailProvider != 'smtp' %}
+    {% if brevoStoredElsewhere or smtpStoredElsewhere %}
+      <h3>Also stored</h3>
+
+      {% if brevoStoredElsewhere %}
+        <p class="admin-field-static">
+          A <strong>Brevo</strong> API key, ending {{ mailBrevoKeyHint }}.
+        </p>
+      {% endif %}
+      {% if smtpStoredElsewhere %}
+        <p class="admin-field-static">
+          An <strong>SMTP</strong> server:
+          {% if mailSmtp.user %}{{ mailSmtp.user }} at {% endif %}{{ mailSmtp.host }}
+          port {{ mailSmtp.port }}{% if mailSmtp.hasPassword %}, with a password{% endif %}.
+        </p>
+      {% endif %}
+
+      <p class="admin-hint">
+        Kept in <code>data/mail.json</code> and used by nothing while
+        {% if mailProvider == 'none' %}no provider is chosen{% else %}{% if mailProvider == 'brevo' %}Brevo{% else %}SMTP{% endif %} is the chosen provider{% endif %}.
+        Choose that provider above to edit it, or press
+        <strong>Remove credentials</strong> to forget every credential this site
+        holds, this one included.
+      </p>
+    {% endif %}
 
     {% if mailBrevoPresent or mailSmtpPresent %}
       <form method="post" action="{{ mailUrl }}">
@@ -114,14 +177,20 @@
       </form>
     {% endif %}
 
-    <form method="post" action="{{ mailTestUrl }}">
-      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-      {{ field.text('settings-mail-test-to', mailTestFields.to, 'Send a test message to', '',
-           inputmode='email', placeholder='you@example.com') }}
-      <p class="admin-settings-buttons">
-        <button type="submit">Send test email</button>
-      </p>
-    </form>
+    {# Only where there is something to send with, the way the notice switches
+       on a user's page are drawn only where there is both a provider and an
+       address (TASK-97). A Send test email button on a site with no credential
+       can do one thing, which is say it did nothing. #}
+    {% if mailConfigured %}
+      <form method="post" action="{{ mailTestUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        {{ field.text('settings-mail-test-to', mailTestFields.to, 'Send a test message to', '',
+             inputmode='email', placeholder='you@example.com') }}
+        <p class="admin-settings-buttons">
+          <button type="submit">Send test email</button>
+        </p>
+      </form>
+    {% endif %}
 
     <p class="admin-hint">
       Neither the API key nor the SMTP password is ever printed back into this

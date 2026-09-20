@@ -1057,6 +1057,15 @@ enough to tell what is stored and not enough to use it. Leaving a secret field
 blank keeps the one already stored, so the SMTP port can be corrected without
 retyping the password. **Remove credentials** forgets both.
 
+The panel draws the boxes of the provider that is saved and no others: an API
+key on a Brevo site, a host, port, TLS flag, user and password on an SMTP one,
+and nothing at all on a site sending through neither. It follows what is in
+`site.json` rather than what the Provider select above it is showing, so
+choosing a different provider there takes a **Save settings** before its boxes
+appear — the panel says as much. A credential stored for the provider that is
+not the chosen one still gets a line of its own, because it is still on disk
+and **Remove credentials** is still what forgets it.
+
 Both files are read on every send, so a credential pasted into the settings
 screen sends the next message and one removed stops the message after it.
 Neither needs a restart.
@@ -1079,6 +1088,10 @@ message through the whole chain — the template, the From line, the provider an
 the retry — and reports what came back, the provider's own words and its
 message id included. It is the one thing that proves mail works before somebody
 needs it to.
+
+It is on the page only where the site can actually send — a provider chosen and
+its credential stored. Without one the only thing the button could report is
+that it did nothing.
 
 ### Queue, retries and the log
 
