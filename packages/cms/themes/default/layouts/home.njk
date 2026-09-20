@@ -3,7 +3,16 @@
 {% block title %}{% if pagination.pageNumber > 0 %}Page {{ pagination.pageNumber + 1 }} &middot; {% endif %}{% if title and title != site.title %}{{ title }} &middot; {% endif %}{{ site.title }}{% endblock %}
 
 {% block content %}
+{# Only where the header has not already said it. `layouts/base.njk` heads the
+   root path with the site title, and the root listing's own title is that same
+   title, so printing it here would give the page two `h1` elements holding the
+   same words. A listing at a path of its own gets only the small link home up
+   there, so it heads itself — even on a site whose posts page shares the
+   site's name. `layouts/front-page.njk` leaves its title out for the same
+   reason. #}
+{% if not atRoot %}
 <h1 class="page-title">{{ title }}</h1>
+{% endif %}
 {# A site whose listing lives on a posts page renders that page's own words
    above the posts; the home listing has none, and prints nothing here. #}
 {% if content %}

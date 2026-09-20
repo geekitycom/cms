@@ -250,6 +250,32 @@ describe('the page shell (AC #1)', () => {
     }
   });
 
+  it('heads the root listing once, with the header rather than the site title twice', async () => {
+    const cms = await site({ postsPerPage: 1 });
+
+    const root = [...(await body(cms, '/')).matchAll(/<h1[^>]*>/g)];
+    assert.equal(root.length, 1, `the root listing has ${String(root.length)} h1 elements`);
+    assert.match(root[0]?.[0] ?? '', /main-heading/, 'and the one it has is not the header');
+
+    // Page two is not the root path, so the header steps down to the small link
+    // home and the listing heads itself. Still one heading either way.
+    const second = [...(await body(cms, '/page/2/')).matchAll(/<h1[^>]*>/g)];
+    assert.equal(second.length, 1, `page two has ${String(second.length)} h1 elements`);
+  });
+
+  it('heads a listing at its own path with its title, since the header does not', async () => {
+    const { cms, contentDir } = await siteWithContent({ homepage: 'about', postsPage: 'news' });
+    await writeTree(contentDir, {
+      'pages/news.md': '---\ntitle: News\npermalink: /news/\n---\n\nThe latest.\n',
+    });
+    await cms.sync();
+
+    const html = await body(cms, '/news/');
+
+    assert.doesNotMatch(header(html), /main-heading/, 'the header heads a page that is not root');
+    assert.match(html, /<h1 class="page-title">News<\/h1>/, 'so the listing must head itself');
+  });
+
   it('puts no navigation in the header', async () => {
     const cms = await site({
       navigation: [

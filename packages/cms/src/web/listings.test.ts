@@ -238,11 +238,10 @@ describe('the excerpt an entry carries (AC #2)', () => {
 });
 
 describe('what heads a listing (AC #3)', () => {
-  it('heads the home page and every archive, and counts nothing', async () => {
+  it('heads every archive, and counts nothing', async () => {
     const cms = await site();
 
     for (const [pathname, heading] of [
-      ['/', 'A Site'],
       ['/tag/introductions/', 'Tagged'],
       ['/category/notes/', 'Filed under'],
     ] as const) {
@@ -250,6 +249,21 @@ describe('what heads a listing (AC #3)', () => {
       assert.match(inside, new RegExp(`<h1[^>]*>[^<]*${heading}`), `${pathname} has no heading`);
       assert.doesNotMatch(inside, /\d+ entr(y|ies)/, `${pathname} still counts its entries`);
     }
+  });
+
+  // The root listing is the exception: the shell already heads the root path
+  // with the site title, and the listing's own title is that same title, so it
+  // heads itself with nothing (TASK-96).
+  it('leaves the home page to the site header, which has already said it', async () => {
+    const html = await body(await site(), '/');
+
+    assert.doesNotMatch(main(html), /<h1/, 'the home listing heads itself a second time');
+    assert.match(
+      html,
+      /<h1 class="main-heading">\s*<a href="\/">A Site</,
+      'and the header does not',
+    );
+    assert.doesNotMatch(main(html), /\d+ entr(y|ies)/, 'the home page still counts its entries');
   });
 
   it('heads a category archive with a header, and no description when it has none', async () => {
