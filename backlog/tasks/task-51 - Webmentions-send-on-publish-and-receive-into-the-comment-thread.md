@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-04 01:35'
-updated_date: '2026-09-04 23:13'
+updated_date: '2026-09-20 21:06'
 labels:
   - web
   - federation
@@ -78,6 +78,8 @@ Per criterion:
 Also covered: the CommentChecker seam is asked about every incoming webmention with comment.source 'webmention', its 'spam' verdict files one as spam and 'discard' stores none; an approved webmention appears in the thread linking to the page that sent it, with no Reply link; and the Eleventy mirror puts a webmention in conversation.mentions from the same comment file (packages/cms/test/eleventy.test.ts).
 
 Docs: new doc-7 (Webmentions), doc-6 updated for the url and avatar keys and the webmention entry, doc-4 for the two new kinds and the mentions group, the theme README for the conversation shape and the <link>, and the package README for the settings, the behaviour and the two /_geekity/ routes.
+
+Backlog review, 2026-09-20: AC #5 (the webmention.rocks receiver tests) was never run and no failures were listed, so neither branch of that criterion was met. The task was closed on the rest of the evidence above. Recorded here rather than silently left unmet; running the suite against a dev server is still worth doing if the receiver is changed again.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

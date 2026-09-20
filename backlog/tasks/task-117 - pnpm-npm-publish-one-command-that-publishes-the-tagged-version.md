@@ -1,11 +1,11 @@
 ---
 id: TASK-117
 title: 'pnpm npm:publish: one command that publishes the tagged version'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-20 19:15'
-updated_date: '2026-09-20 19:23'
+updated_date: '2026-09-20 21:06'
 labels:
   - ci
   - infra
@@ -43,7 +43,7 @@ The README's Publishing to npm section becomes the one command and what it check
 - [x] #2 The version is read from packages/cms/package.json and the tag it requires is that version's, proven by a test
 - [x] #3 The script refuses, before any gate runs, when it is not at the repository root, the tree is dirty, HEAD is not at the version's tag, npm has nobody logged in, or that version is already published — each with a message saying which, proven by a test for each
 - [x] #4 A failing quality gate stops the script before anything is published, proven by a test
-- [ ] #5 A real run publishes the package and nothing else, confirmed by the maintainer on the next release
+- [x] #5 A real run publishes the package and nothing else, confirmed by the maintainer on the next release
 - [x] #6 The README's Publishing to npm section is the one command and what it checks
 <!-- AC:END -->
 
@@ -83,10 +83,12 @@ pnpm npm:dry-run, run for real:
     pnpm publish --filter @geekity/cms --access public
 
 AC #5 is left unchecked on purpose: it can only be proven by a real publish, which this work deliberately never does. 0.5.0 is already on the registry (npm view @geekity/cms@0.5.0 returns 0.5.0), so the next real run will be on the version after release-please's next bump.
+
+AC #5 closed 2026-09-20. @geekity/cms 0.6.0 was released with `pnpm npm:publish`, confirmed by the maintainer. The registry agrees: `npm view @geekity/cms versions` lists 0.3.0, 0.4.0, 0.5.0, 0.6.0 and `dist-tags` has latest: 0.6.0, with nothing else published. The commit order is what the script assumes — 7a66eb7 (the script) landed before 64a5610 (chore(release): release 0.6.0), so the release ran from a tagged main with the tag check in force and no detached HEAD.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added scripts/npm-publish.sh with pnpm npm:publish and pnpm npm:dry-run, modelled on scripts/docker-build-push.sh. It reads the name and version from packages/cms/package.json and refuses, before any gate, when it is not at the repository root, the tree is dirty, HEAD does not carry v<version>, nobody is logged in to npm, or that version is already on the registry; then it runs lint, format:check, typecheck, test and test:11ty and publishes with pnpm publish --filter @geekity/cms --access public, with no --no-git-checks and no tag checkout. The README's Publishing to npm section is now that one command and what it checks. Verified by packages/cms/src/npm-publish.test.ts (14 tests driving a copy of the script in a fixture repo with stand-in git, npm and pnpm), a real pnpm npm:dry-run, a real-git scratch-repo run of the refusals, shellcheck, and pnpm build/test/test:11ty/typecheck/lint. AC #5 stays unchecked: only a real release can prove it, and nothing here was published or logged in.
+Added scripts/npm-publish.sh with pnpm npm:publish and pnpm npm:dry-run, modelled on scripts/docker-build-push.sh. It reads the name and version from packages/cms/package.json and refuses, before any gate, when it is not at the repository root, the tree is dirty, HEAD does not carry v<version>, nobody is logged in to npm, or that version is already on the registry; then it runs lint, format:check, typecheck, test and test:11ty and publishes with pnpm publish --filter @geekity/cms --access public, with no --no-git-checks and no tag checkout. The README's Publishing to npm section is now that one command and what it checks. Verified by packages/cms/src/npm-publish.test.ts (14 tests driving a copy of the script in a fixture repo with stand-in git, npm and pnpm), a real pnpm npm:dry-run, a real-git scratch-repo run of the refusals, shellcheck, and pnpm build/test/test:11ty/typecheck/lint. AC #5 was closed later by the release it was waiting for: 0.6.0 went out with pnpm npm:publish, confirmed by the maintainer and by the registry showing latest: 0.6.0 and nothing unexpected published.
 <!-- SECTION:FINAL_SUMMARY:END -->
