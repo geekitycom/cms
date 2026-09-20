@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-20 01:02'
-updated_date: '2026-09-20 01:19'
+updated_date: '2026-09-20 01:44'
 labels:
   - admin
   - web
@@ -85,6 +85,10 @@ Built test-first, one acceptance criterion at a time.
 **Docs.** Both READMEs: the route table gains `/admin/users/<id>`, and the prose that said the profile, the stored actor id and the notices are edited on `/admin/users` now points at the user's own screen.
 
 Validation: `pnpm build && pnpm test && pnpm typecheck && pnpm lint && pnpm format:check` all pass (1954 + 30 tests). Also booted a throwaway site over temp directories on port 4173 and looked at both screens in a browser with the admin stylesheet on them; server stopped and the scratch files removed.
+
+Follow-up from the maintainer, same day: the notices panel is now headed 'Email <username> about' rather than 'Email me about', which read oddly when you were editing somebody else, and the switches are only drawn once the account has an address. With the box empty the panel keeps its heading and says why there is nothing in it, rather than vanishing: the switches decide what is sent to that address, so without one every switch could be on and the site would still send this person nothing.
+
+Three older tests rendered the switches for a user with no address and had to give it one first; they share a withEmail helper now. One new test covers both states.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

@@ -40,6 +40,22 @@ async function editScreen(agent: Browser, id: number): Promise<{ html: string; t
 }
 
 /**
+ * Give an account an address, and hand back that screen again.
+ *
+ * The notice switches are what is sent to it, so they are only drawn once
+ * there is one; a test about the switches has to put one there first.
+ */
+async function withEmail(
+  agent: Browser,
+  id: number,
+  email = 'someone@example.com',
+): Promise<{ html: string; token: string }> {
+  const { token } = await editScreen(agent, id);
+  await agent.post('/admin/users/email', { csrf_token: token, user_id: String(id), email });
+  return editScreen(agent, id);
+}
+
+/**
  * Every box on a screen a person has to read a label for — so a test can say
  * that each of them has one, rather than naming the fields it happens to
  * remember. Hidden fields are not boxes and need no label.
@@ -176,11 +192,20 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     const agent = await signedIn(cms);
     const ada = idOf(cms.config.dataDir, 'ada');
 
+    // With an address on the account, because the notices are what is sent to
+    // it and the panel keeps itself to itself until there is one.
+    const { token } = await editScreen(agent, ada);
+    await agent.post('/admin/users/email', {
+      csrf_token: token,
+      user_id: String(ada),
+      email: 'ada@example.com',
+    });
+
     const { html } = await editScreen(agent, ada);
 
     assert.match(html, /<h2>Account<\/h2>/);
     assert.match(html, /<h2>Profile<\/h2>/);
-    assert.match(html, /<h2>Email me about<\/h2>/);
+    assert.match(html, /<h2>Email ada about<\/h2>/, 'the notices are headed with whose they are');
 
     // The username is shown, not offered as a box: it is the author URL, the
     // login and the actor, and nothing here may change it.
@@ -204,6 +229,30 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     assert.match(html, new RegExp(notice.label), 'the notices are on this screen');
     assert.match(html, new RegExp(notice.description.slice(0, 40)), 'with what each one sends');
     assert.match(html, /<label[^>]*>How often/, 'and a labelled select for a batched one');
+  });
+
+  it('offers no notice switches until there is an address to send to', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = idOf(cms.config.dataDir, 'ada');
+
+    const { html, token } = await editScreen(agent, ada);
+    const [notice] = NOTIFICATION_EVENTS;
+    assert.ok(notice !== undefined);
+
+    assert.match(html, /<h2>Email ada about<\/h2>/, 'the panel still says what it is for');
+    assert.doesNotMatch(html, /name="event"/, 'a switch is offered with nowhere to write to');
+    assert.match(html, /Nothing, while the box above is empty/, 'and nothing says why');
+
+    await agent.post('/admin/users/email', {
+      csrf_token: token,
+      user_id: String(ada),
+      email: 'ada@example.com',
+    });
+
+    const after = (await editScreen(agent, ada)).html;
+    assert.match(after, new RegExp(notice.label), 'the switches come back with the address');
+    assert.match(after, /<code>ada@example\.com<\/code>/, 'named with where they are sent');
   });
 
   it('shows what is already stored, in the boxes that hold it', async () => {
@@ -304,7 +353,7 @@ describe('saving from the edit user screen (TASK-97 AC #3)', () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
     const ada = idOf(cms.config.dataDir, 'ada');
-    const { token } = await editScreen(agent, ada);
+    const { token } = await withEmail(agent, ada);
 
     const off = await agent.post('/admin/users/notifications', {
       csrf_token: token,
@@ -634,7 +683,7 @@ describe('notification preferences (AC #3)', () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
-    const { html } = await editScreen(agent, idOf(cms.config.dataDir, 'ada'));
+    const { html } = await withEmail(agent, idOf(cms.config.dataDir, 'ada'));
 
     for (const event of NOTIFICATION_EVENTS) {
       assert.match(html, new RegExp(`value="${event.name}"`), `${event.name} has a switch`);
@@ -692,7 +741,7 @@ describe('how often a notice arrives (AC #1)', () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
-    const { html } = await editScreen(agent, idOf(cms.config.dataDir, 'ada'));
+    const { html } = await withEmail(agent, idOf(cms.config.dataDir, 'ada'));
 
     for (const event of NOTIFICATION_EVENTS.filter((candidate) => candidate.batched)) {
       assert.match(html, new RegExp(`value="${event.name}"`), `${event.name} has a mode form`);

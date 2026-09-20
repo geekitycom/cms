@@ -110,15 +110,17 @@
     </p>
   </form>
 
+  {# Only once there is somewhere to write to. These switches decide what is
+     sent to the address above, so with that box empty they are settings about
+     nothing: every one of them could be on and the site would still send this
+     person no mail. The line below says so where the panel would have been,
+     rather than letting it vanish without explanation. #}
+  {% if account.email %}
   <section class="admin-settings">
-    <h2>Email me about</h2>
+    <h2>Email {{ account.username }} about</h2>
 
     <p class="admin-hint">
-      {% if account.you %}
-        What this site writes to you about, at the address above. Nothing is sent while that box is empty.
-      {% else %}
-        What this site writes to {{ account.username }} about, at the address above. Nothing is sent while that box is empty.
-      {% endif %}
+      What this site writes to {{ account.username }} at <code>{{ account.email }}</code>.
     </p>
 
     {# One form per switch, not one form with a checkbox each: a browser sends
@@ -165,6 +167,17 @@
       </div>
     {% endfor %}
   </section>
+  {% else %}
+  <section class="admin-settings">
+    <h2>Email {{ account.username }} about</h2>
+
+    <p class="admin-hint">
+      Nothing, while the box above is empty: there is nowhere to write to. Give
+      {% if account.you %}yourself{% else %}this account{% endif %} an address
+      and what to send comes back here.
+    </p>
+  </section>
+  {% endif %}
 
   {# Only on your own page: it asks for the current password, so it is about
      whoever is signed in and means nothing on somebody else's screen.
