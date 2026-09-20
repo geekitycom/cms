@@ -168,15 +168,31 @@ export type {
   RepresentationResponseOptions,
 } from './negotiate.ts';
 export {
+  DEFAULT_MENU_NAME,
+  MENU_ITEM_FLAGS,
+  MENU_NAME_MAX_LENGTH,
+  MENU_NAME_PATTERN,
+  menuItemLineProblem,
+  menuItemOf,
+  menuItemsFromText,
+  menuItemsText,
+  menuNameProblem,
+  menusOf,
   navigationItems,
   navigationItemsOf,
   navigationMenu,
-  navigationOrder,
-  navigationPages,
-  NAVIGATION_KEY,
-  NAVIGATION_ORDER_KEY,
+  navigationMenus,
+  siteMenus,
 } from './navigation.ts';
-export type { MenuItem, NavigationItem, NavigationMenuOptions } from './navigation.ts';
+export type {
+  MenuItem,
+  MenuItemFlag,
+  MenuList,
+  NavigationItem,
+  NavigationMenuOptions,
+  NavigationMenus,
+  NavigationMenusOptions,
+} from './navigation.ts';
 export { HEALTH_PATH, mountHealth } from './health.ts';
 export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
@@ -262,6 +278,7 @@ export {
 export type {
   ChosenTheme,
   Theme,
+  ThemeArea,
   ThemeKind,
   ThemeLogger,
   ThemeRead,

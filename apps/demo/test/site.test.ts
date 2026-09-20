@@ -96,16 +96,22 @@ describe('the theme the demo chose', () => {
     assert.match(body, /A file-first site, served straight from Markdown/);
   });
 
-  it('degrades the footer for a site author no user answers to', async () => {
-    // `site.json` says `"author": "Joe Blog"` and the demo has no such account,
-    // so `siteAuthor` is absent: the name is still in the copyright line and
-    // there are no `rel="me"` links to print (TASK-79, TASK-80).
+  it('links the footer out of menus.footer and off no account', async () => {
+    // `site.json` says `"author": "Joe Blog"` and the demo has no such account.
+    // Nothing in the footer reads that either way now (TASK-105): the
+    // copyright line names the setting, and everything linked — the feed
+    // included — is a line the demo typed into its footer menu.
     const body = await text('/2026/08/markdown-on-disk/');
-    const footer = /<footer>([\s\S]*?)<\/footer>/.exec(body)?.[1] ?? '';
+    const footer =
+      /<footer>([\s\S]*?)<\/footer>/.exec(body.slice(body.lastIndexOf('</main>')))?.[1] ?? '';
 
     assert.match(footer, /&copy; \d{4}, Joe Blog/, 'no copyright line');
     assert.match(footer, /Published with[\s\S]*Geekity/, 'no colophon');
-    assert.match(footer, /<a href="\/feed\/">RSS<\/a>/, 'no RSS link');
+    assert.match(
+      footer,
+      /<nav class="site-nav" aria-label="Footer">[\s\S]*<a href="\/feed\/">RSS<\/a>/,
+      'the feed is not in the footer menu',
+    );
     assert.doesNotMatch(footer, /rel="me"/, 'a name with no profile behind it has links');
   });
 

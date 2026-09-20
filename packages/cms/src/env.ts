@@ -2,7 +2,7 @@ import type { AdminStore } from './admin/store.ts';
 import type { Session } from './admin/store.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { ContentStore } from './content/store.ts';
-import type { DocumentChange } from './content/sync.ts';
+import type { DocumentChange, SyncResult } from './content/sync.ts';
 import type { DeliveryService } from './federation/delivery.ts';
 import type { RelayService } from './federation/relays.ts';
 import type { MailService } from './mail/service.ts';
@@ -47,6 +47,17 @@ export interface GeekityEnv {
      * save. The promise resolves once every listener has finished.
      */
     announce: (change: DocumentChange) => Promise<void>;
+    /**
+     * Walk the content directory once and reconcile every file against the
+     * index: the scan `serve()` runs before it listens, on demand.
+     *
+     * Here so that Tools > Content index can rebuild the index in place
+     * (TASK-95) by calling the very scan boot calls, rather than by growing a
+     * second thing that knows how to read a content directory. Nothing else in
+     * a request has any business asking for one: the watcher keeps the index
+     * in step, and an admin write corrects it as it lands.
+     */
+    rescan: () => Promise<SyncResult>;
     /**
      * Outbound ActivityPub delivery, so a handler can send one post out again
      * as it now reads. The federation screen's Resend button is the whole

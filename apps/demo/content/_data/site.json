@@ -15,6 +15,18 @@
   "contactEmail": "hello@example.com",
   "notifyServer": "https://rpc.rsscloud.io",
   "relays": [],
-  "navigation": [],
+  "menus": {
+    "primary": [
+      { "label": "Home", "url": "/" },
+      { "label": "Posts", "url": "/posts/" },
+      { "label": "Archive", "url": "/archive/" },
+      { "label": "Contact", "url": "/contact/" }
+    ],
+    "footer": [
+      { "label": "RSS", "url": "/feed/" },
+      { "label": "Colophon", "url": "/colophon/" },
+      { "label": "Now", "url": "/now/" }
+    ]
+  },
   "taxonomyRedirects": []
 }

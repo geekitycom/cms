@@ -22,6 +22,7 @@ import { COMMENTS_PATH, mountCommentsScreen, pendingComments } from './comments.
 import { MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
 import { adminMenu } from './menu.ts';
 import { MESSAGES_PATH, mountMessagesScreen, unreadMessages } from './messages.ts';
+import { mountNavigationScreen } from './navigation.ts';
 import { mountPreview } from './preview.ts';
 import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
 import { mountSettings } from './settings-pages.ts';
@@ -37,6 +38,7 @@ import type { AdminStore, Session } from './store.ts';
 import { mountTaxonomyScreens, TAXONOMY_KINDS } from './taxonomy.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
 import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './throttle.ts';
+import { mountToolsScreen } from './tools.ts';
 import type { LoginThrottle } from './throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 import { mountUsers } from './users.ts';
@@ -319,6 +321,11 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountPreview(app);
   mountUploads(app);
 
+  // Every menu the site holds, and which of them the active theme renders. A
+  // section of its own rather than a settings page: a menu is content a site
+  // arranges, and the shape of the screen comes from the theme (TASK-108).
+  mountNavigationScreen(app, { render });
+
   // Everything under content/uploads: what is there, what links to it, and
   // the upload form that stores a file by the same rules the editor does.
   mountMediaScreen(app, { render });
@@ -334,6 +341,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // What the site is wearing: the themes on disk, and the one setting that
   // says which of them (decision-15).
   mountAppearanceScreen(app, { render });
+
+  // The jobs a site runs rather than the things it sets: reading every file
+  // back into the index, on a site that is serving.
+  mountToolsScreen(app, { render });
 
   // The site's own settings, which are content/_data/site.json itself: the
   // screen reads that file and writes it back (decision-9).

@@ -43,6 +43,7 @@ export const ADMIN_TEMPLATES = {
   documentEditor: 'pages/documents/editor.njk',
   documentConflict: 'pages/documents/conflict.njk',
   taxonomy: 'pages/documents/taxonomy.njk',
+  navigation: 'pages/navigation/menus.njk',
   media: 'pages/media/library.njk',
   themes: 'pages/appearance/themes.njk',
   comments: 'pages/comments/all.njk',
@@ -52,11 +53,12 @@ export const ADMIN_TEMPLATES = {
   settingsPermalinks: 'pages/settings/permalinks.njk',
   settingsDiscussion: 'pages/settings/discussion.njk',
   settingsEmail: 'pages/settings/email.njk',
-  settingsFederation: 'pages/settings/federation.njk',
+  toolsContentIndex: 'pages/tools/content-index.njk',
   usersList: 'pages/users/list.njk',
   usersNew: 'pages/users/new.njk',
   usersEdit: 'pages/users/edit.njk',
   federation: 'pages/federation/followers.njk',
+  federationSettings: 'pages/federation/settings.njk',
 } as const;
 
 /** How to build an {@link createAdminTemplateEnvironment}. */

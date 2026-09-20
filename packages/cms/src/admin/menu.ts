@@ -19,12 +19,14 @@
 import { THEMES_PATH } from './appearance.ts';
 import { COMMENTS_PATH } from './comments.ts';
 import { newEditorPath, PAGE_KIND, POST_KIND } from './documents.ts';
-import { FEDERATION_PATH } from './federation.ts';
+import { FEDERATION_PATH, FEDERATION_SETTINGS_PATH } from './federation.ts';
 import { MEDIA_PATH } from './media.ts';
 import { MESSAGES_PATH } from './messages.ts';
+import { NAVIGATION_PATH } from './navigation.ts';
 import { settingsPagePath } from './settings-page.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { CATEGORY_KIND, TAG_KIND } from './taxonomy.ts';
+import { TOOLS_PATH } from './tools.ts';
 import { ADD_USER_PATH, USERS_PATH } from './users.ts';
 
 /** One screen under a section, as the menu lists it. */
@@ -99,6 +101,10 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     { child: 'all', label: 'All pages', url: PAGE_KIND.basePath },
     { child: 'new', label: 'Add new', url: newEditorPath(PAGE_KIND) },
   ]),
+  // After Pages, because a menu is mostly a list of them, and above Media for
+  // the same reason: it is content the site arranges rather than a setting.
+  // Not a settings page at all — the shape of the screen comes from the theme.
+  section('navigation', 'Navigation', [{ child: 'menus', label: 'Menus', url: NAVIGATION_PATH }]),
   section('media', 'Media', [{ child: 'library', label: 'Library', url: MEDIA_PATH }]),
   section('comments', 'Comments', [{ child: 'all', label: 'All comments', url: COMMENTS_PATH }]),
   section('messages', 'Messages', [{ child: 'all', label: 'All messages', url: MESSAGES_PATH }]),
@@ -110,18 +116,29 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     { child: 'all', label: 'All users', url: USERS_PATH },
     { child: 'new', label: 'Add new', url: ADD_USER_PATH },
   ]),
+  // Where WordPress keeps Tools: after Users, before Settings. A setting is
+  // something you type and save; this is a job you run, so it is not a
+  // seventh settings page — the children of Settings are the settings pages,
+  // and nothing else belongs in that list.
+  section('tools', 'Tools', [{ child: 'index', label: 'Content index', url: TOOLS_PATH }]),
   // WordPress's own pages, in its own order. General is first because the
   // heading lands on the first child and General is `/admin/settings` itself.
+  // Federation's settings are not here: they are a child of the Federation
+  // section, because that is what they are about (TASK-109).
   section('settings', 'Settings', [
     { child: 'general', label: 'General', url: settingsPagePath('general') },
     { child: 'reading', label: 'Reading', url: settingsPagePath('reading') },
     { child: 'permalinks', label: 'Permalinks', url: settingsPagePath('permalinks') },
     { child: 'discussion', label: 'Discussion', url: settingsPagePath('discussion') },
     { child: 'email', label: 'Email', url: settingsPagePath('email') },
-    { child: 'federation', label: 'Federation', url: settingsPagePath('federation') },
   ]),
+  // Everything about federation, in the order somebody comes to it: the
+  // heading lands on Followers, which is what the section is opened to look
+  // at, and Settings is what it is opened to change, which is the rarer
+  // errand.
   section('federation', 'Federation', [
     { child: 'followers', label: 'Followers', url: FEDERATION_PATH },
+    { child: 'settings', label: 'Settings', url: FEDERATION_SETTINGS_PATH },
   ]),
 ];
 

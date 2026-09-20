@@ -18,13 +18,13 @@ import {
   termRedirects,
   themeName,
 } from './context.ts';
-import type { CommentFormContext } from '../comments/form.ts';
+import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
 import type { ContactFormContext } from '../contact/form.ts';
 import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, FrontPageSlugs, NeighbourContext, SiteData } from './context.ts';
-import { navigationMenu } from './navigation.ts';
+import { navigationMenus } from './navigation.ts';
 import type { Pagination } from './pagination.ts';
 import { snippetHtml } from './search.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
@@ -147,14 +147,28 @@ export interface Renderer {
    * `extra` goes on the context last and so wins: it is how the comment
    * endpoint puts a refused form back on the page it came from, and how the
    * redirect after a submission gets its thank-you onto the post.
+   *
+   * `viewer` is who the request's session says is reading, when it says
+   * anybody (TASK-103). The only thing it changes is the comment form, which
+   * is drawn for them rather than for a stranger; a caller with no request —
+   * a feed, a preview, an email — passes nothing and gets the page everybody
+   * else gets.
    */
-  renderDocument(document: Document, extra?: Record<string, unknown>): string;
+  renderDocument(
+    document: Document,
+    extra?: Record<string, unknown>,
+    viewer?: CommentViewer,
+  ): string;
   /**
    * One page as the site's front page: the same context its own URL would give
    * it, at `/`, through the theme's front-page template if it has one and its
    * page layout if it has not.
    */
-  renderFrontPage(document: Document, extra?: Record<string, unknown>): string;
+  renderFrontPage(
+    document: Document,
+    extra?: Record<string, unknown>,
+    viewer?: CommentViewer,
+  ): string;
   /** A listing through the home, tag or category layout. */
   renderListing(listing: Listing): string;
   /**
@@ -191,13 +205,13 @@ export interface CreateRendererOptions {
    */
   themes?: ThemeSource | undefined;
   /**
-   * The public pages, for the ones that put themselves in the site menu. Read
-   * per render rather than at boot, because a page saved in the editor should
-   * be in the menu on the very next request.
+   * The public pages, for the one a site names as its posts page. Read per
+   * render rather than at boot, because a page renamed in the editor should be
+   * linked under its new title on the very next request.
    *
-   * A renderer built without it has a menu of exactly what the setting names,
-   * which is what the tests over one template want and what a site with no
-   * index would get anyway.
+   * A renderer built without it draws no link to a posts page, which is what
+   * the tests over one template want and what a site with no index would get
+   * anyway.
    */
   pages?: (() => readonly Document[]) | undefined;
   /**
@@ -220,7 +234,8 @@ export interface CreateRendererOptions {
    * form decided at boot would go on being offered for a post that closed an
    * hour ago. A renderer built without it renders no form at all.
    */
-  commentForm?: ((document: Document) => CommentFormContext | undefined) | undefined;
+  commentForm?:
+    ((document: Document, viewer?: CommentViewer) => CommentFormContext | undefined) | undefined;
   /**
    * The contact form for a page whose front matter asks for one, and
    * `undefined` for every other document (TASK-56).
@@ -311,17 +326,22 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // the next boot. It costs a comparison of two short arrays when nothing
     // has changed, which is every render of a site that is not being rethemed.
     useThemeDirs(environment, themes.current().dirs);
-    // The menu is built here rather than by each caller because every page of
-    // the site carries it: a listing, a document, the 404 and the editor's
-    // preview all go through here, and a header that appeared on some of them
-    // and not others would be a worse contract than one that is simply always
-    // there. It is `menu` rather than `navigation` because `navigation` is the
-    // front-matter key a page opts in with, and a document's own front matter
-    // goes on top of the globals exactly as Eleventy's data cascade does.
-    const menu = navigationMenu({ site, pages: pages(), url: currentUrl(context) });
+    // The menus are built here rather than by each caller because every page
+    // of the site carries them: a listing, a document, the 404 and the
+    // editor's preview all go through here, and a menu that appeared on some
+    // of them and not others would be a worse contract than one that is
+    // simply always there. It is `menus` rather than `menus` read off `site`
+    // because these items know which one the reader is on; a template reading
+    // `site.menus` would be reading the raw lists.
+    //
+    // Every menu the site stores is here, keyed by name, not only the ones the
+    // theme declares an area for: a name nothing loops over is rendered
+    // nowhere and kept (TASK-107), and the declaration in `theme.json` is for
+    // the screen that edits menus rather than a filter on the render.
+    const menus = navigationMenus({ site, url: currentUrl(context) });
     // Who the page is by, for the bio, the `rel="me"` links and the structured
     // data (decision-16). It is here rather than in each caller because every
-    // page of the site carries it, for the reason the menu does — and it is
+    // page of the site carries it, for the reason the menus do — and it is
     // the site's own author only when the page is about nobody in particular:
     // a document's byline and an author archive's person are put on the
     // context by the callers below, and win by going on last.
@@ -335,7 +355,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     const icons = siteIcons(config, site.avatar);
     return environment.render(template, {
       site,
-      menu,
+      menus,
       icons,
       ...(owner === undefined ? {} : { siteAuthor: owner }),
       ...context,
@@ -416,7 +436,12 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
    */
   function documentPage(
     document: Document,
-    options_: { template: string; url?: string | undefined; extra: Record<string, unknown> },
+    options_: {
+      template: string;
+      url?: string | undefined;
+      extra: Record<string, unknown>;
+      viewer?: CommentViewer | undefined;
+    },
   ): string {
     const { template, extra } = options_;
     // The profile behind the document's `author`, resolved here rather than in
@@ -443,7 +468,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // `commentForm` is on the context only when the post is open, so the
     // theme asks `{% if commentForm %}` rather than working the rules out
     // for itself — and a closed post shows the thread with no form.
-    const form = options.commentForm?.(document);
+    const form = options.commentForm?.(document, options_.viewer);
     // And the contact form, when the page's front matter asked for one
     // (TASK-56). Nothing about where a message would go is on the context:
     // the address is read when a submission arrives, so a theme cannot
@@ -513,14 +538,15 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       return frontPageSlugs(siteData.read());
     },
 
-    renderDocument(document, extra = {}) {
+    renderDocument(document, extra = {}, viewer = undefined) {
       return documentPage(document, {
         template: document.type === 'post' ? TEMPLATES.post : TEMPLATES.page,
         extra,
+        viewer,
       });
     },
 
-    renderFrontPage(document, extra = {}) {
+    renderFrontPage(document, extra = {}, viewer = undefined) {
       return documentPage(document, {
         // A theme's own front page if it has written one, and the layout every
         // other page uses if it has not.
@@ -541,6 +567,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         // `postsPage` goes with them: the front page is the one page that
         // links the listing by name rather than by menu item.
         extra: { ...recentPostsContext(), ...postsPageContext(), ...extra },
+        viewer,
       });
     },
 

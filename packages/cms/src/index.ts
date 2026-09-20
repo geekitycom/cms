@@ -152,6 +152,7 @@ export {
   FEDERATION_FIELDS,
   FEDERATION_PATH,
   FEDERATION_RECENT,
+  FEDERATION_SETTINGS_PATH,
   findAdminAsset,
   findBySlug,
   findUser,
@@ -455,6 +456,8 @@ export {
   refilledCommentForm,
   removeAkismetKey,
   renderCommentMarkdown,
+  signedInCommenter,
+  signedInCommentForm,
   submitComment,
   updateComment,
   valuesOf,
@@ -481,12 +484,14 @@ export type {
   CommentSubmission,
   CommentThrottle,
   CommentVerdict,
+  CommentViewer,
   IntakeCommentOptions,
   ModerateCommentOptions,
   ModerationAction,
   ModerationOutcome,
   NewComment,
   ProposedComment,
+  SignedInAuthor,
   SubmissionType,
   SubmitCommentOptions,
   VerifyAkismetKeyOptions,
@@ -939,6 +944,7 @@ export {
   createSiteDataSource,
   createTemplateEnvironment,
   DEFAULT_FEED_SIZE,
+  DEFAULT_MENU_NAME,
   DEFAULT_TAXONOMY_BASES,
   DEFAULT_POSTS_PER_PAGE,
   DOCUMENT_REPRESENTATIONS,
@@ -992,14 +998,20 @@ export {
   matchesEtag,
   MAXIMUM_QUERY_LENGTH,
   MEDIA_TYPES,
+  MENU_ITEM_FLAGS,
+  MENU_NAME_MAX_LENGTH,
+  MENU_NAME_PATTERN,
+  menuItemLineProblem,
+  menuItemOf,
+  menuItemsFromText,
+  menuItemsText,
+  menuNameProblem,
+  menusOf,
   mountPublicSite,
   navigationItems,
   navigationItemsOf,
   navigationMenu,
-  navigationOrder,
-  navigationPages,
-  NAVIGATION_KEY,
-  NAVIGATION_ORDER_KEY,
+  navigationMenus,
   notAcceptableResponse,
   NOTIFY_CLOUD_PORT,
   NOTIFY_CLOUD_PROTOCOL,
@@ -1059,6 +1071,7 @@ export {
   snippetHtml,
   SOURCE_NAMESPACE,
   siteAuthorContext,
+  siteMenus,
   siteTimezone,
   splitFeedPath,
   splitRepresentationExtension,
@@ -1129,8 +1142,12 @@ export type {
   NotifyServer,
   Listing,
   MenuItem,
+  MenuItemFlag,
+  MenuList,
   NavigationItem,
   NavigationMenuOptions,
+  NavigationMenus,
+  NavigationMenusOptions,
   NeighbourContext,
   PageContext,
   PaginateOptions,
@@ -1155,6 +1172,7 @@ export type {
   TaxonomyRedirect,
   TaxonomyTerm,
   Theme,
+  ThemeArea,
   ThemeAsset,
   ThemeKind,
   ThemeRead,
@@ -1520,11 +1538,16 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // And the form under it, when the post is still taking comments. Asked per
     // render because whether it is depends on the clock: a post that closed an
     // hour ago stops offering one on the very next request.
-    commentForm: (document) =>
+    commentForm: (document, viewer) =>
       commentFormFor({
         document,
         site: renderer.site(),
         now: resolved.now(),
+        // And who is reading it, when a session says: the short form for
+        // somebody signed in to this site, the stranger's form for everybody
+        // else (TASK-103). The route reads the session and hands it down, so
+        // one render of one request cannot disagree with itself.
+        viewer,
         // Whether "tell me about replies" is worth offering, asked per render
         // for the same reason: a credential pasted into the settings screen
         // puts the box on the next page drawn (TASK-55).
@@ -1657,6 +1680,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('renderer', renderer);
     c.set('conversation', conversation);
     c.set('announce', (change) => content.announce(change));
+    c.set('rescan', () => content.sync());
     c.set('delivery', delivery);
     c.set('relays', relays);
     c.set('webmentions', webmentions);

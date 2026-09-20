@@ -1298,3 +1298,56 @@ describe('the search index migration (TASK-22 AC #2)', () => {
     }
   });
 });
+
+describe('clear (TASK-95)', () => {
+  it('empties every table the index is made of, so a scan can fill it again (AC #1)', async () => {
+    const index = await store();
+    index.upsertAll([
+      post({ title: 'On gardening', html: '<p>Tomatoes want sun.</p>' }),
+      post({
+        path: 'posts/2026-09-03-second.md',
+        slug: 'second',
+        permalink: '/2026/09/second/',
+        title: 'Second',
+        date: '2026-09-03T09:00:00-05:00',
+        tags: ['introductions', 'tomatoes'],
+        categories: ['general', 'garden'],
+        html: '<p>More tomatoes.</p>',
+      }),
+    ]);
+    assert.equal(index.counts().total, 2, 'there was something to clear');
+    assert.equal(index.countSearch('tomatoes'), 2, 'and it was findable');
+
+    index.clear();
+
+    assert.deepEqual(index.listPaths(), [], 'documents');
+    assert.deepEqual(index.counts(), {
+      total: 0,
+      posts: 0,
+      pages: 0,
+      drafts: 0,
+      scheduled: 0,
+      trashed: 0,
+    });
+    assert.deepEqual(index.listTags(), [], 'document_tags');
+    assert.deepEqual(index.listCategories(), [], 'document_categories');
+    assert.deepEqual(index.listTermUsage('tag'), [], 'every tag, not only the counted ones');
+    assert.deepEqual(index.listTermUsage('category'), []);
+    assert.deepEqual(index.search('tomatoes'), [], 'documents_fts');
+    assert.equal(index.countSearch('tomatoes'), 0);
+  });
+
+  it('leaves the index usable, so the next write is indexed and found (AC #1)', async () => {
+    const index = await store();
+    index.upsert(post());
+
+    index.clear();
+    index.upsert(post({ title: 'After the clear', html: '<p>Rebuilt.</p>' }));
+
+    assert.deepEqual(
+      index.search('rebuilt').map((hit) => hit.document.title),
+      ['After the clear'],
+    );
+    assert.equal(index.counts().total, 1, 'and nothing was left behind to double it');
+  });
+});

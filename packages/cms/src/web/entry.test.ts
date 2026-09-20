@@ -76,11 +76,13 @@ const CONTENT: Record<string, string> = {
   'pages/about.md': '---\ntitle: About\npermalink: /about/\n---\n\nAbout us.\n',
 };
 
-/** The site menu these tests read, in `site.json` order. */
-const NAVIGATION = [
-  { label: 'Home', url: '/' },
-  { label: 'About', url: '/about/' },
-];
+/** The menus these tests read, in `site.json` order. */
+const MENUS = {
+  primary: [
+    { label: 'Home', url: '/' },
+    { label: 'About', url: '/about/' },
+  ],
+};
 
 /**
  * A CMS wearing the packaged theme.
@@ -106,7 +108,7 @@ async function site(
   await writeTree(contentDir, {
     ...CONTENT,
     '_data/site.json': JSON.stringify(
-      { title: 'A Site', author: 'Ada Lovelace', navigation: NAVIGATION, ...settings },
+      { title: 'A Site', author: 'Ada Lovelace', menus: MENUS, ...settings },
       null,
       2,
     ),
@@ -276,29 +278,49 @@ describe('the bio (AC #2)', () => {
     assert.doesNotMatch(inside, /rel="author me"/, 'a name with no account here was linked');
     assert.doesNotMatch(inside, /u-url/, 'and it has an archive to link to');
   });
+
+  it('prints their note and their rel="me" links under a post (TASK-105 AC #3)', async () => {
+    // The bio used to keep these for an author archive, on the grounds that
+    // the page footer already carried the site's identity links. It does not
+    // any more, so a reader who has just read somebody finds that person's
+    // own links right under what they read.
+    const inside = bio(await body(await site(), '/2026/09/hello/'));
+
+    assert.match(inside, /<p class="bio-note p-note">Wrote the first program\.<\/p>/, 'no note');
+    assert.match(
+      inside,
+      /<ul class="hlist bio-links">[\s\S]*<a class="u-url" rel="me" href="https:\/\/ada\.example">Site<\/a>/,
+      'the person’s own links are not under the post',
+    );
+  });
 });
 
-describe('the site menu (AC #2)', () => {
-  it('lists the menu in the bio, and not in the footer, on an entry', async () => {
+describe('the site menu (AC #2, TASK-105)', () => {
+  it('is in the header, and in neither the bio nor the page footer', async () => {
     const cms = await site();
 
-    for (const pathname of ['/2026/09/hello/', '/about/']) {
+    // Every shape of page the theme draws: the two that used to read the menu
+    // out of a bio, and the three that used to read it out of the footer.
+    for (const pathname of [
+      '/2026/09/hello/',
+      '/about/',
+      '/',
+      '/tag/microformats/',
+      '/category/notes/',
+    ]) {
       const html = await body(cms, pathname);
+
       assert.match(
-        bio(html),
+        /<header class="global-header">([\s\S]*?)<\/header>/.exec(html)?.[1] ?? '',
         /<nav class="site-nav" aria-label="Site">\s*<ul class="hlist">[\s\S]*?<a href="\/about\/"/,
-        `${pathname} has no menu in its bio`,
+        `${pathname} has no menu in its header`,
       );
-      assert.doesNotMatch(pageFooter(html), /site-nav/, `${pathname} prints the menu twice`);
-    }
-  });
-
-  it('keeps the menu in the footer on a page that has no bio', async () => {
-    const cms = await site();
-
-    for (const pathname of ['/', '/tag/microformats/', '/category/notes/']) {
-      const html = await body(cms, pathname);
-      assert.match(pageFooter(html), /<nav class="site-nav"/, `${pathname} lost the menu`);
+      assert.doesNotMatch(bio(html), /site-nav/, `${pathname} still has a menu in its bio`);
+      assert.doesNotMatch(
+        pageFooter(html),
+        /site-nav/,
+        `${pathname} still has a menu in its footer`,
+      );
       assert.equal(
         [...html.matchAll(/class="site-nav"/g)].length,
         1,

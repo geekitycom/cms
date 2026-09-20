@@ -23,6 +23,7 @@ import sharp from 'sharp';
 import { createUser, setUserProfile } from '../admin/accounts.ts';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { PACKAGED_THEME_DIR } from './themes.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -276,65 +277,210 @@ describe('the page shell (AC #1)', () => {
     assert.match(html, /<h1 class="page-title">News<\/h1>/, 'so the listing must head itself');
   });
 
-  it('puts no navigation in the header', async () => {
+  it('gives the root header the menu as a line of its own under the tagline (TASK-105 AC #1)', async () => {
     const cms = await site({
-      navigation: [
-        { label: 'Home', url: '/' },
-        { label: 'About', url: '/about/' },
-      ],
+      menus: {
+        primary: [
+          { label: 'Home', url: '/' },
+          { label: 'About', url: '/about/' },
+        ],
+      },
     });
 
-    for (const pathname of ['/', '/about/', '/2026/09/hello/']) {
-      const html = await body(cms, pathname);
-      assert.doesNotMatch(header(html), /<nav/, `${pathname} still has a header menu`);
-      // Nobody here answers to the site's author setting, so no page has a bio
-      // to carry the menu and the footer prints it everywhere (TASK-83).
-      assert.match(footer(html), /<nav class="site-nav"/, `${pathname} lost the menu altogether`);
-    }
+    assert.match(
+      header(await body(cms, '/')),
+      /<p>Words about words<\/p>\s*<nav class="site-nav" aria-label="Site">/,
+      'the menu does not follow the tagline in the root header',
+    );
   });
 
-  it('moves the menu into the bio on a page that has one', async () => {
+  it('puts the menu beside the link home on every other page (TASK-105 AC #1)', async () => {
+    const cms = await site({ menus: { primary: [{ label: 'About', url: '/about/' }] } });
+
+    for (const pathname of ['/about/', '/2026/09/hello/', '/tag/notes/']) {
+      assert.match(
+        header(await body(cms, pathname)),
+        /<a class="header-link-home" href="\/">A Site<\/a>\s*<nav class="site-nav" aria-label="Site">/,
+        `${pathname} does not carry the menu beside its link home`,
+      );
+    }
+
+    // The two are different layouts rather than the same markup twice: a line
+    // of its own under the tagline at the root, and one line with the link
+    // home everywhere else, which is the stylesheet's half of the same rule.
+    assert.match(
+      await readFile(path.join(PACKAGED_THEME_DIR, 'static', 'style.css'), 'utf8'),
+      /\.global-wrapper:not\(\[data-is-root-path='true'\]\) \.global-header \{[^}]*display: flex;/,
+      'the stylesheet does not lay the header of an inside page out as one line',
+    );
+  });
+
+  it('prints the menu once, in the header, on every kind of page (TASK-105 AC #2)', async () => {
     const cms = await site({
       author: 'Ada Lovelace',
-      navigation: [{ label: 'About', url: '/about/' }],
+      menus: { primary: [{ label: 'About', url: '/about/' }] },
     });
     await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
 
-    // An entry credits somebody, so the menu is the horizontal list in its
-    // bio, where the source design reads it. A listing has no bio, so the
-    // footer keeps it. Either way it is on the page exactly once.
-    for (const [pathname, inTheBio] of [
-      ['/about/', true],
-      ['/2026/09/hello/', true],
-      ['/', false],
-      ['/tag/notes/', false],
-    ] as const) {
-      const html = await body(cms, pathname);
+    // A post, a listing, an author archive and a 404: every shape of page the
+    // theme draws, including the two that used to read the menu out of a bio.
+    for (const pathname of [
+      '/',
+      '/2026/09/hello/',
+      '/about/',
+      '/tag/notes/',
+      '/author/ada/',
+      '/nothing-here/',
+    ]) {
+      const response = await cms.app.request(pathname);
+      const html = await response.text();
+
       assert.equal(
-        [...html.matchAll(/class="site-nav"/g)].length,
+        [...html.matchAll(/<nav class="site-nav" aria-label="Site"/g)].length,
         1,
         `${pathname} does not print the menu exactly once`,
       );
-      assert.equal(
-        /<nav class="site-nav"/.test(footer(html)),
-        !inTheBio,
-        `${pathname} has the menu in the wrong place`,
+      assert.match(
+        header(html),
+        /<nav class="site-nav" aria-label="Site"/,
+        `${pathname} prints the menu outside the header`,
       );
     }
   });
 });
 
-describe('the footer (AC #2)', () => {
-  it('prints the year, the site author, the colophon and an RSS link', async () => {
+describe('the menus a theme renders by name (TASK-107)', () => {
+  /** The `<nav>` an `aria-label` names, anywhere on the page. */
+  function nav(html: string, label: string): string {
+    const found = new RegExp(`<nav class="site-nav" aria-label="${label}">([\\s\\S]*?)</nav>`).exec(
+      html,
+    );
+    return found?.[1] ?? '';
+  }
+
+  it('renders menus.primary and menus.footer, each in its own place (AC #4)', async () => {
+    const cms = await site({
+      menus: {
+        primary: [
+          { label: 'Home', url: '/' },
+          { label: 'About', url: '/about/' },
+        ],
+        footer: [
+          { label: 'Colophon', url: '/colophon/' },
+          { label: 'Sources', url: '/sources/' },
+        ],
+      },
+    });
+
+    const html = await body(cms, '/about/');
+
+    assert.deepEqual(
+      [...nav(html, 'Site').matchAll(/>([^<]+)<\/a>/g)].map((match) => match[1]),
+      ['Home', 'About'],
+      'the site menu is not menus.primary',
+    );
+    assert.deepEqual(
+      [...nav(html, 'Footer').matchAll(/>([^<]+)<\/a>/g)].map((match) => match[1]),
+      ['Colophon', 'Sources'],
+      'the footer menu is not menus.footer',
+    );
+  });
+
+  it('marks the current item of whichever menu holds this page (AC #5)', async () => {
+    const cms = await site({
+      menus: {
+        primary: [{ label: 'Home', url: '/' }],
+        footer: [
+          { label: 'About', url: '/about/' },
+          { label: 'Elsewhere', url: 'https://example.org/' },
+        ],
+      },
+    });
+
+    const printed = nav(await body(cms, '/about/'), 'Footer');
+
+    assert.match(
+      printed,
+      /<a href="\/about\/" class="is-current" aria-current="page">About<\/a>/,
+      'the footer menu does not know which page this is',
+    );
+    assert.match(
+      printed,
+      /<a href="https:\/\/example\.org\/">Elsewhere<\/a>/,
+      'a link off the site is never the current page',
+    );
+  });
+
+  it('gives an item marked me a rel="me" and an unmarked one none (AC #2)', async () => {
+    const cms = await site({
+      menus: {
+        footer: [
+          { label: 'Mastodon', url: 'https://example.social/@ada', me: true },
+          { label: 'Colophon', url: '/colophon/' },
+        ],
+      },
+    });
+
+    const printed = nav(await body(cms, '/about/'), 'Footer');
+
+    assert.match(printed, /<a href="https:\/\/example\.social\/@ada" rel="me">Mastodon<\/a>/);
+    assert.match(printed, /<a href="\/colophon\/">Colophon<\/a>/);
+    assert.equal([...printed.matchAll(/rel="me"/g)].length, 1, 'only the marked item carries it');
+  });
+
+  it('keeps a menu whose name no theme declares, and renders it nowhere (AC #6)', async () => {
+    const { cms, contentDir } = await siteWithContent({
+      menus: {
+        primary: [{ label: 'Home', url: '/' }],
+        sidebar: [{ label: 'Blogroll', url: '/blogroll/' }],
+      },
+    });
+
+    for (const pathname of ['/', '/about/', '/2026/09/hello/']) {
+      assert.doesNotMatch(
+        await body(cms, pathname),
+        /Blogroll/,
+        `${pathname} rendered a menu the theme declares no area for`,
+      );
+    }
+
+    const stored: unknown = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    );
+    assert.deepEqual((stored as { menus: Record<string, unknown> }).menus['sidebar'], [
+      { label: 'Blogroll', url: '/blogroll/' },
+    ]);
+  });
+
+  it('reads no menu at all out of the navigation key TASK-106 left behind (AC #7)', async () => {
+    const cms = await site({ navigation: [{ label: 'Anachronism', url: '/old/' }] });
+
+    assert.doesNotMatch(await body(cms, '/about/'), /Anachronism/);
+  });
+});
+
+describe('the footer (AC #2, TASK-105)', () => {
+  it('prints the year, the site author and the colophon', async () => {
     const printed = footer(await body(await site({ author: 'Ada Lovelace' }), '/'));
 
     assert.match(printed, new RegExp(`&copy; ${YEAR}, Ada Lovelace`), 'no copyright line');
     assert.match(printed, /Published with[\s\S]*Geekity/, 'no colophon');
-    assert.match(printed, /<a href="\/feed\/">RSS<\/a>/, 'no RSS link');
   });
 
-  it('lists the site author’s links as rel="me" in an hlist', async () => {
-    const cms = await site({ author: 'Ada Lovelace' });
+  it('prints menus.footer on every page and nothing off an account (TASK-105 AC #4)', async () => {
+    // The footer used to print an RSS link and one `rel="me"` link per entry
+    // of `siteAuthor.links` — one nominated user's profile presented as the
+    // site's. The footer menu replaces both: a site that wants its feed in
+    // the footer types a line for it, the same way it types anything else.
+    const cms = await site({
+      author: 'Ada Lovelace',
+      menus: {
+        footer: [
+          { label: 'RSS', url: '/feed/' },
+          { label: 'Colophon', url: '/colophon/' },
+        ],
+      },
+    });
     await addUser(cms, 'ada', {
       displayName: 'Ada Lovelace',
       links: [
@@ -343,17 +489,38 @@ describe('the footer (AC #2)', () => {
       ],
     });
 
-    const printed = footer(await body(cms, '/2026/09/hello/'));
-    const list = /<ul class="hlist">([\s\S]*?)<\/ul>/.exec(printed)?.[1] ?? '';
+    for (const pathname of ['/', '/about/', '/2026/09/hello/', '/tag/notes/', '/author/ada/']) {
+      const printed = footer(await body(cms, pathname));
 
-    assert.match(list, /<a rel="me" href="https:\/\/example\.social\/@ada">Mastodon<\/a>/);
-    assert.match(list, /<a rel="me" href="https:\/\/github\.example\/ada">GitHub<\/a>/);
-    assert.equal([...list.matchAll(/rel="me"/g)].length, 2, 'one rel="me" link per profile link');
+      assert.match(
+        printed,
+        /<nav class="site-nav" aria-label="Footer">[\s\S]*<a href="\/feed\/">RSS<\/a>[\s\S]*<a href="\/colophon\/">Colophon<\/a>/,
+        `${pathname} does not print the footer menu`,
+      );
+      assert.doesNotMatch(
+        printed,
+        /example\.social|github\.example|rel="me"/,
+        `${pathname} prints the site author’s own links as the site’s`,
+      );
+    }
+  });
+
+  it('prints no list for an empty or missing footer menu (TASK-105 AC #5)', async () => {
+    for (const menus of [{}, { footer: [] }, { primary: [{ label: 'Home', url: '/' }] }]) {
+      const printed = footer(await body(await site({ author: 'Joe Blog', menus }), '/'));
+
+      assert.doesNotMatch(printed, /<nav|<ul/, `${JSON.stringify(menus)} left an empty list`);
+      assert.match(
+        printed,
+        new RegExp(`&copy; ${YEAR}, Joe Blog`),
+        'the copyright line went with it',
+      );
+    }
   });
 
   it('still has a footer when the site author is nobody this site has', async () => {
     // What the demo does: `site.json` names an author no user answers to, so
-    // `siteAuthor` is absent and there are no identity links to print.
+    // `siteAuthor` is absent. Nothing in the footer reads it either way.
     const printed = footer(await body(await site({ author: 'Joe Blog' }), '/'));
 
     assert.match(
@@ -362,7 +529,6 @@ describe('the footer (AC #2)', () => {
       'the name in the setting is still printed',
     );
     assert.doesNotMatch(printed, /rel="me"/, 'a name with no profile behind it has no links');
-    assert.match(printed, /<a href="\/feed\/">RSS<\/a>/, 'and the RSS link is still there');
   });
 });
 

@@ -279,8 +279,9 @@ And two things under `data/` may be deleted at any time the site is stopped:
 Deleting either is safe with the site stopped: the next boot builds the
 database back out of the files with no manual step, and a request for a variant
 that is not there derives it and serves it. `geekity rebuild` does the database
-half on demand. There is no command for the images, because there is nothing to
-do: `rm -r data/images`.
+half on demand, and **Tools > Content index** in the admin does it [without
+stopping the site](#rebuilding-the-index-from-the-admin). There is no command
+for the images, because there is nothing to do: `rm -r data/images`.
 
 ### What is in the database, and what a rebuild loses
 
@@ -447,6 +448,35 @@ act on a rebuild should check `origin`. A `schedule` change carries no
 creation to everything downstream.
 
 Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there.
+
+### Rebuilding the index from the admin
+
+A scan leaves a row alone when its hash matches the file, which is the right
+rule almost always and the wrong one after the index and the files have come
+apart: content edited over ssh while the site was down, a `git pull` the
+watcher never saw, a database that was restored from an older backup than the
+content. **Tools > Content index** in the admin is the repair. It shows what
+the index holds — documents, followers, inbox activities, comments — and one
+button empties it and reads every file again, on the site as it is running.
+
+It is behind a confirm step, because between the emptying and the end of the
+scan the site answers 404 for documents whose files are perfectly fine: well
+under a second on a small site, longer on a large one, and it is serving the
+whole time. A second rebuild asked for while one is running is refused rather
+than started.
+
+Nothing is deleted and no connection is replaced, so the rebuild costs a site
+much less than the command below: you stay signed in, the delivery log, the
+relay handshakes and the scheduler's watermark are all kept, and a post that
+comes due during it is still announced. It also tells nobody: every change a
+scan makes carries `origin: 'scan'`, which delivery, the webmentions and the
+feed pings all ignore, so no follower, no linked page and no feed server hears
+about a post that was only re-indexed.
+
+`geekity rebuild` at the command line stays for the one case a screen cannot
+be the door for: a database this version refuses to open, where there is no
+site running to press a button in. See [A database this version cannot
+use](#a-database-this-version-cannot-use).
 
 ## The public site
 
@@ -773,8 +803,8 @@ offered.
 
 `/admin/settings` holds the values that are a site's own rather than a post's,
 on six pages under the Settings menu: **General** (title, tagline, author, base
-URL, time zone and language), **Reading** (posts per page, the site menu, the
-notify server the feeds advertise), **Permalinks** (the tag and category
+URL, time zone and language), **Reading** (what the homepage displays, posts per
+page, the notify server the feeds advertise), **Permalinks** (the tag and category
 archive bases), **Discussion** (comments and when they close, webmentions sent
 and received), **Email** (how the site sends mail and where a message written to
 it goes) and **Federation** (the relays the site subscribes to). They live in
@@ -813,7 +843,7 @@ once, on the first boot of this one, and the table is dropped.
 
 The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `timezone`, `language`, `tagBase`, `categoryBase`, `notifyServer`, `mailProvider`, `mailFromName`,
-`mailFromAddress`, `mailReplyTo`, `contactEmail`, `relays`, `navigation` and
+`mailFromAddress`, `mailReplyTo`, `contactEmail`, `relays`, `menus` and
 `taxonomyRedirects`,
 and every other key it already had is kept — a site may put anything in there,
 `feedSize` included, and reach it from its templates. A key it does not carry
@@ -830,7 +860,6 @@ back with a 400 and one message under each field that has one:
 | Time zone      | An IANA zone name `Intl` knows, such as `Europe/London`.                          |
 | Language       | A BCP 47 tag, such as `en` or `en-GB`. It is the page's `lang` and the feeds'.    |
 | Posts per page | A whole number of one or more. It is what the home page and tag archives page by. |
-| Menu           | One `Label \| URL` per line, the URL a path or an absolute URL. See below.        |
 | Tag base       | One URL-safe path segment. See below.                                             |
 | Category base  | The same, and not the same word as the tag base.                                  |
 | Relays         | One relay inbox per line, each an absolute `http://` or `https://` URL.           |
@@ -860,20 +889,6 @@ one still waiting. Removing a line unfollows it. See
 [websub]: https://www.w3.org/TR/websub/
 [notify]: packages/cms/README.md#real-time-notification
 
-The menu is the site navigation, one `Label | URL` per line — `About | /about/`,
-`Mastodon | https://example.social/@me` — rendered in the site header in that
-order, with the item whose path is the one being read marked `aria-current`. A
-page can put itself on the end of it by ticking **Show in navigation** in the
-editor, which writes `navigation: true` into its front matter; **Menu order**
-writes `navigationOrder`, and the flagged pages sort by it and then by title
-after every item the setting names. The setting is `navigation` in
-`content/_data/site.json`, a list of `{ label, url }`, so an Eleventy build
-renders the same menu — `docs/eleventy.config.example.js` assembles it as
-`collections.menu`. A theme reads it as `menu`; see
-[Navigation][navigation] in the theme README.
-
-[navigation]: packages/cms/themes/default/README.md#navigation
-
 The two archive bases decide where the taxonomy archives live: `/{tagBase}/{tag}/`
 and `/{categoryBase}/{name}/`. They default to WordPress's `tag` and `category`,
 so a site imported from WordPress keeps every archive URL it published. Each is
@@ -898,6 +913,62 @@ no configuration at all nothing is sent and every feature that emails carries on
 working. See [Email][email] in the package README.
 
 [email]: packages/cms/README.md#email
+
+## Navigation
+
+A menu is a named thing the site stores and the theme asks for, and
+`/admin/navigation` is where somebody manages them. It is a section of its own
+after Pages rather than a settings page: a menu is content a site arranges, the
+way its pages are, rather than a switch that changes how the site behaves — and
+the shape of the screen comes from the active theme, which is not something a
+page of fields can be.
+
+**A theme declares where a menu can go.** Its `theme.json` carries an `areas`
+list, each entry a `name` and a `label`:
+
+```json
+{ "areas": [{ "name": "primary", "label": "Site menu" }] }
+```
+
+That declaration is the whole of what puts an area on the screen. The packaged
+theme declares `primary` ("Site menu") and `footer` ("Footer links"); a theme
+that wants a third declares it, and a theme that declares none — or whose
+`areas` cannot be read — inherits the packaged theme's, exactly as it inherits
+every template it has not overridden.
+
+**The screen is two lists.** First the areas the active theme declares, in the
+theme's own order and under the theme's own labels, each a box of links. An
+area the site has never filled in is an empty box rather than a missing one.
+Then every other menu the site stores, under a heading saying this theme
+renders them nowhere: those are kept, still editable — which is how the menu a
+theme will use gets written before the site switches to it — and each has a
+Delete, which is the only way a menu is removed. An area the theme declares is
+emptied rather than deleted.
+
+**A menu's items** are typed one `Label | URL` per line — `About | /about/`,
+`Mastodon | https://example.social/@me | me` — rendered in that order, with the
+item whose path is the one being read marked `aria-current` and a line ending
+`| me` given `rel="me"`, which is how Mastodon verifies that the site and the
+profile it links are yours. The menu is the whole of itself: a page cannot put
+itself in one, so there is one screen to edit it on, one order, and no way for
+a link to appear twice. A page the site serves as its front page is typed
+`Home | /`, the URL a reader lands on, rather than at the permalink that
+redirects there.
+
+**A menu name** is lower-case letters, digits and underscores, starting with a
+letter, up to 32 characters. It is the word a theme writes after the dot in
+`{% for item in menus.footer %}`, which is why a dash is
+refused: after a dot it is a minus sign, and a menu named `top-bar` would render
+nothing and say nothing about why. Lower case is the other half of the rule, and
+it is what stops two menus nobody can tell apart: `Footer` is refused rather
+than quietly lowered, and a name the site already holds is refused too.
+
+A site stores its menus as `menus` in `content/_data/site.json`, keyed by name.
+Templates get them all as `menus`; an Eleventy build reads the same object —
+`docs/eleventy.config.example.js` assembles it as `collections.menus`. See
+[Navigation][navigation] in the theme README.
+
+[navigation]: packages/cms/themes/default/README.md#navigation
 
 ## Tags and categories
 
@@ -1014,10 +1085,12 @@ at an 18px root, warm paper, a rust primary and a blue secondary, one column at
 42rem, links that invert on hover. `layouts/base.njk` is the shell — the skip
 link, a `.global-wrapper` that says when it is at `/`, a header that is the
 site title and tagline on the front page and a small link home everywhere else,
-and a footer with the copyright, the colophon, an RSS link and the site author's
-`rel="me"` links. There is no navigation in the header: the site menu is the
-horizontal list in the bio under an entry, and the footer prints it only on a
-page that has no bio — a listing, the 404 — so it is on every page once.
+and a footer with the copyright, the colophon and `menus.footer`. The header
+carries `menus.primary` on every page — a line of its own under the tagline at
+the root, beside the small link home everywhere else — so a reader looks in one
+place whatever they are reading. The bio under an entry carries the person it
+is by and nothing else, and the footer links what a site typed into its footer
+menu rather than anything read off an account.
 Webrings, badges and anything else particular to one site are not in the
 package: they go in a site theme's `footer` block. The source design is light only; the theme adds a dark
 scheme under `prefers-color-scheme: dark`, and
@@ -1070,8 +1143,8 @@ all-or-nothing override: assets resolve file by file the way templates do, so a
 site's `style.css` is served instead of the packaged one, not after it.
 
 `apps/demo/content/pages/contact.md` is the worked example of the other kind of
-opt-in: `contact: true` puts the contact form under the page and
-`navigation: true` puts the page in the menu. Send it a message with the demo
+opt-in: `contact: true` puts the contact form under the page, and the demo's
+`menus.primary` names it so the page is in the menu. Send it a message with the demo
 running and the message is written to `data/contact/` before anything is
 emailed, and is waiting on **Messages** in the admin. Where it is emailed is the
 `contactEmail` setting in `content/_data/site.json`, which is read when the
@@ -1328,7 +1401,8 @@ To roll back, set `GEEKITY_TAG` to the version you came from and redeploy the
 same way. If the newer version migrated the database, the older one refuses to
 start and says the database was written by a newer `@geekity/cms` (the logs in
 dockge, or `docker compose logs`, show it). The database is a cache, so rebuild
-it with the old version:
+it with the old version — the one rebuild the admin cannot do, because there is
+no site running to press a button in:
 
 ```sh
 docker compose stop
@@ -1341,6 +1415,15 @@ docker compose start
 same image, `.env` and mounts with the server stopped. A rebuild signs everyone
 out; [what else it costs](#what-is-in-the-database-and-what-a-rebuild-loses) is
 listed above. The same three commands fix a damaged database.
+
+**Every other rebuild belongs in the admin.** When the index and the content
+files have come apart — content edited over ssh, a `git pull` while the stack
+was down, one of the two restored from a backup — **Tools > Content index**
+[reads every file again on the running site](#rebuilding-the-index-from-the-admin):
+no stopping the stack, no one-off container, nobody signed out, and none of the
+cost listed above. In a container the server is PID 1, so
+`docker exec <container> geekity rebuild` can never work; the admin is the door
+that is always open.
 
 ### A custom theme
 

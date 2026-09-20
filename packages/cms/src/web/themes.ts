@@ -43,6 +43,22 @@ export const SITE_THEME_KIND = 'site';
 /** What kinds of theme a manifest may declare. One, today. */
 export type ThemeKind = typeof SITE_THEME_KIND;
 
+/**
+ * One place a theme renders a menu, as its `theme.json` declares it.
+ *
+ * A theme decides where a menu can go, and the screen that edits menus cannot
+ * know what a theme wants (TASK-107). So the theme says: a `name`, which is
+ * the key a site stores that menu under in `site.json` and the key the
+ * template context carries it as, and a `label` for the person choosing which
+ * menu to fill in.
+ */
+export interface ThemeArea {
+  /** The menu's name: what `menus` is keyed by in `site.json` and in a render. */
+  readonly name: string;
+  /** What the Navigation screen calls this place, for a person to read. */
+  readonly label: string;
+}
+
 /** One theme directory, read and validated. */
 export interface Theme {
   /** The directory name, which is the theme's id and what a site.json names. */
@@ -55,6 +71,12 @@ export interface Theme {
   readonly kind: ThemeKind;
   /** One line about the theme, when the manifest wrote one. */
   readonly description?: string | undefined;
+  /**
+   * Where this theme renders a menu, in the order the manifest names them.
+   * Empty for a theme that declares none, which is every theme written before
+   * areas existed and every theme that renders no menu at all.
+   */
+  readonly areas: readonly ThemeArea[];
 }
 
 /** A theme, or the reason the directory is not one. */
@@ -123,8 +145,47 @@ export function readTheme(dir: string): ThemeRead {
       ...(typeof description === 'string' && description.trim() !== ''
         ? { description: description.trim() }
         : {}),
+      areas: themeAreasOf(manifest['areas']),
     },
   };
+}
+
+/**
+ * An `areas` value as the areas it declares, ignoring anything that is not
+ * one.
+ *
+ * Tolerant where the name and the kind are strict, and deliberately so: a
+ * theme that got its areas wrong still renders a site, whereas one with no
+ * name or the wrong kind is not a theme at all. A declaration that cannot be
+ * read leaves the theme with no areas — the Navigation screen then offers
+ * nowhere to put a menu, which is visibly wrong and fixable, rather than the
+ * site 500ing over a typo in a manifest.
+ *
+ * A label is optional and falls back to the name, because an area with a name
+ * and no label is a theme that said where a menu goes and forgot to say it
+ * nicely. A name declared twice is one area: the manifest is a list only so
+ * that the order is the theme's to choose.
+ */
+function themeAreasOf(value: unknown): ThemeArea[] {
+  if (!Array.isArray(value)) return [];
+
+  const areas: ThemeArea[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { name, label } = entry as Record<string, unknown>;
+    if (typeof name !== 'string') continue;
+
+    const area = name.trim();
+    if (area === '' || seen.has(area)) continue;
+    seen.add(area);
+
+    const words = typeof label === 'string' ? label.trim() : '';
+    areas.push({ name: area, label: words === '' ? area : words });
+  }
+
+  return areas;
 }
 
 /** A directory under the themes directory that turned out not to be a theme. */

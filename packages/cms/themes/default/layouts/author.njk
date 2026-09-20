@@ -9,14 +9,13 @@
 
   The source design has no author archive, so there is nothing to port: the
   heading is the CMS's own. What it does not keep is an h-card of its own.
-  `partials/bio.njk` is the one the theme has, and `bioProfile` asks it for the
-  whole profile — the note and the `rel="me"` links — because this page is
-  about that person rather than about something they wrote.
+  `partials/bio.njk` is the one the theme has, and it prints the whole profile
+  — the note and the `rel="me"` links — wherever it is, so this page is headed
+  with the same card that ends each of their posts.
 #}
 {% extends "layouts/base.njk" %}
 
 {% set bioAuthor = author %}
-{% set bioProfile = true %}
 {% set bioLead = "Posts by" %}
 
 {% block title %}{{ author.name }}{% if pagination.pageNumber > 0 %}, page {{ pagination.pageNumber + 1 }}{% endif %} &middot; {{ site.title }}{% endblock %}

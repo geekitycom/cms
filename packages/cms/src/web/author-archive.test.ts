@@ -147,7 +147,18 @@ describe('the author archive (AC #3)', () => {
     assert.ok(html.includes('Ada Lovelace'), 'the display name is the heading');
     assert.ok(html.includes('Wrote the first program.'), 'the bio is printed');
     assert.ok(html.includes('/uploads/ada.jpg'), 'the avatar is shown');
-    assert.ok(html.includes('https://ada.example'), 'the links are listed');
+
+    // The card is the person and nobody else (TASK-105): their own links,
+    // each `rel="me"` so a profile linking back verifies, and no site menu —
+    // that is in the header on this page like every other.
+    const bio =
+      /<div class="bio p-author h-card">([\s\S]*?)<\/div>\s*<\/div>/.exec(html)?.[1] ?? '';
+    assert.match(
+      bio,
+      /<a class="u-url" rel="me" href="https:\/\/ada\.example">Her notes<\/a>/,
+      'their links are not listed rel="me" in the bio',
+    );
+    assert.ok(!bio.includes('site-nav'), 'the bio still carries the site menu');
   });
 
   it('gives a user with no profile an archive under their username', async () => {

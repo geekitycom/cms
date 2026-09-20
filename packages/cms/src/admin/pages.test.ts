@@ -86,8 +86,6 @@ async function submit(
     description: field(html, 'description') ?? '',
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
     ...(checked(html, 'exclude') ? { exclude: '1' } : {}),
-    ...(checked(html, 'navigation') ? { navigation: '1' } : {}),
-    navigation_order: field(html, 'navigation_order') ?? '',
     ...(checked(html, 'contact') ? { contact: '1' } : {}),
     action: 'update',
     ...changes,
@@ -96,7 +94,6 @@ async function submit(
   // A browser leaves an unticked checkbox out of the body altogether, so a
   // test that clears one says so with an empty value and it goes the same way.
   if (fields['exclude'] === '') delete fields['exclude'];
-  if (fields['navigation'] === '') delete fields['navigation'];
   if (fields['contact'] === '') delete fields['contact'];
 
   const saveUrl = /<form class="admin-editor" method="post" action="([^"]+)"/.exec(html)?.[1];
@@ -431,38 +428,36 @@ describe('the page trash', () => {
   });
 });
 
-describe('a page in the site menu', () => {
-  it('writes navigation when the box is ticked, and brings it back ticked (AC #2)', async () => {
+describe('the site menu, which only the settings screen edits (TASK-106)', () => {
+  it('offers no checkbox or order box, and saves neither key (AC #3)', async () => {
     const contentDir = await seeded([]);
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
 
-    await submit(agent, '/admin/pages/new', { title: 'Hidden', action: 'publish' });
-    const hidden = await readFile(path.join(contentDir, 'pages', 'hidden.md'), 'utf8');
-    assert.ok(!/navigation/.test(hidden), 'an untouched box leaves the key out of the file');
+    await submit(agent, '/admin/pages/new', { title: 'About', action: 'publish' });
 
-    await submit(agent, '/admin/pages/new', {
-      title: 'About',
+    const editor = await (await agent.get('/admin/pages/about')).text();
+    assert.ok(!/name="navigation"/.test(editor), 'the page editor has no navigation checkbox');
+    assert.ok(!/name="navigation_order"/.test(editor), 'and no menu order box');
+    assert.ok(!/Show in navigation/.test(editor), 'nor the words that labelled them');
+
+    // Posted anyway — a bookmarked form, a script written against the old
+    // editor — they are two more unknown fields, and an unknown field is not
+    // front matter.
+    await submit(agent, '/admin/pages/about', {
       navigation: '1',
       navigation_order: '2',
-      action: 'publish',
+      action: 'update',
     });
 
     const written = await readFile(path.join(contentDir, 'pages', 'about.md'), 'utf8');
-    assert.match(written, /^navigation: true$/m);
-    assert.match(written, /^navigationOrder: 2$/m);
-    assert.equal(cms.store.getBySlug('about')?.extra['navigation'], true);
-    assert.equal(cms.store.getBySlug('about')?.extra['navigationOrder'], 2);
-
-    const back = await (await agent.get('/admin/pages/about')).text();
-    assert.ok(checked(back, 'navigation'), 'the editor comes back with the box ticked');
-    assert.equal(field(back, 'navigation_order'), '2');
-
-    const home = await (await cms.app.request('/')).text();
-    assert.match(home, /<nav class="site-nav"[\s\S]*?>About</, 'and the page is on the menu');
+    assert.ok(!/^navigation:/m.test(written), 'the file carries no navigation key');
+    assert.ok(!/^navigationOrder:/m.test(written), 'and no order');
+    assert.equal(cms.store.getBySlug('about')?.extra['navigation'], undefined);
+    assert.equal(cms.store.getBySlug('about')?.extra['navigationOrder'], undefined);
   });
 
-  it('takes the keys back out when the box is cleared', async () => {
+  it('leaves the keys an older file carries where they are', async () => {
     const contentDir = await seeded([
       {
         file: 'pages/about.md',
@@ -474,57 +469,17 @@ describe('a page in the site menu', () => {
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
 
-    const html = await (await agent.get('/admin/pages/about')).text();
-    assert.ok(checked(html, 'navigation'), 'the file said so, so the box is ticked');
-    assert.equal(field(html, 'navigation_order'), '3');
+    await submit(agent, '/admin/pages/about', { action: 'update' });
 
-    await submit(agent, '/admin/pages/about', { navigation: '', action: 'update' });
-
+    // They mean nothing now, but they are keys somebody wrote by hand as far
+    // as the editor is concerned, and doc-2 says those come back out untouched.
     const written = await readFile(path.join(contentDir, 'pages', 'about.md'), 'utf8');
-    assert.ok(!/^navigation:/m.test(written), 'a page off the menu carries no navigation key');
-    assert.ok(!/^navigationOrder:/m.test(written), 'nor an order it no longer uses');
-    assert.match(written, /^hero: \/uploads\/hero\.jpg$/m, 'other hand-added keys survive');
+    assert.match(written, /^navigation: true$/m);
+    assert.match(written, /^navigationOrder: 3$/m);
+    assert.match(written, /^hero: \/uploads\/hero\.jpg$/m);
 
     const home = await (await cms.app.request('/')).text();
-    assert.ok(!/site-nav/.test(home), 'and the menu is empty again');
-  });
-
-  it('never writes the keys onto a post', async () => {
-    const contentDir = await seeded([]);
-    await mkdir(path.join(contentDir, 'posts'), { recursive: true });
-    await writeFile(
-      path.join(contentDir, 'posts', '2026-01-02-published.md'),
-      '---\ntitle: Out in the world\ndate: 2026-01-02\npermalink: /2026/01/published/\n---\n\nBody.\n',
-      'utf8',
-    );
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    const html = await (await agent.get('/admin/posts/published')).text();
-    assert.ok(!/name="navigation"/.test(html), 'a post editor has no such checkbox');
-
-    const token = csrfField(html);
-    assert.ok(token !== undefined);
-    await agent.post('/admin/posts/published', {
-      csrf_token: token,
-      hash: field(html, 'hash') ?? '',
-      title: 'Out in the world',
-      slug: 'published',
-      permalink: '/2026/01/published/',
-      date: '2026-01-02',
-      tags: '',
-      description: '',
-      body: 'Body.',
-      navigation: '1',
-      navigation_order: '1',
-      action: 'update',
-    });
-
-    const written = await readFile(
-      path.join(contentDir, 'posts', '2026-01-02-published.md'),
-      'utf8',
-    );
-    assert.ok(!/navigation/.test(written));
+    assert.ok(!/site-nav/.test(home), 'and none of it is a menu');
   });
 });
 

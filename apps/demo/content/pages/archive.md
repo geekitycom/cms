@@ -3,8 +3,6 @@ title: Archive
 permalink: /archive/
 description: Every post this site has published, month by month.
 archive: true
-navigation: true
-navigationOrder: 2
 ---
 
 `archive: true` in this page's front matter is the whole of it. One key, which

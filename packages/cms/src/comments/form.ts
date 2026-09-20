@@ -39,6 +39,62 @@ export interface CommentFormContext {
   nameLength: number;
   /** The longest a comment may be, for the textarea's `maxlength`. */
   bodyLength: number;
+  /**
+   * Who the site knows is filling this in, when a session says so (TASK-103).
+   *
+   * Absent for a stranger, so a theme asks `{% if commentForm.signedInAs %}`
+   * and draws the short form — the comment box and a sentence naming the
+   * person — instead of the name, email and website boxes and the honeypot.
+   * Nothing about the account is here but the two things the sentence prints:
+   * the email is never handed to a template, exactly as a stranger's never is.
+   */
+  signedInAs?: { name: string; url: string } | undefined;
+  /**
+   * The token the signed-in form carries, and absent on a stranger's.
+   *
+   * A form that acts on nobody's behalf needs none; the moment this one posts
+   * under somebody's name, a page on another site could make them post without
+   * knowing it, so it carries the same per-session token every admin form
+   * does and the endpoint checks it the way the admin guard does.
+   */
+  csrfToken?: string | undefined;
+}
+
+/**
+ * Who the site knows is commenting, when a valid session says so.
+ *
+ * Read from the session on the request rather than from anything the browser
+ * typed: `email` is the account's, which the comment is stored with and which
+ * no template is ever handed, and `csrfToken` is that session's own.
+ */
+export interface CommentViewer {
+  /** What the comment goes under: their display name, else their username. */
+  name: string;
+  /** Their author archive, which is the comment's website. */
+  url: string;
+  /** The account's email, which is stored and never shown. */
+  email: string | null;
+  /** This session's CSRF token, which the form carries. */
+  csrfToken: string;
+}
+
+/**
+ * The same form drawn for somebody the site knows rather than for a stranger.
+ *
+ * A function over a built form rather than another parameter on the two
+ * builders, so `commentForm` and `refilledCommentForm` keep the signatures the
+ * package publishes and there is one place that decides what "signed in"
+ * changes about a form.
+ */
+export function signedInCommentForm(
+  form: CommentFormContext,
+  viewer: CommentViewer,
+): CommentFormContext {
+  return {
+    ...form,
+    signedInAs: { name: viewer.name, url: viewer.url },
+    csrfToken: viewer.csrfToken,
+  };
 }
 
 /** Where the comment form posts. */

@@ -1,40 +1,31 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { Document } from '../content/document.ts';
 import type { SiteData } from './context.ts';
-import { navigationItems, navigationMenu } from './navigation.ts';
-
-/** A page as the index holds one, with whatever front matter a test names. */
-function page(title: string, permalink: string, extra: Record<string, unknown> = {}): Document {
-  return {
-    type: 'page',
-    path: `pages${permalink}index.md`,
-    slug: title.toLowerCase(),
-    permalink,
-    title,
-    tags: [],
-    categories: [],
-    draft: false,
-    extra,
-    body: '',
-    html: '',
-    hash: 'x',
-  };
-}
+import {
+  menuItemLineProblem,
+  menuItemsFromText,
+  menuItemsText,
+  menuNameProblem,
+  navigationItems,
+  navigationMenu,
+  navigationMenus,
+  siteMenus,
+} from './navigation.ts';
 
 describe('navigationMenu', () => {
-  it('lists the items the setting names, in the order it names them', () => {
+  it('lists the items one named menu holds, in the order it names them (AC #1)', () => {
     const menu = navigationMenu({
       site: {
         title: 'A Site',
         url: 'https://example.com',
-        navigation: [
-          { label: 'About', url: '/about/' },
-          { label: 'Elsewhere', url: 'https://example.org/' },
-        ],
+        menus: {
+          primary: [
+            { label: 'About', url: '/about/' },
+            { label: 'Elsewhere', url: 'https://example.org/' },
+          ],
+        },
       },
-      pages: [],
       url: '/',
     });
 
@@ -48,15 +39,17 @@ describe('navigationMenu', () => {
     const site: SiteData = {
       title: 'A Site',
       url: 'https://example.com',
-      navigation: [
-        { label: 'Home', url: '/' },
-        { label: 'About', url: '/about' },
-        { label: 'Elsewhere', url: 'https://example.org/' },
-      ],
+      menus: {
+        primary: [
+          { label: 'Home', url: '/' },
+          { label: 'About', url: '/about' },
+          { label: 'Elsewhere', url: 'https://example.org/' },
+        ],
+      },
     };
 
     const current = (url: string): string[] =>
-      navigationMenu({ site, pages: [], url })
+      navigationMenu({ site, url })
         .filter((item) => item.current)
         .map((item) => item.label);
 
@@ -67,63 +60,213 @@ describe('navigationMenu', () => {
     assert.deepEqual(current('https://example.org/'), [], 'a path is never an absolute URL');
   });
 
-  it('adds the pages that opted in after the items, ordered then titled', () => {
-    const menu = navigationMenu({
+  it('builds the menu the name asks for, and nothing for a name the site has not stored', () => {
+    const site: SiteData = {
+      title: 'A Site',
+      url: 'https://example.com',
+      menus: {
+        primary: [{ label: 'About', url: '/about/' }],
+        footer: [{ label: 'Colophon', url: '/colophon/' }],
+      },
+    };
+
+    assert.deepEqual(
+      navigationMenu({ site, url: '/', name: 'footer' }).map((item) => item.label),
+      ['Colophon'],
+    );
+    assert.deepEqual(navigationMenu({ site, url: '/', name: 'sidebar' }), []);
+  });
+
+  it('has nothing in it for a site that has stored no menu at all', () => {
+    assert.deepEqual(
+      navigationMenu({ site: { title: 'A Site', url: 'https://example.com' }, url: '/' }),
+      [],
+    );
+  });
+});
+
+describe('navigationMenus', () => {
+  it('marks the current item of every stored menu, keyed by name (AC #5)', () => {
+    const menus = navigationMenus({
       site: {
         title: 'A Site',
         url: 'https://example.com',
-        navigation: [{ label: 'Home', url: '/' }],
+        menus: {
+          primary: [
+            { label: 'Home', url: '/' },
+            { label: 'About', url: '/about/' },
+          ],
+          footer: [{ label: 'About', url: '/about/' }],
+        },
       },
-      pages: [
-        page('Uses', '/uses/', { navigation: true }),
-        page('Colophon', '/colophon/', { navigation: true, navigationOrder: 2 }),
-        page('Now', '/now/', { navigation: true, navigationOrder: 1 }),
-        page('About', '/about/', { navigation: true }),
-        page('Secret', '/secret/', {}),
-        page('Also secret', '/also-secret/', { navigation: 'yes' }),
-      ],
-      url: '/now/',
+      url: '/about/',
     });
 
+    assert.deepEqual(menus, {
+      primary: [
+        { label: 'Home', url: '/', current: false },
+        { label: 'About', url: '/about/', current: true },
+      ],
+      footer: [{ label: 'About', url: '/about/', current: true }],
+    });
+  });
+
+  it('carries a menu no theme has an area for, because the site still holds it (AC #6)', () => {
+    const menus = navigationMenus({
+      site: {
+        title: 'A Site',
+        url: 'https://example.com',
+        menus: { sidebar: [{ label: 'Links', url: '/links/' }] },
+      },
+      url: '/',
+    });
+
+    assert.deepEqual(Object.keys(menus), ['sidebar']);
+  });
+});
+
+describe('siteMenus', () => {
+  it('reads nothing out of site data that stores no menus', () => {
+    assert.deepEqual(siteMenus({ title: 'A Site', url: 'https://example.com' }), {});
+  });
+
+  it('no longer reads the navigation key TASK-106 left behind (AC #7)', () => {
     assert.deepEqual(
-      menu.map((item) => item.label),
-      ['Home', 'Now', 'Colophon', 'About', 'Uses'],
+      siteMenus({
+        title: 'A Site',
+        url: 'https://example.com',
+        navigation: [{ label: 'About', url: '/about/' }],
+      }),
+      {},
     );
+  });
+
+  it('reads nothing out of a menus key that is not an object of lists', () => {
     assert.deepEqual(
-      menu.filter((item) => item.current).map((item) => item.label),
-      ['Now'],
-      'a page in the menu is marked when it is the page being read',
+      siteMenus({ title: 'A Site', url: 'https://example.com', menus: 'About' }),
+      {},
     );
-    assert.equal(menu[1]?.url, '/now/', 'a page links to its own permalink');
+    assert.deepEqual(siteMenus({ title: 'A Site', url: 'https://example.com', menus: [] }), {});
+    assert.deepEqual(
+      siteMenus({ title: 'A Site', url: 'https://example.com', menus: { primary: 'About' } }),
+      { primary: [] },
+      'a name that holds something other than a list is a menu with nothing in it',
+    );
   });
 });
 
 describe('navigationItems', () => {
-  it('reads nothing out of site data that names no menu', () => {
-    assert.deepEqual(navigationItems({ title: 'A Site', url: 'https://example.com' }), []);
+  it('reads the primary menu when nothing says which menu', () => {
+    assert.deepEqual(
+      navigationItems({
+        title: 'A Site',
+        url: 'https://example.com',
+        menus: { primary: [{ label: 'About', url: '/about/' }] },
+      }),
+      [{ label: 'About', url: '/about/' }],
+    );
   });
 
-  it('drops what it cannot read rather than failing the render', () => {
+  it('drops what it cannot read rather than failing the render (AC #1)', () => {
     const items = navigationItems({
       title: 'A Site',
       url: 'https://example.com',
-      navigation: [
-        { label: 'About', url: '/about/' },
-        { label: '', url: '/nameless/' },
-        { label: 'Nowhere' },
-        'About',
-        null,
-        { label: 'Numbered', url: 7 },
-      ],
+      menus: {
+        primary: [
+          { label: 'About', url: '/about/' },
+          { label: '', url: '/nameless/' },
+          { label: 'Nowhere' },
+          'About',
+          null,
+          { label: 'Numbered', url: 7 },
+        ],
+      },
     });
 
     assert.deepEqual(items, [{ label: 'About', url: '/about/' }]);
   });
 
-  it('reads nothing out of a navigation key that is not a list', () => {
+  it('reads the me flag, and only when it is spelled true (AC #2)', () => {
+    const items = navigationItems({
+      title: 'A Site',
+      url: 'https://example.com',
+      menus: {
+        primary: [
+          { label: 'Mastodon', url: 'https://example.social/@me', me: true },
+          { label: 'About', url: '/about/' },
+          { label: 'Unset', url: '/unset/', me: false },
+          { label: 'Wordy', url: '/wordy/', me: 'yes' },
+        ],
+      },
+    });
+
+    assert.deepEqual(items, [
+      { label: 'Mastodon', url: 'https://example.social/@me', me: true },
+      { label: 'About', url: '/about/' },
+      { label: 'Unset', url: '/unset/' },
+      { label: 'Wordy', url: '/wordy/' },
+    ]);
+  });
+});
+
+describe('menuNameProblem (TASK-108)', () => {
+  it('takes the names a theme can write after a dot', () => {
+    for (const name of ['primary', 'footer', 'top2', 'social_links', 'a']) {
+      assert.equal(menuNameProblem(name), undefined, name);
+    }
+  });
+
+  it('refuses a name a template could not loop over, and says why', () => {
+    // `menus.top-bar` is `menus.top` minus `bar`, which renders nothing and
+    // says nothing, so the name is refused here instead.
+    assert.match(menuNameProblem('top-bar') ?? '', /letters, digits and underscores/);
+    assert.match(menuNameProblem('2nd') ?? '', /start with a letter/);
+    assert.match(menuNameProblem('') ?? '', /needs a name/);
+    assert.match(menuNameProblem('   ') ?? '', /needs a name/);
+    assert.ok(menuNameProblem('a'.repeat(33)) !== undefined, 'a name has a length');
+  });
+
+  it('refuses a capital rather than lowering it, because that is the confusable spelling', () => {
+    // A stored `footer` and a stored `Footer` would be two menus nobody could
+    // tell apart on the screen or in a theme; one spelling is the whole rule.
+    assert.match(menuNameProblem('Footer') ?? '', /lower case/);
+  });
+});
+
+describe('the Label | URL line format (TASK-108)', () => {
+  it('reads one item per line, trimmed, blank lines skipped', () => {
     assert.deepEqual(
-      navigationItems({ title: 'A Site', url: 'https://example.com', navigation: 'About' }),
-      [],
+      menuItemsFromText('Home | /\n\n  About | /about/  \nElsewhere | https://example.org/'),
+      [
+        { label: 'Home', url: '/' },
+        { label: 'About', url: '/about/' },
+        { label: 'Elsewhere', url: 'https://example.org/' },
+      ],
     );
+  });
+
+  it('reads a trailing flag, and only a flag this CMS has', () => {
+    assert.deepEqual(menuItemsFromText('Mastodon | https://example.social/@me | me'), [
+      { label: 'Mastodon', url: 'https://example.social/@me', me: true },
+    ]);
+    // A bar in the URL survives, because a trailing word that is not a flag is
+    // part of the URL rather than a flag nobody asked for.
+    assert.deepEqual(menuItemsFromText('Odd | /odd/?a=1|2'), [
+      { label: 'Odd', url: '/odd/?a=1|2' },
+    ]);
+  });
+
+  it('writes the items back as the lines they were typed as', () => {
+    const text = 'Mastodon | https://example.social/@me | me\nAbout | /about/';
+    assert.equal(menuItemsText(menuItemsFromText(text)), text);
+  });
+
+  it('names the first line that is not an item, and says what one is', () => {
+    for (const bad of ['About', 'About |', '| /about/', '  | ', 'About | not a url', 'me | me']) {
+      assert.match(menuItemLineProblem(bad) ?? '', /Label \| URL/, JSON.stringify(bad));
+      assert.match(menuItemLineProblem(bad) ?? '', /rel="me"/, JSON.stringify(bad));
+    }
+    assert.equal(menuItemLineProblem('Home | /\nAbout | /about/'), undefined);
+    assert.equal(menuItemLineProblem(''), undefined, 'an empty menu is a menu');
   });
 });

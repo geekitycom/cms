@@ -1,0 +1,89 @@
+{# /admin/tools: what the derived index holds, and the button that reads every
+   file back into it without stopping the site (TASK-95).
+
+   The counts are the point of the screen as much as the button is: an index
+   that disagrees with the files is not something the site complains about, so
+   the only way to notice is to be shown what it holds. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1>{{ heading }}</h1>
+
+  <p>
+    Everything in <code>data/geekity.db</code> is a reading of the files under
+    <code>{{ contentDir }}</code>, so it can always be read again. Rebuild it after
+    editing content outside the admin &mdash; over ssh, or with a
+    <code>git pull</code> while the site was down &mdash; or when what is listed here
+    disagrees with what is on disk.
+  </p>
+
+  <table class="admin-list">
+    <thead>
+      <tr>
+        <th scope="col">What the index holds</th>
+        <th scope="col">Count</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th scope="row">Documents</th>
+        <td>{{ indexed.documents }}</td>
+      </tr>
+      <tr>
+        <th scope="row">Followers</th>
+        <td>{{ indexed.followers }}</td>
+      </tr>
+      <tr>
+        <th scope="row">Inbox activities</th>
+        <td>{{ indexed.activities }}</td>
+      </tr>
+      <tr>
+        <th scope="row">Comments</th>
+        <td>{{ indexed.comments }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  {% if confirm %}
+    {# Offered rather than done, the way a merge is on the taxonomy screens.
+       The window in the middle is the whole reason: for as long as the scan
+       runs the site answers 404 for documents whose files are perfectly fine,
+       and that is not a thing to discover afterwards. #}
+    <form class="admin-settings" method="post" action="{{ rebuildUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+      <input type="hidden" name="{{ fields.confirm }}" value="1" />
+
+      <h2>Rebuild the index now?</h2>
+
+      <p>
+        The index is emptied and every file read again. Until the scan finishes, this
+        site answers <strong>404</strong> for its posts and pages &mdash; under a second
+        on a small site, longer on a large one &mdash; and it is serving the whole time.
+        Nothing is deleted and nothing is sent: you stay signed in, the delivery log and
+        the relays are kept, and no follower, feed or linked page is told about a post
+        the scan re-indexes.
+      </p>
+
+      <p class="admin-settings-buttons">
+        <button type="submit">Rebuild it</button>
+        <a href="{{ toolsUrl }}">Cancel</a>
+      </p>
+    </form>
+  {% else %}
+    <form class="admin-settings" method="post" action="{{ rebuildUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+      <p class="admin-settings-buttons">
+        <button type="submit">Rebuild the index</button>
+      </p>
+    </form>
+  {% endif %}
+
+  <p class="admin-hint">
+    This runs on the site as it is: nothing is deleted, no connection is swapped and
+    nobody is signed out. <code>geekity rebuild</code> at the command line is the other
+    door, and it is for the one case this screen cannot be: a database this version
+    refuses to open, where there is no site running to press a button in.
+  </p>
+{% endblock %}

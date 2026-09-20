@@ -439,7 +439,7 @@ describe('the fixtures content directory under Eleventy', () => {
     assert.ok(!html.includes('class="conversation"'), 'there is no empty section');
   });
 
-  it('renders the same site menu the CMS renders, from site.json and the flagged pages', async () => {
+  it('renders the same primary menu the CMS renders, from site.json alone', async () => {
     const html = await readFile(path.join(buildDir, '_site', 'about/index.html'), 'utf8');
     const nav = /<nav class="site-nav">[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
 
@@ -448,15 +448,18 @@ describe('the fixtures content directory under Eleventy', () => {
       match[1],
     ]);
 
-    // The two items `content/_data/site.json` names, in its order, and then the
-    // pages whose front matter opted in: About carries navigationOrder 1 and
-    // Colophon carries none, so About comes first.
+    // The items `menus.primary` in `content/_data/site.json` names, in the
+    // order it names them. A menu has no other source (TASK-106): a page
+    // cannot add itself.
     assert.deepEqual(links, [
       ['Home', '/'],
       ['Elsewhere', 'https://elsewhere.example/'],
       ['About', '/about/'],
       ['Colophon', '/colophon/'],
+      ['Mastodon', 'https://elsewhere.example/@fixture'],
     ]);
     assert.match(nav, /<a href="\/about\/" aria-current="page">About<\/a>/);
+    // And the flags an item carries reach a build too (TASK-107).
+    assert.match(nav, /<a href="https:\/\/elsewhere\.example\/@fixture" rel="me">Mastodon<\/a>/);
   });
 });

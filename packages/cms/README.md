@@ -131,6 +131,16 @@ It refuses while the site is running, because deleting the file under a live
 server would leave it writing to a database nothing can find. Stop the site
 first. A file that will not parse is reported and exits `1`, as with `sync`.
 
+That is why it is not the usual repair. **Tools > Content index** in the admin
+empties the index and reads every file again in place, on the live connections:
+no downtime, nobody signed out, and the delivery log, the relay handshakes and
+the scheduler's watermark all kept. It is behind a confirm step, because the
+site answers 404 for its documents between the emptying and the end of the
+scan, and it federates nothing — a change a scan makes carries `origin: 'scan'`,
+which delivery, the webmentions and the feed pings ignore. Use the command for
+the one case the screen cannot be the door for: a database this version refuses
+to open, where there is no site running to press a button in.
+
 ### Creating an admin from the command line
 
 `geekity user add <username>` writes a user straight into `data/users.json`,
@@ -555,7 +565,7 @@ rather than in the trash: there is no file left to build the `Tombstone` from.
 A [Mastodon-style relay][fepae0c] boosts every public activity it is sent on to
 the instances subscribed to it, which is how a site nobody follows yet reaches
 people. `relays` is the setting: one relay inbox per line on
-`/admin/settings/federation`, kept in `site.json` like every other setting, and
+`/admin/federation/settings`, kept in `site.json` like every other setting, and
 `https://tags.pub/user/_____relay_____/inbox` is one worth knowing about — it
 boosts any public post carrying a hashtag it tracks, which every `Article` this
 CMS builds already carries one of per tag and per category.
@@ -663,7 +673,7 @@ next time it refetches the actor. So the CMS can carry them for a while, behind
 a switch, and is meant to stop.
 
 Turn **WordPress ActivityPub compatibility** on under
-`/admin/settings/federation`. It is off by default and `site.json` says nothing
+`/admin/federation/settings`. It is off by default and `site.json` says nothing
 about it until it is on. It needs one thing on the user record in
 `data/users.json` besides the stored actor id above: the number WordPress gave
 that person, which is what its paths are built from.
@@ -766,11 +776,11 @@ followers.json` — which is worth doing if the old site is going away before
    you took one. Check the report: every follower should be added, and any that
    were skipped should be re-run once their servers answer.
 3. **Switch on.** Turn **WordPress ActivityPub compatibility** on under
-   `/admin/settings/federation`, then move the DNS. Followers' servers go on
+   `/admin/federation/settings`, then move the DNS. Followers' servers go on
    delivering to the plugin's old inbox paths until they next refetch the
    actor, and the switch is what catches those deliveries.
 4. **Watch.** `/admin/federation` lists the users with their actor ids and
-   followers; `/admin/settings/federation` lists each compatibility path with
+   followers; `/admin/federation/settings` lists each compatibility path with
    the instant it was last asked for. Deliveries should thin out as each
    follower's server refetches the actor and learns the new endpoints.
 5. **Switch off.** Once every path says _Never_ again for long enough — weeks
@@ -1453,47 +1463,52 @@ that ship inside the package, deliberately outside the theme search path: a
 site's theme may override any public template, and must not be able to
 shadow the login form.
 
-| Route                                            | What it does                                                                      |
-| ------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.            |
-| `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                     |
-| `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                 |
-| `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                   |
-| `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                      |
-| `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it.  |
-| `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.           |
-| `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.       |
-| `/admin/comments`                                | Pending, approved and spam, with approve, spam, delete and reply.                 |
-| `/admin/comments/moderate`                       | `POST` only. Approves one comment, files it as spam, or deletes it.               |
-| `/admin/comments/reply`                          | `POST` only. Posts an approved reply under the comment it answers.                |
-| `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                             |
-| `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                             |
-| `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                           |
-| `/admin/appearance/themes`                       | Appearance > Themes: the themes on disk. `POST` activates the one named.          |
-| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language.        |
-| `/admin/settings/reading`                        | Posts per page, the site menu, the notify server.                                 |
-| `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.           |
-| `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                |
-| `/admin/settings/akismet`                        | `POST` only. Saves the Akismet key, or forgets it.                                |
-| `/admin/settings/email`                          | The mail provider, the From line, the reply-to and the contact address.           |
-| `/admin/settings/mail`                           | `POST` only. Saves a mail credential, or forgets every one of them.               |
-| `/admin/settings/mail/test`                      | `POST` only. Sends the theme's test message through the whole chain.              |
-| `/admin/settings/federation`                     | The relays the site subscribes to, and the WordPress compatibility switch.        |
-| `/admin/users`                                   | Who may sign in: a row each, with Edit and Delete. Nothing on it edits anybody.   |
-| `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                   |
-| `/admin/users/<id>`                              | One user: the account, the profile, the notices, your password, and the delete.   |
-| `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                          |
-| `/admin/users/email`                             | `POST` only. Sets or clears the email address on the user the form names.         |
-| `/admin/users/profile`                           | `POST` only. Saves the whole public profile of the user the form names.           |
-| `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the user the form names.              |
-| `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice arrives: as they arrive, hourly or daily. |
-| `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                     |
-| `/admin/federation`                              | The actors, their followers, the inbox log, and per-post delivery.                |
-| `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.        |
-| `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                    |
-| `/admin/login`                                   | Username and password.                                                            |
-| `/admin/logout`                                  | `POST` only. Deletes the session row.                                             |
-| `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                       |
+| Route                                            | What it does                                                                        |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.              |
+| `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                       |
+| `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                   |
+| `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                     |
+| `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                        |
+| `/admin/navigation`                              | Navigation > Menus: every menu the site holds. `POST` saves one menu's items.       |
+| `/admin/navigation/add`                          | `POST` only. Adds an empty menu under the name the form gives.                      |
+| `/admin/navigation/delete`                       | `POST` only. Deletes one menu the active theme renders nowhere.                     |
+| `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it.    |
+| `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.             |
+| `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.         |
+| `/admin/comments`                                | Pending, approved and spam, with approve, spam, delete and reply.                   |
+| `/admin/comments/moderate`                       | `POST` only. Approves one comment, files it as spam, or deletes it.                 |
+| `/admin/comments/reply`                          | `POST` only. Posts an approved reply under the comment it answers.                  |
+| `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                               |
+| `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                               |
+| `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                             |
+| `/admin/appearance/themes`                       | Appearance > Themes: the themes on disk. `POST` activates the one named.            |
+| `/admin/tools`                                   | Tools > Content index: what the index holds, and the button that rebuilds it.       |
+| `/admin/tools/rebuild-index`                     | `POST` only. Offers the rebuild, then reads every file again on the live site.      |
+| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language.          |
+| `/admin/settings/reading`                        | What the homepage displays, posts per page, the notify server.                      |
+| `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.             |
+| `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                  |
+| `/admin/settings/akismet`                        | `POST` only. Saves the Akismet key, or forgets it.                                  |
+| `/admin/settings/email`                          | The mail provider, the From line, the reply-to and the contact address.             |
+| `/admin/settings/mail`                           | `POST` only. Saves a mail credential, or forgets every one of them.                 |
+| `/admin/settings/mail/test`                      | `POST` only. Sends the theme's test message through the whole chain.                |
+| `/admin/users`                                   | Who may sign in: a row each, with Edit and Delete. Nothing on it edits anybody.     |
+| `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                     |
+| `/admin/users/<id>`                              | One user: the account, the profile, the notices, your password, and the delete.     |
+| `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                            |
+| `/admin/users/email`                             | `POST` only. Sets or clears the email address on the user the form names.           |
+| `/admin/users/profile`                           | `POST` only. Saves the whole public profile of the user the form names.             |
+| `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the user the form names.                |
+| `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice arrives: as they arrive, hourly or daily.   |
+| `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                       |
+| `/admin/federation`                              | The actors, their followers, the inbox log, and per-post delivery.                  |
+| `/admin/federation/settings`                     | Federation > Settings: the relays the site subscribes to, and the WordPress switch. |
+| `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.          |
+| `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                      |
+| `/admin/login`                                   | Username and password.                                                              |
+| `/admin/logout`                                  | `POST` only. Deletes the session row.                                               |
+| `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                         |
 
 The screens behind the login share one layout: a bar across the top with the
 site name and a link to the public site, the menu down the left, and a place for
@@ -1503,9 +1518,9 @@ read, so it survives exactly one redirect.
 
 ### The menu
 
-The menu is WordPress classic: ten sections — Dashboard, Posts, Pages, Media,
-Comments, Messages, Appearance, Users, Settings, Federation — each a heading
-over one or more children. Clicking a heading opens the section and lands on its first
+The menu is WordPress classic: twelve sections — Dashboard, Posts, Pages,
+Navigation, Media, Comments, Messages, Appearance, Users, Tools, Settings,
+Federation — each a heading over one or more children. Clicking a heading opens the section and lands on its first
 child; the open section shows its children and the one you are on carries
 `aria-current="page"`, so Users tells you that you are on Users > All users.
 Tags and categories are children of Posts, because a tag with no post on it is
@@ -1599,10 +1614,12 @@ await createUser({
 ### Settings
 
 `content/_data/site.json` is the source of truth for a site's settings. The
-pages under `/admin/settings` — General, Reading, Permalinks, Discussion, Email
-and Federation — each read that file, validate what was typed and write it
-back; nothing else remembers a setting, and `data/geekity.db` holds none of
-them.
+pages under `/admin/settings` — General, Reading, Permalinks, Discussion and
+Email — each read that file, validate what was typed and write it back; nothing
+else remembers a setting, and `data/geekity.db` holds none of them. Federation's
+page is a sixth one of exactly the same kind, filed under its own section at
+`/admin/federation/settings` rather than under Settings, because the relays and
+the compatibility switch are about the section that holds the followers.
 
 Each page saves its own fields and no others, onto the file as re-read inside
 the write, so two people saving two different pages at the same moment both
@@ -1621,7 +1638,7 @@ The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `timezone`, `language`, `tagBase`,
 `categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
-`contactEmail`, `relays`, `navigation` and `taxonomyRedirects`,
+`contactEmail`, `relays`, `menus` and `taxonomyRedirects`,
 and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
 type is the default too: a hand-edited `site.json` cannot take the site down.
@@ -2008,37 +2025,96 @@ can put its archives at the same URLs.
 
 ### Navigation
 
-Every page carries the site menu, which the theme renders in the header. It is
-two things joined:
+A menu is a named thing the site stores and the theme asks for.
 
-1. The `navigation` setting, edited on `/admin/settings/reading` as one
-   `Label | URL`
-   per line — `About | /about/`, `Mastodon | https://example.social/@me` — in
-   the order it is typed. The URL is a site-root path or an absolute
-   `http(s)` URL; anything else is refused with the offending line quoted.
-2. Every published page whose front matter says `navigation: true`, ordered by
-   `navigationOrder` and then by title. A page that names no order sorts after
-   every page that does, and the flagged pages always come after the items the
-   setting names.
+**The site stores menus by name.** `content/_data/site.json` holds a `menus`
+object keyed by the name of each menu, each an ordered list of items:
 
-The editor writes both keys: **Show in navigation** on a page's editor writes
-`navigation: true`, **Menu order** writes `navigationOrder`, and clearing the
-box takes both back out of the file. Posts have neither field — a post is in
-the archive and in the feeds, which is where a post belongs.
+```json
+{
+  "menus": {
+    "primary": [{ "label": "About", "url": "/about/" }],
+    "footer": [
+      { "label": "Colophon", "url": "/colophon/" },
+      { "label": "Mastodon", "url": "https://example.social/@me", "me": true }
+    ]
+  }
+}
+```
 
-Templates read it as `menu`, a list of `{ label, url, current }`, with
-`current` true for the item whose path is the one being rendered. It is `menu`
-rather than `navigation` because `navigation` is the front-matter key a page
-opts in with, and a document's own front matter goes on top of the globals as
-Eleventy's data cascade does. The scheduled, drafted and trashed pages are not
-in it, for the same reason they are not on the site.
+An item is a label, a URL and the flags it carries. The URL is a site-root path
+or an absolute `http(s)` URL; anything else is refused. There is one flag,
+`me`, present only when it is set and read only when it is spelled exactly
+`true`: it gives the link `rel="me"`, which is how Mastodon and the rest of the
+IndieWeb verify that the site and the profile it links are the same person.
 
-The setting is `navigation` in `content/_data/site.json`, a list of
-`{ label, url }`, so an Eleventy build renders the same menu; the example
-config assembles it as `collections.menu`. A `navigation` in a hand-edited
-`site.json` that is not a list of items yields an empty menu rather than an
-error, exactly as a bad archive base falls back rather than taking the site
-down.
+**The theme declares the areas it renders.** `theme.json` carries an `areas`
+list, each entry a `name` — the key under `menus` — and a `label` a person
+reads:
+
+```json
+{ "areas": [{ "name": "primary", "label": "Site menu" }] }
+```
+
+The packaged theme declares `primary` ("Site menu") and `footer` ("Footer
+links"). A theme that wants a third declares it; an `areas` that is missing or
+unreadable leaves that theme declaring none rather than failing to load it, and
+the Navigation screen then offers the packaged theme's — a site theme is laid
+over the packaged one a file at a time, so a theme that has declared nothing has
+not overridden the declaration, and its inherited `layouts/base.njk` really is
+still rendering `menus.primary` and `menus.footer`.
+
+**A theme renders a menu by name.** Every template gets `menus`, keyed by the
+same names, each item already marked `current` for the path being rendered.
+`{% for item in menus.footer %}` is the whole interface, so a site theme can
+render a menu the packaged theme has never heard of. Every stored menu is on
+the context, not only the declared ones: the declaration is what the screen
+that edits menus reads, and a menu nothing loops over is rendered nowhere and
+kept — which is how somebody writes the menu a theme will use before switching
+to that theme.
+
+**The menus are managed on `/admin/navigation`.** It is a top-level section
+after Pages rather than a settings page: a menu is content a site arranges, the
+way its pages are, and the shape of the screen comes from the active theme.
+The screen is two lists. First the areas that theme declares, in the theme's
+order and under its labels — an area the site has never filled in is an empty
+box, not a missing one. Then every other stored menu, under a heading saying
+this theme renders them nowhere; those are still editable, which is how the
+menu a theme will use is written before the site switches to it, and each has
+the Delete that is the only way a menu is removed. An area the theme declares
+is emptied rather than deleted: the theme goes on asking for the name, and the
+box has to stay for the next thing typed into it.
+
+Each menu is one box of `Label | URL` lines, in the order they are typed, with
+a trailing `| me` marking the flag. Only a flag this CMS has is taken off the
+end of a line, so a URL holding a bar survives and a trailing word that is not
+a flag stays part of the URL. A line that is not an item is refused by name,
+with the box still holding every line of what was typed, and nothing written.
+
+**A menu name** is lower-case ASCII letters, digits and underscores, starting
+with a letter, at most 32 characters. It is the word a theme writes after the
+dot — `{% for item in menus.footer %}` — so a dash is refused: after a dot it
+is a minus sign, and `menus.top-bar` renders nothing and raises nothing. Lower
+case is the rest of the rule and it is what refuses the confusable spellings:
+`Footer` is refused rather than quietly lowered, because `footer` and `Footer`
+would be two menus on one screen that nothing could tell apart. A name the site
+already holds is refused too, and the message says its box is already on the
+page. The rule governs a name somebody types; a name a `theme.json` declares is
+a menu name by declaration and is shown as the theme spells it, because a
+screen that hid a declared area over a spelling would leave somebody unable to
+fill in a menu their site renders.
+
+There is no second source. A page cannot put itself in a menu, so there is one
+screen to edit it on, one order, and no way for the same link to appear twice.
+A page that should be linked is linked by typing a line for it — including the
+page a site serves as its front page, which is typed `Home | /`, the URL a
+reader lands on, rather than at the permalink that redirects there.
+
+Because the menus live in `site.json`, an Eleventy build renders the same ones;
+the example config assembles them as `collections.menus`. A `menus` in a
+hand-edited `site.json` that is not an object of lists of items yields no menu
+rather than an error, exactly as a bad archive base falls back rather than
+taking the site down.
 
 ## Content negotiation
 
@@ -2619,10 +2695,13 @@ theme can shadow the login form or the CSRF field inside it.
 The packaged theme is the andrewshell.org design (decision-16). `base.njk` is
 its shell: a skip link, a `.global-wrapper` carrying `data-is-root-path="true"`
 at `/` only, a header that is the site title and tagline on the front page and a
-small link home on every other, `<main id="main">`, and a footer with the
-copyright year, the site author, the colophon, an RSS link and one `rel="me"`
-link per link on the site author's profile. Nothing particular to one site is in
-it — webrings and badges belong in a site theme's `footer` block. Its head
+small link home on every other — with `menus.primary` inside it on every page
+— `<main id="main">`, and a footer with the copyright year, the site author,
+the colophon and `menus.footer`. The footer reads nothing off an account: it
+used to print an RSS link and one `rel="me"` link per link on the site author's
+profile, and a site that wants either types it into its footer menu. Nothing
+particular to one site is in it — webrings and badges belong in a site theme's
+`footer` block. Its head
 carries a description, Open Graph and Twitter card tags, icons derived from the
 site's avatar, and one JSON-LD `@graph` from `partials/jsonld.njk`: that partial
 is all the structured data the theme emits, there is no Microdata anywhere, and
@@ -2715,9 +2794,9 @@ the rules the CMS follows that Eleventy does not know about on its own:
 It also builds two collections Eleventy has no notion of. `collections.categories`
 is the second taxonomy, one entry of `{ name, posts }` per category in use, for
 paginating into archives at `/{{ site.categoryBase }}/{name}/`.
-`collections.menu` is the site menu — the `navigation` array of `site.json`
-followed by the pages whose front matter says `navigation: true` — as
-`{ label, url }` entries in the order the header should render them; a layout
+`collections.menus` is the site's named menus — the `menus` object of
+`site.json`, and nothing else — each an ordered list of `{ label, url }`
+entries, plus `me: true` on a link that should carry `rel="me"`; a layout
 marks the current one itself by comparing `item.url` with `page.url`, because a
 collection is built once for the whole site.
 

@@ -3,25 +3,26 @@
 
   The shell of the andrewshell.org design (decision-16): one wrapper at the
   measure, a big site title and tagline on the front page and a small link home
-  everywhere else, and a footer holding the copyright, the colophon, the feed
-  and whoever the site is by. There is no navigation in the header — the site
-  menu belongs with the bio under an entry — and `data-is-root-path` on the
-  wrapper is how the stylesheet tells the front page from every other one.
+  everywhere else, and a footer holding the copyright, the colophon and the
+  site's own links. `data-is-root-path` on the wrapper is how the stylesheet
+  tells the front page from every other one.
+
+  One home for each kind of link (TASK-105). The header carries the site menu,
+  on every page. `partials/bio.njk` carries the person whose page or post it
+  is. The footer carries `menus.footer`, the site's own list, and nothing read
+  off an account. The search form is on the search page and nowhere else.
 
   Blocks a site can override without copying the whole file:
     title       the contents of <title>
     head        the cards, the icons and the structured data, at the end of
                 <head>. Call `super()` from an override that only adds to it.
     alternates  <link rel="alternate"> tags, where the feeds go
-    header      the site header
+    header      the site header, with the site menu
     content     the page body
-    footer      the site footer, with the search box
+    footer      the site footer
     scripts     scripts at the end of <body>
-
-  One variable crosses between a layout and this file: `bioAuthor`, whoever an
-  entry's bio credits. A layout that prints `partials/bio.njk` sets it, and the
-  footer here leaves the site menu out because the bio is carrying it.
 #}{% import "partials/feeds.njk" as feeds %}
+{%- import "partials/menu.njk" as nav %}
 {#- Whether this is the front page, which is the one page the header and the
     stylesheet treat differently. `page.url` is the URL being served rather
     than the document's own permalink, so a static homepage under the Reading
@@ -107,6 +108,16 @@
     <a class="screen-reader-text" href="#main">Skip to content</a>
     <div class="global-wrapper"{% if atRoot %} data-is-root-path="true"{% endif %}>
       {% block header %}
+      {#
+        The header, and the site menu inside it on every page (TASK-105): one
+        place a reader looks for the navigation, whatever they are reading.
+
+        The header is two shapes and the menu sits differently in each. At the
+        root it is the site title and the tagline, and the menu is a line of
+        its own under them; everywhere else it is the small link home, and the
+        menu is beside it on that line. The stylesheet does the beside part,
+        off `data-is-root-path` on the wrapper.
+      #}
       <header class="global-header">
         {% if atRoot %}
         <h1 class="main-heading">
@@ -118,6 +129,7 @@
         {% else %}
         <a class="header-link-home" href="{{ "/" | url }}">{{ site.title }}</a>
         {% endif %}
+        {{ nav.list(menus.primary, "Site") }}
       </header>
       {% endblock %}
 
@@ -129,47 +141,24 @@
       <footer>
         <p>&copy; {{ "now" | date("year") }}{% if site.author %}, {{ site.author }}{% endif %} &middot; Published with Geekity</p>
         {#
-          The feed and whoever the site is by, as one horizontal list. The links
-          come from the site author's profile (decision-16), so what a reader
-          sees and what a consumer of `rel="me"` reads are the same list, and a
-          site whose author setting names nobody with an account here simply has
-          none. Webrings, badges and anything else particular to one site are
-          deliberately not here: they go in a site theme's `footer` override.
-        #}
-        <ul class="hlist">
-          <li><a href="{{ "/feed/" | url }}">RSS</a></li>
-          {% if siteAuthor.links %}
-          {% for link in siteAuthor.links %}
-          <li><a rel="me" href="{{ link.href }}">{{ link.label }}</a></li>
-          {% endfor %}
-          {% endif %}
-        </ul>
-        {#
-          The site menu, on a page that has no bio to carry it.
+          The footer menu: the `footer` area this theme declares in its
+          `theme.json`, which a site fills in on the Navigation screen, and the
+          whole of what the footer links (TASK-105). It is the site's own list
+          — the feed, a colophon, a webring, a Mastodon link it wants verified
+          — rather than anything read off an account: one nominated user's
+          profile links presented as the site's were nobody's to give, and on a
+          site with more than one person nobody else's appeared at all. An item
+          marked `me` carries `rel="me"`, which is what a site moving a
+          verified profile link in here needs.
 
-          The design has no header navigation: the menu is the horizontal list
-          inside the bio (TASK-83), which an entry and an author archive print
-          and a listing, a 404 or a layout of a site's own does not. So a
-          layout that renders a bio sets `bioAuthor`, and this prints the menu
-          only where nothing else did — the menu is on every page, once.
+          Nothing is printed until a site has filled the area in: an empty
+          footer menu is no list rather than an empty one, and the copyright
+          line above stands on its own.
+
+          Webrings, badges and anything else that is markup rather than a link
+          go in a site theme's `footer` override.
         #}
-        {#
-          The search box, on every page but the one that already has it at the
-          top: `query` is on the context of the search page alone, empty or
-          not, so its being defined is what says this is that page.
-        #}
-        {% if query is not defined %}
-        {% include "partials/search-form.njk" %}
-        {% endif %}
-        {% if menu.length and not bioAuthor %}
-        <nav class="site-nav" aria-label="Site">
-          <ul class="hlist">
-            {% for item in menu %}
-            <li><a href="{{ item.url | url }}"{% if item.current %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a></li>
-            {% endfor %}
-          </ul>
-        </nav>
-        {% endif %}
+        {{ nav.list(menus.footer, "Footer") }}
       </footer>
       {% endblock %}
     </div>

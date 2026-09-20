@@ -88,6 +88,7 @@ export {
   FEDERATION_FIELDS,
   FEDERATION_PATH,
   FEDERATION_RECENT,
+  FEDERATION_SETTINGS_PATH,
   followerRow,
   INBOX_INTERACTIONS,
   inboxRows,
@@ -219,10 +220,16 @@ export {
   updateSiteSettings,
   writeSiteJson,
 } from './settings.ts';
-export type { SettingsField, SettingsForm, SettingsProblems, SiteSettings } from './settings.ts';
+export type {
+  CarriedSettings,
+  SettingsField,
+  SettingsForm,
+  SettingsProblems,
+  SiteSettings,
+} from './settings.ts';
 export { bodyField, mountSettingsPage, settingsPagePath, settingsScreen } from './settings-page.ts';
 export type { MountSettingsOptions, SettingsPage, SubmittedBody } from './settings-page.ts';
-export { mountSettings, SETTINGS_PAGES } from './settings-pages.ts';
+export { ALL_SETTINGS_PAGES, mountSettings, SETTINGS_PAGES } from './settings-pages.ts';
 export { GENERAL_SETTINGS } from './settings-general.ts';
 export { READING_SETTINGS } from './settings-reading.ts';
 export { PERMALINKS_SETTINGS } from './settings-permalinks.ts';

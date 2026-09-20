@@ -22,6 +22,7 @@ import {
 } from './assets.ts';
 import { COMMENT_NOTICE_PARAM, COMMENT_REPLY_PARAM } from '../comments/form.ts';
 import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments/routes.ts';
+import { signedInCommenter } from '../comments/viewer.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
 import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
@@ -512,6 +513,11 @@ function negotiateDocument(
     return notAcceptableResponse(encodePath(href), DOCUMENT_REPRESENTATIONS);
   }
 
+  // Who the request's session says is reading, when it says anybody
+  // (TASK-103). Only the HTML has a form on it, so only the HTML asks; the
+  // Markdown and JSON of a post are the same bytes for everybody.
+  const viewer = representation === 'html' ? signedInCommenter(c) : undefined;
+
   const body =
     representation === 'markdown'
       ? serializeDocument(document)
@@ -523,8 +529,8 @@ function negotiateDocument(
           // A document served at `/` is the site's front page, and the front
           // page is the one place a theme may lay a page out differently.
           href === '/'
-          ? c.var.renderer.renderFrontPage(document, commentNotice(c, document))
-          : c.var.renderer.renderDocument(document, commentNotice(c, document));
+          ? c.var.renderer.renderFrontPage(document, commentNotice(c, document), viewer)
+          : c.var.renderer.renderDocument(document, commentNotice(c, document), viewer);
 
   // The theme can change without the document changing, and only the document
   // is hashed. While the watcher is on — a development server, where a template
@@ -541,6 +547,10 @@ function negotiateDocument(
     // parsing the page, and because the JSON and Markdown representations of a
     // post have no head to put one in (TASK-51).
     links: webmentionLinks(c),
+    // A page drawn for one named reader is that reader's page rather than the
+    // post, so nothing shared may hold it and it carries no validator. A page
+    // drawn for everybody is exactly what it has always been.
+    ...(viewer === undefined ? {} : { private: true }),
     ...(validated
       ? {
           etag: representationEtag(representation, document.hash),

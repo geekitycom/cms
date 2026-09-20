@@ -1219,3 +1219,63 @@ button[type='submit']:hover,
   color: var(--admin-muted);
   overflow-wrap: anywhere;
 }
+
+/* Navigation. One panel per menu, stacked down the page rather than laid out
+   as cards: a menu is a box of text somebody types into, so it wants the width
+   a paragraph wants rather than a column in a grid. The two lists — the areas
+   the theme declares, and the menus it renders nowhere — are the same panel,
+   because they are the same thing in two different situations. */
+
+.admin-menu-boxes {
+  margin: 1rem 0 2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-menu-box {
+  max-width: 42rem;
+  padding: 0.9rem 1.1rem 1.1rem;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+}
+
+.admin-menu-box + .admin-menu-box {
+  margin-top: 1rem;
+}
+
+.admin-menu-box h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+/* The name a theme asks for the menu by, and how much is in it. The name is
+   the useful half: it is what a template loops over and what `site.json`
+   holds, so it is printed rather than left implied by the label above it. */
+
+.admin-menu-name {
+  margin: 0.15rem 0 0.6rem;
+  color: var(--admin-muted);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.admin-menu-buttons {
+  margin: 0.8rem 0 0;
+}
+
+/* Delete is the only way a menu is removed, and it is offered only on one the
+   theme renders nowhere. It sits apart from the Save above it, so the two
+   buttons of one panel are not a pair to be pressed carelessly. */
+
+.admin-menu-delete {
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--admin-field);
+}
+
+.admin-menu-add {
+  max-width: 42rem;
+  padding: 0.9rem 1.1rem 1.1rem;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+}

@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-20 10:44'
+updated_date: '2026-09-20 15:55'
 ---
 # Admin UI
 
@@ -25,13 +25,15 @@ know whether it is the only one of its kind.
 | Dashboard  | Home                                         |
 | Posts      | All posts, Add new, Categories, Tags         |
 | Pages      | All pages, Add new                           |
+| Navigation | Menus                                        |
 | Media      | Library                                      |
 | Comments   | All comments                                 |
 | Messages   | All messages                                 |
 | Appearance | Themes                                       |
 | Users      | All users, Add new                           |
-| Settings   | General, Reading, Permalinks, Discussion, Email, Federation |
-| Federation | Followers                                    |
+| Tools      | Content index                                |
+| Settings   | General, Reading, Permalinks, Discussion, Email |
+| Federation | Followers, Settings                          |
 
 The terms are under Posts rather than at the top level because that is what
 they are about: a tag with no post on it is nothing.
@@ -60,22 +62,24 @@ instead of becoming a sliver.
 | `/admin/posts/new`, `/admin/posts/:slug` | editor |
 | `/admin/pages`, `/admin/pages/new`, `/admin/pages/:slug` | same as posts, without date prefix or tags |
 | `/admin/tags`, `/admin/categories` | every term in use with its post and file counts; rename, merge, delete (under Posts in the menu) |
+| `/admin/navigation` | Navigation > Menus: the areas the active theme declares, then every other menu the site holds. `POST` saves one menu's items, `POST /admin/navigation/add` adds one by name, `POST /admin/navigation/delete` removes one the theme renders nowhere |
 | `/admin/comments` | pending, approved and spam, with approve, spam, delete and reply on every row |
 | `/admin/messages` | what the contact form on a page collected: read, mark read, delete |
 | `/admin/settings` | Settings > General: site title, tagline, author, base URL, time zone, language, and the avatar |
-| `/admin/settings/reading` | what the homepage displays, posts per page, the site menu, the notify server |
+| `/admin/settings/reading` | what the homepage displays, posts per page, the notify server |
 | `/admin/settings/permalinks` | the tag and category bases, and the archive redirects the taxonomy screens recorded |
 | `/admin/settings/discussion` | comments on or off and the closing window, webmentions sent and received, the Akismet key |
 | `/admin/settings/email` | the mail provider, the From line and reply-to, the contact address, the credential and the test message |
-| `/admin/settings/federation` | the actor handle and type, and the relays the site subscribes to |
 | `/admin/appearance/themes` | the packaged theme and the site's own, with the active one marked and an Activate on every other |
+| `/admin/tools` | Tools > Content index: what the index holds, and the button that empties it and reads every file again on the running site (`POST /admin/tools/rebuild-index`, behind a confirm step) |
 | `/admin/users` | list, edit each user's public profile, set their email, which notices go to it and how often, change your own password (single role: admin) |
 | `/admin/users/new` | the add form, Users > Add new |
-| `/admin/federation` | follower list, recent inbox activity, manual re-deliver |
+| `/admin/federation` | Federation > Followers: follower list, recent inbox activity, manual re-deliver |
+| `/admin/federation/settings` | Federation > Settings: the relays the site subscribes to, and the WordPress ActivityPub compatibility switch |
 
 ## Editor
 
-- Fields: title, slug (auto from title until touched), permalink preview, date, tags (comma separated), description, **author**, draft checkbox, comments (follow the site settings / open / closed), body. A page also carries **Show in navigation** with its menu order, and **Contact form**, which writes `contact: true` and puts a contact form under the page.
+- Fields: title, slug (auto from title until touched), permalink preview, date, tags (comma separated), description, **author**, draft checkbox, comments (follow the site settings / open / closed), body. A page also carries **Contact form**, which writes `contact: true` and puts a contact form under the page. The site menu is not here: it is a menu on the Navigation screen and nothing else (TASK-106, TASK-108).
 - Body is a plain `<textarea>` enhanced with CodeMirror 6 in markdown mode. A preview tab posts the body to `/admin/preview` and shows rendered HTML in the theme's post template.
 - Save writes the file (see doc-1 sync model). The form carries the file hash it was loaded with; a mismatch on save returns the form with a warning and both versions.
 - **Author** is a select of the site's users, not a free box: doc-2's `author` names a user, and after decision-14 that decides whose archive the post lands on and, once the actors land, whose followers hear about it. A new document starts on whoever is signed in; an existing one opens on the user the file names, which for a file written before decision-14 is the one its display name reads as. A file naming somebody with no account here keeps an option of its own, marked, so opening the editor and pressing Update cannot quietly reattribute the post.
@@ -97,6 +101,47 @@ instead of becoming a sliver.
 - A message is one JSON file under `data/contact/`, written **before** anything is emailed, so a provider that is down costs a notification rather than the message. There is no SQLite index over them: the screen reads the directory to sort it anyway, and a second copy of the truth would only be a second thing to keep true. They are under `data/` rather than `content/` because they carry the sender's address and were never meant to be published.
 - A message a spam checker called spam is kept, on the Spam list, and is not emailed on: a false positive on a contact form is somebody's message vanishing, which is worse than a list to glance at. One it said to discard, and one that filled the honeypot, was never stored at all.
 - **Without mail.** Submissions are still stored and still listed here. This screen is the notification, exactly as `/admin/comments` was before there was any email.
+
+## Navigation
+
+- **Menus** is the one screen under Navigation, at `/admin/navigation`. It is a
+  top-level section after Pages rather than a settings page, for two reasons: a
+  menu is content a site arranges, the way its pages are, rather than a switch
+  that changes how the site behaves; and the shape of the screen comes from the
+  active theme, which is not something a page of fields can be.
+- The screen is the cross product of two lists. The active theme declares the
+  areas it renders in its `theme.json` — each a `name` and a `label` (TASK-107)
+  — and the site stores menus by name in `content/_data/site.json`. An area
+  with no stored menu is an **empty box to fill in**, not a missing one. A
+  stored menu no area names is listed second, under **Kept, rendered nowhere**,
+  still editable, with the **Delete** that is the only way a menu is removed.
+- The areas come first, in the theme's own order and under the theme's own
+  labels, because that is the order they appear on the site. A theme that
+  declares no areas inherits the packaged theme's, exactly as it inherits every
+  template it has not overridden: a site theme is laid over the packaged one a
+  file at a time, so a theme that has declared nothing has not overridden the
+  declaration and its inherited layouts really are still rendering
+  `menus.primary` and `menus.footer`.
+- **Adding** a menu asks for a name and stores it empty. A name the theme
+  declares moves the box into place above; a name it does not is a block
+  waiting for the theme that will use it, which is what somebody filling in a
+  menu before switching themes wants. **Deleting** is offered only for the
+  second kind: an area the theme declares is emptied rather than removed,
+  because the theme goes on asking for the name and the box has to stay.
+- **A menu name** is lower-case ASCII letters, digits and underscores, starting
+  with a letter, at most 32 characters. It is the word a theme writes after the
+  dot in `{% for item in menus.footer %}`, so a dash is refused: after a dot it
+  is a minus sign, and `menus.top-bar` would render nothing and raise nothing.
+  Lower case is what refuses the confusable spellings — `Footer` beside
+  `footer` would be two menus nothing could tell apart — and a name the site
+  already holds is refused with a message saying its box is on the page. The
+  rule governs a name somebody types; a name a `theme.json` declares is a menu
+  name by declaration and is shown as the theme spells it.
+- Each menu is one box of `Label | URL` lines, `| me` at the end of a line for
+  `rel="me"`, with a label beside the box saying what that flag is for. A line
+  that is not an item is refused by name, the box still holding every line of
+  what was typed, and nothing is written. Each of the three actions is its own
+  POST, so a refused one cannot lose what was typed into another box.
 
 ## Appearance
 
@@ -128,15 +173,15 @@ instead of becoming a sliver.
 
 ## Settings
 
-- Settings is six pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (what the homepage displays, posts per page, the site menu, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message) and **Federation** (the actor handle and type, and the relays). `/admin/settings` is the General page, which is where the Settings heading lands.
+- Settings is five pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (what the homepage displays, posts per page, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), and **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message). `/admin/settings` is the General page, which is where the Settings heading lands. A sixth page of exactly the same kind, **Federation** (the relays the site subscribes to and the WordPress ActivityPub compatibility switch), is filed under the Federation section at `/admin/federation/settings` rather than here: a screen belongs to the section its subject belongs to, and the admin used to carry two menu entries called Federation with neither saying the other existed (TASK-109).
 - Every page is one form of its own with its own POST, and every one of them rewrites `content/_data/site.json` through the same update (decision-9). A page writes the fields it carries and no others, onto the file as re-read inside the write, so two people saving two different pages at the same moment both land and a key the settings do not model is kept. A page validates its own fields and no others: a refused save comes back on the page it was sent from, with the problems on the fields that have them, having written nothing at all.
 - Three things are not fields of any form, and each is its own pair of forms — save and remove — because none can travel in that body and because a rejected one must not lose an edit beside it: the **avatar**, on General; the **Akismet key**, on Discussion; and the **mail credential**, on Email.
 - **Spam checking.** The Akismet key lives in `data/akismet.json` at mode `0600` rather than in `site.json`, which is public and in git. Saving one checks it with Akismet's `verify-key` first; the panel then says connected, "does not recognise this key", "could not be reached", or not connected, and shows the last four characters rather than the key. Remove key turns Akismet off. See doc-6.
 - **Email.** How the site sends mail is four settings on the Email form — `mailProvider` (`none`, `brevo` or `smtp`), the From name and address, and the reply-to — and one credential below it. The Brevo API key and the SMTP host, port, TLS flag, user and password live in `data/mail.json` at mode `0600`, never in `site.json`. Neither secret is printed back: the panel shows the last four characters of the key and the non-secret half of the SMTP connection, and a blank secret keeps the stored one. The panel draws the boxes of the provider that is saved and no others — the API key on a Brevo site, the connection on an SMTP one, neither where the provider is `none` — and says so, because the Provider select above it belongs to the settings form and nothing it shows is true until **Save settings** is pressed; a credential stored for the provider that is not chosen keeps a line of its own, so nothing on disk goes unreported and **Remove credentials** still reaches it. **Send test email** takes an address and sends the theme's `test` message through the whole chain, reporting the provider's own answer and its message id on the flash, and is drawn only where the site can actually send. With no configuration, nothing is sent and every feature that emails still succeeds. See the Email section of the package README.
 - **What the homepage displays.** WordPress's own question, and its two answers: **Your latest posts**, the archive at `/`, or a page picked from the site's published pages, which is then served at `/` while its own URL redirects there. A second pick, the **Posts page**, gives the listing a page of its own: that page's URL carries it, under the page's title and words, paginated beneath it, and `/page/N/` at the root redirects there. A posts page with no homepage is refused, as WordPress refuses it, and so is one page picked as both. The two are stored in `site.json` as the slugs `homepage` and `postsPage` — absent altogether for the latest posts — so an Eleventy build of the same directory shows the same front page. A pick whose page is later drafted, trashed or deleted is off the list and the site is back to its latest posts; the setting keeps the slug and the page says which one has gone, because a select that had quietly reset itself would be the screen lying about what is stored. The pages list marks both rows the way WordPress does, **Front Page** and **Posts Page**, and the feeds stay at `/feed/` and its siblings whatever is chosen.
 - **The contact address.** `contactEmail`, on the Email page, is where a message from a page's contact form is sent, with reply-to set to whoever wrote it. Empty falls back to the first admin with an email address, by username, so a fresh site with a mail credential takes messages without anybody visiting the field. It is read when a message arrives and is never put on a render context, so it cannot appear in the HTML of the page the form is on however a theme is written.
-- **Side effects stay with the field.** Saving General or Federation tells the followers when what it changed is part of the actor's profile; saving Federation reconciles the relay list, sending a `Follow` for a line added and an `Undo` for one removed; saving or removing the avatar tells the followers too. The flash says what was sent.
-- The code follows the same seam: `src/admin/settings.ts` is the settings themselves and nothing about a screen, `settings-page.ts` is what every page is made of, `settings-pages.ts` is the list, and each page is its own module beside its own template under `admin/pages/settings/`, which extends `admin/layouts/settings-page.njk`.
+- **Side effects stay with the field.** Saving General tells the followers when what it changed is part of the actor's profile; saving Federation > Settings reconciles the relay list, sending a `Follow` for a line added and an `Undo` for one removed; saving or removing the avatar tells the followers too. The flash says what was sent.
+- The code follows the same seam: `src/admin/settings.ts` is the settings themselves and nothing about a screen, `settings-page.ts` is what every page is made of, `settings-pages.ts` is the list, and each page is its own module beside its own template under `admin/pages/`, which extends `admin/layouts/settings-page.njk`. A page says which section files it — `section` and `heading` are what the Federation one sets, and `settings-pages.ts` carries two lists: `SETTINGS_PAGES`, which the Settings menu has to agree with, and `ALL_SETTINGS_PAGES`, which the mount registers. The old `/admin/settings/federation` answers a 301 to the new URL, because it was in the README and it is where a bookmark points.
 
 ## Auth
 

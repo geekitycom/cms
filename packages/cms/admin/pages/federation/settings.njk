@@ -1,7 +1,9 @@
-{# /admin/settings/federation: which relays boost the site, and whether it is
-   still answering the paths a WordPress site arrived with. Who the site's
-   people are on the fediverse is a user's profile now (decision-14); the
-   Federation section in the menu is where the actors and their followers are. #}
+{# /admin/federation/settings: which relays boost the site, and whether it is
+   still answering the paths a WordPress site arrived with. It is Federation >
+   Settings rather than Settings > Federation (TASK-109): the section holds
+   everything about federation, and Followers beside it is where the actors and
+   the people following them are. Who the site's people are on the fediverse is
+   a user's profile now (decision-14). #}
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
 
@@ -11,7 +13,7 @@
     <code>https://tags.pub/user/_____relay_____/inbox</code>. Adding one sends
     it a follow; every public post then goes to it as well as to the
     followers, and it boosts them on to instances nobody here follows. The
-    Federation screen says where each subscription stands.
+    Followers screen says where each subscription stands.
   {% endset %}
   {{ field.textarea('settings-relays', fields.relays, 'Relays', form.relays,
        error=problems.relays, hint=relaysHint, rows='3', spellcheck='false', autofocus=true) }}

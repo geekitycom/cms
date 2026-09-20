@@ -257,17 +257,19 @@ describe('GET /search/', () => {
 });
 
 describe('the search box in the theme', () => {
-  it('is in the footer of an ordinary page, but only once on the search page', async () => {
+  it('is on the search page and on no other page at all (TASK-105 AC #6)', async () => {
+    // It used to be in the footer of every page and at the top of this one.
+    // Search is a menu item now — a `Search | /search/` line like any other —
+    // so the box is on the page that is about searching and nowhere else.
     const cms = await site(corpus());
-
-    const home = await (await cms.app.request('/')).text();
-    assert.match(
-      home,
-      /<footer>[\s\S]*<form class="search-form" role="search" action="\/search\/"/,
-    );
 
     const results = await (await cms.app.request('/search/?q=otters')).text();
     assert.equal(results.match(/<form class="search-form"/g)?.length, 1);
+
+    for (const pathname of ['/', '/otters/', '/about/', '/nothing-here/']) {
+      const html = await (await cms.app.request(pathname)).text();
+      assert.doesNotMatch(html, /class="search-form"/, `${pathname} carries a search form`);
+    }
   });
 
   it('is advertised to clients as a SearchAction', async () => {
