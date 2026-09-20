@@ -6,13 +6,13 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-20 12:05'
-updated_date: '2026-09-20 12:21'
+updated_date: '2026-09-20 12:32'
 labels:
   - web
   - theme
 milestone: m-16
 dependencies:
-  - TASK-106
+  - TASK-107
 references:
   - packages/cms/themes/default/layouts/base.njk
   - packages/cms/themes/default/partials/bio.njk
@@ -53,16 +53,13 @@ All of this is the packaged default theme, which a site theme may override, so t
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Settings > Reading has a Footer links box taking Label | url and an optional me marker, saved to site.json, proven by a test
-- [ ] #2 A footer link marked me renders with rel="me" and an unmarked one does not, proven by a test
-- [ ] #3 The footer prints exactly the links in the box, on every page, and nothing derived from any account, proven by a test
-- [ ] #4 An empty box prints no footer list at all, and the footer keeps its copyright line, proven by a test
-- [ ] #5 The starter site ships a Footer links box holding RSS, so a new site has a footer without being told to fill one in
-- [ ] #6 The menu is in the global header on every page: under the tagline at the root, beside the home link everywhere else, proven by a test for each
-- [ ] #7 No page carries the menu twice, and no page carries it outside the header, proven by a test that counts it across a post, a listing, an author archive and a 404
-- [ ] #8 The bio prints the profile links of whoever the page is by, with rel="me", at the top of their author archive and under each of their posts, and carries no menu, proven by a test
-- [ ] #9 No page but the search page carries a search form, proven by a test
-- [ ] #10 The theme README describes the header menu, what the bio prints, the footer links and that the footer has no search form
+- [ ] #1 The menu is in the global header on every page: under the tagline at the root, beside the home link everywhere else, proven by a test for each
+- [ ] #2 No page carries the menu twice, and no page carries it outside the header, proven by a test that counts it across a post, a listing, an author archive and a 404
+- [ ] #3 The bio prints the profile links of whoever the page is by, with rel="me", at the top of their author archive and under each of their posts, and carries no menu, proven by a test
+- [ ] #4 The footer prints menus.footer on every page and nothing derived from any account, proven by a test
+- [ ] #5 An empty or missing footer menu prints no list at all, and the footer keeps its copyright line, proven by a test
+- [ ] #6 No page but the search page carries a search form, proven by a test
+- [ ] #7 The theme README describes the header menu, what the bio prints, the footer menu and that the footer has no search form
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -79,4 +76,6 @@ Arrangement revised on 2026-09-20 before any code was written. The earlier plan 
 The result is one home for each kind of link. The header has the menu, the bio has the person whose page or post it is, the footer has the site's own links on every page.
 
 The menu's items come from the navigation setting alone once TASK-106 lands; this task is the theme side and does not care where they come from. Default arrangement the maintainer asked for: Search in the menu, RSS in the footer, About in the menu.
+
+Narrowed on 2026-09-20 to the theme side alone. The Footer links box this task was going to add to Settings > Reading is now TASK-107 and TASK-108: a menu is a named thing the site stores and the theme declares, so the footer renders menus.footer rather than a setting of its own. What stays here is where the theme puts things — the menu in the header, the person in the bio, the site's links in the footer, and no search form outside the search page.
 <!-- SECTION:NOTES:END -->

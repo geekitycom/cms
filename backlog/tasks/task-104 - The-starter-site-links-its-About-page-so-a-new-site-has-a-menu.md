@@ -4,14 +4,14 @@ title: 'The starter site links its About page, so a new site has a menu'
 status: To Do
 assignee: []
 created_date: '2026-09-20 11:54'
-updated_date: '2026-09-20 12:21'
+updated_date: '2026-09-20 12:32'
 labels:
   - web
   - content
 milestone: m-16
 dependencies:
   - TASK-105
-  - TASK-106
+  - TASK-107
 references:
   - packages/cms/templates/site/content/pages/about.md
   - packages/cms/templates/site/content/_data/site.json
@@ -47,4 +47,6 @@ Check while there whether the starter post and site.json have the same shape of 
 
 <!-- SECTION:NOTES:BEGIN -->
 Superseded in part by TASK-106, which removes the per-page navigation checkbox: the starter About page must be linked by typing a line into the navigation setting in the starter site.json, not by putting navigation: true in its front matter. The defaults the maintainer asked for on 2026-09-20 are Search and About in the menu and RSS in the footer, so the starter site.json carries navigation with About and Search, and footerLinks with RSS (TASK-105).
+
+With TASK-107 in, the starter site's menus live in site.json under menus: primary holding About and Search, footer holding RSS. Not a navigation setting and not front matter.
 <!-- SECTION:NOTES:END -->
