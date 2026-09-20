@@ -3,11 +3,11 @@ id: TASK-89
 title: >-
   Dockerfile: a multi-arch image that runs geekity serve over mounted content
   and data, in the default theme
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-19 15:24'
-updated_date: '2026-09-19 21:05'
+updated_date: '2026-09-19 23:43'
 labels:
   - infra
 milestone: m-15
@@ -35,7 +35,7 @@ Add a Dockerfile and .dockerignore at the repo root that build the generic Geeki
 - [x] #2 The image holds no apps/demo files, no demo theme, no tests and no devDependencies, checked by listing the image filesystem
 - [x] #3 The container runs as uid 1000, and content written through the admin survives a container restart on the same volumes
 - [x] #4 A theme mounted under the themes volume and named in site.json is the one rendered
-- [ ] #5 geekity user add and geekity rebuild run through docker exec against the mounted directories
+- [x] #5 geekity user add runs through docker exec against the mounted directories, and geekity rebuild runs through docker compose run --rm with the server stopped
 - [x] #6 The image builds and sharp loads on both linux/amd64 and linux/arm64
 - [x] #7 The .dockerignore keeps .env files, data directories, node_modules, .git and backlog out of the build context
 <!-- AC:END -->
@@ -74,4 +74,16 @@ Evidence (docker 29.8.0, Docker Desktop, arm64 host):
 - Cache: a second build with no changes was CACHED on every step. With a source edit in packages/cms/src, fetch and install stayed CACHED and only COPY packages/cms, build and deploy re-ran.
 - Gates: pnpm build && pnpm test (1924 + 30 pass) && pnpm typecheck && pnpm lint && pnpm format:check, exit 0.
 - Cleanup: removed all geekity-t89 containers, volumes and images.
+
+Criterion #5 was reworded on 2026-09-19, with the maintainer's agreement, from 'geekity user add and geekity rebuild run through docker exec' to name the route each command actually takes.
+
+geekity rebuild cannot run through docker exec and never will: it refuses while something else holds geekity.db (cli.ts:485), and in this image the server is PID 1, so any exec finds it running. The working route, proven here and documented in the README's rollback section, is `docker compose stop`, `docker compose run --rm geekity geekity rebuild`, `docker compose start` — a one-off container on the same image, .env and mounts, with the server stopped.
+
+Rebuilding the index without stopping the site is TASK-95: clear the documents tables in place on the live connections and re-run the three index builds that already run on every boot, from an admin action. The CLI command stays as it is, because it is also the fix for a database this version refuses to open, and the server is not running in that case.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+A two-stage Dockerfile on a pinned node:24.18.0-trixie-slim builds @geekity/cms with pnpm fetch and a frozen offline install, deploys it with production dependencies only, and runs geekity serve as uid 1000 over /site/content, /site/data and /site/themes. Empty volumes are seeded with the starter site and rendered in the packaged default theme; a theme mounted under /site/themes and named in site.json wins. A HEALTHCHECK probes /healthz, reading the port inside node so GEEKITY_PORT and PORT both work. The .dockerignore keeps .env files, data, node_modules, .git and backlog out of the context, checked with a probe image built from COPY .. Verified by building and running the image on both linux/amd64 and linux/arm64: it boots on empty volumes, answers 200 on /healthz and the home page, survives a restart and a container replacement on the same volumes with content written through the admin, loads sharp and encodes WebP on each architecture, and runs geekity user add through docker exec and geekity rebuild through docker compose run --rm.
+<!-- SECTION:FINAL_SUMMARY:END -->

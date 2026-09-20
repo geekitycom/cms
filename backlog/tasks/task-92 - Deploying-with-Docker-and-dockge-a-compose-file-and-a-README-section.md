@@ -1,11 +1,11 @@
 ---
 id: TASK-92
 title: 'Deploying with Docker and dockge: a compose file and a README section'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-19 15:25'
-updated_date: '2026-09-19 21:24'
+updated_date: '2026-09-20 00:31'
 labels:
   - infra
   - docs
@@ -32,7 +32,7 @@ Write the deployment an operator follows. Add a compose file (for example deploy
 - [x] #1 The compose file starts the published image on a box with no repo checkout, given only its .env and two empty directories owned by uid 1000
 - [x] #2 The port is bound to 127.0.0.1 and the image tag comes from .env
 - [x] #3 The README section covers directories and ownership, environment, first login, WordPress import, backups, upgrade and rollback, and custom themes
-- [ ] #4 Following the README on a fresh machine reaches the setup screen, checked once by hand
+- [x] #4 Following the README on a fresh machine reaches the setup screen, checked once by hand
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -63,4 +63,14 @@ Validation (Docker Desktop 4.x, aarch64, compose v5.5.1): built the image for li
 Gates: pnpm build, pnpm test (1937 + 30 pass), pnpm typecheck, pnpm lint, pnpm format:check all pass.
 
 #4 (fresh machine, by hand) is left for the maintainer. No image is on ghcr.io yet, so a real pull cannot be tested until the first pnpm docker:build-push.
+
+AC #4 checked by hand by the maintainer on 2026-09-19: https://shll.me/ runs the published image, deployed from the README's Deploying with Docker section. GET / answers 200, GET /healthz answers 200 with {"status":"ok","checks":{"database":"ok","content":"ok"}}, and GET /admin redirects to /admin/login, so the setup screen was reached and the first admin created.
+
+The maintainer drove it through the dockge web UI rather than the docker compose CLI, which is what the stack file is for, and said the section held up otherwise. The commands in the README stay written as CLI commands, since they are also what an operator without dockge runs and what dockge itself executes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+deploy/compose.yaml is the dockge stack file: it runs ghcr.io/geekitycom/cms at a tag required from .env, with GEEKITY_BASE_URL also required, bound to 127.0.0.1 on a host port from .env, over ./content and ./data bind mounts owned by uid 1000 and an optional read-only ./themes. It carries init, restart: unless-stopped, memory and pid limits, no-new-privileges, cap_drop ALL and capped json-file logs, and no container_name, so two stacks can share a server. The README's new Deploying with Docker section covers the stack and its directories, the .env and the variables compose sets itself, the reverse proxy including an nginx example that replaces X-Forwarded-For, first login through /admin/setup or geekity user add, the WordPress actor import with the key pair on stdin, what to back up and what the database rebuilds, upgrading and rolling back by tag including the rebuild an older version needs, and a custom theme. Verified by running the stack from a temp directory holding only the compose file, a .env and two empty directories, and then by the maintainer deploying https://shll.me/ from the section through dockge.
+<!-- SECTION:FINAL_SUMMARY:END -->

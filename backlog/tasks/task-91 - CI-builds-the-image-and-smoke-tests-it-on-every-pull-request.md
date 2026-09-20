@@ -1,11 +1,11 @@
 ---
 id: TASK-91
 title: CI builds the image and smoke-tests it on every pull request
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-19 15:25'
-updated_date: '2026-09-19 21:16'
+updated_date: '2026-09-19 23:39'
 labels:
   - infra
 milestone: m-15
@@ -25,7 +25,7 @@ The image is pushed by hand, so a broken Dockerfile would otherwise surface only
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A pull request that breaks the Dockerfile fails CI
+- [x] #1 A pull request that breaks the Dockerfile fails CI
 - [x] #2 The job boots the built image on empty volumes and checks /healthz and the home page
 - [x] #3 The job pushes nothing to any registry
 <!-- AC:END -->
@@ -57,4 +57,19 @@ Local evidence (Docker 29.8.0, buildx 0.37.0, Apple silicon):
 - pnpm build && pnpm test (1937 + 30 pass) && pnpm typecheck && pnpm lint && pnpm format:check: all pass.
 
 Not provable here: AC #1 needs a real pull request run on GitHub (the orchestrator opens the PR, whose CI runs docker-smoke). Also unverified until then: that the Blacksmith amd64 runner honours type=gha cache and that the second run is quick.
+
+AC #1 verified locally on 2026-09-19, on linux/arm64, together with the job's first real run on PR #41 where docker-smoke passed in 1m24s.
+
+Three breakages, each the kind a pull request could introduce:
+1. A COPY of a path that is not in the context (tsconfig.base.json.typo): `docker buildx build` exits 1 with 'failed to compute cache key: "/tsconfig.base.json.typo": not found'. In CI that is the docker/build-push-action step, so the job fails before the smoke script runs.
+2. GEEKITY_SEED_CONTENT=false: the image builds and boots, /healthz answers 200, and the script exits 1 with 'GET / answered 200 but did not contain Hello, world'.
+3. CMD ["geekity", "serv"]: the script exits 1 with 'the container exited before /healthz answered'.
+
+The good image passed the same script in between, so the failures are the breakage and not the harness. The CI job body is `bash scripts/docker-smoke.sh geekity-smoke:ci`, the same script with the same checks, so a non-zero exit fails the job. What is still unmeasured is whether the type=gha layer cache actually hits on the Blacksmith amd64 runner; the first run had nothing to hit.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+scripts/docker-smoke.sh boots the image on two fresh named volumes, waits for GET /healthz to answer 200, and checks the home page is the seeded starter site in the packaged default theme with the default theme's stylesheet byte for byte. It builds the root Dockerfile itself when given no image, so a laptop and CI run the same steps; `pnpm docker:smoke` is the local door. The docker-smoke job in .github/workflows/ci.yml builds the image for linux/amd64 with the buildx GitHub Actions cache and runs the script against it, with push: false, no registry login and a contents: read token, so it publishes nothing. It passed on PR #41. A broken COPY, a broken CMD and seeding turned off were each shown locally to fail the build or the script.
+<!-- SECTION:FINAL_SUMMARY:END -->

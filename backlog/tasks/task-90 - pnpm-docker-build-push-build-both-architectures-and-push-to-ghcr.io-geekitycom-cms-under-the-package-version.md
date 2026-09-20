@@ -3,11 +3,11 @@ id: TASK-90
 title: >-
   pnpm docker:build-push: build both architectures and push to
   ghcr.io/geekitycom/cms under the package version
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-19 15:25'
-updated_date: '2026-09-19 21:11'
+updated_date: '2026-09-19 23:36'
 labels:
   - infra
 milestone: m-15
@@ -32,7 +32,7 @@ Publishing an image is done by hand from a workstation, as in iheartrss: GitHub 
 - [x] #1 pnpm docker:dry-run prints the image name and the version, latest and custom tags it would push, and builds nothing
 - [x] #2 The version tag is read from packages/cms/package.json
 - [x] #3 A failing quality gate stops the script before any build
-- [ ] #4 A real run pushes a manifest list for linux/amd64 and linux/arm64, confirmed with docker buildx imagetools inspect
+- [x] #4 A real run pushes a manifest list for linux/amd64 and linux/arm64, confirmed with docker buildx imagetools inspect
 - [x] #5 The README release section says when and how to run it
 <!-- AC:END -->
 
@@ -69,4 +69,12 @@ Tests: packages/cms/src/docker-build-push.test.ts (13 tests; placed in cms/src b
 Validation: pnpm build, pnpm test (1937 + 30 pass), pnpm typecheck, pnpm lint, pnpm format:check all green. Real pnpm docker:dry-run prints ghcr.io/geekitycom/cms:0.3.0 and :latest (plus :rc1 with a custom tag); running the script from apps/demo exits 1 with the root message. A local multi-arch build with the same flags minus --push/--no-cache on a throwaway docker-container builder (task90-verify, removed afterwards) built both linux/amd64 and linux/arm64 successfully.
 
 AC #4 is NOT checked: it needs a real push to ghcr.io, which is the user's call and was not done (no registry login or push in this task). It awaits the user's first real run: pnpm docker:build-push, then docker buildx imagetools inspect ghcr.io/geekitycom/cms:<version> should list linux/amd64 and linux/arm64. Task stays In Progress for that.
+
+AC #4 verified by the maintainer's first real run on 2026-09-19. `pnpm docker:build-push` passed the four quality gates, then built and pushed ghcr.io/geekitycom/cms:0.3.0 and :latest from the multiplatform builder. `docker buildx imagetools inspect ghcr.io/geekitycom/cms:0.3.0` returns an OCI image index holding linux/amd64 (sha256:666a441b) and linux/arm64 (sha256:b8c50896), plus the two unknown/unknown attestation manifests buildx attaches. Both tags point at the same index, sha256:80eb2716.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+scripts/docker-build-push.sh, run as `pnpm docker:build-push`, runs lint, format:check, typecheck and test, then builds linux/amd64 and linux/arm64 with buildx and pushes ghcr.io/geekitycom/cms under the version in packages/cms/package.json, :latest, and an optional custom tag. `pnpm docker:dry-run` prints what it would push and builds nothing. 13 tests drive a copy of the script in a temporary repo with stand-in docker and pnpm commands, covering the dry run, the version source, each gate failing before any build, the buildx arguments, and the refusals. The first real run published 0.3.0 and latest as a two-platform manifest list, confirmed with imagetools inspect.
+<!-- SECTION:FINAL_SUMMARY:END -->
