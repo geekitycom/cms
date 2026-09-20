@@ -9,7 +9,8 @@ import { readSiteSettings } from './settings.ts';
 
 /**
  * The Reading settings page: what the homepage shows, how many posts a listing
- * holds, the site menu, and the server told when a feed changes.
+ * holds, and the server told when a feed changes. The menus moved to the
+ * Navigation screen (TASK-108).
  */
 
 const box = sandbox();
@@ -270,145 +271,9 @@ describe('the notify server setting', () => {
   });
 });
 
-describe('the site menu setting', () => {
-  /** The content of a named textarea in the rendered settings screen. */
-  function textarea(html: string, name: string): string | undefined {
-    const match = new RegExp(`<textarea[^>]*name="${name}"[^>]*>([\\s\\S]*?)</textarea>`).exec(
-      html,
-    );
-    return match?.[1];
-  }
-
-  it('takes one label and URL per line, and reaches menus.primary and the form', async () => {
-    const contentDir = await box.dir('geekity-settings-navigation-');
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    const html = await (await agent.get('/admin/settings/reading')).text();
-    assert.equal(textarea(html, 'navigation'), '', 'a new site has no menu');
-
-    assert.equal(
-      (
-        await saveSettings(agent, 'reading', {
-          navigation: 'Home | /\n\n  About | /about/  \nElsewhere | https://example.org/',
-        })
-      ).status,
-      303,
-    );
-
-    assert.deepEqual(readSiteSettings(cms.config.contentDir).navigation, [
-      { label: 'Home', url: '/' },
-      { label: 'About', url: '/about/' },
-      { label: 'Elsewhere', url: 'https://example.org/' },
-    ]);
-
-    const written = await siteJson(contentDir);
-    assert.deepEqual(written['menus'], {
-      primary: [
-        { label: 'Home', url: '/' },
-        { label: 'About', url: '/about/' },
-        { label: 'Elsewhere', url: 'https://example.org/' },
-      ],
-    });
-    assert.equal(
-      written['navigation'],
-      undefined,
-      'the old key is gone rather than kept beside it',
-    );
-
-    const back = await (await agent.get('/admin/settings/reading')).text();
-    assert.equal(
-      textarea(back, 'navigation'),
-      'Home | /\nAbout | /about/\nElsewhere | https://example.org/',
-    );
-  });
-
-  it('marks an item me with a third part on the line, and round-trips it (AC #1, AC #2)', async () => {
-    const contentDir = await box.dir('geekity-settings-navigation-me-');
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    assert.equal(
-      (
-        await saveSettings(agent, 'reading', {
-          navigation: 'Mastodon | https://example.social/@me | me\nAbout | /about/',
-        })
-      ).status,
-      303,
-    );
-
-    assert.deepEqual(readSiteSettings(cms.config.contentDir).navigation, [
-      { label: 'Mastodon', url: 'https://example.social/@me', me: true },
-      { label: 'About', url: '/about/' },
-    ]);
-
-    const written = await siteJson(contentDir);
-    assert.deepEqual(written['menus'], {
-      primary: [
-        { label: 'Mastodon', url: 'https://example.social/@me', me: true },
-        { label: 'About', url: '/about/' },
-      ],
-    });
-
-    const back = await (await agent.get('/admin/settings/reading')).text();
-    assert.equal(
-      textarea(back, 'navigation'),
-      'Mastodon | https://example.social/@me | me\nAbout | /about/',
-    );
-  });
-
-  it('reads a trailing word that is not a flag as part of the URL', async () => {
-    // Which is what keeps a URL holding a bar working: only the names of flags
-    // this CMS has are taken off the end of a line.
-    const contentDir = await box.dir('geekity-settings-navigation-bar-');
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    assert.equal(
-      (await saveSettings(agent, 'reading', { navigation: 'Odd | /odd/?a=1|2' })).status,
-      303,
-    );
-
-    assert.deepEqual(readSiteSettings(cms.config.contentDir).navigation, [
-      { label: 'Odd', url: '/odd/?a=1|2' },
-    ]);
-  });
-
-  it('refuses a line missing a label or a URL, and keeps what was stored (AC #1)', async () => {
-    const contentDir = await box.dir('geekity-settings-navigation-bad-');
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    assert.equal((await saveSettings(agent, 'reading', { navigation: 'Home | /' })).status, 303);
-
-    for (const bad of [
-      'About',
-      'About |',
-      '| /about/',
-      '  | ',
-      'About | not a url',
-      // A line that is nothing but a flag names neither a label nor a URL.
-      'me | me',
-    ]) {
-      const response = await saveSettings(agent, 'reading', {
-        navigation: bad,
-        posts_per_page: '99',
-      });
-      assert.equal(response.status, 400, JSON.stringify(bad));
-      assert.match(await response.text(), /Label \| URL/, JSON.stringify(bad));
-    }
-
-    const settings = readSiteSettings(cms.config.contentDir);
-    assert.deepEqual(settings.navigation, [{ label: 'Home', url: '/' }]);
-    assert.equal(settings.postsPerPage, 10, 'the rest of the refused form was not written either');
-
-    assert.deepEqual((await siteJson(contentDir))['menus'], {
-      primary: [{ label: 'Home', url: '/' }],
-    });
-  });
-
-  it('leaves every other menu the site stores exactly as it was (AC #6)', async () => {
-    const contentDir = await box.dir('geekity-settings-navigation-others-');
+describe('the menu box that moved to Navigation (TASK-108)', () => {
+  it('is not on this page any more, and a save leaves every stored menu alone (AC #7)', async () => {
+    const contentDir = await box.dir('geekity-settings-menus-kept-');
     await mkdir(path.join(contentDir, '_data'), { recursive: true });
     await writeFile(
       path.join(contentDir, '_data', 'site.json'),
@@ -426,62 +291,20 @@ describe('the site menu setting', () => {
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
 
-    assert.equal(
-      (await saveSettings(agent, 'reading', { navigation: 'Home | /\nAbout | /about/' })).status,
-      303,
+    const html = await (await agent.get('/admin/settings/reading')).text();
+    assert.doesNotMatch(html, /name="navigation"/, 'the Menu box is gone from Reading');
+
+    assert.equal((await saveSettings(agent, 'reading', { posts_per_page: '7' })).status, 303);
+
+    assert.equal(readSiteSettings(cms.config.contentDir).postsPerPage, 7);
+    assert.deepEqual(
+      (await siteJson(contentDir))['menus'],
+      {
+        primary: [{ label: 'Home', url: '/' }],
+        footer: [{ label: 'Colophon', url: '/colophon/' }],
+        sidebar: [{ label: 'Blogroll', url: '/blogroll/' }],
+      },
+      'a page that does not carry the menus writes them back as they were',
     );
-
-    assert.deepEqual((await siteJson(contentDir))['menus'], {
-      primary: [
-        { label: 'Home', url: '/' },
-        { label: 'About', url: '/about/' },
-      ],
-      footer: [{ label: 'Colophon', url: '/colophon/' }],
-      sidebar: [{ label: 'Blogroll', url: '/blogroll/' }],
-    });
-  });
-
-  it('is seeded from menus.primary, and empty from a site.json that has none (AC #7)', async () => {
-    const contentDir = await box.dir('geekity-settings-navigation-seed-');
-    await mkdir(path.join(contentDir, '_data'), { recursive: true });
-    await writeFile(
-      path.join(contentDir, '_data', 'site.json'),
-      JSON.stringify({
-        title: 'Seeded',
-        menus: {
-          primary: [{ label: 'About', url: '/about/' }, { label: 'Nowhere' }, 'Home'],
-        },
-      }),
-      'utf8',
-    );
-
-    const cms = await box.site({ contentDir });
-    assert.deepEqual(readSiteSettings(cms.config.contentDir).navigation, [
-      { label: 'About', url: '/about/' },
-    ]);
-
-    const older = await box.dir('geekity-settings-navigation-old-');
-    await mkdir(path.join(older, '_data'), { recursive: true });
-    await writeFile(
-      path.join(older, '_data', 'site.json'),
-      JSON.stringify({ title: 'From before the setting' }),
-      'utf8',
-    );
-
-    const before = await box.site({ contentDir: older });
-    assert.deepEqual(readSiteSettings(before.config.contentDir).navigation, []);
-
-    // And the key TASK-106 left behind is not read at all: this is a rename
-    // rather than a migration (TASK-107).
-    const renamed = await box.dir('geekity-settings-navigation-renamed-');
-    await mkdir(path.join(renamed, '_data'), { recursive: true });
-    await writeFile(
-      path.join(renamed, '_data', 'site.json'),
-      JSON.stringify({ title: 'Old key', navigation: [{ label: 'About', url: '/about/' }] }),
-      'utf8',
-    );
-
-    const old = await box.site({ contentDir: renamed });
-    assert.deepEqual(readSiteSettings(old.config.contentDir).navigation, []);
   });
 });

@@ -1,5 +1,6 @@
 {# /admin/settings/reading: what a visitor is shown, and who is told when it
-   changes. #}
+   changes. The site menu was here until TASK-108; it is on /admin/navigation,
+   with every other menu the site holds. #}
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
 
@@ -52,18 +53,6 @@
   {{ field.text('settings-posts-per-page', fields.postsPerPage, 'Posts per page', form.postsPerPage,
        error=problems.postsPerPage, inputmode='numeric', required=true,
        hint='How many posts a listing page holds, on the home page and on every archive.') }}
-
-  {% set navigationHint %}
-    One item per line, written <code>Label | URL</code> &mdash; for example
-    <code>About | /about/</code> or <code>Mastodon | https://example.social/@me</code>.
-    They are the site menu, in this order, and they are the whole of it:
-    nothing else puts a link there. A page serving as the front page goes in as
-    <code>Home | /</code>, where a reader lands. End a line
-    <code>| me</code> to give that link <code>rel="me"</code>, which is how
-    Mastodon verifies that the site and the profile it links are yours.
-  {% endset %}
-  {{ field.textarea('settings-navigation', fields.navigation, 'Menu', form.navigation,
-       error=problems.navigation, hint=navigationHint, rows='4', spellcheck='false') }}
 
   {% set notifyHint %}
     An rssCloud and WebSub server, told whenever a feed changes so subscribers

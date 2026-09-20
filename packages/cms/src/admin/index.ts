@@ -219,7 +219,13 @@ export {
   updateSiteSettings,
   writeSiteJson,
 } from './settings.ts';
-export type { SettingsField, SettingsForm, SettingsProblems, SiteSettings } from './settings.ts';
+export type {
+  CarriedSettings,
+  SettingsField,
+  SettingsForm,
+  SettingsProblems,
+  SiteSettings,
+} from './settings.ts';
 export { bodyField, mountSettingsPage, settingsPagePath, settingsScreen } from './settings-page.ts';
 export type { MountSettingsOptions, SettingsPage, SubmittedBody } from './settings-page.ts';
 export { mountSettings, SETTINGS_PAGES } from './settings-pages.ts';

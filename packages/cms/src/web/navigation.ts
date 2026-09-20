@@ -20,6 +20,56 @@ export const MENU_ITEM_FLAGS = ['me'] as const;
 /** One of {@link MENU_ITEM_FLAGS}. */
 export type MenuItemFlag = (typeof MENU_ITEM_FLAGS)[number];
 
+/**
+ * What a menu name may be spelled with.
+ *
+ * A menu name is the word a theme writes after the dot in
+ * `{% for item in menus.footer %}`, and the key `site.json` stores that menu
+ * under. So it is an identifier before it is a slug: in a template
+ * `menus.top-bar` is `menus.top` minus `bar`, which renders nothing, raises
+ * nothing and leaves somebody looking at an empty page wondering which half is
+ * broken. A hyphen is refused here so that cannot happen.
+ *
+ * Lower case is the other half of the rule, and it is what refuses the
+ * spellings that would be confused with each other: `footer` and `Footer`
+ * would be two menus on the Navigation screen, one of them rendered nowhere,
+ * and no way to see the difference between them at a glance.
+ */
+export const MENU_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
+
+/** The longest a menu name may be. Long enough for a phrase, short enough to read. */
+export const MENU_NAME_MAX_LENGTH = 32;
+
+/**
+ * What is wrong with a proposed menu name, or `undefined` when nothing is.
+ *
+ * The rule governs a name somebody types on the Navigation screen (TASK-108).
+ * A name a `theme.json` declares is a menu name by declaration and is shown as
+ * the theme spells it: the theme decides where its own menus go, and a screen
+ * that hid a declared area because it disliked the spelling would leave
+ * somebody unable to fill in a menu their site renders.
+ */
+export function menuNameProblem(name: string): string | undefined {
+  const proposed = name.trim();
+
+  if (proposed === '') return 'A menu needs a name: it is what a theme asks for the menu by.';
+  if (proposed.length > MENU_NAME_MAX_LENGTH) {
+    return `A menu name is at most ${String(MENU_NAME_MAX_LENGTH)} characters, and "${proposed}" is longer.`;
+  }
+  if (proposed !== proposed.toLowerCase()) {
+    return `A menu name is lower case, so "${proposed}" would be a second menu beside "${proposed.toLowerCase()}" that nothing could tell apart. Try "${proposed.toLowerCase()}".`;
+  }
+  if (!MENU_NAME_PATTERN.test(proposed)) {
+    return (
+      `"${proposed}" is not a menu name. A name is lower-case letters, digits and ` +
+      `underscores and has to start with a letter, because a theme writes it after ` +
+      `the dot — menus.footer — where a dash would be a minus sign.`
+    );
+  }
+
+  return undefined;
+}
+
 /** One entry of a menu, as `site.json` and the settings screen spell it. */
 export interface NavigationItem {
   /** The words on the link. */
@@ -176,6 +226,121 @@ export function navigationItemsOf(value: unknown): NavigationItem[] {
     items.push({ label, url, ...(me === true ? { me: true } : {}) });
   }
   return items;
+}
+
+/**
+ * The non-empty lines of a menu box, trimmed.
+ *
+ * A blank line is not an error, exactly as it is not in the relay list: a
+ * pasted menu leaves them, and a blank line asks for nothing.
+ */
+function menuLines(value: string): string[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+}
+
+/**
+ * One `Label | URL` line as a menu item, or `undefined` when it is not one.
+ *
+ * The URL is either a site-root path or an absolute http(s) URL: a bare
+ * `about/` would be resolved against whatever page it was printed on, which is
+ * never what a menu means.
+ *
+ * A line may end in the flags the item carries, one per bar — `Mastodon |
+ * https://example.social/@me | me` — and those are taken off the end first,
+ * from the right, and only while the last part is the name of a flag this CMS
+ * actually has ({@link MENU_ITEM_FLAGS}). That is what lets a URL still hold a
+ * bar, a query string say: a trailing `| elsewhere` is not a flag, so it stays
+ * part of the URL and the line is refused for not naming one, rather than
+ * being quietly read as a flag nobody asked for.
+ *
+ * What is left splits at its first bar, so a label still cannot hold one.
+ */
+export function menuItemOf(line: string): NavigationItem | undefined {
+  const flags = new Set<string>();
+
+  let rest = line;
+  for (;;) {
+    const bar = rest.lastIndexOf('|');
+    if (bar === -1) break;
+    const flag = rest
+      .slice(bar + 1)
+      .trim()
+      .toLowerCase();
+    if (!(MENU_ITEM_FLAGS as readonly string[]).includes(flag)) break;
+    flags.add(flag);
+    rest = rest.slice(0, bar);
+  }
+
+  const bar = rest.indexOf('|');
+  if (bar === -1) return undefined;
+
+  const label = rest.slice(0, bar).trim();
+  const url = rest.slice(bar + 1).trim();
+  if (label === '' || url === '') return undefined;
+  if (!url.startsWith('/') && !isAbsoluteHttpUrl(url)) return undefined;
+
+  return { label, url, ...(flags.has('me') ? { me: true } : {}) };
+}
+
+/**
+ * A menu box as the ordered items it names, dropping the lines that are not
+ * items.
+ *
+ * Call {@link menuItemLineProblem} first where a person is waiting to be told:
+ * this is the tolerant read, which is what the old settings table's rows and a
+ * validated box both go through. `site.json` is read by {@link menusOf}
+ * instead, because the file holds objects rather than lines.
+ */
+export function menuItemsFromText(value: string): NavigationItem[] {
+  const items: NavigationItem[] = [];
+  for (const line of menuLines(value)) {
+    const item = menuItemOf(line);
+    if (item !== undefined) items.push(item);
+  }
+  return items;
+}
+
+/** The items as a box shows them: one line each, in order. */
+export function menuItemsText(items: readonly NavigationItem[]): string {
+  return items
+    .map((item) => `${item.label} | ${item.url}${item.me === true ? ' | me' : ''}`)
+    .join('\n');
+}
+
+/**
+ * What is wrong with a typed menu, or `undefined` when nothing is.
+ *
+ * One message naming the first bad line rather than a count of how many there
+ * are: a box is fixed a line at a time, and the line to fix is the useful
+ * half of the sentence.
+ */
+export function menuItemLineProblem(value: string): string | undefined {
+  const bad = menuLines(value).find((line) => menuItemOf(line) === undefined);
+  return bad === undefined
+    ? undefined
+    : `A menu item is "Label | URL", one per line, where the URL is a path ` +
+        `like /about/ or an absolute http:// or https:// URL, and ends ` +
+        `"| me" for a link that should carry rel="me". "${bad}" is not one.`;
+}
+
+/**
+ * Whether a menu URL is an absolute http(s) one.
+ *
+ * Deliberately a test rather than a normaliser: a menu keeps the URL as it was
+ * typed, so `https://example.social/@me` is what the link says and what the
+ * box shows it back as.
+ */
+function isAbsoluteHttpUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:';
 }
 
 /** One menu's items, with the one the request is on marked. */

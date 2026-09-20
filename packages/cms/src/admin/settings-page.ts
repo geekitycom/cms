@@ -144,13 +144,13 @@ export function mountSettingsPage(
 
     // The change is applied to the settings re-read inside the write, so a
     // field this page does not carry is whatever the file says now rather than
-    // whatever it said when the form was drawn. The recorded archive renames
-    // come from there for the same reason: a save of the title must not undo a
-    // term somebody renamed while this form was open.
+    // whatever it said when the form was drawn. The archive renames and the
+    // menus come from there for the same reason: a save of the title must not
+    // undo a term somebody renamed, or a menu somebody edited, while this form
+    // was open.
     const settings = await updateSiteSettings({
       contentDir: c.var.config.contentDir,
-      change: (current) =>
-        settingsFromForm(pageForm(c, page, body, current), current.taxonomyRedirects),
+      change: (current) => settingsFromForm(pageForm(c, page, body, current), current),
     });
 
     const note = page.saved === undefined ? '' : await page.saved(c, stored, settings);

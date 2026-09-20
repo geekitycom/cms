@@ -920,10 +920,12 @@ account: it used to print one `rel="me"` link per entry of `siteAuthor.links`,
 which meant one nominated user's links stood for the site and nobody else's
 appeared at all.
 
-`menus.primary` is the whole of the site menu, in the order the settings screen
-names it. A page cannot put itself in a menu; a page that should be linked —
-including the one a site serves as its front page, typed `Home | /` — is typed
-into the setting.
+`menus.primary` is the whole of the site menu, in the order the Navigation
+screen names it. Both areas are declared in this theme's `theme.json`, which is
+what puts them on `/admin/navigation` with those labels; a theme that renders a
+third menu declares a third area. A page cannot put itself in a menu; a page
+that should be linked — including the one a site serves as its front page,
+typed `Home | /` — is typed into the box there.
 
 Because the menus live in `site.json`, an Eleventy build of the same content
 renders the same ones; `docs/eleventy.config.example.js` builds them as

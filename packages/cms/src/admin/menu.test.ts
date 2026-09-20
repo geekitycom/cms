@@ -11,6 +11,7 @@ describe('the admin menu registry', () => {
         'Dashboard',
         'Posts',
         'Pages',
+        'Navigation',
         'Media',
         'Comments',
         'Messages',

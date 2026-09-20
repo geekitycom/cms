@@ -74,8 +74,9 @@ describe('content/_data/site.json', () => {
       contactEmail: '',
       relays: [],
       // Every menu the site stores, by name (TASK-107). A site that has typed
-      // none has the one the theme's primary area reads, empty.
-      menus: { primary: [] },
+      // none stores none: a menu comes into being on the Navigation screen
+      // (TASK-108), so no settings save invents one.
+      menus: {},
       taxonomyRedirects: [],
     });
   });

@@ -170,6 +170,13 @@ export type {
 export {
   DEFAULT_MENU_NAME,
   MENU_ITEM_FLAGS,
+  MENU_NAME_MAX_LENGTH,
+  MENU_NAME_PATTERN,
+  menuItemLineProblem,
+  menuItemOf,
+  menuItemsFromText,
+  menuItemsText,
+  menuNameProblem,
   menusOf,
   navigationItems,
   navigationItemsOf,

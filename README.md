@@ -803,8 +803,8 @@ offered.
 
 `/admin/settings` holds the values that are a site's own rather than a post's,
 on six pages under the Settings menu: **General** (title, tagline, author, base
-URL, time zone and language), **Reading** (posts per page, the site menu, the
-notify server the feeds advertise), **Permalinks** (the tag and category
+URL, time zone and language), **Reading** (what the homepage displays, posts per
+page, the notify server the feeds advertise), **Permalinks** (the tag and category
 archive bases), **Discussion** (comments and when they close, webmentions sent
 and received), **Email** (how the site sends mail and where a message written to
 it goes) and **Federation** (the relays the site subscribes to). They live in
@@ -860,7 +860,6 @@ back with a 400 and one message under each field that has one:
 | Time zone      | An IANA zone name `Intl` knows, such as `Europe/London`.                          |
 | Language       | A BCP 47 tag, such as `en` or `en-GB`. It is the page's `lang` and the feeds'.    |
 | Posts per page | A whole number of one or more. It is what the home page and tag archives page by. |
-| Menu           | One `Label \| URL` per line, the URL a path or an absolute URL. See below.        |
 | Tag base       | One URL-safe path segment. See below.                                             |
 | Category base  | The same, and not the same word as the tag base.                                  |
 | Relays         | One relay inbox per line, each an absolute `http://` or `https://` URL.           |
@@ -890,27 +889,6 @@ one still waiting. Removing a line unfollows it. See
 [websub]: https://www.w3.org/TR/websub/
 [notify]: packages/cms/README.md#real-time-notification
 
-The menu is the site menu, one `Label | URL` per line — `About | /about/`,
-`Mastodon | https://example.social/@me | me` — rendered in that order, with the
-item whose path is the one being read marked `aria-current` and a line ending
-`| me` given `rel="me"`. That setting is the whole menu: a page cannot put
-itself in it, so there is one screen to edit it on, one order, and no way for a
-link to appear twice. A page the site serves as its front page is typed
-`Home | /`, the URL a reader lands on, rather than at the permalink that
-redirects there.
-
-A site stores its menus by name, as `menus` in `content/_data/site.json` — the
-setting above is `menus.primary` — and a theme declares in its `theme.json`
-which names it renders. The packaged theme declares `primary` and `footer`, and
-a theme that wants a third declares that too. A menu stored under a name no
-theme declares is kept and rendered nowhere, so the menu a theme will use can
-be written before switching to it. Templates get them all as `menus`, keyed by
-name; an Eleventy build reads the same object —
-`docs/eleventy.config.example.js` assembles it as `collections.menus`. See
-[Navigation][navigation] in the theme README.
-
-[navigation]: packages/cms/themes/default/README.md#navigation
-
 The two archive bases decide where the taxonomy archives live: `/{tagBase}/{tag}/`
 and `/{categoryBase}/{name}/`. They default to WordPress's `tag` and `category`,
 so a site imported from WordPress keeps every archive URL it published. Each is
@@ -935,6 +913,62 @@ no configuration at all nothing is sent and every feature that emails carries on
 working. See [Email][email] in the package README.
 
 [email]: packages/cms/README.md#email
+
+## Navigation
+
+A menu is a named thing the site stores and the theme asks for, and
+`/admin/navigation` is where somebody manages them. It is a section of its own
+after Pages rather than a settings page: a menu is content a site arranges, the
+way its pages are, rather than a switch that changes how the site behaves — and
+the shape of the screen comes from the active theme, which is not something a
+page of fields can be.
+
+**A theme declares where a menu can go.** Its `theme.json` carries an `areas`
+list, each entry a `name` and a `label`:
+
+```json
+{ "areas": [{ "name": "primary", "label": "Site menu" }] }
+```
+
+That declaration is the whole of what puts an area on the screen. The packaged
+theme declares `primary` ("Site menu") and `footer` ("Footer links"); a theme
+that wants a third declares it, and a theme that declares none — or whose
+`areas` cannot be read — inherits the packaged theme's, exactly as it inherits
+every template it has not overridden.
+
+**The screen is two lists.** First the areas the active theme declares, in the
+theme's own order and under the theme's own labels, each a box of links. An
+area the site has never filled in is an empty box rather than a missing one.
+Then every other menu the site stores, under a heading saying this theme
+renders them nowhere: those are kept, still editable — which is how the menu a
+theme will use gets written before the site switches to it — and each has a
+Delete, which is the only way a menu is removed. An area the theme declares is
+emptied rather than deleted.
+
+**A menu's items** are typed one `Label | URL` per line — `About | /about/`,
+`Mastodon | https://example.social/@me | me` — rendered in that order, with the
+item whose path is the one being read marked `aria-current` and a line ending
+`| me` given `rel="me"`, which is how Mastodon verifies that the site and the
+profile it links are yours. The menu is the whole of itself: a page cannot put
+itself in one, so there is one screen to edit it on, one order, and no way for
+a link to appear twice. A page the site serves as its front page is typed
+`Home | /`, the URL a reader lands on, rather than at the permalink that
+redirects there.
+
+**A menu name** is lower-case letters, digits and underscores, starting with a
+letter, up to 32 characters. It is the word a theme writes after the dot in
+`{% for item in menus.footer %}`, which is why a dash is
+refused: after a dot it is a minus sign, and a menu named `top-bar` would render
+nothing and say nothing about why. Lower case is the other half of the rule, and
+it is what stops two menus nobody can tell apart: `Footer` is refused rather
+than quietly lowered, and a name the site already holds is refused too.
+
+A site stores its menus as `menus` in `content/_data/site.json`, keyed by name.
+Templates get them all as `menus`; an Eleventy build reads the same object —
+`docs/eleventy.config.example.js` assembles it as `collections.menus`. See
+[Navigation][navigation] in the theme README.
+
+[navigation]: packages/cms/themes/default/README.md#navigation
 
 ## Tags and categories
 

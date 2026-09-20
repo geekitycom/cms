@@ -1470,6 +1470,9 @@ shadow the login form.
 | `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                 |
 | `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                   |
 | `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                      |
+| `/admin/navigation`                              | Navigation > Menus: every menu the site holds. `POST` saves one menu's items.     |
+| `/admin/navigation/add`                          | `POST` only. Adds an empty menu under the name the form gives.                    |
+| `/admin/navigation/delete`                       | `POST` only. Deletes one menu the active theme renders nowhere.                   |
 | `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it.  |
 | `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.           |
 | `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.       |
@@ -1483,7 +1486,7 @@ shadow the login form.
 | `/admin/tools`                                   | Tools > Content index: what the index holds, and the button that rebuilds it.     |
 | `/admin/tools/rebuild-index`                     | `POST` only. Offers the rebuild, then reads every file again on the live site.    |
 | `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language.        |
-| `/admin/settings/reading`                        | Posts per page, the site menu, the notify server.                                 |
+| `/admin/settings/reading`                        | What the homepage displays, posts per page, the notify server.                    |
 | `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.           |
 | `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                |
 | `/admin/settings/akismet`                        | `POST` only. Saves the Akismet key, or forgets it.                                |
@@ -2051,9 +2054,13 @@ reads:
 { "areas": [{ "name": "primary", "label": "Site menu" }] }
 ```
 
-The packaged theme declares `primary` and `footer`. A theme that wants a third
-declares it; a theme that renders none declares none; an `areas` that is
-missing or unreadable leaves a theme with none rather than failing to load it.
+The packaged theme declares `primary` ("Site menu") and `footer` ("Footer
+links"). A theme that wants a third declares it; an `areas` that is missing or
+unreadable leaves that theme declaring none rather than failing to load it, and
+the Navigation screen then offers the packaged theme's — a site theme is laid
+over the packaged one a file at a time, so a theme that has declared nothing has
+not overridden the declaration, and its inherited `layouts/base.njk` really is
+still rendering `menus.primary` and `menus.footer`.
 
 **A theme renders a menu by name.** Every template gets `menus`, keyed by the
 same names, each item already marked `current` for the path being rendered.
@@ -2064,11 +2071,36 @@ that edits menus reads, and a menu nothing loops over is rendered nowhere and
 kept — which is how somebody writes the menu a theme will use before switching
 to that theme.
 
-`menus.primary` is edited on `/admin/settings/reading` as one `Label | URL` per
-line — `About | /about/`, `Mastodon | https://example.social/@me | me` — in the
-order it is typed, with a trailing `| me` marking the flag. Only a flag this
-CMS has is taken off the end of a line, so a URL holding a bar survives and a
-trailing word that is not a flag stays part of the URL.
+**The menus are managed on `/admin/navigation`.** It is a top-level section
+after Pages rather than a settings page: a menu is content a site arranges, the
+way its pages are, and the shape of the screen comes from the active theme.
+The screen is two lists. First the areas that theme declares, in the theme's
+order and under its labels — an area the site has never filled in is an empty
+box, not a missing one. Then every other stored menu, under a heading saying
+this theme renders them nowhere; those are still editable, which is how the
+menu a theme will use is written before the site switches to it, and each has
+the Delete that is the only way a menu is removed. An area the theme declares
+is emptied rather than deleted: the theme goes on asking for the name, and the
+box has to stay for the next thing typed into it.
+
+Each menu is one box of `Label | URL` lines, in the order they are typed, with
+a trailing `| me` marking the flag. Only a flag this CMS has is taken off the
+end of a line, so a URL holding a bar survives and a trailing word that is not
+a flag stays part of the URL. A line that is not an item is refused by name,
+with the box still holding every line of what was typed, and nothing written.
+
+**A menu name** is lower-case ASCII letters, digits and underscores, starting
+with a letter, at most 32 characters. It is the word a theme writes after the
+dot — `{% for item in menus.footer %}` — so a dash is refused: after a dot it
+is a minus sign, and `menus.top-bar` renders nothing and raises nothing. Lower
+case is the rest of the rule and it is what refuses the confusable spellings:
+`Footer` is refused rather than quietly lowered, because `footer` and `Footer`
+would be two menus on one screen that nothing could tell apart. A name the site
+already holds is refused too, and the message says its box is already on the
+page. The rule governs a name somebody types; a name a `theme.json` declares is
+a menu name by declaration and is shown as the theme spells it, because a
+screen that hid a declared area over a spelling would leave somebody unable to
+fill in a menu their site renders.
 
 There is no second source. A page cannot put itself in a menu, so there is one
 screen to edit it on, one order, and no way for the same link to appear twice.

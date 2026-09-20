@@ -22,6 +22,7 @@ import { COMMENTS_PATH, mountCommentsScreen, pendingComments } from './comments.
 import { MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
 import { adminMenu } from './menu.ts';
 import { MESSAGES_PATH, mountMessagesScreen, unreadMessages } from './messages.ts';
+import { mountNavigationScreen } from './navigation.ts';
 import { mountPreview } from './preview.ts';
 import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
 import { mountSettings } from './settings-pages.ts';
@@ -319,6 +320,11 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // POST in the admin.
   mountPreview(app);
   mountUploads(app);
+
+  // Every menu the site holds, and which of them the active theme renders. A
+  // section of its own rather than a settings page: a menu is content a site
+  // arranges, and the shape of the screen comes from the theme (TASK-108).
+  mountNavigationScreen(app, { render });
 
   // Everything under content/uploads: what is there, what links to it, and
   // the upload form that stores a file by the same rules the editor does.

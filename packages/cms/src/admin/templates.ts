@@ -43,6 +43,7 @@ export const ADMIN_TEMPLATES = {
   documentEditor: 'pages/documents/editor.njk',
   documentConflict: 'pages/documents/conflict.njk',
   taxonomy: 'pages/documents/taxonomy.njk',
+  navigation: 'pages/navigation/menus.njk',
   media: 'pages/media/library.njk',
   themes: 'pages/appearance/themes.njk',
   comments: 'pages/comments/all.njk',

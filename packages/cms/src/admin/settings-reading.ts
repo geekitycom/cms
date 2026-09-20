@@ -2,10 +2,11 @@
  * Reading: what a visitor is shown, and who is told when it changes.
  *
  * WordPress's Reading page is what the homepage displays and how many posts a
- * listing holds; this one adds the site menu, which is the other thing that
- * decides what somebody arriving can reach, and the notify server, which is
- * how a subscriber hears that a feed moved on without waiting for their next
- * poll.
+ * listing holds; this one adds the notify server, which is how a subscriber
+ * hears that a feed moved on without waiting for their next poll. The site
+ * menu was here too until TASK-108 gave the menus a screen of their own: which
+ * menus there are to edit comes from the active theme, which is not something
+ * a page of fields can be.
  */
 
 import type { Context } from 'hono';
@@ -50,7 +51,7 @@ export const READING_SETTINGS: SettingsPage = {
   label: 'Reading',
   path: settingsPagePath('reading'),
   template: ADMIN_TEMPLATES.settingsReading,
-  fields: ['homepage', 'postsPage', 'postsPerPage', 'navigation', 'notifyServer'],
+  fields: ['homepage', 'postsPage', 'postsPerPage', 'notifyServer'],
 
   panels: (c, settings) => {
     const choices = pageChoices(c);

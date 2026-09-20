@@ -12,8 +12,8 @@ import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
-import { DEFAULT_MENU_NAME, MENU_ITEM_FLAGS, menusOf } from '../web/navigation.ts';
-import type { NavigationItem } from '../web/navigation.ts';
+import { DEFAULT_MENU_NAME, menuItemsFromText, menusOf } from '../web/navigation.ts';
+import type { NavigationMenus } from '../web/navigation.ts';
 import {
   DEFAULT_TAXONOMY_BASES,
   taxonomyBaseProblems,
@@ -223,19 +223,17 @@ export interface SiteSettings {
    */
   wordpressActivityPub: boolean;
   /**
-   * The site menu: the `primary` menu of `site.json`'s `menus`, an ordered
-   * list of items the theme renders wherever it declares a `primary` area and
-   * an Eleventy build reads out of the same file.
+   * Every menu the site holds, by name: `site.json`'s `menus`, each an ordered
+   * list of items a theme renders wherever it declares an area of that name
+   * and an Eleventy build reads out of the same file.
    *
-   * The list is edited one `Label | URL` per line, with ` | me` at the end of
-   * a line whose link should carry `rel="me"`. A page cannot put itself on it:
-   * the setting is the whole menu (TASK-106).
-   *
-   * Only this one menu is a setting. Every other menu a site stores under
-   * `menus` is carried through a save untouched and edited on the Navigation
-   * screen (TASK-108); see {@link siteJsonFor}.
+   * Not a field of the settings form, and deliberately: a menu is content a
+   * site arranges rather than a switch it sets, and which menus there are to
+   * edit comes from the active theme. The Navigation screen is what writes
+   * them (TASK-108); a settings page carries them through a save untouched,
+   * the way it carries the archive renames.
    */
-  navigation: readonly NavigationItem[];
+  menus: NavigationMenus;
   /**
    * The taxonomy archives that have moved: one `{ taxonomy, from, to }` per
    * term the taxonomy screens renamed or merged away, so the URL it used to
@@ -251,10 +249,21 @@ export interface SiteSettings {
 /**
  * The settings the form on the settings screen carries.
  *
- * Every setting but the recorded archive renames, which the taxonomy screens
- * write; see {@link SiteSettings.taxonomyRedirects}.
+ * Every setting but the two that a screen of its own writes: the recorded
+ * archive renames, which the taxonomy screens write, and the menus, which the
+ * Navigation screen writes. See {@link CarriedSettings}.
  */
-export type SettingsField = Exclude<keyof SiteSettings, 'taxonomyRedirects'>;
+export type SettingsField = Exclude<keyof SiteSettings, 'taxonomyRedirects' | 'menus'>;
+
+/**
+ * The settings no settings form carries, as a save takes them from the file.
+ *
+ * Both are records of what another screen did rather than preferences typed
+ * into a box, so a save of the title reads them off `site.json` as it stands
+ * inside the write rather than off the form — which is what makes a menu
+ * edited while the settings page was open survive the save.
+ */
+export type CarriedSettings = Partial<Pick<SiteSettings, 'taxonomyRedirects' | 'menus'>>;
 
 /**
  * What a site is worth before anybody has said otherwise.
@@ -287,7 +296,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   contactEmail: '',
   relays: [],
   wordpressActivityPub: false,
-  navigation: [],
+  menus: {},
   taxonomyRedirects: [],
 };
 
@@ -317,7 +326,6 @@ export const SETTINGS_FIELDS = {
   contactEmail: 'contact_email',
   relays: 'relays',
   wordpressActivityPub: 'wordpress_activitypub',
-  navigation: 'navigation',
 } as const satisfies Record<SettingsField, string>;
 
 /** A submitted settings form, before it is known to be valid. */
@@ -418,12 +426,10 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(typeof file['wordpressActivityPub'] === 'boolean'
       ? { wordpressActivityPub: file['wordpressActivityPub'] }
       : {}),
-    // The primary menu, out of the `menus` object that holds every menu the
-    // site has. The `navigation` key this setting used to live under is not
-    // read at all: menus were renamed rather than migrated (TASK-107).
-    ...(file['menus'] === undefined
-      ? {}
-      : { navigation: menusOf(file['menus'])[DEFAULT_MENU_NAME] ?? [] }),
+    // Every menu the site holds, whether or not the theme in use renders it.
+    // The `navigation` key the one menu used to live under is not read at all:
+    // menus were renamed rather than migrated (TASK-107).
+    ...(file['menus'] === undefined ? {} : { menus: menusOf(file['menus']) }),
     // The renames a site has published redirects for: facts about its URLs
     // rather than preferences, which is why a content directory restored on
     // its own keeps answering the archive URLs it used to.
@@ -480,16 +486,16 @@ export function siteJsonFor(
     mailReplyTo: settings.mailReplyTo,
     contactEmail: settings.contactEmail,
     relays: [...settings.relays],
-    // Every menu the site stores, with the one this form edits replaced.
-    //
-    // The others are carried through rather than modelled: a site holds a menu
-    // for an area no theme declares yet, and a save of the Reading form is not
-    // going to be the thing that throws it away (TASK-107). The Navigation
-    // screen is what edits them (TASK-108).
-    menus: {
-      ...menusOf(existing['menus']),
-      [DEFAULT_MENU_NAME]: settings.navigation.map((item) => ({ ...item })),
-    },
+    // Every menu the site holds, written whole. A settings page never has
+    // them off its own form — it reads them out of the file inside the write
+    // and hands them straight back — so the one screen that models them is the
+    // one that edits them (TASK-108).
+    menus: Object.fromEntries(
+      Object.entries(settings.menus).map(([name, items]) => [
+        name,
+        items.map((item) => ({ ...item })),
+      ]),
+    ),
     taxonomyRedirects: settings.taxonomyRedirects.map((entry) => ({ ...entry })),
   };
 
@@ -622,7 +628,7 @@ function settingsFromRows(rows: readonly LegacySetting[]): SiteSettings {
       ? {}
       : { postsPerPage: Number(stored['postsPerPage']) }),
     relays: relayList(stored['relays'] ?? ''),
-    menus: { [DEFAULT_MENU_NAME]: navigationList(stored['navigation'] ?? '') },
+    menus: { [DEFAULT_MENU_NAME]: menuItemsFromText(stored['navigation'] ?? '') },
     taxonomyRedirects: redirectList(stored['taxonomyRedirects'] ?? ''),
   });
 }
@@ -824,18 +830,6 @@ const FIELD_CHECKS: Record<
   // get wrong about it.
   wordpressActivityPub: () => undefined,
 
-  // A menu is checked line by line like the relays, and for the same reason:
-  // one message on a textarea is more use pointing at the line to fix than
-  // counting how many are wrong.
-  navigation: (form) => {
-    const bad = navigationLines(form.navigation).find((line) => navigationItem(line) === undefined);
-    return bad === undefined
-      ? undefined
-      : `A menu item is "Label | URL", one per line, where the URL is a path ` +
-          `like /about/ or an absolute http:// or https:// URL, and ends ` +
-          `"| me" for a link that should carry rel="me". "${bad}" is not one.`;
-  },
-
   // The two archive bases are checked as a pair, because two of the rules —
   // that they differ, and that neither takes a path the site already answers
   // on — are about the pair rather than either one. They are on one page for
@@ -878,16 +872,16 @@ export function settingsProblems(
  * A validated form as settings. Only call it on a form
  * {@link settingsProblems} found nothing wrong with.
  *
- * The recorded archive renames are carried in rather than read off the form,
- * because they are not on it: the taxonomy screens write them, and a save of
- * the other fields keeps whatever is stored.
+ * The archive renames and the menus are carried in rather than read off the
+ * form, because they are not on it: the taxonomy screens write the one and the
+ * Navigation screen the other, and a save of the fields that are on the form
+ * keeps whatever is stored. Passing the settings read inside the write is all
+ * a caller has to do, since they hold both.
  */
-export function settingsFromForm(
-  form: SettingsForm,
-  taxonomyRedirects: readonly TaxonomyRedirect[] = DEFAULT_SITE_SETTINGS.taxonomyRedirects,
-): SiteSettings {
+export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = {}): SiteSettings {
   return {
-    taxonomyRedirects,
+    taxonomyRedirects: carried.taxonomyRedirects ?? DEFAULT_SITE_SETTINGS.taxonomyRedirects,
+    menus: carried.menus ?? DEFAULT_SITE_SETTINGS.menus,
     title: form.title.trim(),
     tagline: form.tagline.trim(),
     baseUrl: normalizeBaseUrl(form.baseUrl) ?? '',
@@ -919,7 +913,6 @@ export function settingsFromForm(
     contactEmail: form.contactEmail.trim(),
     relays: relayList(form.relays),
     wordpressActivityPub: form.wordpressActivityPub !== '',
-    navigation: navigationList(form.navigation),
   };
 }
 
@@ -950,7 +943,6 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     contactEmail: settings.contactEmail,
     relays: settings.relays.join('\n'),
     wordpressActivityPub: settings.wordpressActivityPub ? '1' : '',
-    navigation: navigationText(settings.navigation),
   };
 }
 /**
@@ -1095,84 +1087,4 @@ function parseSiteJson(source: string): Record<string, unknown> {
   return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
     ? (parsed as Record<string, unknown>)
     : {};
-}
-
-/**
- * The non-empty lines of the navigation textarea, trimmed.
- *
- * Blank lines are not an error, exactly as they are not in the relay list: a
- * pasted menu leaves them, and a blank line asks for nothing.
- */
-function navigationLines(value: string): string[] {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '');
-}
-
-/**
- * One `Label | URL` line as a menu item, or `undefined` when it is not one.
- *
- * The URL is either a site-root path or an absolute http(s) URL: a bare
- * `about/` would be resolved against whatever page it was printed on, which is
- * never what a menu means.
- *
- * A line may end in the flags the item carries, one per bar — `Mastodon |
- * https://example.social/@me | me` — and those are taken off the end first,
- * from the right, and only while the last part is the name of a flag this CMS
- * actually has ({@link MENU_ITEM_FLAGS}). That is what lets a URL still hold a
- * bar, a query string say: a trailing `| elsewhere` is not a flag, so it stays
- * part of the URL and the line is refused for not naming one, rather than
- * being quietly read as a flag nobody asked for.
- *
- * What is left splits at its first bar, so a label still cannot hold one.
- */
-function navigationItem(line: string): NavigationItem | undefined {
-  const flags = new Set<string>();
-
-  let rest = line;
-  for (;;) {
-    const bar = rest.lastIndexOf('|');
-    if (bar === -1) break;
-    const flag = rest
-      .slice(bar + 1)
-      .trim()
-      .toLowerCase();
-    if (!(MENU_ITEM_FLAGS as readonly string[]).includes(flag)) break;
-    flags.add(flag);
-    rest = rest.slice(0, bar);
-  }
-
-  const bar = rest.indexOf('|');
-  if (bar === -1) return undefined;
-
-  const label = rest.slice(0, bar).trim();
-  const url = rest.slice(bar + 1).trim();
-  if (label === '' || url === '') return undefined;
-  if (!url.startsWith('/') && normalizeRelayInbox(url) === undefined) return undefined;
-
-  return { label, url, ...(flags.has('me') ? { me: true } : {}) };
-}
-
-/**
- * A navigation textarea as the ordered items it names.
- *
- * Exported nowhere: the same parsing turns the old settings table's rows and
- * the submitted form into one list, and `site.json` is read by
- * {@link menusOf} instead, because the file holds objects rather than lines.
- */
-function navigationList(value: string): NavigationItem[] {
-  const items: NavigationItem[] = [];
-  for (const line of navigationLines(value)) {
-    const item = navigationItem(line);
-    if (item !== undefined) items.push(item);
-  }
-  return items;
-}
-
-/** The items as the textarea shows them, and as the settings table holds them. */
-function navigationText(items: readonly NavigationItem[]): string {
-  return items
-    .map((item) => `${item.label} | ${item.url}${item.me === true ? ' | me' : ''}`)
-    .join('\n');
 }

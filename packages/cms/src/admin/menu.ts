@@ -22,6 +22,7 @@ import { newEditorPath, PAGE_KIND, POST_KIND } from './documents.ts';
 import { FEDERATION_PATH } from './federation.ts';
 import { MEDIA_PATH } from './media.ts';
 import { MESSAGES_PATH } from './messages.ts';
+import { NAVIGATION_PATH } from './navigation.ts';
 import { settingsPagePath } from './settings-page.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { CATEGORY_KIND, TAG_KIND } from './taxonomy.ts';
@@ -100,6 +101,10 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     { child: 'all', label: 'All pages', url: PAGE_KIND.basePath },
     { child: 'new', label: 'Add new', url: newEditorPath(PAGE_KIND) },
   ]),
+  // After Pages, because a menu is mostly a list of them, and above Media for
+  // the same reason: it is content the site arranges rather than a setting.
+  // Not a settings page at all — the shape of the screen comes from the theme.
+  section('navigation', 'Navigation', [{ child: 'menus', label: 'Menus', url: NAVIGATION_PATH }]),
   section('media', 'Media', [{ child: 'library', label: 'Library', url: MEDIA_PATH }]),
   section('comments', 'Comments', [{ child: 'all', label: 'All comments', url: COMMENTS_PATH }]),
   section('messages', 'Messages', [{ child: 'all', label: 'All messages', url: MESSAGES_PATH }]),

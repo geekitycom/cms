@@ -2,7 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { SiteData } from './context.ts';
-import { navigationItems, navigationMenu, navigationMenus, siteMenus } from './navigation.ts';
+import {
+  menuItemLineProblem,
+  menuItemsFromText,
+  menuItemsText,
+  menuNameProblem,
+  navigationItems,
+  navigationMenu,
+  navigationMenus,
+  siteMenus,
+} from './navigation.ts';
 
 describe('navigationMenu', () => {
   it('lists the items one named menu holds, in the order it names them (AC #1)', () => {
@@ -197,5 +206,67 @@ describe('navigationItems', () => {
       { label: 'Unset', url: '/unset/' },
       { label: 'Wordy', url: '/wordy/' },
     ]);
+  });
+});
+
+describe('menuNameProblem (TASK-108)', () => {
+  it('takes the names a theme can write after a dot', () => {
+    for (const name of ['primary', 'footer', 'top2', 'social_links', 'a']) {
+      assert.equal(menuNameProblem(name), undefined, name);
+    }
+  });
+
+  it('refuses a name a template could not loop over, and says why', () => {
+    // `menus.top-bar` is `menus.top` minus `bar`, which renders nothing and
+    // says nothing, so the name is refused here instead.
+    assert.match(menuNameProblem('top-bar') ?? '', /letters, digits and underscores/);
+    assert.match(menuNameProblem('2nd') ?? '', /start with a letter/);
+    assert.match(menuNameProblem('') ?? '', /needs a name/);
+    assert.match(menuNameProblem('   ') ?? '', /needs a name/);
+    assert.ok(menuNameProblem('a'.repeat(33)) !== undefined, 'a name has a length');
+  });
+
+  it('refuses a capital rather than lowering it, because that is the confusable spelling', () => {
+    // A stored `footer` and a stored `Footer` would be two menus nobody could
+    // tell apart on the screen or in a theme; one spelling is the whole rule.
+    assert.match(menuNameProblem('Footer') ?? '', /lower case/);
+  });
+});
+
+describe('the Label | URL line format (TASK-108)', () => {
+  it('reads one item per line, trimmed, blank lines skipped', () => {
+    assert.deepEqual(
+      menuItemsFromText('Home | /\n\n  About | /about/  \nElsewhere | https://example.org/'),
+      [
+        { label: 'Home', url: '/' },
+        { label: 'About', url: '/about/' },
+        { label: 'Elsewhere', url: 'https://example.org/' },
+      ],
+    );
+  });
+
+  it('reads a trailing flag, and only a flag this CMS has', () => {
+    assert.deepEqual(menuItemsFromText('Mastodon | https://example.social/@me | me'), [
+      { label: 'Mastodon', url: 'https://example.social/@me', me: true },
+    ]);
+    // A bar in the URL survives, because a trailing word that is not a flag is
+    // part of the URL rather than a flag nobody asked for.
+    assert.deepEqual(menuItemsFromText('Odd | /odd/?a=1|2'), [
+      { label: 'Odd', url: '/odd/?a=1|2' },
+    ]);
+  });
+
+  it('writes the items back as the lines they were typed as', () => {
+    const text = 'Mastodon | https://example.social/@me | me\nAbout | /about/';
+    assert.equal(menuItemsText(menuItemsFromText(text)), text);
+  });
+
+  it('names the first line that is not an item, and says what one is', () => {
+    for (const bad of ['About', 'About |', '| /about/', '  | ', 'About | not a url', 'me | me']) {
+      assert.match(menuItemLineProblem(bad) ?? '', /Label \| URL/, JSON.stringify(bad));
+      assert.match(menuItemLineProblem(bad) ?? '', /rel="me"/, JSON.stringify(bad));
+    }
+    assert.equal(menuItemLineProblem('Home | /\nAbout | /about/'), undefined);
+    assert.equal(menuItemLineProblem(''), undefined, 'an empty menu is a menu');
   });
 });

@@ -7,9 +7,8 @@ contact: true
 
 `contact: true` in this page's front matter is the whole of it. One key, which
 Eleventy ignores, puts the form below. What the menu at the top says is a
-separate matter entirely: it is the Navigation setting on **Settings → Reading**
-and nothing else, so this page is in it because somebody typed
-`Contact | /contact/` there.
+separate matter entirely: it is the site menu on **Navigation** and nothing
+else, so this page is in it because somebody typed `Contact | /contact/` there.
 
 Send yourself a message and follow it. It is written to `data/contact/` as a
 JSON file before anything is emailed, and it is waiting on **Messages** in the
