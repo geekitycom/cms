@@ -65,24 +65,26 @@ pnpm install
 
 Run from the repository root.
 
-| Command                  | What it does                                                              |
-| ------------------------ | ------------------------------------------------------------------------- |
-| `pnpm install`           | Installs both workspace packages and links `apps/demo` to `packages/cms`. |
-| `pnpm dev`               | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`).         |
-| `pnpm start`             | Starts the demo site once, without watching.                              |
-| `pnpm build`             | Compiles `packages/cms` to `dist/` and bundles the admin editor.          |
-| `pnpm test`              | Runs the `node:test` suites in every package through `tsx`.               |
-| `pnpm test:coverage`     | The same suites with `--experimental-test-coverage`.                      |
-| `pnpm test:11ty`         | Builds the fixtures and the demo content with Eleventy, comparing URLs.   |
-| `pnpm typecheck`         | `tsc --noEmit` across the workspace, tests included.                      |
-| `pnpm lint`              | Fans out to each package's lint script.                                   |
-| `pnpm lint:fix`          | The same, with eslint's fixes applied.                                    |
-| `pnpm format`            | Rewrites every file prettier owns.                                        |
-| `pnpm format:check`      | Fails if any of them is not already formatted.                            |
-| `pnpm clean`             | Removes build output.                                                     |
-| `pnpm docker:dry-run`    | Prints the image tags a Docker publish would push, and builds nothing.    |
-| `pnpm docker:build-push` | Builds the image for amd64 and arm64 and pushes it to ghcr.io.            |
-| `pnpm docker:smoke`      | Builds the image locally, boots it on empty volumes and checks it serves. |
+| Command                  | What it does                                                                |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `pnpm install`           | Installs both workspace packages and links `apps/demo` to `packages/cms`.   |
+| `pnpm dev`               | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`).           |
+| `pnpm start`             | Starts the demo site once, without watching.                                |
+| `pnpm build`             | Compiles `packages/cms` to `dist/` and bundles the admin editor.            |
+| `pnpm test`              | Runs the `node:test` suites in every package through `tsx`.                 |
+| `pnpm test:coverage`     | The same suites with `--experimental-test-coverage`.                        |
+| `pnpm test:11ty`         | Builds the fixtures and the demo content with Eleventy, comparing URLs.     |
+| `pnpm typecheck`         | `tsc --noEmit` across the workspace, tests included.                        |
+| `pnpm lint`              | Fans out to each package's lint script.                                     |
+| `pnpm lint:fix`          | The same, with eslint's fixes applied.                                      |
+| `pnpm format`            | Rewrites every file prettier owns.                                          |
+| `pnpm format:check`      | Fails if any of them is not already formatted.                              |
+| `pnpm clean`             | Removes build output.                                                       |
+| `pnpm docker:dry-run`    | Prints the image tags a Docker publish would push, and builds nothing.      |
+| `pnpm docker:build-push` | Builds the image for amd64 and arm64 and pushes it to ghcr.io.              |
+| `pnpm docker:smoke`      | Builds the image locally, boots it on empty volumes and checks it serves.   |
+| `pnpm npm:dry-run`       | Prints the package, version and tag a publish needs, and publishes nothing. |
+| `pnpm npm:publish`       | Publishes `@geekity/cms` to npm from the commit carrying its version tag.   |
 
 Package-scoped variants work too, for example
 `pnpm --filter @geekity/cms test` or `pnpm --filter demo dev`.
@@ -1580,8 +1582,8 @@ pnpm --filter @geekity/cms pack
 ```
 
 Versions, tags and the changelog are automated by release-please (decision-7).
-Publishing to npm is a manual step a maintainer runs from the tagged checkout;
-CI never publishes. `apps/demo` is private and unversioned, so it is not
+Publishing to npm is one command a maintainer runs from main once the release
+commit is in; CI never publishes. `apps/demo` is private and unversioned, so it is not
 tracked.
 
 ### How a release flows
@@ -1625,24 +1627,41 @@ both; do not edit either by hand.
 
 ### Publishing to npm
 
-CI does not publish. Publish from the tagged commit so what reaches npm is
-exactly what was released:
+CI does not publish. A maintainer publishes with `scripts/npm-publish.sh`, the
+same shape as the Docker script below, after the release pull request is
+merged:
 
 ```sh
-git fetch --tags
-git checkout v0.1.0
-pnpm install --frozen-lockfile
-pnpm build && pnpm test && pnpm test:11ty
-pnpm publish --filter @geekity/cms --access public --no-git-checks
 git checkout main
+git pull --tags
+pnpm npm:dry-run    # check the package, the version and the tag first
+pnpm npm:publish
 ```
 
-`--no-git-checks` is needed because a tag checkout is a detached HEAD and pnpm
-otherwise insists on being on the publish branch. `--access public` matters for
-a scoped package. Log in first with `npm login`; the npm scope `@geekity` must
-be owned by the project (decision-6). The `pack-install` CI job has already
-proven the tarball installs and boots, so the publish itself is the only
-untested step.
+The version is read from `packages/cms/package.json`, which is why the pull
+comes first: release-please bumps it in the release pull request and tags the
+release commit, so main right after that merge already is `v<version>`.
+
+The script refuses to run from anywhere but the repository root. It then
+refuses, before running anything slow, when the working tree is dirty, when
+`HEAD` does not carry the version's tag, when nobody is logged in to npm (run
+`npm login` yourself; the script will not), or when that version is already on
+the registry. Checking the tag at `HEAD` is what replaced the old
+`git checkout v0.1.0` recipe: it proves the commit being published is the
+released one instead of assuming it, with no detached HEAD to strand commits on
+and nothing to undo afterwards. It is also why `--no-git-checks` is gone — pnpm
+is on the publish branch with a clean tree, so its own checks pass.
+
+It then runs the quality gates `pnpm lint`, `pnpm format:check`,
+`pnpm typecheck`, `pnpm test` and `pnpm test:11ty`. A failing gate stops it
+before anything is published. The publish itself is
+`pnpm publish --filter @geekity/cms --access public`; `--access public` matters
+for a scoped package, and the npm scope `@geekity` must be owned by the project
+(decision-6). `--dry-run` prints the package, the version, the tag it needs and
+the gates it would run, and publishes, checks and runs nothing.
+
+The `pack-install` CI job has already proven the tarball installs and boots, so
+the publish itself is the only untested step.
 
 ### Publishing the Docker image
 
