@@ -5,7 +5,10 @@
   "author": "You",
   "language": "en",
   "menus": {
-    "primary": [{ "label": "About", "url": "/about/" }],
+    "primary": [
+      { "label": "About", "url": "/about/" },
+      { "label": "Search", "url": "/search/" }
+    ],
     "footer": [{ "label": "RSS", "url": "/feed/" }]
   },
   "postsPerPage": 10,
