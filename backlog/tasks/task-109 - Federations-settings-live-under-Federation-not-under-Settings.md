@@ -4,7 +4,7 @@ title: 'Federation''s settings live under Federation, not under Settings'
 status: To Do
 assignee: []
 created_date: '2026-09-20 12:36'
-updated_date: '2026-09-20 12:36'
+updated_date: '2026-09-20 12:38'
 labels:
   - admin
   - federation
@@ -46,3 +46,11 @@ Worth checking while in there: whether any other Settings child is really a sect
 - [ ] #5 The README, the admin doc and any other prose naming the old path are updated
 - [ ] #6 Any other Settings child that is really a section's own screen is named in the implementation notes, moved or with a reason not to
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Settled by the maintainer on 2026-09-20: the child is labelled Settings, not General, and it is second. The section lands on Followers, which is what somebody opens Federation to look at; the settings are what they open it to change, and that is the rarer errand.
+
+So the section reads Federation > Followers, Federation > Settings, and the new path follows that label.
+<!-- SECTION:NOTES:END -->
