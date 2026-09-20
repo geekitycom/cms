@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.ts';
 
 /**
- * `admin/layouts/_fields.njk`: the one place a labelled box is written.
+ * `admin/components/fields.njk`: the one place a labelled box is written.
  *
  * The admin's screens used to spell out every `<label for>`, control, hint and
  * error by hand, which is how /admin/users ended up with hidden labels nobody
@@ -20,7 +20,7 @@ const environment = createAdminTemplateEnvironment({ noCache: true });
 
 /** Render one call of the partial's macros, with nothing else around it. */
 function render(body: string, context: Record<string, unknown> = {}): string {
-  return environment.renderString(`{% import "layouts/_fields.njk" as field %}${body}`, context);
+  return environment.renderString(`{% import "components/fields.njk" as field %}${body}`, context);
 }
 
 /** The opening tag of the first `<input>`, `<select>` or `<textarea>`. */
@@ -314,7 +314,7 @@ describe('a label or a hint written by the template', () => {
 
 describe('the classes the partial emits', () => {
   it('are every one of them styled, so no field renders bare', async () => {
-    const partial = await readFile(`${PACKAGED_ADMIN_DIR}layouts/_fields.njk`, 'utf8');
+    const partial = await readFile(`${PACKAGED_ADMIN_DIR}components/fields.njk`, 'utf8');
     const css = await readFile(`${PACKAGED_ADMIN_DIR}static/admin.css`, 'utf8');
     const rules = new Set(
       [...css.replaceAll(/\/\*[\s\S]*?\*\//g, ' ').matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map(

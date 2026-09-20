@@ -1,7 +1,7 @@
 {# /admin/settings/permalinks: the URLs the archives live at, and the ones they
    used to. #}
-{% extends "layouts/settings/page.njk" %}
-{% import "layouts/_fields.njk" as field %}
+{% extends "layouts/settings-page.njk" %}
+{% import "components/fields.njk" as field %}
 
 {% block settingsFields %}
   {% set tagBaseHint %}The tag archives live at <code>/{{ form.tagBase }}/{tag}/</code>. One path segment, no slashes.{% endset %}

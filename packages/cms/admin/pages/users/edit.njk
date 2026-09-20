@@ -11,7 +11,7 @@
    about whoever is signed in. Each saves what its own heading is about and
    lands back here, so a Save always shows its own result. #}
 {% extends "layouts/shell.njk" %}
-{% import "layouts/_fields.njk" as field %}
+{% import "components/fields.njk" as field %}
 
 {% block title %}Edit {{ account.username }}{% endblock %}
 

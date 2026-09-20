@@ -1,6 +1,14 @@
 {# The listing behind /admin/posts and /admin/pages. One template for both:
    `kind` says which, and whether the table has a date column and taxonomy
-   ones. #}
+   ones.
+
+   There is no `pages/posts/` or `pages/categories/` for the same reason.
+   Posts, Pages, Categories and Tags are four menu entries over three
+   templates — this listing, the editor beside it and the taxonomy screen —
+   because a post and a page differ by a `kind`, not by a screen. A folder per
+   menu entry would mean either a second copy of each template or a re-export
+   that exists only to make the directory look like the menu, so the folder is
+   named after what the screens are about instead. #}
 {% extends "layouts/shell.njk" %}
 
 {% block title %}{{ kind.plural }}{% endblock %}

@@ -21,13 +21,13 @@ const ADMIN_DIR = fileURLToPath(new URL('../../admin/', import.meta.url));
  * thing on every page (TASK-72).
  */
 const SCREENS = [
-  'layouts/comments.njk',
-  'layouts/messages.njk',
+  'pages/comments/all.njk',
+  'pages/messages/all.njk',
   'layouts/shell.njk',
   // Appearance > Themes, which is cards rather than a table and so brings
   // styles of its own that nothing else on the admin would have caught
   // (TASK-77).
-  'layouts/themes.njk',
+  'pages/appearance/themes.njk',
 ];
 
 /** Marks where a `{{ … }}` stood, so an interpolated name is not mistaken
@@ -83,7 +83,7 @@ describe('the admin screens', () => {
   }
 
   it('has a rule for every comment status the meta line can print', async () => {
-    const { prefixes } = classNames(await readFile(`${ADMIN_DIR}layouts/comments.njk`, 'utf8'));
+    const { prefixes } = classNames(await readFile(`${ADMIN_DIR}pages/comments/all.njk`, 'utf8'));
 
     assert.deepEqual(prefixes, ['admin-status-'], 'the only interpolated class is the status');
     assert.deepEqual(
