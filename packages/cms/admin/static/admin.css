@@ -249,20 +249,30 @@ h2 {
 
 .admin-counts {
   display: flex;
+  /* A cell that does not fit moves to the next line rather than being
+     squeezed until its label breaks; the panel has no breakpoint of its own. */
+  flex-wrap: wrap;
   margin: 0;
   gap: 1.5rem;
+  /* A cell is as tall as its own content, so the tallest of them cannot
+     stretch the rest and move where their numbers are drawn. */
+  align-items: start;
 }
 
+/* A cell is its label and its number, and the markup has to be a `dt` then its
+   `dd` — so the two rows are named rather than the cell packed from its bottom
+   edge. A number then sits at the top of its cell whatever its label does. */
 .admin-counts div {
-  display: flex;
-  flex-direction: column-reverse;
+  display: grid;
 }
 
 .admin-counts dt {
+  grid-row: 2;
   color: var(--admin-muted);
 }
 
 .admin-counts dd {
+  grid-row: 1;
   margin: 0;
   font-size: 1.75rem;
   line-height: 1.2;
