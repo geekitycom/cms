@@ -4,6 +4,7 @@ import { MODERATION_ACTIONS } from '../comments/moderate.ts';
 import type { AdminStore, PostComment } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { ContentStore } from '../content/store.ts';
+import { postLabel } from '../content/post-type.ts';
 import type { MailService } from '../mail/service.ts';
 import { moderationLink, unsubscribeLink } from './links.ts';
 import { hasOptedOut } from './optouts.ts';
@@ -82,7 +83,7 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
   function postOf(comment: PostComment): { title: string; url: string } {
     const document = store.getBySlug(comment.slug);
     return {
-      title: document?.title ?? comment.slug,
+      title: document === undefined ? comment.slug : postLabel(document),
       url: absolute(comment.permalink, config.baseUrl),
     };
   }

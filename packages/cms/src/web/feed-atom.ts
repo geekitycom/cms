@@ -80,7 +80,7 @@ export function atomEntry(item: FeedItem): string[] {
   return [
     '  <entry>',
     element('id', item.id, 2),
-    element('title', item.title, 2),
+    element('title', item.title ?? '', 2),
     element('updated', (item.updated ?? EMPTY_FEED_UPDATED).toISOString(), 2),
     ...(item.published === undefined
       ? []

@@ -3,6 +3,7 @@ import type { Environment } from 'nunjucks';
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { postLabel } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { siteIcons } from '../images/icons.ts';
 import { archiveMonths, archiveOpen } from './archive.ts';
@@ -660,7 +661,7 @@ function neighbourContext(
   document: Document | undefined,
 ): Record<string, NeighbourContext> | object {
   if (document === undefined) return {};
-  return { [key]: { title: document.title, url: document.permalink } };
+  return { [key]: { title: postLabel(document), url: document.permalink } };
 }
 
 /**

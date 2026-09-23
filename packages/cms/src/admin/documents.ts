@@ -4,9 +4,12 @@ import path from 'node:path';
 import type { Context, Hono } from 'hono';
 
 import type { Document, DocumentContent, DocumentType } from '../content/document.ts';
+import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
+import { postLabel } from '../content/post-type.ts';
 import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
 import { scheduledFor } from '../content/schedule.ts';
+import { htmlToText } from '../content/search.ts';
 import { defaultPermalink, slugify } from '../content/slug.ts';
 import { DuplicatePermalinkError, isTrashedPath, TRASH_DIRECTORY } from '../content/store.ts';
 import type { ContentStore, ListAllOptions } from '../content/store.ts';
@@ -298,8 +301,9 @@ interface SaveFromFormOptions {
  * The order matters: the form is read and checked before anything is touched,
  * the on-disk file is re-hashed and compared with the hash the form loaded with
  * (doc-1's conflict rule), and only then is a file written. A save that is
- * refused — no title, an unreadable date, a stale hash, a URL another document
- * already holds — leaves the content directory exactly as it was.
+ * refused — a page with no title, an unreadable date, a stale hash, a URL
+ * another document already holds — leaves the content directory exactly as it
+ * was.
  */
 async function saveFromForm(
   c: Context<GeekityEnv>,
@@ -342,7 +346,10 @@ async function saveFromForm(
     });
   }
 
-  if (form.title === '') return refuse(`A ${kind.singular} needs a title.`);
+  // A post with no title is a note; a page is always named.
+  if (form.title === '' && kind.type === 'page') {
+    return refuse(`A ${kind.singular} needs a title.`);
+  }
 
   const timezone = siteTimezone(c);
 
@@ -357,7 +364,12 @@ async function saveFromForm(
     return refuse('That date is not one anybody can read. Try 2026-03-04 09:00.');
   }
 
-  const slug = slugify(form.slug) || slugify(form.title) || (document?.slug ?? '') || 'untitled';
+  const slug =
+    slugify(form.slug) ||
+    slugify(form.title) ||
+    (document?.slug ?? '') ||
+    noteSlug(form.body) ||
+    'untitled';
   const trashed = document !== undefined && isTrashedPath(document.path);
   // The calendar day the document is filed under: the site zone's day at its
   // date for a new one, and the day already in the filename for one whose date
@@ -470,6 +482,15 @@ async function saveFromForm(
   return c.redirect(editorPath(kind, saved.slug), 303);
 }
 
+/** How many of an untitled post's first words its slug is made from. */
+const NOTE_SLUG_WORDS = 5;
+
+/** The slug a note takes from its first words, or empty when it has none. */
+function noteSlug(body: string): string {
+  const words = htmlToText(renderMarkdown(body)).split(' ').slice(0, NOTE_SLUG_WORDS);
+  return slugify(words.join(' '));
+}
+
 /** What the flash says after a save, which depends on what the save did. */
 function savedMessage(
   kind: DocumentKind,
@@ -477,13 +498,13 @@ function savedMessage(
   saved: Document,
   now: Date,
 ): string {
-  if (saved.draft) return `Draft saved: ${saved.title}`;
+  if (saved.draft) return `Draft saved: ${postLabel(saved)}`;
   // A date in the future is not a refusal to publish, it is an instruction
   // about when, and the flash has to say so or the author will think the
   // Publish button did nothing.
-  if (scheduledFor(saved, now) !== undefined) return `Scheduled: ${saved.title}`;
-  if (previous === undefined || previous.draft) return `Published: ${saved.title}`;
-  return `Updated: ${saved.title}`;
+  if (scheduledFor(saved, now) !== undefined) return `Scheduled: ${postLabel(saved)}`;
+  if (previous === undefined || previous.draft) return `Published: ${postLabel(saved)}`;
+  return `Updated: ${postLabel(saved)}`;
 }
 
 /** Where a document's file goes, trash included. */
@@ -920,7 +941,9 @@ async function moveDocument(
   });
 
   const message =
-    action === 'trash' ? `Moved to the trash: ${document.title}` : `Restored: ${document.title}`;
+    action === 'trash'
+      ? `Moved to the trash: ${postLabel(document)}`
+      : `Restored: ${postLabel(document)}`;
   flash(c, 'notice', message);
 
   return c.redirect(
@@ -1120,7 +1143,9 @@ function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Res
     // Who this can be attributed to, and who it is attributed to now.
     authors: authorChoices(c, form.author),
     heading:
-      document === undefined ? `Add ${kind.singular}` : `Edit ${kind.singular}: ${document.title}`,
+      document === undefined
+        ? `Add ${kind.singular}`
+        : `Edit ${kind.singular}: ${postLabel(document)}`,
     saveUrl: document === undefined ? newEditorPath(kind) : editorPath(kind, document.slug),
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
@@ -1162,6 +1187,7 @@ export function findBySlug(
 
 /** What the listing template shows for one document. */
 export interface DocumentRow {
+  /** What the row's link says: the title, or a note's first words. */
   title: string;
   slug: string;
   author: string | undefined;
@@ -1215,7 +1241,7 @@ function listRow(
 ): DocumentRow {
   const isPublic = isPublicDocument(document, now);
   return {
-    title: document.title,
+    title: postLabel(document),
     slug: document.slug,
     author: document.author,
     tags: document.tags.join(', '),

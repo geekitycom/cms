@@ -6,6 +6,7 @@ import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts'
 import type { AdminStore, PostComment } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { ContentStore } from '../content/store.ts';
+import { postLabel } from '../content/post-type.ts';
 import type { MailService } from '../mail/service.ts';
 import { COMMENTS_NOTIFICATION } from './comments.ts';
 import { moderationLink } from './links.ts';
@@ -204,7 +205,7 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
   function postOf(comment: PostComment): { title: string; url: string } {
     const document = store.getBySlug(comment.slug);
     return {
-      title: document?.title ?? comment.slug,
+      title: document === undefined ? comment.slug : postLabel(document),
       url: absolute(comment.permalink, config.baseUrl),
     };
   }

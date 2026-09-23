@@ -23,9 +23,13 @@
 {% block content %}
 {% set entryUrl = page.url or url %}
 <article class="blog-post h-entry">
+  {#- A note has no name (Post Type Discovery): its words are the post, so it
+      opens on them rather than on an empty heading. -#}
+  {% if postType != "note" %}
   <header>
     <h1 class="p-name">{{ title }}</h1>
   </header>
+  {% endif %}
 
   <section class="e-content">
     {{ content | safe }}

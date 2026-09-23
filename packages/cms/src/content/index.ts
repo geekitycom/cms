@@ -10,6 +10,8 @@ export {
 export type { UploadMediaType, UploadSignature } from './media.ts';
 export { hashDocument, parseDocument, typeForPath } from './parser.ts';
 export type { ParseDocumentOptions } from './parser.ts';
+export { discoverPostType, postLabel, postTypeOf } from './post-type.ts';
+export type { PostProperties, PostType } from './post-type.ts';
 export { contentFilePath, freeSlug, saveDocument } from './save.ts';
 export type { ContentFilePathInput, FreeSlugOptions, SaveDocumentOptions } from './save.ts';
 export {

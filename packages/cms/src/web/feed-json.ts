@@ -67,8 +67,8 @@ export interface JsonFeedItem {
   id: string;
   /** Where the entry can be read: the permalink. */
   url: string;
-  /** Display title. */
-  title: string;
+  /** Display title, absent for a note. */
+  title?: string;
   /** The rendered body. */
   content_html: string;
   /** The post's summary, unless there is nothing to summarise. */
@@ -105,7 +105,7 @@ export function jsonFeedItem(item: FeedItem): JsonFeedItem {
   const entry: JsonFeedItem = {
     id: item.id,
     url: item.link,
-    title: item.title,
+    ...(item.title === undefined ? {} : { title: item.title }),
     content_html: item.html,
   };
 

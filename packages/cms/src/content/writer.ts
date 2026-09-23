@@ -12,7 +12,7 @@ const KNOWN_KEYS = new Set<string>(KNOWN_FRONT_MATTER_KEYS);
  * {@link KNOWN_FRONT_MATTER_KEYS}, followed by the unmodelled keys in the order
  * they were read, so an unchanged document always writes the same bytes and a
  * real edit produces a small diff. Keys that carry no information — an empty
- * tag list, `draft: false` — are left out.
+ * tag list, `draft: false`, a note's empty title — are left out.
  */
 export function serializeDocument(document: DocumentContent): string {
   const frontMatter = documentFrontMatter(document);
@@ -66,7 +66,9 @@ export function normalizeBody(body: string): string {
  * what its front matter is.
  */
 export function documentFrontMatter(document: DocumentContent): Record<string, unknown> {
-  const data: Record<string, unknown> = { title: document.title };
+  const data: Record<string, unknown> = {};
+
+  if (document.title !== '') data['title'] = document.title;
 
   if (document.date !== undefined) data['date'] = document.date;
   if (document.updated !== undefined) data['updated'] = document.updated;

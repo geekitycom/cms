@@ -1,5 +1,6 @@
 import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
 import type { Document } from '../content/document.ts';
+import { postLabel } from '../content/post-type.ts';
 import { formatDate } from './templates.ts';
 
 /**
@@ -28,7 +29,7 @@ export function archiveOpen(document: Document): boolean {
 
 /** One post of an archive page, which is a link and the date beside it. */
 export interface ArchiveEntry {
-  /** The post's title, which is what the link says. */
+  /** What the link says: the post's title, or a note's first words. */
   title: string;
   /** Its URL path. */
   url: string;
@@ -79,7 +80,7 @@ export function archiveMonths(
       months.push({ month: formatDate(date, 'month', timezone), posts: [] });
     }
 
-    months.at(-1)?.posts.push({ title: document.title, url: document.permalink, date });
+    months.at(-1)?.posts.push({ title: postLabel(document), url: document.permalink, date });
   }
 
   return months;

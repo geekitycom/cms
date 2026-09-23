@@ -33,7 +33,10 @@
 {% block content %}
 <article class="post h-entry">
   <header class="post-header">
+    {#- A note has no name, so it has no heading either: its words are it. -#}
+    {% if postType != "note" %}
     <h1 class="post-title p-name">{{ title }}</h1>
+    {% endif %}
     <p class="post-byline">
       by
       <span class="p-author h-card">

@@ -223,11 +223,31 @@ describe('parseDocument', () => {
     assert.throws(() => parseDocument('Just a body.\n', { path: 'pages/none.md' }), /front matter/);
   });
 
-  it('refuses a document with no title', () => {
+  it('refuses a page with no title', () => {
     assert.throws(
       () => parseDocument('---\npermalink: /a/\n---\n\nBody.\n', { path: 'pages/a.md' }),
       /title/,
     );
+  });
+
+  it('reads a post with no title as one whose title is empty', () => {
+    const document = parseDocument('---\ndate: 2026-09-20T09:00:00Z\n---\n\nCoffee first.\n', {
+      path: 'posts/2026-09-20-coffee.md',
+    });
+
+    assert.equal(document.title, '');
+    assert.equal(document.slug, 'coffee');
+    assert.equal(document.permalink, '/2026/09/coffee/');
+  });
+
+  it('reads an empty title on a post the same as a missing one', () => {
+    const document = parseDocument(
+      "---\ntitle: ''\ndate: 2026-09-20T09:00:00Z\npermalink: /2026/09/coffee/\n---\n\nCoffee first.\n",
+      { path: 'posts/2026-09-20-coffee.md' },
+    );
+
+    assert.equal(document.title, '');
+    assert.equal(document.slug, 'coffee');
   });
 
   it('refuses a path it cannot read a type from', () => {

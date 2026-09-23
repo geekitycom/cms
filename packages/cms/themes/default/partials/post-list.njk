@@ -2,10 +2,11 @@
   The feed a listing is made of: `h-feed` of `h-entry` items, as the source
   design lists them (decision-16).
 
-  Expects `posts`. Each entry prints its title as a linked `p-name`, its
-  `summary` — the very line the feeds publish — as a `p-summary` cut to about
-  280 characters, a Continue reading link, its publish date and the categories
-  it is filed under. Tags are deliberately not here: an entry's tags belong
+  Expects `posts`. A note, which has no title, is printed whole as its
+  `e-content`, with its date as the link to it. Every other entry prints its
+  title as a linked `p-name`, its `summary` — the very line the feeds publish —
+  as a `p-summary` cut to about 280 characters, a Continue reading link, its
+  publish date and the categories it is filed under. Tags are deliberately not here: an entry's tags belong
   under the entry, and a feed of twenty posts listing everyone's would be a
   wall of links rather than a list of writing.
 
@@ -24,6 +25,9 @@
   {% endif %}
   <article class="feed-item h-entry">
     <div class="feed-content">
+      {% if post.postType == "note" %}
+      <div class="feed-excerpt e-content">{{ post.content | safe }}</div>
+      {% else %}
       <{{ feedTitleTag }} class="feed-title p-name">
         <a href="{{ post.url | url }}" class="u-url">{{ post.title }}</a>
       </{{ feedTitleTag }}>
@@ -38,8 +42,13 @@
       <p class="feed-more">
         <a href="{{ post.url | url }}" aria-label="Continue reading: {{ post.title }}">Continue reading<span aria-hidden="true"> &rarr;</span></a>
       </p>
+      {% endif %}
       <div class="feed-meta">
-        {% if post.date %}
+        {% if post.postType == "note" %}
+        <p>
+          <a href="{{ post.url | url }}" class="u-url">{% if post.date %}<time class="feed-date dt-published" datetime="{{ post.date | date("iso") }}">{{ post.date | date }}</time>{% else %}{{ post.label }}{% endif %}</a>
+        </p>
+        {% elif post.date %}
         <p>
           <time class="feed-date dt-published" datetime="{{ post.date | date("iso") }}">
             {{ post.date | date }}

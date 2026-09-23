@@ -38,8 +38,13 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
   const parsed = matter(text, {});
 
   const data = parsed.data;
-  const title = requiredString(data['title'], 'title', path);
   const type = options.type ?? typeForPath(path);
+  // A post without a title is a note; a page is standing content and is
+  // always named.
+  const title =
+    type === 'page'
+      ? requiredString(data['title'], 'title', path)
+      : (asString(data['title']) ?? '');
   const date = asDate(data['date'], 'date', path);
   const body = normalizeBody(parsed.content);
 

@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
 
+import { postLabel } from '../content/post-type.ts';
 import { renderCommentMarkdown } from '../comments/markdown.ts';
 import { isModerationAction, moderateComment } from '../comments/moderate.ts';
 import { intakeComment } from '../comments/records.ts';
@@ -295,7 +296,7 @@ function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
     // The first eight characters are enough to see that two comments came from
     // one place, which is the only question the hash is there to answer.
     address: comment.addressHash === null ? null : comment.addressHash.slice(0, 8),
-    post: document?.title ?? comment.slug,
+    post: document === undefined ? comment.slug : postLabel(document),
     postUrl: comment.permalink === '' ? null : comment.permalink,
     editUrl:
       document === undefined

@@ -81,6 +81,21 @@ Body.
     );
   });
 
+  it('leaves the title out of an untitled post', () => {
+    const written = serializeDocument(
+      content({ title: '', date: '2026-09-20T09:00:00.000Z', permalink: '/2026/09/coffee/' }),
+    );
+
+    assert.equal(
+      written,
+      "---\ndate: '2026-09-20T09:00:00.000Z'\npermalink: /2026/09/coffee/\n---\n\nBody.\n",
+    );
+    assert.equal(
+      serializeDocument(parseDocument(written, { path: 'posts/2026-09-20-coffee.md' })),
+      written,
+    );
+  });
+
   it('writes the same bytes every time for an unchanged document', () => {
     const document = content({ tags: ['a'], extra: { series: 'x' } });
 

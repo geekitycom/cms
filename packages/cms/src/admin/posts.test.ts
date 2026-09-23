@@ -464,16 +464,68 @@ describe('writing a post', () => {
     assert.equal(cms.store.getBySlug('ada-charles-a-note')?.draft, true);
   });
 
-  it('refuses a post with no title and writes nothing', async () => {
+  it('saves a post with no title as a note, named after its first words', async () => {
     const contentDir = await seeded([]);
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
 
-    const response = await submit(agent, '/admin/posts/new', { title: '  ', action: 'publish' });
+    const editor = await (await agent.get('/admin/posts/new')).text();
+    assert.doesNotMatch(
+      /<input id="editor-title"[^>]*>/.exec(editor)?.[0] ?? '',
+      /required/,
+      'the browser refuses an empty title before the server sees it',
+    );
 
-    assert.equal(response.status, 400);
-    assert.match(await response.text(), /needs a title/);
-    assert.equal(cms.store.counts().total, 0);
+    const response = await submit(agent, '/admin/posts/new', {
+      title: '  ',
+      slug: '',
+      date: '2026-03-04T10:00:00Z',
+      body: 'Coffee *first*, then the inbox and after that a walk.',
+      action: 'publish',
+    });
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/posts/coffee-first-then-the-inbox');
+    assert.deepEqual(await readdir(path.join(contentDir, 'posts')), [
+      '2026-03-04-coffee-first-then-the-inbox.md',
+    ]);
+
+    const written = await readFile(
+      path.join(contentDir, 'posts', '2026-03-04-coffee-first-then-the-inbox.md'),
+      'utf8',
+    );
+    assert.doesNotMatch(written, /^title:/m, 'a note’s file carries no title');
+    assert.match(written, /^permalink: \/2026\/03\/coffee-first-then-the-inbox\/$/m);
+
+    const live = await cms.app.request('/2026/03/coffee-first-then-the-inbox/');
+    assert.equal(live.status, 200, 'the note is served at its permalink');
+
+    const listing = await (await agent.get('/admin/posts')).text();
+    assert.match(
+      listing,
+      /<a href="\/admin\/posts\/coffee-first-then-the-inbox">Coffee first, then the inbox and after that a walk\.<\/a>/,
+      'the posts list links a note by its first words',
+    );
+
+    const again = await submit(agent, '/admin/posts/coffee-first-then-the-inbox', {
+      body: 'Tea, as it turned out.',
+      action: 'update',
+    });
+    assert.equal(again.status, 303, 'an edited note keeps the slug it was given');
+  });
+
+  it('names a note with no words at all as untitled', async () => {
+    const cms = await box.site({ contentDir: await seeded([]) });
+    const agent = await signedIn(cms);
+
+    const response = await submit(agent, '/admin/posts/new', {
+      title: '',
+      slug: '',
+      body: '',
+      action: 'save-draft',
+    });
+
+    assert.equal(response.headers.get('location'), '/admin/posts/untitled');
   });
 });
 

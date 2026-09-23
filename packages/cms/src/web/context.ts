@@ -3,6 +3,8 @@ import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { postLabel, postTypeOf } from '../content/post-type.ts';
+import type { PostType } from '../content/post-type.ts';
 import { DEFAULT_TIMEZONE } from '../content/time.ts';
 import { siteImageMarkup } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
@@ -115,8 +117,19 @@ export interface PageContext {
  * in a listing.
  */
 export interface DocumentContext {
-  /** Display title. */
+  /** Display title. Empty for an untitled post. */
   title: string;
+  /**
+   * `note` or `article`, discovered from the title and the body (Post Type
+   * Discovery) on every render rather than read from the file. A theme heads
+   * an article with its title and draws a note by its content.
+   */
+  postType: PostType;
+  /**
+   * The words a link to the document says: its title, or an untitled post's
+   * first words.
+   */
+  label: string;
   /** Publish date, absent for a document that has none. */
   date?: Date | undefined;
   /** Taxonomy, in the order the file lists it. */
@@ -155,7 +168,7 @@ export interface DocumentContext {
  * accident.
  */
 export interface NeighbourContext {
-  /** The neighbour's title, which is what the link says. */
+  /** What the link says: the neighbour's title, or a note's first words. */
   title: string;
   /** Its URL path. */
   url: string;
@@ -202,6 +215,8 @@ export function documentContext(
     ...optional('activitypub', document.activitypub),
 
     title: document.title,
+    postType: postTypeOf(document),
+    label: postLabel(document),
     ...optional('date', date),
     tags: document.tags,
     categories: document.categories,

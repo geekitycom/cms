@@ -32,7 +32,11 @@
 
     <div class="admin-editor-main">
       <label for="editor-title">Title</label>
-      <input id="editor-title" name="title" type="text" value="{{ form.title }}" required autofocus />
+      {#- A post may go without one, and is then a note; a page is always named. -#}
+      <input id="editor-title" name="title" type="text" value="{{ form.title }}"{% if kind.type == "page" %} required{% endif %} autofocus />
+      {% if kind.type == "post" %}
+      <p class="admin-hint">Leave it empty to write a note: the post is then its words, and takes its slug from the first of them.</p>
+      {% endif %}
 
       <label for="editor-body">Body</label>
       <textarea id="editor-body" name="body" rows="24">{{ form.body }}</textarea>
