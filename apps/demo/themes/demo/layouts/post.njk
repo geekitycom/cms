@@ -37,9 +37,8 @@
     {% if named %}
     <h1 class="post-title p-name">{{ title }}</h1>
     {% endif %}
-    {% if inReplyTo %}
-    <p class="post-reply">In reply to <a class="u-in-reply-to" href="{{ inReplyTo }}">{{ inReplyTo }}</a></p>
-    {% endif %}
+    {#- The packaged citation of the post a reply answers (TASK-123). -#}
+    {% include "partials/reply-context.njk" %}
     <p class="post-byline">
       by
       <span class="p-author h-card">

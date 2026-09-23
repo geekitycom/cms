@@ -3,7 +3,7 @@ import type { Environment } from 'nunjucks';
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { postLabel } from '../content/post-type.ts';
+import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { siteIcons } from '../images/icons.ts';
 import { archiveMonths, archiveOpen } from './archive.ts';
@@ -32,6 +32,7 @@ import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 import { createTemplateEnvironment, useThemeDirs } from './templates.ts';
 import { createThemeSource, findThemeFile } from './themes.ts';
 import type { ThemeSource } from './themes.ts';
+import type { ReplyContext } from '../webmention/reply-context.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 
 /** Templates the default theme ships and the public routes ask for by name. */
@@ -226,6 +227,14 @@ export interface CreateRendererOptions {
    * every test over one template wants.
    */
   conversation?: ((document: Document) => Conversation) | undefined;
+  /**
+   * What is stored about the post a reply answers, by its URL (TASK-123).
+   *
+   * Read, never fetched: the context was fetched when the reply was saved or
+   * synced, so drawing a reply waits on nobody's server. A renderer built
+   * without it draws every reply with a bare link.
+   */
+  replyContext?: ((target: string) => ReplyContext | undefined) | undefined;
   /**
    * The comment form for a post that is taking comments, and `undefined` for
    * one that is not (TASK-50).
@@ -483,6 +492,11 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // an entry (TASK-79). Each is on the context only when there is one, so a
     // theme asks `{% if previous %}` and the ends of the archive draw nothing.
     const either = options.neighbours?.(document) ?? {};
+    // What the post a reply answers says about itself, when it was fetched
+    // (TASK-123). On the context only when there is some, so a theme draws
+    // the bare link from `inReplyTo` and fills it in from `replyContext`.
+    const target = replyTarget(document);
+    const cited = target === undefined ? undefined : options.replyContext?.(target);
 
     return render(template, {
       ...context,
@@ -508,6 +522,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(form === undefined ? {} : { commentForm: form }),
       ...(contact === undefined ? {} : { contactForm: contact }),
       ...(webmention === undefined ? {} : { webmention }),
+      ...(cited === undefined ? {} : { replyContext: replyContextFor(cited) }),
       ...extra,
     });
   }
@@ -692,4 +707,16 @@ function currentUrl(context: Record<string, unknown>): string {
     if (typeof url === 'string') return url;
   }
   return typeof context['url'] === 'string' ? context['url'] : '/';
+}
+
+/**
+ * A stored reply context as a theme reads it: the published instant as a
+ * `Date`, so the `date` filter prints it in the site's zone like any other.
+ */
+function replyContextFor(context: ReplyContext): Record<string, unknown> {
+  const published = context.published === undefined ? undefined : new Date(context.published);
+  const { published: _published, ...rest } = context;
+  return published === undefined || Number.isNaN(published.getTime())
+    ? rest
+    : { ...rest, published };
 }

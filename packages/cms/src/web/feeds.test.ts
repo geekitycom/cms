@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { resolveNothing } from '../admin/__testing__/harness.ts';
 import { readSiteSettings, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -50,6 +51,7 @@ async function site(
     dataDir,
     watch: false,
     baseUrl: 'https://example.com',
+    hostLookup: resolveNothing,
     ...config,
   });
   started.push(instance);

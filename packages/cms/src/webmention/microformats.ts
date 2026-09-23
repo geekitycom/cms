@@ -126,6 +126,40 @@ export function sourceEntry(html: string, sourceUrl: string, target: string): So
   };
 }
 
+/** The first `h-entry` on a page, as the parts a citation of it shows. */
+export interface CitedEntry {
+  /** Its `p-name`, or empty. A note's name is often its whole text. */
+  readonly name: string;
+  /** Its `e-content` as text, or its `p-summary`, or empty. */
+  readonly text: string;
+  /** Who wrote it, when the entry says, with their page when it gives one. */
+  readonly author: { readonly name: string; readonly url: string | null } | undefined;
+  /** When it says it was published, as an ISO 8601 instant, or `null`. */
+  readonly published: string | null;
+}
+
+/**
+ * What the first `h-entry` on a parsed page says about itself, or `undefined`
+ * when the page has none. Unlike {@link sourceEntry} nothing is filled in from
+ * the page around it: a citation names who wrote a post only when the post
+ * does.
+ */
+export function citedEntry(root: HtmlElement, pageUrl: string): CitedEntry | undefined {
+  const entry = itemsOfType(itemsIn(root, baseOf(root, pageUrl)), 'h-entry')[0];
+  if (entry === undefined) return undefined;
+
+  const author = first(entry, 'author');
+  const card = author?.item === undefined ? undefined : cardOf(author.item);
+  const authorName = card?.name ?? author?.text ?? '';
+
+  return {
+    name: first(entry, 'name')?.text ?? '',
+    text: first(entry, 'content')?.text ?? first(entry, 'summary')?.text ?? '',
+    author: authorName === '' ? undefined : { name: authorName, url: card?.url ?? null },
+    published: instantOf(first(entry, 'published')),
+  };
+}
+
 /** The entry a webmention is about, or `undefined` when the page has none. */
 function chooseEntry(
   entries: readonly MicroformatItem[],
@@ -324,6 +358,9 @@ function propertiesOf(element: HtmlElement): { prefix: string; name: string }[] 
 function parseItem(element: HtmlElement, base: string): MicroformatItem {
   const properties: Record<string, MicroformatValue[]> = {};
   const children: MicroformatItem[] = [];
+  // Whether anything inside is a `p-` or `e-` property or a microformat of its
+  // own, which is when mf2 stops implying a name from the whole text.
+  let textual = false;
 
   const add = (name: string, value: MicroformatValue): void => {
     (properties[name] ??= []).push(value);
@@ -337,6 +374,7 @@ function parseItem(element: HtmlElement, base: string): MicroformatItem {
       const named = propertiesOf(child);
 
       if (roots.length > 0) {
+        textual = true;
         const nested = parseItem(child, base);
         if (named.length === 0) children.push(nested);
         else {
@@ -347,13 +385,16 @@ function parseItem(element: HtmlElement, base: string): MicroformatItem {
         continue;
       }
 
-      for (const { prefix, name } of named) add(name, valueOf(prefix, child, base));
+      for (const { prefix, name } of named) {
+        if (prefix === 'p' || prefix === 'e') textual = true;
+        add(name, valueOf(prefix, child, base));
+      }
       walk(child);
     }
   };
 
   walk(element);
-  implied(element, properties, base);
+  implied(element, properties, base, !textual);
   return { types: rootTypesOf(element), properties, children, element };
 }
 
@@ -422,14 +463,18 @@ function attributeFor(
  * `<a class="h-card" href="https://ada.example/">Ada</a>` is the commonest
  * `h-card` on the web and says none of its three properties explicitly. The
  * full rules are longer than this; what is here covers the shapes a webmention
- * actually arrives in and stops short of guessing.
+ * actually arrives in and stops short of guessing. A name is implied only when
+ * nothing inside is a `p-` or `e-` property or a nested microformat, as mf2
+ * says, so an entry with an `e-content` and no `p-name` has no name rather
+ * than the text of everything around it.
  */
 function implied(
   element: HtmlElement,
   properties: Record<string, MicroformatValue[]>,
   base: string,
+  impliesName: boolean,
 ): void {
-  if (properties['name'] === undefined) {
+  if (impliesName && properties['name'] === undefined) {
     const name =
       attributeFor(element, ['img', 'area'], 'alt') ??
       attributeFor(element, ['abbr'], 'title') ??

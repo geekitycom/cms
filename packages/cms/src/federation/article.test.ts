@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { resolveNothing } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
@@ -78,7 +79,14 @@ async function site(
   // needs an account before it can federate anything at all.
   writeUsers(dataDir, [{ username: ADA, profile: { displayName: 'Ada Lovelace' } }]);
 
-  const instance = createCms({ dataDir, contentDir, watch: false, baseUrl: BASE_URL, ...config });
+  const instance = createCms({
+    dataDir,
+    contentDir,
+    watch: false,
+    baseUrl: BASE_URL,
+    hostLookup: resolveNothing,
+    ...config,
+  });
   started.push(instance);
   await instance.sync();
   return instance;
@@ -951,6 +959,7 @@ describe('a site in a subdirectory', () => {
       contentDir,
       watch: false,
       baseUrl: 'https://example.com/blog',
+      hostLookup: resolveNothing,
     });
     started.push(instance);
     await instance.sync();

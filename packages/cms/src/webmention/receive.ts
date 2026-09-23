@@ -6,6 +6,7 @@ import type { Document } from '../content/document.ts';
 import { sanitizeCommentHtml } from '../web/sanitize.ts';
 import { readCapped, WEBMENTION_USER_AGENT } from './discovery.ts';
 import { linksTo, sourceEntry } from './microformats.ts';
+import { isPrivateHost } from './public-address.ts';
 
 /**
  * Taking a webmention somebody sent this site.
@@ -324,23 +325,6 @@ function webUrl(value: string): URL | undefined {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
   if (url.hostname === '') return undefined;
   return url;
-}
-
-/** Whether a hostname is one only this network can see. */
-function isPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true;
-  if (host === '::1' || host === '0.0.0.0') return true;
-  if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')) return true;
-
-  const parts = host.split('.');
-  if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/.test(part))) return false;
-  const [a = 0, b = 0] = parts.map(Number);
-  if (a === 127 || a === 10 || a === 0) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  return false;
 }
 
 /** The host a source is on, for a page that never says who wrote it. */

@@ -3,7 +3,7 @@ id: doc-7
 title: Webmentions
 type: specification
 created_date: '2026-09-04 23:08'
-updated_date: '2026-09-23 13:07'
+updated_date: '2026-09-23 19:35'
 ---
 # Webmentions
 
@@ -55,6 +55,48 @@ how yesterday's notification went and not the ability to send it again. The
 federation screen shows the counts per post, and its **Resend** button sends the
 webmentions as well as the activity — it reads the file again rather than
 replaying anything, so a link added since the last publish goes out.
+
+## Reply context
+
+A reply shows a preview of the post it answers (TASK-123): the page cites the
+target as an embedded `u-in-reply-to h-cite`, which always carries the target's
+URL as `u-url` and adds its `p-name`, an excerpt as `p-content`, its author as a
+`p-author h-card` and its `dt-published` when the target said so. The packaged
+partial is `partials/reply-context.njk`, and a theme reads the same data as
+`replyContext` on the context of a reply's page.
+
+**When it is fetched.** Never while a page is served. The index change that
+makes a post a reply, or changes its target, queues a fetch, the same way the
+sender queues a webmention, so a save never waits on the target. A scan
+fetches only a target the file has never held, so rebuilding the index sends no
+request. When the site starts serving, every target a live post replies to that
+the file lacks is fetched, so an upgraded site catches up without each reply
+being edited. A target no live post replies to any more is dropped from the
+file.
+
+**Where it is kept.** `content/_data/replyContexts.json`, one object keyed by
+the target URL (decision-19). An Eleventy build reads it as `replyContexts`.
+
+**What is read off the target.** The first `h-entry`: its name when it has one
+of its own (a note's name is its text, so a note is cited by its words), a text
+excerpt of about forty words, its `p-author` and its `dt-published`. A page with
+no `h-entry` is cited by its `<title>` (or `og:title`) and its description
+metadata. An author URL that is not http or https is dropped. Everything is
+stored as plain text and printed through the theme's autoescaping.
+
+**What is refused.** Only http and https. A host that is private as written, or
+whose name resolves to any loopback, private, link-local or otherwise reserved
+address, is not fetched, and every redirect hop is checked the same way. The
+whole exchange has a ten second timeout, and a page over a megabyte is not read
+at all. Any of these, and a target that answers an error, is not HTML, or has
+nothing to show, leaves no entry, and the reply keeps its link-only preview.
+The address check resolves the name before the connection, so a name that
+resolves differently a moment later is not caught.
+
+The guard is `src/webmention/public-address.ts`, and the receiver's synchronous
+check on a webmention source is its `isPrivateHost`. The resolver is the
+`hostLookup` config option, which a test replaces so no test resolves a real
+name.
 
 ## Receiving
 

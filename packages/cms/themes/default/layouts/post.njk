@@ -31,11 +31,9 @@
   </header>
   {% endif %}
 
-  {#- A reply names the post it answers, which is also the link its
+  {#- A reply cites the post it answers, whose URL is also the link its
       webmention points a receiver at. -#}
-  {% if inReplyTo %}
-  <p class="entry-reply small">In reply to <a class="u-in-reply-to" href="{{ inReplyTo }}">{{ inReplyTo }}</a></p>
-  {% endif %}
+  {% include "partials/reply-context.njk" %}
 
   <section class="e-content">
     {{ content | safe }}

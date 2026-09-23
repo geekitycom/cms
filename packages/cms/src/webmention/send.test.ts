@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import { csrfField, FIRST_ADMIN, signedIn } from '../admin/__testing__/harness.ts';
+import { csrfField, FIRST_ADMIN, resolveNothing, signedIn } from '../admin/__testing__/harness.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { seedActorKeys } from '../federation/__testing__/keys.ts';
@@ -128,7 +128,14 @@ async function site(
     },
   });
 
-  const cms = createCms({ dataDir, contentDir, port: 0, watch: false, baseUrl: BASE_URL });
+  const cms = createCms({
+    dataDir,
+    contentDir,
+    port: 0,
+    watch: false,
+    baseUrl: BASE_URL,
+    hostLookup: resolveNothing,
+  });
   started.push(cms);
   await cms.sync();
   return cms;

@@ -39,6 +39,21 @@ export {
   WEBMENTION_PATH,
   webmentionEndpointFor,
 } from './routes.ts';
+export { isPrivateHost, publicHost, systemHostLookup } from './public-address.ts';
+export type { HostLookup } from './public-address.ts';
+export {
+  fetchReplyContext,
+  readReplyContext,
+  REPLY_CONTEXT_MAX_BYTES,
+  REPLY_CONTEXT_TIMEOUT_MS,
+} from './reply-context.ts';
+export type { FetchReplyContextOptions, ReplyContext, ReplyContextFetch } from './reply-context.ts';
+export { createReplyContextService, REPLY_CONTEXTS_FILE } from './reply-contexts.ts';
+export type {
+  CreateReplyContextServiceOptions,
+  ReplyContextLogger,
+  ReplyContextService,
+} from './reply-contexts.ts';
 export { createWebmentionService, SEND_TIMEOUT_MS } from './service.ts';
 export type {
   CreateWebmentionServiceOptions,

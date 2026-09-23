@@ -72,12 +72,19 @@ function main(html: string): string {
   return /<main id="main">([\s\S]*?)<\/main>/.exec(html)?.[1] ?? '';
 }
 
-/** Every `<a>` carrying the class `u-in-reply-to`, as its href. */
+/**
+ * Every `u-in-reply-to` in the markup, as the URL it names: the href of a bare
+ * link, or the `u-url` of an embedded `h-cite` (TASK-123).
+ */
 function replyLinks(html: string): string[] {
-  return [...html.matchAll(/<a\b[^>]*>/g)]
+  const links = [...html.matchAll(/<a\b[^>]*>/g)]
     .map((match) => match[0])
     .filter((tag) => /class="[^"]*\bu-in-reply-to\b/.test(tag))
     .map((tag) => /href="([^"]*)"/.exec(tag)?.[1] ?? '');
+  const cites = [
+    ...html.matchAll(/<div class="[^"]*\bu-in-reply-to h-cite\b[^"]*">([\s\S]*?)<\/div>/g),
+  ].map((match) => /<a class="u-url\b[^"]*" href="([^"]*)"/.exec(match[1] ?? '')?.[1] ?? '');
+  return [...links, ...cites];
 }
 
 describe('a reply’s own page', () => {
