@@ -361,6 +361,153 @@ describe('the post summary', () => {
   });
 });
 
+/** A post file written out whole, for the shapes {@link post} cannot spell. */
+function rawPost(frontMatter: string[], body: string): string {
+  return `---\n${[...frontMatter, `author: ${ADA}`].join('\n')}\n---\n\n${body}\n`;
+}
+
+// Post Type Discovery decides the object type, and Mastodon reads the two
+// differently: a Note's `content` is the status and its `summary` a content
+// warning, an Article's `content` is dropped for `name` and `summary`.
+describe('the object type', () => {
+  const NOTE_BODY = 'Just a *quick* thought about [links](https://example.org/).';
+
+  it('is a Note for an untitled post, carrying everything in content', async () => {
+    const instance = await site({
+      'posts/2026-09-02-quick.md': rawPost(
+        ["date: '2026-09-02T09:00:00Z'", 'permalink: /2026/09/quick/'],
+        NOTE_BODY,
+      ),
+    });
+
+    const note = await articleAt(instance, '/2026/09/quick/');
+
+    assert.equal(note['type'], 'Note');
+    assert.equal(note['content'], renderMarkdown(NOTE_BODY));
+    assert.equal('summary' in note, false, 'no excerpt Mastodon would show as a content warning');
+    assert.equal('name' in note, false, 'no name, which Mastodon never reads on a Note');
+  });
+
+  it('is a Note for a post whose text begins with its title', async () => {
+    const instance = await site({
+      'posts/2026-09-02-quick.md': post('Just a quick thought', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/quick/',
+        description: 'A teaser that must not become a content warning.',
+        body: NOTE_BODY,
+      }),
+    });
+
+    const note = await articleAt(instance, '/2026/09/quick/');
+
+    assert.equal(note['type'], 'Note');
+    assert.equal(note['content'], renderMarkdown(NOTE_BODY), 'the title is already the text');
+    assert.equal('summary' in note, false);
+  });
+
+  it('is an Article for a titled post, with its name and summary', async () => {
+    const instance = await site(HELLO);
+
+    const article = await articleAt(instance, '/2026/09/hello/');
+
+    assert.equal(article['type'], 'Article');
+    assert.equal(article['name'], 'Hello, World!');
+    assert.equal(article['summary'], 'A first post, with a link.');
+  });
+
+  it('follows an activitypub.type of Note over the derived Article', async () => {
+    const instance = await site({
+      'posts/2026-09-02-hello.md': rawPost(
+        [
+          'title: Hello & welcome',
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/hello/',
+          'activitypub:',
+          '  type: Note',
+        ],
+        HELLO_BODY,
+      ),
+    });
+
+    const note = await articleAt(instance, '/2026/09/hello/');
+
+    assert.equal(note['type'], 'Note');
+    // Mastodon never reads a Note's name, so a title the text does not
+    // already start with goes into the content or is lost.
+    assert.equal(note['content'], `<p>Hello &amp; welcome</p>\n${renderMarkdown(HELLO_BODY)}`);
+    assert.equal('summary' in note, false);
+    assert.equal('name' in note, false);
+  });
+
+  it('follows an activitypub.type of Article over the derived Note', async () => {
+    const instance = await site({
+      'posts/2026-09-02-quick.md': rawPost(
+        [
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/quick/',
+          'activitypub:',
+          '  type: Article',
+        ],
+        NOTE_BODY,
+      ),
+    });
+
+    const article = await articleAt(instance, '/2026/09/quick/');
+
+    assert.equal(article['type'], 'Article');
+    assert.equal(article['summary'], 'Just a quick thought about links.');
+  });
+
+  it('falls back to the derived type and warns for an activitypub.type it does not know', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    const instance = await site({
+      'posts/2026-09-02-hello.md': rawPost(
+        [
+          'title: Hello',
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/hello/',
+          'activitypub:',
+          '  type: Photo',
+        ],
+        HELLO_BODY,
+      ),
+    });
+
+    const response = await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS);
+
+    assert.equal(response.status, 200, 'the request is not failed');
+    const article = (await response.json()) as Record<string, unknown>;
+    assert.equal(article['type'], 'Article');
+    const messages = warn.mock.calls.map((call) => String(call.arguments[0]));
+    assert.ok(
+      messages.some(
+        (message) =>
+          message.includes('posts/2026-09-02-hello.md') &&
+          message.includes('"Photo"') &&
+          message.includes('Article'),
+      ),
+      `a warning names the file, the value and the type used instead: ${JSON.stringify(messages)}`,
+    );
+  });
+
+  it('names the same type in the outbox Create as at the permalink', async () => {
+    const instance = await site({
+      'posts/2026-09-02-quick.md': rawPost(
+        ["date: '2026-09-02T09:00:00Z'", 'permalink: /2026/09/quick/'],
+        NOTE_BODY,
+      ),
+    });
+
+    const outbox = (await (
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+    const page = await fetchLink(instance, outbox['first']);
+
+    const activity = (page['orderedItems'] as Record<string, unknown>[])[0];
+    assert.equal((activity?.['object'] as Record<string, unknown>)['type'], 'Note');
+  });
+});
+
 describe('the outbox', () => {
   it('counts the published posts and pages rather than listing them all at once', async () => {
     const instance = await site(archive(OUTBOX_PAGE_SIZE + 5));

@@ -141,6 +141,14 @@ Body.
     assert.equal(serializeDocument(parsed), text);
   });
 
+  it('writes an author’s activitypub.type back verbatim, even one federation does not know', () => {
+    const text = serializeDocument(
+      content({ activitypub: { published: '2026-01-03T00:00:01Z', type: 'Photo' } }),
+    );
+
+    assert.match(text, /^activitypub:\n {2}published: '2026-01-03T00:00:01Z'\n {2}type: Photo$/m);
+  });
+
   it('drops an activitypub block with nothing in it', () => {
     const text = serializeDocument(content({ activitypub: {} }));
 

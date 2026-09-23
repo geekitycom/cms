@@ -12,7 +12,7 @@ import { publicDocumentAt } from '../web/documents.ts';
 import { absoluteUrl, prefersActivityStreams } from '../web/negotiate.ts';
 import { requestPath } from '../web/routes.ts';
 import { actorAliases, actorId, userActor } from './actor.ts';
-import { isFederatedDocument, postArticle } from './article.ts';
+import { isFederatedDocument, postObject } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { federationOrigin, handleHref } from './paths.ts';
 import {
@@ -327,7 +327,7 @@ function storedObjectAt(c: Context<GeekityEnv>): Document | undefined {
 /**
  * One post as the ActivityStreams response a peer asked for.
  *
- * The article is built through the same {@link postArticle} the outbox uses,
+ * The object is built through the same {@link postObject} the outbox uses,
  * off a context Fedify makes for this request, so the object a peer fetches
  * and the one it is delivered cannot drift apart.
  */
@@ -337,7 +337,7 @@ async function article(
   document: Document,
 ): Promise<Response> {
   const context = federation.createContext(c.req.raw, contextData(c));
-  return await respondWithObject(postArticle(context, document), {
+  return await respondWithObject(postObject(context, document), {
     contextLoader: context.contextLoader,
   });
 }

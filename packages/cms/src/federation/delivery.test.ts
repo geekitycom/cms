@@ -663,6 +663,64 @@ describe('editing a published post file on disk', () => {
   });
 });
 
+describe('the object type across a post’s life', () => {
+  const FILE = 'posts/2026-03-04-hello-world.md';
+
+  it('names a Note in the Create, the Update and the Delete of an untitled post', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+
+    await publishNewPost(agent, { title: '', body: 'A thought with no title.' });
+    await cms.delivery.settled();
+    const created = (delivered('Create')[0] as Delivery | undefined)?.body['object'];
+    assert.equal((created as Record<string, unknown>)['type'], 'Note');
+
+    await submitEditor(agent, '/admin/posts/hello-world', { body: 'A second thought.' });
+    await cms.delivery.settled();
+    const updated = (delivered('Update')[0] as Delivery | undefined)?.body['object'];
+    assert.equal((updated as Record<string, unknown>)['type'], 'Note');
+
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+    await cms.delivery.settled();
+    const deleted = (delivered('Delete')[0] as Delivery | undefined)?.body['object'];
+    assert.equal((deleted as Record<string, unknown>)['formerType'], 'as:Note');
+  });
+
+  it('keeps an author-written activitypub.type through an admin save, and sends it', async () => {
+    const { cms, contentDir } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+
+    // The author adds the override by hand, beside the key the delivery stamped.
+    const file = path.join(contentDir, ...FILE.split('/'));
+    const stamped = await readFile(file, 'utf8');
+    await writeFile(file, stamped.replace(/^activitypub:$/m, 'activitypub:\n  type: Note'), 'utf8');
+    await cms.sync();
+    deliveries.length = 0;
+
+    const response = await submitEditor(agent, '/admin/posts/hello-world', {
+      body: 'The first post, edited.',
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    const source = await readFile(file, 'utf8');
+    assert.match(source, /^ {2}type: Note$/m, 'the save kept the author’s type');
+    assert.match(source, /^ {2}published: '2026-03-04T10:00:00Z'$/m, 'and the stamp beside it');
+
+    const update = delivered('Update')[0] as Delivery | undefined;
+    assert.ok(update !== undefined, `expected an Update, saw ${JSON.stringify(deliveries)}`);
+    assert.equal((update.body['object'] as Record<string, unknown>)['type'], 'Note');
+
+    deliveries.length = 0;
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+    await cms.delivery.settled();
+    const deleted = (delivered('Delete')[0] as Delivery | undefined)?.body['object'];
+    assert.equal((deleted as Record<string, unknown>)['formerType'], 'as:Note');
+  });
+});
+
 describe('the delivery log', () => {
   it('records how every follower behind a shared inbox fared', async () => {
     const { cms } = await site({ followers: 2 });

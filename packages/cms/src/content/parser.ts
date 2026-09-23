@@ -197,6 +197,7 @@ function asActivityPub(value: unknown, path: string): ActivityPubMetadata | unde
   const metadata: ActivityPubMetadata = {
     ...optional('id', asString(block['id'])),
     ...optional('published', asDate(block['published'], 'activitypub.published', path)),
+    ...optional('type', asString(block['type'])),
   };
 
   return Object.keys(metadata).length === 0 ? undefined : metadata;

@@ -2,15 +2,21 @@
 export type DocumentType = 'post' | 'page';
 
 /**
- * The ActivityStreams identity of a document, written back once the post has
- * been federated so later Update and Delete activities name the same object.
- * Eleventy ignores the whole block.
+ * Everything about how a post federates, whether its author wrote it or the
+ * CMS wrote it back after a delivery. Eleventy ignores the whole block, which
+ * is right: a theme has no business branching on the wire format.
  */
 export interface ActivityPubMetadata {
-  /** The ActivityStreams object id. */
+  /** The ActivityStreams object id, kept when a post brought one with it. */
   id?: string | undefined;
-  /** When the object was first delivered, ISO 8601. */
+  /** When the object was first delivered, ISO 8601. The only key the CMS writes. */
   published?: string | undefined;
+  /**
+   * The author's choice of ActivityStreams object type, over the one Post Type
+   * Discovery derives. Kept verbatim, recognised or not: federation decides
+   * what it means, and a save never rewrites what an author wrote.
+   */
+  type?: string | undefined;
 }
 
 /**

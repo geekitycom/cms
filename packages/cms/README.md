@@ -499,8 +499,8 @@ does:
 
 | What happened to the post                                                 | What the followers get    |
 | ------------------------------------------------------------------------- | ------------------------- |
-| became published — written live, or undrafted, or restored from the trash | `Create(Article)`         |
-| edited while published                                                    | `Update(Article)`         |
+| became published — written live, or undrafted, or restored from the trash | `Create` of its object    |
+| edited while published                                                    | `Update` of its object    |
 | drafted, trashed, or its file deleted                                     | `Delete` of a `Tombstone` |
 
 Nothing is delivered for a full scan, the boot scan included: a rebuilt index
@@ -509,9 +509,29 @@ reports the whole archive as new, and announcing it again is not what deleting
 
 A post's ActivityStreams object id is its permalink, absolute on the site's
 base URL. One URL answers both audiences — a browser gets the page, a peer
-asking for `application/activity+json` gets the `Article` — so a shared link, a
-feed item, an object id and a reply's `inReplyTo` all name the same thing.
-Nothing else has to be minted or kept in step.
+asking for `application/activity+json` gets the post's object — so a shared
+link, a feed item, an object id and a reply's `inReplyTo` all name the same
+thing. Nothing else has to be minted or kept in step.
+
+That object is a `Note` or an `Article`, whichever the post's discovered type
+is: a post with no title, or whose text opens with its title, is a `Note`, and
+any other is an `Article`. Mastodon shows the two differently. An `Article`
+arrives as its title, its excerpt and a link, so it sends `name` and a
+`summary`. A `Note` arrives as its `content` and nothing else, and Mastodon
+would show a `summary` as a content warning, so a note sends neither and puts a
+title its text does not open with at the top of its content.
+
+An author can choose the type for one post in its front matter:
+
+```yaml
+activitypub:
+  type: Note
+```
+
+`Note` and `Article` are the two values. Anything else is logged as a warning
+and the derived type is sent instead. The CMS never rewrites the key. Changing
+it on a post already announced sends an `Update`, but a remote server may keep
+showing the post the way it first arrived.
 
 The first activity about a post writes one key, `activitypub.published`, into
 its front matter: the record that the post has been announced and when, which
@@ -526,7 +546,7 @@ knowing that its followers will be handed a second object.
 A post whose file already names an `activitypub.id` keeps it as its object id
 for the life of the post — that is how a post migrated from WordPress keeps the
 `https://example.com/?p=813` its followers, its replies and its RSS subscribers
-already hold. The CMS serves the `Article` at that URL on an ActivityStreams
+already hold. The CMS serves the post's object at that URL on an ActivityStreams
 request, redirects a browser from it to the permalink, and names it in every
 `Update` and `Delete`. The CMS never writes one itself.
 
@@ -855,7 +875,7 @@ Then, from a Mastodon account:
    CMS answers `Accept`, and the account appears on `/admin/federation` within
    a second or two.
 3. Publish a post, from the editor or by writing a file into `content/posts/`.
-   A `Create(Article)` is delivered, and the post shows up in the follower's
+   A `Create` is delivered, and the post shows up in the follower's
    home timeline; `/admin/federation` records the outcome, with a Resend
    button if it did not land.
 4. Edit the post, then set `draft: true` on it, to see the `Update` and the
@@ -1370,7 +1390,7 @@ off every archive, out of all three feeds and out of the ActivityPub outbox,
 its permalink 404s in every representation, and no follower has been told about
 it. When the moment comes the running server publishes it — no restart, no
 build — and the same delivery that a live publish runs sends the
-`Create(Article)` and pings the notify server.
+`Create` and pings the notify server.
 
 There is no `scheduled` key and no state to keep: a scheduled post is an
 ordinary published one whose date has not arrived, which is a question asked of
@@ -1795,7 +1815,7 @@ so a head never advertises a URL this server would answer 404 for.
 
 `documentContext(document, images)` is where the rewrite is applied. Passing the
 config is what turns the page's `content` into `<picture>` markup; the feeds,
-`documentJson`, the Markdown representation and `postArticle` all read
+`documentJson`, the Markdown representation and `postObject` all read
 `document.html` directly and so keep the plain `<img>` by construction.
 
 ### Managing tags and categories
@@ -1821,7 +1841,7 @@ bulk rewrite that trusted it would put that edit back. A file that has gone or
 will not parse is skipped, counted, and named in the message.
 
 Every rewrite is announced the way an editor save is, so the index, the feeds,
-the notify server and the fediverse all follow — one `Update(Article)` per
+the notify server and the fediverse all follow — one `Update` per
 affected published post, because the hashtags on those posts have just changed.
 A term on many published posts is therefore many deliveries; that is the point,
 but it is worth knowing before renaming a tag that half the archive carries.

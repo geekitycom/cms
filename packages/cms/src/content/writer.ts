@@ -98,6 +98,7 @@ function activityPubOf(document: DocumentContent): Record<string, unknown> | und
   const out: Record<string, unknown> = {};
   if (block.id !== undefined) out['id'] = block.id;
   if (block.published !== undefined) out['published'] = block.published;
+  if (block.type !== undefined) out['type'] = block.type;
 
   return Object.keys(out).length === 0 ? undefined : out;
 }
