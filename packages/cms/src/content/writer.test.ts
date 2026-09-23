@@ -149,6 +149,25 @@ Body.
     assert.match(text, /^activitypub:\n {2}published: '2026-01-03T00:00:01Z'\n {2}type: Photo$/m);
   });
 
+  it('writes in-reply-to under its mf2 name, after the author, and round-trips it', () => {
+    const text = serializeDocument(
+      content({
+        title: '',
+        author: 'andrew',
+        inReplyTo: 'https://example.com/post',
+        activitypub: { published: '2026-01-03T00:00:01Z' },
+      }),
+    );
+
+    assert.match(
+      text,
+      /^author: andrew\nin-reply-to: https:\/\/example\.com\/post\nactivitypub:$/m,
+    );
+    const parsed = parseDocument(text, { path: 'posts/a.md' });
+    assert.equal(parsed.inReplyTo, 'https://example.com/post');
+    assert.equal(serializeDocument(parsed), text);
+  });
+
   it('drops an activitypub block with nothing in it', () => {
     const text = serializeDocument(content({ activitypub: {} }));
 

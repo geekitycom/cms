@@ -451,10 +451,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     insert: db.prepare(`
       INSERT INTO documents (
         path, type, slug, permalink, title, date, date_sort, updated, draft, trashed,
-        description, author, activitypub, extra, body, html, hash
+        description, author, in_reply_to, activitypub, extra, body, html, hash
       ) VALUES (
         :path, :type, :slug, :permalink, :title, :date, :date_sort, :updated, :draft, :trashed,
-        :description, :author, :activitypub, :extra, :body, :html, :hash
+        :description, :author, :in_reply_to, :activitypub, :extra, :body, :html, :hash
       )
       ON CONFLICT (path) DO UPDATE SET
         type = excluded.type,
@@ -468,6 +468,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         trashed = excluded.trashed,
         description = excluded.description,
         author = excluded.author,
+        in_reply_to = excluded.in_reply_to,
         activitypub = excluded.activitypub,
         extra = excluded.extra,
         body = excluded.body,
@@ -992,6 +993,7 @@ function toRow(document: Document): Record<string, string | number | null> {
     trashed: isTrashedPath(document.path) ? 1 : 0,
     description: document.description ?? null,
     author: document.author ?? null,
+    in_reply_to: document.inReplyTo ?? null,
     activitypub: document.activitypub === undefined ? null : JSON.stringify(document.activitypub),
     extra: JSON.stringify(document.extra),
     body: document.body,
@@ -1020,6 +1022,7 @@ function toDocument(row: Record<string, unknown>, tags: string[], categories: st
     draft: row['draft'] === 1,
     ...optional('description', text(row['description'])),
     ...optional('author', text(row['author'])),
+    ...optional('inReplyTo', text(row['in_reply_to'])),
     ...optional('activitypub', json<ActivityPubMetadata>(row['activitypub'])),
     extra: json<Record<string, unknown>>(row['extra']) ?? {},
     body: String(row['body']),
@@ -1162,6 +1165,18 @@ const MIGRATIONS: readonly Migration[] = [
       -- index, so a scan would find every row up to date and never fill the
       -- table. Emptying the index is what makes the next scan index them all;
       -- the files are the source of truth, so nothing is lost (decision-1).
+      DELETE FROM documents;
+    `,
+  },
+  {
+    version: 5,
+    sql: `
+      -- \`in-reply-to\` is modelled now (TASK-121). A file that already had one
+      -- kept it in \`extra\`, and may hash the same as it did, so a scan would
+      -- leave the row alone and never learn the post is a reply. Emptying the
+      -- index is what makes the next scan read them all again; the files are
+      -- the source of truth, so nothing is lost (decision-1).
+      ALTER TABLE documents ADD COLUMN in_reply_to TEXT;
       DELETE FROM documents;
     `,
   },

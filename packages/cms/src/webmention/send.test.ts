@@ -150,7 +150,11 @@ function linkingPost(): string {
 }
 
 /** Publish a post through the editor, the way a browser would. */
-async function publish(agent: Browser, body: string): Promise<Response> {
+async function publish(
+  agent: Browser,
+  body: string,
+  fields: Record<string, string> = {},
+): Promise<Response> {
   const html = await (await agent.get('/admin/posts/new')).text();
   const token = csrfField(html);
   assert.ok(token !== undefined, 'the editor carried a CSRF token');
@@ -167,6 +171,7 @@ async function publish(agent: Browser, body: string): Promise<Response> {
     body,
     hash: '',
     action: 'publish',
+    ...fields,
   });
 }
 
@@ -227,6 +232,52 @@ describe('sending webmentions when a post is published', () => {
 
     assert.deepEqual(sent, []);
     assert.deepEqual(cms.admin.listSentWebmentions('hello-world'), []);
+  });
+});
+
+describe('sending a webmention for a reply', () => {
+  it('tells the post it replies to, though the body links nowhere', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+
+    const response = await publish(agent, 'Completely agree with this.', {
+      'in-reply-to': FRIENDLY,
+    });
+    assert.equal(response.status, 303, 'the reply was published');
+    await cms.webmentions.settled();
+
+    assert.deepEqual(
+      sent.map((one) => [one.source, one.target]),
+      [[`${BASE_URL}/2026/03/hello-world/`, FRIENDLY]],
+    );
+    assert.deepEqual(
+      cms.admin.listSentWebmentions('hello-world').map((one) => [one.target, one.status]),
+      [[FRIENDLY, 'sent']],
+      'recorded like any other target',
+    );
+  });
+
+  it('tells it once when the body links to it as well', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+
+    await publish(agent, `Agree with [this](${FRIENDLY}).`, { 'in-reply-to': FRIENDLY });
+    await cms.webmentions.settled();
+
+    assert.deepEqual(
+      sent.map((one) => one.target),
+      [FRIENDLY],
+    );
+  });
+
+  it('sends nothing for a reply when the setting is off', async () => {
+    const cms = await site({ webmentionsSend: false });
+    const agent = await signedIn(cms);
+
+    await publish(agent, 'Completely agree with this.', { 'in-reply-to': FRIENDLY });
+    await cms.webmentions.settled();
+
+    assert.deepEqual(sent, []);
   });
 });
 

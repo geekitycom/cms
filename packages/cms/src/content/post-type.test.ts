@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { Document } from './document.ts';
 import { parseDocument } from './parser.ts';
-import { discoverPostType, postLabel, postTypeOf } from './post-type.ts';
+import { discoverPostType, isNamed, postLabel, postTypeOf, replyTarget } from './post-type.ts';
 
 function post(frontMatter: string, body: string): Document {
   return parseDocument(`---\n${frontMatter}date: 2026-09-20T09:00:00Z\n---\n\n${body}\n`, {
@@ -82,6 +82,51 @@ describe('discoverPostType', () => {
   it('calls a post with a name but neither content nor summary a note', () => {
     assert.equal(discoverPostType({ name: 'On gardens' }), 'note');
     assert.equal(discoverPostType({ name: 'On gardens', content: '', summary: ' ' }), 'note');
+  });
+});
+
+describe('a reply', () => {
+  const target = 'https://example.com/post';
+
+  it('is a post whose in-reply-to is a valid URL, ahead of the note/article tail', () => {
+    assert.equal(discoverPostType({ 'in-reply-to': target, content: 'Agreed.' }), 'reply');
+    assert.equal(
+      discoverPostType({ 'in-reply-to': target, name: 'On gardens', content: 'The tomatoes.' }),
+      'reply',
+    );
+  });
+
+  it('is not made by an in-reply-to that is not an http or https URL', () => {
+    for (const value of [
+      '',
+      '   ',
+      'example.com/post',
+      '/2026/09/a-post/',
+      'mailto:a@b.example',
+      'not a url',
+    ]) {
+      assert.equal(discoverPostType({ 'in-reply-to': value, content: 'Agreed.' }), 'note', value);
+    }
+  });
+
+  it('is still a reply with a title and a photo', () => {
+    const document = post(
+      `title: On gardens\nin-reply-to: ${target}\n`,
+      '![Tomatoes](/uploads/2026/09/tomatoes.jpg)\n\nThe tomatoes came in late.',
+    );
+    assert.equal(postTypeOf(document), 'reply');
+    assert.equal(isNamed(document), true);
+  });
+
+  it('is named only when its title is its own, as a note/article would be', () => {
+    assert.equal(isNamed(post(`in-reply-to: ${target}\n`, 'Agreed.')), false);
+    assert.equal(isNamed(post(`title: Agreed\nin-reply-to: ${target}\n`, 'Agreed.')), false);
+  });
+
+  it('names its target only when the target is a valid URL', () => {
+    assert.equal(replyTarget(post(`in-reply-to: ${target}\n`, 'Agreed.')), target);
+    assert.equal(replyTarget(post('in-reply-to: example.com/post\n', 'Agreed.')), undefined);
+    assert.equal(replyTarget(post('', 'Agreed.')), undefined);
   });
 });
 

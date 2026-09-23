@@ -43,6 +43,7 @@ export function documentContent(document: DocumentContent): DocumentContent {
     draft: document.draft,
     ...(document.description === undefined ? {} : { description: document.description }),
     ...(document.author === undefined ? {} : { author: document.author }),
+    ...(document.inReplyTo === undefined ? {} : { inReplyTo: document.inReplyTo }),
     ...(document.activitypub === undefined ? {} : { activitypub: { ...document.activitypub } }),
     extra: { ...document.extra },
     body: document.body,
@@ -78,6 +79,7 @@ export function documentFrontMatter(document: DocumentContent): Record<string, u
   if (document.draft) data['draft'] = true;
   if (document.description !== undefined) data['description'] = document.description;
   if (document.author !== undefined) data['author'] = document.author;
+  if (document.inReplyTo !== undefined) data['in-reply-to'] = document.inReplyTo;
 
   const activitypub = activityPubOf(document);
   if (activitypub !== undefined) data['activitypub'] = activitypub;

@@ -88,6 +88,9 @@ function previewDocument(
     draft: body['draft'] !== undefined,
     ...(text(body['description']) === '' ? {} : { description: text(body['description']).trim() }),
     ...(currentUsername(c) === undefined ? {} : { author: currentUsername(c) }),
+    ...(text(body['in-reply-to']).trim() === ''
+      ? {}
+      : { inReplyTo: text(body['in-reply-to']).trim() }),
     extra: {},
     body: markdown,
     html: renderMarkdown(markdown),

@@ -37,9 +37,9 @@
 <div class="search-results">
   {% for post in posts %}
   <article class="search-result h-entry">
-    {#- A note has no name to claim, so its first words link it without
-        being marked up as one. -#}
-    <h2 class="feed-title{% if post.postType != "note" %} p-name{% endif %}">
+    {#- A post with no name of its own has none to claim, so its first words
+        link it without being marked up as one. -#}
+    <h2 class="feed-title{% if post.named %} p-name{% endif %}">
       <a href="{{ post.url | url }}" class="u-url">{{ post.label }}</a>
     </h2>
     {% if post.snippet %}

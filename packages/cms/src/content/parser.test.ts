@@ -110,6 +110,17 @@ describe('parseDocument', () => {
     assert.deepEqual(document.activitypub, { type: 'Photo' });
   });
 
+  it('reads in-reply-to verbatim, a URL or not, and keeps it out of extra', () => {
+    for (const value of ['https://example.com/post', 'example.com/post']) {
+      const source = `---\ndate: '2026-01-02T03:04:05Z'\nin-reply-to: ${value}\n---\n\nAgreed.\n`;
+
+      const document = parseDocument(source, { path: 'posts/2026-01-02-a.md' });
+
+      assert.equal(document.inReplyTo, value);
+      assert.equal('in-reply-to' in document.extra, false);
+    }
+  });
+
   it('keeps front-matter keys it does not model', async () => {
     const path = 'posts/2026-08-15-notes-from-a-draft.md';
 

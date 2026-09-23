@@ -25,7 +25,10 @@
   {% endif %}
   <article class="feed-item h-entry">
     <div class="feed-content">
-      {% if post.postType == "note" %}
+      {% if post.inReplyTo %}
+      <p class="feed-reply small">In reply to <a class="u-in-reply-to" href="{{ post.inReplyTo }}">{{ post.inReplyTo }}</a></p>
+      {% endif %}
+      {% if not post.named %}
       <div class="feed-excerpt e-content">{{ post.content | safe }}</div>
       {% else %}
       <{{ feedTitleTag }} class="feed-title p-name">
@@ -44,7 +47,7 @@
       </p>
       {% endif %}
       <div class="feed-meta">
-        {% if post.postType == "note" %}
+        {% if not post.named %}
         <p>
           <a href="{{ post.url | url }}" class="u-url">{% if post.date %}<time class="feed-date dt-published" datetime="{{ post.date | date("iso") }}">{{ post.date | date }}</time>{% else %}{{ post.label }}{% endif %}</a>
         </p>

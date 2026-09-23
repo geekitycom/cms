@@ -68,6 +68,7 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
     ...optional('updated', asDate(data['updated'], 'updated', path)),
     ...optional('description', asString(data['description'])),
     ...optional('author', asString(data['author'])),
+    ...optional('inReplyTo', asReplyTarget(data['in-reply-to'])),
     ...optional('activitypub', asActivityPub(data['activitypub'], path)),
   };
 
@@ -185,6 +186,17 @@ function asTerms(value: unknown): string[] {
   if (typeof value === 'string') return value === '' ? [] : [value];
   if (!Array.isArray(value)) return [];
   return value.filter((term): term is string => typeof term === 'string' && term !== '');
+}
+
+/**
+ * `in-reply-to` as text. mf2 allows a list, so a list of one is its one URL;
+ * anything else that is not a string is kept as its string, which is not a
+ * URL, so it is reported and refused rather than dropped from the file.
+ */
+function asReplyTarget(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (Array.isArray(value) && value.length === 1) return asReplyTarget(value[0]);
+  return asString(typeof value === 'string' ? value : JSON.stringify(value));
 }
 
 function asActivityPub(value: unknown, path: string): ActivityPubMetadata | undefined {

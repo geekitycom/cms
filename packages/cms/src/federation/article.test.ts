@@ -508,6 +508,85 @@ describe('the object type', () => {
   });
 });
 
+describe('a reply', () => {
+  const TARGET = 'https://them.example/2026/09/their-post/';
+
+  it('is a Note naming its target in inReplyTo, with no summary', async () => {
+    const instance = await site({
+      'posts/2026-09-02-agreed.md': rawPost(
+        ["date: '2026-09-02T09:00:00Z'", 'permalink: /2026/09/agreed/', `in-reply-to: ${TARGET}`],
+        'Completely agree with this.',
+      ),
+    });
+
+    const note = await articleAt(instance, '/2026/09/agreed/');
+
+    assert.equal(note['type'], 'Note');
+    assert.equal(note['inReplyTo'], TARGET);
+    assert.equal(note['content'], renderMarkdown('Completely agree with this.'));
+    assert.equal('summary' in note, false);
+  });
+
+  it('is a Note with its title at the top of its content when it has one (decision-18)', async () => {
+    const instance = await site({
+      'posts/2026-09-02-agreed.md': rawPost(
+        [
+          'title: On their post',
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/agreed/',
+          `in-reply-to: ${TARGET}`,
+        ],
+        'Completely agree with this.',
+      ),
+    });
+
+    const note = await articleAt(instance, '/2026/09/agreed/');
+
+    assert.equal(note['type'], 'Note');
+    assert.equal(note['inReplyTo'], TARGET);
+    assert.equal(
+      note['content'],
+      `<p>On their post</p>\n${renderMarkdown('Completely agree with this.')}`,
+      'Mastodon never reads a Note name, so the title travels in the content',
+    );
+  });
+
+  it('keeps inReplyTo when activitypub.type makes it an Article', async () => {
+    const instance = await site({
+      'posts/2026-09-02-agreed.md': rawPost(
+        [
+          'title: On their post',
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/agreed/',
+          `in-reply-to: ${TARGET}`,
+          'activitypub:',
+          '  type: Article',
+        ],
+        'Completely agree with this.',
+      ),
+    });
+
+    const article = await articleAt(instance, '/2026/09/agreed/');
+
+    assert.equal(article['type'], 'Article');
+    assert.equal(article['inReplyTo'], TARGET);
+  });
+
+  it('sends no inReplyTo for an in-reply-to that is not a URL', async (t) => {
+    t.mock.method(console, 'warn', () => undefined);
+    const instance = await site({
+      'posts/2026-09-02-agreed.md': rawPost(
+        ["date: '2026-09-02T09:00:00Z'", 'permalink: /2026/09/agreed/', 'in-reply-to: their post'],
+        'Completely agree with this.',
+      ),
+    });
+
+    const note = await articleAt(instance, '/2026/09/agreed/');
+
+    assert.equal('inReplyTo' in note, false);
+  });
+});
+
 describe('the outbox', () => {
   it('counts the published posts and pages rather than listing them all at once', async () => {
     const instance = await site(archive(OUTBOX_PAGE_SIZE + 5));

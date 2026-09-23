@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { postLabel, postTypeOf } from '../content/post-type.ts';
+import { isNamed, postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { DEFAULT_TIMEZONE } from '../content/time.ts';
 import { siteImageMarkup } from '../images/markup.ts';
@@ -120,11 +120,19 @@ export interface DocumentContext {
   /** Display title. Empty for an untitled post. */
   title: string;
   /**
-   * `note` or `article`, discovered from the title and the body (Post Type
-   * Discovery) on every render rather than read from the file. A theme heads
-   * an article with its title and draws a note by its content.
+   * `reply`, `note` or `article`, discovered from the front matter, the title
+   * and the body (Post Type Discovery) on every render rather than read from
+   * the file.
    */
   postType: PostType;
+  /**
+   * Whether the post has a name of its own, a title its text does not open
+   * with. A theme heads a named post with its title and draws any other by its
+   * content, whatever its type: a reply can be either.
+   */
+  named: boolean;
+  /** The URL a reply answers, present only on a reply. */
+  inReplyTo?: string | undefined;
   /**
    * The words a link to the document says: its title, or an untitled post's
    * first words.
@@ -216,6 +224,8 @@ export function documentContext(
 
     title: document.title,
     postType: postTypeOf(document),
+    named: isNamed(document),
+    ...optional('inReplyTo', replyTarget(document)),
     label: postLabel(document),
     ...optional('date', date),
     tags: document.tags,

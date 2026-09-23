@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-23 12:53'
+updated_date: '2026-09-23 13:07'
 ---
 # ActivityPub Federation
 
@@ -101,10 +101,13 @@ Each non-draft post maps to a `Note` or an `Article`. Which one follows the post
 
 | discovered type | object |
 | --- | --- |
+| reply | `Note` with `inReplyTo` |
 | note | `Note` |
 | article | `Article` |
 
-An `activitypub.type` of `Note` or `Article` in the post's front matter overrides the derived type. Any other value is logged as a warning naming the file and the value, and the derived type is sent instead, as an unusable theme choice is logged and passed over rather than failing the request. The other rows of that mapping (event, rsvp, repost, like, reply, video, photo) are not post types here yet.
+An `activitypub.type` of `Note` or `Article` in the post's front matter overrides the derived type. Any other value is logged as a warning naming the file and the value, and the derived type is sent instead, as an unusable theme choice is logged and passed over rather than failing the request. The other rows of that mapping (event, rsvp, repost, like, video, photo) are not post types here yet.
+
+A reply is a post whose `in-reply-to` front matter is an http or https URL (TASK-121). It is a `Note` whether or not it has a title of its own, and a title goes at the top of its `content` as a note's does (decision-18). `inReplyTo` names the target on the object whichever type it goes out as, so an `activitypub.type: Article` override keeps the thread.
 
 The two are not one object with two labels, because Mastodon reads them differently. For an `Article` it drops `content` and builds the status from `name`, `summary` and `url`, and `summary` is body text. For a `Note` the status is `content` verbatim, `name` is never read, and `summary` is rendered as a content warning. So:
 

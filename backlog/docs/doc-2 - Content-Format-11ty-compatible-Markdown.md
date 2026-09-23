@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-23 12:53'
+updated_date: '2026-09-23 13:07'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -61,6 +61,7 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | --- | --- |
 | `updated` | last modified date, a UTC instant, written on every admin save |
 | `author` | the username of a user; see below |
+| `in-reply-to` | the URL of the post this one answers, under its microformats2 name. An http or https URL makes the post a reply (Post Type Discovery, TASK-121): the theme links it as `u-in-reply-to`, the ActivityStreams object carries it as `inReplyTo`, and publishing sends it a webmention. Any other value is kept in the file, logged as a warning when the file is indexed, and ignored; the admin editor refuses to save one |
 | `activitypub.published` | timestamp of first delivery, a UTC instant. The only key the CMS writes here: it records that the post has been announced and when, which is what decides `Create` against `Update` |
 | `activitypub.id` | never written by the CMS. A post's ActivityStreams object id is its permalink (decision-13); this key is read, not minted, so a post migrated from elsewhere keeps the id its followers already hold — `https://example.com/?p=813` — and every `Update` and `Delete` names it |
 | `activitypub.type` | never written by the CMS. `Note` or `Article`, overriding the ActivityStreams type Post Type Discovery derives for the post (decision-17). Any other value is kept in the file, logged as a warning, and ignored. The `activitypub` block is everything about how a post federates, whether the author set it or the CMS wrote it back, and a save never rewrites what the author set |

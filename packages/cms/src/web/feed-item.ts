@@ -1,5 +1,5 @@
 import type { Document } from '../content/document.ts';
-import { postTypeOf } from '../content/post-type.ts';
+import { isNamed } from '../content/post-type.ts';
 import type { SiteData } from './context.ts';
 import { activityStreamsId } from './documents.ts';
 import { feedPathUnder } from './feed-source.ts';
@@ -149,7 +149,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     markdown: document.body,
   };
 
-  if (postTypeOf(document) !== 'note') item.title = document.title;
+  if (isNamed(document)) item.title = document.title;
   if (published !== undefined && !Number.isNaN(published.getTime())) item.published = published;
 
   const updated = lastModifiedOf(document);

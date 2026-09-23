@@ -3,12 +3,13 @@ import type { AdminStore, SentWebmention, WebmentionSendStatus } from '../admin/
 import type { CommentNotices, CommentRecords } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../federation/article.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { discoverEndpoint, WEBMENTION_USER_AGENT } from './discovery.ts';
-import { externalLinks } from './links.ts';
+import { externalLinks, externalTarget } from './links.ts';
 import { verifyWebmention } from './receive.ts';
 import type { IncomingWebmention, WebmentionOutcome } from './receive.ts';
 
@@ -274,12 +275,17 @@ export function createWebmentionService(
   };
 }
 
-/** Every external page any of these versions of a post links to, in order. */
+/**
+ * Every external page any of these versions of a post links to, in order: the
+ * post it replies to first, then the links in its body.
+ */
 function targetsOf(documents: readonly (Document | undefined)[], baseUrl: string): string[] {
   const targets = new Set<string>();
 
   for (const document of documents) {
     if (document === undefined) continue;
+    const reply = externalTarget(replyTarget(document), baseUrl);
+    if (reply !== undefined) targets.add(reply);
     for (const target of externalLinks(document.html, baseUrl)) targets.add(target);
   }
 

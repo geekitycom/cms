@@ -6,7 +6,7 @@ import type { Context, Hono } from 'hono';
 import type { Document, DocumentContent, DocumentType } from '../content/document.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
-import { postLabel } from '../content/post-type.ts';
+import { postLabel, replyTarget } from '../content/post-type.ts';
 import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
 import { scheduledFor } from '../content/schedule.ts';
 import { htmlToText } from '../content/search.ts';
@@ -322,6 +322,7 @@ async function saveFromForm(
     categories: text(body['categories']).trim(),
     description: text(body['description']).trim(),
     author: text(body['author']).trim(),
+    inReplyTo: text(body['in-reply-to']).trim(),
     draft: body['draft'] !== undefined,
     exclude: body['exclude'] !== undefined,
     contact: body['contact'] !== undefined,
@@ -349,6 +350,12 @@ async function saveFromForm(
   // A post with no title is a note; a page is always named.
   if (form.title === '' && kind.type === 'page') {
     return refuse(`A ${kind.singular} needs a title.`);
+  }
+
+  // A post is a reply only when the target is a URL (Post Type Discovery), so
+  // anything else would be saved as a reply that is not one.
+  if (kind.type === 'post' && form.inReplyTo !== '' && replyTarget(form) === undefined) {
+    return refuse('In reply to has to be a web address, like https://example.com/a-post/.');
   }
 
   const timezone = siteTimezone(c);
@@ -440,6 +447,7 @@ async function saveFromForm(
     draft,
     ...(form.description === '' ? {} : { description: form.description }),
     ...optional('author', chosenAuthor(c, form.author, document)),
+    ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', document?.activitypub),
     extra: resolveExtra(kind, document, form),
     body: form.body,
@@ -853,6 +861,7 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     draft: form.draft,
     ...(form.description === '' ? {} : { description: form.description }),
     ...optional('author', document.author),
+    ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', document.activitypub),
     extra: resolveExtra(kind, document, form),
     body: form.body,
@@ -984,6 +993,19 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+/**
+ * The `in-reply-to` a save writes: the field for a post, where an empty one
+ * clears it, and whatever the file had for a page, whose editor has no field.
+ */
+function replyTo(
+  kind: DocumentKind,
+  form: EditorForm,
+  document: Document | undefined,
+): string | undefined {
+  if (kind.type !== 'post') return document?.inReplyTo;
+  return form.inReplyTo === '' ? undefined : form.inReplyTo;
+}
+
 /** The editor's fields, as strings, which is what a form has. */
 export interface EditorForm {
   title: string;
@@ -1002,6 +1024,8 @@ export interface EditorForm {
    * decision-14 has to be offered back as what it says until somebody saves it.
    */
   author: string;
+  /** The post this one replies to, the mf2 `in-reply-to`. Posts only. */
+  inReplyTo: string;
   draft: boolean;
   /** Whether `eleventyExcludeFromCollections` is set. Pages only. */
   exclude: boolean;
@@ -1045,6 +1069,7 @@ export function blankForm(
     // over a kind and a clock, and who is signed in is a fact about a request.
     // {@link authorChoices} is where the default is applied.
     author: '',
+    inReplyTo: '',
     draft: false,
     exclude: false,
     contact: false,
@@ -1072,6 +1097,7 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     categories: document.categories.join(', '),
     description: document.description ?? '',
     author: document.author ?? '',
+    inReplyTo: document.inReplyTo ?? '',
     draft: document.draft,
     exclude: document.extra[EXCLUDE_KEY] === true,
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,

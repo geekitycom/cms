@@ -87,6 +87,7 @@ async function submit(
     tags: field(html, 'tags') ?? '',
     categories: field(html, 'categories') ?? '',
     description: field(html, 'description') ?? '',
+    'in-reply-to': field(html, 'in-reply-to') ?? '',
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
     action: 'update',
     ...changes,
@@ -414,6 +415,57 @@ describe('the post editor', () => {
     );
     assert.ok(!/^categories:/m.test(written), 'the key is gone, not left empty');
     assert.equal((await cms.app.request('/category/general/')).status, 404);
+  });
+});
+
+describe('the reply target in the editor', () => {
+  const TARGET = 'https://them.example/2026/09/their-post/';
+  const FILE = ['posts', '2026-01-02-published.md'];
+
+  async function published(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  it('sets in-reply-to, shows it on reload, and clears it again', async () => {
+    const { contentDir, agent } = await published();
+
+    assert.equal(
+      (await submit(agent, '/admin/posts/published', { 'in-reply-to': TARGET })).status,
+      303,
+    );
+    let written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.match(written, new RegExp(`^in-reply-to: ${TARGET}$`, 'm'));
+    const reloaded = await (await agent.get('/admin/posts/published')).text();
+    assert.equal(field(reloaded, 'in-reply-to'), TARGET);
+
+    assert.equal(
+      (await submit(agent, '/admin/posts/published', { 'in-reply-to': '' })).status,
+      303,
+    );
+    written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.doesNotMatch(written, /in-reply-to/, 'the key is gone, not left empty');
+  });
+
+  it('refuses a reply target that is not a web address, and writes nothing', async () => {
+    const { contentDir, agent } = await published();
+    const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+    const response = await submit(agent, '/admin/posts/published', {
+      'in-reply-to': 'their post',
+    });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /In reply to has to be a web address/);
+    assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
   });
 });
 

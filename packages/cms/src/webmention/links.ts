@@ -18,19 +18,27 @@ import { elementsIn, parseHtml } from './html.ts';
  * target rather than two — and the `target` a receiver verifies is a page.
  */
 export function externalLinks(html: string, baseUrl: string): string[] {
-  const site = originOf(baseUrl);
   const found = new Set<string>();
 
   for (const element of elementsIn(parseHtml(html))) {
     if (element.name !== 'a') continue;
 
-    const target = linkTarget(element.attributes['href'], baseUrl);
-    if (target === undefined) continue;
-    if (site !== undefined && originOf(target) === site) continue;
-    found.add(target);
+    const target = externalTarget(element.attributes['href'], baseUrl);
+    if (target !== undefined) found.add(target);
   }
 
   return [...found];
+}
+
+/**
+ * One URL as the external page it names, or `undefined` when it names none
+ * this sends a webmention to: not a page, or one of this site's own.
+ */
+export function externalTarget(href: string | undefined, baseUrl: string): string | undefined {
+  const target = linkTarget(href, baseUrl);
+  if (target === undefined) return undefined;
+  const site = originOf(baseUrl);
+  return site !== undefined && originOf(target) === site ? undefined : target;
 }
 
 /**

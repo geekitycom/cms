@@ -16,7 +16,7 @@ import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
-import { postTypeOf } from '../content/post-type.ts';
+import { postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
 import { userForAuthor } from '../web/authors.ts';
@@ -98,9 +98,13 @@ type PostObjectType = keyof typeof OBJECT_TYPES;
 /**
  * The object type each discovered post type federates as: the rows of Post
  * Type Discovery's own AS2 mapping (section 6) that this site has post types
- * for.
+ * for. A reply is a `Note` even with a title of its own (decision-18).
  */
-const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = { note: 'Note', article: 'Article' };
+const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = {
+  reply: 'Note',
+  note: 'Note',
+  article: 'Article',
+};
 
 function isPostObjectType(value: string): value is PostObjectType {
   return Object.hasOwn(OBJECT_TYPES, value);
@@ -161,8 +165,11 @@ export function postObject(
   // them, which is a setting rather than a constant (TASK-36).
   const bases = taxonomyBasesFromSettings(readSiteSettings(context.data.config.contentDir));
 
+  const inReplyTo = replyTarget(document);
   const common = {
     id: articleObjectId(context, document),
+    // On either type, so an activitypub.type override never breaks a thread.
+    replyTarget: inReplyTo === undefined ? null : new URL(inReplyTo),
     url: new URL(absoluteUrl(document.permalink, baseUrl)),
     source: new Source({ content: document.body, mediaType: SOURCE_MEDIA_TYPE }),
     published: toInstant(document.date) ?? null,

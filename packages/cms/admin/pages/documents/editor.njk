@@ -92,6 +92,14 @@
         <p class="admin-hint">Separated by commas.</p>
       {% endif %}
 
+      {% if kind.type == "post" %}
+        {#- The mf2 `in-reply-to`: a URL here makes the post a reply, threads
+            it in the fediverse and sends that page a webmention. -#}
+        <label for="editor-in-reply-to">In reply to</label>
+        <input id="editor-in-reply-to" name="in-reply-to" type="url" value="{{ form.inReplyTo }}" />
+        <p class="admin-hint">The address of the post this one answers. Leave it empty for a post that answers nobody.</p>
+      {% endif %}
+
       <label for="editor-description">Description</label>
       <input id="editor-description" name="description" type="text" value="{{ form.description }}" />
 

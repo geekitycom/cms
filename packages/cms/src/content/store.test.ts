@@ -168,14 +168,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -204,7 +204,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5]);
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -233,8 +233,44 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5]);
       assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
+    } finally {
+      upgraded.close();
+    }
+  });
+});
+
+describe('a reply target', () => {
+  it('survives the index', async () => {
+    const store = openContentStore({ dataDir: await dataDir() });
+    try {
+      store.upsert(post({ inReplyTo: 'https://example.com/post' }));
+      assert.equal(
+        store.getByPermalink('/2026/09/hello-world/')?.inReplyTo,
+        'https://example.com/post',
+      );
+    } finally {
+      store.close();
+    }
+  });
+
+  it('is read again from the files after an upgrade, which empties the index', async () => {
+    const dir = await dataDir();
+    const before = openContentStore({ dataDir: dir });
+    before.upsert(post());
+    before.close();
+
+    const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
+    legacy.exec(
+      'DELETE FROM migrations WHERE version = 5; ALTER TABLE documents DROP COLUMN in_reply_to',
+    );
+    legacy.close();
+
+    const upgraded = openContentStore({ dataDir: dir });
+    try {
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5]);
+      assert.equal(upgraded.counts().total, 0, 'a row with in-reply-to in extra survived');
     } finally {
       upgraded.close();
     }
@@ -1288,7 +1324,7 @@ describe('the search index migration (TASK-22 AC #2)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5]);
       assert.equal(upgraded.counts().total, 0, 'a row survived with no words indexed for it');
 
       upgraded.upsert(post());

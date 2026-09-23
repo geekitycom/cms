@@ -57,6 +57,11 @@ export interface Document {
   description?: string | undefined;
   /** User login, resolved to a display name at render time. */
   author?: string | undefined;
+  /**
+   * The post this one answers, from the mf2 `in-reply-to` front matter key,
+   * kept verbatim. Only a valid URL makes it a reply; see `replyTarget`.
+   */
+  inReplyTo?: string | undefined;
   /** Federation identity, present once the document has been delivered. */
   activitypub?: ActivityPubMetadata | undefined;
   /** Front-matter keys the CMS does not model, preserved verbatim. */
@@ -85,6 +90,7 @@ export type DocumentContent = Pick<
   | 'draft'
   | 'description'
   | 'author'
+  | 'inReplyTo'
   | 'activitypub'
   | 'extra'
   | 'body'
@@ -101,5 +107,6 @@ export const KNOWN_FRONT_MATTER_KEYS = [
   'draft',
   'description',
   'author',
+  'in-reply-to',
   'activitypub',
 ] as const;

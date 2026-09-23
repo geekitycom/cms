@@ -33,9 +33,12 @@
 {% block content %}
 <article class="post h-entry">
   <header class="post-header">
-    {#- A note has no name, so it has no heading either: its words are it. -#}
-    {% if postType != "note" %}
+    {#- A post with no name of its own has no heading either: its words are it. -#}
+    {% if named %}
     <h1 class="post-title p-name">{{ title }}</h1>
+    {% endif %}
+    {% if inReplyTo %}
+    <p class="post-reply">In reply to <a class="u-in-reply-to" href="{{ inReplyTo }}">{{ inReplyTo }}</a></p>
     {% endif %}
     <p class="post-byline">
       by

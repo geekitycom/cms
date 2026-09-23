@@ -3,7 +3,7 @@ id: doc-7
 title: Webmentions
 type: specification
 created_date: '2026-09-04 23:08'
-updated_date: '2026-09-12 21:02'
+updated_date: '2026-09-23 13:07'
 ---
 # Webmentions
 
@@ -24,8 +24,8 @@ scan reports a cold index as a directory full of creations, and telling every
 page the archive has ever linked to on every rebuild would be a denial of
 service with this site's name on it.
 
-1. **The links.** Every external `<a href>` in the post's rendered body, each
-   named once, fragment dropped. A link back into the site is not one: the
+1. **The links.** The post's `in-reply-to` when it is a reply, then every
+   external `<a href>` in its rendered body, each named once, fragment dropped. A link back into the site is not one: the
    conversation under a post is no place for a loop.
 2. **The endpoint.** Per the W3C discovery order: the HTTP `Link` header first,
    then the first `<link>` **or** `<a>` carrying `rel="webmention"` in document
