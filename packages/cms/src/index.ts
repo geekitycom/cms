@@ -56,8 +56,8 @@ import {
   recentPosts,
   themeName,
 } from './web/index.ts';
-import { createWebmentionService } from './webmention/index.ts';
-import type { WebmentionService } from './webmention/index.ts';
+import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
+import type { ReplyContextService, WebmentionService } from './webmention/index.ts';
 
 export { createFeedNotifier, NOTIFY_TIMEOUT_MS } from './notify.ts';
 export type {
@@ -872,9 +872,9 @@ export {
   NODEINFO_PATH,
   OUTBOX_PAGE_SIZE,
   OUTBOX_PATH,
-  postArticle,
   postCreateActivity,
   postDeleteActivity,
+  postObject,
   postUpdateActivity,
   readFollowers,
   readInboxLog,
@@ -1138,6 +1138,7 @@ export type {
   FrontPageSlugs,
   JsonFeed,
   JsonFeedAuthor,
+  JsonFeedGeekity,
   JsonFeedHub,
   Interaction,
   InteractionAuthor,
@@ -1205,8 +1206,17 @@ export {
   sourceEntry,
   textOf,
   WEBMENTION_USER_AGENT,
+  createReplyContextService,
+  fetchReplyContext,
+  readReplyContext,
+  REPLY_CONTEXTS_FILE,
+  systemHostLookup,
 } from './webmention/index.ts';
 export type {
+  CreateReplyContextServiceOptions,
+  HostLookup,
+  ReplyContext,
+  ReplyContextService,
   CreateWebmentionServiceOptions,
   HtmlElement,
   HtmlNode,
@@ -1277,6 +1287,13 @@ export interface Cms {
    * post's links again, or to wait for the ones in flight.
    */
   readonly webmentions: WebmentionService;
+  /**
+   * What a reply shows of the post it answers (TASK-123): fetched when a reply
+   * is saved or synced, kept in `content/_data/replyContexts.json`, and read
+   * from there when a page is drawn. Already subscribed to the index; a site
+   * or a test reaches for it to wait for the fetches in flight.
+   */
+  readonly replyContexts: ReplyContextService;
   /**
    * The site's rssCloud and WebSub client: what tells the notify server named
    * in the settings that a feed changed, so a subscriber hears at once rather
@@ -1521,9 +1538,21 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // thing on the page and another in the feed (TASK-62).
   const conversation = createConversation({ admin, store, baseUrl: resolved.baseUrl });
 
+  // What a reply shows of the post it answers. Built before the renderer,
+  // which reads the stored contexts, and subscribed to the index below with
+  // the other services that reach out to the web.
+  const replyContexts = createReplyContextService({
+    store,
+    contentDir: resolved.contentDir,
+    lookup: resolved.hostLookup,
+  });
+
   const renderer = createRenderer({
     config: resolved,
     themes,
+    // The stored context of a reply's target: a file read, never a fetch, so
+    // a page is drawn without waiting on anybody's server (TASK-123).
+    replyContext: (target) => replyContexts.read(target),
     // The pages that put themselves in the site menu are found by asking for
     // every public page and reading their front matter, rather than by an
     // index of their own: a site has a handful of pages, the query is the
@@ -1631,6 +1660,9 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const webmentions = createWebmentionService({ admin, store, config: resolved, notifications });
   content.events.on('change', (change) => {
     webmentions.handle(change);
+  });
+  content.events.on('change', (change) => {
+    replyContexts.handle(change);
   });
 
   // The notify server listens to the index for the same reason: a post edited
@@ -1753,6 +1785,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     delivery,
     relays,
     webmentions,
+    replyContexts,
     notifier,
     mail,
     notifications,
@@ -1789,6 +1822,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // date passed while nothing was running is published here, once.
       await scheduler.start();
 
+      // And a reply whose target the contexts file holds nothing for is
+      // fetched now, in the background, for the same reason (TASK-123).
+      replyContexts.catchUp();
+
       // The digests tick from here on. Nothing is caught up first: a digest is
       // whatever is pending when a window comes up, so a site that was down
       // over one simply sends the next one, with everything still waiting in it.
@@ -1814,6 +1851,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       await delivery.settled();
       await relays.settled();
       await webmentions.settled();
+      await replyContexts.settled();
       await notifier.settled();
       await mail.settled();
 

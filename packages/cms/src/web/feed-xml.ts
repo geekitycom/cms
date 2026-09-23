@@ -25,6 +25,9 @@ export const DC_NAMESPACE = 'http://purl.org/dc/elements/1.1/';
  */
 export const WFW_NAMESPACE = 'http://wellformedweb.org/CommentAPI/';
 
+/** RFC 4685's Atom Threading Extensions, whose `in-reply-to` names what a reply answers. */
+export const THR_NAMESPACE = 'http://purl.org/syndication/thread/1.0';
+
 /**
  * A date as RFC 822, which is what RSS 2.0's `pubDate` and `lastBuildDate`
  * are. `toUTCString` writes exactly that spelling, `GMT` zone included.

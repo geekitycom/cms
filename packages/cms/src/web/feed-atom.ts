@@ -10,7 +10,15 @@ import {
   notifyServerOf,
 } from './feed-source.ts';
 import type { FeedSource } from './feed-source.ts';
-import { author, element, escapeXml, link, optionalElement, SOURCE_NAMESPACE } from './feed-xml.ts';
+import {
+  author,
+  element,
+  escapeXml,
+  link,
+  optionalElement,
+  SOURCE_NAMESPACE,
+  THR_NAMESPACE,
+} from './feed-xml.ts';
 import { absoluteUrl, latestModified } from './negotiate.ts';
 
 /**
@@ -30,6 +38,7 @@ export function atomFeed(source: FeedSource): string {
     '<?xml version="1.0" encoding="utf-8"?>',
     `<feed xmlns="http://www.w3.org/2005/Atom"`,
     `      xmlns:source="${SOURCE_NAMESPACE}"`,
+    `      xmlns:thr="${THR_NAMESPACE}"`,
     `      xml:lang="${escapeXml(feedLanguage(site))}">`,
     element('id', absoluteUrl(source.href, baseUrl)),
     element('title', source.title),
@@ -80,12 +89,13 @@ export function atomEntry(item: FeedItem): string[] {
   return [
     '  <entry>',
     element('id', item.id, 2),
-    element('title', item.title, 2),
+    element('title', item.title ?? '', 2),
     element('updated', (item.updated ?? EMPTY_FEED_UPDATED).toISOString(), 2),
     ...(item.published === undefined
       ? []
       : [element('published', item.published.toISOString(), 2)]),
     link({ rel: 'alternate', type: 'text/html', href: item.link }, 2),
+    ...inReplyTo(item.inReplyTo),
     ...author(item.author, 2),
     ...item.terms.map((term) => `    <category term="${escapeXml(term)}"/>`),
     ...(item.summary === ''
@@ -96,4 +106,14 @@ export function atomEntry(item: FeedItem): string[] {
     `    <content type="html">${escapeXml(item.html)}</content>`,
     '  </entry>',
   ];
+}
+
+/**
+ * RFC 4685's `thr:in-reply-to` for a reply. `ref` is the target's identity and
+ * `href` where it is read; the post names one URL, which is both.
+ */
+function inReplyTo(target: string | undefined): string[] {
+  if (target === undefined) return [];
+  const url = escapeXml(target);
+  return [`    <thr:in-reply-to ref="${url}" href="${url}"/>`];
 }

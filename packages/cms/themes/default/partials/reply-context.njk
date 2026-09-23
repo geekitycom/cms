@@ -1,0 +1,29 @@
+{#
+  The post a reply answers, cited in the reply (TASK-123): an embedded
+  `u-in-reply-to h-cite` that always carries the target's URL, so a parser
+  reads what this post answers even when nothing more is known about it.
+
+  `replyContext` is what the target said about itself when the reply was saved
+  or synced: its name, a short excerpt, its author and its date, each only when
+  it said so. It is somebody else's words, so every piece is printed through
+  autoescaping and none of it with `safe`.
+#}
+{% if inReplyTo %}
+<div class="reply-context u-in-reply-to h-cite">
+  <p class="small">In reply to
+    {%- if replyContext.name %} <a class="u-url p-name" href="{{ inReplyTo }}">{{ replyContext.name }}</a>
+    {%- else %} <a class="u-url" href="{{ inReplyTo }}">{{ inReplyTo }}</a>
+    {%- endif %}
+    {%- if replyContext.author %} by <span class="p-author h-card">
+      {%- if replyContext.author.url %}<a class="u-url p-name" href="{{ replyContext.author.url }}">{{ replyContext.author.name }}</a>
+      {%- else %}<span class="p-name">{{ replyContext.author.name }}</span>{% endif -%}
+    </span>
+    {%- endif %}
+    {%- if replyContext.published %} on <time class="dt-published" datetime="{{ replyContext.published | date("iso") }}">{{ replyContext.published | date }}</time>
+    {%- endif -%}
+  </p>
+  {% if replyContext.text %}
+  <blockquote class="p-content">{{ replyContext.text }}</blockquote>
+  {% endif %}
+</div>
+{% endif %}

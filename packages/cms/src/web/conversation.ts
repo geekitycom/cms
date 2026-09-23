@@ -1,5 +1,6 @@
 import type { AdminStore, Follower, InboxActivity, PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
+import { postLabel } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import { actorHandle, replyFrom, REPLY_ACTIVITY_TYPE } from '../federation/replies.ts';
 import { activityStreamsId, isPublicDocument } from './documents.ts';
@@ -498,7 +499,7 @@ export function feedComments(
     html: entry.content,
     ...(entry.post === undefined
       ? {}
-      : { post: { title: entry.post.title, permalink: entry.post.permalink } }),
+      : { post: { title: postLabel(entry.post), permalink: entry.post.permalink } }),
   }));
 }
 

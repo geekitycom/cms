@@ -39,7 +39,9 @@
     `pagination`, and the posts page is a listing carrying a page's front
     matter, so it is a website like every other listing. -#}
 {% set metaDescription = description or summary or site.tagline %}
-{% set metaTitle = title or site.title %}
+{#- A note has no title, and is named here by its first words. -#}
+{% set pageTitle = title or label %}
+{% set metaTitle = pageTitle or site.title %}
 {% set metaUrl = (page.url or "/") | absoluteUrl %}
 {% set metaImage = image or site.avatar %}
 {% set isEntry = (type == "post" or type == "page") and not pagination %}
@@ -48,7 +50,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}{% if title %}{{ title }} &middot; {% endif %}{{ site.title }}{% endblock %}</title>
+    <title>{% block title %}{% if pageTitle %}{{ pageTitle }} &middot; {% endif %}{{ site.title }}{% endblock %}</title>
     {% if metaDescription %}
     <meta name="description" content="{{ metaDescription }}">
     {% endif %}
@@ -58,7 +60,7 @@
     {{ feeds.feedLinks("/", site.title) }}
     {{ feeds.commentsFeedLink("/comments/feed/", site.title + " comments") }}
     {% if commentsFeed %}
-    {{ feeds.commentsFeedLink(commentsFeed, "Comments on: " + title) }}
+    {{ feeds.commentsFeedLink(commentsFeed, "Comments on: " + pageTitle) }}
     {% endif %}
     {% if activityStreams %}
     <link rel="alternate" type="application/activity+json" href="{{ activityStreams }}">

@@ -23,9 +23,17 @@
 {% block content %}
 {% set entryUrl = page.url or url %}
 <article class="blog-post h-entry">
+  {#- A post with no name of its own (a note, or a reply without a title) is
+      its words, so it opens on them rather than on an empty heading. -#}
+  {% if named %}
   <header>
     <h1 class="p-name">{{ title }}</h1>
   </header>
+  {% endif %}
+
+  {#- A reply cites the post it answers, whose URL is also the link its
+      webmention points a receiver at. -#}
+  {% include "partials/reply-context.njk" %}
 
   <section class="e-content">
     {{ content | safe }}

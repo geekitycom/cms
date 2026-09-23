@@ -339,6 +339,28 @@ describe('a full scan', () => {
     assert.match(warnings.join('\n'), /broken\.md/);
   });
 
+  it('indexes a post whose in-reply-to is not a URL, and says so once', async () => {
+    const warnings: string[] = [];
+    const dir = await contentDir({
+      'posts/2026-09-02-agreed.md':
+        "---\ndate: '2026-09-02T09:00:00Z'\nin-reply-to: their post\n---\n\nAgreed.\n",
+      'posts/2026-09-03-fine.md':
+        "---\ndate: '2026-09-03T09:00:00Z'\nin-reply-to: https://them.example/\n---\n\nFine.\n",
+    });
+    const { sync: content, store: index } = await sync(dir, {
+      logger: { warn: (message) => warnings.push(message) },
+    });
+
+    await content.sync();
+    await content.sync();
+
+    assert.equal(index.listPaths().length, 2, 'both are indexed');
+    assert.equal(warnings.length, 1, `one warning, for the one bad file: ${warnings.join(' | ')}`);
+    assert.match(warnings[0] ?? '', /posts\/2026-09-02-agreed\.md/);
+    assert.match(warnings[0] ?? '', /"their post"/);
+    assert.match(warnings[0] ?? '', /not a reply/);
+  });
+
   it('is a no-op on a content directory that does not exist', async () => {
     const { sync: content, store: index } = await sync(
       path.join(await temporaryDir('missing'), 'content'),

@@ -87,12 +87,21 @@ export function sandbox(): Sandbox {
       for (const username of options.actorKeys ?? [FIRST_ADMIN.username]) {
         seedActorKeys(config.dataDir, username);
       }
-      const instance = createCms({ watch: false, ...config });
+      const instance = createCms({ watch: false, hostLookup: resolveNothing, ...config });
       started.push(instance);
       await instance.sync();
       return instance;
     },
   };
+}
+
+/**
+ * A host lookup that answers nothing, so no sandbox site resolves a real name
+ * when a reply's target is fetched (TASK-123). A test that wants a target read
+ * names a lookup of its own.
+ */
+export function resolveNothing(hostname: string): Promise<readonly string[]> {
+  return Promise.reject(new Error(`a test resolves no names: ${hostname}`));
 }
 
 /** The value of a `Set-Cookie` for `name`, or `undefined`. */

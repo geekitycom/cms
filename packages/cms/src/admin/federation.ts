@@ -3,6 +3,7 @@ import type { Hono } from 'hono';
 import type { Document } from '../content/document.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
+import { postLabel } from '../content/post-type.ts';
 import type { GeekityEnv } from '../env.ts';
 import { listUsers } from './accounts.ts';
 import type { User } from './accounts.ts';
@@ -343,7 +344,7 @@ export function deliveryRows(
     return {
       post: {
         slug: document.slug,
-        title: document.title,
+        title: postLabel(document),
         editUrl: editorPath(POST_KIND, document.slug),
       },
       author: context.author(document),
@@ -590,7 +591,7 @@ export function localPosts(
 
     return {
       slug: document.slug,
-      title: document.title,
+      title: postLabel(document),
       editUrl: editorPath(POST_KIND, document.slug),
     };
   };

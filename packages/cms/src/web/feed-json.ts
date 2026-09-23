@@ -67,8 +67,8 @@ export interface JsonFeedItem {
   id: string;
   /** Where the entry can be read: the permalink. */
   url: string;
-  /** Display title. */
-  title: string;
+  /** Display title, absent for a note. */
+  title?: string;
   /** The rendered body. */
   content_html: string;
   /** The post's summary, unless there is nothing to summarise. */
@@ -81,6 +81,18 @@ export interface JsonFeedItem {
   tags?: string[];
   /** The post's own author, when it names one. */
   authors?: JsonFeedAuthor[];
+  /**
+   * This CMS's extension object, which JSON Feed 1.1 allows under any key that
+   * starts with an underscore, and which a reader that does not know it
+   * ignores. Present only on a reply.
+   */
+  _geekity?: JsonFeedGeekity;
+}
+
+/** The `_geekity` extension on a {@link JsonFeedItem}. */
+export interface JsonFeedGeekity {
+  /** The URL the post answers. JSON Feed 1.1 has no field of its own for it. */
+  in_reply_to: string;
 }
 
 /** One feed as a JSON Feed 1.1 document. */
@@ -105,7 +117,7 @@ export function jsonFeedItem(item: FeedItem): JsonFeedItem {
   const entry: JsonFeedItem = {
     id: item.id,
     url: item.link,
-    title: item.title,
+    ...(item.title === undefined ? {} : { title: item.title }),
     content_html: item.html,
   };
 
@@ -116,6 +128,7 @@ export function jsonFeedItem(item: FeedItem): JsonFeedItem {
   if (item.updated !== undefined) entry.date_modified = item.updated.toISOString();
   if (item.terms.length > 0) entry.tags = [...item.terms];
   if (item.author !== undefined) entry.authors = [{ name: item.author }];
+  if (item.inReplyTo !== undefined) entry._geekity = { in_reply_to: item.inReplyTo };
 
   return entry;
 }

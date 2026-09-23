@@ -4,6 +4,7 @@ import {
   Create,
   Delete,
   Hashtag,
+  Note,
   PUBLIC_COLLECTION,
   Source,
   Tombstone,
@@ -15,8 +16,12 @@ import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
+import { postTypeOf, replyTarget } from '../content/post-type.ts';
+import type { PostType } from '../content/post-type.ts';
+import { htmlToText } from '../content/search.ts';
 import { userForAuthor } from '../web/authors.ts';
 import { isPublicDocument, postObjectId } from '../web/documents.ts';
+import { feedExcerpt } from '../web/feed-item.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { categoryHref, tagHref } from '../web/taxonomy.ts';
 import { actorId } from './actor.ts';
@@ -84,14 +89,64 @@ export function isFederatedDocument(document: Document, now: Date = new Date()):
   return document.type === 'post' && isPublicDocument(document, now);
 }
 
+/** The ActivityStreams object types a post can federate as, by name. */
+const OBJECT_TYPES = { Note, Article } as const;
+
+/** The name of an ActivityStreams object type a post can federate as. */
+type PostObjectType = keyof typeof OBJECT_TYPES;
+
 /**
- * One post as the `Article` doc-4 describes.
+ * The object type each discovered post type federates as: the rows of Post
+ * Type Discovery's own AS2 mapping (section 6) that this site has post types
+ * for. A reply is a `Note` even with a title of its own (decision-18).
+ */
+const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = {
+  reply: 'Note',
+  note: 'Note',
+  article: 'Article',
+};
+
+function isPostObjectType(value: string): value is PostObjectType {
+  return Object.hasOwn(OBJECT_TYPES, value);
+}
+
+/**
+ * The ActivityStreams type a post federates as: the one its front matter
+ * names in `activitypub.type`, else the one its discovered post type maps to.
+ *
+ * A name this site cannot send is logged and ignored rather than refused, as
+ * an unusable theme choice is: a typo in one file should not stop the post
+ * reaching anybody.
+ */
+function postObjectType(document: Document): PostObjectType {
+  const derived = OBJECT_TYPE_OF[postTypeOf(document)];
+  const chosen = document.activitypub?.type;
+  if (chosen === undefined || isPostObjectType(chosen)) return chosen ?? derived;
+
+  console.warn(
+    `${document.path} names activitypub.type "${chosen}", which is not one of ` +
+      `${Object.keys(OBJECT_TYPES).join(', ')}. It is federated as ${derived} instead.`,
+  );
+  return derived;
+}
+
+/**
+ * One post as the `Note` or `Article` doc-4 describes, whichever
+ * {@link postObjectType} says it is.
  *
  * Its `id` and its `url` are the same URL — the permalink — because
  * decision-13 gives a post one name for both audiences: a browser asking for
  * HTML gets the page, a peer asking for ActivityStreams gets this. The
  * exception is a post whose file already names an `activitypub.id`, which
  * keeps it; see {@link articleObjectId}.
+ *
+ * The two types are not one object with two labels, because Mastodon reads
+ * them differently. An `Article`'s status is built from `name`, `summary` and
+ * `url`, and `content` is dropped, so it carries the excerpt the feeds print
+ * ({@link feedExcerpt}) as its `summary`. A `Note`'s status is its `content`,
+ * `name` is never read and `summary` is shown as a content warning, so a note
+ * sends neither and carries its title, when its text does not already start
+ * with it, at the top of its `content`.
  *
  * `source` carries the Markdown the file holds, so a peer that wants to quote
  * or re-render the post has the text rather than only the rendering of it.
@@ -100,18 +155,22 @@ export function isFederatedDocument(document: Document, now: Date = new Date()):
  * (decision-14), and `cc` is that user's followers: a post belongs to a person
  * on this site, not to the site.
  */
-export function postArticle(context: Context<FederationContextData>, document: Document): Article {
+export function postObject(
+  context: Context<FederationContextData>,
+  document: Document,
+): Article | Note {
   const { baseUrl } = context.data.config;
   const { actor, followers } = attribution(context, document);
   // The archives an activity points at are wherever the site currently serves
   // them, which is a setting rather than a constant (TASK-36).
   const bases = taxonomyBasesFromSettings(readSiteSettings(context.data.config.contentDir));
 
-  return new Article({
+  const inReplyTo = replyTarget(document);
+  const common = {
     id: articleObjectId(context, document),
+    // On either type, so an activitypub.type override never breaks a thread.
+    replyTarget: inReplyTo === undefined ? null : new URL(inReplyTo),
     url: new URL(absoluteUrl(document.permalink, baseUrl)),
-    name: document.title,
-    content: document.html,
     source: new Source({ content: document.body, mediaType: SOURCE_MEDIA_TYPE }),
     published: toInstant(document.date) ?? null,
     updated: toInstant(document.updated) ?? null,
@@ -129,7 +188,37 @@ export function postArticle(context: Context<FederationContextData>, document: D
         hashtag(category, categoryHref(category, 0, bases), baseUrl),
       ),
     ],
+  };
+
+  if (postObjectType(document) === 'Note') {
+    return new Note({ ...common, content: noteContent(document) });
+  }
+
+  const summary = feedExcerpt(document);
+  return new Article({
+    ...common,
+    name: document.title === '' ? null : document.title,
+    summary: summary === '' ? null : summary,
+    content: document.html,
   });
+}
+
+/** A note's HTML: its title first when its text does not already open with it. */
+function noteContent(document: Document): string {
+  const title = document.title.trim();
+  if (title === '' || collapse(htmlToText(document.html)).startsWith(collapse(title))) {
+    return document.html;
+  }
+  const heading = `<p>${escapeHtml(title)}</p>`;
+  return document.html === '' ? heading : `${heading}\n${document.html}`;
+}
+
+function collapse(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+function escapeHtml(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
 /** One taxonomy term as a `Hashtag` pointing at its archive. */
@@ -141,21 +230,21 @@ function hashtag(term: string, href: string, baseUrl: string): Hashtag {
  * The `Create` that announces a post: what the outbox lists, and what delivery
  * sends.
  *
- * Its addressing is the article's, because an activity a follower cannot see
+ * Its addressing is the object's, because an activity a follower cannot see
  * is an object it will never learn about. The id is a fragment of the
- * article's, so the same post always produces the same activity id.
+ * object's, so the same post always produces the same activity id.
  */
 export function postCreateActivity(
   context: Context<FederationContextData>,
   document: Document,
 ): Create {
-  const article = postArticle(context, document);
+  const object = postObject(context, document);
   const { actor, followers } = attribution(context, document);
 
   return new Create({
     id: createActivityId(articleObjectId(context, document)),
     actor,
-    object: article,
+    object,
     published: toInstant(document.date) ?? null,
     to: PUBLIC_COLLECTION,
     cc: followers,
@@ -165,7 +254,7 @@ export function postCreateActivity(
 /**
  * The `Update` that announces an edit to a post followers already hold.
  *
- * The whole article goes with it rather than a diff, because that is all
+ * The whole object goes with it rather than a diff, because that is all
  * ActivityPub offers and all a peer can apply. Its id carries the document's
  * hash, so two edits are two activities and the same edit delivered twice is
  * one; see {@link updateActivityId}.
@@ -181,13 +270,13 @@ export function postUpdateActivity(
   document: Document,
   revision: string = revisionOf(document),
 ): Update {
-  const article = postArticle(context, document);
+  const object = postObject(context, document);
   const { actor, followers } = attribution(context, document);
 
   return new Update({
     id: updateActivityId(articleObjectId(context, document), revision),
     actor,
-    object: article,
+    object,
     published: toInstant(document.updated ?? document.date) ?? null,
     to: PUBLIC_COLLECTION,
     cc: followers,
@@ -195,13 +284,13 @@ export function postUpdateActivity(
 }
 
 /**
- * The `Delete` that withdraws a post: a `Tombstone` where the `Article` was.
+ * The `Delete` that withdraws a post: a `Tombstone` where its object was.
  *
  * doc-4 sends this when a post becomes a draft, is trashed or is deleted, and
  * all three look the same from outside — the object is gone and the copy every
  * follower holds should go with it. The `Tombstone` keeps the object's id and
  * says what it used to be, which is what lets a peer that never held the
- * article recognise what it is being told about.
+ * object recognise what it is being told about.
  *
  * The document is the one as it was before it went, because after a delete
  * there is no other.
@@ -219,7 +308,7 @@ export function postDeleteActivity(
     actor,
     object: new Tombstone({
       id: objectId,
-      formerType: Article,
+      formerType: OBJECT_TYPES[postObjectType(document)],
       deleted: toInstant(deleted) ?? null,
     }),
     to: PUBLIC_COLLECTION,
@@ -232,7 +321,7 @@ export function postDeleteActivity(
  * or the id its file already names (decision-13).
  *
  * A thin wrapper over {@link postObjectId} so everything in this module reads
- * the id the same way and off the same base URL the article's `url` is built
+ * the id the same way and off the same base URL the object's `url` is built
  * on. The rule itself lives in `web/documents.ts`, because the page, the feed
  * item and the object are one identity now rather than three.
  */

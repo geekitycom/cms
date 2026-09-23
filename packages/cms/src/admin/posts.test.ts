@@ -87,6 +87,7 @@ async function submit(
     tags: field(html, 'tags') ?? '',
     categories: field(html, 'categories') ?? '',
     description: field(html, 'description') ?? '',
+    'in-reply-to': field(html, 'in-reply-to') ?? '',
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
     action: 'update',
     ...changes,
@@ -417,6 +418,57 @@ describe('the post editor', () => {
   });
 });
 
+describe('the reply target in the editor', () => {
+  const TARGET = 'https://them.example/2026/09/their-post/';
+  const FILE = ['posts', '2026-01-02-published.md'];
+
+  async function published(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  it('sets in-reply-to, shows it on reload, and clears it again', async () => {
+    const { contentDir, agent } = await published();
+
+    assert.equal(
+      (await submit(agent, '/admin/posts/published', { 'in-reply-to': TARGET })).status,
+      303,
+    );
+    let written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.match(written, new RegExp(`^in-reply-to: ${TARGET}$`, 'm'));
+    const reloaded = await (await agent.get('/admin/posts/published')).text();
+    assert.equal(field(reloaded, 'in-reply-to'), TARGET);
+
+    assert.equal(
+      (await submit(agent, '/admin/posts/published', { 'in-reply-to': '' })).status,
+      303,
+    );
+    written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.doesNotMatch(written, /in-reply-to/, 'the key is gone, not left empty');
+  });
+
+  it('refuses a reply target that is not a web address, and writes nothing', async () => {
+    const { contentDir, agent } = await published();
+    const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+    const response = await submit(agent, '/admin/posts/published', {
+      'in-reply-to': 'their post',
+    });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /In reply to has to be a web address/);
+    assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+  });
+});
+
 describe('writing a post', () => {
   it('names the file for its date and slug, writes an explicit permalink, and is public at once', async () => {
     const contentDir = await seeded([]);
@@ -464,16 +516,68 @@ describe('writing a post', () => {
     assert.equal(cms.store.getBySlug('ada-charles-a-note')?.draft, true);
   });
 
-  it('refuses a post with no title and writes nothing', async () => {
+  it('saves a post with no title as a note, named after its first words', async () => {
     const contentDir = await seeded([]);
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
 
-    const response = await submit(agent, '/admin/posts/new', { title: '  ', action: 'publish' });
+    const editor = await (await agent.get('/admin/posts/new')).text();
+    assert.doesNotMatch(
+      /<input id="editor-title"[^>]*>/.exec(editor)?.[0] ?? '',
+      /required/,
+      'the browser refuses an empty title before the server sees it',
+    );
 
-    assert.equal(response.status, 400);
-    assert.match(await response.text(), /needs a title/);
-    assert.equal(cms.store.counts().total, 0);
+    const response = await submit(agent, '/admin/posts/new', {
+      title: '  ',
+      slug: '',
+      date: '2026-03-04T10:00:00Z',
+      body: 'Coffee *first*, then the inbox and after that a walk.',
+      action: 'publish',
+    });
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/posts/coffee-first-then-the-inbox');
+    assert.deepEqual(await readdir(path.join(contentDir, 'posts')), [
+      '2026-03-04-coffee-first-then-the-inbox.md',
+    ]);
+
+    const written = await readFile(
+      path.join(contentDir, 'posts', '2026-03-04-coffee-first-then-the-inbox.md'),
+      'utf8',
+    );
+    assert.doesNotMatch(written, /^title:/m, 'a note’s file carries no title');
+    assert.match(written, /^permalink: \/2026\/03\/coffee-first-then-the-inbox\/$/m);
+
+    const live = await cms.app.request('/2026/03/coffee-first-then-the-inbox/');
+    assert.equal(live.status, 200, 'the note is served at its permalink');
+
+    const listing = await (await agent.get('/admin/posts')).text();
+    assert.match(
+      listing,
+      /<a href="\/admin\/posts\/coffee-first-then-the-inbox">Coffee first, then the inbox and after that a walk\.<\/a>/,
+      'the posts list links a note by its first words',
+    );
+
+    const again = await submit(agent, '/admin/posts/coffee-first-then-the-inbox', {
+      body: 'Tea, as it turned out.',
+      action: 'update',
+    });
+    assert.equal(again.status, 303, 'an edited note keeps the slug it was given');
+  });
+
+  it('names a note with no words at all as untitled', async () => {
+    const cms = await box.site({ contentDir: await seeded([]) });
+    const agent = await signedIn(cms);
+
+    const response = await submit(agent, '/admin/posts/new', {
+      title: '',
+      slug: '',
+      body: '',
+      action: 'save-draft',
+    });
+
+    assert.equal(response.headers.get('location'), '/admin/posts/untitled');
   });
 });
 

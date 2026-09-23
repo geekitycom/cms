@@ -3,11 +3,11 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-20 15:56'
+updated_date: '2026-09-23 13:07'
 ---
 # ActivityPub Federation
 
-Federation is implemented with Fedify (`@fedify/fedify` 2.x) mounted into Hono through `@fedify/hono`. **Every user is an actor** (decision-14); the site is not one. Every published post is an `Article` created by the actor of the user its `author` names.
+Federation is implemented with Fedify (`@fedify/fedify` 2.x) mounted into Hono through `@fedify/hono`. **Every user is an actor** (decision-14); the site is not one. Every published post is a `Note` or an `Article`, whichever Post Type Discovery makes it (decision-17), created by the actor of the user its `author` names.
 
 ## Actors
 
@@ -97,12 +97,28 @@ is not part of the cutover.
 
 ## Objects
 
-Each non-draft post maps to an `Article`:
+Each non-draft post maps to a `Note` or an `Article`. Which one follows the post's discovered type (decision-17), by the AS2 mapping in section 6 of the Post Type Discovery note:
+
+| discovered type | object |
+| --- | --- |
+| reply | `Note` with `inReplyTo` |
+| note | `Note` |
+| article | `Article` |
+
+An `activitypub.type` of `Note` or `Article` in the post's front matter overrides the derived type. Any other value is logged as a warning naming the file and the value, and the derived type is sent instead, as an unusable theme choice is logged and passed over rather than failing the request. The other rows of that mapping (event, rsvp, repost, like, video, photo) are not post types here yet.
+
+A reply is a post whose `in-reply-to` front matter is an http or https URL (TASK-121). It is a `Note` whether or not it has a title of its own, and a title goes at the top of its `content` as a note's does (decision-18). `inReplyTo` names the target on the object whichever type it goes out as, so an `activitypub.type: Article` override keeps the thread.
+
+The two are not one object with two labels, because Mastodon reads them differently. For an `Article` it drops `content` and builds the status from `name`, `summary` and `url`, and `summary` is body text. For a `Note` the status is `content` verbatim, `name` is never read, and `summary` is rendered as a content warning. So:
+
+- `name`: the title, on an `Article` only. A `Note` sends none.
+- `summary`: on an `Article`, the excerpt the feeds print (the description, else the first paragraph cut where the feeds cut it), left out when empty. A `Note` sends none, because a teaser there would hide the post behind a spurious content warning.
+- `content`: rendered HTML. A `Note` whose text does not already open with its title carries the title as a first paragraph, since `content` is all of it anyone reads.
+
+Both carry:
 
 - `id`: the post permalink, absolute on `baseUrl` (decision-13). One URL for both audiences: a browser asking for HTML gets the page and a peer asking for ActivityStreams gets this object, served by the permalink middleware rather than by a host-rooted dispatcher, so a site in a subdirectory keeps that directory in its ids. There is no `/ap/posts/{slug}` route.
 - `url`: the same permalink
-- `name`: title
-- `content`: rendered HTML
 - `source`: `{ content: markdown, mediaType: "text/markdown" }`
 - `published`, `updated`
 - `attributedTo`: the actor of the user the post's `author` names
@@ -113,7 +129,7 @@ Which user that is follows TASK-67's one rule: a username exactly, else a displa
 
 Pages are not federated.
 
-A post whose front matter already names an `activitypub.id` keeps it as its object id for the life of the post, and the CMS never mints one. That is what lets a post migrated from WordPress keep the `https://example.com/?p=813` its followers, its replies and its RSS subscribers already hold (decision-14): the CMS serves the `Article` at that URL on an ActivityStreams request, redirects a browser from it to the permalink, and names it in every `Update` and `Delete`. The match is on the whole URL, so a stored id with a query string works exactly as one with a path. A user's stored actor id, above, is the same rule for people.
+A post whose front matter already names an `activitypub.id` keeps it as its object id for the life of the post, and the CMS never mints one. That is what lets a post migrated from WordPress keep the `https://example.com/?p=813` its followers, its replies and its RSS subscribers already hold (decision-14): the CMS serves the post's object at that URL on an ActivityStreams request, redirects a browser from it to the permalink, and names it in every `Update` and `Delete`. The match is on the whole URL, so a stored id with a query string works exactly as one with a path. A user's stored actor id, above, is the same rule for people.
 
 Because the id is the permalink, the permalink is a promise to two audiences at once, and the editor keeps it: renaming a published post's slug, or editing its permalink, is refused. A draft's may still change.
 
@@ -121,12 +137,12 @@ Because the id is the permalink, the permalink is a promise to two audiences at 
 
 | Event | Activity |
 | --- | --- |
-| post becomes non-draft (new file, or `draft` flips to false) | `Create(Article)` |
-| non-draft post content or title changes | `Update(Article)` |
-| post becomes draft, is trashed, or file deleted | `Delete(Article)` with a `Tombstone` |
+| post becomes non-draft (new file, or `draft` flips to false) | `Create` of its `Note` or `Article` |
+| non-draft post content, title or `activitypub.type` changes | `Update` of its `Note` or `Article` |
+| post becomes draft, is trashed, or file deleted | `Delete` of a `Tombstone` whose `formerType` is the post's object type |
 | a user's profile is saved on the users screen | `Update` of that user's actor |
 
-The sync layer emits the post events from index diffs, so editing a file on disk federates the same way an admin save does. A post is delivered to **its author's followers** and to every accepted relay, each recipient grouped into the inbox one POST reaches (shared inbox when available). Nothing on the settings screen is anybody's profile any more, so no save there tells anybody anything. The `activitypub.published` front-matter key records that a post has been announced and when, which is what decides `Create` against `Update` and what a restore reuses. It is the only key a delivery writes.
+The sync layer emits the post events from index diffs, so editing a file on disk federates the same way an admin save does. All three name the same object type for a given post, because each is built from the file through the same rule. Changing the type of a post that has already been announced sends an `Update` carrying the new type; whether a remote server re-renders a status whose object type changed is not established, so for a post already out the override may in practice only count at first publish. A post is delivered to **its author's followers** and to every accepted relay, each recipient grouped into the inbox one POST reaches (shared inbox when available). Nothing on the settings screen is anybody's profile any more, so no save there tells anybody anything. The `activitypub` front-matter block is everything about how a post federates, whether its author set it or the CMS wrote it back. `activitypub.published` records that a post has been announced and when, which is what decides `Create` against `Update` and what a restore reuses. It is the only key a delivery writes. `activitypub.id` and `activitypub.type` are the author's, and neither a delivery nor an admin save ever rewrites them.
 
 Every `sendActivity` call site — the fan-out in `delivery.ts`, the `Accept` in `inbox.ts` and the relay `Follow`/`Undo` in `relays.ts` — hands Fedify an explicit `SenderKeyPair[]` rather than `{ identifier }`. That is what lets an actor sign under an id Fedify did not derive (doc-8), and it costs nothing today because none of the three uses the `sendActivity(sender, 'followers', …)` overload: `delivery.ts` groups the recipients itself so it can report per-follower outcomes, and the other two name a single recipient.
 
@@ -196,8 +212,8 @@ Resend means "send the current state of the post": `cms.delivery.resend(slug)` r
 
 | The post now | What a resend sends |
 | --- | --- |
-| published, with no `activitypub.published` | `Create(Article)`, stamping the announcement into the file |
-| published, with one | `Update(Article)` under a fresh, timestamped activity id |
+| published, with no `activitypub.published` | `Create` of its object, stamping the announcement into the file |
+| published, with one | `Update` of its object under a fresh, timestamped activity id |
 | a draft, in the trash, or dated into the future | `Delete` of a `Tombstone` for its object id |
 
 The `Update`'s id carries the moment rather than the content hash a save uses, because a resend is asking for a revision the followers have already been offered to be offered again, and an activity id a peer has seen is one it is entitled to drop.

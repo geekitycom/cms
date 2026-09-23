@@ -52,6 +52,9 @@ const BARE: FeedItem = {
   markdown: 'Nothing much.',
 };
 
+/** A post that answers another, by its `in-reply-to`. */
+const REPLY: FeedItem = { ...BARE, inReplyTo: 'https://remote.example/notes/1?a=1&b=2' };
+
 describe('an RSS item', () => {
   it('renders the whole item, keyed by its object id', () => {
     assert.deepEqual(rssItem(ITEM), [
@@ -85,6 +88,10 @@ describe('an RSS item', () => {
       '      <source:markdown><![CDATA[Nothing much.]]></source:markdown>',
       '    </item>',
     ]);
+  });
+
+  it('says nothing about a reply’s target, which RSS 2.0 has no element for', () => {
+    assert.deepEqual(rssItem(REPLY), rssItem(BARE));
   });
 });
 
@@ -120,6 +127,27 @@ describe('an Atom entry', () => {
       '    <content type="html">&lt;p&gt;Nothing much.&lt;/p&gt;\n</content>',
       '  </entry>',
     ]);
+  });
+
+  it('names a reply’s target with RFC 4685’s thr:in-reply-to, ref and href alike', () => {
+    assert.deepEqual(atomEntry(REPLY), [
+      '  <entry>',
+      '    <id>https://example.com/2026/09/bare/</id>',
+      '    <title>Bare</title>',
+      '    <updated>1970-01-01T00:00:00.000Z</updated>',
+      '    <link rel="alternate" type="text/html" href="https://example.com/2026/09/bare/"/>',
+      '    <thr:in-reply-to ref="https://remote.example/notes/1?a=1&amp;b=2" href="https://remote.example/notes/1?a=1&amp;b=2"/>',
+      '    <summary type="text">Nothing much.</summary>',
+      '    <content type="html">&lt;p&gt;Nothing much.&lt;/p&gt;\n</content>',
+      '  </entry>',
+    ]);
+  });
+
+  it('carries no thr:in-reply-to for an item that answers nothing', () => {
+    assert.deepEqual(
+      [...atomEntry(ITEM), ...atomEntry(BARE)].filter((line) => line.includes('thr:')),
+      [],
+    );
   });
 
   it('carries no summary at all for an item there is nothing to summarise', () => {
@@ -173,5 +201,24 @@ describe('a JSON Feed item', () => {
 
   it('carries no summary key at all for an item there is nothing to summarise', () => {
     assert.equal('summary' in jsonFeedItem({ ...BARE, summary: '', html: '' }), false);
+  });
+
+  it('names a reply’s target in the _geekity extension, last', () => {
+    const item = jsonFeedItem(REPLY);
+
+    assert.deepEqual(item, {
+      id: 'https://example.com/2026/09/bare/',
+      url: 'https://example.com/2026/09/bare/',
+      title: 'Bare',
+      content_html: '<p>Nothing much.</p>\n',
+      summary: 'Nothing much.',
+      _geekity: { in_reply_to: 'https://remote.example/notes/1?a=1&b=2' },
+    });
+    assert.equal(Object.keys(item).at(-1), '_geekity');
+  });
+
+  it('carries no extension object for an item that answers nothing', () => {
+    assert.equal('_geekity' in jsonFeedItem(ITEM), false);
+    assert.equal('_geekity' in jsonFeedItem(BARE), false);
   });
 });

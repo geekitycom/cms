@@ -2,6 +2,7 @@ import type { Context, Hono, MiddlewareHandler } from 'hono';
 import type { Environment } from 'nunjucks';
 
 import type { ResolvedConfig } from '../config.ts';
+import { postLabel } from '../content/post-type.ts';
 import type { GeekityEnv } from '../env.ts';
 import {
   countUsers,
@@ -283,7 +284,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       child: 'home',
       counts: store.counts(),
       recent: store.listAll({ type: 'post', limit: DASHBOARD_RECENT_POSTS }).map((document) => ({
-        title: document.title,
+        title: postLabel(document),
         slug: document.slug,
         date: document.date,
         draft: document.draft,

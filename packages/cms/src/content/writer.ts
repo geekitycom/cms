@@ -12,7 +12,7 @@ const KNOWN_KEYS = new Set<string>(KNOWN_FRONT_MATTER_KEYS);
  * {@link KNOWN_FRONT_MATTER_KEYS}, followed by the unmodelled keys in the order
  * they were read, so an unchanged document always writes the same bytes and a
  * real edit produces a small diff. Keys that carry no information — an empty
- * tag list, `draft: false` — are left out.
+ * tag list, `draft: false`, a note's empty title — are left out.
  */
 export function serializeDocument(document: DocumentContent): string {
   const frontMatter = documentFrontMatter(document);
@@ -43,6 +43,7 @@ export function documentContent(document: DocumentContent): DocumentContent {
     draft: document.draft,
     ...(document.description === undefined ? {} : { description: document.description }),
     ...(document.author === undefined ? {} : { author: document.author }),
+    ...(document.inReplyTo === undefined ? {} : { inReplyTo: document.inReplyTo }),
     ...(document.activitypub === undefined ? {} : { activitypub: { ...document.activitypub } }),
     extra: { ...document.extra },
     body: document.body,
@@ -66,7 +67,9 @@ export function normalizeBody(body: string): string {
  * what its front matter is.
  */
 export function documentFrontMatter(document: DocumentContent): Record<string, unknown> {
-  const data: Record<string, unknown> = { title: document.title };
+  const data: Record<string, unknown> = {};
+
+  if (document.title !== '') data['title'] = document.title;
 
   if (document.date !== undefined) data['date'] = document.date;
   if (document.updated !== undefined) data['updated'] = document.updated;
@@ -76,6 +79,7 @@ export function documentFrontMatter(document: DocumentContent): Record<string, u
   if (document.draft) data['draft'] = true;
   if (document.description !== undefined) data['description'] = document.description;
   if (document.author !== undefined) data['author'] = document.author;
+  if (document.inReplyTo !== undefined) data['in-reply-to'] = document.inReplyTo;
 
   const activitypub = activityPubOf(document);
   if (activitypub !== undefined) data['activitypub'] = activitypub;
@@ -96,6 +100,7 @@ function activityPubOf(document: DocumentContent): Record<string, unknown> | und
   const out: Record<string, unknown> = {};
   if (block.id !== undefined) out['id'] = block.id;
   if (block.published !== undefined) out['published'] = block.published;
+  if (block.type !== undefined) out['type'] = block.type;
 
   return Object.keys(out).length === 0 ? undefined : out;
 }

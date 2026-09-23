@@ -1,6 +1,7 @@
 import { CSRF_FIELD } from '../admin/session.ts';
 import type { CommentAuthor, PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
+import { postLabel } from '../content/post-type.ts';
 import {
   ADDRESS_SALT_FILE,
   FORM_LOADED_FIELD,
@@ -409,7 +410,7 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     origin: signedIn === undefined ? 'form' : 'moderator',
     comment: proposed,
     post: {
-      title: document.title,
+      title: postLabel(document),
       url: absolute(document.permalink, options.baseUrl),
     },
     dataDir: options.dataDir,

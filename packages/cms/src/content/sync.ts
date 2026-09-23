@@ -7,6 +7,7 @@ import type { FSWatcher } from 'chokidar';
 
 import type { Document, DocumentType } from './document.ts';
 import { parseDocument } from './parser.ts';
+import { replyTarget } from './post-type.ts';
 import { isScheduled } from './schedule.ts';
 import { DuplicatePermalinkError, isTrashedPath, TRASH_DIRECTORY } from './store.ts';
 import type { ContentStore } from './store.ts';
@@ -248,6 +249,14 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     // nothing — an admin save, a touch, the watcher event that follows an
     // admin write — costs no index write and emits no event.
     if (previous !== undefined && previous.hash === document.hash) return false;
+
+    // Indexed all the same, as an unknown activitypub.type is: the post is
+    // still a post, only not a reply, and the author is told why.
+    if (document.inReplyTo !== undefined && replyTarget(document) === undefined) {
+      logger.warn(
+        `${relativePath} names in-reply-to "${document.inReplyTo}", which is not an http or https URL, so it is not a reply.`,
+      );
+    }
 
     try {
       await index(document, origin);

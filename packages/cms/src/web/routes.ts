@@ -5,6 +5,7 @@ import type { User } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
+import { postLabel } from '../content/post-type.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
@@ -1185,7 +1186,7 @@ function comments(c: Context<GeekityEnv>, document: Document | undefined): Respo
     title:
       document === undefined
         ? `${site.title}: comments`
-        : `${COMMENTS_TITLE_PREFIX}${document.title}`,
+        : `${COMMENTS_TITLE_PREFIX}${postLabel(document)}`,
     href: document?.permalink ?? '/',
     feedHref: commentsFeedHref(document),
     baseUrl: config.baseUrl,

@@ -131,6 +131,7 @@ export type {
   FeedSource,
   JsonFeed,
   JsonFeedAuthor,
+  JsonFeedGeekity,
   JsonFeedHub,
   JsonFeedItem,
   NotifyServer,

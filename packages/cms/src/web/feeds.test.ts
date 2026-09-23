@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { resolveNothing } from '../admin/__testing__/harness.ts';
 import { readSiteSettings, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -50,6 +51,7 @@ async function site(
     dataDir,
     watch: false,
     baseUrl: 'https://example.com',
+    hostLookup: resolveNothing,
     ...config,
   });
   started.push(instance);
@@ -75,6 +77,7 @@ function post(
     draft?: boolean;
     description?: string;
     author?: string;
+    inReplyTo?: string;
     body?: string;
   },
 ): string {
@@ -97,6 +100,9 @@ function post(
     lines.push(`description: ${JSON.stringify(options.description)}`);
   }
   if (options.author !== undefined) lines.push(`author: ${options.author}`);
+  if (options.inReplyTo !== undefined) {
+    lines.push(`in-reply-to: ${JSON.stringify(options.inReplyTo)}`);
+  }
 
   return `---\n${lines.join('\n')}\n---\n\n${options.body ?? 'Body.'}\n`;
 }
@@ -935,6 +941,71 @@ describe('a tag feed', () => {
       childrenNamed(feed, 'entry').map((entry) => child(entry, 'title').text),
       ['Spaced'],
     );
+  });
+});
+
+describe('a reply in the feeds', () => {
+  const TARGET = 'https://remote.example/notes/1';
+
+  const files = {
+    'posts/2026-09-03-reply.md': post('', {
+      date: '2026-09-03T09:00:00Z',
+      permalink: '/2026/09/reply/',
+      inReplyTo: TARGET,
+      body: 'Agreed, and then some.',
+    }),
+    'posts/2026-09-02-invalid.md': post('', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/2026/09/invalid/',
+      inReplyTo: 'not a url',
+      body: 'An answer to nothing a reader can follow.',
+    }),
+    'posts/2026-09-01-standalone.md': post('Standalone', {
+      date: '2026-09-01T09:00:00Z',
+      permalink: '/2026/09/standalone/',
+    }),
+  };
+
+  it('names its target in Atom, under the declared threading namespace', async () => {
+    const { cms } = await site(files);
+    const { feed } = await atom(cms, '/feed/atom/');
+
+    assert.equal(feed.attributes['xmlns:thr'], 'http://purl.org/syndication/thread/1.0');
+
+    const [reply, invalid, standalone] = childrenNamed(feed, 'entry') as [
+      XmlElement,
+      XmlElement,
+      XmlElement,
+    ];
+    const target = childrenNamed(reply, 'thr:in-reply-to');
+    assert.equal(target.length, 1);
+    assert.deepEqual(target[0]?.attributes, { ref: TARGET, href: TARGET });
+
+    assert.deepEqual(childrenNamed(invalid, 'thr:in-reply-to'), []);
+    assert.deepEqual(childrenNamed(standalone, 'thr:in-reply-to'), []);
+  });
+
+  it('names its target in JSON Feed’s _geekity extension', async () => {
+    const { cms } = await site(files);
+    const { items } = await jsonFeedAt(cms, '/feed/json/');
+
+    const [reply, invalid, standalone] = items as [
+      Record<string, unknown>,
+      Record<string, unknown>,
+      Record<string, unknown>,
+    ];
+    assert.deepEqual(reply['_geekity'], { in_reply_to: TARGET });
+    assert.equal('_geekity' in invalid, false);
+    assert.equal('_geekity' in standalone, false);
+  });
+
+  it('leaves RSS as it was: no threading namespace and no reply element', async () => {
+    const { cms } = await site(files);
+    const { body } = await rss(cms, '/feed/');
+
+    assert.equal(body.includes('purl.org/syndication/thread'), false);
+    assert.equal(body.includes('<thr:'), false);
+    assert.equal(body.includes(TARGET), false);
   });
 });
 

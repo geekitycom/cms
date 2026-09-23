@@ -14,6 +14,7 @@ import {
   DC_NAMESPACE,
   element,
   escapeXml,
+  optionalElement,
   rfc822,
   SOURCE_NAMESPACE,
   WFW_NAMESPACE,
@@ -125,7 +126,7 @@ function channelImage(source: FeedSource, link: string): string[] {
 export function rssItem(item: FeedItem): string[] {
   return [
     '    <item>',
-    element('title', item.title, 3),
+    ...optionalElement('title', item.title, 3),
     element('link', item.link, 3),
     `      <guid isPermaLink="${item.id === item.link ? 'true' : 'false'}">` +
       `${escapeXml(item.id)}</guid>`,

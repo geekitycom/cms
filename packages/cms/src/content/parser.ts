@@ -38,8 +38,13 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
   const parsed = matter(text, {});
 
   const data = parsed.data;
-  const title = requiredString(data['title'], 'title', path);
   const type = options.type ?? typeForPath(path);
+  // A post without a title is a note; a page is standing content and is
+  // always named.
+  const title =
+    type === 'page'
+      ? requiredString(data['title'], 'title', path)
+      : (asString(data['title']) ?? '');
   const date = asDate(data['date'], 'date', path);
   const body = normalizeBody(parsed.content);
 
@@ -63,6 +68,7 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
     ...optional('updated', asDate(data['updated'], 'updated', path)),
     ...optional('description', asString(data['description'])),
     ...optional('author', asString(data['author'])),
+    ...optional('inReplyTo', asReplyTarget(data['in-reply-to'])),
     ...optional('activitypub', asActivityPub(data['activitypub'], path)),
   };
 
@@ -182,6 +188,17 @@ function asTerms(value: unknown): string[] {
   return value.filter((term): term is string => typeof term === 'string' && term !== '');
 }
 
+/**
+ * `in-reply-to` as text. mf2 allows a list, so a list of one is its one URL;
+ * anything else that is not a string is kept as its string, which is not a
+ * URL, so it is reported and refused rather than dropped from the file.
+ */
+function asReplyTarget(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (Array.isArray(value) && value.length === 1) return asReplyTarget(value[0]);
+  return asString(typeof value === 'string' ? value : JSON.stringify(value));
+}
+
 function asActivityPub(value: unknown, path: string): ActivityPubMetadata | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== 'object' || Array.isArray(value)) {
@@ -192,6 +209,7 @@ function asActivityPub(value: unknown, path: string): ActivityPubMetadata | unde
   const metadata: ActivityPubMetadata = {
     ...optional('id', asString(block['id'])),
     ...optional('published', asDate(block['published'], 'activitypub.published', path)),
+    ...optional('type', asString(block['type'])),
   };
 
   return Object.keys(metadata).length === 0 ? undefined : metadata;

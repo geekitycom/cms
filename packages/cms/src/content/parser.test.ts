@@ -101,6 +101,26 @@ describe('parseDocument', () => {
     });
   });
 
+  it('reads the activitypub.type an author wrote, whatever it says', () => {
+    const source =
+      "---\ntitle: A\ndate: '2026-01-02T03:04:05Z'\nactivitypub:\n  type: Photo\n---\n\nBody.\n";
+
+    const document = parseDocument(source, { path: 'posts/2026-01-02-a.md' });
+
+    assert.deepEqual(document.activitypub, { type: 'Photo' });
+  });
+
+  it('reads in-reply-to verbatim, a URL or not, and keeps it out of extra', () => {
+    for (const value of ['https://example.com/post', 'example.com/post']) {
+      const source = `---\ndate: '2026-01-02T03:04:05Z'\nin-reply-to: ${value}\n---\n\nAgreed.\n`;
+
+      const document = parseDocument(source, { path: 'posts/2026-01-02-a.md' });
+
+      assert.equal(document.inReplyTo, value);
+      assert.equal('in-reply-to' in document.extra, false);
+    }
+  });
+
   it('keeps front-matter keys it does not model', async () => {
     const path = 'posts/2026-08-15-notes-from-a-draft.md';
 
@@ -223,11 +243,31 @@ describe('parseDocument', () => {
     assert.throws(() => parseDocument('Just a body.\n', { path: 'pages/none.md' }), /front matter/);
   });
 
-  it('refuses a document with no title', () => {
+  it('refuses a page with no title', () => {
     assert.throws(
       () => parseDocument('---\npermalink: /a/\n---\n\nBody.\n', { path: 'pages/a.md' }),
       /title/,
     );
+  });
+
+  it('reads a post with no title as one whose title is empty', () => {
+    const document = parseDocument('---\ndate: 2026-09-20T09:00:00Z\n---\n\nCoffee first.\n', {
+      path: 'posts/2026-09-20-coffee.md',
+    });
+
+    assert.equal(document.title, '');
+    assert.equal(document.slug, 'coffee');
+    assert.equal(document.permalink, '/2026/09/coffee/');
+  });
+
+  it('reads an empty title on a post the same as a missing one', () => {
+    const document = parseDocument(
+      "---\ntitle: ''\ndate: 2026-09-20T09:00:00Z\npermalink: /2026/09/coffee/\n---\n\nCoffee first.\n",
+      { path: 'posts/2026-09-20-coffee.md' },
+    );
+
+    assert.equal(document.title, '');
+    assert.equal(document.slug, 'coffee');
   });
 
   it('refuses a path it cannot read a type from', () => {

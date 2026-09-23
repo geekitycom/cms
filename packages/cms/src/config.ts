@@ -10,6 +10,8 @@ import type { Clock } from './content/store.ts';
 import type { DocumentChange } from './content/sync.ts';
 import type { MailProvider } from './mail/provider.ts';
 import type { MailLogger } from './mail/service.ts';
+import { systemHostLookup } from './webmention/public-address.ts';
+import type { HostLookup } from './webmention/public-address.ts';
 
 /**
  * Something a site wants to happen when the index changes.
@@ -282,6 +284,13 @@ export interface GeekityConfig {
    * {@link FederationOverrides}.
    */
   federation?: FederationOverrides;
+  /**
+   * How a host name is resolved before the CMS fetches a page a reply answers
+   * (TASK-123), so a name that resolves to this network is refused. Defaults
+   * to the system resolver. A test names one so that nothing it does reaches
+   * a real DNS server.
+   */
+  hostLookup?: HostLookup;
 }
 
 /**
@@ -340,6 +349,8 @@ export interface ResolvedConfig {
   now: Clock;
   /** Federation stores and guards, empty when the site named none. */
   federation: FederationOverrides;
+  /** How host names are resolved before a stranger's page is fetched. */
+  hostLookup: HostLookup;
 }
 
 /** Ambient inputs {@link resolveConfig} reads, injectable so the resolution is testable. */
@@ -480,6 +491,7 @@ export function resolveConfig(
     mail: config.mail ?? {},
     now: config.now ?? systemClock,
     federation: config.federation ?? {},
+    hostLookup: config.hostLookup ?? systemHostLookup,
   };
 }
 
