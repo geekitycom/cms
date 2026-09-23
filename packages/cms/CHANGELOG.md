@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.7.0](https://github.com/geekitycom/cms/compare/v0.6.0...v0.7.0) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** PostType gains 'reply', and themes should head a post with the new `named` context key instead of `postType != "note"`. in-reply-to leaves the loose front matter on the theme context and becomes inReplyTo.
+* **cms:** the exported postArticle is renamed postObject and returns Article | Note.
+
+### Features
+
+* **cms:** a post federates as a note or an article by its discovered type ([6a800ac](https://github.com/geekitycom/cms/commit/6a800ace954215f0316eafb6bafd7ecad7a91fd6))
+* **cms:** a post with no title is a note, on the page and in the feeds ([e0dbd54](https://github.com/geekitycom/cms/commit/e0dbd54f205e3af39e613ce075479fa4590da633))
+* **cms:** a reply shows a preview of the post it answers ([825ec88](https://github.com/geekitycom/cms/commit/825ec886ddd81f70f1131b93794402d72bbbcd47))
+* **cms:** an in-reply-to post is a reply on the page, in the fediverse and by webmention ([86aaaba](https://github.com/geekitycom/cms/commit/86aaabad13a3e48a7cb102d6c5ddb43830b0647b))
+* **cms:** name a reply's target in atom and json feeds ([927b953](https://github.com/geekitycom/cms/commit/927b95383838df4d5c6377f4a9762e56341659b8))
+
+
+### Bug Fixes
+
+* **cms:** give federated posts a summary so mastodon shows more than a title ([d37005f](https://github.com/geekitycom/cms/commit/d37005f40fae02479efb441727dd07e1263e03e1))
+
 ## [0.6.0](https://github.com/geekitycom/cms/compare/v0.5.0...v0.6.0) (2026-09-20)
 
 
