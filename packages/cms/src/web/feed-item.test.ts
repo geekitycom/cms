@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { Document } from '../content/document.ts';
 import type { SiteData } from './context.ts';
-import { feedItem, feedItems } from './feed-item.ts';
+import { FEED_ITEM_REVISION, feedItem, feedItems } from './feed-item.ts';
 import type { FeedItemContext } from './feed-item.ts';
 
 /**
@@ -111,6 +111,24 @@ describe('a feed item', () => {
 
     assert.equal(item.html, '<p>A <em>file-first</em> CMS.</p>\n');
     assert.equal(item.markdown, 'A *file-first* CMS.');
+  });
+
+  it('names what a reply answers, and nothing for a post that answers nothing', () => {
+    const reply = feedItem(post({ inReplyTo: 'https://remote.example/notes/1' }), CONTEXT);
+    assert.equal(reply.inReplyTo, 'https://remote.example/notes/1');
+
+    assert.equal('inReplyTo' in feedItem(post(), CONTEXT), false);
+  });
+
+  it('is no reply when its in-reply-to is not an absolute http(s) URL', () => {
+    for (const inReplyTo of ['', 'not a url', '/2026/09/local/', 'mailto:me@example.com']) {
+      const item = feedItem(post({ inReplyTo }), CONTEXT);
+      assert.equal('inReplyTo' in item, false, `${JSON.stringify(inReplyTo)} is no reply target`);
+    }
+  });
+
+  it('is at revision 4, so feeds cached before replies named their target are refetched', () => {
+    assert.equal(FEED_ITEM_REVISION, 4);
   });
 
   it('points at its comments, counted, only when the feed resolved the counts', () => {

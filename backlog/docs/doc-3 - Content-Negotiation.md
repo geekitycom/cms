@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-19 14:31'
+updated_date: '2026-09-23 19:13'
 ---
 # Content Negotiation
 
@@ -105,6 +105,8 @@ Feeds are routes, not representations, because feed readers do not send useful `
 Every format renders the same **feed item**: one shape derived once per post and site, carrying the post's name — its ActivityStreams object id — beside its permalink, and its title, published and updated instants, author, terms, summary and rendered body. The RSS, Atom and JSON Feed serialisers write that item rather than reading the document again, so what a feed says about a post is decided in one place; decision-12 is what it decides, and the item carries one of each thing so no format can print a second-best version of it.
 
 The three answers, on the wire. **Identity**: the object id is RSS's `guid`, Atom's `<id>` and JSON Feed's `id`, and the permalink is always the link — RSS's `<link>`, Atom's `rel="alternate"` and JSON Feed's `url`. The two are the same URL for a post born here and differ only for one carrying a stored id, which is what `guid`'s `isPermaLink` reports: `true` for the permalink, `false` for a stored id such as `https://example.com/?p=813`. **Terms**: the post's categories and then its tags, in file order, as one flat list in all three — no feed format can say which vocabulary a term came from, and neither does WordPress. **Summary**: the document's `description` when it has one, else an excerpt of the rendered HTML cut at 55 words, printed by all three and left out only when there is nothing to summarise.
+
+A reply names what it answers. The item carries the post's reply target, its `in-reply-to` when that is an absolute http(s) URL (`replyTarget`, the same rule that makes the post a reply on the page and in the fediverse). Atom writes it as RFC 4685's `<thr:in-reply-to ref href/>`, with the one URL as both the target's identity and its location, and every Atom feed declares `xmlns:thr="http://purl.org/syndication/thread/1.0"`. JSON Feed 1.1 has no reply field, so a JSON Feed item carries `"_geekity": { "in_reply_to": "<url>" }`: the spec allows extension objects under a key that starts with an underscore and tells readers that do not know one to ignore it, the key is named after the publisher as the spec's own example is, and `in_reply_to` is the microformats `in-reply-to` property spelt the way JSON Feed spells its keys. A post that is not a reply, or whose `in-reply-to` is not such a URL, carries neither. RSS 2.0 has no equivalent, so an RSS item is unchanged.
 
 `/feed/` is RSS because that is the format nearly every existing subscriber holds. The site's three are registered routes; the per-archive ones — a term's and a person's alike — are resolved in the not-found handler, because the two taxonomy bases are a setting and a route table is fixed when the app is built. An author feed is titled after the person, `{site}: {display name}`, as a tag's is titled after the term.
 

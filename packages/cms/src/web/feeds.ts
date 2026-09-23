@@ -77,7 +77,13 @@ export {
 export { commentsRssFeed, rssFeed, rssItem } from './feed-rss.ts';
 export { atomEntry, atomFeed } from './feed-atom.ts';
 export { JSON_FEED_HUB_TYPE, JSON_FEED_VERSION, jsonFeed, jsonFeedItem } from './feed-json.ts';
-export type { JsonFeed, JsonFeedAuthor, JsonFeedHub, JsonFeedItem } from './feed-json.ts';
+export type {
+  JsonFeed,
+  JsonFeedAuthor,
+  JsonFeedGeekity,
+  JsonFeedHub,
+  JsonFeedItem,
+} from './feed-json.ts';
 
 /** Everything one feed response needs. */
 export interface FeedResponseOptions {

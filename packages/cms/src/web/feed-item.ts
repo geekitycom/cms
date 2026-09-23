@@ -1,5 +1,5 @@
 import type { Document } from '../content/document.ts';
-import { isNamed } from '../content/post-type.ts';
+import { isNamed, replyTarget } from '../content/post-type.ts';
 import type { SiteData } from './context.ts';
 import { activityStreamsId } from './documents.ts';
 import { feedPathUnder } from './feed-source.ts';
@@ -86,6 +86,13 @@ export interface FeedItem {
    * would otherwise publish "0 comments" about a post with plenty.
    */
   comments?: FeedItemComments | undefined;
+  /**
+   * The URL the post answers, when it is a reply: its `in-reply-to`, and only
+   * when that is a URL a reader can follow ({@link replyTarget}). Atom writes
+   * it as `thr:in-reply-to` and JSON Feed in its `_geekity` extension; RSS 2.0
+   * has nowhere to put it.
+   */
+  inReplyTo?: string | undefined;
 }
 
 /**
@@ -95,15 +102,16 @@ export interface FeedItem {
  * those are what usually move it. The rules for turning a document into an item
  * are not in that hash, so a release that changes them — revision 2 changed
  * every RSS `guid`, the other formats' ids, their terms and their summaries,
- * and revision 3 dropped the title of a post whose title only repeats its
- * opening words — would leave the validator where it was, and a reader polling
- * with `If-None-Match` would be handed a 304 that hides the new bytes.
+ * revision 3 dropped the title of a post whose title only repeats its opening
+ * words, and revision 4 named a reply's target in Atom and JSON Feed — would
+ * leave the validator where it was, and a reader polling with `If-None-Match`
+ * would be handed a 304 that hides the new bytes.
  *
  * Bumping this moves every post feed's ETag exactly once, at the upgrade, and
  * never again until the next such change. The comments feeds do not carry it:
  * a comment is not a {@link FeedItem} and its bytes are untouched.
  */
-export const FEED_ITEM_REVISION = 3;
+export const FEED_ITEM_REVISION = 4;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -156,6 +164,9 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   if (updated !== undefined) item.updated = updated;
 
   if (document.author !== undefined) item.author = document.author;
+
+  const inReplyTo = replyTarget(document);
+  if (inReplyTo !== undefined) item.inReplyTo = inReplyTo;
 
   const creator = document.author ?? context.site.author;
   if (creator !== undefined && creator !== '') item.creator = creator;

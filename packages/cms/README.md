@@ -2334,6 +2334,30 @@ only when there is nothing to summarise at all. The whole post goes in the
 content element beside it, so a reader that shows both has something to choose
 between.
 
+**Replies.** A post whose `in-reply-to` front matter is an absolute `http` or
+`https` URL is a reply, and Atom and JSON Feed name the URL it answers. An Atom
+entry carries RFC 4685's `<thr:in-reply-to ref="…" href="…"/>`, with the target
+URL as both its identity and its location, and every Atom feed declares
+`xmlns:thr="http://purl.org/syndication/thread/1.0"`. JSON Feed 1.1 has no reply
+field, so a JSON Feed item carries the target in an extension object, which the
+spec allows under any key that starts with an underscore and tells readers that
+do not know it to ignore:
+
+```json
+{
+  "id": "…",
+  "url": "…",
+  "content_html": "…",
+  "_geekity": { "in_reply_to": "https://example.net/notes/1" }
+}
+```
+
+The key is `_geekity` because an extension is named after its publisher, and
+`in_reply_to` spells the microformats `in-reply-to` property the JSON way. A
+post that is not a reply, or whose `in-reply-to` is not such a URL, carries
+neither. RSS 2.0 has no equivalent element, so an RSS item for a reply is
+written the same as any other.
+
 ### RSS 2.0
 
 The channel carries `title`, `link`, `description` (the tagline), `language`

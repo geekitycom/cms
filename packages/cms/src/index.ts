@@ -1138,6 +1138,7 @@ export type {
   FrontPageSlugs,
   JsonFeed,
   JsonFeedAuthor,
+  JsonFeedGeekity,
   JsonFeedHub,
   Interaction,
   InteractionAuthor,
