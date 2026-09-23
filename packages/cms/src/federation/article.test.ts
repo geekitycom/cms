@@ -105,6 +105,7 @@ function post(
     draft?: boolean;
     body?: string;
     author?: string;
+    description?: string;
   },
 ): string {
   const lines = [
@@ -123,6 +124,9 @@ function post(
     lines.push('categories:', ...options.categories.map((category) => `  - ${category}`));
   }
   if (options.draft === true) lines.push('draft: true');
+  if (options.description !== undefined) {
+    lines.push(`description: ${JSON.stringify(options.description)}`);
+  }
 
   return `---\n${lines.join('\n')}\n---\n\n${options.body ?? 'Body.'}\n`;
 }
@@ -281,6 +285,81 @@ async function fetchLink(instance: Cms, href: unknown): Promise<Record<string, u
   assert.equal(response.status, 200, `${url.href} answers`);
   return (await response.json()) as Record<string, unknown>;
 }
+
+/** The Article served at a post's permalink, as a peer receives it. */
+async function articleAt(instance: Cms, pathname: string): Promise<Record<string, unknown>> {
+  const response = await get(instance, pathname, ACTIVITY_STREAMS);
+  assert.equal(response.status, 200);
+  return (await response.json()) as Record<string, unknown>;
+}
+
+// Mastodon builds an Article's status from `name`, `summary` and the link and
+// discards `content`, so without a summary a post shows as a bare title.
+describe('the post summary', () => {
+  it('is the description the author wrote, when the post has one', async () => {
+    const instance = await site({
+      'posts/2026-09-02-hello.md': post('Hello', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/hello/',
+        description: 'What this post is about, in a sentence.',
+        body: 'A *first* post, with a [link](https://example.org/).',
+      }),
+    });
+
+    const article = await articleAt(instance, '/2026/09/hello/');
+
+    assert.equal(article['summary'], 'What this post is about, in a sentence.');
+  });
+
+  it('is the plain text of the first paragraph when there is no description', async () => {
+    const instance = await site({
+      'posts/2026-09-02-hello.md': post('Hello', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/hello/',
+        body: 'Fish & chips, *with* a [link](https://example.org/).\n\nA second paragraph.',
+      }),
+    });
+
+    const article = await articleAt(instance, '/2026/09/hello/');
+
+    assert.equal(article['summary'], 'Fish & chips, with a link.');
+  });
+
+  it('cuts a long first paragraph where the feeds do, with no Read more link', async () => {
+    const words = Array.from({ length: 80 }, (_, index) => `word${index}`);
+    const instance = await site({
+      'posts/2026-09-02-hello.md': post('Hello', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/hello/',
+        body: words.join(' '),
+      }),
+    });
+
+    const article = await articleAt(instance, '/2026/09/hello/');
+
+    assert.equal(article['summary'], `${words.slice(0, 55).join(' ')} …`);
+  });
+
+  it('is left out, not empty, for a post with nothing to summarise', async () => {
+    const instance = await site({
+      'posts/2026-09-02-empty.md': post('Empty', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/empty/',
+        body: '',
+      }),
+      'posts/2026-09-03-photo.md': post('Photo', {
+        date: '2026-09-03T09:00:00Z',
+        permalink: '/2026/09/photo/',
+        body: '![A heron on the river](https://example.org/heron.jpg)',
+      }),
+    });
+
+    for (const pathname of ['/2026/09/empty/', '/2026/09/photo/']) {
+      const article = await articleAt(instance, pathname);
+      assert.equal('summary' in article, false, `${pathname} has no summary property`);
+    }
+  });
+});
 
 describe('the outbox', () => {
   it('counts the published posts and pages rather than listing them all at once', async () => {

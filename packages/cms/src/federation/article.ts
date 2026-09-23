@@ -17,6 +17,7 @@ import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.t
 import type { Document } from '../content/document.ts';
 import { userForAuthor } from '../web/authors.ts';
 import { isPublicDocument, postObjectId } from '../web/documents.ts';
+import { feedExcerpt } from '../web/feed-item.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { categoryHref, tagHref } from '../web/taxonomy.ts';
 import { actorId } from './actor.ts';
@@ -93,6 +94,12 @@ export function isFederatedDocument(document: Document, now: Date = new Date()):
  * exception is a post whose file already names an `activitypub.id`, which
  * keeps it; see {@link articleObjectId}.
  *
+ * `summary` is the excerpt the feeds print ({@link feedExcerpt}), so a post
+ * reads the same in a feed reader and a timeline. Mastodon builds an
+ * `Article`'s status from `name`, `summary` and `url` and drops `content`, so
+ * without it a post arrives as a bare title and link. A post with nothing to
+ * summarise leaves the property out rather than sending an empty string.
+ *
  * `source` carries the Markdown the file holds, so a peer that wants to quote
  * or re-render the post has the text rather than only the rendering of it.
  *
@@ -106,11 +113,13 @@ export function postArticle(context: Context<FederationContextData>, document: D
   // The archives an activity points at are wherever the site currently serves
   // them, which is a setting rather than a constant (TASK-36).
   const bases = taxonomyBasesFromSettings(readSiteSettings(context.data.config.contentDir));
+  const summary = feedExcerpt(document);
 
   return new Article({
     id: articleObjectId(context, document),
     url: new URL(absoluteUrl(document.permalink, baseUrl)),
     name: document.title,
+    summary: summary === '' ? null : summary,
     content: document.html,
     source: new Source({ content: document.body, mediaType: SOURCE_MEDIA_TYPE }),
     published: toInstant(document.date) ?? null,
