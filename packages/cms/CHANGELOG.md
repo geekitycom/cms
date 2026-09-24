@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.1](https://github.com/geekitycom/cms/compare/v0.7.0...v0.7.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **cms:** give every post editor field the same width, height and look ([f4bd981](https://github.com/geekitycom/cms/commit/f4bd981e89fcbc94be857e382e19b4cfc737a346))
+* **cms:** give every post editor field the same width, height and look ([5ac3430](https://github.com/geekitycom/cms/commit/5ac3430aae0323fad0da7bafb472feb0745199ee))
+
 ## [0.7.0](https://github.com/geekitycom/cms/compare/v0.6.0...v0.7.0) (2026-09-23)
 
 
