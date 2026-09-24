@@ -331,6 +331,8 @@ label {
 input[type='text'],
 input[type='password'],
 input[type='email'],
+input[type='url'],
+select,
 textarea {
   width: 100%;
   padding: 0.4rem 0.5rem;
@@ -344,6 +346,13 @@ textarea {
   min-height: 8rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   resize: vertical;
+}
+
+/* A select lays its text out at line-height: normal whatever it inherits, so
+   it is given the height a text box reaches: the body's 1.6 line, the padding
+   and the border. */
+select {
+  min-height: calc(1.6em + 0.8rem + 2px);
 }
 
 button[type='submit'],
@@ -477,6 +486,7 @@ button[type='submit']:hover,
 
 .admin-check input {
   width: auto;
+  margin: 0;
 }
 
 .admin-editor-buttons {
@@ -657,14 +667,6 @@ button[type='submit']:hover,
   margin-top: 0;
   padding-top: 0;
   border-top: 0;
-}
-
-.admin-settings select {
-  padding: 0.4rem 0.5rem;
-  border: 1px solid #8c8f94;
-  background: var(--admin-surface);
-  color: inherit;
-  font: inherit;
 }
 
 .admin-settings input:disabled {
@@ -877,6 +879,7 @@ button[type='submit']:hover,
    switches and windows still reads as one column rather than as a form. */
 
 .admin-inline select {
+  width: auto;
   margin: 0;
 }
 
