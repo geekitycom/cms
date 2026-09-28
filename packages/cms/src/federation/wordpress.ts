@@ -2,7 +2,17 @@ import path from 'node:path';
 
 import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/fedify';
 import type { Context, InboxContext } from '@fedify/fedify';
-import { Accept, Announce, Create, Delete, Follow, Like, Reject, Undo } from '@fedify/vocab';
+import {
+  Accept,
+  Announce,
+  Create,
+  Delete,
+  Follow,
+  Like,
+  QuoteRequest,
+  Reject,
+  Undo,
+} from '@fedify/vocab';
 import type { Activity } from '@fedify/vocab';
 
 import { listUsers } from '../admin/accounts.ts';
@@ -19,6 +29,7 @@ import {
   handleDelete,
   handleFollow,
   handleLoggedActivity,
+  handleQuoteRequest,
   handleReject,
   handleUndo,
 } from './inbox.ts';
@@ -193,7 +204,7 @@ export function createWordPressFederation(
     actorFor(context, identifier) === undefined ? null : { items: [] },
   );
 
-  // The same five handlers the canonical inbox runs, over a canonical context.
+  // The same handlers the canonical inbox runs, over a canonical context.
   // `per-origin` idempotence is what keeps one `Follow` redelivered to both
   // inboxes from being handled twice (doc-8); the canonical federation is set
   // the same way, and they share a KV store so the two agree about what they
@@ -208,7 +219,8 @@ export function createWordPressFederation(
     .on(Delete, canonically(handleDelete))
     .on(Like, canonically(handleLoggedActivity))
     .on(Announce, canonically(handleLoggedActivity))
-    .on(Create, canonically(handleLoggedActivity));
+    .on(Create, canonically(handleLoggedActivity))
+    .on(QuoteRequest, canonically(handleQuoteRequest));
 
   /**
    * One inbox handler, run against the canonical federation.

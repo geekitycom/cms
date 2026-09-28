@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { InboxContext } from '@fedify/fedify';
-import { Accept, Follow } from '@fedify/vocab';
+import { Accept, Follow, Reject } from '@fedify/vocab';
 import type {
   Activity,
   Actor,
@@ -10,15 +10,18 @@ import type {
   Delete,
   Like,
   Link,
-  Reject,
+  QuoteRequest,
   Undo,
 } from '@fedify/vocab';
 
-import { listUsers } from '../admin/accounts.ts';
+import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import type { NewFollower } from '../admin/store.ts';
 import { actorId, senderKeyPairs, userByUsername } from './actor.ts';
+import { documentAuthor, isFederatedDocument, postByObjectId } from './article.ts';
+import { postObjectId } from '../web/documents.ts';
 import type { FederationContextData } from './federation.ts';
+import { authorizeQuote, quoteAuthorization, revokeQuotes } from './quotes.ts';
 import { addFollower, appendInboxActivity, removeFollower } from './records.ts';
 import type { FederationRecords } from './records.ts';
 import { acceptRelay, rejectRelay } from './relays.ts';
@@ -100,7 +103,8 @@ function followedUser(context: SiteInboxContext, follow: Follow): User | undefin
 }
 
 /**
- * Handle an `Undo`: an undone `Follow` removes the follower.
+ * Handle an `Undo`: an undone `Follow` removes the follower, and an undone
+ * `QuoteRequest` withdraws the quote approval it was given.
  *
  * Only the actor that sent the `Follow` may undo it. Without that check any
  * signed actor could unfollow the site on somebody else's behalf, since the
@@ -108,15 +112,25 @@ function followedUser(context: SiteInboxContext, follow: Follow): User | undefin
  * about who the follow belonged to.
  */
 export async function handleUndo(context: SiteInboxContext, undo: Undo): Promise<void> {
+  // A withdrawn QuoteRequest takes its approval with it. Matched on the ids
+  // alone, so an Undo naming the request by a URL nobody can fetch still counts.
+  const undoer = undo.actorId?.href;
+  const undone = undo.objectId?.href;
+  if (undoer !== undefined && undone !== undefined) {
+    await revokeQuotes(
+      context.data.config.contentDir,
+      (record) => record.request === undone && record.actor === undoer,
+    );
+  }
+
   const object = await undo.getObject(dereference(context));
   const followed = object instanceof Follow ? followedUser(context, object) : undefined;
   await logActivity(context, undo, followed?.username);
 
   if (!(object instanceof Follow)) return;
 
-  const undoer = undo.actorId;
   const follower = object.actorId;
-  if (undoer === null || follower === null || undoer.href !== follower.href) return;
+  if (undoer === undefined || follower === null || undoer !== follower.href) return;
 
   // An `Undo` that names which actor was followed unfollows exactly that one;
   // one that does not — the object arrived as a bare id nothing could
@@ -138,7 +152,16 @@ export async function handleDelete(context: SiteInboxContext, activity: Delete):
 
   const actor = activity.actorId;
   const object = activity.objectId;
-  if (actor === null || object === null || actor.href !== object.href) return;
+  if (actor === null || object === null) return;
+
+  if (actor.href !== object.href) {
+    // A quote its author deleted is no longer one this site vouches for.
+    await revokeQuotes(
+      context.data.config.contentDir,
+      (record) => record.quote === object.href && record.actor === actor.href,
+    );
+    return;
+  }
 
   // An account that is gone is gone from everybody's followers, whichever
   // inbox the announcement happened to reach.
@@ -171,6 +194,74 @@ async function forget(
       .map((follower) => follower.username),
   );
   for (const name of usernames) await removeFollower(records, name, actorHref);
+}
+
+/**
+ * Handle a `QuoteRequest` (FEP-044f): approve a quote of a post this site
+ * federates, and refuse anything else.
+ *
+ * Every federated post is public and advertises `canQuote` for anybody (see
+ * `postObject`), so approval is automatic and the one rule is whether the
+ * quoted object is such a post. The quote has to live on the requester's own
+ * server too, as Mastodon insists of any activity: otherwise anybody could
+ * obtain a stamp for somebody else's post. An approval is stored, then sent
+ * as the `result` of an `Accept`; a refusal is a `Reject` and stores nothing.
+ * Either way the answer comes from the post's author, to the requester.
+ */
+export async function handleQuoteRequest(
+  context: SiteInboxContext,
+  request: QuoteRequest,
+): Promise<void> {
+  const { config, store } = context.data;
+  const post =
+    request.objectId === null
+      ? undefined
+      : postByObjectId(store, request.objectId.href, config.baseUrl);
+  const author =
+    post === undefined
+      ? (userByUsername(config.dataDir, context.recipient ?? '') ?? primaryUser(config.dataDir))
+      : documentAuthor(context, post);
+  await logActivity(context, request, author?.username);
+  if (request.id === null || author === undefined) return;
+
+  const requester = await request.getActor(dereference(context));
+  if (requester === null || requester.id === null) return;
+
+  const quote = request.instrumentId;
+  const quotable =
+    post !== undefined &&
+    isFederatedDocument(post, store.now()) &&
+    quote !== null &&
+    quote.origin === requester.id.origin;
+
+  const sender = await senderKeyPairs(context, author);
+  const from = actorId(context, author);
+  if (!quotable) {
+    await context.sendActivity(
+      sender,
+      requester,
+      new Reject({ id: new URL(`#reject/${randomUUID()}`, from), actor: from, object: request }),
+    );
+    return;
+  }
+
+  const record = await authorizeQuote(config.contentDir, author.username, {
+    quote: quote.href,
+    post: postObjectId(post, config.baseUrl),
+    request: request.id.href,
+    actor: requester.id.href,
+  });
+  const stamp = quoteAuthorization(context, author, record);
+  await context.sendActivity(
+    sender,
+    requester,
+    new Accept({
+      id: new URL(`#accept/${randomUUID()}`, from),
+      actor: from,
+      object: request,
+      result: stamp,
+    }),
+  );
 }
 
 /**

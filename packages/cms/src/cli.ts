@@ -21,10 +21,18 @@ import type { GeekityConfig } from './config.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
 
 export type Command =
-  'serve' | 'init' | 'sync' | 'rebuild' | 'user' | 'import' | 'help' | 'version';
+  'serve' | 'init' | 'sync' | 'rebuild' | 'resend' | 'user' | 'import' | 'help' | 'version';
 
 /** The commands a site can name on the command line, as opposed to the flags. */
-const COMMANDS: readonly Command[] = ['serve', 'init', 'sync', 'rebuild', 'user', 'import'];
+const COMMANDS: readonly Command[] = [
+  'serve',
+  'init',
+  'sync',
+  'rebuild',
+  'resend',
+  'user',
+  'import',
+];
 
 /**
  * The options one command reads out of {@link ParsedArgs.flags}, each of which
@@ -44,7 +52,7 @@ const VALUE_FLAGS = [
 ] as const;
 
 /** The options that are simply on or off. */
-const SWITCH_FLAGS = ['force'] as const;
+const SWITCH_FLAGS = ['force', 'all'] as const;
 
 export interface ParsedArgs {
   command: Command;
@@ -84,6 +92,7 @@ Usage:
   geekity init <directory>
   geekity sync [--config <file>]
   geekity rebuild [--config <file>]
+  geekity resend (--all | <slug>...) [--config <file>]
   geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
   geekity import wordpress-actor <username> --actor-id <url> --wordpress-id <n>
           (--keypair <file> | --private-key <file> [--public-key <file>])
@@ -96,6 +105,11 @@ Commands:
   rebuild          Delete data/geekity.db and build it again from the files.
                    Everything in it is derived, so this is always safe with the
                    site stopped; sessions and delivery outcomes start empty.
+  resend           Send announced posts to every follower and relay again, as
+                   they read now: an Update for a post still published, a
+                   Delete for one withdrawn. --all resends every post the site
+                   has announced; this is how posts federated before a new
+                   federation feature (such as quote posts) pick it up.
   user add         Create an admin user, so a site can get its first login
                    without the setup screen.
   import
@@ -128,6 +142,7 @@ Options:
   --followers <url|file|none>
                    Where the followers come from. Left off, the plugin's own
                    public followers collection on the actor id's origin.
+  --all            With resend: every announced post rather than named ones.
   --force          Import over a key pair the user already has. Do this only
                    when you are certain the pair being imported is the one the
                    followers hold: a new key means none of them can verify
@@ -398,6 +413,7 @@ async function main(argv: readonly string[]): Promise<number> {
   if (command === 'import') return importCommand(args, configPath, flags);
   if (command === 'sync') return syncCommand(configPath);
   if (command === 'rebuild') return rebuildCommand(configPath);
+  if (command === 'resend') return resendCommand(args, configPath, flags);
 
   return serveCommand(configPath);
 }
@@ -453,6 +469,58 @@ async function syncCommand(configPath: string | undefined): Promise<number> {
       return 1;
     }
     return 0;
+  } finally {
+    await cms.close();
+  }
+}
+
+/**
+ * `geekity resend`: send announced posts to their followers again, as they now
+ * read.
+ *
+ * Mastodon keeps the copy of a post it first fetched, so a property added
+ * later — the quote policy (TASK-125) is the one that made this a command —
+ * reaches a post already out only through an `Update`. This is the resend
+ * button on the federation screen, for every post at once. Delivery runs with
+ * no queue, so each activity has been posted before the process exits.
+ */
+async function resendCommand(
+  args: readonly string[],
+  configPath: string | undefined,
+  flags: Readonly<Record<string, string | true>>,
+): Promise<number> {
+  const all = flags['all'] === true;
+  if (all === args.length > 0) {
+    throw new Error(
+      'geekity resend needs either --all or the slugs of the posts to resend, and not both.',
+    );
+  }
+
+  const config = await loadConfig(process.cwd(), configPath);
+  const cms = createCms({
+    ...config,
+    watch: false,
+    federation: { ...config.federation, queue: null },
+  });
+
+  try {
+    await cms.sync();
+    const slugs = all ? cms.store.listFederated().map((document) => document.slug) : args;
+    let failed = 0;
+    for (const slug of slugs) {
+      const report = await cms.delivery.resend(slug);
+      if (report === undefined) {
+        process.stderr.write(`${slug}: nothing to resend, no announced post has that slug.\n`);
+        failed += 1;
+        continue;
+      }
+      const reached = report.deliveries.filter((delivery) => delivery.status === 'sent').length;
+      process.stdout.write(
+        `${slug}: ${report.activityType} to ${String(reached)} of ` +
+          `${String(report.deliveries.length)} inboxes\n`,
+      );
+    }
+    return failed === 0 ? 0 : 1;
   } finally {
     await cms.close();
   }

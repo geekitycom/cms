@@ -85,12 +85,13 @@ site (or `npx geekity`, or a `package.json` script, which is how the generated
 | `geekity init <dir>`                    | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                  |
 | `geekity sync`                          | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                              |
 | `geekity rebuild`                       | Delete `data/geekity.db` and build it again from the files.                                                                                                           |
+| `geekity resend --all`, `<slug>...`     | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                            |
 | `geekity user add <name>`               | Create an admin account, so a site can get its first login without the setup screen.                                                                                  |
 | `geekity import wordpress-actor <name>` | Bring one person across from the WordPress ActivityPub plugin: their key pair, the actor id their followers hold, the plugin's numeric actor id, and their followers. |
 | `geekity --help`, `-h`                  | The same table, on the terminal.                                                                                                                                      |
 | `geekity --version`                     | The installed version.                                                                                                                                                |
 
-`serve`, `sync`, `rebuild`, `user add` and `import wordpress-actor` take
+`serve`, `sync`, `rebuild`, `resend`, `user add` and `import wordpress-actor` take
 `--config <file>`; without it they look for `geekity.config.ts`, then
 `geekity.config.js`, then `geekity.config.mjs` in the working directory, and run
 on defaults if there is none.
@@ -579,6 +580,56 @@ queue, which retries out of band) or `failed`.
 
 The one capability given up is tombstoning a post whose file is gone entirely
 rather than in the trash: there is no file left to build the `Tombstone` from.
+
+### Quote posts
+
+Mastodon 4.5 lets people quote a post only when the post says who may, and
+shows a quote only once the quoted author's server has approved it
+([FEP-044f]). Every post this site federates is public, so every `Note` and
+`Article` carries `interactionPolicy.canQuote` with `automaticApproval` set to
+the public collection: anybody may quote it, and nobody has to approve it by
+hand. Pages, drafts, scheduled and trashed posts do not federate, so nobody
+can quote them.
+
+A quoting server sends a `QuoteRequest` to the post's author. The inbox, and
+the WordPress-compatible inbox when that switch is on, answers it:
+
+- For a post the site federates, whose quote lives on the requester's own
+  server, it stores an approval and replies `Accept` with a
+  `QuoteAuthorization` as its `result`. The authorization names the quote
+  (`interactingObject`), the post (`interactionTarget`) and the author
+  (`attributedTo`).
+- For anything else it replies `Reject` and stores nothing.
+
+Approvals are files, like followers:
+`content/_data/federation/{username}/quotes.json` holds one object per quote of
+that user's posts. Each is served unsigned, as ActivityStreams JSON, at
+`{baseUrl}/author/{username}/quotes/{id}/`, for as long as the post is still
+published. An `Undo` of the `QuoteRequest`, or a `Delete` of the quoting post,
+removes the approval, and its URL answers 404 after that. A quote does not
+notify the author.
+
+Mastodon keeps the copy of a post it fetched first, so a post federated before
+the quote policy existed is not quotable until its followers receive an
+`Update`. Editing the post sends one. To update every announced post at once,
+run `geekity resend --all` in the site directory:
+
+```sh
+$ geekity resend --all
+hello-world: Update to 3 of 3 inboxes
+another-post: Update to 3 of 3 inboxes
+```
+
+`geekity resend <slug>...` does the same for named posts. Each is what the
+Resend button on the federation screen does: an `Update` for a post still
+published, a `Delete` for one that has been withdrawn, and a `Create` for a
+published post that was never announced. `--all` only reaches posts that were
+announced. The command delivers with no queue, so every activity has been
+posted before it exits, and it exits non-zero when a named slug has nothing to
+resend. It works while the server runs, because both read the same files and
+database.
+
+[FEP-044f]: https://codeberg.org/fediverse/fep/src/branch/main/fep/044f/fep-044f.md
 
 ### Relays
 

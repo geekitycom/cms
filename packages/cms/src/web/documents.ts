@@ -81,3 +81,33 @@ export function activityStreamsId(document: Document, baseUrl: string): string |
   if (document.type !== 'post' || !isPublicDocument(document)) return undefined;
   return postObjectId(document, baseUrl);
 }
+
+/**
+ * The permalink an object id names, when it is one this site would have
+ * minted: the path, with the base URL's own directory taken off it.
+ *
+ * An id from another host belongs to no post here however it is spelled, and
+ * neither does one carrying a query string — a permalink has none, so an id
+ * like `?p=813` is a stored one and is looked up as one instead.
+ */
+export function permalinkOfObjectId(objectId: string, baseUrl: string): string | undefined {
+  let url: URL;
+  let base: URL;
+  try {
+    url = new URL(objectId);
+    base = new URL(baseUrl);
+  } catch {
+    return undefined;
+  }
+  if (url.origin !== base.origin || url.search !== '') return undefined;
+
+  const directory = base.pathname === '/' ? '' : base.pathname.replace(/\/$/, '');
+  if (directory !== '' && !url.pathname.startsWith(`${directory}/`)) return undefined;
+
+  const pathname = url.pathname.slice(directory.length);
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
+}

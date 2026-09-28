@@ -4,6 +4,8 @@ import {
   Create,
   Delete,
   Hashtag,
+  InteractionPolicy,
+  InteractionRule,
   Note,
   PUBLIC_COLLECTION,
   Source,
@@ -16,11 +18,12 @@ import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
+import type { ContentStore } from '../content/store.ts';
 import { postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
 import { userForAuthor } from '../web/authors.ts';
-import { isPublicDocument, postObjectId } from '../web/documents.ts';
+import { isPublicDocument, permalinkOfObjectId, postObjectId } from '../web/documents.ts';
 import { feedExcerpt } from '../web/feed-item.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { categoryHref, tagHref } from '../web/taxonomy.ts';
@@ -87,6 +90,26 @@ export const SOURCE_MEDIA_TYPE = 'text/markdown';
  */
 export function isFederatedDocument(document: Document, now: Date = new Date()): boolean {
   return document.type === 'post' && isPublicDocument(document, now);
+}
+
+/**
+ * The post an ActivityStreams object id names, federated or not.
+ *
+ * Either the post whose file stores that id, or the one at the permalink the
+ * id spells — and then only when that post's id really is this URL, so a
+ * migrated post is not found a second time under its permalink.
+ */
+export function postByObjectId(
+  store: ContentStore,
+  objectId: string,
+  baseUrl: string,
+): Document | undefined {
+  const permalink = permalinkOfObjectId(objectId, baseUrl);
+  const document =
+    store.getByStoredObjectId(objectId) ??
+    (permalink === undefined ? undefined : store.getByPermalink(permalink));
+  if (document?.type !== 'post' || postObjectId(document, baseUrl) !== objectId) return undefined;
+  return document;
 }
 
 /** The ActivityStreams object types a post can federate as, by name. */
@@ -179,6 +202,10 @@ export function postObject(
     // follower of its author is told about it.
     to: PUBLIC_COLLECTION,
     cc: followers,
+    // FEP-044f: a post with no policy is one Mastodon lets nobody quote. Every
+    // post that federates is addressed to Public, so anybody may quote it, and
+    // the inbox approves each QuoteRequest on the same rule (TASK-125).
+    interactionPolicy: QUOTABLE_BY_ANYONE,
     // Both taxonomies become hashtags: a relay or a search that keys on a
     // hashtag has no reason to care which of the two a term came from, and
     // each one points at the archive the site serves for it.
@@ -202,6 +229,10 @@ export function postObject(
     content: document.html,
   });
 }
+
+const QUOTABLE_BY_ANYONE = new InteractionPolicy({
+  canQuote: new InteractionRule({ automaticApproval: PUBLIC_COLLECTION }),
+});
 
 /** A note's HTML: its title first when its text does not already open with it. */
 function noteContent(document: Document): string {

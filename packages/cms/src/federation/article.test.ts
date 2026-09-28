@@ -270,6 +270,47 @@ describe('the post object', () => {
   });
 });
 
+// Mastodon 4.5 reads `interactionPolicy.canQuote` by its plain keys and treats
+// a post without one as quotable by nobody (FEP-044f).
+describe('the quote policy (TASK-125 AC #1)', () => {
+  const QUOTABLE = { canQuote: { automaticApproval: 'as:Public' } };
+
+  it('lets anybody quote an Article and a Note, under the GoToSocial context', async () => {
+    const instance = await site({
+      ...HELLO,
+      'posts/2026-09-02-quick.md': rawPost(
+        ["date: '2026-09-02T09:00:00Z'", 'permalink: /2026/09/quick/'],
+        'A quick thought.',
+      ),
+    });
+
+    for (const [pathname, type] of [
+      ['/2026/09/hello/', 'Article'],
+      ['/2026/09/quick/', 'Note'],
+    ] as const) {
+      const object = await articleAt(instance, pathname);
+      assert.equal(object['type'], type);
+      assert.deepEqual(object['interactionPolicy'], QUOTABLE, `${pathname} is quotable`);
+      assert.ok(
+        (object['@context'] as unknown[]).includes('https://gotosocial.org/ns'),
+        'the gts terms interactionPolicy, canQuote and automaticApproval are defined',
+      );
+    }
+  });
+
+  it('carries the same policy on the Create the outbox lists', async () => {
+    const instance = await site(HELLO);
+
+    const outbox = (await (
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+    const page = await fetchLink(instance, outbox['first']);
+    const items = page['orderedItems'] as Record<string, unknown>[];
+    const object = items[0]?.['object'] as Record<string, unknown>;
+    assert.deepEqual(object['interactionPolicy'], QUOTABLE);
+  });
+});
+
 /** `count` posts, each an hour older than the one before, newest `post-1`. */
 function archive(count: number): Record<string, string> {
   const files: Record<string, string> = {};
