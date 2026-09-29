@@ -13,14 +13,19 @@
 # release pull request, `git pull` on main, then run this. `latest` is pushed
 # alongside the version, and so is a custom tag when one is given.
 #
+# A release normally publishes to npm too, and scripts/release.sh does both in
+# one run, with the quality gates run once. This script on its own is for
+# pushing only an image, or for finishing a release whose Docker half failed.
+#
 # Usage (from the repository root):
 #
-#   scripts/docker-build-push.sh [--dry-run] [CUSTOM_TAG]
+#   scripts/docker-build-push.sh [--dry-run] [--check-only | --skip-gates] [CUSTOM_TAG]
 #   pnpm docker:build-push [CUSTOM_TAG]
 #   pnpm docker:dry-run [CUSTOM_TAG]
 #
 # --dry-run prints what would be built and pushed, and builds, pushes, logs in
-# and runs the quality gates not at all.
+# and runs the quality gates not at all. --check-only runs the preflight checks
+# and stops. --skip-gates runs everything but the quality gates.
 set -euo pipefail
 
 readonly IMAGE="ghcr.io/geekitycom/cms"
@@ -29,8 +34,9 @@ readonly PLATFORMS="linux/amd64,linux/arm64"
 readonly BUILDER="multiplatform"
 readonly DOCKERFILE="Dockerfile"
 readonly VERSION_FILE="packages/cms/package.json"
-# The quality gates, in the order they run. `typecheck` builds first.
-readonly GATES=(lint format:check typecheck test)
+# shellcheck source=scripts/lib/quality-gates.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/lib/quality-gates.sh"
+readonly GATES=("${DOCKER_GATES[@]}")
 
 log() {
   printf '\033[1m==> %s\033[0m\n' "$*"
@@ -43,14 +49,21 @@ fail() {
 
 usage() {
   cat <<EOF
-Usage: scripts/docker-build-push.sh [--dry-run] [CUSTOM_TAG]
+Usage: scripts/docker-build-push.sh [--dry-run] [--check-only | --skip-gates] [CUSTOM_TAG]
 
 Build ${IMAGE} for ${PLATFORMS} and push it tagged with the version in
 ${VERSION_FILE}, latest, and CUSTOM_TAG when one is given.
 
 Options:
-  --dry-run   Print what would be built and pushed without doing any of it
-  -h, --help  Show this help
+  --dry-run     Print what would be built and pushed without doing any of it
+  --check-only  Run the preflight checks and nothing else
+  --skip-gates  Build and push without running the quality gates. Warning: it
+                assumes the quality gates just passed on this commit. Use it
+                to finish a release whose gates already ran, as
+                scripts/release.sh does
+  -h, --help    Show this help
+
+A normal release publishes to npm and ghcr.io together with pnpm release.
 
 Run it from the repository root, after merging the release pull request and
 pulling main.
@@ -59,6 +72,15 @@ EOF
 
 dry_run=false
 custom_tag=""
+# full, check-only or skip-gates.
+mode=full
+
+set_mode() {
+  if [[ "$mode" != full && "$mode" != "$1" ]]; then
+    fail "--check-only and --skip-gates cannot be used together"
+  fi
+  mode="$1"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -69,6 +91,14 @@ while [[ $# -gt 0 ]]; do
     --dry-run)
       dry_run=true
       ;;
+    --check-only)
+      set_mode check-only
+      ;;
+    --skip-gates)
+      set_mode skip-gates
+      ;;
+    # pnpm passes the -- in `pnpm docker:build-push -- --skip-gates` through.
+    --) ;;
     -*)
       usage >&2
       fail "unknown option: $1"
@@ -111,7 +141,14 @@ main() {
     echo "Image:     ${IMAGE}"
     echo "Version:   ${version} (from ${VERSION_FILE})"
     echo "Platforms: ${PLATFORMS}"
-    echo "Would run the quality gates: ${GATES[*]}"
+    case "$mode" in
+      check-only)
+        echo "Would run the preflight checks only: no quality gates, nothing built or pushed"
+        return 0
+        ;;
+      skip-gates) echo "Would skip the quality gates (--skip-gates)" ;;
+      full) echo "Would run the quality gates: ${GATES[*]}" ;;
+    esac
     echo "Would build and push:"
     for tag in "${tags[@]}"; do
       echo "  ${tag}"
@@ -121,7 +158,17 @@ main() {
 
   check_docker
   check_login
-  run_gates
+  case "$mode" in
+    check-only)
+      log "Preflight checks passed: ready to build and push:"
+      for tag in "${tags[@]}"; do
+        echo "  ${tag}"
+      done
+      return 0
+      ;;
+    skip-gates) log "Skipping the quality gates (--skip-gates)" ;;
+    full) run_gates ;;
+  esac
   build_and_push "${tags[@]}"
 
   log "Pushed ${IMAGE} for ${PLATFORMS}:"

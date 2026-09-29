@@ -85,6 +85,8 @@ Run from the repository root.
 | `pnpm docker:smoke`      | Builds the image locally, boots it on empty volumes and checks it serves.   |
 | `pnpm npm:dry-run`       | Prints the package, version and tag a publish needs, and publishes nothing. |
 | `pnpm npm:publish`       | Publishes `@geekity/cms` to npm from the commit carrying its version tag.   |
+| `pnpm release:dry-run`   | Prints every step of a release, and checks, publishes and builds nothing.   |
+| `pnpm release`           | Publishes to npm and pushes the image, with the quality gates run once.     |
 
 Package-scoped variants work too, for example
 `pnpm --filter @geekity/cms test` or `pnpm --filter demo dev`.
@@ -1632,8 +1634,8 @@ pnpm --filter @geekity/cms pack
 ```
 
 Versions, tags and the changelog are automated by release-please (decision-7).
-Publishing to npm is one command a maintainer runs from main once the release
-commit is in; CI never publishes. `apps/demo` is private and unversioned, so it is not
+Releasing to npm and ghcr.io is one command a maintainer runs from main once the
+release commit is in; CI never publishes. `apps/demo` is private and unversioned, so it is not
 tracked.
 
 ### How a release flows
@@ -1648,9 +1650,9 @@ tracked.
 3. Merging that release pull request pushes the version bump to `main`.
    release-please runs again, sees its own release commit, and creates the git
    tag and the GitHub release.
-4. Nothing is published. When the maintainer wants the release on npm they
-   follow [Publishing to npm](#publishing-to-npm) below, and for the Docker
-   image [Publishing the Docker image](#publishing-the-docker-image).
+4. Nothing is published. When the maintainer wants the release out they
+   follow [Releasing](#releasing) below, which publishes to npm and pushes the
+   Docker image in one run.
 
 The bumps are the pre-1.0 rules of decision-7, configured in
 `release-please-config.json`: `fix` takes a patch, `feat` takes a minor, and
@@ -1675,17 +1677,60 @@ since the default would use the target branch as the scope.
 package and must agree with `packages/cms/package.json`. release-please writes
 both; do not edit either by hand.
 
+### Releasing
+
+A release goes to npm and to ghcr.io together. `scripts/release.sh` does both
+in one run, after the release pull request is merged:
+
+```sh
+git checkout main
+git pull --tags
+pnpm release:dry-run   # print every step first
+pnpm release           # npm, then <version> and latest on ghcr.io
+pnpm release beta      # the same, plus a custom image tag
+```
+
+It runs the two scripts described below, in four steps, and stops at the first
+failure:
+
+1. The preflight checks of both, npm first: `npm-publish.sh --check-only`, then
+   `docker-build-push.sh --check-only`. A dirty tree, a missing login or an
+   untagged `HEAD` turns up here, before minutes of gates, and so does an
+   interactive `docker login` if ghcr.io needs one.
+2. The quality gates, once: `pnpm lint`, `pnpm format:check`,
+   `pnpm typecheck`, `pnpm test` and `pnpm test:11ty`. The list is the union of
+   the gates of both scripts, which all three read from
+   `scripts/lib/quality-gates.sh`, so a gate added to either script is run
+   here too.
+3. `npm-publish.sh --skip-gates`, which re-runs its own checks and publishes.
+4. `docker-build-push.sh --skip-gates`, which re-runs its own checks, builds
+   and pushes.
+
+If the Docker step fails after npm published, the script says so and prints the
+command that finishes the release, for example
+`pnpm docker:build-push -- --skip-gates beta`. Run that once the problem is
+fixed. Running `pnpm release` again would stop at the npm preflight, because
+the version is already on the registry.
+
+Each script also runs on its own, for publishing only one half or for
+re-running the half that failed. Both take `--check-only`, which runs the
+preflight checks and nothing else, and `--skip-gates`, which does everything
+except the quality gates. `--skip-gates` assumes the gates just passed on this
+commit, so use it only after a run whose gates passed. The two flags cannot be
+used together.
+
 ### Publishing to npm
 
-CI does not publish. A maintainer publishes with `scripts/npm-publish.sh`, the
-same shape as the Docker script below, after the release pull request is
-merged:
+CI does not publish. `pnpm release` publishes to npm as its third step. To
+publish only to npm, or to re-run that half of a release, use
+`scripts/npm-publish.sh`, the same shape as the Docker script below:
 
 ```sh
 git checkout main
 git pull --tags
 pnpm npm:dry-run    # check the package, the version and the tag first
 pnpm npm:publish
+pnpm npm:publish -- --skip-gates   # after a release whose gates passed
 ```
 
 The version is read from `packages/cms/package.json`, which is why the pull
@@ -1708,7 +1753,8 @@ before anything is published. The publish itself is
 `pnpm publish --filter @geekity/cms --access public`; `--access public` matters
 for a scoped package, and the npm scope `@geekity` must be owned by the project
 (decision-6). `--dry-run` prints the package, the version, the tag it needs and
-the gates it would run, and publishes, checks and runs nothing.
+the gates it would run, and publishes, checks and runs nothing. `--check-only`
+stops after the checks, and `--skip-gates` publishes without running the gates.
 
 The `pack-install` CI job has already proven the tarball installs and boots, so
 the publish itself is the only untested step.
@@ -1719,7 +1765,9 @@ The image is `ghcr.io/geekitycom/cms`, built from the `Dockerfile` at the
 repository root for `linux/amd64` and `linux/arm64`. CI never pushes it:
 GitHub's runners are amd64 only and the machine a site runs on may be arm64, so
 a CI publish could ship only half of what is needed. A maintainer publishes it
-from a workstation with `scripts/docker-build-push.sh`. What CI does do is
+from a workstation, normally as the last step of `pnpm release`. To push only
+an image, or to re-run that half of a release, use
+`scripts/docker-build-push.sh`. What CI does do is
 build the amd64 image on every pull request and boot it (the `docker-smoke`
 job), so a broken Dockerfile fails on its pull request rather than at release.
 
@@ -1731,6 +1779,7 @@ git pull
 pnpm docker:dry-run          # check the version and tags first
 pnpm docker:build-push       # pushes <version> and latest
 pnpm docker:build-push beta  # the same, plus a custom tag
+pnpm docker:build-push -- --skip-gates beta  # after a release whose gates passed
 ```
 
 The version tag is read from `packages/cms/package.json`, which is why the
@@ -1746,7 +1795,9 @@ failing gate stops it before anything is built. It then builds both platforms
 with `--pull --no-cache` on a buildx builder called `multiplatform`, which it
 creates with the `docker-container` driver the first time, and pushes every tag
 as one manifest list. `--dry-run` prints the image, the version and the tags,
-and builds, pushes, logs in and runs nothing.
+and builds, pushes, logs in and runs nothing. `--check-only` stops after the
+Docker and login checks, and `--skip-gates` builds and pushes without running
+the gates.
 
 Confirm the push carried both platforms:
 
