@@ -54,11 +54,13 @@ a {
   min-height: 2.5rem;
   background: var(--admin-bar);
   color: var(--admin-nav-text);
+  anchor-name: --admin-bar;
 }
 
 .admin-bar a {
   color: var(--admin-nav-text);
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .admin-bar a:hover,
@@ -74,22 +76,71 @@ a {
   flex: 1;
 }
 
-.admin-bar-user {
-  color: #c3c4c7;
-}
-
-.admin-bar form {
-  display: inline;
-}
-
-.admin-bar button {
+.admin-bar-account {
   padding: 0;
   border: 0;
   background: none;
   color: var(--admin-nav-text);
   font: inherit;
+  text-align: right;
   cursor: pointer;
-  text-decoration: underline;
+  anchor-name: --admin-account;
+}
+
+.admin-bar-account:hover,
+.admin-bar-account:focus-visible,
+.admin-bar-account:popover-open {
+  color: #72aee6;
+}
+
+.admin-bar-account::after {
+  content: ' \25BE' / '';
+}
+
+/* The menu is in the top layer, so it is placed rather than laid out: under
+   the greeting where anchor positioning exists, at the bar's right edge
+   where it does not. */
+
+.admin-account-menu {
+  inset: 2.5rem 0 auto auto;
+  margin: 0;
+  min-width: 10rem;
+  padding: 0.25rem 0;
+  border: 0;
+  background: var(--admin-nav);
+  color: var(--admin-nav-text);
+  box-shadow: 0 3px 5px rgb(0 0 0 / 20%);
+}
+
+@supports (top: anchor(--admin-bar bottom)) {
+  .admin-account-menu {
+    inset: anchor(--admin-bar bottom) anchor(--admin-account right) auto auto;
+  }
+}
+
+.admin-account-menu a,
+.admin-account-menu button[type='submit'] {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0.5rem 1rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--admin-nav-text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.admin-account-menu a:hover,
+.admin-account-menu a:focus-visible,
+.admin-account-menu button[type='submit']:hover,
+.admin-account-menu button[type='submit']:focus-visible {
+  background: var(--admin-bar);
+  color: #72aee6;
 }
 
 /* The shell: navigation column beside the screen itself. */

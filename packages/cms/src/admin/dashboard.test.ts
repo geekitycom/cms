@@ -4,6 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
+import { findUser, setUserProfile } from './accounts.ts';
 import type { Browser } from './__testing__/harness.ts';
 
 const box = sandbox();
@@ -94,7 +95,7 @@ describe('the admin shell', () => {
     );
   });
 
-  it('carries the site name, a link to the public site, the user and a logout form', async () => {
+  it('carries the site name, a link to the public site and the account menu', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
@@ -102,8 +103,7 @@ describe('the admin shell', () => {
 
     assert.match(html, /class="admin-bar-site"[^>]*>Geekity</);
     assert.match(html, /<a href="\/">View site<\/a>/);
-    assert.match(html, /Signed in as ada/);
-    assert.match(html, /<form method="post" action="\/admin\/logout">/);
+    assert.doesNotMatch(html, /Signed in as/);
   });
 
   it('leaves the login page without navigation', async () => {
@@ -114,6 +114,76 @@ describe('the admin shell', () => {
 
     assert.match(html, /<h1>Log in<\/h1>/);
     assert.ok(!/admin-nav/.test(html), 'nowhere to navigate until you are in');
+  });
+});
+
+/** The account menu's button and the popover it controls, out of a page. */
+function accountMenu(html: string): { button: string; menu: string } {
+  const button = /<button[^>]*popovertarget="admin-account-menu"[^>]*>([^<]*)<\/button>/.exec(html);
+  assert.ok(button, 'the bar has a button that controls the account menu');
+  const menu = /<div id="admin-account-menu"[^>]*\bpopover\b[^>]*>([\s\S]*?)<\/div>/.exec(html);
+  assert.ok(menu, 'and the menu is a popover');
+  return { button: (button[1] ?? '').trim(), menu: menu[1] ?? '' };
+}
+
+describe('the account menu (TASK-126)', () => {
+  it('greets a user without a display name by their username', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    const { button } = accountMenu(await (await agent.get('/admin')).text());
+
+    assert.equal(button, 'Hoopla! ada');
+  });
+
+  it('greets a user with a display name by that name', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada);
+    await setUserProfile({
+      dataDir: cms.config.dataDir,
+      userId: ada.id,
+      profile: { displayName: 'Ada Lovelace' },
+    });
+
+    const { button } = accountMenu(await (await agent.get('/admin')).text());
+
+    assert.equal(button, 'Hoopla! Ada Lovelace');
+  });
+
+  it("holds a link to the signed-in user's own edit screen and the logout form", async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const ada = findUser(cms.config.dataDir, 'ada');
+    assert.ok(ada);
+
+    const { menu } = accountMenu(await (await agent.get('/admin')).text());
+
+    assert.match(menu, new RegExp(`<a href="/admin/users/${String(ada.id)}">Edit profile</a>`));
+    assert.match(menu, /<form method="post" action="\/admin\/logout">/);
+    assert.match(menu, /<button type="submit">Log out<\/button>/);
+  });
+
+  it("signs out through the menu's form, with its CSRF token", async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const sessionId = agent.session();
+    assert.ok(sessionId !== undefined);
+
+    const { menu } = accountMenu(await (await agent.get('/admin')).text());
+    const action = /<form method="post" action="([^"]+)">/.exec(menu)?.[1];
+    const token = csrfField(menu);
+    assert.ok(action !== undefined && token !== undefined, 'the menu carries the logout form');
+
+    const refused = await agent.post(action, { csrf_token: 'not-the-token' });
+    assert.equal(refused.status, 403, 'a wrong token is still refused');
+    assert.ok(cms.admin.getSession(sessionId), 'and signs nobody out');
+
+    const response = await agent.post(action, { csrf_token: token });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/login');
+    assert.equal(cms.admin.getSession(sessionId), undefined, 'the session is gone');
   });
 });
 

@@ -232,8 +232,8 @@ describe('the edit user screen (TASK-97 AC #1, #7)', () => {
 
     const { html } = await editScreen(agent, grace);
 
-    assert.match(html, /Signed in as ada/, 'the bar is about the browser, not the page');
-    assert.doesNotMatch(html, /Signed in as grace/);
+    assert.match(html, /Hoopla! ada/, 'the bar is about the browser, not the page');
+    assert.doesNotMatch(html, /Hoopla! grace/);
   });
 
   it('leaves the list with nothing on it that edits anybody', async () => {
@@ -554,7 +554,7 @@ describe('adding a user', () => {
 
     const grace = await signIn(cms, { username: 'grace', password: 'a password of her own' });
     const dashboard = await (await grace.get('/admin')).text();
-    assert.match(dashboard, /Signed in as grace/);
+    assert.match(dashboard, /Hoopla! grace/);
   });
 
   it('generates a password on request and shows it once, and it is the real one', async () => {
@@ -575,7 +575,7 @@ describe('adding a user', () => {
 
     // The password on the screen is the one that was stored, not a decoration.
     const grace = await signIn(cms, { username: 'grace', password: shown });
-    assert.match(await (await grace.get('/admin')).text(), /Signed in as grace/);
+    assert.match(await (await grace.get('/admin')).text(), /Hoopla! grace/);
 
     // Shown once: the flash is cleared by the page that renders it.
     assert.doesNotMatch(await (await agent.get('/admin/users')).text(), /Their password is/);
@@ -1080,7 +1080,7 @@ describe('changing your own password', () => {
     });
 
     const withNew = await signIn(cms, { username: 'ada', password: 'a brand new password' });
-    assert.match(await (await withNew.get('/admin')).text(), /Signed in as ada/);
+    assert.match(await (await withNew.get('/admin')).text(), /Hoopla! ada/);
 
     const stale = browser(cms);
     const loginToken = csrfField(await (await stale.get('/admin/login')).text());
