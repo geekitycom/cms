@@ -22,6 +22,7 @@ import { after, describe, it } from 'node:test';
 import { PACKAGE_ROOT } from './__testing__/cli.ts';
 
 const SCRIPT = path.join(PACKAGE_ROOT, '..', '..', 'scripts', 'npm-publish.sh');
+const GATES_LIB = path.join(PACKAGE_ROOT, '..', '..', 'scripts', 'lib', 'quality-gates.sh');
 const GATES = ['lint', 'format:check', 'typecheck', 'test', 'test:11ty'];
 
 const scratch: string[] = [];
@@ -74,8 +75,9 @@ function run(args: string[], version = '9.8.7', options: Options = {}): Run {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'geekity-npm-publish-'));
   scratch.push(repo);
 
-  fs.mkdirSync(path.join(repo, 'scripts'));
+  fs.mkdirSync(path.join(repo, 'scripts', 'lib'), { recursive: true });
   fs.copyFileSync(SCRIPT, path.join(repo, 'scripts', 'npm-publish.sh'));
+  fs.copyFileSync(GATES_LIB, path.join(repo, 'scripts', 'lib', 'quality-gates.sh'));
   fs.writeFileSync(path.join(repo, 'package.json'), '{ "version": "0.0.0" }\n');
   fs.mkdirSync(path.join(repo, 'packages', 'cms'), { recursive: true });
   fs.writeFileSync(
@@ -236,5 +238,96 @@ describe('npm-publish.sh real run', () => {
     assert.ok(calls.indexOf(publish) > calls.lastIndexOf('pnpm test:11ty'), calls.join('\n'));
     assert.ok(calls.indexOf('npm whoami') < calls.indexOf('pnpm lint'), calls.join('\n'));
     assert.match(output, /@geekity\/cms@9\.8\.7/);
+  });
+});
+
+describe('npm-publish.sh --check-only', () => {
+  it('runs every preflight check, then stops before any gate or publish', () => {
+    const { status, output, calls } = run(['--check-only']);
+
+    assert.equal(status, 0, output);
+    assert.deepEqual(calls, [
+      'git status --porcelain',
+      'git tag --points-at HEAD',
+      'npm whoami',
+      'npm view @geekity/cms@9.8.7 version',
+    ]);
+    assert.match(output, /@geekity\/cms@9\.8\.7/);
+  });
+
+  it('fails as a real run would when a preflight check fails', () => {
+    const { status, output, calls } = run(['--check-only'], '9.8.7', { published: '9.8.7' });
+
+    assert.notEqual(status, 0, output);
+    assert.match(output, /already published/);
+    assert.deepEqual(gatesRun(calls), []);
+    assert.deepEqual(publishes(calls), []);
+  });
+
+  it('says in a dry run that it would check and do nothing else', () => {
+    const { status, output, calls } = run(['--dry-run', '--check-only']);
+
+    assert.equal(status, 0, output);
+    assert.match(output, /preflight checks only/);
+    assert.doesNotMatch(output, /pnpm publish/);
+    assert.deepEqual(calls, []);
+  });
+});
+
+describe('npm-publish.sh --skip-gates', () => {
+  it('runs the preflight checks and publishes, with no gate at all', () => {
+    const { status, output, calls } = run(['--skip-gates']);
+
+    assert.equal(status, 0, output);
+    assert.deepEqual(gatesRun(calls), []);
+    assert.deepEqual(publishes(calls), ['pnpm publish --filter @geekity/cms --access public']);
+    assert.ok(calls.indexOf('npm whoami') < calls.indexOf(publishes(calls)[0] ?? ''));
+  });
+
+  it('still refuses when a preflight check fails', () => {
+    const { status, output, calls } = run(['--skip-gates'], '9.8.7', { dirty: true });
+
+    assert.notEqual(status, 0, output);
+    assert.deepEqual(publishes(calls), []);
+  });
+
+  it('takes its flags after the -- that pnpm passes through', () => {
+    const { status, output, calls } = run(['--', '--skip-gates']);
+
+    assert.equal(status, 0, output);
+    assert.deepEqual(gatesRun(calls), []);
+    assert.equal(publishes(calls).length, 1, calls.join('\n'));
+  });
+
+  it('warns in its usage that it assumes the gates just passed on this commit', () => {
+    const { status, output } = run(['--help']);
+
+    assert.equal(status, 0, output);
+    assert.match(output, /--skip-gates/);
+    assert.match(output, /assumes the quality gates just passed on this commit/);
+  });
+
+  it('says in a dry run that it would skip the gates', () => {
+    const { status, output, calls } = run(['--dry-run', '--skip-gates']);
+
+    assert.equal(status, 0, output);
+    assert.match(output, /skip the quality gates/);
+    assert.match(output, /pnpm publish --filter @geekity\/cms --access public/);
+    assert.deepEqual(calls, []);
+  });
+});
+
+describe('npm-publish.sh --check-only with --skip-gates', () => {
+  it('refuses the two together, in either order, and runs nothing', () => {
+    for (const args of [
+      ['--check-only', '--skip-gates'],
+      ['--skip-gates', '--check-only'],
+    ]) {
+      const { status, output, calls } = run(args);
+
+      assert.notEqual(status, 0, output);
+      assert.match(output, /--check-only and --skip-gates/);
+      assert.deepEqual(calls, []);
+    }
   });
 });

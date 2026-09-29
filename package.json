@@ -28,7 +28,9 @@
     "docker:dry-run": "./scripts/docker-build-push.sh --dry-run",
     "docker:smoke": "./scripts/docker-smoke.sh",
     "npm:publish": "./scripts/npm-publish.sh",
-    "npm:dry-run": "./scripts/npm-publish.sh --dry-run"
+    "npm:dry-run": "./scripts/npm-publish.sh --dry-run",
+    "release": "./scripts/release.sh",
+    "release:dry-run": "./scripts/release.sh --dry-run"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",

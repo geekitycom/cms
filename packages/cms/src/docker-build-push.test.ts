@@ -22,6 +22,7 @@ import { after, describe, it } from 'node:test';
 import { PACKAGE_ROOT } from './__testing__/cli.ts';
 
 const SCRIPT = path.join(PACKAGE_ROOT, '..', '..', 'scripts', 'docker-build-push.sh');
+const GATES_LIB = path.join(PACKAGE_ROOT, '..', '..', 'scripts', 'lib', 'quality-gates.sh');
 const IMAGE = 'ghcr.io/geekitycom/cms';
 const GATES = ['lint', 'format:check', 'typecheck', 'test'];
 
@@ -69,8 +70,9 @@ function run(args: string[], version = '9.8.7', options: Options = {}): Run {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'geekity-docker-push-'));
   scratch.push(repo);
 
-  fs.mkdirSync(path.join(repo, 'scripts'));
+  fs.mkdirSync(path.join(repo, 'scripts', 'lib'), { recursive: true });
   fs.copyFileSync(SCRIPT, path.join(repo, 'scripts', 'docker-build-push.sh'));
+  fs.copyFileSync(GATES_LIB, path.join(repo, 'scripts', 'lib', 'quality-gates.sh'));
   fs.writeFileSync(path.join(repo, 'Dockerfile'), 'FROM scratch\n');
   fs.writeFileSync(path.join(repo, 'package.json'), '{ "version": "0.0.0" }\n');
   fs.mkdirSync(path.join(repo, 'packages', 'cms'), { recursive: true });
@@ -230,5 +232,111 @@ describe('docker-build-push.sh refusals', () => {
 
     assert.notEqual(status, 0, output);
     assert.match(output, /unknown option: --push-only/);
+  });
+});
+
+describe('docker-build-push.sh --check-only', () => {
+  it('checks Docker and the ghcr.io login, then stops before any gate or build', () => {
+    const { status, output, calls } = run(['--check-only', 'beta']);
+
+    assert.equal(status, 0, output);
+    assert.deepEqual(calls, ['docker info']);
+    assert.match(output, /ghcr\.io\/geekitycom\/cms:beta/);
+  });
+
+  it('logs in to ghcr.io when needed, and fails as a real run would when it cannot', () => {
+    const { status, output, calls } = run(['--check-only'], '9.8.7', { loggedIn: false });
+
+    assert.notEqual(status, 0, output);
+    assert.ok(calls.includes('docker login ghcr.io'), calls.join('\n'));
+    assert.deepEqual(gatesRun(calls), []);
+    assert.deepEqual(builds(calls), []);
+  });
+
+  it('fails when Docker is not running', () => {
+    const { status, output, calls } = run(['--check-only'], '9.8.7', { dockerDown: true });
+
+    assert.notEqual(status, 0, output);
+    assert.match(output, /Docker is not running/);
+    assert.deepEqual(builds(calls), []);
+  });
+
+  it('rejects a custom tag Docker would not accept', () => {
+    const { status, output, calls } = run(['--check-only', 'not/a:tag']);
+
+    assert.notEqual(status, 0, output);
+    assert.match(output, /not a valid tag/);
+    assert.deepEqual(calls, []);
+  });
+
+  it('says in a dry run that it would check and do nothing else', () => {
+    const { status, output, calls } = run(['--dry-run', '--check-only']);
+
+    assert.equal(status, 0, output);
+    assert.match(output, /preflight checks only/);
+    assert.doesNotMatch(output, /Would build and push/);
+    assert.deepEqual(calls, []);
+  });
+});
+
+describe('docker-build-push.sh --skip-gates', () => {
+  it('checks, then builds and pushes every tag, with no gate at all', () => {
+    const { status, output, calls } = run(['--skip-gates', 'beta']);
+
+    assert.equal(status, 0, output);
+    assert.deepEqual(gatesRun(calls), []);
+    const [build, ...more] = builds(calls);
+    assert.deepEqual(more, []);
+    assert.ok(build !== undefined, calls.join('\n'));
+    assert.match(build, /--tag ghcr\.io\/geekitycom\/cms:9\.8\.7 /);
+    assert.match(build, /--tag ghcr\.io\/geekitycom\/cms:beta /);
+    assert.ok(calls.indexOf('docker info') < calls.indexOf(build), calls.join('\n'));
+  });
+
+  it('still stops when Docker is not running', () => {
+    const { status, output, calls } = run(['--skip-gates'], '9.8.7', { dockerDown: true });
+
+    assert.notEqual(status, 0, output);
+    assert.deepEqual(builds(calls), []);
+  });
+
+  it('takes its flags and tag after the -- that pnpm passes through', () => {
+    const { status, output, calls } = run(['--', '--skip-gates', 'beta']);
+
+    assert.equal(status, 0, output);
+    assert.deepEqual(gatesRun(calls), []);
+    assert.match(builds(calls)[0] ?? '', /--tag ghcr\.io\/geekitycom\/cms:beta /);
+  });
+
+  it('warns in its usage that it assumes the gates just passed on this commit', () => {
+    const { status, output } = run(['--help']);
+
+    assert.equal(status, 0, output);
+    assert.match(output, /--skip-gates/);
+    assert.match(output, /assumes the quality gates just passed on this commit/);
+  });
+
+  it('says in a dry run that it would skip the gates', () => {
+    const { status, output, calls } = run(['--dry-run', '--skip-gates', 'beta']);
+
+    assert.equal(status, 0, output);
+    assert.match(output, /skip the quality gates/);
+    assert.match(output, /ghcr\.io\/geekitycom\/cms:beta/);
+    assert.deepEqual(calls, []);
+  });
+});
+
+describe('docker-build-push.sh --check-only with --skip-gates', () => {
+  it('refuses the two together, in either order, and runs nothing', () => {
+    for (const args of [
+      ['--check-only', '--skip-gates'],
+      ['--skip-gates', '--check-only'],
+    ]) {
+      const { status, output, calls } = run(args);
+
+      assert.notEqual(status, 0, output);
+      assert.match(output, /--check-only and --skip-gates/);
+      assert.deepEqual(calls, []);
+    }
   });
 });
