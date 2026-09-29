@@ -121,6 +121,40 @@ describe('parseDocument', () => {
     }
   });
 
+  it('reads redirect_from as site paths, dropping anything that cannot redirect here', () => {
+    const source = [
+      '---',
+      'title: Moved',
+      'permalink: /now/',
+      'redirect_from:',
+      '  - /then/',
+      '  - relative/',
+      '  - /now/',
+      '  - /then/',
+      '  - /before-then/',
+      '---',
+      '',
+      'Body.',
+      '',
+    ].join('\n');
+    const document = parseDocument(source, { path: 'pages/moved.md' });
+    assert.deepEqual(document.redirectFrom, ['/then/', '/before-then/']);
+    assert.equal('redirect_from' in document.extra, false);
+
+    const single = parseDocument(
+      '---\ntitle: One\npermalink: /now/\nredirect_from: /then/\n---\n',
+      {
+        path: 'pages/one.md',
+      },
+    );
+    assert.deepEqual(single.redirectFrom, ['/then/']);
+
+    const none = parseDocument('---\ntitle: None\npermalink: /now/\n---\n', {
+      path: 'pages/none.md',
+    });
+    assert.equal('redirectFrom' in none, false);
+  });
+
   it('keeps front-matter keys it does not model', async () => {
     const path = 'posts/2026-08-15-notes-from-a-draft.md';
 

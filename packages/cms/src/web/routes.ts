@@ -1,4 +1,4 @@
-import type { Context, Hono } from 'hono';
+import type { Context, Hono, MiddlewareHandler } from 'hono';
 
 import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
@@ -86,6 +86,7 @@ import {
   SEARCH_PATH,
   SEARCH_QUERY_PARAM,
 } from './search.ts';
+import { findQueryRedirect, redirectLocation } from './redirects.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
@@ -98,6 +99,8 @@ import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
  * them, because the document lookup only runs once nothing else has matched.
  */
 export function mountPublicSite(app: Hono<GeekityEnv>): void {
+  app.use('*', declaredQueryRedirect);
+
   app.get(`${THEME_ASSET_PREFIX}*`, themeAsset);
   // Derived images go on first: their prefix is inside the uploads one, so the
   // general route would otherwise swallow them and answer 404 for a file that
@@ -187,6 +190,24 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // holds at that moment (TASK-36).
   app.notFound(resolveRequest);
 }
+
+/**
+ * A declared redirect whose source names a query, WordPress's `/?p=123` above
+ * all (TASK-128). It is answered before any route because `/` is one the
+ * not-found handler never sees, and it shadows nothing: no document is
+ * addressed by a query.
+ */
+const declaredQueryRedirect: MiddlewareHandler<GeekityEnv> = async (c, next) => {
+  if (c.req.method === 'GET' || c.req.method === 'HEAD') {
+    const { search } = new URL(c.req.url);
+    const redirect =
+      search === ''
+        ? undefined
+        : findQueryRedirect(c.var.redirects.current(), requestPath(c), search);
+    if (redirect !== undefined) return c.redirect(redirect.location, redirect.status);
+  }
+  await next();
+};
 
 /**
  * The last stop for a request: a taxonomy archive or one of its feeds, the
@@ -287,10 +308,49 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     }
   }
 
+  // Nothing lives here, so a URL something used to live at leads on to where
+  // it lives now. Asked only after every live lookup, which is what lets a new
+  // document take an old URL over.
+  const formerly =
+    movedHref(store, pages, pathname, undefined) ??
+    extension?.paths
+      .map((candidate) => movedHref(store, pages, candidate, extension.representation))
+      .find((href) => href !== undefined);
+  const { search } = new URL(c.req.url);
+  if (formerly !== undefined) return c.redirect(`${formerly}${search}`, 301);
+
   const canonical = canonicalPath(c, pathname, bases, authors);
   if (canonical !== undefined) return c.redirect(canonical, 301);
 
+  // And a URL the site itself says has moved (TASK-128), after every live
+  // lookup and after the slash that would lead to one, so a declared source
+  // never shadows a live document. One asked for without its trailing slash
+  // reaches the target in one hop.
+  const declared = c.var.redirects.current().paths;
+  const redirect =
+    declared.get(pathname) ?? (pathname.endsWith('/') ? undefined : declared.get(`${pathname}/`));
+  if (redirect !== undefined) {
+    return c.redirect(redirectLocation(redirect, search), redirect.status);
+  }
+
   return notFound(c);
+}
+
+/**
+ * Where the document that used to live at a URL lives now, in the
+ * representation asked for, or `undefined` when no published document names
+ * the URL in its `redirect_from` (TASK-127).
+ */
+function movedHref(
+  store: ContentStore,
+  pages: FrontPages,
+  pathname: string,
+  representation: Representation | undefined,
+): string | undefined {
+  const document = store.getByFormerPermalink(pathname);
+  if (document === undefined) return undefined;
+  const href = document.path === pages.home?.path ? '/' : encodePath(document.permalink);
+  return representation === undefined ? href : representationHref(href, representation);
 }
 
 /**
@@ -640,6 +700,9 @@ function canonicalTarget(
     // leads to `/`: one hop, the way `/page/1` reaches `/` in one.
     return document.path === pages.home?.path ? '/' : encodePath(pathname);
   }
+
+  const moved = movedHref(store, pages, pathname, undefined);
+  if (moved !== undefined) return moved;
 
   const listing = listingRequestAt(pages, pathname, bases, authors);
   if (listing === undefined) return undefined;

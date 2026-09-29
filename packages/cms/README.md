@@ -79,19 +79,20 @@ changelog.
 site (or `npx geekity`, or a `package.json` script, which is how the generated
 `sync` script calls it).
 
-| Command                                 | What it does                                                                                                                                                          |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `geekity serve`                         | Boot from the config file and listen. The default when no command is given.                                                                                           |
-| `geekity init <dir>`                    | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                  |
-| `geekity sync`                          | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                              |
-| `geekity rebuild`                       | Delete `data/geekity.db` and build it again from the files.                                                                                                           |
-| `geekity resend --all`, `<slug>...`     | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                            |
-| `geekity user add <name>`               | Create an admin account, so a site can get its first login without the setup screen.                                                                                  |
-| `geekity import wordpress-actor <name>` | Bring one person across from the WordPress ActivityPub plugin: their key pair, the actor id their followers hold, the plugin's numeric actor id, and their followers. |
-| `geekity --help`, `-h`                  | The same table, on the terminal.                                                                                                                                      |
-| `geekity --version`                     | The installed version.                                                                                                                                                |
+| Command                                   | What it does                                                                                                                                                          |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geekity serve`                           | Boot from the config file and listen. The default when no command is given.                                                                                           |
+| `geekity init <dir>`                      | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                  |
+| `geekity sync`                            | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                              |
+| `geekity rebuild`                         | Delete `data/geekity.db` and build it again from the files.                                                                                                           |
+| `geekity resend --all`, `<slug>...`       | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                            |
+| `geekity maintenance on`, `off`, `status` | Take the public site down on purpose with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` names when it should be back.             |
+| `geekity user add <name>`                 | Create an admin account, so a site can get its first login without the setup screen.                                                                                  |
+| `geekity import wordpress-actor <name>`   | Bring one person across from the WordPress ActivityPub plugin: their key pair, the actor id their followers hold, the plugin's numeric actor id, and their followers. |
+| `geekity --help`, `-h`                    | The same table, on the terminal.                                                                                                                                      |
+| `geekity --version`                       | The installed version.                                                                                                                                                |
 
-`serve`, `sync`, `rebuild`, `resend`, `user add` and `import wordpress-actor` take
+`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `user add` and `import wordpress-actor` take
 `--config <file>`; without it they look for `geekity.config.ts`, then
 `geekity.config.js`, then `geekity.config.mjs` in the working directory, and run
 on defaults if there is none.
@@ -274,6 +275,7 @@ directory; absolute ones are used as given.
 | `accessLog`        | `false`; `true` under `geekity serve` | `GEEKITY_ACCESS_LOG`         | One line per request on stdout: method, path with query, status, duration. See [The access log](#the-access-log).                                                                         |
 | `accessLogAddress` | `false`                               | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address on the end of each access-log line. `trustProxy` decides which address that is.                                                                                    |
 | `accessLogWriter`  | stdout                                | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                        |
+| `maintenance`      | `false`                               | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode, answering 503, until a restart without it.                                                                                                             |
 | `onDocumentChange` | none                                  | —                            | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                              |
 | `onPublish`        | none                                  | —                            | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                            |
 | `federation`       | `{}`                                  | —                            | Federation stores and guards. See [Federation](#federation).                                                                                                                              |
@@ -539,17 +541,20 @@ its front matter: the record that the post has been announced and when, which
 is what decides `Create` against `Update` and what a resend reads. Restoring a
 trashed post reuses it too.
 
-Because that URL is a promise, the editor keeps it: **a published post's slug
-and permalink cannot be changed**. Both fields still move freely on a draft,
-and a site that really means to move a published post can edit the file,
-knowing that its followers will be handed a second object.
-
 A post whose file already names an `activitypub.id` keeps it as its object id
 for the life of the post — that is how a post migrated from WordPress keeps the
 `https://example.com/?p=813` its followers, its replies and its RSS subscribers
 already hold. The CMS serves the post's object at that URL on an ActivityStreams
 request, redirects a browser from it to the permalink, and names it in every
-`Update` and `Delete`. The CMS never writes one itself.
+`Update` and `Delete`.
+
+The CMS writes one itself in one case: when a published post's slug or
+permalink is changed in the editor. A fediverse server cannot rename an object
+it holds, so the URL the post is leaving becomes its stored `activitypub.id`.
+Followers get an `Update` of the object they already have, a peer at the old
+URL still gets the object, and a browser there is redirected to the new
+permalink. The object's `url` is the new permalink. See
+[Moved URLs](#moved-urls).
 
 One POST serves a whole instance — the shared inbox is preferred — but the
 outcome is recorded per recipient, so an admin can see which one did not get it
@@ -2196,6 +2201,85 @@ the example config assembles them as `collections.menus`. A `menus` in a
 hand-edited `site.json` that is not an object of lists of items yields no menu
 rather than an error, exactly as a bad archive base falls back rather than
 taking the site down.
+
+### Moved URLs
+
+Changing the slug or the permalink of a published post or page in the editor
+moves it, and the URL it leaves is written into its file:
+
+```yaml
+permalink: /2026/01/new-name/
+redirect_from:
+  - /2026/01/first-name/
+  - /2026/01/second-name/
+```
+
+Every URL in `redirect_from` answers `301 Moved Permanently` with the current
+permalink, and so do its `.md` and `.json` spellings. Each entry points at the
+document itself, not at the next rename, so no chain of redirects builds up.
+The list is in the file, so deleting `data/geekity.db` keeps it working.
+
+A URL in the list only redirects while nothing else lives there: a new document
+given that URL takes it over. Moving a document back to a URL in its list takes
+that URL off the list. A draft that was never published moves without leaving
+anything behind. Correcting a published post's date files it under the new
+day but keeps its URL.
+
+### Declared redirects
+
+A site that moves to this CMS, or reorganises, lists the old URLs that no
+document owns in `content/_data/redirects.json`. The file is a JSON list:
+
+```json
+[
+  { "from": "/?p=123", "to": "/2026/01/hello/" },
+  { "from": "/old-section/", "to": "/new-section/", "status": 301 },
+  { "from": "/sale/", "to": "/shop/", "status": 302 },
+  { "from": "/forum/", "to": "https://forum.example.com/", "status": 308 }
+]
+```
+
+- `from` is a path on this site. It starts with `/` and can carry a query
+  string.
+- `to` is a path on this site, or an absolute `http` or `https` URL.
+- `status` is `301` or `308` for a permanent redirect, and `302` or `307` for a
+  temporary one. It defaults to `301`.
+
+A `from` without a query string matches that path with any query, or none. The
+request's query goes on to a `to` that has no query of its own, so
+`/old-section/?page=2` lands on `/new-section/?page=2`. The path must match
+exactly, except that a `from` ending in `/` also answers the same path without
+the slash, in one hop.
+
+A `from` with a query string matches only that query. The order of the
+parameters does not matter, so `/archives/?cat=4&paged=2` also matches
+`/archives/?paged=2&cat=4`. Nothing else in the request's query may differ:
+`/?p=123` does not match `/?p=123&replytocom=9`. This is how old WordPress
+`?p=` links reach their posts.
+
+A declared redirect never hides something real. A path-only `from` is answered
+only after every document, archive, feed and moved URL has had its turn, and
+just before the 404 page, so a document given that URL later takes it over. A
+`from` with a query string is answered first, because no document is addressed
+by its query. The admin, the federation endpoints and the health check answer
+before any declared redirect.
+
+The file is read on the next request after it changes, with no restart. An
+entry that cannot be served is logged as a warning at boot, and again on the
+first request after the file changes, and it is skipped. The following entries are skipped:
+
+- An entry with a missing or malformed `from`, `to` or `status`.
+- A second entry with the same `from`. The first entry wins.
+- Every entry that leads into a loop, such as `/a/` to `/b/` and `/b/` back to
+  `/a/`.
+
+A file that is not a JSON list serves no redirects and is reported the same
+way.
+
+Every redirect the CMS sends carries `X-Redirect-By: Geekity CMS`. This
+includes the declared redirects, moved URLs, trailing slashes, feed spellings
+and the admin's redirects. Someone who traces a chain of redirects through a
+proxy can see which layer sent each one.
 
 ## Content negotiation
 

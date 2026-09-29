@@ -150,6 +150,7 @@ directory; absolute ones are used as given.
 | `accessLog`        | `false`, but `true` under `geekity serve` | `GEEKITY_ACCESS_LOG`         | Write one line per request to stdout: the method, the path with its query string, the status and how long it took. `geekity serve` and the Docker image turn it on, because a server answering the internet should be able to say what it answered; `createCms` leaves it off, so a CMS embedded in another app never writes to its stdout unasked. See [The access log](#the-access-log). |
 | `accessLogAddress` | `false`                                   | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address at the end of each access-log line. Off unless asked for: an address is personal data and needs a reason and a retention policy. Which address is right is `trustProxy`'s answer.                                                                                                                                                                                   |
 | `seedContent`      | `false`                                   | `GEEKITY_SEED_CONTENT`       | When `geekity serve` starts and `contentDir` is missing or has no entries at all, fill it with the starter site `geekity init` writes, its `site.json` `url` set to the base URL. A directory with anything in it, even a dotfile, is never touched. Off so a site run from npm is never written to unasked.                                                                               |
+| `maintenance`      | `false`                                   | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode until a restart without it. `geekity maintenance on` and `off` are the everyday switch; see [Maintenance mode](#maintenance-mode).                                                                                                                                                                                                                       |
 
 The admin adds eight more:
 
@@ -549,7 +550,11 @@ monitor needs. It runs two checks: one query against the content index in
 pass it answers 200:
 
 ```json
-{ "status": "ok", "checks": { "database": "ok", "content": "ok" } }
+{
+  "status": "ok",
+  "maintenance": false,
+  "checks": { "database": "ok", "content": "ok" }
+}
 ```
 
 When either fails it answers 503, with that check reading `"fail"` and
@@ -564,6 +569,51 @@ carries `Cache-Control: no-store`, sets no cookie, and the login throttle does
 not count it, so probing it every few seconds costs nothing but the two checks.
 The older `/_geekity/health` still answers `{ "status": "ok" }` without
 checking anything.
+
+`maintenance` says whether the site is in maintenance mode. It does not change
+the status code: a site that is down on purpose is still healthy, and a
+container orchestrator that restarted it would be fighting the operator.
+
+### Maintenance mode
+
+Maintenance mode takes the public site down on purpose, for an upgrade or a
+restore, in a way browsers, crawlers and fediverse servers all read as
+temporary.
+
+```
+$ geekity maintenance on --until 2026-09-28T14:00:00Z
+Maintenance mode is on (/srv/site/data/maintenance.json). Expected back by Mon, 28 Sep 2026 14:00:00 GMT.
+$ geekity maintenance status
+$ geekity maintenance off
+```
+
+While it is on, every public page, feed, sitemap, `robots.txt` and ActivityPub
+endpoint answers `503 Service Unavailable` with `Retry-After` and
+`Cache-Control: no-store`. `Retry-After` is the `--until` time as an HTTP date
+while that time is ahead, and 600 seconds otherwise. A page answers with the
+theme's `layouts/503.njk`, and a `.json` or `.md` request answers in that
+format. A crawler keeps the page in its index, and a server whose inbox delivery
+was refused queues it for a retry instead of dropping it.
+
+Some requests are let through:
+
+- `/healthz` and `/_geekity/health`, which report `"maintenance": true`.
+- The admin, the login page included, so an admin can sign in and work.
+- The theme's files under `/theme/`, so the maintenance page is styled.
+- Every request from a signed-in user, so an admin can check the site before
+  turning maintenance off. These responses carry `Cache-Control: private,
+no-store`, so no shared cache keeps one and hands it to a stranger.
+
+The switch is the file `data/maintenance.json`. `on` writes it and `off`
+removes it, and the running site looks at it at most once a second, so neither
+needs a restart. It lives in `data/` and not in `content/` because it is
+operational state: `content/` is published and committed, and a flag that
+travelled with it would take down every checkout of the site.
+
+`GEEKITY_MAINTENANCE=on`, or `maintenance: true` in the config, keeps the site
+in maintenance from boot for the life of the process, for a site that must come
+up already down. Removing the file does not lift it; restarting without the
+setting does.
 
 ### The access log
 

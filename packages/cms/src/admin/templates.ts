@@ -59,6 +59,7 @@ export const ADMIN_TEMPLATES = {
   usersEdit: 'pages/users/edit.njk',
   federation: 'pages/federation/followers.njk',
   federationSettings: 'pages/federation/settings.njk',
+  serverError: 'pages/error.njk',
 } as const;
 
 /** How to build an {@link createAdminTemplateEnvironment}. */

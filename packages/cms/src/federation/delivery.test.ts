@@ -1019,28 +1019,60 @@ describe('resending a post', () => {
   });
 });
 
-describe('renaming a post that has already been announced', () => {
-  it('is refused, so no follower is ever handed a second object (decision-13)', async () => {
-    const { cms } = await site();
+describe('renaming a post that has already been announced (TASK-127)', () => {
+  const OLD_ID = `${BASE_URL}/2026/03/hello-world/`;
+
+  it('keeps the object id its followers hold and sends them an Update', async () => {
+    const { cms, contentDir } = await site();
     const agent = await signedIn(cms);
     await publishNewPost(agent);
     await cms.delivery.settled();
     deliveries.length = 0;
 
-    const response = await submitEditor(agent, '/admin/posts/hello-world', {
-      slug: 'renamed',
-      action: 'update',
-    });
-
-    assert.equal(response.status, 400);
-    assert.match(await response.text(), /permalink of a published post is permanent/);
+    await submitEditor(agent, '/admin/posts/hello-world', { slug: 'renamed', action: 'update' });
     await cms.delivery.settled();
-    assert.deepEqual(deliveries, [], 'nothing was announced, because nothing moved');
 
-    const served = await cms.app.request(`${BASE_URL}/2026/03/hello-world/`, {
+    assert.deepEqual(delivered('Delete'), [], 'nothing was withdrawn');
+    assert.deepEqual(delivered('Create'), [], 'and no second object was handed out');
+    const update = delivered('Update')[0];
+    assert.ok(update !== undefined, 'the followers were told about the move');
+    const object = update.body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], OLD_ID);
+    assert.equal(object['url'], `${BASE_URL}/2026/03/renamed/`);
+
+    const written = await readFile(path.join(contentDir, 'posts', '2026-03-04-renamed.md'), 'utf8');
+    assert.match(written, new RegExp(`^ {2}id: ${OLD_ID}$`, 'm'), 'the id is pinned in the file');
+  });
+
+  it('answers a peer at the old URL with the object and a browser with a redirect', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+
+    await submitEditor(agent, '/admin/posts/hello-world', { slug: 'renamed', action: 'update' });
+    await cms.delivery.settled();
+
+    const peer = await cms.app.request(OLD_ID, {
       headers: { accept: 'application/activity+json' },
     });
-    assert.equal(served.status, 200, 'the id every follower holds still dereferences');
+    assert.equal(peer.status, 200, 'the id every follower holds still dereferences');
+    const article = (await peer.json()) as Record<string, unknown>;
+    assert.equal(article['id'], OLD_ID);
+    assert.equal(article['url'], `${BASE_URL}/2026/03/renamed/`);
+
+    const browser = await cms.app.request(OLD_ID);
+    assert.equal(browser.status, 301);
+    assert.equal(
+      new URL(browser.headers.get('location') ?? '', BASE_URL).pathname,
+      '/2026/03/renamed/',
+    );
+
+    const atNewUrl = await cms.app.request(`${BASE_URL}/2026/03/renamed/`, {
+      headers: { accept: 'application/activity+json' },
+    });
+    assert.equal(atNewUrl.status, 200, 'the new permalink answers a peer too');
+    assert.equal(((await atNewUrl.json()) as Record<string, unknown>)['id'], OLD_ID);
   });
 });
 

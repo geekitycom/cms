@@ -38,6 +38,7 @@ export function documentContent(document: DocumentContent): DocumentContent {
     ...(document.date === undefined ? {} : { date: document.date }),
     ...(document.updated === undefined ? {} : { updated: document.updated }),
     permalink: document.permalink,
+    ...(document.redirectFrom === undefined ? {} : { redirectFrom: [...document.redirectFrom] }),
     tags: [...document.tags],
     categories: [...document.categories],
     draft: document.draft,
@@ -74,6 +75,9 @@ export function documentFrontMatter(document: DocumentContent): Record<string, u
   if (document.date !== undefined) data['date'] = document.date;
   if (document.updated !== undefined) data['updated'] = document.updated;
   data['permalink'] = document.permalink;
+  if (document.redirectFrom !== undefined && document.redirectFrom.length > 0) {
+    data['redirect_from'] = [...document.redirectFrom];
+  }
   if (document.tags.length > 0) data['tags'] = [...document.tags];
   if (document.categories.length > 0) data['categories'] = [...document.categories];
   if (document.draft) data['draft'] = true;

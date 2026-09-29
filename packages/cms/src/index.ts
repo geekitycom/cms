@@ -46,14 +46,19 @@ import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
 import { commentFormFor, createAkismetChecker, rebuildCommentIndexes } from './comments/index.ts';
 import { contactFormFor } from './contact/index.ts';
+import { createMaintenanceSwitch } from './maintenance.ts';
 import {
   createConversation,
+  createRedirectSource,
   createRenderer,
   createSiteDataSource,
   createThemeSource,
+  maintenanceGate,
   mountHealth,
   mountPublicSite,
   recentPosts,
+  redirectBy,
+  serverError,
   themeName,
 } from './web/index.ts';
 import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
@@ -1520,6 +1525,12 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // rather than at whatever moment the first request happens to arrive.
   themes.current();
 
+  // The site's declared redirects (TASK-128), read per request for the reason
+  // the site data is. Asked once here for the reason the theme is: an entry
+  // that cannot be served, or a loop, is reported at boot.
+  const redirects = createRedirectSource({ contentDir: resolved.contentDir });
+  redirects.current();
+
   const content = createContentSync({
     store,
     contentDir: resolved.contentDir,
@@ -1696,7 +1707,18 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const relays = createRelayService({ federation, admin, store, config: resolved });
   relays.sync();
 
+  const maintenance = createMaintenanceSwitch({
+    dataDir: resolved.dataDir,
+    forced: resolved.maintenance,
+    now: resolved.now,
+  });
+
   const app = new Hono<GeekityEnv>();
+
+  // A handler that throws is answered here rather than with Hono's plain-text
+  // 500. The middleware above the handler still runs on the way out, so the
+  // baseline and admin headers land on this response like any other.
+  app.onError(serverError);
 
   // One line per request, before anything else is registered so that every
   // route is on it: /healthz, the federation endpoints, the admin and the
@@ -1725,6 +1747,8 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('webmentions', webmentions);
     c.set('mail', mail);
     c.set('notifications', notifications);
+    c.set('redirects', redirects);
+    c.set('maintenance', maintenance);
     await next();
   });
 
@@ -1732,6 +1756,14 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // admin adds a policy of its own on top; the public site does not, so a
   // theme is free to reference whatever it likes.
   app.use('*', baselineSecurityHeaders);
+
+  // And one on every redirect, whichever part of the CMS sent it.
+  app.use('*', redirectBy);
+
+  // Maintenance mode (TASK-130) turns away everything after it but the health
+  // checks, the admin and the theme's files, so it goes in front of all of
+  // them: federation's inboxes included.
+  app.use('*', maintenanceGate);
 
   app.get('/_geekity/health', (c) => c.json({ status: 'ok' }));
 

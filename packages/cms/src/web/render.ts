@@ -45,6 +45,8 @@ export const TEMPLATES = {
   author: 'layouts/author.njk',
   search: 'layouts/search.njk',
   notFound: 'layouts/404.njk',
+  serverError: 'layouts/500.njk',
+  maintenance: 'layouts/503.njk',
 } as const;
 
 /**
@@ -181,6 +183,13 @@ export interface Renderer {
   renderSearch(search: SearchPage): string;
   /** The 404 page, for a path that resolved to nothing. */
   renderNotFound(url: string): string;
+  /** The 500 page, for a request whose handler threw. */
+  renderServerError(url: string): string;
+  /**
+   * The maintenance page (TASK-130), for a request turned away while the site
+   * is down on purpose. `until` is when the operator expects it back.
+   */
+  renderMaintenance(url: string, until: Date | undefined): string;
   /** Any template by name, with the site data already in the context. */
   render(template: string, context?: Record<string, unknown>): string;
   /**
@@ -656,6 +665,25 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         title: 'Not found',
         url,
         page: { url },
+      });
+    },
+
+    renderServerError(url) {
+      return render(TEMPLATES.serverError, {
+        title: 'Something went wrong',
+        url,
+        page: { url },
+      });
+    },
+
+    renderMaintenance(url, until) {
+      return render(TEMPLATES.maintenance, {
+        title: 'Down for maintenance',
+        url,
+        page: { url },
+        ...(until === undefined
+          ? {}
+          : { until: until.toISOString(), untilText: until.toUTCString() }),
       });
     },
 

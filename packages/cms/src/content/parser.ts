@@ -66,6 +66,7 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
     body,
     ...(date === undefined ? {} : { date }),
     ...optional('updated', asDate(data['updated'], 'updated', path)),
+    ...optional('redirectFrom', asRedirectFrom(data['redirect_from'], permalink)),
     ...optional('description', asString(data['description'])),
     ...optional('author', asString(data['author'])),
     ...optional('inReplyTo', asReplyTarget(data['in-reply-to'])),
@@ -186,6 +187,19 @@ function asTerms(value: unknown): string[] {
   if (typeof value === 'string') return value === '' ? [] : [value];
   if (!Array.isArray(value)) return [];
   return value.filter((term): term is string => typeof term === 'string' && term !== '');
+}
+
+/**
+ * `redirect_from` as the list of site paths it names, or `undefined` for none.
+ *
+ * One path may be a bare string, as a tag may. Only a path that starts with
+ * `/` is a URL on this site, and the document's own permalink cannot redirect
+ * to itself, so both are dropped along with repeats.
+ */
+function asRedirectFrom(value: unknown, permalink: string): string[] | undefined {
+  const paths = asTerms(value).filter((entry) => entry.startsWith('/') && entry !== permalink);
+  const unique = [...new Set(paths)];
+  return unique.length === 0 ? undefined : unique;
 }
 
 /**

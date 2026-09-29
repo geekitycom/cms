@@ -19,9 +19,24 @@ import type { ImportWordPressActorReport } from './federation/import-wordpress.t
 import { createCms } from './index.ts';
 import type { GeekityConfig } from './config.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
+import {
+  enterMaintenance,
+  leaveMaintenance,
+  maintenanceFile,
+  readMaintenance,
+} from './maintenance.ts';
 
 export type Command =
-  'serve' | 'init' | 'sync' | 'rebuild' | 'resend' | 'user' | 'import' | 'help' | 'version';
+  | 'serve'
+  | 'init'
+  | 'sync'
+  | 'rebuild'
+  | 'resend'
+  | 'user'
+  | 'import'
+  | 'maintenance'
+  | 'help'
+  | 'version';
 
 /** The commands a site can name on the command line, as opposed to the flags. */
 const COMMANDS: readonly Command[] = [
@@ -32,6 +47,7 @@ const COMMANDS: readonly Command[] = [
   'resend',
   'user',
   'import',
+  'maintenance',
 ];
 
 /**
@@ -49,6 +65,7 @@ const VALUE_FLAGS = [
   'public-key',
   'keypair',
   'followers',
+  'until',
 ] as const;
 
 /** The options that are simply on or off. */
@@ -93,6 +110,7 @@ Usage:
   geekity sync [--config <file>]
   geekity rebuild [--config <file>]
   geekity resend (--all | <slug>...) [--config <file>]
+  geekity maintenance (on [--until <time>] | off | status) [--config <file>]
   geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
   geekity import wordpress-actor <username> --actor-id <url> --wordpress-id <n>
           (--keypair <file> | --private-key <file> [--public-key <file>])
@@ -110,6 +128,11 @@ Commands:
                    Delete for one withdrawn. --all resends every post the site
                    has announced; this is how posts federated before a new
                    federation feature (such as quote posts) pick it up.
+  maintenance      Take the public site down on purpose, or bring it back.
+                   While on, pages, feeds, sitemaps and inbox deliveries answer
+                   503 with Retry-After; the admin, /healthz and signed-in
+                   users are let through. A running site notices within a
+                   second, with no restart.
   user add         Create an admin user, so a site can get its first login
                    without the setup screen.
   import
@@ -142,6 +165,10 @@ Options:
   --followers <url|file|none>
                    Where the followers come from. Left off, the plugin's own
                    public followers collection on the actor id's origin.
+  --until <time>   With maintenance on: when the site should be back, as an
+                   ISO 8601 time such as 2026-09-28T14:00:00Z. It is the
+                   Retry-After a client is sent, and the maintenance page
+                   says it.
   --all            With resend: every announced post rather than named ones.
   --force          Import over a key pair the user already has. Do this only
                    when you are certain the pair being imported is the one the
@@ -152,7 +179,8 @@ Options:
 
 Environment overrides:
   GEEKITY_PORT (or PORT), GEEKITY_CONTENT_DIR, GEEKITY_DATA_DIR,
-  GEEKITY_THEMES_DIR, GEEKITY_BASE_URL, GEEKITY_WATCH
+  GEEKITY_THEMES_DIR, GEEKITY_BASE_URL, GEEKITY_WATCH,
+  GEEKITY_MAINTENANCE (on keeps the site in maintenance until a restart)
 `;
 
 /** Turn `process.argv.slice(2)` into a command, its options and its arguments. */
@@ -414,6 +442,7 @@ async function main(argv: readonly string[]): Promise<number> {
   if (command === 'sync') return syncCommand(configPath);
   if (command === 'rebuild') return rebuildCommand(configPath);
   if (command === 'resend') return resendCommand(args, configPath, flags);
+  if (command === 'maintenance') return maintenanceCommand(args, configPath, flags);
 
   return serveCommand(configPath);
 }
@@ -440,6 +469,70 @@ async function init(args: readonly string[]): Promise<number> {
     ].join('\n'),
   );
   return 0;
+}
+
+/**
+ * `geekity maintenance on|off|status` (TASK-130).
+ *
+ * Only the file under `data/` is touched, so this works the same with the
+ * site running or stopped: a running site re-reads it within a second.
+ */
+async function maintenanceCommand(
+  args: readonly string[],
+  configPath: string | undefined,
+  flags: Readonly<Record<string, string | true>>,
+): Promise<number> {
+  const action = args[0];
+  const config = resolveConfig(await loadConfig(process.cwd(), configPath));
+  const file = maintenanceFile(config.dataDir);
+
+  if (action === 'on') {
+    const until = untilFlag(text(flags, 'until'));
+    await enterMaintenance(config.dataDir, { until });
+    process.stdout.write(`Maintenance mode is on (${file}).${untilLine(until)}\n`);
+    return 0;
+  }
+
+  if (action === 'off') {
+    await leaveMaintenance(config.dataDir);
+    process.stdout.write(`Maintenance mode is off.${forcedLine(config.maintenance)}\n`);
+    return 0;
+  }
+
+  if (action === 'status') {
+    const window = readMaintenance(config.dataDir);
+    if (window === undefined && !config.maintenance) {
+      process.stdout.write('Maintenance mode is off.\n');
+    } else {
+      process.stdout.write(
+        `Maintenance mode is on.${untilLine(window?.until)}${forcedLine(config.maintenance)}\n`,
+      );
+    }
+    return 0;
+  }
+
+  throw new Error('geekity maintenance needs on, off or status.');
+}
+
+function untilFlag(value: string | undefined): Date | undefined {
+  if (value === undefined) return undefined;
+  const until = new Date(value);
+  if (Number.isNaN(until.getTime())) {
+    throw new Error(
+      `--until needs a time such as 2026-09-28T14:00:00Z, received ${JSON.stringify(value)}.`,
+    );
+  }
+  return until;
+}
+
+function untilLine(until: Date | undefined): string {
+  return until === undefined ? '' : ` Expected back by ${until.toUTCString()}.`;
+}
+
+function forcedLine(forced: boolean): string {
+  return forced
+    ? ' GEEKITY_MAINTENANCE or the maintenance setting keeps it on until the site restarts without it.'
+    : '';
 }
 
 /**

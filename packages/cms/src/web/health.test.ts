@@ -49,6 +49,7 @@ describe('GET /healthz', () => {
     assert.match(response.headers.get('content-type') ?? '', /application\/json/);
     assert.deepEqual(await response.json(), {
       status: 'ok',
+      maintenance: false,
       checks: { database: 'ok', content: 'ok' },
     });
   });
@@ -62,6 +63,7 @@ describe('GET /healthz', () => {
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), {
       status: 'fail',
+      maintenance: false,
       checks: { database: 'fail', content: 'ok' },
     });
   });
@@ -75,6 +77,7 @@ describe('GET /healthz', () => {
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), {
       status: 'fail',
+      maintenance: false,
       checks: { database: 'ok', content: 'fail' },
     });
   });
@@ -89,6 +92,7 @@ describe('GET /healthz', () => {
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       status: 'ok',
+      maintenance: false,
       checks: { database: 'ok', content: 'ok' },
     });
     // The page is still there at its own address.
@@ -120,6 +124,7 @@ describe('GET /healthz', () => {
 
     assert.deepEqual(JSON.parse(body), {
       status: 'fail',
+      maintenance: false,
       checks: { database: 'fail', content: 'fail' },
     });
     assert.doesNotMatch(body, /ENOENT|closed|Error/i);
