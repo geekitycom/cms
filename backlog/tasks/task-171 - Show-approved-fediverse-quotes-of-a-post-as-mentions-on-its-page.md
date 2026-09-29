@@ -1,11 +1,11 @@
 ---
 id: TASK-171
 title: Show approved fediverse quotes of a post as mentions on its page
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-29 02:06'
-updated_date: '2026-09-29 02:28'
+updated_date: '2026-09-29 12:35'
 labels:
   - federation
 dependencies:
@@ -34,7 +34,7 @@ A post on this site can now be quoted from Mastodon (TASK-125), but the quote ne
 - [x] #5 The quote is rebuilt from the logged inbox JSON and the approval file, so deleting the SQLite index loses nothing (decision-9)
 - [x] #6 The quote's content is sanitised the same way a fediverse reply's is
 - [x] #7 Mention counts, and the comments feeds if they include mentions, count the quote consistently with the page
-- [ ] #8 Verified on a real site: the me.dm quote of https://shll.me/2026/09/this-post-should-be-able/ shows under that post
+- [x] #8 Verified on a real site: the me.dm quote of https://shll.me/2026/09/this-post-should-be-able/ shows under that post
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -74,10 +74,12 @@ AC #8 is not verified. It needs the deployed shll.me. Manual steps:
 3. Check that https://shll.me/2026/09/this-post-should-be-able/feed/ has the quote as an item, and that the site /feed/ source:comments count includes it.
 
 Follow-ups, not done here: doc-4's Inbox and Storage sections still do not list quotes.json or quote mentions (carried over from TASK-125). The post page ETag is document.hash, so a conditional GET of the HTML can return 304 after a new reply or quote. That is the same for replies today and was not changed here.
+
+AC #8 verified 2026-09-29 on shll.me: https://shll.me/2026/09/this-post-should-be-able/ shows 'Mentions (1)' linking https://me.dm/@andrewshell/117351853054835652, with the author's avatar served from /_geekity/avatars/.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-An approved fediverse quote of a post now shows in that post's Mentions group, with its author, a link to the quote and its sanitised words. It also appears in the post's comments feed, in /comments/feed/ and in the source:comments count. The quote is read from the logged Create (quote, quoteUri, quoteUrl or _misskey_quote, with no inReplyTo) and shows only while quotes.json holds an approval for that quote, post and actor. An Undo or Delete that revokes the approval hides it. A quote that also replies shows once, as a reply. Both inputs are files, so deleting the database loses nothing. Verified by signed-HTTP and unit tests, mutation checks, and curl against a running scratch site. AC #8 is still open and needs the deployed shll.me.
+An approved fediverse quote of a post now shows in that post's Mentions group, with its author, a link to the quote and its sanitised words. It also appears in the post's comments feed, in /comments/feed/ and in the source:comments count. The quote is read from the logged Create (quote, quoteUri, quoteUrl or _misskey_quote, with no inReplyTo) and shows only while quotes.json holds an approval for that quote, post and actor. An Undo or Delete that revokes the approval hides it. A quote that also replies shows once, as a reply. Both inputs are files, so deleting the database loses nothing. Verified by signed-HTTP and unit tests, mutation checks, curl against a running scratch site, and on shll.me, where the me.dm quote shows under the quoted post.
 <!-- SECTION:FINAL_SUMMARY:END -->
