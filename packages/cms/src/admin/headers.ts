@@ -21,13 +21,22 @@ export const NONCE_BYTES = 16;
 /**
  * The headers every response gets, admin or not.
  *
- * Deliberately two of them. `nosniff` says the `Content-Type` the CMS sends is
- * the one to believe, which constrains nothing a theme might want to do, and
+ * `nosniff` says the `Content-Type` the CMS sends is the one to believe, and
  * HSTS is about the host rather than the page — the admin and the public site
  * are the same origin, so sending it on one and not the other would be a
- * distinction the browser does not make. Everything else that would tell a
- * browser what a page may load stays off the public site: a theme is somebody
- * else's HTML and the CMS has no business deciding what it may reference.
+ * distinction the browser does not make. Neither can be configured away.
+ *
+ * Then the site's `securityHeaders`, which default to
+ * `DEFAULT_SECURITY_HEADERS` in config.ts: a referrer policy, framing by the site
+ * itself only, powerful browser features off, and a browsing context of its
+ * own. None of them restricts what a page may load. That is the line
+ * the public site does not cross: there is no content policy, no `script-src`
+ * or `img-src`, because a theme is somebody else's HTML and the CMS has no
+ * business deciding what it may reference. The one CSP directive sent,
+ * `frame-ancestors`, is about who may frame the page, not what is in it.
+ *
+ * A configured header goes on only when the response has none by that name,
+ * so the admin's stricter values, set further in, are never replaced.
  */
 export const baselineSecurityHeaders: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   await next();
@@ -108,10 +117,12 @@ export function adminContentSecurityPolicy(nonce: string): string {
   ].join('; ');
 }
 
-/** The two headers every response carries. */
 function applyBaseline(headers: Headers, config: ResolvedConfig): void {
   headers.set('X-Content-Type-Options', 'nosniff');
   // The same test the session cookie's `Secure` uses, so the two can never
   // disagree about whether the site is served over https.
   if (usesSecureCookies(config)) headers.set('Strict-Transport-Security', HSTS_VALUE);
+  for (const [name, value] of Object.entries(config.securityHeaders)) {
+    if (!headers.has(name)) headers.set(name, value);
+  }
 }

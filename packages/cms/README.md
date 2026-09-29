@@ -276,6 +276,7 @@ directory; absolute ones are used as given.
 | `accessLogAddress` | `false`                               | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address on the end of each access-log line. `trustProxy` decides which address that is.                                                                                    |
 | `accessLogWriter`  | stdout                                | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                        |
 | `maintenance`      | `false`                               | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode, answering 503, until a restart without it.                                                                                                             |
+| `securityHeaders`  | [see below](#security-headers)        | —                            | Headers every response carries. A string replaces a default or adds a header, `false` removes one.                                                                                        |
 | `onDocumentChange` | none                                  | —                            | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                              |
 | `onPublish`        | none                                  | —                            | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                            |
 | `federation`       | `{}`                                  | —                            | Federation stores and guards. See [Federation](#federation).                                                                                                                              |
@@ -1993,12 +1994,67 @@ no restart.
 Every response the CMS sends carries `X-Content-Type-Options: nosniff`, and
 `Strict-Transport-Security: max-age=31536000; includeSubDomains` when `baseUrl`
 is an `https` URL — the same test that decides whether the session cookie is
-`Secure`, so the two cannot disagree. That is all the public site gets: a theme
-is somebody else's HTML and the CMS has no business deciding what it may
-reference.
+`Secure`, so the two cannot disagree. Neither can be turned off.
 
-Every response under `/admin`, static files and redirects included, carries
-three more:
+Every response also carries these, public pages, feeds, uploads, ActivityPub
+JSON, redirects, 404s, the maintenance 503 and the 500 page alike:
+
+| Header                       | Default                                                                                                                                                    |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Referrer-Policy`            | `strict-origin-when-cross-origin`                                                                                                                          |
+| `Content-Security-Policy`    | `frame-ancestors 'self'`                                                                                                                                   |
+| `X-Frame-Options`            | `SAMEORIGIN`                                                                                                                                               |
+| `Permissions-Policy`         | `browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()` |
+| `Cross-Origin-Opener-Policy` | `same-origin`                                                                                                                                              |
+
+None of them limits what a page may load, and that is the line the CMS holds
+on the public site. There is no content policy, no `default-src`, `script-src`
+or `img-src`, because a theme is somebody else's HTML and the CMS has no
+business deciding what it may reference. `frame-ancestors` is the only
+directive in the policy, and it is about who may put the page in a frame, not
+what is in it. Each header does something else:
+
+- `Referrer-Policy` sends only the origin, not the full URL, when a reader
+  follows a link to another site, so the path and query of the page they were
+  on stay on the site.
+- `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN` stop another site
+  from framing a page. That matters most for a signed-in user, whose pages carry
+  a comment form that posts as them, but it covers every page because the CMS
+  cannot tell a framed reader from a framed user.
+- `Permissions-Policy` turns off browser features a blog has no use for. It
+  leaves alone what an embedded video player asks for: autoplay, fullscreen,
+  `encrypted-media`, picture-in-picture, and the motion sensors behind a
+  360-degree video.
+- `Cross-Origin-Opener-Policy: same-origin` keeps a window the site opens, or a
+  window that opens the site, from reaching into it through `window.opener`.
+
+Two of them can get in the way of something a site does on purpose. A site that
+is meant to be framed elsewhere, such as in a portfolio or a slide deck, has to
+name that host in `frame-ancestors` and remove `X-Frame-Options`, which cannot
+name another host. A theme that signs readers in or takes payment through a
+popup on another origin needs `same-origin-allow-popups` for COOP. The CMS
+itself does neither.
+
+A site changes them with `securityHeaders` in its config. Names are matched
+without regard to case. A string replaces a default or adds a header of the
+site's own, and `false` removes a default:
+
+```ts
+export default defineConfig({
+  securityHeaders: {
+    'Content-Security-Policy':
+      "frame-ancestors 'self' https://portfolio.example",
+    'X-Frame-Options': false,
+    'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+  },
+});
+```
+
+A name that is not a header name, or a value that is empty or has a line break
+in it, stops the site at boot. There is no environment variable for these.
+
+Every response under `/admin`, static files and redirects included, gets three
+stricter values in their place, whatever `securityHeaders` says:
 
 | Header                    | Value                                         |
 | ------------------------- | --------------------------------------------- |

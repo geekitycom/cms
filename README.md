@@ -726,8 +726,14 @@ almost everywhere — with a per-response nonce on `style-src` for the styles
 CodeMirror injects at runtime, `data:` on `img-src` for a preview of a post
 holding a data URI image, and `frame-ancestors 'self'` because the editor
 frames its own preview. There is no inline script in the admin, so `script-src`
-is a bare `'self'`. The public site gets none of that, so a theme is free to
-reference whatever it likes. The package README has
+is a bare `'self'`. The public site gets none of that. It gets a
+`Referrer-Policy` of `strict-origin-when-cross-origin`, framing by the site
+itself only (`frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`), a
+`Permissions-Policy` that turns off the camera, microphone, geolocation,
+payments, USB and similar, and `Cross-Origin-Opener-Policy: same-origin`. None
+of them limits what a page loads, so a theme is still free to reference whatever
+it likes, and a site can change or remove each one with `securityHeaders`. The
+package README has
 [the whole table and the reasoning](packages/cms/README.md#security-headers).
 
 ## The media library

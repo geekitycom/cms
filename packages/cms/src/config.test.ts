@@ -329,6 +329,40 @@ describe('resolveConfig', () => {
     );
   });
 
+  it('merges security headers over the defaults by name, whatever the case', () => {
+    const defaults = resolveConfig({}, { cwd: '/srv/site', env: {} }).securityHeaders;
+    const config = resolveConfig(
+      {
+        securityHeaders: {
+          'REFERRER-POLICY': 'no-referrer',
+          'Cross-Origin-Opener-Policy': false,
+          'Cross-Origin-Resource-Policy': 'same-site',
+        },
+      },
+      { cwd: '/srv/site', env: {} },
+    );
+
+    assert.equal(defaults['referrer-policy'], 'strict-origin-when-cross-origin');
+    assert.equal(config.securityHeaders['referrer-policy'], 'no-referrer');
+    assert.ok(!('cross-origin-opener-policy' in config.securityHeaders), 'removed');
+    assert.equal(config.securityHeaders['cross-origin-resource-policy'], 'same-site');
+    assert.equal(config.securityHeaders['x-frame-options'], 'SAMEORIGIN', 'the rest stay');
+  });
+
+  it('refuses a security header it could not send', () => {
+    const at = { cwd: '/srv/site', env: {} };
+    assert.throws(() => resolveConfig({ securityHeaders: { 'Bad Name': 'x' } }, at), /Bad Name/);
+    assert.throws(
+      () => resolveConfig({ securityHeaders: { 'X-Test': 'a\r\nSet-Cookie: b' } }, at),
+      /X-Test/,
+    );
+    assert.throws(() => resolveConfig({ securityHeaders: { 'X-Test': '' } }, at), /X-Test/);
+    assert.throws(
+      () => resolveConfig({ securityHeaders: { 'X-Test': true as unknown as string } }, at),
+      /X-Test/,
+    );
+  });
+
   it('defaults cwd and env to the running process', () => {
     const config = resolveConfig({ baseUrl: 'https://geekity.example' });
 

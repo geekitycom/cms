@@ -393,6 +393,7 @@ export {
 export {
   DEFAULT_IMAGE_FORMATS,
   DEFAULT_IMAGE_WIDTHS,
+  DEFAULT_SECURITY_HEADERS,
   DEFAULT_UPLOAD_MAX_BYTES,
   DEFAULT_UPLOAD_TYPES,
   defineConfig,
@@ -1757,9 +1758,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
     await next();
   });
 
-  // Two headers on everything the CMS answers, admin and public alike. The
-  // admin adds a policy of its own on top; the public site does not, so a
-  // theme is free to reference whatever it likes.
+  // The baseline on everything the CMS answers, admin and public alike, and
+  // outside everything below so redirects, the 503, 404s and the onError 500
+  // carry it too. The admin sets stricter values of its own inside it; none of
+  // it restricts what a theme may reference.
   app.use('*', baselineSecurityHeaders);
 
   // And one on every redirect, whichever part of the CMS sent it.
