@@ -199,10 +199,41 @@ anonymous reader's page is unchanged, byte for byte.
 
 The bar keeps its markup and its stylesheet in a shadow root, so a theme's CSS
 cannot restyle it and its CSS cannot restyle the theme. The element carries an
-inline style that resets it, so rules such as `body > *` or a grid on `<body>`
-do not resize or move it. It is in normal flow: it pushes the page down by its
-own height instead of covering it, and a sticky header sticks at the top of the
-window once the bar has scrolled away.
+inline style that resets it and fixes it to the top of the window, full width,
+above the page. Padding or margins on `<body>`, and rules such as `body > *` or
+a grid on `<body>`, do not move or resize it. It stays in place while the page
+scrolls.
+
+The bar takes no room by itself, so the CMS makes room for it from outside. On
+a page that carries the bar:
+
+- `<html>` has the class `geekity-admin-bar`.
+- A stylesheet in `<head>` declares `--geekity-admin-bar-height` on `:root`
+  and sets `margin-top: var(--geekity-admin-bar-height) !important` on
+  `<html>`, which pushes the whole page down below the bar. The height is
+  40px, or 80px on a screen 600px wide or less, where the bar can wrap onto a
+  second line. A script in the bar then measures it and sets the real height
+  on `<html>`, so the push matches the bar at any width, and is 0 when a theme
+  hides the bar.
+- The same stylesheet sets `scroll-padding-top` on `<html>` to the bar's
+  height, so a link to an anchor on the page, such as a skip link or a
+  footnote, scrolls its target to below the bar. It is declared with no
+  specificity, so a theme that sets its own `scroll-padding-top` keeps it.
+
+A theme with a sticky or fixed header of its own offsets it by the bar's
+height. The fallback of `0` applies on every page the bar is not on:
+
+```css
+.site-header {
+  position: sticky;
+  top: var(--geekity-admin-bar-height, 0);
+}
+```
+
+A theme that sets its own `scroll-padding-top` adds the bar to it the same
+way, for example `calc(var(--geekity-admin-bar-height, 0px) + 4rem)`. Use the
+`geekity-admin-bar` class for any other change, for example
+`.geekity-admin-bar .site-header { ... }`.
 
 A theme that must not show the bar can hide it:
 
@@ -213,6 +244,14 @@ geekity-admin-bar {
 ```
 
 The `!important` is needed because it has to beat the element's inline style.
+With script on, the bar then measures 0 and the page moves back up. For a
+reader without script, the theme also removes the margin:
+
+```css
+html.geekity-admin-bar {
+  margin-top: 0 !important;
+}
+```
 
 ### An entry
 

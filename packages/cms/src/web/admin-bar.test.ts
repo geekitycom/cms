@@ -119,8 +119,21 @@ const BROKEN_THEME: Record<string, string> = {
     '{% extends "layouts/base.njk" %}{% block content %}{{ nothing() }}{% endblock %}',
 };
 
+/** The bare theme with a class of its own on <html>, in single quotes. */
+const CLASSED_THEME: Record<string, string> = {
+  ...BARE_THEME,
+  'layouts/base.njk': BARE_BASE.replace('<html lang="en">', `<html lang="en" class='dark'>`),
+};
+
+/** The bare theme with no <head> tags, which HTML allows. */
+const HEADLESS_THEME: Record<string, string> = {
+  ...BARE_THEME,
+  'layouts/base.njk':
+    '<!doctype html>\n<html lang="en"><title>{{ site.title }}</title>\n<body>{% block content %}{% endblock %}</body></html>\n',
+};
+
 interface SiteOptions {
-  theme?: 'bare' | 'broken' | undefined;
+  theme?: 'bare' | 'broken' | 'classed' | 'headless' | undefined;
   homepage?: string | undefined;
 }
 
@@ -132,6 +145,8 @@ async function site(options: SiteOptions = {}): Promise<Cms> {
 
   await writeTree(path.join(themesDir, 'bare'), BARE_THEME);
   await writeTree(path.join(themesDir, 'broken'), BROKEN_THEME);
+  await writeTree(path.join(themesDir, 'classed'), CLASSED_THEME);
+  await writeTree(path.join(themesDir, 'headless'), HEADLESS_THEME);
   await writeTree(contentDir, {
     ...CONTENT,
     '_data/site.json': JSON.stringify({
@@ -168,10 +183,21 @@ function barIn(html: string): string | undefined {
   return /<geekity-admin-bar[\s\S]*?<\/geekity-admin-bar>/.exec(html)?.[0];
 }
 
-/** The page with the bar taken out, which is what the theme drew. */
+/** The stylesheet that makes room for the bar, from outside its shadow root. */
+function offsetStyleIn(html: string): string | undefined {
+  return /<style id="geekity-admin-bar-offset">[\s\S]*?<\/style>/.exec(html)?.[0];
+}
+
+/**
+ * The page with the bar, its offset stylesheet and its class on `<html>` taken
+ * out, which is what the theme drew.
+ */
 function withoutBar(html: string): string {
-  const bar = barIn(html);
-  return bar === undefined ? html : html.replace(bar, '');
+  let drawn = html;
+  for (const added of [barIn(html), offsetStyleIn(html)]) {
+    if (added !== undefined) drawn = drawn.replace(added, '');
+  }
+  return drawn.replace('<html class="geekity-admin-bar" lang="en">', '<html lang="en">');
 }
 
 /** The bar's links, as label and href, in the order they appear. */
@@ -309,9 +335,71 @@ describe('the admin bar for a signed-in user', () => {
     const agent = await signedInTo(cms);
     const bar = barIn(await (await agent.get(POST_URL)).text()) ?? '';
 
-    assert.match(bar, /^<geekity-admin-bar style="[^"]*all:\s*initial/);
+    assert.match(
+      bar,
+      /^<geekity-admin-bar style="all: initial; display: block; position: fixed; top: 0; left: 0; right: 0; z-index: \d+">/,
+      "the host is reset and pinned to the top of the window, out of the theme's flow",
+    );
     assert.match(bar, /<template shadowrootmode="open"><style>/);
     assert.match(bar, /\.admin-bar\s*\{/, 'its stylesheet travels inside the shadow root');
+  });
+
+  it('makes room for itself at the top of the page, from outside the shadow root', async () => {
+    const cms = await site({ theme: 'bare' });
+    const agent = await signedInTo(cms);
+    const html = await (await agent.get(POST_URL)).text();
+
+    const head = /<head>[\s\S]*<\/head>/.exec(html)?.[0] ?? '';
+    const style = offsetStyleIn(head);
+    assert.ok(style !== undefined, 'the offset stylesheet is in <head>');
+    assert.match(html, /<style id="geekity-admin-bar-offset">[\s\S]*?<\/style>\s*<\/head>/);
+    assert.match(style, /:root \{ --geekity-admin-bar-height: 40px; \}/, 'one line by default');
+    assert.match(
+      style,
+      /@media \(max-width: 600px\) \{ :root \{ --geekity-admin-bar-height: 80px; \} \}/,
+      'two lines where the bar wraps, for a reader without script',
+    );
+    assert.match(
+      style,
+      /html \{ margin-top: var\(--geekity-admin-bar-height\) !important; \}/,
+      'the page is pushed down by the bar',
+    );
+    assert.match(
+      style,
+      /:where\(html\) \{ scroll-padding-top: var\(--geekity-admin-bar-height\); \}/,
+      'an in-page link scrolls its target clear of the bar',
+    );
+    assert.match(html, /<html class="geekity-admin-bar" lang="en">/, 'a class for the theme');
+    assert.match(
+      barIn(html) ?? '',
+      /setProperty\('--geekity-admin-bar-height'/,
+      'the bar measures itself',
+    );
+  });
+
+  it("adds its class to the theme's own classes on <html>", async () => {
+    const cms = await site({ theme: 'classed' });
+    const agent = await signedInTo(cms);
+    const html = await (await agent.get(POST_URL)).text();
+
+    assert.match(html, /<html lang="en" class="geekity-admin-bar dark">/);
+    assert.equal(
+      (await (await cms.app.request(POST_URL)).text()).match(/<html[^>]*>/)?.[0],
+      `<html lang="en" class='dark'>`,
+      "an anonymous reader gets the theme's tag untouched",
+    );
+  });
+
+  it('puts the offset stylesheet before the bar on a page with no </head>', async () => {
+    const cms = await site({ theme: 'headless' });
+    const agent = await signedInTo(cms);
+    const html = await (await agent.get(POST_URL)).text();
+
+    assert.match(
+      html,
+      /<body><style id="geekity-admin-bar-offset">[\s\S]*?<\/style><geekity-admin-bar /,
+    );
+    assert.match(html, /<html class="geekity-admin-bar" lang="en">/);
   });
 
   it('goes on the 500 too, which stays unstored', async () => {

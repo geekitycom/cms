@@ -3,22 +3,34 @@
 
    Whatever theme the site wears has never heard of it, so it keeps to a shadow
    root: no selector of the theme's reaches the markup inside, and the
-   stylesheet inside reaches nothing outside. The host's inline reset is what
-   stops a theme's rules for the host element itself, a `body > *` or a grid
-   on <body>, from resizing or moving it; only an `!important` rule of the
-   theme's can, which is also how a theme that insists hides it. It is in
-   normal flow, so it pushes the page down rather than covering a sticky
-   header. The stylesheet is inlined rather than linked so the bar is never
-   drawn unstyled; the public site has no content CSP to refuse it.
+   stylesheet inside reaches nothing outside. The stylesheet is inlined rather
+   than linked so the bar is never drawn unstyled; the public site has no
+   content CSP to refuse it.
 
-   The one script is for the keyboard. Chrome hands focus back to the greeting
-   when Escape closes a popover in the light DOM, but not from inside a shadow
-   root, where the focus is simply lost. So when the menu closes with
-   focus inside it, focus goes back to the greeting. A click elsewhere has
-   already moved focus by then, and keeps it. #}
-<geekity-admin-bar style="all: initial; display: block; grid-column: 1 / -1; width: auto; max-width: none; margin: 0; padding: 0"><template shadowrootmode="open"><style>{% include "static/admin-bar.css" %}</style>{% include "components/admin-bar.njk" %}<script>
+   The host is fixed to the top of the window, as WordPress's is. In normal
+   flow it sat inside whatever padding or margin the theme gave <body>, so it
+   stopped short of the window's edges. Out of flow, nothing the theme does to
+   <body> moves it, and the inline reset keeps the theme's rules for the host
+   element itself, a `body > *` or a grid on <body>, from restyling it; only an
+   `!important` rule can, which is also how a theme that insists hides it. The
+   page is pushed down from outside, by a stylesheet the CMS puts in <head>
+   (OFFSET_STYLE in src/web/admin-bar.ts) reading --geekity-admin-bar-height.
+
+   The script does two things. It measures the bar and sets that height on
+   <html>, so a bar that wraps to two lines on a phone, or one a theme has
+   hidden, pushes the page down by what it really is. And it gives focus back
+   to the greeting when the menu closes with focus inside it: Chrome does that
+   for a popover in the light DOM, not from inside a shadow root, where the
+   focus is simply lost. A click elsewhere has already moved focus by then,
+   and keeps it. #}
+<geekity-admin-bar style="all: initial; display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 99999"><template shadowrootmode="open"><style>{% include "static/admin-bar.css" %}</style>{% include "components/admin-bar.njk" %}<script>
 (() => {
-  const root = document.querySelector('geekity-admin-bar').shadowRoot;
+  const host = document.querySelector('geekity-admin-bar');
+  const root = host.shadowRoot;
+  new ResizeObserver(() => {
+    const height = host.getBoundingClientRect().height;
+    document.documentElement.style.setProperty('--geekity-admin-bar-height', `${height}px`);
+  }).observe(host);
   const menu = root.getElementById('admin-account-menu');
   menu?.addEventListener('beforetoggle', (event) => {
     if (event.newState === 'closed' && menu.contains(root.activeElement)) {

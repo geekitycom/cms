@@ -29,8 +29,9 @@ let environment: Environment | undefined;
  * it was before the bar existed. For a signed-in one the account is put on the
  * context for the handlers, and whatever HTML they answer with, a document, a
  * listing, a search, the 404 or the 500, gets the bar straight after its
- * `<body>` tag and the headers of a page drawn for one reader: private,
- * no-store, and no validator. Anything that is not HTML, the JSON, the
+ * `<body>` tag, the stylesheet that makes room for it in `<head>`, the
+ * `geekity-admin-bar` class on `<html>`, and the headers of a page drawn for
+ * one reader: private, no-store, and no validator. Anything that is not HTML, the JSON, the
  * Markdown, the feeds, ActivityPub, is left exactly as it was.
  *
  * Not inside `/admin`, which has a bar of its own and a CSP that would refuse
@@ -55,7 +56,7 @@ export const publicAdminBar: MiddlewareHandler<GeekityEnv> = async (c, next) => 
   headers.delete('content-length');
 
   const { status } = c.res;
-  const body = withBar(await c.res.text(), renderBar(c, account));
+  const body = withAdminBar(await c.res.text(), renderBar(c, account));
   // Cleared first, because assigning over a response copies its headers onto
   // the new one, and the validators being dropped would come straight back.
   c.res = undefined;
@@ -90,15 +91,62 @@ function renderBar(c: Context<GeekityEnv>, account: SignedInAccount): string {
     .trim();
 }
 
+/** The class on `<html>` of a page that carries the bar, for a theme to key off. */
+const ROOT_CLASS = 'geekity-admin-bar';
+
 /**
- * `html` with `bar` straight after its opening `<body>` tag, or unchanged when
- * it has none to put it after.
+ * The room the bar takes at the top of the page, set from outside its shadow
+ * root because the bar is fixed and takes none by itself.
+ *
+ * `--geekity-admin-bar-height` is the bar's height, for a theme's own sticky
+ * or fixed header to sit under it. The script in the bar replaces it with the
+ * height it measures; until then, or without script, it is one 40px line, and
+ * two on a screen narrow enough for the bar to wrap.
+ *
+ * The page moves down by a margin on `<html>`, as it does under WordPress's
+ * bar: a theme's padding on `<html>` or `<body>` is left alone, `!important`
+ * outlasts a reset such as `html, body { margin: 0 }`, and the root's
+ * background still fills the canvas behind the bar. `scroll-padding-top` is
+ * under `:where()` so that a theme that sets its own, for a sticky header of
+ * its own, keeps it.
  */
-function withBar(html: string, bar: string): string {
+const OFFSET_STYLE = `<style id="geekity-admin-bar-offset">
+:root { --geekity-admin-bar-height: 40px; }
+@media (max-width: 600px) { :root { --geekity-admin-bar-height: 80px; } }
+html { margin-top: var(--geekity-admin-bar-height) !important; }
+:where(html) { scroll-padding-top: var(--geekity-admin-bar-height); }
+</style>`;
+
+/**
+ * `html` with `bar` straight after its opening `<body>` tag, the offset
+ * stylesheet before `</head>`, and the root class on `<html>`; unchanged when
+ * it has no `<body>` tag to put the bar after.
+ */
+function withAdminBar(html: string, bar: string): string {
   const body = /<body\b[^>]*>/i.exec(html);
   if (body === null) return html;
-  const at = body.index + body[0].length;
-  return `${html.slice(0, at)}${bar}${html.slice(at)}`;
+  const afterBody = body.index + body[0].length;
+  const head = /<\/head\s*>/i.exec(html.slice(0, body.index));
+  const withBar =
+    head === null
+      ? `${html.slice(0, afterBody)}${OFFSET_STYLE}${bar}${html.slice(afterBody)}`
+      : `${html.slice(0, head.index)}${OFFSET_STYLE}${html.slice(head.index, afterBody)}${bar}${html.slice(afterBody)}`;
+  return withRootClass(withBar);
+}
+
+/** `html` with ROOT_CLASS added to its `<html>` tag's classes. */
+function withRootClass(html: string): string {
+  const tag = /<html\b[^>]*>/i.exec(html);
+  if (tag === null) return html;
+  const attribute = /(\sclass\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i;
+  const classed = attribute.test(tag[0])
+    ? tag[0].replace(
+        attribute,
+        (_match, lead: string, double?: string, single?: string, bare?: string) =>
+          `${lead}"${ROOT_CLASS} ${(double ?? single ?? bare ?? '').replaceAll('"', '&quot;')}"`,
+      )
+    : tag[0].replace(/^<html\b/i, `<html class="${ROOT_CLASS}"`);
+  return `${html.slice(0, tag.index)}${classed}${html.slice(tag.index + tag[0].length)}`;
 }
 
 function capitalized(word: string): string {
