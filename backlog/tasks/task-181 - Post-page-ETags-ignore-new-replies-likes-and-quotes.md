@@ -4,9 +4,11 @@ title: 'Post page ETags ignore new replies, likes and quotes'
 status: To Do
 assignee: []
 created_date: '2026-09-29 02:30'
+updated_date: '2026-09-29 23:01'
 labels:
   - bug
   - web
+milestone: m-20
 dependencies: []
 priority: medium
 type: bug
