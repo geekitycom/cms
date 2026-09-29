@@ -88,7 +88,7 @@ describe('image optimization end to end', () => {
     assert.match(html, /<picture>/);
     assert.match(html, /<source type="image\/webp" srcset="[^"]*320\.webp 320w/);
     assert.match(html, /<img src="\/uploads\/[^"]*\.png"/);
-    assert.match(html, /width="1000" height="500" loading="lazy"/);
+    assert.match(html, /width="1000" height="500" fetchpriority="high" decoding="async"/);
     assert.match(html, /alt="A photo"/);
 
     // Every URL the page offers is one the site actually serves.
@@ -245,5 +245,161 @@ describe('image optimization end to end', () => {
     assert.equal(response.status, 303);
 
     await assert.rejects(() => readFile(sidecar));
+  });
+});
+
+/** Write one post from its front matter and body, without syncing. */
+async function writePost(
+  contentDir: string,
+  slug: string,
+  front: string,
+  body: string,
+): Promise<void> {
+  const file = path.join(contentDir, 'posts', `${slug}.md`);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `---\n${front}\npermalink: /${slug}/\n---\n\n${body}\n`, 'utf8');
+}
+
+/** Every `<img>` in a page that shows an upload, in document order. */
+function uploadImages(html: string): string[] {
+  return html.match(/<img src="\/uploads\/[^>]*>/g) ?? [];
+}
+
+/** A site with one uploaded photograph, and the URL it was given. */
+async function siteWithPhoto(): Promise<{ cms: Cms; contentDir: string; url: string }> {
+  const { cms, agent, token, contentDir } = await siteWithAdmin();
+  const url = await uploaded(
+    agent,
+    token,
+    'Photo.png',
+    await rectangle(1000, 500).png().toBuffer(),
+    'image/png',
+  );
+  return { cms, contentDir, url };
+}
+
+function assertLead(tag: string | undefined): void {
+  assert.ok(tag !== undefined, 'the page has a lead image');
+  assert.doesNotMatch(tag, /loading=/);
+  assert.match(tag, /fetchpriority="high"/);
+  assert.match(tag, /decoding="async"/);
+}
+
+function assertLazy(tag: string | undefined): void {
+  assert.ok(tag !== undefined, 'the page has a later image');
+  assert.match(tag, /loading="lazy"/);
+  assert.doesNotMatch(tag, /fetchpriority/);
+  assert.match(tag, /decoding="async"/);
+}
+
+describe('image loading priority end to end', () => {
+  it('fetches the only image of a post at once, at high priority', async () => {
+    const { cms, contentDir, url } = await siteWithPhoto();
+    await writePost(contentDir, 'one', 'title: One\ndate: 2026-01-01T00:00:00Z', `![Only](${url})`);
+    await cms.sync();
+
+    const tags = uploadImages(await fetched(cms, '/one/'));
+
+    assert.equal(tags.length, 1);
+    assertLead(tags[0]);
+  });
+
+  it('fetches only the first of several images in a post at once', async () => {
+    const { cms, contentDir, url } = await siteWithPhoto();
+    await writePost(
+      contentDir,
+      'several',
+      'title: Several\ndate: 2026-01-01T00:00:00Z',
+      [`![One](${url})`, `![Two](${url})`, `![Three](${url})`].join('\n\n'),
+    );
+    await cms.sync();
+
+    const tags = uploadImages(await fetched(cms, '/several/'));
+
+    assert.equal(tags.length, 3);
+    assertLead(tags[0]);
+    assertLazy(tags[1]);
+    assertLazy(tags[2]);
+  });
+
+  it('fetches only the first entry of a listing at once', async () => {
+    const { cms, contentDir, url } = await siteWithPhoto();
+    // Notes, because a listing prints a note whole and a titled post as its summary.
+    for (const [slug, day] of [
+      ['newest', '03'],
+      ['middle', '02'],
+      ['oldest', '01'],
+    ] as const) {
+      await writePost(
+        contentDir,
+        slug,
+        `date: 2026-01-${day}T00:00:00Z`,
+        `![First of ${slug}](${url})\n\n![Second of ${slug}](${url})`,
+      );
+    }
+    await cms.sync();
+
+    const tags = uploadImages(await fetched(cms, '/'));
+
+    assert.equal(tags.length, 6);
+    assert.match(tags[0] ?? '', /alt="First of newest"/);
+    assertLead(tags[0]);
+    for (const tag of tags.slice(1)) assertLazy(tag);
+  });
+
+  it('gives the lead to a posts page whose own body has an image', async () => {
+    const { cms, contentDir, url } = await siteWithPhoto();
+    await mkdir(path.join(contentDir, 'pages'), { recursive: true });
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, 'pages', 'welcome.md'),
+      '---\ntitle: Welcome\npermalink: /welcome/\n---\n\nHello.\n',
+      'utf8',
+    );
+    await writeFile(
+      path.join(contentDir, 'pages', 'news.md'),
+      `---\ntitle: News\npermalink: /news/\n---\n\n![Banner](${url})\n`,
+      'utf8',
+    );
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({ homepage: 'welcome', postsPage: 'news' }),
+      'utf8',
+    );
+    await writePost(contentDir, 'note', 'date: 2026-01-01T00:00:00Z', `![In a note](${url})`);
+    await cms.sync();
+
+    const tags = uploadImages(await fetched(cms, '/news/'));
+
+    assert.equal(tags.length, 2);
+    assert.match(tags[0] ?? '', /alt="Banner"/);
+    assertLead(tags[0]);
+    assertLazy(tags[1]);
+  });
+
+  it('gives the lead to the first recent post under a front page with no image', async () => {
+    const { cms, contentDir, url } = await siteWithPhoto();
+    await mkdir(path.join(contentDir, 'pages'), { recursive: true });
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, 'pages', 'welcome.md'),
+      '---\ntitle: Welcome\npermalink: /welcome/\n---\n\nHello.\n',
+      'utf8',
+    );
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({ homepage: 'welcome' }),
+      'utf8',
+    );
+    await writePost(contentDir, 'newer', 'date: 2026-01-02T00:00:00Z', `![Newer](${url})`);
+    await writePost(contentDir, 'older', 'date: 2026-01-01T00:00:00Z', `![Older](${url})`);
+    await cms.sync();
+
+    const tags = uploadImages(await fetched(cms, '/'));
+
+    assert.equal(tags.length, 2);
+    assert.match(tags[0] ?? '', /alt="Newer"/);
+    assertLead(tags[0]);
+    assertLazy(tags[1]);
   });
 });

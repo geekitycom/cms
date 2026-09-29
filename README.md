@@ -823,14 +823,23 @@ A post page then renders the picture as
     width="2400"
     height="1600"
     loading="lazy"
+    decoding="async"
   />
 </picture>
 ```
 
+The first image a page shows is the exception to `loading="lazy"`. It is
+usually the page's Largest Contentful Paint, and waiting to lazy-load it slows
+that paint down, so it carries `fetchpriority="high"` and no `loading` instead.
+On a single post or page that is the first image in the body. On a listing, and
+on a front page with its recent posts under it, it is the first image in the
+page's own body when that has one, and otherwise the first image of the first
+entry. Every other image stays lazy.
+
 `sizes` is `100vw`, which is 11ty/image's default and the only honest one a CMS
 can give: how wide a picture is drawn is a fact about the theme's stylesheet.
-Attributes the author wrote win — a hand-written `width`, `loading` or
-`srcset` is left alone — and an image pointing at another origin is untouched.
+Attributes the author wrote win — a hand-written `width`, `loading`,
+`fetchpriority` or `srcset` is left alone — and an image pointing at another origin is untouched.
 
 Only the theme's HTML gets that markup. The RSS and Atom `content:encoded`, the
 JSON and Markdown representations of a document and the ActivityStreams

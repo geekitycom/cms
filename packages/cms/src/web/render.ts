@@ -387,15 +387,21 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
    *
    * One read of the users file for the whole list, the way a listing does it:
    * five posts is five bylines resolved against the same people.
+   *
+   * The first post's first image is fetched at once when the front page's own
+   * words above it have no image, because it is then the first one on the page.
    */
-  function recentPostsContext(): Record<string, unknown> {
+  function recentPostsContext(page: Document): Record<string, unknown> {
     const posts = options.recentPosts?.();
     if (posts === undefined) return {};
 
     const people = users();
+    const pageLeads = page.html.includes('<img');
     return {
-      recentPosts: posts.map((document) =>
-        documentContext(document, config, authorContext(people, document.author)),
+      recentPosts: posts.map((document, index) =>
+        documentContext(document, config, authorContext(people, document.author), {
+          lead: !pageLeads && index === 0,
+        }),
       ),
     };
   }
@@ -467,7 +473,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // `documentContext` for the reason the object id is: it needs the site's
     // users, which a document on its own does not carry.
     const writer = authorContext(users(), document.author);
-    const context = documentContext(document, config, writer);
+    const context = documentContext(document, config, writer, { lead: true });
     // The URL it is being served at, which is its own permalink everywhere but
     // the front page.
     const url = options_.url ?? context.url;
@@ -591,7 +597,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         // resolved once for the whole list the way a listing's bylines are.
         // `postsPage` goes with them: the front page is the one page that
         // links the listing by name rather than by menu item.
-        extra: { ...recentPostsContext(), ...postsPageContext(), ...extra },
+        extra: { ...recentPostsContext(document), ...postsPageContext(), ...extra },
         viewer,
       });
     },
@@ -600,8 +606,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // One read of the users file for the whole page, however many posts are
       // on it: every byline on a listing resolves against the same list.
       const people = users();
-      const items: DocumentContext[] = listing.documents.map((document) =>
-        documentContext(document, config, authorContext(people, document.author)),
+      // The first image on the page is fetched at once: the posts page's own
+      // when its body has one, since it is printed above the list, else the
+      // first entry's.
+      const bodyLeads = listing.document?.html.includes('<img') === true;
+      const items: DocumentContext[] = listing.documents.map((document, index) =>
+        documentContext(document, config, authorContext(people, document.author), {
+          lead: !bodyLeads && index === 0,
+        }),
       );
       // The posts page's own front matter and rendered body, under the
       // listing's title, URL and posts: a theme prints `{{ content | safe }}`
@@ -615,6 +627,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
               listing.document,
               config,
               authorContext(people, listing.document.author),
+              { lead: bodyLeads },
             );
 
       return render(listingTemplate(listing), {

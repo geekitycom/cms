@@ -632,6 +632,7 @@ export {
 export type {
   DescribeImage,
   ImageConfig,
+  ImageLoading,
   ImageRecord,
   ImageVariant,
   SiteIcon,
