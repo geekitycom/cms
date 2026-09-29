@@ -50,26 +50,85 @@ export function replyFrom(
   activity: InboxActivity,
   nameFor?: (actorId: string) => string | undefined,
 ): Reply | undefined {
+  const note = noteFrom(activity);
+  if (note === undefined) return undefined;
+
+  const inReplyTo = uriOf(note.object['inReplyTo']);
+  if (inReplyTo === null) return undefined;
+
+  return {
+    ...note.said,
+    author: nameFor?.(note.said.actorId) ?? actorHandle(note.said.actorId) ?? note.said.actorId,
+    inReplyTo,
+  };
+}
+
+/** One logged quote: a note that is about somebody's post without answering it. */
+export interface Quote {
+  /** The note's own id, which a quote approval names. */
+  id: string;
+  /** Where the note can be read: its `url`, else its id. */
+  url: string;
+  /** Who wrote it, as an id. */
+  actorId: string;
+  /** What it says, as the remote server rendered it and *not* sanitised. */
+  html: string;
+  /** When the note says it was published, or when it arrived if it did not. */
+  published: Date;
+  /** The object it quotes. */
+  quoted: string;
+}
+
+/**
+ * The properties a note names what it quotes in: FEP-044f's `quote` first, and
+ * the older spellings Mastodon still writes beside it for servers that only
+ * know those (Fedibird's, ActivityStreams' proposed one and Misskey's).
+ */
+const QUOTE_PROPERTIES = ['quote', 'quoteUri', 'quoteUrl', '_misskey_quote'] as const;
+
+/**
+ * A logged activity as the quote it is, or `undefined` when it is not one.
+ *
+ * A note that quotes something and also answers something is a reply, and
+ * only a reply: it is part of that thread, and showing it twice under one
+ * post would count it twice.
+ */
+export function quoteFrom(activity: InboxActivity): Quote | undefined {
+  const note = noteFrom(activity);
+  if (note === undefined || uriOf(note.object['inReplyTo']) !== null) return undefined;
+
+  for (const property of QUOTE_PROPERTIES) {
+    const quoted = uriOf(note.object[property]);
+    if (quoted !== null) return { ...note.said, quoted };
+  }
+  return undefined;
+}
+
+/** What every note somebody created says, whatever else it is. */
+function noteFrom(activity: InboxActivity):
+  | {
+      object: Record<string, unknown>;
+      said: { id: string; url: string; actorId: string; html: string; published: Date };
+    }
+  | undefined {
   if (activity.activityType !== REPLY_ACTIVITY_TYPE) return undefined;
 
   const object = activityObject(activity.json);
   if (object === undefined) return undefined;
 
-  const inReplyTo = uriOf(object['inReplyTo']);
   const id = uriOf(object['id']) ?? activity.objectId;
-  if (inReplyTo === null || id === null) return undefined;
+  if (id === null) return undefined;
 
-  const actorId = activity.actorId;
   const published = new Date(textOf(object['published']) ?? '');
-
   return {
-    id,
-    url: uriOf(object['url']) ?? id,
-    author: nameFor?.(actorId) ?? actorHandle(actorId) ?? actorId,
-    actorId,
-    html: textOf(object['content']) ?? languageText(object['contentMap']) ?? '',
-    published: Number.isNaN(published.getTime()) ? new Date(activity.receivedAt) : published,
-    inReplyTo,
+    object,
+    said: {
+      id,
+      url: uriOf(object['url']) ?? id,
+      actorId: activity.actorId,
+      html: textOf(object['content']) ?? languageText(object['contentMap']) ?? '',
+      published: Number.isNaN(published.getTime()) ? new Date(activity.receivedAt) : published,
+    },
   };
 }
 

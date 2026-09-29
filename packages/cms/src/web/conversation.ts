@@ -2,7 +2,9 @@ import type { AdminStore, Follower, InboxActivity, PostComment } from '../admin/
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
-import { actorHandle, replyFrom, REPLY_ACTIVITY_TYPE } from '../federation/replies.ts';
+import { readAllQuoteAuthorizations } from '../federation/quotes.ts';
+import type { QuoteAuthorizationRecord } from '../federation/quotes.ts';
+import { actorHandle, quoteFrom, replyFrom, REPLY_ACTIVITY_TYPE } from '../federation/replies.ts';
 import { activityStreamsId, isPublicDocument, permalinkOfObjectId } from './documents.ts';
 import type { FeedComment } from './feeds.ts';
 import { absoluteUrl } from './negotiate.ts';
@@ -145,6 +147,11 @@ export interface ConversationContext {
    * showing while the post it is about is there to read.
    */
   readonly store: ContentStore;
+  /**
+   * Where the quote approvals are: a quote of a post is shown only while the
+   * post's author vouches for it (FEP-044f, TASK-171).
+   */
+  readonly contentDir: string;
   /** The site's public origin, for the post's object id. */
   readonly baseUrl: string;
 }
@@ -224,14 +231,18 @@ function postConversation(context: ConversationContext, document: Document): Con
 
   const activities = objectId === undefined ? [] : activitiesAround(context.admin, objectId);
   const native = approvedComments(context.admin, document);
-  if (activities.length === 0 && native.length === 0) return NOTHING;
-
   const naming = authorNaming(context.admin);
+  const quotes =
+    objectId === undefined
+      ? []
+      : quotesOf(context.admin, readAllQuoteAuthorizations(context.contentDir), objectId, naming);
+  if (activities.length === 0 && native.length === 0 && quotes.length === 0) return NOTHING;
+
   const withdrawn = withdrawnBy(activities);
   const written: Interaction[] = [];
   const likes: Interaction[] = [];
   const boosts: Interaction[] = [];
-  const mentions: Interaction[] = [];
+  const mentions: Interaction[] = [...quotes];
   const reacted = new Set<string>();
 
   for (const activity of activities) {
@@ -340,6 +351,16 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
     }
   }
 
+  // Every quote the site vouches for, rather than a page of them: there is one
+  // approval per quote, and a site has few enough to read whole.
+  for (const approval of readAllQuoteAuthorizations(context.contentDir)) {
+    const post = posts.get(approval.post);
+    if (post === undefined) continue;
+    for (const quote of quotesOf(context.admin, [approval], approval.post, naming)) {
+      said.push({ ...quote, post });
+    }
+  }
+
   for (const stored of context.admin.listComments({
     status: 'approved',
     limit: limit * OVERSCAN,
@@ -358,9 +379,15 @@ function commentCounts(
   documents: readonly Document[],
 ): Map<string, number> {
   const counts = new Map<string, number>();
+  const approvals = readAllQuoteAuthorizations(context.contentDir);
+  const naming = authorNaming(context.admin);
   for (const document of documents) {
     const objectId = activityStreamsId(document, context.baseUrl);
-    const federated = objectId === undefined ? 0 : context.admin.countRepliesTo(objectId);
+    const federated =
+      objectId === undefined
+        ? 0
+        : context.admin.countRepliesTo(objectId) +
+          quotesOf(context.admin, approvals, objectId, naming).length;
     counts.set(
       document.permalink,
       federated + context.admin.countCommentsFor(document.slug, 'approved'),
@@ -378,6 +405,51 @@ function commentCounts(
  * whose posts do not.
  */
 const OVERSCAN = 4;
+
+/**
+ * The approved quotes of one post, as mentions, in no order.
+ *
+ * The approval is what makes a quote showable (FEP-044f: a quote its author
+ * never approved should not be displayed), so the approvals are walked and the
+ * log is asked for each one's note, rather than the other way about. The note
+ * has to be the approved one, by the approved actor, quoting this post: an
+ * approval of one quote vouches for nothing else. Both are files (decision-9),
+ * so a rebuilt index shows exactly what the live one did.
+ */
+function quotesOf(
+  admin: AdminStore,
+  approvals: readonly QuoteAuthorizationRecord[],
+  objectId: string,
+  naming: (actorId: string) => InteractionAuthor,
+): Interaction[] {
+  const quotes: Interaction[] = [];
+  for (const approval of approvals) {
+    if (approval.post !== objectId) continue;
+
+    for (const activity of admin.listActivitiesAbout([approval.quote])) {
+      if (activity.actorId !== approval.actor) continue;
+      const quote = quoteFrom(activity);
+      if (quote?.id !== approval.quote || quote.quoted !== objectId) continue;
+
+      quotes.push({
+        id: quote.id,
+        source: 'activitypub',
+        kind: 'mention',
+        author: naming(quote.actorId),
+        url: quote.url,
+        content: sanitizeCommentHtml(quote.html),
+        published: quote.published,
+        inReplyTo: null,
+        status: 'published',
+        replies: [],
+      });
+      // The first `Create` of the note is the one shown: a redelivery is the
+      // same quote again.
+      break;
+    }
+  }
+  return quotes;
+}
 
 /** One logged fediverse reply as the thread's own shape. */
 function federatedInteraction(
