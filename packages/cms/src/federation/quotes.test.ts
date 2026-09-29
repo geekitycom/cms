@@ -400,3 +400,164 @@ describe('a quote taken back (AC #5)', () => {
     assert.equal((await fetchObject(instance, url)).status, 200);
   });
 });
+
+/**
+ * The quoting post, shaped the way me.dm delivered one to shll.me: a `Create`
+ * at the shared inbox whose `Note` names the post in `quote` and in the three
+ * older spellings beside it, and answers nothing.
+ */
+function quoteCreate(
+  options: { id?: string; content?: string; inReplyTo?: string | null } = {},
+): Record<string, unknown> {
+  const id = options.id ?? QUOTE;
+  return {
+    '@context': [
+      'https://www.w3.org/ns/activitystreams',
+      {
+        quote: { '@id': 'https://w3id.org/fep/044f#quote', '@type': '@id' },
+        quoteUri: 'http://fedibird.com/ns#quoteUri',
+        quoteUrl: 'as:quoteUrl',
+        _misskey_quote: 'https://misskey-hub.net/ns#_misskey_quote',
+      },
+    ],
+    id: `${id}/activity`,
+    type: 'Create',
+    actor: REMOTE_ACTOR,
+    published: '2026-09-29T01:59:32Z',
+    to: ['https://www.w3.org/ns/activitystreams#Public'],
+    object: {
+      id,
+      type: 'Note',
+      attributedTo: REMOTE_ACTOR,
+      url: `${REMOTE_ORIGIN}/@bea/42`,
+      published: '2026-09-29T01:59:32Z',
+      to: ['https://www.w3.org/ns/activitystreams#Public'],
+      inReplyTo: options.inReplyTo ?? null,
+      content: options.content ?? '<p>This post is worth reading.</p>',
+      quote: POST,
+      quoteUri: POST,
+      quoteUrl: POST,
+      _misskey_quote: POST,
+    },
+  };
+}
+
+async function page(instance: Cms): Promise<string> {
+  const response = await instance.app.request('/2026/09/hello/');
+  assert.equal(response.status, 200);
+  return await response.text();
+}
+
+/** The Mentions group of the default theme, or `undefined` when the page has none. */
+function mentions(html: string): string | undefined {
+  return /<div class="reaction-group p-mention">[\s\S]*?<\/div>\s*<\/div>/.exec(html)?.[0];
+}
+
+describe('an approved quote on the quoted post’s page (TASK-171)', () => {
+  it('is shown among the mentions, linking to the quote under its author (AC #1)', async () => {
+    const instance = await site();
+    await approvedQuote(instance);
+    await deliver(instance, quoteCreate(), SHARED_INBOX);
+
+    const group = mentions(await page(instance));
+
+    assert.ok(group !== undefined, 'the page has a Mentions group');
+    assert.match(group, /Mentions \(1\)/);
+    assert.ok(group.includes(`href="${REMOTE_ORIGIN}/@bea/42"`), 'linking to the quote');
+    assert.ok(group.includes('@bea@mastodon.example'), 'under its author');
+  });
+
+  it('carries the quote’s words, sanitised, into the post’s comments feed (AC #1, #6, #7)', async () => {
+    const instance = await site();
+    await approvedQuote(instance);
+    await deliver(
+      instance,
+      quoteCreate({ content: '<p>Worth it<script>alert(1)</script></p>' }),
+      SHARED_INBOX,
+    );
+
+    const feed = await (await instance.app.request('/2026/09/hello/feed/')).text();
+
+    assert.ok(feed.includes(`<guid isPermaLink="false">${QUOTE}</guid>`), 'the quote is an item');
+    assert.ok(feed.includes('Worth it'), 'with what it says');
+    assert.ok(!feed.includes('alert(1)'), 'sanitised');
+  });
+
+  it('is not shown when nobody approved it (AC #2)', async () => {
+    const instance = await site();
+    await deliver(instance, quoteCreate(), SHARED_INBOX);
+
+    assert.equal(mentions(await page(instance)), undefined);
+  });
+
+  it('is gone once its request is undone (AC #3)', async () => {
+    const instance = await site();
+    await approvedQuote(instance);
+    await deliver(instance, quoteCreate(), SHARED_INBOX);
+
+    await deliver(instance, {
+      '@context': [
+        'https://www.w3.org/ns/activitystreams',
+        { QuoteRequest: 'https://w3id.org/fep/044f#QuoteRequest' },
+      ],
+      id: `${REQUEST}#undo`,
+      type: 'Undo',
+      actor: REMOTE_ACTOR,
+      object: quoteRequest(),
+    });
+
+    assert.equal(mentions(await page(instance)), undefined);
+  });
+
+  it('is gone once the quote is deleted (AC #3)', async () => {
+    const instance = await site();
+    await approvedQuote(instance);
+    await deliver(instance, quoteCreate(), SHARED_INBOX);
+
+    await deliver(instance, {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      id: `${QUOTE}#delete`,
+      type: 'Delete',
+      actor: REMOTE_ACTOR,
+      object: { id: QUOTE, type: 'Tombstone' },
+    });
+
+    assert.equal(mentions(await page(instance)), undefined);
+  });
+
+  it('is shown once, as a reply, when it also answers the post (AC #4)', async () => {
+    const instance = await site();
+    await approvedQuote(instance);
+    await deliver(instance, quoteCreate({ inReplyTo: POST }), SHARED_INBOX);
+
+    const html = await page(instance);
+
+    assert.equal(mentions(html), undefined, 'not among the mentions');
+    assert.ok(html.includes(`id="comment-${QUOTE}"`), 'but in the thread');
+  });
+
+  it('survives the database being thrown away (AC #5)', async () => {
+    const first = await site();
+    await approvedQuote(first);
+    await deliver(first, quoteCreate(), SHARED_INBOX);
+    const { contentDir, dataDir } = first.config;
+    await first.close();
+    started.splice(started.indexOf(first), 1);
+    await rm(path.join(dataDir, 'geekity.db'), { force: true });
+    await rm(path.join(dataDir, 'geekity.db-wal'), { force: true });
+    await rm(path.join(dataDir, 'geekity.db-shm'), { force: true });
+
+    const second = createCms({
+      dataDir,
+      contentDir,
+      watch: false,
+      baseUrl: BASE_URL,
+      federation: { queue: null, allowPrivateAddress: true },
+    });
+    started.push(second);
+    await second.sync();
+
+    const group = mentions(await page(second));
+    assert.ok(group?.includes(`href="${REMOTE_ORIGIN}/@bea/42"`), 'the quote is still shown');
+  });
+});

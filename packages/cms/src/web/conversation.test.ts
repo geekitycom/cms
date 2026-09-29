@@ -10,6 +10,7 @@ import { openContentStore } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import { parseDocument } from '../content/parser.ts';
 import type { Document } from '../content/document.ts';
+import { authorizeQuote } from '../federation/quotes.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { createConversation } from './conversation.ts';
@@ -36,16 +37,19 @@ async function temporaryDir(prefix: string): Promise<string> {
 async function reader(): Promise<{
   admin: AdminStore;
   posts: ContentStore;
+  contentDir: string;
   conversation: ConversationReader;
 }> {
   const dataDir = await temporaryDir('geekity-conversation-');
+  const contentDir = await temporaryDir('geekity-conversation-content-');
   const admin = openAdminStore({ dataDir });
   const posts = openContentStore({ dataDir });
   stores.push(admin, posts);
   return {
     admin,
     posts,
-    conversation: createConversation({ admin, store: posts, baseUrl: BASE_URL }),
+    contentDir,
+    conversation: createConversation({ admin, store: posts, contentDir, baseUrl: BASE_URL }),
   };
 }
 
@@ -562,6 +566,158 @@ describe('how many answers a post has', () => {
     const { conversation: read } = await reader();
 
     assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 0);
+  });
+});
+
+describe('a quote of a post (TASK-171)', () => {
+  const QUOTE = 'https://remote.example/notes/q';
+  const QUOTER = 'https://remote.example/users/bea';
+
+  /** Log the quoting `Create` the way the inbox logs one. */
+  function logQuote(
+    admin: AdminStore,
+    options: { quoted?: string; spelling?: string; actor?: string; inReplyTo?: string } = {},
+  ): void {
+    const actor = options.actor ?? QUOTER;
+    admin.logInboxActivity({
+      activityId: `${QUOTE}/activity`,
+      activityType: 'Create',
+      actorId: actor,
+      objectId: QUOTE,
+      json: JSON.stringify({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: `${QUOTE}/activity`,
+        type: 'Create',
+        actor,
+        object: {
+          id: QUOTE,
+          type: 'Note',
+          attributedTo: actor,
+          url: 'https://remote.example/@bea/q',
+          content: '<p>Quoted<script>alert(1)</script></p>',
+          published: '2026-09-03T10:00:00Z',
+          inReplyTo: options.inReplyTo ?? null,
+          [options.spelling ?? 'quote']: options.quoted ?? POST,
+        },
+      }),
+    });
+  }
+
+  async function approve(contentDir: string, post = POST, actor = QUOTER): Promise<void> {
+    await authorizeQuote(contentDir, 'ada', {
+      quote: QUOTE,
+      post,
+      request: `${QUOTE}/request`,
+      actor,
+    });
+  }
+
+  it('is a mention of the post it quotes, once approved', async () => {
+    const { admin, contentDir, conversation: read } = await reader();
+    await approve(contentDir);
+    logQuote(admin);
+
+    const conversation = read.thread(hello());
+
+    assert.deepEqual(conversation.replies, []);
+    assert.equal(conversation.counts.mentions, 1);
+    assert.equal(conversation.counts.total, 1);
+    const [mention] = conversation.mentions;
+    assert.equal(mention?.id, QUOTE);
+    assert.equal(mention?.source, 'activitypub');
+    assert.equal(mention?.kind, 'mention');
+    assert.equal(mention?.url, 'https://remote.example/@bea/q');
+    assert.equal(mention?.author.handle, '@bea@remote.example');
+    assert.equal(mention?.content, '<p>Quoted</p>');
+    assert.deepEqual(mention?.published, new Date('2026-09-03T10:00:00Z'));
+  });
+
+  for (const spelling of ['quoteUri', 'quoteUrl', '_misskey_quote']) {
+    it(`is read from the older ${spelling} spelling`, async () => {
+      const { admin, contentDir, conversation: read } = await reader();
+      await approve(contentDir);
+      logQuote(admin, { spelling });
+
+      assert.equal(read.thread(hello()).counts.mentions, 1);
+    });
+  }
+
+  for (const [label, arrange] of [
+    ['with no approval', (): Promise<void> => Promise.resolve()],
+    [
+      'approved for another post',
+      async (dir: string) => approve(dir, `${BASE_URL}/2026/09/second/`),
+    ],
+    [
+      'approved for another actor',
+      async (dir: string) => approve(dir, POST, 'https://remote.example/users/eve'),
+    ],
+  ] as const) {
+    it(`is not shown ${label}`, async () => {
+      const { admin, contentDir, conversation: read } = await reader();
+      await arrange(contentDir);
+      logQuote(admin);
+
+      assert.deepEqual(read.thread(hello()).mentions, []);
+      assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 0);
+    });
+  }
+
+  it('is not shown when the note quotes something else', async () => {
+    const { admin, contentDir, conversation: read } = await reader();
+    await approve(contentDir);
+    logQuote(admin, { quoted: 'https://elsewhere.example/notes/1' });
+
+    assert.deepEqual(read.thread(hello()).mentions, []);
+  });
+
+  it('is a reply, and only a reply, when it also answers the post', async () => {
+    const { admin, contentDir, conversation: read } = await reader();
+    await approve(contentDir);
+    logQuote(admin, { inReplyTo: POST });
+
+    const conversation = read.thread(hello());
+
+    assert.deepEqual(conversation.mentions, []);
+    assert.deepEqual(
+      conversation.replies.map((reply) => reply.id),
+      [QUOTE],
+    );
+    assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 1);
+    assert.equal(conversation.counts.total, 1);
+  });
+
+  it('is counted with the post’s answers', async () => {
+    const { admin, contentDir, conversation: read } = await reader();
+    await approve(contentDir);
+    logQuote(admin);
+    logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
+
+    assert.equal(read.counts([hello(), second()]).get('/2026/09/hello/'), 2);
+    assert.equal(read.counts([hello(), second()]).get('/2026/09/second/'), 0);
+  });
+
+  it('is among the site’s latest answers, naming the post it quotes', async () => {
+    const { admin, posts, contentDir, conversation: read } = await reader();
+    posts.upsertAll([hello(), second()]);
+    await approve(contentDir);
+    logQuote(admin);
+    logReply(admin, {
+      inReplyTo: POST,
+      id: 'https://remote.example/notes/1',
+      published: '2026-09-02T10:00:00Z',
+    });
+
+    const latest = read.latest(10);
+
+    assert.deepEqual(
+      latest.map((said) => [said.id, said.kind, said.post.permalink]),
+      [
+        [QUOTE, 'mention', '/2026/09/hello/'],
+        ['https://remote.example/notes/1', 'reply', '/2026/09/hello/'],
+      ],
+    );
+    assert.equal(latest[0]?.content, '<p>Quoted</p>');
   });
 });
 

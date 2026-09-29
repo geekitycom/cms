@@ -68,6 +68,13 @@ export function readQuoteAuthorizations(
   return parsed;
 }
 
+/** Every user's quote approvals, which is every quote the site vouches for. */
+export function readAllQuoteAuthorizations(contentDir: string): QuoteAuthorizationRecord[] {
+  return federatedUsernames(contentDir).flatMap((username) =>
+    readQuoteAuthorizations(contentDir, username),
+  );
+}
+
 const FIELDS = ['id', 'quote', 'post', 'request', 'actor', 'authorizedAt'] as const;
 
 function isRecord(value: unknown): value is QuoteAuthorizationRecord {

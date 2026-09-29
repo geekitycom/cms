@@ -1051,8 +1051,9 @@ Category archives get their own three the same way.
 ## The conversation
 
 `conversation` is what has been said about a post: the fediverse replies, likes
-and boosts its inbox was sent, the comments people left on the page itself, and
-the webmentions other pages sent it.
+and boosts its inbox was sent, the fediverse posts that quoted it with its
+author's approval, the comments people left on the page itself, and the
+webmentions other pages sent it.
 It is on the context of a rendered post **only when there is something in it**,
 so a post nobody has answered renders no empty section and a layout can simply
 ask:
@@ -1092,29 +1093,29 @@ the thread, because it is not an answer.
 | `replies`                                          | The replies to the post, oldest first, each carrying its own `replies`. See below.         |
 | `likes`                                            | The likes, oldest first, in the same shape.                                                |
 | `boosts`                                           | The boosts, oldest first, in the same shape. A webmention `repost` is one of them.         |
-| `mentions`                                         | The pages that linked here without answering, oldest first, in the same shape.             |
+| `mentions`                                         | The pages and fediverse quotes about this post, oldest first, in the same shape.           |
 | `counts.replies`                                   | How many replies, counted through the whole thread rather than the top of it.              |
 | `counts.likes`, `counts.boosts`, `counts.mentions` | How many of each.                                                                          |
 | `counts.total`                                     | All four added up. Zero never reaches a template: there would be no `conversation` at all. |
 
 Each entry — a reply, a like or a boost — is:
 
-| Key              | What it holds                                                                                                                                                                          |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`             | What it is called: a reply's own note id, which is what an answer to it names.                                                                                                         |
-| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here.                                                             |
-| `kind`           | `"reply"`, `"like"`, `"boost"`, `"repost"` or `"mention"`. The last two only ever come from a webmention.                                                                              |
-| `author.name`    | The best name available: their display name, else their handle, else their id. For a webmention, the source's `h-card` name, else its host.                                            |
-| `author.handle`  | `@user@host`, or `null`. Taken from the follower profile the site holds, else guessed from the actor URL. `null` for a native comment.                                                 |
-| `author.url`     | Their profile page, the website a commenter typed, or a webmention author's `u-url`. May be `null`, so guard the link.                                                                 |
-| `author.avatar`  | Their avatar, or `null`. The site knows one for an actor that follows it and for a webmention whose `h-card` carried a `u-photo`.                                                      |
-| `author.actorId` | Their id, which is what identifies them however they are named. `null` for a native comment.                                                                                           |
-| `url`            | Where it can be read: the remote note's `url` for a fediverse reply, the source page for a webmention, and `{permalink}#comment-{id}` — this page's own anchor — for a native comment. |
-| `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.                                                                                          |
-| `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                                                          |
-| `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                           |
-| `status`         | `"published"`. On the record for the sources that moderate.                                                                                                                            |
-| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                                                                                                            |
+| Key              | What it holds                                                                                                                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`             | What it is called: a reply's own note id, which is what an answer to it names.                                                                                                                  |
+| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here.                                                                      |
+| `kind`           | `"reply"`, `"like"`, `"boost"`, `"repost"` or `"mention"`. A `repost` comes from a webmention; a `mention` is a webmention or an approved fediverse quote.                                      |
+| `author.name`    | The best name available: their display name, else their handle, else their id. For a webmention, the source's `h-card` name, else its host.                                                     |
+| `author.handle`  | `@user@host`, or `null`. Taken from the follower profile the site holds, else guessed from the actor URL. `null` for a native comment.                                                          |
+| `author.url`     | Their profile page, the website a commenter typed, or a webmention author's `u-url`. May be `null`, so guard the link.                                                                          |
+| `author.avatar`  | Their avatar, or `null`. The site knows one for an actor that follows it and for a webmention whose `h-card` carried a `u-photo`.                                                               |
+| `author.actorId` | Their id, which is what identifies them however they are named. `null` for a native comment.                                                                                                    |
+| `url`            | Where it can be read: the remote note's `url` for a fediverse reply or quote, the source page for a webmention, and `{permalink}#comment-{id}` — this page's own anchor — for a native comment. |
+| `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.                                                                                                   |
+| `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                                                                   |
+| `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                                    |
+| `status`         | `"published"`. On the record for the sources that moderate.                                                                                                                                     |
+| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                                                                                                                     |
 
 Three rules decide what is in the thread, and they are the CMS's rather than a
 theme's: a reply whose author deleted it is gone, and its own answers move up to

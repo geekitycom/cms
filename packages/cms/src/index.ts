@@ -1547,7 +1547,12 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // per-post comments feed, `/comments/feed/` and the `source:comments` count
   // on a post feed are all drawn from it, so a reader cannot be shown one
   // thing on the page and another in the feed (TASK-62).
-  const conversation = createConversation({ admin, store, baseUrl: resolved.baseUrl });
+  const conversation = createConversation({
+    admin,
+    store,
+    contentDir: resolved.contentDir,
+    baseUrl: resolved.baseUrl,
+  });
 
   // What a reply shows of the post it answers. Built before the renderer,
   // which reads the stored contexts, and subscribed to the index below with
