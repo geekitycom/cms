@@ -99,6 +99,7 @@ async function siteWith(
     contentDir,
     dataDir,
     baseUrl: 'https://blog.example',
+    port: 0,
     now: () => NOW,
   });
   return { cms, contentDir, dataDir, file };
