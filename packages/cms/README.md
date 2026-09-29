@@ -19,8 +19,8 @@ pnpm install
 pnpm dev
 ```
 
-That is a running site on <http://localhost:3000> with a post, a page and the
-packaged theme. `geekity init` refuses a directory that already has anything in
+That is a running site on <http://localhost:3000> with a post, an About page, a
+starter privacy page and the packaged theme. `geekity init` refuses a directory that already has anything in
 it, so it can never write over a site you already have.
 
 What it writes:
@@ -32,7 +32,7 @@ server.ts             the entry file; where your own routes go
 tsconfig.json         so the site type checks against the package
 content/
   posts/              Markdown posts, plus posts.json for Eleventy
-  pages/              Markdown pages, plus pages.json
+  pages/              about.md, privacy.md, plus pages.json
   _data/site.json     the settings: title, tagline, author, page and feed sizes
   _data/federation/   once the site federates: followers.json and the inbox log
   _data/comments/     once somebody comments: one JSON file per post
@@ -1417,6 +1417,23 @@ Two services outside the site see personal data when a site turns them on.
 Akismet is sent a commenter's or sender's address, user agent, referrer, name,
 email, website and words. The mail provider is sent every address a message
 goes to.
+
+### The starter privacy page
+
+`geekity init` writes `content/pages/privacy.md`, served at `/privacy/` and
+linked from the footer by a `Privacy | /privacy/` line in `menus.footer`. It
+says in plain language what the table above says, marks the contact form,
+reply emails and Akismet as optional, and quotes the retention periods a new
+site starts with. It is a starting point written from what the software does,
+not legal advice, and a note at its top says so to the owner: review it, add
+whatever the site does beyond the CMS (analytics, a host's logs, a theme that
+loads fonts from elsewhere), change the numbers when a retention period
+changes, and remove the menu line if the page is deleted.
+
+The link is a menu line rather than something the theme prints, because the
+footer prints `menus.footer` and nothing of its own (TASK-105). A site that
+upgrades gets no page and no link; it can copy the file from
+`templates/site/content/pages/privacy.md` in the package.
 
 ### Retention
 

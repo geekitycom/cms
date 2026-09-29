@@ -9,7 +9,10 @@
       { "label": "About", "url": "/about/" },
       { "label": "Search", "url": "/search/" }
     ],
-    "footer": [{ "label": "RSS", "url": "/feed/" }]
+    "footer": [
+      { "label": "RSS", "url": "/feed/" },
+      { "label": "Privacy", "url": "/privacy/" }
+    ]
   },
   "commentEmailRetentionDays": 180,
   "addressHashRetentionDays": 30,

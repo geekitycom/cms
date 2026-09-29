@@ -289,6 +289,14 @@ describe('the demo content', () => {
     assert.match(await text('/colophon/'), /Colophon/);
   });
 
+  it('serves the starter privacy page and links it from the footer (TASK-136)', async () => {
+    assert.match(await text('/privacy/'), /not legal advice/);
+    const body = await text('/colophon/');
+    const footer =
+      /<footer>([\s\S]*?)<\/footer>/.exec(body.slice(body.lastIndexOf('</main>')))?.[1] ?? '';
+    assert.match(footer, /<a href="\/privacy\/">Privacy<\/a>/);
+  });
+
   it('serves the post that opted out of the dated permalink', async () => {
     assert.match(await text('/reading-the-index/'), /Reading the index/);
   });
