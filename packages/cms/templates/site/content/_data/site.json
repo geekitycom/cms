@@ -11,6 +11,9 @@
     ],
     "footer": [{ "label": "RSS", "url": "/feed/" }]
   },
+  "commentEmailRetentionDays": 180,
+  "addressHashRetentionDays": 30,
+  "contactMessageRetentionDays": 365,
   "postsPerPage": 10,
   "feedSize": 20
 }

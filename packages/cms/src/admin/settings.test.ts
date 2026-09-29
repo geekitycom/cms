@@ -60,6 +60,9 @@ describe('content/_data/site.json', () => {
       categoryBase: 'category',
       comments: true,
       commentsCloseAfterDays: 14,
+      commentEmailRetentionDays: 0,
+      addressHashRetentionDays: 0,
+      contactMessageRetentionDays: 0,
       // Neither save was of the Discussion page, so its checkboxes are as they
       // were: a page writes the fields it carries and no others.
       webmentionsSend: true,

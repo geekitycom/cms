@@ -287,6 +287,18 @@ half on demand, and **Tools > Content index** in the admin does it [without
 stopping the site](#rebuilding-the-index-from-the-admin). There is no command
 for the images, because there is nothing to do: `rm -r data/images`.
 
+### Personal data
+
+Commenter emails and address hashes are in the comment files under
+`content/_data/comments/`, and contact messages are in `data/contact/`. A sweep
+removes each once it outlives the period set on **Settings > Discussion**. A
+site keeps everything until its owner sets a period, so upgrading deletes
+nothing; a new site from `geekity init` starts with 180 days for an email, 30
+for an address hash and 365 for a contact message.
+**Tools > Personal data** erases one person's data on request. The package
+README lists [every piece of personal data the CMS stores and
+where](packages/cms/README.md#personal-data).
+
 ### What is in the database, and what a rebuild loses
 
 No table holds anything that is not either read back from the files or
@@ -865,7 +877,8 @@ on six pages under the Settings menu: **General** (title, tagline, author, base
 URL, time zone and language), **Reading** (what the homepage displays, posts per
 page, the notify server the feeds advertise), **Permalinks** (the tag and category
 archive bases), **Discussion** (comments and when they close, webmentions sent
-and received), **Email** (how the site sends mail and where a message written to
+and received, and how long commenter emails, address hashes and contact
+messages are kept), **Email** (how the site sends mail and where a message written to
 it goes) and **Federation** (the relays the site subscribes to). They live in
 `content/_data/site.json`, which is published with the site and in git.
 
@@ -1467,6 +1480,10 @@ docker compose up -d
 Database migrations run on start, so there is no other step. Read the
 [changelog](packages/cms/CHANGELOG.md) for the versions in between first; a
 breaking change carries a note there.
+
+An upgrade never deletes a reader's data. Commenter emails, address hashes and
+contact messages are kept until the owner sets a retention period on
+**Settings > Discussion** ([Personal data](#personal-data)).
 
 `GEEKITY_TAG=latest` is the other way to run this. Every push moves that tag,
 so an upgrade is `pull` and `up -d` with nothing to edit — at the cost of the

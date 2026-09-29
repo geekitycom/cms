@@ -76,6 +76,10 @@ changelog.
 Upgrading to the release that renamed the session cookie signs everybody out
 of an https site once. See [Session hardening](#session-hardening).
 
+Upgrading never deletes a reader's data. The release that added
+[retention](#retention) keeps every commenter email, address hash and contact
+message on a site whose `site.json` has not set a period.
+
 ## The `geekity` command
 
 `geekity` is installed as a bin, so `pnpm geekity <command>` runs it inside a
@@ -1385,6 +1389,92 @@ positive on a contact form is somebody's message vanishing, which is a worse
 failure than a spam list to glance at. A checker that is down or throwing is no
 opinion, and the message is stored as it would have been before anybody had
 one.
+
+## Personal data
+
+This is every piece of personal data the CMS stores, where it is, and how long
+it stays. "Kept" means until somebody deletes it, unless a retention period
+says otherwise.
+
+| What                                                                                                                 | Where                                                             | How long                                                                       |
+| -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| A commenter's name, website and words                                                                                | `content/_data/comments/{slug}.json`, public and in git           | Kept. Erasing on request replaces the name and drops the website.              |
+| A commenter's email, and whether they asked to be told about replies                                                 | `content/_data/comments/{slug}.json`, **never shown**, but in git | `commentEmailRetentionDays`: forever unless set, 180 on a new site.            |
+| A salted hash of the address a comment, webmention or contact message came from (the address itself is never stored) | The comment file, or the contact message file                     | `addressHashRetentionDays`: forever unless set, 30 on a new site.              |
+| A webmention's author name, website, avatar URL and the source page's words                                          | `content/_data/comments/{slug}.json`                              | Kept, as a copy of a page that is public already.                              |
+| A contact message: the sender's name, email, subject and message                                                     | `data/contact/{id}.json`, mode `0600`                             | `contactMessageRetentionDays`: forever unless set, 365 on a new site.          |
+| The addresses that unsubscribed from reply notices                                                                   | `data/comment-optouts.json`, mode `0600`                          | Kept, so the site goes on not writing to them. Erasing on request removes one. |
+| Followers: actor id, handle, display name, avatar URL, profile URL                                                   | `content/_data/federation/{username}/followers.json`, in git      | Until they unfollow.                                                           |
+| Inbound likes, boosts, replies and quotes, with the actor who sent them                                              | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`, in git        | Kept.                                                                          |
+| What a reply shows of the post it answers: its title, words and author                                               | `content/_data/replyContexts.json`, in git                        | Kept.                                                                          |
+| Remote avatars, shrunk                                                                                               | `data/avatars/`                                                   | Deleted by the avatar sweep once nothing shown names them.                     |
+| Users: username, email, argon2id password hash, profile                                                              | `data/users.json`, mode `0600`                                    | Until the user is deleted.                                                     |
+| An index of all of the above, and sessions, reset tokens and spent link tokens                                       | `data/geekity.db`                                                 | A cache of the files. Sessions and tokens are pruned when they expire.         |
+| Client addresses in the rate limits                                                                                  | Memory                                                            | Until the window passes or the site restarts.                                  |
+| Client addresses in the access log                                                                                   | stdout, and whatever collects it                                  | Only with `accessLogAddress` on. The collector keeps them.                     |
+
+Two services outside the site see personal data when a site turns them on.
+Akismet is sent a commenter's or sender's address, user agent, referrer, name,
+email, website and words. The mail provider is sent every address a message
+goes to.
+
+### Retention
+
+Three settings in `content/_data/site.json`, on **Settings > Discussion**,
+decide how long the site keeps what readers hand it. Each counts whole days from
+when the data arrived, and `0` keeps it forever:
+
+| Setting                       | Recommended | What goes when it runs out                                        |
+| ----------------------------- | ----------- | ----------------------------------------------------------------- |
+| `commentEmailRetentionDays`   | `180`       | The email on a comment, and with it the reply subscription.       |
+| `addressHashRetentionDays`    | `30`        | The address hash on a comment, a webmention or a contact message. |
+| `contactMessageRetentionDays` | `365`       | The whole contact message.                                        |
+
+**A site keeps everything until its owner sets a period.** A `site.json`
+without these keys reads as `0` for all three, so an existing site that
+upgrades loses nothing, and the Discussion screen says "Kept forever" beside
+each one. A new site from `geekity init` starts with the recommended periods
+written into its `site.json`. An existing site opts in by typing them on
+Settings > Discussion and saving once.
+
+They are settings rather than config because how long a site keeps people's
+data is the owner's decision, and a privacy notice quotes it; `site.json` is
+public, which suits a policy. The recommended periods are long enough for a
+reply notice to arrive, a run of spam to be spotted and a year of
+correspondence to be answered, and no longer. The first sweep after a site
+sets a period removes whatever is already past it.
+
+A sweep runs when the site starts serving and every six hours after that, and
+`cms.retention.sweep()` runs one now. It reads the files rather than the index,
+rewrites each comment file and message inside the same lock every other writer
+takes, and puts each changed comment back into the index in the same step. A
+second sweep finds nothing left to remove and writes nothing.
+
+A comment that loses its email keeps its id, its place in the thread, its
+status, its words and its name. It gains `"redacted": ["email"]`, which is how
+the index tells an email removed from one never given: a name whose email was
+removed does not count toward auto-approval, so nobody can type that name and
+skip the queue. Its author is no longer told about replies, and their next
+comment waits for a moderator. A moderation link in an inbox names the comment
+by id, so it goes on working.
+
+The sweep changes the files as they are now. A comment file in git keeps its
+history, so an email committed before it was removed is still in the
+repository's history until that history is rewritten.
+
+### Erasing one person's data
+
+**Tools > Personal data** erases what the site holds for one email address.
+It shows what it found first: how many comments carry the address, how many
+contact messages came from it, and whether it is on the opt-out list. Erasing
+then signs each of those comments `Anonymous`, removes its email, website,
+avatar and address hash, and marks it `"redacted": ["email", "addressHash",
+"author"]`; the comment keeps its place in the thread, its status and its words.
+The contact messages are deleted and the address comes off the opt-out list.
+
+A comment is found by its email, so one whose email the sweep has already
+removed, a webmention and a fediverse reply are not found there. The Comments
+screen deletes those one at a time.
 
 ## Keeping the index in step
 

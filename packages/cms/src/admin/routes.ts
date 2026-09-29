@@ -43,6 +43,7 @@ import { mountTaxonomyScreens, TAXONOMY_KINDS } from './taxonomy.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
 import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './throttle.ts';
 import { mountToolsScreen } from './tools.ts';
+import { mountPersonalDataScreen } from './personal-data.ts';
 import type { LoginThrottle } from './throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 import { editUserPath, mountUsers } from './users.ts';
@@ -356,6 +357,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // The jobs a site runs rather than the things it sets: reading every file
   // back into the index, on a site that is serving.
   mountToolsScreen(app, { render });
+  mountPersonalDataScreen(app, { render });
 
   // The site's own settings, which are content/_data/site.json itself: the
   // screen reads that file and writes it back (decision-9).

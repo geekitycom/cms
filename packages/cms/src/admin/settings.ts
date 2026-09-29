@@ -2,6 +2,7 @@ import { statSync } from 'node:fs';
 import path from 'node:path';
 
 import { DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from '../comments/policy.ts';
+import type { RetentionPolicy } from '../privacy/policy.ts';
 import type { ResolvedConfig } from '../config.ts';
 import {
   readFileIfPresentSync,
@@ -145,6 +146,19 @@ export interface SiteSettings {
    * for itself with `comments: true` or `comments: false` in its front matter.
    */
   commentsCloseAfterDays: number;
+  /**
+   * How many days a comment keeps its author's email (TASK-135). Zero keeps it
+   * forever. Past it the email is removed from the comment file and the index,
+   * and with it the author's subscription to replies.
+   */
+  commentEmailRetentionDays: number;
+  /**
+   * How many days a comment or a contact message keeps the salted hash of the
+   * address it came from. Zero keeps it forever.
+   */
+  addressHashRetentionDays: number;
+  /** How many days a contact message is kept at all. Zero keeps it forever. */
+  contactMessageRetentionDays: number;
   /**
    * Whether the site tells the pages a post links to that it has (TASK-51).
    *
@@ -303,6 +317,11 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
   comments: true,
   commentsCloseAfterDays: DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
+  // Forever, so a site that upgrades loses nothing it never chose to lose.
+  // `geekity init` writes the recommended periods for a new site.
+  commentEmailRetentionDays: 0,
+  addressHashRetentionDays: 0,
+  contactMessageRetentionDays: 0,
   webmentionsSend: true,
   webmentionsReceive: true,
   notifyServer: DEFAULT_NOTIFY_SERVER,
@@ -336,6 +355,9 @@ export const SETTINGS_FIELDS = {
   categoryBase: 'category_base',
   comments: 'comments',
   commentsCloseAfterDays: 'comments_close_after_days',
+  commentEmailRetentionDays: 'comment_email_retention_days',
+  addressHashRetentionDays: 'address_hash_retention_days',
+  contactMessageRetentionDays: 'contact_message_retention_days',
   webmentionsSend: 'webmentions_send',
   webmentionsReceive: 'webmentions_receive',
   notifyServer: 'notify_server',
@@ -417,6 +439,9 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(Number.isInteger(closeAfterDays) && closeAfterDays >= 0
       ? { commentsCloseAfterDays: closeAfterDays }
       : {}),
+    ...wholeDays(file, 'commentEmailRetentionDays'),
+    ...wholeDays(file, 'addressHashRetentionDays'),
+    ...wholeDays(file, 'contactMessageRetentionDays'),
     ...(typeof file['webmentionsSend'] === 'boolean'
       ? { webmentionsSend: file['webmentionsSend'] }
       : {}),
@@ -516,6 +541,9 @@ export function siteJsonFor(
     categoryBase: settings.categoryBase,
     comments: settings.comments,
     commentsCloseAfterDays: settings.commentsCloseAfterDays,
+    commentEmailRetentionDays: settings.commentEmailRetentionDays,
+    addressHashRetentionDays: settings.addressHashRetentionDays,
+    contactMessageRetentionDays: settings.contactMessageRetentionDays,
     webmentionsSend: settings.webmentionsSend,
     webmentionsReceive: settings.webmentionsReceive,
     notifyServer: settings.notifyServer,
@@ -818,6 +846,12 @@ const FIELD_CHECKS: Record<
       : undefined;
   },
 
+  commentEmailRetentionDays: (form) => retentionProblem(form.commentEmailRetentionDays),
+
+  addressHashRetentionDays: (form) => retentionProblem(form.addressHashRetentionDays),
+
+  contactMessageRetentionDays: (form) => retentionProblem(form.contactMessageRetentionDays),
+
   webmentionsSend: () => undefined,
 
   webmentionsReceive: () => undefined,
@@ -965,6 +999,9 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     // empty string here means.
     comments: form.comments !== '',
     commentsCloseAfterDays: Number(form.commentsCloseAfterDays),
+    commentEmailRetentionDays: Number(form.commentEmailRetentionDays),
+    addressHashRetentionDays: Number(form.addressHashRetentionDays),
+    contactMessageRetentionDays: Number(form.contactMessageRetentionDays),
     webmentionsSend: form.webmentionsSend !== '',
     webmentionsReceive: form.webmentionsReceive !== '',
     notifyServer: normalizeBaseUrl(form.notifyServer) ?? '',
@@ -1000,6 +1037,9 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     categoryBase: settings.categoryBase,
     comments: settings.comments ? '1' : '',
     commentsCloseAfterDays: String(settings.commentsCloseAfterDays),
+    commentEmailRetentionDays: String(settings.commentEmailRetentionDays),
+    addressHashRetentionDays: String(settings.addressHashRetentionDays),
+    contactMessageRetentionDays: String(settings.contactMessageRetentionDays),
     webmentionsSend: settings.webmentionsSend ? '1' : '',
     webmentionsReceive: settings.webmentionsReceive ? '1' : '',
     notifyServer: settings.notifyServer,
@@ -1212,4 +1252,34 @@ function parseSiteJson(source: string): Record<string, unknown> {
   return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
     ? (parsed as Record<string, unknown>)
     : {};
+}
+
+/** The three retention periods, as the sweep reads them. */
+export function retentionPolicyOf(settings: SiteSettings): RetentionPolicy {
+  return {
+    commentEmailDays: settings.commentEmailRetentionDays,
+    addressHashDays: settings.addressHashRetentionDays,
+    contactMessageDays: settings.contactMessageRetentionDays,
+  };
+}
+
+/** A retention key from `site.json`, when it holds a whole number of days. */
+function wholeDays(
+  file: Record<string, unknown>,
+  key: 'commentEmailRetentionDays' | 'addressHashRetentionDays' | 'contactMessageRetentionDays',
+): Partial<SiteSettings> {
+  const days = file[key];
+  return typeof days === 'number' && Number.isInteger(days) && days >= 0 ? { [key]: days } : {};
+}
+
+/**
+ * What is wrong with a typed retention period, if anything. Empty is refused
+ * rather than read as zero, because zero keeps the data forever and a cleared
+ * field should not be how a site says that.
+ */
+function retentionProblem(typed: string): string | undefined {
+  const days = Number(typed.trim());
+  return typed.trim() === '' || !Number.isInteger(days) || days < 0
+    ? 'Keep it for a whole number of days, or 0 to keep it forever.'
+    : undefined;
 }

@@ -45,7 +45,15 @@ export const DISCUSSION_SETTINGS: SettingsPage = {
   label: 'Discussion',
   path: settingsPagePath('discussion'),
   template: ADMIN_TEMPLATES.settingsDiscussion,
-  fields: ['comments', 'commentsCloseAfterDays', 'webmentionsSend', 'webmentionsReceive'],
+  fields: [
+    'comments',
+    'commentsCloseAfterDays',
+    'webmentionsSend',
+    'webmentionsReceive',
+    'commentEmailRetentionDays',
+    'addressHashRetentionDays',
+    'contactMessageRetentionDays',
+  ],
 
   panels: (c) => akismetPanel(c.var.config.dataDir),
 

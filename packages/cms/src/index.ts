@@ -5,6 +5,8 @@ import { Hono } from 'hono';
 import { createAccessLog } from './access-log.ts';
 import { createAvatarService } from './avatars/index.ts';
 import type { AvatarService } from './avatars/index.ts';
+import { createRetentionService } from './privacy/retention.ts';
+import type { RetentionService } from './privacy/retention.ts';
 import {
   baselineSecurityHeaders,
   effectiveBaseUrl,
@@ -1248,6 +1250,18 @@ export {
   mountAvatars,
 } from './avatars/index.ts';
 export type { AvatarAnswer, AvatarService, CreateAvatarServiceOptions } from './avatars/index.ts';
+export {
+  RECOMMENDED_ADDRESS_HASH_RETENTION_DAYS,
+  RECOMMENDED_COMMENT_EMAIL_RETENTION_DAYS,
+  RECOMMENDED_CONTACT_MESSAGE_RETENTION_DAYS,
+} from './privacy/policy.ts';
+export type { RetentionPolicy } from './privacy/policy.ts';
+export { createRetentionService, RETENTION_SWEEP_MS } from './privacy/retention.ts';
+export type {
+  CreateRetentionServiceOptions,
+  RetentionReport,
+  RetentionService,
+} from './privacy/retention.ts';
 
 /**
  * Where the scheduler's watermark lives in {@link AdminStore.getState}: the
@@ -1320,6 +1334,13 @@ export interface Cms {
    * serves; a site or a test reaches for it to sweep now or to wait.
    */
   readonly avatars: AvatarService;
+  /**
+   * The sweep that removes commenter emails, address hashes and contact
+   * messages once they outlive the periods in the site's settings (TASK-135).
+   * Runs on a timer once the site serves; a site or a test reaches for it to
+   * sweep now or to wait.
+   */
+  readonly retention: RetentionService;
   /**
    * The site's rssCloud and WebSub client: what tells the notify server named
    * in the settings that a feed changed, so a subscriber hears at once rather
@@ -1588,6 +1609,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // reader's address never reaches the servers they live on (TASK-134).
   const avatars = createAvatarService({ admin, config: resolved });
 
+  // What keeps a site from holding its readers' personal data for longer than
+  // its settings say (TASK-135).
+  const retention = createRetentionService({ admin, config: resolved });
+
   const renderer = createRenderer({
     config: resolved,
     themes,
@@ -1855,6 +1880,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     webmentions,
     replyContexts,
     avatars,
+    retention,
     notifier,
     mail,
     notifications,
@@ -1900,6 +1926,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // waits on a stranger's server for one (TASK-134).
       avatars.start();
 
+      // And whatever personal data has outlived its period is removed now and
+      // every few hours from here on (TASK-135).
+      retention.start();
+
       // The digests tick from here on. Nothing is caught up first: a digest is
       // whatever is pending when a window comes up, so a site that was down
       // over one simply sends the next one, with everything still waiting in it.
@@ -1918,6 +1948,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       scheduler.stop();
       digests.stop();
       avatars.stop();
+      retention.stop();
       await content.stop();
       await scheduler.settled();
       await digests.settled();
@@ -1928,6 +1959,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       await webmentions.settled();
       await replyContexts.settled();
       await avatars.settled();
+      await retention.settled();
       await notifier.settled();
       await mail.settled();
 

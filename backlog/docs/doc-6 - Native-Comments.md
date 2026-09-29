@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-12 21:20'
+updated_date: '2026-09-29 03:45'
 ---
 # Native comments
 
@@ -79,6 +79,7 @@ belong. `comments` is the list, oldest first.
 | `inReplyTo`   | The comment it answers, or `null` for one answering the post.                                     |
 | `url`         | Where it lives when it lives somewhere else: a webmention's source page, `null` for one written here. |
 | `notify`      | Whether the commenter asked to be told when somebody answers them. Only ever `true` alongside an `author.email`; an entry that does not say it asked for nothing. |
+| `redacted`    | What was removed from it for privacy (TASK-135): any of `email`, `addressHash` and `author`. Absent when nothing was. An author whose email was removed does not count toward auto-approval. |
 
 The shape is deliberately wider than a form submission, because a webmention
 lands in the same file: it has a page of its own and no email, it may be a like
@@ -143,6 +144,18 @@ salt in `data/comment-salt` (mode `0600`, minted on first use). Unsalted, an
 IPv4 hash *is* the address — four billion candidates is seconds of work. Losing
 the salt costs the ability to compare old hashes with new ones and nothing
 else.
+
+### Retention (TASK-135)
+
+A sweep removes `author.email` (and `notify` with it) and `addressHash` once
+they outlive `commentEmailRetentionDays` and `addressHashRetentionDays` in
+`site.json` and marks the entry `redacted`. An absent key is `0`, forever,
+so an upgraded site loses nothing it did not choose to; `geekity init` writes
+180 and 30 for a new site. It
+rewrites each file under the same per-file lock as every other writer and puts
+each changed entry back into the index, and a second sweep writes nothing.
+Tools > Personal data erases one commenter's data by email: the entry keeps its
+id, status, thread and words, signed `Anonymous`.
 
 The spam checker gets the real address, because that is the one thing it cannot
 work without; see the seam below.

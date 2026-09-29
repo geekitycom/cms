@@ -39,6 +39,7 @@ export {
   commentOptOutsFile,
   hasOptedOut,
   readCommentOptOuts,
+  removeCommentOptOut,
 } from './optouts.ts';
 export {
   DEFAULT_DELIVERY_MODE,
