@@ -3,7 +3,7 @@ import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import { actorHandle, replyFrom, REPLY_ACTIVITY_TYPE } from '../federation/replies.ts';
-import { activityStreamsId, isPublicDocument } from './documents.ts';
+import { activityStreamsId, isPublicDocument, permalinkOfObjectId } from './documents.ts';
 import type { FeedComment } from './feeds.ts';
 import { absoluteUrl } from './negotiate.ts';
 import { sanitizeCommentHtml } from './sanitize.ts';
@@ -557,36 +557,6 @@ class PostsByObjectId {
       }
     }
     return this.#all;
-  }
-}
-
-/**
- * The permalink an object id names, when it is one this site would have
- * minted: the path, with the base URL's own directory taken off it.
- *
- * An id from another host belongs to no post here however it is spelled, and
- * neither does one carrying a query string — a permalink has none, so an id
- * like `?p=813` is a stored one and is found by the walk instead.
- */
-function permalinkOfObjectId(objectId: string, baseUrl: string): string | undefined {
-  let url: URL;
-  let base: URL;
-  try {
-    url = new URL(objectId);
-    base = new URL(baseUrl);
-  } catch {
-    return undefined;
-  }
-  if (url.origin !== base.origin || url.search !== '') return undefined;
-
-  const directory = base.pathname === '/' ? '' : base.pathname.replace(/\/$/, '');
-  if (directory !== '' && !url.pathname.startsWith(`${directory}/`)) return undefined;
-
-  const pathname = url.pathname.slice(directory.length);
-  try {
-    return decodeURIComponent(pathname);
-  } catch {
-    return pathname;
   }
 }
 

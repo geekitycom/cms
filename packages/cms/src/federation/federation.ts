@@ -2,7 +2,18 @@ import { createRequire } from 'node:module';
 
 import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/fedify';
 import type { Context, Federation, FederationOptions, PageItems } from '@fedify/fedify';
-import { Accept, Announce, Create, Delete, Follow, Like, Reject, Undo } from '@fedify/vocab';
+import {
+  Accept,
+  Announce,
+  Create,
+  Delete,
+  Follow,
+  Like,
+  QuoteAuthorization,
+  QuoteRequest,
+  Reject,
+  Undo,
+} from '@fedify/vocab';
 
 import { countUsers, listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
@@ -12,13 +23,14 @@ import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import { authorNames } from '../web/authors.ts';
 import { userActor, userByUsername } from './actor.ts';
-import { isFederatedDocument, postCreateActivity } from './article.ts';
+import { isFederatedDocument, postByObjectId, postCreateActivity } from './article.ts';
 import { followersPage, lastFollowersCursor } from './followers.ts';
 import {
   handleAccept,
   handleDelete,
   handleFollow,
   handleLoggedActivity,
+  handleQuoteRequest,
   handleReject,
   handleUndo,
 } from './inbox.ts';
@@ -31,8 +43,10 @@ import {
   INBOX_PATH,
   NODEINFO_PATH,
   OUTBOX_PATH,
+  QUOTE_AUTHORIZATION_PATH,
   SHARED_INBOX_PATH,
 } from './paths.ts';
+import { quoteAuthorization, readQuoteAuthorizations } from './quotes.ts';
 
 /** The `software.name` this CMS reports in NodeInfo. Lower case, as the schema demands. */
 export const SOFTWARE_NAME = 'geekity-cms';
@@ -137,6 +151,26 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
   // `isFederatedDocument` is the one rule it and the outbox both read, so they
   // cannot disagree about what exists.
 
+  // A quote approval, for anybody who asks, as long as the quote still stands
+  // and the post it quotes is still one this site federates: a stamp on a post
+  // nobody can see any more approves nothing (FEP-044f).
+  federation.setObjectDispatcher(
+    QuoteAuthorization,
+    QUOTE_AUTHORIZATION_PATH,
+    (context, { identifier, id }) => {
+      const user = actorFor(context, identifier);
+      if (user === undefined) return null;
+      const { config, store } = context.data;
+      const record = readQuoteAuthorizations(config.contentDir, user.username).find(
+        (entry) => entry.id === id,
+      );
+      if (record === undefined) return null;
+      const post = postByObjectId(store, record.post, config.baseUrl);
+      if (post === undefined || !isFederatedDocument(post, store.now())) return null;
+      return quoteAuthorization(context, user, record);
+    },
+  );
+
   /** Every stored `author` string that reads as this user (TASK-67). */
   function namesOf(context: { data: FederationContextData }, user: User): string[] {
     return authorNames(listUsers(context.data.config.dataDir), user);
@@ -201,7 +235,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
   // by the time a listener runs — an unsigned or badly signed delivery never
   // reaches one — so a handler may trust that the activity's actor really sent
   // it. An activity of a type not listed here is answered 202 and dropped,
-  // which is what doc-4 asks for everything past these five.
+  // which is what doc-4 asks for everything past these.
   federation
     .setInboxListeners(INBOX_PATH, SHARED_INBOX_PATH)
     // `per-origin` rather than Fedify's default `per-inbox`, which folds the
@@ -217,7 +251,8 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
     .on(Delete, handleDelete)
     .on(Like, handleLoggedActivity)
     .on(Announce, handleLoggedActivity)
-    .on(Create, handleLoggedActivity);
+    .on(Create, handleLoggedActivity)
+    .on(QuoteRequest, handleQuoteRequest);
 
   federation.setNodeInfoDispatcher(NODEINFO_PATH, (context) => {
     const counts = context.data.store.counts();

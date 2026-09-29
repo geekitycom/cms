@@ -25,6 +25,12 @@ export const FOLLOWERS_PATH = `${ACTOR_PATH}followers/` as const;
 export const FOLLOWING_PATH = `${ACTOR_PATH}following/` as const;
 
 /**
+ * Where one quote approval (FEP-044f) is served: under the author who granted
+ * it, on this site's host, which is where Mastodon checks a stamp comes from.
+ */
+export const QUOTE_AUTHORIZATION_PATH = `${ACTOR_PATH}quotes/{id}/` as const;
+
+/**
  * The instance-wide inbox, which a peer may use to deliver to every actor at
  * once.
  *
