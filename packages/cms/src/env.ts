@@ -6,6 +6,7 @@ import type { DocumentChange, SyncResult } from './content/sync.ts';
 import type { DeliveryService } from './federation/delivery.ts';
 import type { RelayService } from './federation/relays.ts';
 import type { MailService } from './mail/service.ts';
+import type { MaintenanceSwitch } from './maintenance.ts';
 import type { CommentNotifier } from './notifications/comments.ts';
 import type { WebmentionService } from './webmention/service.ts';
 import type { ConversationReader } from './web/conversation.ts';
@@ -18,6 +19,11 @@ import type { Renderer } from './web/render.ts';
  */
 export interface GeekityEnv {
   Variables: {
+    /**
+     * Whether the site is in maintenance mode (TASK-130), and until when: the
+     * gate in front of the public site and `/healthz` read the same answer.
+     */
+    maintenance: MaintenanceSwitch;
     /** The derived content index this CMS booted. */
     store: ContentStore;
     /** Users and sessions, the part of the database that is not derived. */

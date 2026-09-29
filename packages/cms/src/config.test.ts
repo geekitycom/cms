@@ -503,4 +503,20 @@ describe('baseUrlSource', () => {
       /GEEKITY_SEED_CONTENT/,
     );
   });
+
+  it('forces maintenance mode from GEEKITY_MAINTENANCE, and is off by default', () => {
+    assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).maintenance, false);
+    assert.equal(
+      resolveConfig({ maintenance: true }, { cwd: '/srv/site', env: {} }).maintenance,
+      true,
+    );
+    assert.equal(
+      resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_MAINTENANCE: 'on' } }).maintenance,
+      true,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_MAINTENANCE: 'sometimes' } }),
+      /GEEKITY_MAINTENANCE/,
+    );
+  });
 });

@@ -107,7 +107,7 @@ export const serverError: ErrorHandler<GeekityEnv> = (error, c) => {
  * The representation the failed request was after: the one its `.md` or
  * `.json` suffix names, else the one its `Accept` header prefers, else HTML.
  */
-function representationOf(pathname: string, accept: string | undefined): Representation {
+export function representationOf(pathname: string, accept: string | undefined): Representation {
   return (
     splitRepresentationExtension(pathname)?.representation ??
     selectRepresentation(accept, DOCUMENT_REPRESENTATIONS) ??

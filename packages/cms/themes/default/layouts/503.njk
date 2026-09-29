@@ -1,0 +1,8 @@
+{% extends "layouts/base.njk" %}
+
+{% block content %}
+<article class="maintenance">
+  <h1 class="page-title">Down for maintenance.</h1>
+  <p>This site is down for maintenance and will be back shortly.{% if until %} It should be back by <time datetime="{{ until }}">{{ untilText }}</time>.{% endif %} Please try again then.</p>
+</article>
+{% endblock %}

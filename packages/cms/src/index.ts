@@ -46,12 +46,14 @@ import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
 import { commentFormFor, createAkismetChecker, rebuildCommentIndexes } from './comments/index.ts';
 import { contactFormFor } from './contact/index.ts';
+import { createMaintenanceSwitch } from './maintenance.ts';
 import {
   createConversation,
   createRedirectSource,
   createRenderer,
   createSiteDataSource,
   createThemeSource,
+  maintenanceGate,
   mountHealth,
   mountPublicSite,
   recentPosts,
@@ -1705,6 +1707,12 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const relays = createRelayService({ federation, admin, store, config: resolved });
   relays.sync();
 
+  const maintenance = createMaintenanceSwitch({
+    dataDir: resolved.dataDir,
+    forced: resolved.maintenance,
+    now: resolved.now,
+  });
+
   const app = new Hono<GeekityEnv>();
 
   // A handler that throws is answered here rather than with Hono's plain-text
@@ -1740,6 +1748,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('mail', mail);
     c.set('notifications', notifications);
     c.set('redirects', redirects);
+    c.set('maintenance', maintenance);
     await next();
   });
 
@@ -1750,6 +1759,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
 
   // And one on every redirect, whichever part of the CMS sent it.
   app.use('*', redirectBy);
+
+  // Maintenance mode (TASK-130) turns away everything after it but the health
+  // checks, the admin and the theme's files, so it goes in front of all of
+  // them: federation's inboxes included.
+  app.use('*', maintenanceGate);
 
   app.get('/_geekity/health', (c) => c.json({ status: 'ok' }));
 

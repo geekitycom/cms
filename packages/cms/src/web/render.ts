@@ -46,6 +46,7 @@ export const TEMPLATES = {
   search: 'layouts/search.njk',
   notFound: 'layouts/404.njk',
   serverError: 'layouts/500.njk',
+  maintenance: 'layouts/503.njk',
 } as const;
 
 /**
@@ -184,6 +185,11 @@ export interface Renderer {
   renderNotFound(url: string): string;
   /** The 500 page, for a request whose handler threw. */
   renderServerError(url: string): string;
+  /**
+   * The maintenance page (TASK-130), for a request turned away while the site
+   * is down on purpose. `until` is when the operator expects it back.
+   */
+  renderMaintenance(url: string, until: Date | undefined): string;
   /** Any template by name, with the site data already in the context. */
   render(template: string, context?: Record<string, unknown>): string;
   /**
@@ -667,6 +673,17 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         title: 'Something went wrong',
         url,
         page: { url },
+      });
+    },
+
+    renderMaintenance(url, until) {
+      return render(TEMPLATES.maintenance, {
+        title: 'Down for maintenance',
+        url,
+        page: { url },
+        ...(until === undefined
+          ? {}
+          : { until: until.toISOString(), untilText: until.toUTCString() }),
       });
     },
 

@@ -18,6 +18,7 @@ themes/default/
     search.njk   the search form and what it found, paginated
     404.njk      nothing at this URL
     500.njk      the request failed on the server
+    503.njk      the site is in maintenance mode
   partials/
     post-list.njk     the h-feed a listing is made of
     pagination.njk    previous/next pager
@@ -382,6 +383,15 @@ the error itself goes to the server's log, never into the page. If this template
 fails too, the CMS answers with a plain HTML page of its own instead, so a theme
 cannot turn one failure into a crash. A request for the `.md` or `.json`
 representation gets a 500 in that format and never reaches this template.
+
+`layouts/503.njk` is the page a request gets while the site is in maintenance
+mode (TASK-130). It says `Down for maintenance.` in an `article.maintenance`.
+The context is the 404's, plus `until` (an ISO 8601 time) and `untilText` (the
+same time as an HTTP date) when the operator named when the site should be
+back. The response is a 503 with `Retry-After` and `Cache-Control: no-store`.
+The theme's files under `/theme/` are still served, so the page can use the
+stylesheet. If this template fails, the CMS answers with a plain HTML page of
+its own.
 
 ### Search
 

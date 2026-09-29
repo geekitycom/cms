@@ -235,6 +235,18 @@ export interface GeekityConfig {
    */
   seedContent?: boolean;
   /**
+   * Keep the site in maintenance mode for the life of the process: public
+   * pages, feeds and inbox deliveries answer 503 (TASK-130). Default `false`.
+   * Overridden by `GEEKITY_MAINTENANCE`.
+   *
+   * The boot-time switch, for a site that must come up already down. The
+   * everyday one is `geekity maintenance on` and `off`, which write and remove
+   * `data/maintenance.json` and take effect on a running site within a second;
+   * with this on, removing that file does not bring the site back until a
+   * restart without it.
+   */
+  maintenance?: boolean;
+  /**
    * Called for every `created`, `updated` and `deleted` the index records.
    *
    * The boot scan reports a cold index as a directory full of creations, so a
@@ -332,6 +344,7 @@ export interface ResolvedConfig {
   /** The sink, when the site named one; otherwise the log writes to stdout. */
   accessLogWriter: AccessLogWriter | undefined;
   seedContent: boolean;
+  maintenance: boolean;
   onDocumentChange: DocumentChangeHook | undefined;
   onPublish: DocumentChangeHook | undefined;
   /**
@@ -483,6 +496,12 @@ export function resolveConfig(
       'GEEKITY_SEED_CONTENT',
       env['GEEKITY_SEED_CONTENT'],
       config.seedContent,
+      false,
+    ),
+    maintenance: resolveBoolean(
+      'GEEKITY_MAINTENANCE',
+      env['GEEKITY_MAINTENANCE'],
+      config.maintenance,
       false,
     ),
     onDocumentChange: config.onDocumentChange,

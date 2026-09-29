@@ -79,19 +79,20 @@ changelog.
 site (or `npx geekity`, or a `package.json` script, which is how the generated
 `sync` script calls it).
 
-| Command                                 | What it does                                                                                                                                                          |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `geekity serve`                         | Boot from the config file and listen. The default when no command is given.                                                                                           |
-| `geekity init <dir>`                    | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                  |
-| `geekity sync`                          | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                              |
-| `geekity rebuild`                       | Delete `data/geekity.db` and build it again from the files.                                                                                                           |
-| `geekity resend --all`, `<slug>...`     | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                            |
-| `geekity user add <name>`               | Create an admin account, so a site can get its first login without the setup screen.                                                                                  |
-| `geekity import wordpress-actor <name>` | Bring one person across from the WordPress ActivityPub plugin: their key pair, the actor id their followers hold, the plugin's numeric actor id, and their followers. |
-| `geekity --help`, `-h`                  | The same table, on the terminal.                                                                                                                                      |
-| `geekity --version`                     | The installed version.                                                                                                                                                |
+| Command                                   | What it does                                                                                                                                                          |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geekity serve`                           | Boot from the config file and listen. The default when no command is given.                                                                                           |
+| `geekity init <dir>`                      | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                  |
+| `geekity sync`                            | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                              |
+| `geekity rebuild`                         | Delete `data/geekity.db` and build it again from the files.                                                                                                           |
+| `geekity resend --all`, `<slug>...`       | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                            |
+| `geekity maintenance on`, `off`, `status` | Take the public site down on purpose with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` names when it should be back.             |
+| `geekity user add <name>`                 | Create an admin account, so a site can get its first login without the setup screen.                                                                                  |
+| `geekity import wordpress-actor <name>`   | Bring one person across from the WordPress ActivityPub plugin: their key pair, the actor id their followers hold, the plugin's numeric actor id, and their followers. |
+| `geekity --help`, `-h`                    | The same table, on the terminal.                                                                                                                                      |
+| `geekity --version`                       | The installed version.                                                                                                                                                |
 
-`serve`, `sync`, `rebuild`, `resend`, `user add` and `import wordpress-actor` take
+`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `user add` and `import wordpress-actor` take
 `--config <file>`; without it they look for `geekity.config.ts`, then
 `geekity.config.js`, then `geekity.config.mjs` in the working directory, and run
 on defaults if there is none.
@@ -274,6 +275,7 @@ directory; absolute ones are used as given.
 | `accessLog`        | `false`; `true` under `geekity serve` | `GEEKITY_ACCESS_LOG`         | One line per request on stdout: method, path with query, status, duration. See [The access log](#the-access-log).                                                                         |
 | `accessLogAddress` | `false`                               | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address on the end of each access-log line. `trustProxy` decides which address that is.                                                                                    |
 | `accessLogWriter`  | stdout                                | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                        |
+| `maintenance`      | `false`                               | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode, answering 503, until a restart without it.                                                                                                             |
 | `onDocumentChange` | none                                  | —                            | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                              |
 | `onPublish`        | none                                  | —                            | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                            |
 | `federation`       | `{}`                                  | —                            | Federation stores and guards. See [Federation](#federation).                                                                                                                              |

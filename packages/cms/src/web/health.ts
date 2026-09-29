@@ -13,6 +13,12 @@ export type HealthOutcome = 'ok' | 'fail';
 /** The body of a `/healthz` response. */
 export interface HealthReport {
   status: HealthOutcome;
+  /**
+   * Whether the site is in maintenance mode (TASK-130). Reported rather than
+   * failed: the process is healthy, and an orchestrator that restarted it for
+   * being down on purpose would be fighting the operator.
+   */
+  maintenance: boolean;
   checks: { database: HealthOutcome; content: HealthOutcome };
 }
 
@@ -39,7 +45,11 @@ export async function healthReport(c: Context<GeekityEnv>): Promise<HealthReport
     await dir.close();
   });
   const status = database === 'ok' && content === 'ok' ? 'ok' : 'fail';
-  return { status, checks: { database, content } };
+  return {
+    status,
+    maintenance: c.var.maintenance() !== undefined,
+    checks: { database, content },
+  };
 }
 
 /**
