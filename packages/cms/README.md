@@ -367,13 +367,14 @@ the same directory reads all of it, and everything in it is meant to be public:
 | `data/notification-digests.json`  | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                         |
 | `data/wordpress-activitypub.json` | When each WordPress compatibility path was last asked for. Losing it resets the answer the switch is watched by.                |
 
-Two things under `data/` may be deleted whenever the site is stopped, and
+Three things under `data/` may be deleted whenever the site is stopped, and
 nothing else in either directory may:
 
-| Path              | What it is                                                                               |
-| ----------------- | ---------------------------------------------------------------------------------------- |
-| `data/geekity.db` | The SQLite cache, with its `-wal` and `-shm`. `geekity rebuild` deletes and rebuilds it. |
-| `data/images/`    | Variants derived from `content/uploads/`, with their `image.json` sidecars. `rm -r` it.  |
+| Path              | What it is                                                                                      |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| `data/geekity.db` | The SQLite cache, with its `-wal` and `-shm`. `geekity rebuild` deletes and rebuilds it.        |
+| `data/images/`    | Variants derived from `content/uploads/`, with their `image.json` sidecars. `rm -r` it.         |
+| `data/avatars/`   | Remote avatars served from `/_geekity/avatars/` (TASK-134). `rm -r` it; they are fetched again. |
 
 The next boot builds the database out of the files with no manual step, and a
 request for a variant that is not there derives it and serves it.

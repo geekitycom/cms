@@ -3,6 +3,8 @@ import { serve as serveNode } from '@hono/node-server';
 import { Hono } from 'hono';
 
 import { createAccessLog } from './access-log.ts';
+import { createAvatarService } from './avatars/index.ts';
+import type { AvatarService } from './avatars/index.ts';
 import {
   baselineSecurityHeaders,
   effectiveBaseUrl,
@@ -1237,6 +1239,15 @@ export type {
   WebmentionLogger,
   WebmentionReport,
 } from './webmention/index.ts';
+export {
+  AVATAR_PATH_PREFIX,
+  AVATAR_SIZE,
+  avatarHref,
+  avatarSourceOf,
+  createAvatarService,
+  mountAvatars,
+} from './avatars/index.ts';
+export type { AvatarAnswer, AvatarService, CreateAvatarServiceOptions } from './avatars/index.ts';
 
 /**
  * Where the scheduler's watermark lives in {@link AdminStore.getState}: the
@@ -1303,6 +1314,12 @@ export interface Cms {
    * or a test reaches for it to wait for the fetches in flight.
    */
   readonly replyContexts: ReplyContextService;
+  /**
+   * The remote avatars a conversation shows, cached under `data/avatars/` and
+   * served from `/_geekity/avatars/` (TASK-134). Swept on a timer once the site
+   * serves; a site or a test reaches for it to sweep now or to wait.
+   */
+  readonly avatars: AvatarService;
   /**
    * The site's rssCloud and WebSub client: what tells the notify server named
    * in the settings that a feed changed, so a subscriber hears at once rather
@@ -1567,6 +1584,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
     lookup: resolved.hostLookup,
   });
 
+  // The faces in a conversation, fetched here and served from here so a
+  // reader's address never reaches the servers they live on (TASK-134).
+  const avatars = createAvatarService({ admin, config: resolved });
+
   const renderer = createRenderer({
     config: resolved,
     themes,
@@ -1749,6 +1770,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('config', resolved);
     c.set('renderer', renderer);
     c.set('conversation', conversation);
+    c.set('avatars', avatars);
     c.set('announce', (change) => content.announce(change));
     c.set('rescan', () => content.sync());
     c.set('delivery', delivery);
@@ -1832,6 +1854,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     relays,
     webmentions,
     replyContexts,
+    avatars,
     notifier,
     mail,
     notifications,
@@ -1872,6 +1895,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // fetched now, in the background, for the same reason (TASK-123).
       replyContexts.catchUp();
 
+      // And the avatars the conversations show are fetched or refreshed in the
+      // background now and on a timer from here on, so a reader almost never
+      // waits on a stranger's server for one (TASK-134).
+      avatars.start();
+
       // The digests tick from here on. Nothing is caught up first: a digest is
       // whatever is pending when a window comes up, so a site that was down
       // over one simply sends the next one, with everything still waiting in it.
@@ -1889,6 +1917,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       server = undefined;
       scheduler.stop();
       digests.stop();
+      avatars.stop();
       await content.stop();
       await scheduler.settled();
       await digests.settled();
@@ -1898,6 +1927,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       await relays.settled();
       await webmentions.settled();
       await replyContexts.settled();
+      await avatars.settled();
       await notifier.settled();
       await mail.settled();
 

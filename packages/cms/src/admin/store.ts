@@ -671,6 +671,15 @@ export interface AdminStore {
   /** One user's follower by actor id, or `undefined`. */
   getFollower(username: string, actorId: string): Follower | undefined;
   /**
+   * Whether a URL is an avatar a reader of this site can be shown: the picture
+   * of a follower who has done something to a post, or of the author of an
+   * approved comment or webmention. The avatar proxy fetches nothing else
+   * (TASK-134), so it cannot be pointed at an arbitrary URL.
+   */
+  isAvatarSource(url: string): boolean;
+  /** Every URL {@link AdminStore.isAvatarSource} answers yes for, each once. */
+  listAvatarSources(): string[];
+  /**
    * Store a follower, replacing whatever was known about that actor. The
    * original `followedAt` is kept, because a repeat `Follow` from an actor
    * that already follows is a redelivery rather than a new follow.
@@ -899,6 +908,20 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       LIMIT ?2 OFFSET ?3
     `),
     followerById: db.prepare('SELECT * FROM followers WHERE username = ? AND actor_id = ?'),
+    isAvatarSource: db.prepare(`
+      SELECT 1 FROM followers
+      WHERE icon_url = ?1 AND actor_id IN (SELECT actor_id FROM ap_inbox)
+      UNION ALL
+      SELECT 1 FROM comments WHERE author_avatar = ?1 AND status = 'approved'
+      LIMIT 1
+    `),
+    listAvatarSources: db.prepare(`
+      SELECT icon_url AS url FROM followers
+      WHERE icon_url IS NOT NULL AND actor_id IN (SELECT actor_id FROM ap_inbox)
+      UNION
+      SELECT author_avatar AS url FROM comments
+      WHERE author_avatar IS NOT NULL AND status = 'approved'
+    `),
     putFollower: db.prepare(`
       INSERT INTO followers (
         username, actor_id, inbox_id, shared_inbox_id, handle, name, icon_url, url, followed_at
@@ -1222,6 +1245,16 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       const row = statements.followerById.get(username, actorId) as
         Record<string, unknown> | undefined;
       return row === undefined ? undefined : toFollower(row);
+    },
+
+    isAvatarSource(url) {
+      return statements.isAvatarSource.get(url) !== undefined;
+    },
+
+    listAvatarSources() {
+      return (statements.listAvatarSources.all() as Record<string, unknown>[]).map((row) =>
+        String(row['url']),
+      );
     },
 
     putFollower(follower) {
@@ -2421,6 +2454,16 @@ const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE ap_inbox ADD COLUMN recipient TEXT;
 
       CREATE INDEX ap_inbox_recipient ON ap_inbox (recipient);
+    `,
+  },
+  {
+    // The avatar proxy asks, per request for a picture, whether its URL is one
+    // the site has recorded (TASK-134). Both columns are indexed so that
+    // question is a lookup rather than a scan of every follower and comment.
+    version: 19,
+    sql: `
+      CREATE INDEX followers_icon_url ON followers (icon_url);
+      CREATE INDEX comments_author_avatar ON comments (author_avatar);
     `,
   },
 ];

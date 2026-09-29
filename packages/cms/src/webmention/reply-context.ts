@@ -1,9 +1,8 @@
 import { discoverPostType } from '../content/post-type.ts';
-import { WEBMENTION_USER_AGENT } from './discovery.ts';
+import { fetchPublic, webUrl } from './fetch-public.ts';
 import { elementsIn, parseHtml, textOf } from './html.ts';
 import type { HtmlElement } from './html.ts';
 import { citedEntry } from './microformats.ts';
-import { publicHost } from './public-address.ts';
 import type { HostLookup } from './public-address.ts';
 
 /**
@@ -21,9 +20,6 @@ export const REPLY_CONTEXT_TIMEOUT_MS = 10_000;
 
 /** The most of a target page that is read. A bigger page is not read at all. */
 export const REPLY_CONTEXT_MAX_BYTES = 1_000_000;
-
-/** How many redirects are followed, each one checked like the first. */
-const MAX_REDIRECTS = 5;
 
 /** How many words of a target's text a preview keeps. */
 const EXCERPT_WORDS = 40;
@@ -71,52 +67,17 @@ export async function fetchReplyContext(
   target: string,
   options: FetchReplyContextOptions,
 ): Promise<ReplyContextFetch> {
-  const maxBytes = options.maxBytes ?? REPLY_CONTEXT_MAX_BYTES;
-  const signal = AbortSignal.timeout(options.timeoutMs ?? REPLY_CONTEXT_TIMEOUT_MS);
-  let at = target;
+  const fetched = await fetchPublic(target, {
+    lookup: options.lookup,
+    timeoutMs: options.timeoutMs ?? REPLY_CONTEXT_TIMEOUT_MS,
+    maxBytes: options.maxBytes ?? REPLY_CONTEXT_MAX_BYTES,
+    accept: 'text/html, */*;q=0.8',
+    contentType: { pattern: /^\s*(text\/html|application\/xhtml\+xml)/i, name: 'an HTML page' },
+  });
+  if (!fetched.ok) return fetched;
 
-  try {
-    for (let hop = 0; ; hop += 1) {
-      const url = webUrl(at);
-      if (url === undefined) return refuse('not an http or https URL');
-      if (!(await publicHost(url.hostname, options.lookup))) {
-        return refuse('not a public address');
-      }
-
-      const response = await fetch(url, {
-        headers: { accept: 'text/html, */*;q=0.8', 'user-agent': WEBMENTION_USER_AGENT },
-        redirect: 'manual',
-        signal,
-      });
-
-      const location = response.headers.get('location');
-      if (response.status >= 300 && response.status < 400 && location !== null) {
-        await response.body?.cancel();
-        if (hop === MAX_REDIRECTS) return refuse('too many redirects');
-        at = new URL(location, url).href;
-        continue;
-      }
-
-      if (!response.ok) {
-        await response.body?.cancel();
-        return refuse(`answered ${String(response.status)}`);
-      }
-
-      const type = response.headers.get('content-type') ?? '';
-      if (!/^\s*(text\/html|application\/xhtml\+xml)/i.test(type)) {
-        await response.body?.cancel();
-        return refuse('not an HTML page');
-      }
-
-      const body = await readWithin(response, maxBytes);
-      if (body === undefined) return refuse(`larger than ${String(maxBytes)} bytes`);
-
-      const context = readReplyContext(body, target, url.href);
-      return context === undefined ? refuse('nothing to show') : { ok: true, context };
-    }
-  } catch (thrown) {
-    return refuse(thrown instanceof Error ? thrown.message : String(thrown));
-  }
+  const context = readReplyContext(new TextDecoder().decode(fetched.body), target, fetched.url);
+  return context === undefined ? refuse('nothing to show') : { ok: true, context };
 }
 
 /**
@@ -164,38 +125,6 @@ export function readReplyContext(
   return { url: target, ...(name === '' ? {} : { name }), ...(text === '' ? {} : { text }) };
 }
 
-/** A response body when it is no bigger than the limit, else `undefined`. */
-async function readWithin(response: Response, maxBytes: number): Promise<string | undefined> {
-  const declared = Number(response.headers.get('content-length') ?? '0');
-  if (declared > maxBytes) {
-    await response.body?.cancel();
-    return undefined;
-  }
-
-  const body = response.body;
-  if (body === null) return '';
-
-  const reader = (body as ReadableStream<Uint8Array>).getReader();
-  const decoder = new TextDecoder();
-  const chunks: string[] = [];
-  let read = 0;
-
-  for (;;) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    const value: Uint8Array = chunk.value;
-    read += value.length;
-    if (read > maxBytes) {
-      await reader.cancel();
-      return undefined;
-    }
-    chunks.push(decoder.decode(value, { stream: true }));
-  }
-
-  chunks.push(decoder.decode());
-  return chunks.join('');
-}
-
 /** The page's `<title>`, or empty. */
 function titleOf(root: HtmlElement): string {
   for (const element of elementsIn(root)) {
@@ -222,18 +151,6 @@ function excerpt(text: string): string {
   let cut = words.length > EXCERPT_WORDS ? words.slice(0, EXCERPT_WORDS).join(' ') : normalized;
   if (cut.length > EXCERPT_CHARACTERS) cut = cut.slice(0, EXCERPT_CHARACTERS).trimEnd();
   return cut === normalized ? normalized : `${cut} …`;
-}
-
-/** A URL, when it is an http or https one with a host. */
-function webUrl(value: string): URL | undefined {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return undefined;
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
-  return url.hostname === '' ? undefined : url;
 }
 
 function refuse(reason: string): ReplyContextFetch {

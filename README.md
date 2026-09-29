@@ -272,16 +272,17 @@ copied somewhere safe:
 | `data/users.json` | Usernames and argon2id password hashes, mode 0600.                                 |
 | `data/keys/`      | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.** |
 
-And two things under `data/` may be deleted at any time the site is stopped:
+And three things under `data/` may be deleted at any time the site is stopped:
 
 | Path              | What it is                                                                                      |
 | ----------------- | ----------------------------------------------------------------------------------------------- |
 | `data/geekity.db` | The SQLite cache, `-wal` and `-shm` with it. See below.                                         |
 | `data/images/`    | Image variants derived from `content/uploads/` (decision-10), with their `image.json` sidecars. |
+| `data/avatars/`   | Remote avatars fetched and shrunk so a reader's browser never asks the server they live on.     |
 
-Deleting either is safe with the site stopped: the next boot builds the
+Deleting any of them is safe with the site stopped: the next boot builds the
 database back out of the files with no manual step, and a request for a variant
-that is not there derives it and serves it. `geekity rebuild` does the database
+that is not there derives it and serves it, and an avatar is fetched again. `geekity rebuild` does the database
 half on demand, and **Tools > Content index** in the admin does it [without
 stopping the site](#rebuilding-the-index-from-the-admin). There is no command
 for the images, because there is nothing to do: `rm -r data/images`.
@@ -1436,15 +1437,16 @@ the package README has the full list):
   is credentials and records that are also not rebuilt.
 - **`compose.yaml` and `.env`**, so the stack can be recreated.
 
-`data/geekity.db` (with `-wal` and `-shm`) and `data/images/` are derived and
-need not be copied: the database is rebuilt on the next start, and an image
+`data/geekity.db` (with `-wal` and `-shm`), `data/images/` and `data/avatars/`
+are derived and need not be copied: the database is rebuilt on the next start, and an image
 variant the next time it is asked for. The site writes its files by renaming a
 finished copy over the old one, so a copy taken while it runs gets whole files;
 stop the stack first if the copy has to be of one moment. For example:
 
 ```sh
 tar -C /opt/stacks -czf geekity-$(date +%F).tar.gz \
-  --exclude='geekity/data/geekity.db*' --exclude='geekity/data/images' geekity
+  --exclude='geekity/data/geekity.db*' --exclude='geekity/data/images' \
+  --exclude='geekity/data/avatars' geekity
 ```
 
 Restore by unpacking it into `/opt/stacks`, checking `content/` and `data/` are

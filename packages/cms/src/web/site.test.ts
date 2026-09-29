@@ -7,6 +7,7 @@ import { after, describe, it } from 'node:test';
 import { readSiteSettings, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { avatarHref } from '../avatars/avatars.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -749,7 +750,10 @@ describe('the conversation under a post', () => {
     const html = await (await cms.app.request('/2026/09/hello/')).text();
 
     assert.ok(html.includes('Ada Lovelace'), 'the author is named from the follower profile');
-    assert.ok(html.includes('https://remote.example/avatars/ada.png'), 'the avatar is shown');
+    assert.ok(
+      html.includes(avatarHref('https://remote.example/avatars/ada.png')),
+      'the avatar is shown, from this site',
+    );
     assert.ok(
       html.includes('href="https://remote.example/@ada"'),
       'the author links to the remote profile',

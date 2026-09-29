@@ -15,6 +15,7 @@ import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { createConversation } from './conversation.ts';
 import type { ConversationReader } from './conversation.ts';
+import { avatarHref } from '../avatars/avatars.ts';
 
 const temporaryDirs: string[] = [];
 const stores: (AdminStore | ContentStore)[] = [];
@@ -213,7 +214,7 @@ describe('a post’s conversation', () => {
       name: 'Ada Lovelace',
       handle: '@ada@remote.example',
       url: 'https://remote.example/@ada',
-      avatar: 'https://remote.example/avatars/ada.png',
+      avatar: avatarHref('https://remote.example/avatars/ada.png'),
       actorId: 'https://remote.example/users/ada',
     });
   });
