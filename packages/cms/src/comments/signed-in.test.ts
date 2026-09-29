@@ -283,6 +283,19 @@ describe('the token on the signed-in form', () => {
     await assert.rejects(storedComments(cms), 'nothing was written');
   });
 
+  it('refuses a signed-in submission sent from another site, token or not', async () => {
+    const { cms, agent } = await signedInSite();
+    const token = tokenIn(await postPage(agent));
+    assert.ok(token !== undefined);
+
+    const refused = await agent.post(COMMENT_POST_PATH, submission(token), {
+      'sec-fetch-site': 'cross-site',
+    });
+
+    assert.equal(refused.status, 403);
+    await assert.rejects(storedComments(cms), 'nothing was written');
+  });
+
   it('is not asked of a stranger, whose form acts on nobody’s behalf', async () => {
     const cms = await site();
 

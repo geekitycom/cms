@@ -73,6 +73,9 @@ JSON representation and the content format are all covered by semver: a
 breaking change to any of them is a major with a migration note in the
 changelog.
 
+Upgrading to the release that renamed the session cookie signs everybody out
+of an https site once. See [Session hardening](#session-hardening).
+
 ## The `geekity` command
 
 `geekity` is installed as a bin, so `pnpm geekity <command>` runs it inside a
@@ -1586,7 +1589,7 @@ shadow the login form.
 | `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.          |
 | `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                      |
 | `/admin/login`                                   | Username and password.                                                              |
-| `/admin/logout`                                  | `POST` only. Deletes the session row.                                               |
+| `/admin/logout`                                  | `POST` only. Deletes the session row and sends `Clear-Site-Data`.                   |
 | `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                         |
 
 The screens behind the login share one layout: a bar across the top with the
@@ -1643,11 +1646,13 @@ Passwords are hashed with argon2id through `node:crypto`, so there is no native
 module to build. The cost parameters travel with each hash, which means raising
 them later leaves every password already stored verifiable.
 
-A session id is 256 random bits in a `HttpOnly; SameSite=Lax; Path=/admin`
-cookie, with `Secure` added when `baseUrl` is an `https` URL. It lasts
-`sessionLifetime`; an expired session is deleted rather than merely ignored.
-Every mutating admin form carries a per-session CSRF token, and a `POST`
-without a valid one is refused with 403 — including the login and setup forms,
+A session id is 256 random bits in a `HttpOnly; SameSite=Lax; Path=/` cookie.
+When `baseUrl` is an `https` URL the cookie is `Secure` and named
+`__Host-geekity_session`; over plain http it is `geekity_session`, as
+[Session hardening](#session-hardening) explains. It lasts `sessionLifetime`;
+an expired session is deleted rather than merely ignored. Every mutating admin
+form carries a per-session CSRF token, and a `POST` without a valid one is
+refused with 403 — including the login and setup forms,
 which get the token from a short anonymous session created when the form is
 first rendered. Logging in throws that session away and starts a new one, so a
 planted session id cannot become a logged-in one.
@@ -1950,6 +1955,49 @@ it on — and only on — when a reverse proxy in front of the site sets that
 header; the leftmost entry is then used. With neither available, which is what
 happens when the app is driven in process rather than served, the username is
 the only key.
+
+### Session hardening
+
+Three things protect a signed-in session beyond the cookie flags and the CSRF
+token.
+
+**The cookie is `__Host-geekity_session` under https.** A browser accepts a
+cookie with the `__Host-` prefix only when it is `Secure`, has `Path=/` and
+names no `Domain`. That binds it to the exact host, so a page on a sibling
+subdomain cannot set or overwrite it to plant a session. The prefix needs
+`Secure`, and a browser drops a `Secure` cookie on a plain-http origin, so a
+site whose `baseUrl` is `http://localhost:3000` keeps the name
+`geekity_session` and local development works as before.
+
+**The upgrade signs people out once.** A session made before this change is in
+a cookie named `geekity_session`. Under https that name is never accepted as a
+login again, because accepting it would give a sibling subdomain the way in
+that the prefix closes. The first admin request that carries only the old
+cookie deletes its session, expires the old cookie, and sends the browser to
+the login form with a message that the sign-in cookie was renamed and asks the
+person to sign in again. On the public site the old cookie is ignored, so a
+signed-in commenter sees the stranger's form until they sign in again.
+
+**Fetch Metadata refuses cross-site writes.** A browser sends
+`Sec-Fetch-Site` with every request, and a page cannot change it. Every
+request under `/admin` other than `GET`, `HEAD` and `OPTIONS`, including the
+login and setup forms, is refused with 403 when that header says `cross-site`
+or `same-site`, before the session is read or a handler runs. A comment posted
+by somebody signed in gets the same check. `same-origin` and `none` pass. A
+request with no `Sec-Fetch-Site`, from an older browser or a script, falls back
+to the CSRF token, which every such request still has to carry. Nothing else
+is checked: the ActivityPub inboxes, the WordPress-compatible inbox,
+webmentions, the contact form, a stranger's comment, and the one-click
+moderate and unsubscribe links in an email take cross-site `POST`s by design,
+and they act on no session.
+
+**Logout clears the site's data in the browser.** The logout response sends
+`Clear-Site-Data: "cache", "cookies", "storage"`, so a shared computer does not
+keep admin pages in its cache or anything the site stored. Browsers honour it
+only on a secure origin, which includes `http://localhost`. The `cookies`
+directive clears cookies for the whole registrable domain, so signing out of
+`blog.example.com` also signs the browser out of other sites under
+`example.com`.
 
 ### Forgotten passwords
 

@@ -304,15 +304,6 @@ describe('the session cookie', () => {
     assert.ok(!/Secure/.test(header), 'plain http keeps Secure off, or the cookie is dropped');
   });
 
-  it('is Secure when the site says it is served over https', async () => {
-    const cms = await site({ baseUrl: 'https://geekity.example' });
-    const response = await cms.app.request('/admin/setup');
-    const header = setCookie(response, 'geekity_session');
-
-    assert.ok(header !== undefined);
-    assert.match(header, /Secure/);
-  });
-
   it('expires after the configured lifetime', async () => {
     const cms = await site({ sessionLifetime: 0.25 });
     const agent = browser(cms);

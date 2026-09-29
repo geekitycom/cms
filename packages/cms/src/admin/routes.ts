@@ -31,7 +31,10 @@ import {
   ADMIN_PREFIX,
   clearSessionCookie,
   CSRF_FIELD,
+  CROSS_SITE_REFUSAL,
+  crossSiteWrite,
   csrfTokenMatches,
+  retireOldSessionCookie,
   sessionIdFrom,
   setSessionCookie,
 } from './session.ts';
@@ -278,6 +281,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const session = c.var.session;
     if (session !== undefined) c.var.admin.deleteSession(session.id);
     clearSessionCookie(c, c.var.config);
+    // A shared computer keeps what the admin cached and stored after the
+    // cookie is gone. This asks the browser to forget all of it for the site.
+    c.header('Clear-Site-Data', CLEAR_ON_LOGOUT);
     return c.redirect(LOGIN_PATH, 303);
   });
 
@@ -414,6 +420,13 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 const USERNAME_FIELD = 'username';
 const PASSWORD_FIELD = 'password';
 
+/** `Clear-Site-Data` on logout: every kind of data a browser keeps for the site. */
+const CLEAR_ON_LOGOUT = '"cache", "cookies", "storage"';
+
+/** What somebody signed in under the pre-`__Host-` cookie reads on the login form. */
+const RENAMED_COOKIE_NOTICE =
+  'The sign-in cookie was renamed to make it harder to tamper with, so you have been signed out. Please sign in again.';
+
 /**
  * The one gate in front of every admin URL.
  *
@@ -421,6 +434,8 @@ const PASSWORD_FIELD = 'password';
  * behind the same guard, and so the ordering is testable.
  */
 export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
+  if (crossSiteWrite(c)) return c.text(CROSS_SITE_REFUSAL, 403);
+
   const admin = c.var.admin;
   const dataDir = c.var.config.dataDir;
   const pathname = new URL(c.req.url).pathname;
@@ -428,11 +443,16 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   // Reading a session prunes it when it has expired, so an expired session is
   // gone from here on, not merely ignored.
   const sessionId = sessionIdFrom(c);
-  const session = liveSession(
+  let session = liveSession(
     admin,
     dataDir,
     sessionId === undefined ? undefined : admin.getSession(sessionId),
   );
+  if (retireOldSessionCookie(c) && session === undefined) {
+    session = admin.createSession({ userId: null, lifetimeSeconds: c.var.config.sessionLifetime });
+    setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
+    admin.pushFlash(session.id, { kind: 'notice', message: RENAMED_COOKIE_NOTICE });
+  }
   c.set('session', session);
 
   const isSetup = pathname === SETUP_PATH;
