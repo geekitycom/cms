@@ -1722,7 +1722,8 @@ The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `timezone`, `language`, `tagBase`,
 `categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
-`contactEmail`, `relays`, `menus` and `taxonomyRedirects`,
+`contactEmail`, `securityContacts`, `securityPolicy`, `securityLanguages`,
+`relays`, `menus` and `taxonomyRedirects`,
 and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
 type is the default too: a hand-edited `site.json` cannot take the site down.
@@ -2131,35 +2132,69 @@ uploads. Four directives say more than that:
   sandboxed `srcdoc` iframe, which inherits this policy, and its one ancestor is
   the admin page itself.
 
+### security.txt and change-password
+
+`/.well-known/security.txt` ([RFC 9116](https://www.rfc-editor.org/rfc/rfc9116))
+tells somebody who finds a vulnerability in the site where to report it. It is
+built from three settings on the Email settings page, under Security contact,
+which `content/_data/site.json` holds:
+
+| Setting             | `site.json` key     | Default | What it becomes                                                                                                   |
+| ------------------- | ------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| Contacts            | `securityContacts`  | `[]`    | One `Contact:` line each, in order. An email address, stored as `mailto:…`, an `https://` URL or a `tel:` number. |
+| Disclosure policy   | `securityPolicy`    | `""`    | A `Policy:` line. An `https://` URL, or empty for no line.                                                        |
+| Preferred languages | `securityLanguages` | `""`    | A `Preferred-Languages:` line. Language tags separated by commas, or empty for no line.                           |
+
+With no contact the path is a 404: the RFC requires at least one. The
+`contactEmail` setting is never used in its place, because that address is
+promised never to appear on the public site.
+
+The file is built on every request and served as `text/plain; charset=utf-8`.
+`Expires` is 30 days after the request, so it never goes stale however long the
+site runs, and `Canonical` is the path under the base URL in effect. There is no
+config-file key or environment variable for any of these: like `contactEmail`,
+they are site settings a person edits on the settings screen.
+
+`/.well-known/change-password` is where a password manager sends somebody who
+wants to change a saved password. It redirects with a `302` and
+`Cache-Control: no-store`: to `/admin/users/{id}#change-password`, the form on
+the signed-in user's own page, or to the login form when nobody is signed in.
+
+Both paths answer as usual in maintenance mode. A researcher may need the
+security contact most while the site is down, and change-password only points
+into the admin, which maintenance mode leaves open.
+
 ## The public site
 
 Booting mounts the public site on the app. The routes are:
 
-| Route                                   | What it serves                                                                                      |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `/`                                     | Published posts, newest first.                                                                      |
-| `/page/2/` and up                       | Later pages of the same archive.                                                                    |
-| a document's permalink                  | The post or the page, through the theme.                                                            |
-| `/tag/{tag}/`                           | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`.                          |
-| `/category/{name}/`                     | The second taxonomy, paginated the same way.                                                        |
-| `/author/{username}/`                   | One user's published posts, headed by their profile, paginated the same way.                        |
-| `/feed/`, `/feed/atom/`, `/feed/json/`  | The recent posts as RSS 2.0, Atom and JSON Feed.                                                    |
-| `/tag/{tag}/feed/` and its two siblings | The same, for one tag; `/category/{name}/feed/` likewise.                                           |
-| `/author/{username}/feed/` and siblings | The same, for one person.                                                                           |
-| `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                                                    |
-| `{permalink}feed/`                      | One post's replies, the same way.                                                                   |
-| `/sitemap.xml`                          | Every public URL, for a search engine.                                                              |
-| `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                   |
-| `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                  |
-| `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                           |
-| `/_geekity/contact`                     | `POST` only. Where the contact form on a page submits.                                              |
-| `/_geekity/webmention`                  | `POST` only. Where a webmention is sent; advertised on every document.                              |
-| `/_geekity/moderate`                    | Where an approve, spam or delete link from a notification lands. `GET` shows a button; `POST` acts. |
-| `/_geekity/unsubscribe`                 | Where the unsubscribe link in a reply notice lands. Same two steps.                                 |
-| `/theme/…`                              | The theme's own files, from its `static/` directory.                                                |
-| `/uploads/…`                            | A file from `content/uploads/`, byte for byte as it was stored.                                     |
-| `/uploads/_/…`                          | One derived copy of an uploaded image, generated on the spot if missing.                            |
-| anything else                           | The theme's 404.                                                                                    |
+| Route                                   | What it serves                                                                                                         |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `/`                                     | Published posts, newest first.                                                                                         |
+| `/page/2/` and up                       | Later pages of the same archive.                                                                                       |
+| a document's permalink                  | The post or the page, through the theme.                                                                               |
+| `/tag/{tag}/`                           | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`.                                             |
+| `/category/{name}/`                     | The second taxonomy, paginated the same way.                                                                           |
+| `/author/{username}/`                   | One user's published posts, headed by their profile, paginated the same way.                                           |
+| `/feed/`, `/feed/atom/`, `/feed/json/`  | The recent posts as RSS 2.0, Atom and JSON Feed.                                                                       |
+| `/tag/{tag}/feed/` and its two siblings | The same, for one tag; `/category/{name}/feed/` likewise.                                                              |
+| `/author/{username}/feed/` and siblings | The same, for one person.                                                                                              |
+| `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                                                                       |
+| `{permalink}feed/`                      | One post's replies, the same way.                                                                                      |
+| `/sitemap.xml`                          | Every public URL, for a search engine.                                                                                 |
+| `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                                      |
+| `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                                     |
+| `/.well-known/security.txt`             | Where to report a vulnerability; a 404 until a security contact is set. See [above](#securitytxt-and-change-password). |
+| `/.well-known/change-password`          | A redirect to the signed-in user's change-password form, or to the login form.                                         |
+| `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                                              |
+| `/_geekity/contact`                     | `POST` only. Where the contact form on a page submits.                                                                 |
+| `/_geekity/webmention`                  | `POST` only. Where a webmention is sent; advertised on every document.                                                 |
+| `/_geekity/moderate`                    | Where an approve, spam or delete link from a notification lands. `GET` shows a button; `POST` acts.                    |
+| `/_geekity/unsubscribe`                 | Where the unsubscribe link in a reply notice lands. Same two steps.                                                    |
+| `/theme/…`                              | The theme's own files, from its `static/` directory.                                                                   |
+| `/uploads/…`                            | A file from `content/uploads/`, byte for byte as it was stored.                                                        |
+| `/uploads/_/…`                          | One derived copy of an uploaded image, generated on the spot if missing.                                               |
+| anything else                           | The theme's 404.                                                                                                       |
 
 The federation routes go on before it, and answer only their own paths:
 

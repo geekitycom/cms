@@ -198,6 +198,23 @@ export interface SiteSettings {
    */
   contactEmail: string;
   /**
+   * Where a security researcher reports a vulnerability: the `Contact` lines
+   * of `/.well-known/security.txt` (RFC 9116, TASK-133), each a `mailto:`,
+   * `https:` or `tel:` URI, in the order the site prefers them.
+   *
+   * Empty means the site answers that path with a 404. There is no fallback
+   * to {@link SiteSettings.contactEmail}: that address is promised never to
+   * appear on the public site, and this one is published by definition.
+   */
+  securityContacts: readonly string[];
+  /** The `Policy` line of security.txt: an https URL, or empty for none. */
+  securityPolicy: string;
+  /**
+   * The `Preferred-Languages` line of security.txt: language tags joined by
+   * `, `, or empty for none.
+   */
+  securityLanguages: string;
+  /**
    * The relay inboxes the site subscribes to (FEP-ae0c): a Mastodon-style
    * relay boosts every public post it is sent, which is how a small site
    * reaches instances nobody on it follows.
@@ -294,6 +311,9 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   mailFromAddress: '',
   mailReplyTo: '',
   contactEmail: '',
+  securityContacts: [],
+  securityPolicy: '',
+  securityLanguages: '',
   relays: [],
   wordpressActivityPub: false,
   menus: {},
@@ -324,6 +344,9 @@ export const SETTINGS_FIELDS = {
   mailFromAddress: 'mail_from_address',
   mailReplyTo: 'mail_reply_to',
   contactEmail: 'contact_email',
+  securityContacts: 'security_contacts',
+  securityPolicy: 'security_policy',
+  securityLanguages: 'security_languages',
   relays: 'relays',
   wordpressActivityPub: 'wordpress_activitypub',
 } as const satisfies Record<SettingsField, string>;
@@ -414,6 +437,22 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
       : {}),
     ...(typeof file['mailReplyTo'] === 'string' ? { mailReplyTo: file['mailReplyTo'] } : {}),
     ...(typeof file['contactEmail'] === 'string' ? { contactEmail: file['contactEmail'] } : {}),
+    // Through the form's own normalisers, and dropped when they refuse: these
+    // three are printed line by line into security.txt, so a hand edit with a
+    // line break in it must not become a field nobody set.
+    ...(Array.isArray(file['securityContacts'])
+      ? {
+          securityContacts: securityContactList(
+            file['securityContacts'].filter((entry) => typeof entry === 'string').join('\n'),
+          ),
+        }
+      : {}),
+    ...(typeof file['securityPolicy'] === 'string'
+      ? { securityPolicy: normalizeSecurityPolicy(file['securityPolicy']) ?? '' }
+      : {}),
+    ...(typeof file['securityLanguages'] === 'string'
+      ? { securityLanguages: normalizeLanguageList(file['securityLanguages']) ?? '' }
+      : {}),
     // Through the same normaliser a submitted form goes through, so the file
     // and the screen cannot mean different things by the same line.
     ...(Array.isArray(file['relays'])
@@ -485,6 +524,9 @@ export function siteJsonFor(
     mailFromAddress: settings.mailFromAddress,
     mailReplyTo: settings.mailReplyTo,
     contactEmail: settings.contactEmail,
+    securityContacts: [...settings.securityContacts],
+    securityPolicy: settings.securityPolicy,
+    securityLanguages: settings.securityLanguages,
     relays: [...settings.relays],
     // Every menu the site holds, written whole. A settings page never has
     // them off its own form — it reads them out of the file inside the write
@@ -815,6 +857,28 @@ const FIELD_CHECKS: Record<
       ? 'A contact address is an email address, such as hello@example.com, or empty for the first admin with one.'
       : undefined,
 
+  // Line by line, like the relays, and for the same reason.
+  securityContacts: (form) => {
+    const bad = relayLines(form.securityContacts).find(
+      (line) => normalizeSecurityContact(line) === undefined,
+    );
+    return bad === undefined
+      ? undefined
+      : 'A security contact is an email address, an https:// URL or a tel: number, one per line. ' +
+          `"${bad}" is not one.`;
+  },
+
+  // RFC 9116 wants every web URI in the file to be https.
+  securityPolicy: (form) =>
+    form.securityPolicy.trim() !== '' && normalizeSecurityPolicy(form.securityPolicy) === undefined
+      ? 'A security policy is an https:// URL, or empty for none.'
+      : undefined,
+
+  securityLanguages: (form) =>
+    normalizeLanguageList(form.securityLanguages) === undefined
+      ? 'Preferred languages are language tags separated by commas, such as en, fr, or empty for none.'
+      : undefined,
+
   // A relay list is checked line by line, and the first bad line is what the
   // field says: a textarea has one message, and pointing at the line somebody
   // has to fix is more use than counting how many are wrong.
@@ -911,6 +975,9 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     mailFromAddress: form.mailFromAddress.trim(),
     mailReplyTo: form.mailReplyTo.trim(),
     contactEmail: form.contactEmail.trim(),
+    securityContacts: securityContactList(form.securityContacts),
+    securityPolicy: normalizeSecurityPolicy(form.securityPolicy) ?? '',
+    securityLanguages: normalizeLanguageList(form.securityLanguages) ?? '',
     relays: relayList(form.relays),
     wordpressActivityPub: form.wordpressActivityPub !== '',
   };
@@ -941,6 +1008,9 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     mailFromAddress: settings.mailFromAddress,
     mailReplyTo: settings.mailReplyTo,
     contactEmail: settings.contactEmail,
+    securityContacts: settings.securityContacts.join('\n'),
+    securityPolicy: settings.securityPolicy,
+    securityLanguages: settings.securityLanguages,
     relays: settings.relays.join('\n'),
     wordpressActivityPub: settings.wordpressActivityPub ? '1' : '',
   };
@@ -1040,6 +1110,61 @@ export function normalizeRelayInbox(value: string): string | undefined {
 
   const href = parsed.href;
   return href.endsWith('/') && parsed.pathname !== '/' ? href.slice(0, -1) : href;
+}
+
+/** A security contact textarea as its URIs, in order, repeats dropped. */
+function securityContactList(value: string): string[] {
+  const contacts: string[] = [];
+  for (const line of relayLines(value)) {
+    const contact = normalizeSecurityContact(line);
+    if (contact !== undefined && !contacts.includes(contact)) contacts.push(contact);
+  }
+  return contacts;
+}
+
+/** A phone number as a `tel:` URI writes it: digits and visual separators. */
+const TEL_PATTERN = /^tel:\+?[0-9][0-9().-]*$/i;
+
+/**
+ * One security contact as the URI security.txt carries, or `undefined`.
+ *
+ * A bare address is taken as the `mailto:` it means, since that is what
+ * somebody filling in a settings form types.
+ */
+function normalizeSecurityContact(value: string): string | undefined {
+  const trimmed = value.trim();
+  const address = trimmed.toLowerCase().startsWith('mailto:') ? trimmed.slice(7) : trimmed;
+  if (EMAIL_PATTERN.test(address)) return `mailto:${address}`;
+  if (TEL_PATTERN.test(trimmed)) return `tel:${trimmed.slice(4)}`;
+  return httpsUrl(trimmed);
+}
+
+/** A security policy URL, or `undefined` when it is not an https one. */
+function normalizeSecurityPolicy(value: string): string | undefined {
+  return httpsUrl(value.trim());
+}
+
+/** An absolute https URL as `URL` spells it, or `undefined`. */
+function httpsUrl(value: string): string | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return undefined;
+  }
+  return parsed.protocol === 'https:' ? parsed.href : undefined;
+}
+
+/**
+ * A comma-separated list of language tags, joined the way RFC 9116's example
+ * writes them, or `undefined` when one of them is not a tag. Empty is a value.
+ */
+function normalizeLanguageList(value: string): string | undefined {
+  const tags = value
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag !== '');
+  return tags.every((tag) => LANGUAGE_TAG_PATTERN.test(tag)) ? tags.join(', ') : undefined;
 }
 
 /**

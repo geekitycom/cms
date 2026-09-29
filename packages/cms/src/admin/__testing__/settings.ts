@@ -47,6 +47,9 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     mail_from_address: '',
     mail_reply_to: '',
     contact_email: '',
+    security_contacts: '',
+    security_policy: '',
+    security_languages: '',
   },
   federation: {
     actor_handle: 'blog',

@@ -294,4 +294,5 @@ export type {
 export { createRedirectSource, redirectBy, REDIRECT_BY, REDIRECTS_FILE } from './redirects.ts';
 export { serverError } from './errors.ts';
 export { maintenanceGate } from './maintenance.ts';
+export { mountWellKnown } from './well-known.ts';
 export type { RedirectSource } from './redirects.ts';

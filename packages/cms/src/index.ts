@@ -56,6 +56,7 @@ import {
   maintenanceGate,
   mountHealth,
   mountPublicSite,
+  mountWellKnown,
   recentPosts,
   redirectBy,
   serverError,
@@ -1780,6 +1781,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // (TASK-87). It goes on before federation, the admin and the public site,
   // so no permalink can ever shadow it.
   mountHealth(app);
+
+  // The two well-known files a site answers for itself (TASK-133), before the
+  // public site can claim either path as a permalink.
+  mountWellKnown(app);
 
   // Federation goes on first. It answers its own paths and falls through on
   // every other, so putting it in front costs the rest of the app nothing and
