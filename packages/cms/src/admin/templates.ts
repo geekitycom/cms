@@ -61,6 +61,7 @@ export const ADMIN_TEMPLATES = {
   federation: 'pages/federation/followers.njk',
   federationSettings: 'pages/federation/settings.njk',
   serverError: 'pages/error.njk',
+  publicAdminBar: 'components/public-admin-bar.njk',
 } as const;
 
 /** How to build an {@link createAdminTemplateEnvironment}. */

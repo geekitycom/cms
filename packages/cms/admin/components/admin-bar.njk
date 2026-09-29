@@ -1,0 +1,26 @@
+{# The admin bar, in the admin and across the top of the public site alike
+   (TASK-126, TASK-183). The site title leads to the dashboard; `barLinks` are
+   the shortcuts beside it, which each place chooses for itself; the account
+   menu ends it.
+
+   WordPress's "Howdy," menu, greeting the way this site's owner does. A
+   popover rather than a script: the browser opens and closes it, shuts it on
+   Escape or a click elsewhere, and tells a screen reader whether it is
+   expanded, all under the admin CSP's script-src 'self'. #}
+<nav class="admin-bar" aria-label="Admin bar">
+  <a class="admin-bar-site" href="{{ adminUrl }}">{{ site.title }}</a>
+  {% for link in barLinks %}
+    <a href="{{ link.url }}">{{ link.label }}</a>
+  {% endfor %}
+  <span class="admin-bar-spacer"></span>
+  {% if me %}
+    <button type="button" class="admin-bar-account" popovertarget="admin-account-menu">Hoopla! {{ me.name }}</button>
+    <div id="admin-account-menu" class="admin-account-menu" popover>
+      <a href="{{ me.url }}">Edit profile</a>
+      <form method="post" action="{{ logoutUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <button type="submit">Log out</button>
+      </form>
+    </div>
+  {% endif %}
+</nav>

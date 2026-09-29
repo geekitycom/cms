@@ -1,0 +1,435 @@
+{
+  "home": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"b75a534b2d7a37890f6f685bc65c43eb\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>A Site</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>A Site</h1><ul></ul></main>\n  </body>\n</html>\n"
+  },
+  "home (stranger)": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"b75a534b2d7a37890f6f685bc65c43eb\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>A Site</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>A Site</h1><ul></ul></main>\n  </body>\n</html>\n"
+  },
+  "home (revalidated)": {
+    "status": 304,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"b75a534b2d7a37890f6f685bc65c43eb\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": ""
+  },
+  "post": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"b751ac436a5fc548612b1c61112b989d\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</2026/09/hello-world/index.md>; rel=\"alternate\"; type=\"text/markdown\", </2026/09/hello-world/index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Hello world</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Hello world</h1><p>Words about engines.</p>\n</main>\n  </body>\n</html>\n"
+  },
+  "post (stranger)": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"b751ac436a5fc548612b1c61112b989d\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</2026/09/hello-world/index.md>; rel=\"alternate\"; type=\"text/markdown\", </2026/09/hello-world/index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Hello world</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Hello world</h1><p>Words about engines.</p>\n</main>\n  </body>\n</html>\n"
+  },
+  "post (revalidated)": {
+    "status": 304,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"b751ac436a5fc548612b1c61112b989d\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</2026/09/hello-world/index.md>; rel=\"alternate\"; type=\"text/markdown\", </2026/09/hello-world/index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": ""
+  },
+  "page": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"9d9e91788327e364c4795ff8c2f66049\"",
+      "link": "</about/index.md>; rel=\"alternate\"; type=\"text/markdown\", </about/index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>About</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>About</h1><p>Me.</p>\n</main>\n  </body>\n</html>\n"
+  },
+  "page (stranger)": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"9d9e91788327e364c4795ff8c2f66049\"",
+      "link": "</about/index.md>; rel=\"alternate\"; type=\"text/markdown\", </about/index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>About</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>About</h1><p>Me.</p>\n</main>\n  </body>\n</html>\n"
+  },
+  "page (revalidated)": {
+    "status": 304,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"9d9e91788327e364c4795ff8c2f66049\"",
+      "link": "</about/index.md>; rel=\"alternate\"; type=\"text/markdown\", </about/index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": ""
+  },
+  "archive": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"bcebf40af76a5f46425b0e469851b39b\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</tag/engines/index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>engines</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>engines</h1><ul></ul></main>\n  </body>\n</html>\n"
+  },
+  "archive (stranger)": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"bcebf40af76a5f46425b0e469851b39b\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</tag/engines/index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>engines</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>engines</h1><ul></ul></main>\n  </body>\n</html>\n"
+  },
+  "archive (revalidated)": {
+    "status": 304,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"bcebf40af76a5f46425b0e469851b39b\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</tag/engines/index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": ""
+  },
+  "author": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"9e2959125d3a1dd2dda8c4427dc12b93\"",
+      "link": "</author/ada/index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Ada Lovelace</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Ada Lovelace</h1><ul></ul></main>\n  </body>\n</html>\n"
+  },
+  "author (stranger)": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"9e2959125d3a1dd2dda8c4427dc12b93\"",
+      "link": "</author/ada/index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Ada Lovelace</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Ada Lovelace</h1><ul></ul></main>\n  </body>\n</html>\n"
+  },
+  "author (revalidated)": {
+    "status": 304,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"9e2959125d3a1dd2dda8c4427dc12b93\"",
+      "link": "</author/ada/index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": ""
+  },
+  "search": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"77113b611aae83d8ff1a684b6414c1ea\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</search/index.json?q=engines>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Search results for “engines”</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Search: engines</h1><ul></ul></main>\n  </body>\n</html>\n"
+  },
+  "search (stranger)": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"77113b611aae83d8ff1a684b6414c1ea\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</search/index.json?q=engines>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Search results for “engines”</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Search: engines</h1><ul></ul></main>\n  </body>\n</html>\n"
+  },
+  "search (revalidated)": {
+    "status": 304,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"77113b611aae83d8ff1a684b6414c1ea\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</search/index.json?q=engines>; rel=\"alternate\"; type=\"application/json\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": ""
+  },
+  "notFound": {
+    "status": 404,
+    "headers": {
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=UTF-8",
+      "cross-origin-opener-policy": "same-origin",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Not found</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Not here</h1></main>\n  </body>\n</html>\n"
+  },
+  "notFound (stranger)": {
+    "status": 404,
+    "headers": {
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=UTF-8",
+      "cross-origin-opener-policy": "same-origin",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Not found</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Not here</h1></main>\n  </body>\n</html>\n"
+  },
+  "static front page": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/html; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"9d9e91788327e364c4795ff8c2f66049\"",
+      "link": "</index.md>; rel=\"alternate\"; type=\"text/markdown\", </index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>About</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>About</h1><p>Me.</p>\n</main>\n  </body>\n</html>\n"
+  },
+  "post json": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "application/json; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"36a1cf7e261badcac24913537dd37373\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</2026/09/hello-world/>; rel=\"alternate\"; type=\"text/html\", </2026/09/hello-world/index.md>; rel=\"alternate\"; type=\"text/markdown\", </_geekity/webmention>; rel=\"webmention\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "{\n  \"schema\": 1,\n  \"url\": \"https://blog.example/2026/09/hello-world/\",\n  \"frontMatter\": {\n    \"title\": \"Hello world\",\n    \"date\": \"2026-09-19T09:00:00Z\",\n    \"permalink\": \"/2026/09/hello-world/\",\n    \"tags\": [\n      \"engines\"\n    ]\n  },\n  \"markdown\": \"Words about engines.\",\n  \"html\": \"<p>Words about engines.</p>\\n\"\n}\n"
+  },
+  "post markdown": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-disposition": "inline",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "text/markdown; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"c0346ac16422037fc5114b78928dadc1\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "</2026/09/hello-world/>; rel=\"alternate\"; type=\"text/html\", </2026/09/hello-world/index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "vary": "Accept",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "---\ntitle: Hello world\ndate: '2026-09-19T09:00:00Z'\npermalink: /2026/09/hello-world/\ntags:\n  - engines\n---\n\nWords about engines.\n"
+  },
+  "feed": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-cache",
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-type": "application/rss+xml; charset=utf-8",
+      "cross-origin-opener-policy": "same-origin",
+      "etag": "\"3f1c1f2c5f6b124a55ef894d149a0f30\"",
+      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "link": "<https://rpc.rsscloud.io/websub>; rel=\"hub\", <https://blog.example/feed/>; rel=\"self\"",
+      "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "strict-transport-security": "max-age=31536000; includeSubDomains",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<rss version=\"2.0\"\n     xmlns:atom=\"http://www.w3.org/2005/Atom\"\n     xmlns:content=\"http://purl.org/rss/1.0/modules/content/\"\n     xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n     xmlns:source=\"https://source.scripting.com/\"\n     xmlns:wfw=\"http://wellformedweb.org/CommentAPI/\">\n  <channel>\n    <title>A Site</title>\n    <link>https://blog.example/</link>\n    <description></description>\n    <language>en</language>\n    <lastBuildDate>Sat, 19 Sep 2026 09:00:00 GMT</lastBuildDate>\n    <generator>Geekity</generator>\n    <atom:link rel=\"self\" type=\"application/rss+xml\" href=\"https://blog.example/feed/\"/>\n    <cloud domain=\"rpc.rsscloud.io\" port=\"80\" path=\"/pleaseNotify\" registerProcedure=\"\" protocol=\"http-post\"/>\n    <source:cloud>https://rpc.rsscloud.io/pleaseNotify</source:cloud>\n    <atom:link rel=\"hub\" href=\"https://rpc.rsscloud.io/websub\"/>\n    <item>\n      <title>Hello world</title>\n      <link>https://blog.example/2026/09/hello-world/</link>\n      <guid isPermaLink=\"true\">https://blog.example/2026/09/hello-world/</guid>\n      <pubDate>Sat, 19 Sep 2026 09:00:00 GMT</pubDate>\n      <category>engines</category>\n      <comments>https://blog.example/2026/09/hello-world/#comments</comments>\n      <wfw:commentRss>https://blog.example/2026/09/hello-world/feed/</wfw:commentRss>\n      <source:comments count=\"0\" feedUrl=\"https://blog.example/2026/09/hello-world/feed/\"/>\n      <description>Words about engines.</description>\n      <content:encoded><![CDATA[<p>Words about engines.</p>\n]]></content:encoded>\n      <source:markdown><![CDATA[Words about engines.]]></source:markdown>\n    </item>\n  </channel>\n</rss>\n"
+  }
+}

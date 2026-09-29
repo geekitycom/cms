@@ -1,7 +1,9 @@
 import type { AdminStore } from './admin/store.ts';
 import type { Session } from './admin/store.ts';
 import type { AvatarService } from './avatars/avatars.ts';
+import type { SignedInAccount } from './comments/viewer.ts';
 import type { ResolvedConfig } from './config.ts';
+import type { Document } from './content/document.ts';
 import type { ContentStore } from './content/store.ts';
 import type { DocumentChange, SyncResult } from './content/sync.ts';
 import type { DeliveryService } from './federation/delivery.ts';
@@ -127,5 +129,16 @@ export interface GeekityEnv {
      * where there is no policy to be part of.
      */
     cspNonce: string | undefined;
+    /**
+     * Who the public site's session names, set once at the public site's door
+     * (TASK-183): the page drawn for them carries the admin bar and is theirs
+     * alone. `undefined` for an anonymous reader and inside `/admin`.
+     */
+    signedIn: SignedInAccount | undefined;
+    /**
+     * The post or page this public HTML response draws, so the admin bar can
+     * link to its editor. `undefined` on a listing, a search or an error.
+     */
+    shownDocument: Document | undefined;
   };
 }
