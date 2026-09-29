@@ -11,13 +11,14 @@ import type { GeekityEnv } from '../env.ts';
 import { mountAvatars } from '../avatars/routes.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
 import {
+  ASSET_VERSION_PARAM,
   assetNotModified,
   assetResponse,
+  assetVersion,
   findThemeAsset,
   findUpload,
+  IMMUTABLE_ASSET,
   matchesEtag,
-  themeAssetNotModified,
-  themeAssetResponse,
   THEME_ASSET_PREFIX,
   UPLOAD_ASSET_MAX_AGE,
   UPLOAD_ASSET_PREFIX,
@@ -1375,17 +1376,22 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
  * A file from the theme's `static/` directory, the site's copy first.
  *
  * Assets are cacheable and validated, so a browser that already has one pays a
- * conditional request rather than a download.
+ * conditional request rather than a download. A URL whose `v` is the hash of
+ * the bytes being served, which is what the `asset` filter writes, is cached
+ * for a year without revalidation. Any other `v`, or none, gets the short
+ * lifetime: a stale hash from a cached page still gets the file, but the
+ * current bytes are never pinned under a name that describes older ones.
  */
 function themeAsset(c: Context<GeekityEnv>): Response {
   const relative = requestPath(c).slice(THEME_ASSET_PREFIX.length);
   const asset = findThemeAsset(relative, c.var.renderer.themeDirs());
   if (asset === undefined) return notFound(c);
 
-  if (matchesEtag(c.req.header('if-none-match'), asset.etag)) {
-    return themeAssetNotModified(asset);
-  }
-  return themeAssetResponse(asset);
+  const fingerprinted = c.req.query(ASSET_VERSION_PARAM) === assetVersion(asset);
+  const options = fingerprinted ? IMMUTABLE_ASSET : {};
+  return matchesEtag(c.req.header('if-none-match'), asset.etag)
+    ? assetNotModified(asset, options)
+    : assetResponse(asset, options);
 }
 
 /**
@@ -1397,19 +1403,18 @@ function themeAsset(c: Context<GeekityEnv>): Response {
  * offer is a 404 and encodes nothing, so the URL space cannot be used to make
  * the server work.
  *
- * The cache lifetime is the uploads' own, and it is honest for the same
- * reason: a derived URL names one width of one file, and the file it was
- * derived from is never overwritten.
+ * A variant is cached for a year without revalidation: its URL names one
+ * width of one upload, and the upload endpoint never overwrites a file, it
+ * suffixes the name.
  */
 async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
   const relative = requestPath(c).slice(VARIANT_ASSET_PREFIX.length);
   const asset = await findImageVariant(c.var.config, decodeVariantPath(relative));
   if (asset === undefined) return notFound(c);
 
-  const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
   return matchesEtag(c.req.header('if-none-match'), asset.etag)
-    ? assetNotModified(asset, options)
-    : assetResponse(asset, options);
+    ? assetNotModified(asset, IMMUTABLE_ASSET)
+    : assetResponse(asset, IMMUTABLE_ASSET);
 }
 
 /** A request path as a path on disk: percent-encoding off, segment by segment. */

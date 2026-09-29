@@ -93,7 +93,11 @@ reason rather than quietly left out.
 Resolution order for any template is then that theme first, this directory
 second, one file at a time. The theme above replaces the post layout and keeps
 receiving updates to every other template, and `static/style.css` replaces the
-stylesheet the same way — assets under `/theme/` resolve in the same order. A
+stylesheet the same way — assets under `/theme/` resolve in the same order.
+Link a theme file with the `asset` filter rather than a literal `/theme/`
+path: `{{ "style.css" | asset }}` puts a hash of the file in the URL, so a
+reader's browser keeps it for a year and still fetches the new one the moment
+it changes. The plain `/theme/style.css` keeps working, cached for an hour. A
 site that has chosen no theme reads this one and nothing else, and a theme
 sitting in `themes/` that the setting does not name is never on the path at
 all. A `theme` naming a folder that is not there, or is not a theme, falls back
@@ -1422,6 +1426,7 @@ the import above carries `with context`: a macro imported without it cannot see
 | `date(format, zone)` | Formats a `Date` or a date string. `readable` (the default) gives `2 September 2026`, `html` gives `2026-09-02` for a `<time datetime>`, `year` gives `2026`, `month` gives `September 2026`, `iso` gives the full ISO 8601 instant. A date in a file is a UTC instant; every format but `iso` is rendered in the site's `timezone` setting, and `iso` stays the instant. Pass `zone` — an IANA name — to override the setting for one call. A value that is not a date renders as the empty string. |
 | `url`                | Prefixes a root-relative path with the base URL's path, so a site served from a subdirectory links correctly. Eleventy's filter of the same name.                                                                                                                                                                                                                                                                                                                                                    |
 | `absoluteUrl`        | The same path as a fully qualified URL against the site's `baseUrl`.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `asset`              | The URL of a file in the theme's `static/` directory, with the base path in front and a hash of the file's bytes on the end: `{{ "style.css" \| asset }}` gives `/theme/style.css?v=3f2a9c01b7d4`. The file is found the way `/theme/` finds it, the chosen theme first. A hashed URL is served with `Cache-Control: public, max-age=31536000, immutable`, and editing the file changes the hash on the next render. A file no theme has gets its plain `/theme/` URL.                               |
 
 `date` reads one word rather than parsing it: `{{ "now" | date("year") }}` is
 the year at the moment the page is rendered, in the site's own timezone. It is

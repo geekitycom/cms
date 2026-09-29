@@ -224,7 +224,7 @@ describe('the demo with its theme unchosen', () => {
     assert.match(withCode, /<pre tabindex="0"><code class="language-sql">/);
     assert.match(withCode, /<pre tabindex="0"><code class="language-typescript">/);
     assert.match(withCode, /<pre tabindex="0"><code class="language-diff">/);
-    assert.match(withCode, /<script src="\/theme\/highlight\.js" defer><\/script>/);
+    assert.match(withCode, /<script src="\/theme\/highlight\.js\?v=[0-9a-f]{12}" defer><\/script>/);
 
     const withoutCode = await bareText('/2026/08/one-url-many-representations/');
     assert.doesNotMatch(withoutCode, /highlight\.js/, 'a post with no code ships JavaScript');
@@ -459,7 +459,10 @@ describe('the demo highlights code where there is code', () => {
   });
 
   it('loads the highlighter there and nowhere else, on the theme the demo chose', async () => {
-    assert.match(await text(WITH_CODE), /<script src="\/theme\/highlight\.js" defer><\/script>/);
+    assert.match(
+      await text(WITH_CODE),
+      /<script src="\/theme\/highlight\.js\?v=[0-9a-f]{12}" defer><\/script>/,
+    );
     assert.doesNotMatch(await text(WITHOUT_CODE), /highlight\.js/);
     assert.doesNotMatch(await text('/'), /highlight\.js/);
   });

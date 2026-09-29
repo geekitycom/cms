@@ -100,6 +100,7 @@ describe('image optimization end to end', () => {
     const derived = await cms.app.request(`/uploads/_/${url.slice('/uploads/'.length)}/320.webp`);
     assert.equal(derived.headers.get('content-type'), 'image/webp');
     assert.equal((await sharp(Buffer.from(await derived.arrayBuffer())).metadata()).width, 320);
+    assert.equal(derived.headers.get('cache-control'), 'public, max-age=31536000, immutable');
   });
 
   it('keeps the plain image in the feed, the JSON and the Markdown', async () => {

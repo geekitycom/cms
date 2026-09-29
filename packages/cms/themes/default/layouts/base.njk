@@ -55,7 +55,7 @@
     <meta name="description" content="{{ metaDescription }}">
     {% endif %}
     <link rel="canonical" href="{{ (page.url or "/") | absoluteUrl }}">
-    <link rel="stylesheet" href="{{ "/theme/style.css" | url }}">
+    <link rel="stylesheet" href="{{ "style.css" | asset }}">
     {% block alternates %}
     {{ feeds.feedLinks("/", site.title) }}
     {{ feeds.commentsFeedLink("/comments/feed/", site.title + " comments") }}
@@ -184,7 +184,7 @@
       See the theme README.
     #}
     {% if content and "language-" in content %}
-    <script src="{{ "/theme/highlight.js" | url }}" defer></script>
+    <script src="{{ "highlight.js" | asset }}" defer></script>
     {% endif %}
     {% endblock %}
   </body>

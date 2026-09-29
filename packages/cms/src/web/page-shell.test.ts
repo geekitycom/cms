@@ -559,10 +559,10 @@ describe('the head (AC #5)', () => {
       'title="Comments on: Hello" href="/2026/09/hello/feed/"',
       'type="application/activity+json"',
       'rel="webmention"',
-      '<link rel="stylesheet" href="/theme/style.css">',
     ]) {
       assert.ok(html.includes(marker), `the head lost ${marker}`);
     }
+    assert.match(html, /<link rel="stylesheet" href="\/theme\/style\.css\?v=[0-9a-f]{12}">/);
   });
 });
 
@@ -898,7 +898,7 @@ describe('the code highlighter in the shell (TASK-86 AC #2)', () => {
 
     assert.match(
       html,
-      /<script src="\/theme\/highlight\.js" defer><\/script>/,
+      /<script src="\/theme\/highlight\.js\?v=[0-9a-f]{12}" defer><\/script>/,
       'the page with code on it loads no highlighter',
     );
     assert.match(html, /<pre tabindex="0"><code class="language-js">/, 'nothing to highlight');

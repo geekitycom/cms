@@ -897,6 +897,96 @@ describe('theme assets', () => {
   });
 });
 
+/** The `href` of the page's stylesheet link. */
+async function stylesheetHref(cms: Cms, pathname = '/'): Promise<string> {
+  const html = await (await cms.app.request(pathname)).text();
+  const href = /<link rel="stylesheet" href="([^"]+)">/.exec(html)?.[1];
+  assert.ok(href !== undefined, 'the page links a stylesheet');
+  return href;
+}
+
+describe('fingerprinted theme assets (TASK-138)', () => {
+  it('links the stylesheet and the script at URLs carrying a content hash', async () => {
+    const { cms } = await site({
+      'posts/2026-09-02-code.md': post('Code', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/code/',
+        body: '```js\nconst a = 1;\n```',
+      }),
+    });
+
+    const html = await (await cms.app.request('/2026/09/code/')).text();
+
+    assert.match(html, /<link rel="stylesheet" href="\/theme\/style\.css\?v=[0-9a-f]{12}">/);
+    assert.match(html, /<script src="\/theme\/highlight\.js\?v=[0-9a-f]{12}" defer>/);
+  });
+
+  it('hashes the file the chosen theme ships, so two themes get two URLs', async () => {
+    const packaged = await stylesheetHref((await site({})).cms);
+    const themesDir = await fixtureTheme({ 'static/style.css': 'body { color: teal }\n' });
+    const themed = await stylesheetHref((await site(choosing(), { themesDir })).cms);
+
+    assert.notEqual(themed, packaged);
+    assert.match(themed, /^\/theme\/style\.css\?v=[0-9a-f]{12}$/);
+  });
+
+  it('puts the base path in front of a hashed URL', async () => {
+    const { cms } = await site({}, { baseUrl: 'https://example.com/blog/' });
+
+    assert.match(await stylesheetHref(cms), /^\/blog\/theme\/style\.css\?v=[0-9a-f]{12}$/);
+  });
+
+  it('serves the hashed URL for a year, immutable', async () => {
+    const { cms } = await site({});
+    const href = await stylesheetHref(cms);
+
+    const response = await cms.app.request(href);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    const etag = response.headers.get('etag') ?? '';
+    const revalidated = await cms.app.request(href, { headers: { 'if-none-match': etag } });
+    assert.equal(revalidated.status, 304);
+    assert.equal(revalidated.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  });
+
+  it('keeps the unhashed URL working at a short lifetime', async () => {
+    const { cms } = await site({});
+
+    const response = await cms.app.request('/theme/style.css');
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'public, max-age=3600');
+  });
+
+  it('does not pin a stale hash to the bytes the file holds now', async () => {
+    const { cms } = await site({});
+
+    const response = await cms.app.request('/theme/style.css?v=000000000000');
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'public, max-age=3600');
+  });
+
+  it('changes the URL when the theme file is edited, without a restart', async () => {
+    const themesDir = await fixtureTheme({ 'static/style.css': 'body { color: teal }\n' });
+    const { cms } = await site(choosing(), { themesDir, watch: true });
+    const before = await stylesheetHref(cms);
+
+    await writeFile(
+      path.join(themesDir, 'fixture', 'static', 'style.css'),
+      'body { color: rebeccapurple; background: white }\n',
+      'utf8',
+    );
+    const after = await stylesheetHref(cms);
+
+    assert.notEqual(after, before, 'the edit moved the URL');
+    const response = await cms.app.request(after);
+    assert.equal(await response.text(), 'body { color: rebeccapurple; background: white }\n');
+    assert.match(response.headers.get('cache-control') ?? '', /immutable/);
+  });
+});
+
 describe('uploads', () => {
   it('serves a file from content/uploads at the URL Eleventy copies it to', async () => {
     const { cms } = await site({ 'uploads/2026/09/notes.txt': 'Attached.\n' });

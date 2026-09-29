@@ -1208,7 +1208,11 @@ The directory's name is the theme's id, and the one setting that picks a theme,
 the chosen theme first and in the packaged theme second, one file at a time, so
 a theme that ships only `layouts/post.njk` replaces the post layout and keeps
 receiving updates to every other template. Assets under `/theme/` resolve in
-the same order, and so do the mail templates under `mail/`.
+the same order, and so do the mail templates under `mail/`. A layout links a
+theme file with `{{ "style.css" | asset }}`, which writes a URL with a hash of
+the file's bytes in it; that URL is cached for a year as `immutable`, and the
+plain `/theme/style.css` for an hour. Image variants under `/uploads/_/` are
+immutable too, because a variant's URL names one width of one upload.
 
 **Appearance > Themes** in the admin is where the choice is made: the packaged
 theme and everything under `themes/` with its name and description, the active
@@ -1227,7 +1231,7 @@ shadow the login form or the CSRF field inside it.
 The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`,
 `categories`, `content`, `page.url`, and every front matter key the file carried — so a
 layout can move between an Eleventy build and the CMS with few edits. The
-context, the blocks and the filter set (`date`, `url`, `absoluteUrl`) are part
+context, the blocks and the filter set (`date`, `url`, `absoluteUrl`, `asset`) are part
 of the semver contract; they are documented in
 [`packages/cms/themes/default/README.md`](packages/cms/themes/default/README.md).
 
