@@ -1,11 +1,11 @@
 ---
 id: TASK-125
 title: 'Quote posts: let Mastodon users quote a post, and approve the quote'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-24 12:33'
-updated_date: '2026-09-28 23:55'
+updated_date: '2026-09-29 02:06'
 labels:
   - federation
 dependencies: []
@@ -29,7 +29,7 @@ Mastodon 4.5 shows "You are not allowed to quote this post" on every post from t
 - [x] #4 A QuoteRequest the policy does not allow, or for a post this site does not federate, is rejected and no authorization is stored
 - [x] #5 Undoing or deleting a quote leaves no authorization served for it
 - [x] #6 Posts federated before this change can be made quotable (an Update per post, sent on republish or by a one-off resend), and the README says how
-- [ ] #7 Verified end to end against a real Mastodon 4.5+ account: the quote button is offered, the quote is approved, and the quote shows the post
+- [x] #7 Verified end to end against a real Mastodon 4.5+ account: the quote button is offered, the quote is approved, and the quote shows the post
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -80,10 +80,12 @@ AC #7 is not verified: it needs a Mastodon 4.5+ account and this site deployed o
 Follow-ups, not done here: doc-4's Inbox and Storage sections do not yet list QuoteRequest or quotes.json. A quote notification. `resend --all` resolves posts by slug, so when two announced posts share a slug across years, only the newer is resent (the delivery service's existing slug lookup).
 
 Correction to the notification note above: the email notices in src/notifications/comments.ts cover a comment or webmention waiting in moderation and an approved reply to a subscribed comment. Nothing there is driven by the ActivityPub inbox, so a quote notification would be a new notice kind, template and preference.
+
+AC #7 verified 2026-09-29 on shll.me running 0.8.0 against me.dm (Mastodon): after geekity resend --all, the quote button was offered on https://shll.me/2026/09/this-post-should-be-able/, and https://me.dm/@andrewshell/117351853054835652 quoted it, showing the post. The site logged the QuoteRequest at 01:59:32.627Z, stored the approval in content/_data/federation/a/quotes.json at 01:59:32.819Z, and received the quoting Create (object.quote naming the post) at 01:59:32.923Z. resend --all also showed that me.dm's Cloudflare returned 403 to one of seven back-to-back Updates. Follow-up: approved quotes are not yet shown on the post's page (TASK-171).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Posts are now quotable from Mastodon 4.5 (FEP-044f). Every federated Note and Article advertises canQuote for anyone. The inbox (canonical and WordPress-compatible) answers a QuoteRequest for a federated post with an Accept carrying a QuoteAuthorization, stored in content/_data/federation/{username}/quotes.json and served unsigned at /author/{username}/quotes/{id}/. Anything else gets a Reject. Undo or Delete of the quote withdraws the stamp. `geekity resend --all | <slug>...` sends an Update so posts already federated pick up the policy, documented in packages/cms/README.md under Quote posts. Verified by unit and HTTP tests, a CLI subprocess test, and an end-to-end run against a served scratch site. AC #7 (a real Mastodon 4.5+ account) is still open, and the manual steps are in the notes.
+Posts from this site can be quoted on Mastodon 4.5+ (FEP-044f). Every federated Note and Article advertises canQuote with automatic approval for the public; a QuoteRequest for a federated post is answered with an Accept carrying a QuoteAuthorization that is stored in the author's quotes.json and served at its own URL, and an Undo or a Delete of the quote withdraws it. geekity resend --all makes posts federated earlier quotable. Verified by unit and signed-HTTP tests, a local end-to-end run, and a real quote from me.dm of a post on shll.me.
 <!-- SECTION:FINAL_SUMMARY:END -->
