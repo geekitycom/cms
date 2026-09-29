@@ -643,53 +643,6 @@ describe('editing a post', () => {
     });
   });
 
-  it('refuses to change a published post\u2019s slug (decision-13)', async () => {
-    const contentDir = await seeded([
-      {
-        file: 'posts/2026-01-02-published.md',
-        title: 'Out in the world',
-        date: '2026-01-02',
-        permalink: '/2026/01/published/',
-      },
-    ]);
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    const response = await submit(agent, '/admin/posts/published', {
-      slug: 'out-in-the-world',
-      action: 'update',
-    });
-
-    assert.equal(response.status, 400);
-    assert.match(await response.text(), /permalink of a published post is permanent/);
-    // Nothing moved: the file, the URL and the object id all stand.
-    assert.deepEqual(await readdir(path.join(contentDir, 'posts')), ['2026-01-02-published.md']);
-    assert.equal((await cms.app.request('/2026/01/published/')).status, 200);
-  });
-
-  it('refuses to change a published post\u2019s permalink, and says why', async () => {
-    const contentDir = await seeded([
-      {
-        file: 'posts/2026-01-02-published.md',
-        title: 'Out in the world',
-        date: '2026-01-02',
-        permalink: '/2026/01/published/',
-      },
-    ]);
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    const response = await submit(agent, '/admin/posts/published', {
-      permalink: '/a-url-i-picked/',
-      action: 'update',
-    });
-
-    assert.equal(response.status, 400);
-    assert.match(await response.text(), /permalink of a published post is permanent/);
-    assert.equal((await cms.app.request('/a-url-i-picked/')).status, 404);
-    assert.equal((await cms.app.request('/2026/01/published/')).status, 200);
-  });
-
   it('still renames a draft, and takes the permalink with it', async () => {
     const contentDir = await seeded([
       {
@@ -785,6 +738,179 @@ describe('editing a post', () => {
     assert.deepEqual(await readdir(path.join(contentDir, 'posts')), ['2026-01-02-renamed.md']);
     const written = await readFile(path.join(contentDir, 'posts', '2026-01-02-renamed.md'), 'utf8');
     assert.match(written, /^permalink: \/a-url-i-picked\/$/m);
+  });
+});
+
+/** Where a response redirects to, asserting that the redirect is permanent. */
+function movedTo(response: Response): string | null {
+  assert.equal(response.status, 301, `expected a permanent redirect, got ${response.status}`);
+  return response.headers.get('location');
+}
+
+describe('moving a published document (TASK-127)', () => {
+  const PUBLISHED: Seed = {
+    file: 'posts/2026-01-02-published.md',
+    title: 'Out in the world',
+    date: '2026-01-02',
+    permalink: '/2026/01/published/',
+  };
+
+  it('redirects a renamed post’s old URL to the new one', async () => {
+    const contentDir = await seeded([PUBLISHED]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await submit(agent, '/admin/posts/published', {
+      slug: 'out-in-the-world',
+      action: 'update',
+    });
+    assert.equal(response.headers.get('location'), '/admin/posts/out-in-the-world');
+
+    assert.equal(
+      movedTo(await cms.app.request('/2026/01/published/')),
+      '/2026/01/out-in-the-world/',
+    );
+    assert.equal((await cms.app.request('/2026/01/out-in-the-world/')).status, 200);
+  });
+
+  it('redirects a renamed page’s old URL to the new one', async () => {
+    const contentDir = await seeded([
+      { file: 'pages/about.md', title: 'About', permalink: '/about/' },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/pages/about', { slug: 'about-me', action: 'update' });
+
+    assert.equal(movedTo(await cms.app.request('/about/')), '/about-me/');
+    assert.equal((await cms.app.request('/about-me/')).status, 200);
+  });
+
+  it('redirects when the permalink field itself is changed', async () => {
+    const contentDir = await seeded([PUBLISHED]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/posts/published', {
+      permalink: '/a-url-i-picked/',
+      action: 'update',
+    });
+
+    assert.equal(movedTo(await cms.app.request('/2026/01/published/')), '/a-url-i-picked/');
+    assert.equal((await cms.app.request('/a-url-i-picked/')).status, 200);
+  });
+
+  it('collapses a chain: every earlier URL goes straight to the current one', async () => {
+    const contentDir = await seeded([PUBLISHED]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/posts/published', { slug: 'second', action: 'update' });
+    await submit(agent, '/admin/posts/second', { slug: 'third', action: 'update' });
+
+    assert.equal(movedTo(await cms.app.request('/2026/01/published/')), '/2026/01/third/');
+    assert.equal(movedTo(await cms.app.request('/2026/01/second/')), '/2026/01/third/');
+    assert.equal((await cms.app.request('/2026/01/third/')).status, 200);
+  });
+
+  it('records the old URLs in the file, so a deleted database keeps them working', async () => {
+    const contentDir = await seeded([PUBLISHED]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/posts/published', { slug: 'second', action: 'update' });
+    await submit(agent, '/admin/posts/second', { slug: 'third', action: 'update' });
+
+    const written = await readFile(path.join(contentDir, 'posts', '2026-01-02-third.md'), 'utf8');
+    assert.match(
+      written,
+      /^redirect_from:\n {2}- \/2026\/01\/published\/\n {2}- \/2026\/01\/second\/$/m,
+    );
+
+    // A second site over the same content and an empty data directory: the
+    // index is built from the files alone.
+    const rebuilt = await box.open({ contentDir, dataDir: await box.dir('geekity-fresh-data-') });
+    assert.equal(movedTo(await rebuilt.app.request('/2026/01/published/')), '/2026/01/third/');
+    assert.equal(movedTo(await rebuilt.app.request('/2026/01/second/')), '/2026/01/third/');
+  });
+
+  it('lets a new document take an old URL over, and stops redirecting it', async () => {
+    const contentDir = await seeded([PUBLISHED]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+    await submit(agent, '/admin/posts/published', { slug: 'renamed', action: 'update' });
+    assert.equal(movedTo(await cms.app.request('/2026/01/published/')), '/2026/01/renamed/');
+
+    await writeFile(
+      path.join(contentDir, 'posts', '2026-01-09-published.md'),
+      '---\ntitle: A new one\ndate: 2026-01-09\npermalink: /2026/01/published/\n---\n\nIt lives here now.\n',
+      'utf8',
+    );
+    await cms.sync();
+
+    const taken = await cms.app.request('/2026/01/published/');
+    assert.equal(taken.status, 200);
+    assert.match(await taken.text(), /It lives here now\./);
+    assert.equal(
+      (await cms.app.request('/2026/01/published/index.md')).status,
+      200,
+      'and so do its other representations',
+    );
+  });
+
+  it('forgets the URL a document moves back to', async () => {
+    const contentDir = await seeded([PUBLISHED]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/posts/published', { slug: 'renamed', action: 'update' });
+    await submit(agent, '/admin/posts/renamed', { slug: 'published', action: 'update' });
+
+    assert.equal((await cms.app.request('/2026/01/published/')).status, 200);
+    assert.equal(movedTo(await cms.app.request('/2026/01/renamed/')), '/2026/01/published/');
+    const written = await readFile(
+      path.join(contentDir, 'posts', '2026-01-02-published.md'),
+      'utf8',
+    );
+    assert.match(written, /^redirect_from:\n {2}- \/2026\/01\/renamed\/$/m);
+  });
+
+  it('redirects the .md and .json of an old URL to the same representation', async () => {
+    const contentDir = await seeded([PUBLISHED]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/posts/published', { slug: 'renamed', action: 'update' });
+
+    assert.equal(
+      movedTo(await cms.app.request('/2026/01/published/index.md')),
+      '/2026/01/renamed/index.md',
+    );
+    assert.equal(
+      movedTo(await cms.app.request('/2026/01/published/index.json')),
+      '/2026/01/renamed/index.json',
+    );
+    assert.equal(
+      movedTo(await cms.app.request('/2026/01/published.json')),
+      '/2026/01/renamed/index.json',
+    );
+    assert.equal(
+      movedTo(await cms.app.request('/2026/01/published')),
+      '/2026/01/renamed/',
+      'and the old URL without its slash reaches the new one in one hop',
+    );
+  });
+
+  it('records nothing for a draft, which promised no URL to anybody', async () => {
+    const contentDir = await seeded([{ ...PUBLISHED, draft: true }]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    await submit(agent, '/admin/posts/published', { slug: 'renamed', action: 'save-draft' });
+
+    const written = await readFile(path.join(contentDir, 'posts', '2026-01-02-renamed.md'), 'utf8');
+    assert.doesNotMatch(written, /redirect_from/);
+    assert.doesNotMatch(written, /activitypub/);
   });
 });
 

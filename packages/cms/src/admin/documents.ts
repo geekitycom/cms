@@ -23,6 +23,7 @@ import {
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { isPublicDocument } from '../web/documents.ts';
+import { absoluteUrl } from '../web/negotiate.ts';
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
 import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
 import { userForAuthor } from '../web/authors.ts';
@@ -390,40 +391,27 @@ async function saveFromForm(
       ? await freeSlug({ contentDir, store, type: kind.type, slug, date: filed })
       : slug;
 
-  // decision-13: a published post's permalink is its name in the fediverse as
-  // well as on the web, and the two are one promise. Moving it hands every
-  // follower a second object and breaks every link somebody already shared, so
-  // the editor refuses. A draft has promised nothing yet and may still move;
-  // a site that really means to move a published post can still do it in the
-  // file, knowing what it costs.
-  const promised = promisedDocument(kind, document, store.now());
-  if (promised !== undefined) {
-    if (finalSlug !== promised.slug) {
-      return refuse(
-        `The permalink of a published post is permanent, and the slug names the file it is filed under: this ${kind.singular} keeps the slug ${promised.slug}.`,
-      );
-    }
-    // An empty field is not a request to move: it is a form that carried no
-    // permalink, and the promised one is what it keeps. Only a field naming
-    // some other URL is somebody asking for the one thing this refuses.
-    const submitted = normalizePermalink(form.permalink);
-    if (submitted !== undefined && submitted !== promised.permalink) {
-      return refuse(
-        `The permalink of a published post is permanent: this ${kind.singular} stays at ${promised.permalink}.`,
-      );
-    }
-  }
+  // A URL somebody has been shown only moves when the author asks it to, by
+  // editing the slug or the permalink: correcting a date refiles the file and
+  // leaves the URL where it was. An empty permalink field is a form that
+  // carried none, not a request to move.
+  const promised = promisedDocument(document, store.now());
+  const submitted = normalizePermalink(form.permalink);
+  const asked =
+    promised !== undefined &&
+    (finalSlug !== promised.slug || (submitted !== undefined && submitted !== promised.permalink));
 
   const permalink =
-    promised?.permalink ??
-    resolvePermalink({
-      kind,
-      form,
-      slug: finalSlug,
-      date: filed,
-      document,
-      timezone,
-    });
+    promised !== undefined && !asked
+      ? promised.permalink
+      : resolvePermalink({
+          kind,
+          form,
+          slug: finalSlug,
+          date: filed,
+          document,
+          timezone,
+        });
   const target = documentPath({ kind, slug: finalSlug, date: filed, trashed });
 
   if (document !== undefined) {
@@ -442,13 +430,14 @@ async function saveFromForm(
     ...(date === undefined ? {} : { date }),
     updated: store.now().toISOString(),
     permalink,
+    ...optional('redirectFrom', formerPermalinks(document, promised, permalink)),
     tags: kind.tagged ? splitTags(form.tags) : [],
     categories: kind.categorised ? splitTags(form.categories) : [],
     draft,
     ...(form.description === '' ? {} : { description: form.description }),
     ...optional('author', chosenAuthor(c, form.author, document)),
     ...optional('inReplyTo', replyTo(kind, form, document)),
-    ...optional('activitypub', document?.activitypub),
+    ...optional('activitypub', keptIdentity(document, promised, permalink, c.var.config.baseUrl)),
     extra: resolveExtra(kind, document, form),
     body: form.body,
   };
@@ -527,22 +516,66 @@ function documentPath(input: {
 }
 
 /**
- * The document whose permalink has already been promised, or `undefined` when
+ * The document whose URL has already been promised, or `undefined` when
  * nothing has been promised yet.
  *
- * A published post, and only a published post. decision-13 makes its permalink
- * its ActivityStreams object id, so the URL is a name its followers, its
- * replies and its feed subscribers are all holding; a draft, a trashed post
- * and one whose date has not arrived have been shown to nobody, and a page
- * federates nothing at all.
+ * A published post or page is at a URL readers, search engines and other
+ * sites may hold, and a post that was ever announced is at one its followers
+ * hold even while it is a draft. A draft nobody was told about, a trashed
+ * document and one whose date has not arrived have been shown to nobody, and
+ * may move without leaving anything behind.
  */
-function promisedDocument(
-  kind: DocumentKind,
+function promisedDocument(document: Document | undefined, now: Date): Document | undefined {
+  if (document === undefined) return undefined;
+  const announced = document.activitypub?.published !== undefined;
+  return isPublicDocument(document, now) || announced ? document : undefined;
+}
+
+/**
+ * The URLs a document is saved as having lived at (TASK-127).
+ *
+ * Every entry names the document itself rather than the next hop, so a chain
+ * of renames collapses by construction: the URL it is leaving joins the ones
+ * it already left, and all of them redirect straight to where it is now. The
+ * URL it is arriving at leaves the list, because a document moved back to an
+ * old URL lives there again.
+ */
+function formerPermalinks(
   document: Document | undefined,
-  now: Date,
-): Document | undefined {
-  if (document === undefined || kind.type !== 'post') return undefined;
-  return isPublicDocument(document, now) ? document : undefined;
+  promised: Document | undefined,
+  permalink: string,
+): string[] | undefined {
+  const left =
+    promised !== undefined && promised.permalink !== permalink ? [promised.permalink] : [];
+  const former = [...new Set([...(document?.redirectFrom ?? []), ...left])].filter(
+    (url) => url !== permalink,
+  );
+  return former.length === 0 ? undefined : former;
+}
+
+/**
+ * The `activitypub` block to write, which pins the object id when a promised
+ * post moves (decision-20).
+ *
+ * decision-13 makes a post's object id its permalink, and a fediverse server
+ * cannot rename an object it holds. So the URL the post is leaving is written
+ * as its stored id, and the stored-id path does the rest: a peer at the old
+ * URL still gets the `Article`, a browser there is sent on, and every `Update`
+ * names the id the followers already have. An id the file already stores
+ * stays, since it is already what they hold.
+ */
+function keptIdentity(
+  document: Document | undefined,
+  promised: Document | undefined,
+  permalink: string,
+  baseUrl: string,
+): Document['activitypub'] {
+  const block = document?.activitypub;
+  if (promised === undefined || promised.type !== 'post' || promised.permalink === permalink) {
+    return block;
+  }
+  if (block?.id !== undefined) return block;
+  return { ...block, id: absoluteUrl(promised.permalink, baseUrl) };
 }
 
 /**

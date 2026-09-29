@@ -38,6 +38,14 @@ export interface Document {
   slug: string;
   /** Output URL, always explicit so Eleventy and the CMS agree. Ends in `/`. */
   permalink: string;
+  /**
+   * The URLs this document used to live at, from the `redirect_from` front
+   * matter key (the name Jekyll's plugin gave the same list). Each one answers
+   * with a permanent redirect to {@link Document.permalink} while nothing else
+   * lives there. Written by the editor when a published document moves, so the
+   * record survives the index (decision-9). Absent when there are none.
+   */
+  redirectFrom?: string[] | undefined;
   /** Display title. */
   title: string;
   /** Publish date, ISO 8601 with offset. Required for posts. */
@@ -85,6 +93,7 @@ export type DocumentContent = Pick<
   | 'date'
   | 'updated'
   | 'permalink'
+  | 'redirectFrom'
   | 'tags'
   | 'categories'
   | 'draft'
@@ -102,6 +111,7 @@ export const KNOWN_FRONT_MATTER_KEYS = [
   'date',
   'updated',
   'permalink',
+  'redirect_from',
   'tags',
   'categories',
   'draft',

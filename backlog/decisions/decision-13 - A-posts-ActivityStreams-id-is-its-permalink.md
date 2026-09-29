@@ -27,7 +27,7 @@ A post's ActivityStreams object id is its permalink, absolute on the site's base
 
 **A stored id is honoured.** A post whose file already names an `activitypub.id` keeps it as its object id for the life of the post: the CMS serves the object at that URL on an ActivityStreams request, redirects a browser from it to the permalink, and names it in every `Update` and `Delete`. This is what lets a post migrated from WordPress keep the `https://example.com/?p=813` id its followers, its replies and its RSS subscribers already hold (decision-14). A post born on the CMS has no stored id and never sees this path. The id is identity, not cache: it is never dropped, and it is not behind any compatibility setting.
 
-The editor keeps the promise the name makes: a published post's permalink does not change. Renaming a published post's slug, or editing its permalink, is refused with a message saying why. A draft's may still change, since nothing has been promised yet. The date of a published post keeps the day it was filed under, as decision-11 already guarantees.
+*Superseded by decision-20: a published post may now move, keeping its id and redirecting its old URL.* The editor keeps the promise the name makes: a published post's permalink does not change. Renaming a published post's slug, or editing its permalink, is refused with a message saying why. A draft's may still change, since nothing has been promised yet. The date of a published post keeps the day it was filed under, as decision-11 already guarantees.
 
 Supersedes doc-4's "stable, independent of permalink changes" rationale for a separate id. decision-12 is read with this: the id every feed keys a post by is the permalink.
 

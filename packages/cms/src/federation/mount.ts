@@ -300,8 +300,12 @@ async function activityStreamsDocument(
 
   const stored = storedObjectAt(c);
   if (stored === undefined) return undefined;
-  if (!wantsObject) return c.redirect(stored.permalink, 301);
-  return await article(c, federation, stored);
+  if (wantsObject) return await article(c, federation, stored);
+  // A renamed post's old URL is its stored id (decision-20). Once a new
+  // document takes that URL over, a browser there is reading the new one; the
+  // id keeps answering peers, who hold it as a name rather than a page.
+  if (publicDocumentAt(c.var.store, requestPath(c)) !== undefined) return undefined;
+  return c.redirect(stored.permalink, 301);
 }
 
 /**

@@ -539,17 +539,20 @@ its front matter: the record that the post has been announced and when, which
 is what decides `Create` against `Update` and what a resend reads. Restoring a
 trashed post reuses it too.
 
-Because that URL is a promise, the editor keeps it: **a published post's slug
-and permalink cannot be changed**. Both fields still move freely on a draft,
-and a site that really means to move a published post can edit the file,
-knowing that its followers will be handed a second object.
-
 A post whose file already names an `activitypub.id` keeps it as its object id
 for the life of the post — that is how a post migrated from WordPress keeps the
 `https://example.com/?p=813` its followers, its replies and its RSS subscribers
 already hold. The CMS serves the post's object at that URL on an ActivityStreams
 request, redirects a browser from it to the permalink, and names it in every
-`Update` and `Delete`. The CMS never writes one itself.
+`Update` and `Delete`.
+
+The CMS writes one itself in one case: when a published post's slug or
+permalink is changed in the editor. A fediverse server cannot rename an object
+it holds, so the URL the post is leaving becomes its stored `activitypub.id`.
+Followers get an `Update` of the object they already have, a peer at the old
+URL still gets the object, and a browser there is redirected to the new
+permalink. The object's `url` is the new permalink. See
+[Moved URLs](#moved-urls).
 
 One POST serves a whole instance — the shared inbox is preferred — but the
 outcome is recorded per recipient, so an admin can see which one did not get it
@@ -2196,6 +2199,29 @@ the example config assembles them as `collections.menus`. A `menus` in a
 hand-edited `site.json` that is not an object of lists of items yields no menu
 rather than an error, exactly as a bad archive base falls back rather than
 taking the site down.
+
+### Moved URLs
+
+Changing the slug or the permalink of a published post or page in the editor
+moves it, and the URL it leaves is written into its file:
+
+```yaml
+permalink: /2026/01/new-name/
+redirect_from:
+  - /2026/01/first-name/
+  - /2026/01/second-name/
+```
+
+Every URL in `redirect_from` answers `301 Moved Permanently` with the current
+permalink, and so do its `.md` and `.json` spellings. Each entry points at the
+document itself, not at the next rename, so no chain of redirects builds up.
+The list is in the file, so deleting `data/geekity.db` keeps it working.
+
+A URL in the list only redirects while nothing else lives there: a new document
+given that URL takes it over. Moving a document back to a URL in its list takes
+that URL off the list. A draft that was never published moves without leaving
+anything behind. Correcting a published post's date files it under the new
+day but keeps its URL.
 
 ## Content negotiation
 

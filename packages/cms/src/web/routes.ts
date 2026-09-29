@@ -287,10 +287,37 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     }
   }
 
+  // Nothing lives here, so a URL something used to live at leads on to where
+  // it lives now. Asked only after every live lookup, which is what lets a new
+  // document take an old URL over.
+  const formerly =
+    movedHref(store, pages, pathname, undefined) ??
+    extension?.paths
+      .map((candidate) => movedHref(store, pages, candidate, extension.representation))
+      .find((href) => href !== undefined);
+  if (formerly !== undefined) return c.redirect(`${formerly}${new URL(c.req.url).search}`, 301);
+
   const canonical = canonicalPath(c, pathname, bases, authors);
   if (canonical !== undefined) return c.redirect(canonical, 301);
 
   return notFound(c);
+}
+
+/**
+ * Where the document that used to live at a URL lives now, in the
+ * representation asked for, or `undefined` when no published document names
+ * the URL in its `redirect_from` (TASK-127).
+ */
+function movedHref(
+  store: ContentStore,
+  pages: FrontPages,
+  pathname: string,
+  representation: Representation | undefined,
+): string | undefined {
+  const document = store.getByFormerPermalink(pathname);
+  if (document === undefined) return undefined;
+  const href = document.path === pages.home?.path ? '/' : encodePath(document.permalink);
+  return representation === undefined ? href : representationHref(href, representation);
 }
 
 /**
@@ -640,6 +667,9 @@ function canonicalTarget(
     // leads to `/`: one hop, the way `/page/1` reaches `/` in one.
     return document.path === pages.home?.path ? '/' : encodePath(pathname);
   }
+
+  const moved = movedHref(store, pages, pathname, undefined);
+  if (moved !== undefined) return moved;
 
   const listing = listingRequestAt(pages, pathname, bases, authors);
   if (listing === undefined) return undefined;

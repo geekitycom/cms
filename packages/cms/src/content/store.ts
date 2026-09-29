@@ -89,13 +89,24 @@ export interface ContentStore {
   /**
    * The post whose front matter names this ActivityStreams id, or `undefined`.
    *
-   * Only a migrated post has one (decision-13): a post born on the CMS is
-   * named by its permalink and carries no `activitypub.id` at all. This is how
+   * Only a migrated post (decision-13) or one moved after it was published
+   * (decision-20) has one: any other post is named by its permalink and
+   * carries no `activitypub.id` at all. This is how
    * the id its followers already hold keeps answering — with the `Article` for
    * a peer and a redirect to the permalink for a browser — so the match is on
    * the whole URL, a `?p=813` query string included.
    */
   getByStoredObjectId(objectId: string): Document | undefined;
+  /**
+   * The published document whose `redirect_from` names this URL, or
+   * `undefined`.
+   *
+   * What a URL a document used to live at resolves to (TASK-127). Only a
+   * public document answers, so an old URL of something since drafted or
+   * trashed 404s rather than redirecting to a 404. Should two claim one URL,
+   * the one updated most recently wins.
+   */
+  getByFormerPermalink(permalink: string): Document | undefined;
   /**
    * The document with this slug, or `undefined`. Slugs are not unique across
    * years, so the newest match wins.
@@ -485,6 +496,19 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     remove: db.prepare('DELETE FROM documents WHERE path = ?'),
     byPath: db.prepare('SELECT * FROM documents WHERE path = ?'),
     byPermalink: db.prepare('SELECT * FROM documents WHERE permalink = ?'),
+    deleteRedirects: db.prepare('DELETE FROM document_redirects WHERE path = ?'),
+    insertRedirect: db.prepare(
+      'INSERT INTO document_redirects (path, url, position) VALUES (?, ?, ?)',
+    ),
+    redirectsFor: db.prepare('SELECT url FROM document_redirects WHERE path = ? ORDER BY position'),
+    byFormerPermalink: db.prepare(`
+      SELECT documents.* FROM documents
+      JOIN document_redirects ON document_redirects.path = documents.path
+      WHERE document_redirects.url = ?
+        AND documents.draft = 0 AND documents.trashed = 0 AND ${DUE_CLAUSE}
+      ORDER BY documents.updated DESC, documents.path DESC
+      LIMIT 1
+    `),
     byStoredObjectId: db.prepare(
       `SELECT * FROM documents WHERE json_extract(activitypub, '$.id') = ? LIMIT 1`,
     ),
@@ -567,7 +591,13 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
   function hydrateOne(row: Record<string, unknown>): Document {
     const contentPath = String(row['path']);
-    return toDocument(row, tagsOf(contentPath), categoriesOf(contentPath));
+    const redirectFrom = statements.redirectsFor
+      .all(contentPath)
+      .map((redirect) => String(redirect['url']));
+    return {
+      ...toDocument(row, tagsOf(contentPath), categoriesOf(contentPath)),
+      ...(redirectFrom.length === 0 ? {} : { redirectFrom }),
+    };
   }
 
   function hydrateAll(rows: Record<string, unknown>[]): Document[] {
@@ -588,6 +618,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     statements.deleteCategories.run(contentPath);
     document.categories.forEach((category, position) => {
       statements.insertCategory.run(contentPath, category, position);
+    });
+    statements.deleteRedirects.run(contentPath);
+    (document.redirectFrom ?? []).forEach((url, position) => {
+      statements.insertRedirect.run(contentPath, url, position);
     });
     // The words it is found by. Replaced rather than updated, because an FTS5
     // table has no key to conflict on: the path is only a column in it.
@@ -723,6 +757,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         db.exec('DELETE FROM documents_fts');
         db.exec('DELETE FROM document_tags');
         db.exec('DELETE FROM document_categories');
+        db.exec('DELETE FROM document_redirects');
         db.exec('DELETE FROM documents');
         db.exec('COMMIT');
       } catch (error) {
@@ -743,6 +778,13 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       if (objectId === '') return undefined;
       return hydrate(
         statements.byStoredObjectId.get(objectId) as Record<string, unknown> | undefined,
+      );
+    },
+
+    getByFormerPermalink(permalink) {
+      return hydrate(
+        statements.byFormerPermalink.get(permalink, nowKey()) as
+          Record<string, unknown> | undefined,
       );
     },
 
@@ -1177,6 +1219,25 @@ const MIGRATIONS: readonly Migration[] = [
       -- index is what makes the next scan read them all again; the files are
       -- the source of truth, so nothing is lost (decision-1).
       ALTER TABLE documents ADD COLUMN in_reply_to TEXT;
+      DELETE FROM documents;
+    `,
+  },
+  {
+    version: 6,
+    sql: `
+      -- The URLs a document used to live at, from its \`redirect_from\` (TASK-127),
+      -- so an old URL is one indexed lookup. A file that already carried the
+      -- key kept it in \`extra\` and hashes the same, so a scan would never
+      -- index it; emptying the index makes the next scan read every file again,
+      -- and the files are the source of truth, so nothing is lost (decision-1).
+      CREATE TABLE document_redirects (
+        path     TEXT NOT NULL REFERENCES documents (path) ON DELETE CASCADE,
+        url      TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY (path, url)
+      );
+
+      CREATE INDEX document_redirects_url ON document_redirects (url);
       DELETE FROM documents;
     `,
   },

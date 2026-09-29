@@ -168,14 +168,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -204,7 +204,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6]);
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -233,7 +233,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6]);
       assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
     } finally {
       upgraded.close();
@@ -269,8 +269,57 @@ describe('a reply target', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6]);
       assert.equal(upgraded.counts().total, 0, 'a row with in-reply-to in extra survived');
+    } finally {
+      upgraded.close();
+    }
+  });
+});
+
+describe('former permalinks (TASK-127)', () => {
+  it('survive the index in order and find the published document that left them', async () => {
+    const store = openContentStore({ dataDir: await dataDir() });
+    try {
+      store.upsert(post({ redirectFrom: ['/2026/09/first/', '/2026/09/second/'] }));
+      assert.deepEqual(store.getByPermalink('/2026/09/hello-world/')?.redirectFrom, [
+        '/2026/09/first/',
+        '/2026/09/second/',
+      ]);
+      assert.equal(
+        store.getByFormerPermalink('/2026/09/first/')?.permalink,
+        '/2026/09/hello-world/',
+      );
+      assert.equal(store.getByFormerPermalink('/2026/09/hello-world/'), undefined);
+
+      store.upsert(post({ redirectFrom: ['/2026/09/second/'] }));
+      assert.equal(store.getByFormerPermalink('/2026/09/first/'), undefined, 'a dropped URL goes');
+
+      store.upsert(post({ redirectFrom: ['/2026/09/second/'], draft: true }));
+      assert.equal(
+        store.getByFormerPermalink('/2026/09/second/'),
+        undefined,
+        'a draft leads nowhere',
+      );
+    } finally {
+      store.close();
+    }
+  });
+
+  it('are read again from the files after an upgrade, which empties the index', async () => {
+    const dir = await dataDir();
+    const before = openContentStore({ dataDir: dir });
+    before.upsert(post());
+    before.close();
+
+    const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
+    legacy.exec('DELETE FROM migrations WHERE version = 6; DROP TABLE document_redirects');
+    legacy.close();
+
+    const upgraded = openContentStore({ dataDir: dir });
+    try {
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6]);
+      assert.equal(upgraded.counts().total, 0, 'a row with redirect_from in extra survived');
     } finally {
       upgraded.close();
     }
@@ -1324,7 +1373,7 @@ describe('the search index migration (TASK-22 AC #2)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6]);
       assert.equal(upgraded.counts().total, 0, 'a row survived with no words indexed for it');
 
       upgraded.upsert(post());
