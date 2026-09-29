@@ -42,7 +42,7 @@ import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './t
 import { mountToolsScreen } from './tools.ts';
 import type { LoginThrottle } from './throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
-import { mountUsers } from './users.ts';
+import { editUserPath, mountUsers } from './users.ts';
 
 /** Where the login form lives. */
 export const LOGIN_PATH = `${ADMIN_PREFIX}/login`;
@@ -132,6 +132,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   ): Response {
     const session = c.var.session;
     const userId = session?.userId ?? null;
+    const user = userId === null ? undefined : findUserById(c.var.config.dataDir, userId);
 
     const html = templates(c).render(template, {
       site: c.var.renderer.site(),
@@ -142,7 +143,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       logoutUrl: LOGOUT_PATH,
       csrfToken: session?.csrfToken ?? '',
       cspNonce: c.var.cspNonce ?? '',
-      user: userId === null ? undefined : findUserById(c.var.config.dataDir, userId),
+      me:
+        user === undefined
+          ? undefined
+          : { name: user.profile?.displayName ?? user.username, url: editUserPath(user.id) },
       flash: takeFlash(c),
       ...context,
     });

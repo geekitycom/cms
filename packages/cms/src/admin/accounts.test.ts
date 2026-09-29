@@ -538,7 +538,7 @@ describe('a database whose users are still rows', () => {
     // The whole point of the migration: the account still works, through the
     // login form, against the hash the table used to hold.
     const agent = await signIn(cms, { username: 'ada', password: 'a password from before' });
-    assert.match(await (await agent.get('/admin')).text(), /Signed in as ada/);
+    assert.match(await (await agent.get('/admin')).text(), /Hoopla! ada/);
   });
 
   it('keeps the logins the database already held', async () => {
@@ -550,7 +550,7 @@ describe('a database whose users are still rows', () => {
     agent.setSession('a-session-from-before');
     const dashboard = await agent.get('/admin');
     assert.equal(dashboard.status, 200, 'the session survived the schema change');
-    assert.match(await dashboard.text(), /Signed in as ada/);
+    assert.match(await dashboard.text(), /Hoopla! ada/);
   });
 
   it('leaves a users.json that is already there alone, because files win', async () => {
@@ -595,7 +595,7 @@ describe('a login and a database that may be deleted (AC #2)', () => {
 
     // The account was not: it is in the file, and the login form still knows it.
     const again = await signIn(rebuilt, FIRST_ADMIN);
-    assert.match(await (await again.get('/admin')).text(), /Signed in as ada/);
+    assert.match(await (await again.get('/admin')).text(), /Hoopla! ada/);
   });
 
   it('refuses a session whose user the file no longer holds', async () => {
