@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.8.0](https://github.com/geekitycom/cms/compare/v0.7.0...v0.8.0) (2026-09-29)
+
+
+### Features
+
+* **cms:** add a maintenance mode that answers 503 with retry-after ([64c3a6c](https://github.com/geekitycom/cms/commit/64c3a6c301ffdf47ac8b3e985fc42d82dc591d14))
+* **cms:** let mastodon users quote a post and approve the quote ([e216354](https://github.com/geekitycom/cms/commit/e21635433ce61baf2ec4aee2c95fb2c8a27b0721))
+* **cms:** let mastodon users quote a post and approve the quote ([7276d4e](https://github.com/geekitycom/cms/commit/7276d4e41e94b81513547d81f66120d3ad6e31ed))
+* **cms:** milestone M19 stable urls and graceful failure ([3f4fde9](https://github.com/geekitycom/cms/commit/3f4fde9db5682518978855ba6cd031772a05d6ea))
+* **cms:** redirect a post or page's old URL when its slug or permalink changes ([a80da3e](https://github.com/geekitycom/cms/commit/a80da3e2fe285f725fc0918be3650fd1c0ff5542))
+* **cms:** replace the admin bar's sign-in line with a hoopla account menu ([821eea4](https://github.com/geekitycom/cms/commit/821eea42f53e9e27f7ee1f05bf758ae1fe895870))
+* **cms:** replace the admin bar's sign-in line with a hoopla account menu ([384ba2d](https://github.com/geekitycom/cms/commit/384ba2d491136b31b9b101ef971910b9259ef5c1))
+* **cms:** serve a site's declared redirects and name the cms in x-redirect-by ([743b0a6](https://github.com/geekitycom/cms/commit/743b0a60961333b0ec08382fa9fecbef71b5665b))
+* **cms:** serve a themed 500 page when a request fails ([9974aa5](https://github.com/geekitycom/cms/commit/9974aa535f076362b74e866958309d2bec87620e))
+
+
+### Bug Fixes
+
+* **cms:** give every post editor field the same width, height and look ([f4bd981](https://github.com/geekitycom/cms/commit/f4bd981e89fcbc94be857e382e19b4cfc737a346))
+* **cms:** give every post editor field the same width, height and look ([5ac3430](https://github.com/geekitycom/cms/commit/5ac3430aae0323fad0da7bafb472feb0745199ee))
+
 ## [0.7.0](https://github.com/geekitycom/cms/compare/v0.6.0...v0.7.0) (2026-09-23)
 
 
