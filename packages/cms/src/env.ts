@@ -9,6 +9,7 @@ import type { MailService } from './mail/service.ts';
 import type { CommentNotifier } from './notifications/comments.ts';
 import type { WebmentionService } from './webmention/service.ts';
 import type { ConversationReader } from './web/conversation.ts';
+import type { RedirectSource } from './web/redirects.ts';
 import type { Renderer } from './web/render.ts';
 
 /**
@@ -97,6 +98,11 @@ export interface GeekityEnv {
      * behind it.
      */
     notifications: CommentNotifier;
+    /**
+     * The redirects the site declares in `content/_data/redirects.json`
+     * (TASK-128), read from the file as it is at this request.
+     */
+    redirects: RedirectSource;
     /**
      * The session this request carries, set by the admin guard: a login, the
      * anonymous session that holds a CSRF token before login, or `undefined`

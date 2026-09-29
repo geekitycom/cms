@@ -291,3 +291,5 @@ export type {
   ThemeRead,
   ThemeSource,
 } from './themes.ts';
+export { createRedirectSource, redirectBy, REDIRECT_BY, REDIRECTS_FILE } from './redirects.ts';
+export type { RedirectSource } from './redirects.ts';

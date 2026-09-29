@@ -48,12 +48,14 @@ import { commentFormFor, createAkismetChecker, rebuildCommentIndexes } from './c
 import { contactFormFor } from './contact/index.ts';
 import {
   createConversation,
+  createRedirectSource,
   createRenderer,
   createSiteDataSource,
   createThemeSource,
   mountHealth,
   mountPublicSite,
   recentPosts,
+  redirectBy,
   themeName,
 } from './web/index.ts';
 import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
@@ -1520,6 +1522,12 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // rather than at whatever moment the first request happens to arrive.
   themes.current();
 
+  // The site's declared redirects (TASK-128), read per request for the reason
+  // the site data is. Asked once here for the reason the theme is: an entry
+  // that cannot be served, or a loop, is reported at boot.
+  const redirects = createRedirectSource({ contentDir: resolved.contentDir });
+  redirects.current();
+
   const content = createContentSync({
     store,
     contentDir: resolved.contentDir,
@@ -1725,6 +1733,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('webmentions', webmentions);
     c.set('mail', mail);
     c.set('notifications', notifications);
+    c.set('redirects', redirects);
     await next();
   });
 
@@ -1732,6 +1741,9 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // admin adds a policy of its own on top; the public site does not, so a
   // theme is free to reference whatever it likes.
   app.use('*', baselineSecurityHeaders);
+
+  // And one on every redirect, whichever part of the CMS sent it.
+  app.use('*', redirectBy);
 
   app.get('/_geekity/health', (c) => c.json({ status: 'ok' }));
 

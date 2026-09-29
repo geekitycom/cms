@@ -2223,6 +2223,62 @@ that URL off the list. A draft that was never published moves without leaving
 anything behind. Correcting a published post's date files it under the new
 day but keeps its URL.
 
+### Declared redirects
+
+A site that moves to this CMS, or reorganises, lists the old URLs that no
+document owns in `content/_data/redirects.json`. The file is a JSON list:
+
+```json
+[
+  { "from": "/?p=123", "to": "/2026/01/hello/" },
+  { "from": "/old-section/", "to": "/new-section/", "status": 301 },
+  { "from": "/sale/", "to": "/shop/", "status": 302 },
+  { "from": "/forum/", "to": "https://forum.example.com/", "status": 308 }
+]
+```
+
+- `from` is a path on this site. It starts with `/` and can carry a query
+  string.
+- `to` is a path on this site, or an absolute `http` or `https` URL.
+- `status` is `301` or `308` for a permanent redirect, and `302` or `307` for a
+  temporary one. It defaults to `301`.
+
+A `from` without a query string matches that path with any query, or none. The
+request's query goes on to a `to` that has no query of its own, so
+`/old-section/?page=2` lands on `/new-section/?page=2`. The path must match
+exactly, except that a `from` ending in `/` also answers the same path without
+the slash, in one hop.
+
+A `from` with a query string matches only that query. The order of the
+parameters does not matter, so `/archives/?cat=4&paged=2` also matches
+`/archives/?paged=2&cat=4`. Nothing else in the request's query may differ:
+`/?p=123` does not match `/?p=123&replytocom=9`. This is how old WordPress
+`?p=` links reach their posts.
+
+A declared redirect never hides something real. A path-only `from` is answered
+only after every document, archive, feed and moved URL has had its turn, and
+just before the 404 page, so a document given that URL later takes it over. A
+`from` with a query string is answered first, because no document is addressed
+by its query. The admin, the federation endpoints and the health check answer
+before any declared redirect.
+
+The file is read on the next request after it changes, with no restart. An
+entry that cannot be served is logged as a warning at boot, and again on the
+first request after the file changes, and it is skipped. The following entries are skipped:
+
+- An entry with a missing or malformed `from`, `to` or `status`.
+- A second entry with the same `from`. The first entry wins.
+- Every entry that leads into a loop, such as `/a/` to `/b/` and `/b/` back to
+  `/a/`.
+
+A file that is not a JSON list serves no redirects and is reported the same
+way.
+
+Every redirect the CMS sends carries `X-Redirect-By: Geekity CMS`. This
+includes the declared redirects, moved URLs, trailing slashes, feed spellings
+and the admin's redirects. Someone who traces a chain of redirects through a
+proxy can see which layer sent each one.
+
 ## Content negotiation
 
 Every public URL is one resource with more than one body. A post or a page has
