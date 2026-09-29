@@ -24,11 +24,12 @@ import {
 } from './assets.ts';
 import { COMMENT_NOTICE_PARAM, COMMENT_REPLY_PARAM } from '../comments/form.ts';
 import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments/routes.ts';
-import { signedInCommenter } from '../comments/viewer.ts';
+import { commenterOf } from '../comments/viewer.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
 import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
 import { mountNotificationLinks } from '../notifications/routes.ts';
+import { publicAdminBar } from './admin-bar.ts';
 import {
   authorFeedHref,
   authorHref,
@@ -100,6 +101,9 @@ import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
  * them, because the document lookup only runs once nothing else has matched.
  */
 export function mountPublicSite(app: Hono<GeekityEnv>): void {
+  // First, so every page below it, the 404 and the 500 included, is drawn
+  // knowing whether a signed-in user is reading it (TASK-183).
+  app.use('*', publicAdminBar);
   app.use('*', declaredQueryRedirect);
 
   app.get(`${THEME_ASSET_PREFIX}*`, themeAsset);
@@ -582,7 +586,10 @@ function negotiateDocument(
   // Who the request's session says is reading, when it says anybody
   // (TASK-103). Only the HTML has a form on it, so only the HTML asks; the
   // Markdown and JSON of a post are the same bytes for everybody.
-  const viewer = representation === 'html' ? signedInCommenter(c) : undefined;
+  const account = representation === 'html' ? c.var.signedIn : undefined;
+  const viewer = account === undefined ? undefined : commenterOf(account);
+  // And which document it is, so the admin bar can offer its editor.
+  if (representation === 'html') c.set('shownDocument', document);
 
   const body =
     representation === 'markdown'
@@ -1073,6 +1080,7 @@ function listing(
     representation,
     href,
     available: LISTING_REPRESENTATIONS,
+    ...(drawnForSomebody(c, representation) ? { private: true } : {}),
     ...(validated
       ? {
           etag: representationEtag(
@@ -1136,6 +1144,7 @@ function search(c: Context<GeekityEnv>, representation: Representation | undefin
       (other) =>
         `<${searchHref(query, pageNumber, other)}>; rel="alternate"; type="${MEDIA_TYPES[other]}"`,
     ),
+    ...(drawnForSomebody(c, representation) ? { private: true } : {}),
     ...(validated
       ? {
           etag: representationEtag(
@@ -1147,6 +1156,15 @@ function search(c: Context<GeekityEnv>, representation: Representation | undefin
       : {}),
     conditional: conditionalHeaders(c),
   });
+}
+
+/**
+ * Whether this is a page drawn for a signed-in reader, which carries the admin
+ * bar (TASK-183) and so must never be answered with a 304 off the validators of
+ * the copy an anonymous visit left in their browser.
+ */
+function drawnForSomebody(c: Context<GeekityEnv>, representation: Representation): boolean {
+  return representation === 'html' && c.var.signedIn !== undefined;
 }
 
 /**

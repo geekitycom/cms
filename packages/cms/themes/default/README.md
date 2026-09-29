@@ -188,6 +188,32 @@ block:
 {% endblock %}
 ```
 
+### The admin bar
+
+When somebody signed in to the admin reads the site, the CMS puts the admin bar
+across the top of every HTML page: the site title linking to the dashboard,
+**+ New**, **Edit Post** or **Edit Page** on a post or a page, and the account
+menu. A theme draws none of it and needs no template for it. The CMS inserts a
+`<geekity-admin-bar>` element straight after the page's `<body>` tag, and an
+anonymous reader's page is unchanged, byte for byte.
+
+The bar keeps its markup and its stylesheet in a shadow root, so a theme's CSS
+cannot restyle it and its CSS cannot restyle the theme. The element carries an
+inline style that resets it, so rules such as `body > *` or a grid on `<body>`
+do not resize or move it. It is in normal flow: it pushes the page down by its
+own height instead of covering it, and a sticky header sticks at the top of the
+window once the bar has scrolled away.
+
+A theme that must not show the bar can hide it:
+
+```css
+geekity-admin-bar {
+  display: none !important;
+}
+```
+
+The `!important` is needed because it has to beat the element's inline style.
+
 ### An entry
 
 `layouts/post.njk` and `layouts/page.njk` draw the same thing, the source

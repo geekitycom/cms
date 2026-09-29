@@ -1,0 +1,29 @@
+{# The admin bar as the public site draws it for a signed-in user (TASK-183),
+   put straight after the theme's <body> tag.
+
+   Whatever theme the site wears has never heard of it, so it keeps to a shadow
+   root: no selector of the theme's reaches the markup inside, and the
+   stylesheet inside reaches nothing outside. The host's inline reset is what
+   stops a theme's rules for the host element itself, a `body > *` or a grid
+   on <body>, from resizing or moving it; only an `!important` rule of the
+   theme's can, which is also how a theme that insists hides it. It is in
+   normal flow, so it pushes the page down rather than covering a sticky
+   header. The stylesheet is inlined rather than linked so the bar is never
+   drawn unstyled; the public site has no content CSP to refuse it.
+
+   The one script is for the keyboard. Chrome hands focus back to the greeting
+   when Escape closes a popover in the light DOM, but not from inside a shadow
+   root, where the focus is simply lost. So when the menu closes with
+   focus inside it, focus goes back to the greeting. A click elsewhere has
+   already moved focus by then, and keeps it. #}
+<geekity-admin-bar style="all: initial; display: block; grid-column: 1 / -1; width: auto; max-width: none; margin: 0; padding: 0"><template shadowrootmode="open"><style>{% include "static/admin-bar.css" %}</style>{% include "components/admin-bar.njk" %}<script>
+(() => {
+  const root = document.querySelector('geekity-admin-bar').shadowRoot;
+  const menu = root.getElementById('admin-account-menu');
+  menu?.addEventListener('beforetoggle', (event) => {
+    if (event.newState === 'closed' && menu.contains(root.activeElement)) {
+      setTimeout(() => root.querySelector('.admin-bar-account').focus());
+    }
+  });
+})();
+</script></template></geekity-admin-bar>

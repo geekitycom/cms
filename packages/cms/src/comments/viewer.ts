@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 
 import { findUserById } from '../admin/accounts.ts';
+import type { User } from '../admin/accounts.ts';
 import { sessionIdFrom } from '../admin/session.ts';
 import type { GeekityEnv } from '../env.ts';
 import { authorHref } from '../web/authors.ts';
@@ -23,6 +24,21 @@ import type { CommentViewer } from './form.ts';
  * holds, which is the same test the admin guard applies at its own door.
  */
 export function signedInCommenter(c: Context<GeekityEnv>): CommentViewer | undefined {
+  const account = signedInAccount(c);
+  return account === undefined ? undefined : commenterOf(account);
+}
+
+/** A live login on the public site: who it names, and the session's CSRF token. */
+export interface SignedInAccount {
+  user: User;
+  csrfToken: string;
+}
+
+/**
+ * The account a request's session names, by the rules {@link signedInCommenter}
+ * describes: `undefined` for every way a cookie can be worth nothing.
+ */
+export function signedInAccount(c: Context<GeekityEnv>): SignedInAccount | undefined {
   const id = sessionIdFrom(c);
   if (id === undefined) return undefined;
 
@@ -37,6 +53,11 @@ export function signedInCommenter(c: Context<GeekityEnv>): CommentViewer | undef
   const user = findUserById(c.var.config.dataDir, session.userId);
   if (user === undefined) return undefined;
 
+  return { user, csrfToken: session.csrfToken };
+}
+
+/** What the comment form needs to know about a signed-in account. */
+export function commenterOf({ user, csrfToken }: SignedInAccount): CommentViewer {
   return {
     // What a byline would print for them, on the same rule: a user who has
     // written no display name is called by their username, which is what
@@ -44,6 +65,6 @@ export function signedInCommenter(c: Context<GeekityEnv>): CommentViewer | undef
     name: user.profile?.displayName ?? user.username,
     url: authorHref(user.username),
     email: user.email ?? null,
-    csrfToken: session.csrfToken,
+    csrfToken,
   };
 }

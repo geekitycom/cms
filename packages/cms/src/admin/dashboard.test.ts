@@ -126,6 +126,72 @@ function accountMenu(html: string): { button: string; menu: string } {
   return { button: (button[1] ?? '').trim(), menu: menu[1] ?? '' };
 }
 
+describe('the admin bar inside the admin (TASK-183)', () => {
+  /** The links in the admin bar, as label and href, in order. */
+  function barLinks(html: string): { label: string; href: string }[] {
+    const bar = /<nav class="admin-bar"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
+    const menuless = bar.replace(/<div id="admin-account-menu"[\s\S]*?<\/div>/, '');
+    return [...menuless.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((match) => ({
+      label: (match[2] ?? '').trim(),
+      href: match[1] ?? '',
+    }));
+  }
+
+  it('keeps View site and gains + New, which opens the new-post editor (AC #3, #4)', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin')).text();
+    assert.match(html, /<nav class="admin-bar" aria-label="Admin bar">/);
+    assert.deepEqual(barLinks(html), [
+      { label: 'Geekity', href: '/admin' },
+      { label: 'View site', href: '/' },
+      { label: '+ New', href: '/admin/posts/new' },
+    ]);
+
+    const editor = await agent.get('/admin/posts/new');
+    assert.equal(editor.status, 200);
+    assert.match(await editor.text(), /Add post/);
+  });
+
+  it('offers View Post or View Page on the editor of a published document, and not of a draft (AC #3)', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Published',
+        date: '2026-01-02T09:00:00Z',
+        permalink: '/2026/01/published/',
+      },
+      {
+        file: 'posts/2026-01-03-unfinished.md',
+        title: 'Unfinished',
+        date: '2026-01-03T09:00:00Z',
+        permalink: '/2026/01/unfinished/',
+        draft: true,
+      },
+      { file: 'pages/about.md', title: 'About', permalink: '/about/' },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const views = async (url: string): Promise<{ label: string; href: string }[]> =>
+      barLinks(await (await agent.get(url)).text()).filter((link) =>
+        link.label.startsWith('View '),
+      );
+
+    assert.deepEqual(await views('/admin/posts/published'), [
+      { label: 'View site', href: '/' },
+      { label: 'View Post', href: '/2026/01/published/' },
+    ]);
+    assert.deepEqual(await views('/admin/pages/about'), [
+      { label: 'View site', href: '/' },
+      { label: 'View Page', href: '/about/' },
+    ]);
+    assert.deepEqual(await views('/admin/posts/unfinished'), [{ label: 'View site', href: '/' }]);
+    assert.deepEqual(await views('/admin/posts'), [{ label: 'View site', href: '/' }]);
+  });
+});
+
 describe('the account menu (TASK-126)', () => {
   it('greets a user without a display name by their username', async () => {
     const cms = await box.site();
@@ -236,7 +302,9 @@ describe('the dashboard', () => {
     const agent = await signedIn(cms);
 
     const html = await (await agent.get('/admin')).text();
-    const listed = [...html.matchAll(/<a href="\/admin\/posts\/([^"]+)">([^<]+)<\/a>/g)];
+    // The screen's own list, not the bar's + New, which is a posts link too.
+    const screen = html.slice(html.indexOf('<main'));
+    const listed = [...screen.matchAll(/<a href="\/admin\/posts\/([^"]+)">([^<]+)<\/a>/g)];
 
     assert.deepEqual(
       listed.map((match) => match[2]),
