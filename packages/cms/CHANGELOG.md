@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.0](https://github.com/geekitycom/cms/compare/v0.8.0...v0.9.0) (2026-09-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** under https the session cookie is renamed to __Host-geekity_session, so every signed-in user is signed out once after upgrading, with a notice on the login form.
+* **cms:** ConversationContext now requires contentDir, so a direct caller of createConversation must pass the site's content directory.
+
+### Features
+
+* **cms:** harden the admin session cookie, cross-site checks and logout ([de7255f](https://github.com/geekitycom/cms/commit/de7255fda94b2d83ccdf3e3c3a92f9cc07cc1fc0))
+* **cms:** remove commenter and contact data past retention, erase on request ([c35b3c4](https://github.com/geekitycom/cms/commit/c35b3c401442627fe947091a738ddadda5043bd4))
+* **cms:** scaffold a starter privacy page linked from the footer ([ad7f05f](https://github.com/geekitycom/cms/commit/ad7f05fc0b97a04181a9ad1850b4c40d05ef8121))
+* **cms:** send public security headers that do not constrain themes ([a5f9e66](https://github.com/geekitycom/cms/commit/a5f9e6609dd374d3f9b63f7f83525088aec5569d))
+* **cms:** serve remote avatars from the site to keep readers private ([8916062](https://github.com/geekitycom/cms/commit/89160624f2954a9b2fdbf28e80b9528033df779a))
+* **cms:** serve security.txt and change-password well-known urls ([4119d5f](https://github.com/geekitycom/cms/commit/4119d5f5ef86378b150d89ae7c075f7f2af9d274))
+* **cms:** show approved fediverse quotes of a post as mentions ([685703b](https://github.com/geekitycom/cms/commit/685703b4d2ae576c1f8b2f48733c9c0a75d4d93f))
+
 ## [0.8.0](https://github.com/geekitycom/cms/compare/v0.7.0...v0.8.0) (2026-09-29)
 
 
