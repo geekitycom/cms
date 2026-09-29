@@ -247,6 +247,17 @@ export interface GeekityConfig {
    */
   maintenance?: boolean;
   /**
+   * Security headers every response carries, merged over
+   * {@link DEFAULT_SECURITY_HEADERS} by name, case aside. A string replaces a
+   * default or adds a header of the site's own; `false` removes a default.
+   * Config file only: a table of headers does not fit one environment
+   * variable.
+   *
+   * The admin keeps its own `Content-Security-Policy`, `Referrer-Policy` and
+   * `X-Frame-Options` whatever this says, so nothing here can loosen them.
+   */
+  securityHeaders?: Record<string, string | false>;
+  /**
    * Called for every `created`, `updated` and `deleted` the index records.
    *
    * The boot scan reports a cold index as a directory full of creations, so a
@@ -345,6 +356,8 @@ export interface ResolvedConfig {
   accessLogWriter: AccessLogWriter | undefined;
   seedContent: boolean;
   maintenance: boolean;
+  /** Header name, lower case, to value: the defaults with the site's changes applied. */
+  securityHeaders: Readonly<Record<string, string>>;
   onDocumentChange: DocumentChangeHook | undefined;
   onPublish: DocumentChangeHook | undefined;
   /**
@@ -413,6 +426,36 @@ export const KNOWN_IMAGE_FORMATS: readonly string[] = ['avif', 'jpeg', 'png', 'w
 export const DEFAULT_LOGIN_ATTEMPTS = 5;
 /** How long the first lockout lasts by default: a quarter of an hour, in seconds. */
 export const DEFAULT_LOGIN_LOCKOUT = 15 * 60;
+
+/**
+ * The security headers a site gets without asking (TASK-131).
+ *
+ * Each one restricts nothing a theme loads. `frame-ancestors` is the only
+ * directive in the policy, so it says who may frame a page and nothing about
+ * what a page may reference. The Permissions-Policy turns off the features a
+ * blog has no use for and a hostile script would, and leaves alone the ones an
+ * embedded video player asks for: autoplay, fullscreen, encrypted-media,
+ * picture-in-picture and the motion sensors behind a 360-degree video.
+ */
+export const DEFAULT_SECURITY_HEADERS: Readonly<Record<string, string>> = {
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'content-security-policy': "frame-ancestors 'self'",
+  'x-frame-options': 'SAMEORIGIN',
+  'permissions-policy': [
+    'browsing-topics=()',
+    'camera=()',
+    'display-capture=()',
+    'geolocation=()',
+    'hid=()',
+    'microphone=()',
+    'midi=()',
+    'payment=()',
+    'serial=()',
+    'usb=()',
+    'xr-spatial-tracking=()',
+  ].join(', '),
+  'cross-origin-opener-policy': 'same-origin',
+};
 
 /**
  * Identity helper that gives a `geekity.config.ts` file type checking and
@@ -504,6 +547,7 @@ export function resolveConfig(
       config.maintenance,
       false,
     ),
+    securityHeaders: resolveSecurityHeaders(config.securityHeaders),
     onDocumentChange: config.onDocumentChange,
     onPublish: config.onPublish,
     commentChecker: config.commentChecker,
@@ -512,6 +556,39 @@ export function resolveConfig(
     federation: config.federation ?? {},
     hostLookup: config.hostLookup ?? systemHostLookup,
   };
+}
+
+/** RFC 9110's `token`: the characters a header name may be made of. */
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+
+/**
+ * The defaults with a site's changes applied, keyed by lower-case name.
+ *
+ * Checked here rather than when a response is sent, where a bad name or a
+ * value with a line break in it would throw on every request instead of once
+ * at boot.
+ */
+function resolveSecurityHeaders(
+  configured: Record<string, string | false> | undefined,
+): Record<string, string> {
+  const headers: Record<string, string> = { ...DEFAULT_SECURITY_HEADERS };
+  for (const [name, value] of Object.entries(configured ?? {})) {
+    if (!HEADER_NAME.test(name)) {
+      throw new Error(`securityHeaders: ${JSON.stringify(name)} is not a header name`);
+    }
+    const key = name.toLowerCase();
+    if (value === false) {
+      delete headers[key];
+      continue;
+    }
+    if (typeof value !== 'string' || value.trim() === '' || /[\r\n\0]/.test(value)) {
+      throw new Error(
+        `securityHeaders: ${name} must be a non-empty single-line string, or false to remove it`,
+      );
+    }
+    headers[key] = value;
+  }
+  return headers;
 }
 
 /** Bytes, a positive whole number of them. */

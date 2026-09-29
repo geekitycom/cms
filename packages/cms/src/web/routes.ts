@@ -8,6 +8,7 @@ import type { ContentStore, ListOptions } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
+import { mountAvatars } from '../avatars/routes.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
 import {
   assetNotModified,
@@ -124,6 +125,10 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // And where the one-click links in a notification land (TASK-55): the same
   // prefix again, and no session behind either of them.
   mountNotificationLinks(app);
+
+  // And where the avatars a conversation shows are served from (TASK-134):
+  // the same prefix again, so a reader's browser fetches every face from here.
+  mountAvatars(app);
 
   app.get('/', (c) => {
     // The site's latest posts, or the page the Reading setting names — the

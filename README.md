@@ -272,19 +272,32 @@ copied somewhere safe:
 | `data/users.json` | Usernames and argon2id password hashes, mode 0600.                                 |
 | `data/keys/`      | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.** |
 
-And two things under `data/` may be deleted at any time the site is stopped:
+And three things under `data/` may be deleted at any time the site is stopped:
 
 | Path              | What it is                                                                                      |
 | ----------------- | ----------------------------------------------------------------------------------------------- |
 | `data/geekity.db` | The SQLite cache, `-wal` and `-shm` with it. See below.                                         |
 | `data/images/`    | Image variants derived from `content/uploads/` (decision-10), with their `image.json` sidecars. |
+| `data/avatars/`   | Remote avatars fetched and shrunk so a reader's browser never asks the server they live on.     |
 
-Deleting either is safe with the site stopped: the next boot builds the
+Deleting any of them is safe with the site stopped: the next boot builds the
 database back out of the files with no manual step, and a request for a variant
-that is not there derives it and serves it. `geekity rebuild` does the database
+that is not there derives it and serves it, and an avatar is fetched again. `geekity rebuild` does the database
 half on demand, and **Tools > Content index** in the admin does it [without
 stopping the site](#rebuilding-the-index-from-the-admin). There is no command
 for the images, because there is nothing to do: `rm -r data/images`.
+
+### Personal data
+
+Commenter emails and address hashes are in the comment files under
+`content/_data/comments/`, and contact messages are in `data/contact/`. A sweep
+removes each once it outlives the period set on **Settings > Discussion**. A
+site keeps everything until its owner sets a period, so upgrading deletes
+nothing; a new site from `geekity init` starts with 180 days for an email, 30
+for an address hash and 365 for a contact message.
+**Tools > Personal data** erases one person's data on request. The package
+README lists [every piece of personal data the CMS stores and
+where](packages/cms/README.md#personal-data).
 
 ### What is in the database, and what a rebuild loses
 
@@ -726,8 +739,14 @@ almost everywhere — with a per-response nonce on `style-src` for the styles
 CodeMirror injects at runtime, `data:` on `img-src` for a preview of a post
 holding a data URI image, and `frame-ancestors 'self'` because the editor
 frames its own preview. There is no inline script in the admin, so `script-src`
-is a bare `'self'`. The public site gets none of that, so a theme is free to
-reference whatever it likes. The package README has
+is a bare `'self'`. The public site gets none of that. It gets a
+`Referrer-Policy` of `strict-origin-when-cross-origin`, framing by the site
+itself only (`frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`), a
+`Permissions-Policy` that turns off the camera, microphone, geolocation,
+payments, USB and similar, and `Cross-Origin-Opener-Policy: same-origin`. None
+of them limits what a page loads, so a theme is still free to reference whatever
+it likes, and a site can change or remove each one with `securityHeaders`. The
+package README has
 [the whole table and the reasoning](packages/cms/README.md#security-headers).
 
 ## The media library
@@ -858,7 +877,8 @@ on six pages under the Settings menu: **General** (title, tagline, author, base
 URL, time zone and language), **Reading** (what the homepage displays, posts per
 page, the notify server the feeds advertise), **Permalinks** (the tag and category
 archive bases), **Discussion** (comments and when they close, webmentions sent
-and received), **Email** (how the site sends mail and where a message written to
+and received, and how long commenter emails, address hashes and contact
+messages are kept), **Email** (how the site sends mail and where a message written to
 it goes) and **Federation** (the relays the site subscribes to). They live in
 `content/_data/site.json`, which is published with the site and in git.
 
@@ -1430,15 +1450,16 @@ the package README has the full list):
   is credentials and records that are also not rebuilt.
 - **`compose.yaml` and `.env`**, so the stack can be recreated.
 
-`data/geekity.db` (with `-wal` and `-shm`) and `data/images/` are derived and
-need not be copied: the database is rebuilt on the next start, and an image
+`data/geekity.db` (with `-wal` and `-shm`), `data/images/` and `data/avatars/`
+are derived and need not be copied: the database is rebuilt on the next start, and an image
 variant the next time it is asked for. The site writes its files by renaming a
 finished copy over the old one, so a copy taken while it runs gets whole files;
 stop the stack first if the copy has to be of one moment. For example:
 
 ```sh
 tar -C /opt/stacks -czf geekity-$(date +%F).tar.gz \
-  --exclude='geekity/data/geekity.db*' --exclude='geekity/data/images' geekity
+  --exclude='geekity/data/geekity.db*' --exclude='geekity/data/images' \
+  --exclude='geekity/data/avatars' geekity
 ```
 
 Restore by unpacking it into `/opt/stacks`, checking `content/` and `data/` are
@@ -1459,6 +1480,10 @@ docker compose up -d
 Database migrations run on start, so there is no other step. Read the
 [changelog](packages/cms/CHANGELOG.md) for the versions in between first; a
 breaking change carries a note there.
+
+An upgrade never deletes a reader's data. Commenter emails, address hashes and
+contact messages are kept until the owner sets a retention period on
+**Settings > Discussion** ([Personal data](#personal-data)).
 
 `GEEKITY_TAG=latest` is the other way to run this. Every push moves that tag,
 so an upgrade is `pull` and `up -d` with nothing to edit — at the cost of the

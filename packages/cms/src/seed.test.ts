@@ -65,6 +65,7 @@ describe('seedStarterContent', () => {
       '_data/site.json',
       'pages/about.md',
       'pages/pages.json',
+      'pages/privacy.md',
       'posts/2026-01-01-hello-world.md',
       'posts/posts.json',
     ]);
@@ -92,7 +93,7 @@ describe('seedStarterContent', () => {
     assert.equal(settings['title'], 'A Geekity site');
   });
 
-  it('types the About page into the primary menu and the feed into the footer (TASK-106 AC #6, TASK-107, TASK-105)', async () => {
+  it('types the About page into the primary menu and the feed and privacy page into the footer (TASK-106 AC #6, TASK-107, TASK-105, TASK-136)', async () => {
     const site = await temporaryDir('geekity-seed-menu-');
     const contentDir = path.join(site, 'content');
 
@@ -103,14 +104,18 @@ describe('seedStarterContent', () => {
     // its front matter says anything. Search is typed in beside it (TASK-104):
     // the box is on /search/ and nowhere else, so without the line there is no
     // way in. The footer prints its menu and nothing of its own (TASK-105), so
-    // the RSS link a new site wants is a line in it.
+    // the RSS link a new site wants is a line in it, and so is the privacy
+    // page: deleting that line is how a site that drops the page unlinks it.
     const settings = await readJson(path.join(contentDir, '_data', 'site.json'));
     assert.deepEqual(settings['menus'], {
       primary: [
         { label: 'About', url: '/about/' },
         { label: 'Search', url: '/search/' },
       ],
-      footer: [{ label: 'RSS', url: '/feed/' }],
+      footer: [
+        { label: 'RSS', url: '/feed/' },
+        { label: 'Privacy', url: '/privacy/' },
+      ],
     });
 
     const about = await fs.readFile(path.join(contentDir, 'pages', 'about.md'), 'utf8');
@@ -223,5 +228,98 @@ describe('the starter site, served', () => {
     assert.match(html, /Reading/);
     assert.match(html, /menus\.primary/);
     assert.match(html, /[Dd]elete that line/);
+  });
+
+  it('links the privacy page from the footer, and it answers (TASK-136 AC #2)', async () => {
+    const parent = await temporaryDir('geekity-seed-privacy-footer-');
+    const initialised = await initSite({ directory: 'from-init', cwd: parent });
+
+    const cms = await serving(path.join(initialised.directory, 'content'));
+    const html = await (await cms.app.request('/')).text();
+
+    assert.deepEqual(menuLinks(html, 'Footer'), [
+      ['RSS', '/feed/'],
+      ['Privacy', '/privacy/'],
+    ]);
+    assert.equal((await cms.app.request('/privacy/')).status, 200);
+  });
+});
+
+/**
+ * The starter privacy page (TASK-136). Every row of the README's Personal data
+ * table is something this page has to own up to, and each optional feature has
+ * to say it is optional, so the assertions read the rendered page for each.
+ */
+describe('the starter privacy page', () => {
+  async function privacyText(): Promise<string> {
+    const parent = await temporaryDir('geekity-seed-privacy-');
+    const initialised = await initSite({ directory: 'from-init', cwd: parent });
+    const cms = await serving(path.join(initialised.directory, 'content'));
+    const response = await cms.app.request('/privacy/');
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    const main = /<main id="main">([\s\S]*?)<\/main>/.exec(html)?.[1] ?? '';
+    return main
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&#39;|&rsquo;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/\s+/g, ' ');
+  }
+
+  it('says it is a starting point for the owner to review, not legal advice', async () => {
+    const text = await privacyText();
+    assert.match(text, /starting point/i);
+    assert.match(text, /not legal advice/i);
+    assert.match(text, /review/i);
+  });
+
+  it('lists everything the CMS stores about a reader', async () => {
+    const text = await privacyText();
+    for (const [what, pattern] of [
+      [
+        'comment name, website and words',
+        /name, (?:your )?website and (?:the )?(?:words|comment)/i,
+      ],
+      ['commenter email', /email address/i],
+      ['reply notices', /repl(?:y|ies)[^.]*email|email[^.]*repl(?:y|ies)/i],
+      ['opt-out list', /unsubscribe/i],
+      ['salted address hash, never the address', /hash/i],
+      [
+        'the address itself is not stored',
+        /IP address itself|address itself is never|never store(?:s|d)? (?:your|the) (?:IP )?address/i,
+      ],
+      ['webmentions', /webmention/i],
+      ['contact messages', /contact form/i],
+      ['fediverse followers', /follow/i],
+      ['fediverse replies, likes and boosts', /boost/i],
+      ['remote avatars fetched by the site', /avatar/i],
+      ['accounts', /account/i],
+      ['the session cookie', /geekity_session/],
+      ['no cookie for readers', /no cookies?/i],
+      ['rate-limit counts, in memory only', /in memory/i],
+      ['server logs', /log/i],
+      ['the referrer sent on to other sites', /which site you came from, not which page/i],
+    ] as const) {
+      assert.match(text, pattern, `the page does not mention ${what}`);
+    }
+  });
+
+  it('marks the optional features as optional', async () => {
+    const text = await privacyText();
+    assert.match(text, /Reply emails \(optional\)/);
+    assert.match(text, /The contact form \(optional\)/);
+    assert.match(text, /Spam checking with Akismet \(optional\)/);
+    assert.match(text, /Akismet, a spam-checking service run by Automattic/);
+  });
+
+  it('quotes the retention periods a new site starts with, and says to keep them in step', async () => {
+    const text = await privacyText();
+    assert.match(text, /180 days/);
+    assert.match(text, /30 days/);
+    assert.match(text, /365 days/);
+    assert.match(text, /Settings > Discussion/);
+    assert.match(text, /Tools > Personal data|erase/i);
   });
 });

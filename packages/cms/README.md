@@ -19,8 +19,8 @@ pnpm install
 pnpm dev
 ```
 
-That is a running site on <http://localhost:3000> with a post, a page and the
-packaged theme. `geekity init` refuses a directory that already has anything in
+That is a running site on <http://localhost:3000> with a post, an About page, a
+starter privacy page and the packaged theme. `geekity init` refuses a directory that already has anything in
 it, so it can never write over a site you already have.
 
 What it writes:
@@ -32,7 +32,7 @@ server.ts             the entry file; where your own routes go
 tsconfig.json         so the site type checks against the package
 content/
   posts/              Markdown posts, plus posts.json for Eleventy
-  pages/              Markdown pages, plus pages.json
+  pages/              about.md, privacy.md, plus pages.json
   _data/site.json     the settings: title, tagline, author, page and feed sizes
   _data/federation/   once the site federates: followers.json and the inbox log
   _data/comments/     once somebody comments: one JSON file per post
@@ -72,6 +72,13 @@ is the whole upgrade. The config schema, `createCms`, the template context, the
 JSON representation and the content format are all covered by semver: a
 breaking change to any of them is a major with a migration note in the
 changelog.
+
+Upgrading to the release that renamed the session cookie signs everybody out
+of an https site once. See [Session hardening](#session-hardening).
+
+Upgrading never deletes a reader's data. The release that added
+[retention](#retention) keeps every commenter email, address hash and contact
+message on a site whose `site.json` has not set a period.
 
 ## The `geekity` command
 
@@ -276,6 +283,7 @@ directory; absolute ones are used as given.
 | `accessLogAddress` | `false`                               | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address on the end of each access-log line. `trustProxy` decides which address that is.                                                                                    |
 | `accessLogWriter`  | stdout                                | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                        |
 | `maintenance`      | `false`                               | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode, answering 503, until a restart without it.                                                                                                             |
+| `securityHeaders`  | [see below](#security-headers)        | —                            | Headers every response carries. A string replaces a default or adds a header, `false` removes one.                                                                                        |
 | `onDocumentChange` | none                                  | —                            | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                              |
 | `onPublish`        | none                                  | —                            | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                            |
 | `federation`       | `{}`                                  | —                            | Federation stores and guards. See [Federation](#federation).                                                                                                                              |
@@ -363,13 +371,14 @@ the same directory reads all of it, and everything in it is meant to be public:
 | `data/notification-digests.json`  | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                         |
 | `data/wordpress-activitypub.json` | When each WordPress compatibility path was last asked for. Losing it resets the answer the switch is watched by.                |
 
-Two things under `data/` may be deleted whenever the site is stopped, and
+Three things under `data/` may be deleted whenever the site is stopped, and
 nothing else in either directory may:
 
-| Path              | What it is                                                                               |
-| ----------------- | ---------------------------------------------------------------------------------------- |
-| `data/geekity.db` | The SQLite cache, with its `-wal` and `-shm`. `geekity rebuild` deletes and rebuilds it. |
-| `data/images/`    | Variants derived from `content/uploads/`, with their `image.json` sidecars. `rm -r` it.  |
+| Path              | What it is                                                                                      |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| `data/geekity.db` | The SQLite cache, with its `-wal` and `-shm`. `geekity rebuild` deletes and rebuilds it.        |
+| `data/images/`    | Variants derived from `content/uploads/`, with their `image.json` sidecars. `rm -r` it.         |
+| `data/avatars/`   | Remote avatars served from `/_geekity/avatars/` (TASK-134). `rm -r` it; they are fetched again. |
 
 The next boot builds the database out of the files with no manual step, and a
 request for a variant that is not there derives it and serves it.
@@ -1381,6 +1390,109 @@ failure than a spam list to glance at. A checker that is down or throwing is no
 opinion, and the message is stored as it would have been before anybody had
 one.
 
+## Personal data
+
+This is every piece of personal data the CMS stores, where it is, and how long
+it stays. "Kept" means until somebody deletes it, unless a retention period
+says otherwise.
+
+| What                                                                                                                 | Where                                                             | How long                                                                       |
+| -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| A commenter's name, website and words                                                                                | `content/_data/comments/{slug}.json`, public and in git           | Kept. Erasing on request replaces the name and drops the website.              |
+| A commenter's email, and whether they asked to be told about replies                                                 | `content/_data/comments/{slug}.json`, **never shown**, but in git | `commentEmailRetentionDays`: forever unless set, 180 on a new site.            |
+| A salted hash of the address a comment, webmention or contact message came from (the address itself is never stored) | The comment file, or the contact message file                     | `addressHashRetentionDays`: forever unless set, 30 on a new site.              |
+| A webmention's author name, website, avatar URL and the source page's words                                          | `content/_data/comments/{slug}.json`                              | Kept, as a copy of a page that is public already.                              |
+| A contact message: the sender's name, email, subject and message                                                     | `data/contact/{id}.json`, mode `0600`                             | `contactMessageRetentionDays`: forever unless set, 365 on a new site.          |
+| The addresses that unsubscribed from reply notices                                                                   | `data/comment-optouts.json`, mode `0600`                          | Kept, so the site goes on not writing to them. Erasing on request removes one. |
+| Followers: actor id, handle, display name, avatar URL, profile URL                                                   | `content/_data/federation/{username}/followers.json`, in git      | Until they unfollow.                                                           |
+| Inbound likes, boosts, replies and quotes, with the actor who sent them                                              | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`, in git        | Kept.                                                                          |
+| What a reply shows of the post it answers: its title, words and author                                               | `content/_data/replyContexts.json`, in git                        | Kept.                                                                          |
+| Remote avatars, shrunk                                                                                               | `data/avatars/`                                                   | Deleted by the avatar sweep once nothing shown names them.                     |
+| Users: username, email, argon2id password hash, profile                                                              | `data/users.json`, mode `0600`                                    | Until the user is deleted.                                                     |
+| An index of all of the above, and sessions, reset tokens and spent link tokens                                       | `data/geekity.db`                                                 | A cache of the files. Sessions and tokens are pruned when they expire.         |
+| Client addresses in the rate limits                                                                                  | Memory                                                            | Until the window passes or the site restarts.                                  |
+| Client addresses in the access log                                                                                   | stdout, and whatever collects it                                  | Only with `accessLogAddress` on. The collector keeps them.                     |
+
+Two services outside the site see personal data when a site turns them on.
+Akismet is sent a commenter's or sender's address, user agent, referrer, name,
+email, website and words. The mail provider is sent every address a message
+goes to.
+
+### The starter privacy page
+
+`geekity init` writes `content/pages/privacy.md`, served at `/privacy/` and
+linked from the footer by a `Privacy | /privacy/` line in `menus.footer`. It
+says in plain language what the table above says, marks the contact form,
+reply emails and Akismet as optional, and quotes the retention periods a new
+site starts with. It is a starting point written from what the software does,
+not legal advice, and a note at its top says so to the owner: review it, add
+whatever the site does beyond the CMS (analytics, a host's logs, a theme that
+loads fonts from elsewhere), change the numbers when a retention period
+changes, and remove the menu line if the page is deleted.
+
+The link is a menu line rather than something the theme prints, because the
+footer prints `menus.footer` and nothing of its own (TASK-105). A site that
+upgrades gets no page and no link; it can copy the file from
+`templates/site/content/pages/privacy.md` in the package.
+
+### Retention
+
+Three settings in `content/_data/site.json`, on **Settings > Discussion**,
+decide how long the site keeps what readers hand it. Each counts whole days from
+when the data arrived, and `0` keeps it forever:
+
+| Setting                       | Recommended | What goes when it runs out                                        |
+| ----------------------------- | ----------- | ----------------------------------------------------------------- |
+| `commentEmailRetentionDays`   | `180`       | The email on a comment, and with it the reply subscription.       |
+| `addressHashRetentionDays`    | `30`        | The address hash on a comment, a webmention or a contact message. |
+| `contactMessageRetentionDays` | `365`       | The whole contact message.                                        |
+
+**A site keeps everything until its owner sets a period.** A `site.json`
+without these keys reads as `0` for all three, so an existing site that
+upgrades loses nothing, and the Discussion screen says "Kept forever" beside
+each one. A new site from `geekity init` starts with the recommended periods
+written into its `site.json`. An existing site opts in by typing them on
+Settings > Discussion and saving once.
+
+They are settings rather than config because how long a site keeps people's
+data is the owner's decision, and a privacy notice quotes it; `site.json` is
+public, which suits a policy. The recommended periods are long enough for a
+reply notice to arrive, a run of spam to be spotted and a year of
+correspondence to be answered, and no longer. The first sweep after a site
+sets a period removes whatever is already past it.
+
+A sweep runs when the site starts serving and every six hours after that, and
+`cms.retention.sweep()` runs one now. It reads the files rather than the index,
+rewrites each comment file and message inside the same lock every other writer
+takes, and puts each changed comment back into the index in the same step. A
+second sweep finds nothing left to remove and writes nothing.
+
+A comment that loses its email keeps its id, its place in the thread, its
+status, its words and its name. It gains `"redacted": ["email"]`, which is how
+the index tells an email removed from one never given: a name whose email was
+removed does not count toward auto-approval, so nobody can type that name and
+skip the queue. Its author is no longer told about replies, and their next
+comment waits for a moderator. A moderation link in an inbox names the comment
+by id, so it goes on working.
+
+The sweep changes the files as they are now. A comment file in git keeps its
+history, so an email committed before it was removed is still in the
+repository's history until that history is rewritten.
+
+### Erasing one person's data
+
+**Tools > Personal data** erases what the site holds for one email address.
+It shows what it found first: how many comments carry the address, how many
+contact messages came from it, and whether it is on the opt-out list. Erasing
+then signs each of those comments `Anonymous`, removes its email, website,
+avatar and address hash, and marks it `"redacted": ["email", "addressHash",
+"author"]`; the comment keeps its place in the thread, its status and its words.
+The contact messages are deleted and the address comes off the opt-out list.
+
+A comment is found by its email, so one whose email the sweep has already
+removed, a webmention and a fediverse reply are not found there. The Comments
+screen deletes those one at a time.
+
 ## Keeping the index in step
 
 Booting scans `contentDir`, indexes every Markdown file under `posts/` and
@@ -1585,7 +1697,7 @@ shadow the login form.
 | `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.          |
 | `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                      |
 | `/admin/login`                                   | Username and password.                                                              |
-| `/admin/logout`                                  | `POST` only. Deletes the session row.                                               |
+| `/admin/logout`                                  | `POST` only. Deletes the session row and sends `Clear-Site-Data`.                   |
 | `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                         |
 
 The screens behind the login share one layout: a bar across the top with the
@@ -1642,11 +1754,13 @@ Passwords are hashed with argon2id through `node:crypto`, so there is no native
 module to build. The cost parameters travel with each hash, which means raising
 them later leaves every password already stored verifiable.
 
-A session id is 256 random bits in a `HttpOnly; SameSite=Lax; Path=/admin`
-cookie, with `Secure` added when `baseUrl` is an `https` URL. It lasts
-`sessionLifetime`; an expired session is deleted rather than merely ignored.
-Every mutating admin form carries a per-session CSRF token, and a `POST`
-without a valid one is refused with 403 — including the login and setup forms,
+A session id is 256 random bits in a `HttpOnly; SameSite=Lax; Path=/` cookie.
+When `baseUrl` is an `https` URL the cookie is `Secure` and named
+`__Host-geekity_session`; over plain http it is `geekity_session`, as
+[Session hardening](#session-hardening) explains. It lasts `sessionLifetime`;
+an expired session is deleted rather than merely ignored. Every mutating admin
+form carries a per-session CSRF token, and a `POST` without a valid one is
+refused with 403 — including the login and setup forms,
 which get the token from a short anonymous session created when the form is
 first rendered. Logging in throws that session away and starts a new one, so a
 planted session id cannot become a logged-in one.
@@ -1716,7 +1830,8 @@ The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `timezone`, `language`, `tagBase`,
 `categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
-`contactEmail`, `relays`, `menus` and `taxonomyRedirects`,
+`contactEmail`, `securityContacts`, `securityPolicy`, `securityLanguages`,
+`relays`, `menus` and `taxonomyRedirects`,
 and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
 type is the default too: a hand-edited `site.json` cannot take the site down.
@@ -1950,6 +2065,49 @@ header; the leftmost entry is then used. With neither available, which is what
 happens when the app is driven in process rather than served, the username is
 the only key.
 
+### Session hardening
+
+Three things protect a signed-in session beyond the cookie flags and the CSRF
+token.
+
+**The cookie is `__Host-geekity_session` under https.** A browser accepts a
+cookie with the `__Host-` prefix only when it is `Secure`, has `Path=/` and
+names no `Domain`. That binds it to the exact host, so a page on a sibling
+subdomain cannot set or overwrite it to plant a session. The prefix needs
+`Secure`, and a browser drops a `Secure` cookie on a plain-http origin, so a
+site whose `baseUrl` is `http://localhost:3000` keeps the name
+`geekity_session` and local development works as before.
+
+**The upgrade signs people out once.** A session made before this change is in
+a cookie named `geekity_session`. Under https that name is never accepted as a
+login again, because accepting it would give a sibling subdomain the way in
+that the prefix closes. The first admin request that carries only the old
+cookie deletes its session, expires the old cookie, and sends the browser to
+the login form with a message that the sign-in cookie was renamed and asks the
+person to sign in again. On the public site the old cookie is ignored, so a
+signed-in commenter sees the stranger's form until they sign in again.
+
+**Fetch Metadata refuses cross-site writes.** A browser sends
+`Sec-Fetch-Site` with every request, and a page cannot change it. Every
+request under `/admin` other than `GET`, `HEAD` and `OPTIONS`, including the
+login and setup forms, is refused with 403 when that header says `cross-site`
+or `same-site`, before the session is read or a handler runs. A comment posted
+by somebody signed in gets the same check. `same-origin` and `none` pass. A
+request with no `Sec-Fetch-Site`, from an older browser or a script, falls back
+to the CSRF token, which every such request still has to carry. Nothing else
+is checked: the ActivityPub inboxes, the WordPress-compatible inbox,
+webmentions, the contact form, a stranger's comment, and the one-click
+moderate and unsubscribe links in an email take cross-site `POST`s by design,
+and they act on no session.
+
+**Logout clears the site's data in the browser.** The logout response sends
+`Clear-Site-Data: "cache", "cookies", "storage"`, so a shared computer does not
+keep admin pages in its cache or anything the site stored. Browsers honour it
+only on a secure origin, which includes `http://localhost`. The `cookies`
+directive clears cookies for the whole registrable domain, so signing out of
+`blog.example.com` also signs the browser out of other sites under
+`example.com`.
+
 ### Forgotten passwords
 
 `/admin/login` carries a **Forgotten your password?** link to `/admin/forgot`,
@@ -1993,12 +2151,67 @@ no restart.
 Every response the CMS sends carries `X-Content-Type-Options: nosniff`, and
 `Strict-Transport-Security: max-age=31536000; includeSubDomains` when `baseUrl`
 is an `https` URL — the same test that decides whether the session cookie is
-`Secure`, so the two cannot disagree. That is all the public site gets: a theme
-is somebody else's HTML and the CMS has no business deciding what it may
-reference.
+`Secure`, so the two cannot disagree. Neither can be turned off.
 
-Every response under `/admin`, static files and redirects included, carries
-three more:
+Every response also carries these, public pages, feeds, uploads, ActivityPub
+JSON, redirects, 404s, the maintenance 503 and the 500 page alike:
+
+| Header                       | Default                                                                                                                                                    |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Referrer-Policy`            | `strict-origin-when-cross-origin`                                                                                                                          |
+| `Content-Security-Policy`    | `frame-ancestors 'self'`                                                                                                                                   |
+| `X-Frame-Options`            | `SAMEORIGIN`                                                                                                                                               |
+| `Permissions-Policy`         | `browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()` |
+| `Cross-Origin-Opener-Policy` | `same-origin`                                                                                                                                              |
+
+None of them limits what a page may load, and that is the line the CMS holds
+on the public site. There is no content policy, no `default-src`, `script-src`
+or `img-src`, because a theme is somebody else's HTML and the CMS has no
+business deciding what it may reference. `frame-ancestors` is the only
+directive in the policy, and it is about who may put the page in a frame, not
+what is in it. Each header does something else:
+
+- `Referrer-Policy` sends only the origin, not the full URL, when a reader
+  follows a link to another site, so the path and query of the page they were
+  on stay on the site.
+- `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN` stop another site
+  from framing a page. That matters most for a signed-in user, whose pages carry
+  a comment form that posts as them, but it covers every page because the CMS
+  cannot tell a framed reader from a framed user.
+- `Permissions-Policy` turns off browser features a blog has no use for. It
+  leaves alone what an embedded video player asks for: autoplay, fullscreen,
+  `encrypted-media`, picture-in-picture, and the motion sensors behind a
+  360-degree video.
+- `Cross-Origin-Opener-Policy: same-origin` keeps a window the site opens, or a
+  window that opens the site, from reaching into it through `window.opener`.
+
+Two of them can get in the way of something a site does on purpose. A site that
+is meant to be framed elsewhere, such as in a portfolio or a slide deck, has to
+name that host in `frame-ancestors` and remove `X-Frame-Options`, which cannot
+name another host. A theme that signs readers in or takes payment through a
+popup on another origin needs `same-origin-allow-popups` for COOP. The CMS
+itself does neither.
+
+A site changes them with `securityHeaders` in its config. Names are matched
+without regard to case. A string replaces a default or adds a header of the
+site's own, and `false` removes a default:
+
+```ts
+export default defineConfig({
+  securityHeaders: {
+    'Content-Security-Policy':
+      "frame-ancestors 'self' https://portfolio.example",
+    'X-Frame-Options': false,
+    'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+  },
+});
+```
+
+A name that is not a header name, or a value that is empty or has a line break
+in it, stops the site at boot. There is no environment variable for these.
+
+Every response under `/admin`, static files and redirects included, gets three
+stricter values in their place, whatever `securityHeaders` says:
 
 | Header                    | Value                                         |
 | ------------------------- | --------------------------------------------- |
@@ -2027,35 +2240,69 @@ uploads. Four directives say more than that:
   sandboxed `srcdoc` iframe, which inherits this policy, and its one ancestor is
   the admin page itself.
 
+### security.txt and change-password
+
+`/.well-known/security.txt` ([RFC 9116](https://www.rfc-editor.org/rfc/rfc9116))
+tells somebody who finds a vulnerability in the site where to report it. It is
+built from three settings on the Email settings page, under Security contact,
+which `content/_data/site.json` holds:
+
+| Setting             | `site.json` key     | Default | What it becomes                                                                                                   |
+| ------------------- | ------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| Contacts            | `securityContacts`  | `[]`    | One `Contact:` line each, in order. An email address, stored as `mailto:…`, an `https://` URL or a `tel:` number. |
+| Disclosure policy   | `securityPolicy`    | `""`    | A `Policy:` line. An `https://` URL, or empty for no line.                                                        |
+| Preferred languages | `securityLanguages` | `""`    | A `Preferred-Languages:` line. Language tags separated by commas, or empty for no line.                           |
+
+With no contact the path is a 404: the RFC requires at least one. The
+`contactEmail` setting is never used in its place, because that address is
+promised never to appear on the public site.
+
+The file is built on every request and served as `text/plain; charset=utf-8`.
+`Expires` is 30 days after the request, so it never goes stale however long the
+site runs, and `Canonical` is the path under the base URL in effect. There is no
+config-file key or environment variable for any of these: like `contactEmail`,
+they are site settings a person edits on the settings screen.
+
+`/.well-known/change-password` is where a password manager sends somebody who
+wants to change a saved password. It redirects with a `302` and
+`Cache-Control: no-store`: to `/admin/users/{id}#change-password`, the form on
+the signed-in user's own page, or to the login form when nobody is signed in.
+
+Both paths answer as usual in maintenance mode. A researcher may need the
+security contact most while the site is down, and change-password only points
+into the admin, which maintenance mode leaves open.
+
 ## The public site
 
 Booting mounts the public site on the app. The routes are:
 
-| Route                                   | What it serves                                                                                      |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `/`                                     | Published posts, newest first.                                                                      |
-| `/page/2/` and up                       | Later pages of the same archive.                                                                    |
-| a document's permalink                  | The post or the page, through the theme.                                                            |
-| `/tag/{tag}/`                           | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`.                          |
-| `/category/{name}/`                     | The second taxonomy, paginated the same way.                                                        |
-| `/author/{username}/`                   | One user's published posts, headed by their profile, paginated the same way.                        |
-| `/feed/`, `/feed/atom/`, `/feed/json/`  | The recent posts as RSS 2.0, Atom and JSON Feed.                                                    |
-| `/tag/{tag}/feed/` and its two siblings | The same, for one tag; `/category/{name}/feed/` likewise.                                           |
-| `/author/{username}/feed/` and siblings | The same, for one person.                                                                           |
-| `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                                                    |
-| `{permalink}feed/`                      | One post's replies, the same way.                                                                   |
-| `/sitemap.xml`                          | Every public URL, for a search engine.                                                              |
-| `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                   |
-| `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                  |
-| `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                           |
-| `/_geekity/contact`                     | `POST` only. Where the contact form on a page submits.                                              |
-| `/_geekity/webmention`                  | `POST` only. Where a webmention is sent; advertised on every document.                              |
-| `/_geekity/moderate`                    | Where an approve, spam or delete link from a notification lands. `GET` shows a button; `POST` acts. |
-| `/_geekity/unsubscribe`                 | Where the unsubscribe link in a reply notice lands. Same two steps.                                 |
-| `/theme/…`                              | The theme's own files, from its `static/` directory.                                                |
-| `/uploads/…`                            | A file from `content/uploads/`, byte for byte as it was stored.                                     |
-| `/uploads/_/…`                          | One derived copy of an uploaded image, generated on the spot if missing.                            |
-| anything else                           | The theme's 404.                                                                                    |
+| Route                                   | What it serves                                                                                                         |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `/`                                     | Published posts, newest first.                                                                                         |
+| `/page/2/` and up                       | Later pages of the same archive.                                                                                       |
+| a document's permalink                  | The post or the page, through the theme.                                                                               |
+| `/tag/{tag}/`                           | Everything published carrying that tag, paginated at `/tag/{tag}/page/2/`.                                             |
+| `/category/{name}/`                     | The second taxonomy, paginated the same way.                                                                           |
+| `/author/{username}/`                   | One user's published posts, headed by their profile, paginated the same way.                                           |
+| `/feed/`, `/feed/atom/`, `/feed/json/`  | The recent posts as RSS 2.0, Atom and JSON Feed.                                                                       |
+| `/tag/{tag}/feed/` and its two siblings | The same, for one tag; `/category/{name}/feed/` likewise.                                                              |
+| `/author/{username}/feed/` and siblings | The same, for one person.                                                                                              |
+| `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                                                                       |
+| `{permalink}feed/`                      | One post's replies, the same way.                                                                                      |
+| `/sitemap.xml`                          | Every public URL, for a search engine.                                                                                 |
+| `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                                      |
+| `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                                     |
+| `/.well-known/security.txt`             | Where to report a vulnerability; a 404 until a security contact is set. See [above](#securitytxt-and-change-password). |
+| `/.well-known/change-password`          | A redirect to the signed-in user's change-password form, or to the login form.                                         |
+| `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                                              |
+| `/_geekity/contact`                     | `POST` only. Where the contact form on a page submits.                                                                 |
+| `/_geekity/webmention`                  | `POST` only. Where a webmention is sent; advertised on every document.                                                 |
+| `/_geekity/moderate`                    | Where an approve, spam or delete link from a notification lands. `GET` shows a button; `POST` acts.                    |
+| `/_geekity/unsubscribe`                 | Where the unsubscribe link in a reply notice lands. Same two steps.                                                    |
+| `/theme/…`                              | The theme's own files, from its `static/` directory.                                                                   |
+| `/uploads/…`                            | A file from `content/uploads/`, byte for byte as it was stored.                                                        |
+| `/uploads/_/…`                          | One derived copy of an uploaded image, generated on the spot if missing.                                               |
+| anything else                           | The theme's 404.                                                                                                       |
 
 The federation routes go on before it, and answer only their own paths:
 

@@ -423,6 +423,18 @@ export const COMMENT_STATUSES = ['pending', 'approved', 'spam'] as const;
  */
 export type CommentStatus = (typeof COMMENT_STATUSES)[number];
 
+/** What a comment can have had removed from it for privacy (TASK-135). */
+export const REDACTED_FIELDS = ['email', 'addressHash', 'author'] as const;
+
+/**
+ * One of {@link REDACTED_FIELDS}.
+ *
+ * `email` and `addressHash` are what the retention sweep removes once they
+ * have outlived the site's periods. `author` is an erasure on request: the
+ * name, website, picture and email all went at once.
+ */
+export type RedactedField = (typeof REDACTED_FIELDS)[number];
+
 /** Who wrote a comment, as much as the site knows. */
 export interface CommentAuthor {
   /** The name they gave, which is what the page shows. */
@@ -508,6 +520,17 @@ export interface CommentRecord {
    * unsubscribe link that needs no login.
    */
   notify: boolean;
+  /**
+   * What was removed from it for privacy, in the order {@link REDACTED_FIELDS}
+   * lists them, when anything was (TASK-135). Absent rather than empty otherwise, so the files of a site
+   * that has never swept stay byte for byte what they were.
+   *
+   * It is what tells an email that was taken away from one that was never
+   * given: an author whose email was removed must not match the auto-approval
+   * rule the way an author who gave none does, or anybody typing their name
+   * would walk past the queue.
+   */
+  redacted?: readonly RedactedField[];
 }
 
 /**
@@ -670,6 +693,15 @@ export interface AdminStore {
   listFollowers(username?: string, options?: ListPageOptions): Follower[];
   /** One user's follower by actor id, or `undefined`. */
   getFollower(username: string, actorId: string): Follower | undefined;
+  /**
+   * Whether a URL is an avatar a reader of this site can be shown: the picture
+   * of a follower who has done something to a post, or of the author of an
+   * approved comment or webmention. The avatar proxy fetches nothing else
+   * (TASK-134), so it cannot be pointed at an arbitrary URL.
+   */
+  isAvatarSource(url: string): boolean;
+  /** Every URL {@link AdminStore.isAvatarSource} answers yes for, each once. */
+  listAvatarSources(): string[];
   /**
    * Store a follower, replacing whatever was known about that actor. The
    * original `followedAt` is kept, because a repeat `Follow` from an actor
@@ -899,6 +931,20 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       LIMIT ?2 OFFSET ?3
     `),
     followerById: db.prepare('SELECT * FROM followers WHERE username = ? AND actor_id = ?'),
+    isAvatarSource: db.prepare(`
+      SELECT 1 FROM followers
+      WHERE icon_url = ?1 AND actor_id IN (SELECT actor_id FROM ap_inbox)
+      UNION ALL
+      SELECT 1 FROM comments WHERE author_avatar = ?1 AND status = 'approved'
+      LIMIT 1
+    `),
+    listAvatarSources: db.prepare(`
+      SELECT icon_url AS url FROM followers
+      WHERE icon_url IS NOT NULL AND actor_id IN (SELECT actor_id FROM ap_inbox)
+      UNION
+      SELECT author_avatar AS url FROM comments
+      WHERE author_avatar IS NOT NULL AND status = 'approved'
+    `),
     putFollower: db.prepare(`
       INSERT INTO followers (
         username, actor_id, inbox_id, shared_inbox_id, handle, name, icon_url, url, followed_at
@@ -962,14 +1008,16 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     hasApprovedAuthor: db.prepare(`
       SELECT 1 FROM comments
       WHERE status = 'approved' AND author_name = ? AND author_email IS ?
+        AND NOT EXISTS (SELECT 1 FROM json_each(comments.redacted) WHERE value = 'email')
       LIMIT 1
     `),
     putComment: db.prepare(`
       INSERT INTO comments (
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
-        markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify,
+        redacted
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -986,7 +1034,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         in_reply_to = excluded.in_reply_to,
         url = excluded.url,
         author_avatar = excluded.author_avatar,
-        notify = excluded.notify
+        notify = excluded.notify,
+        redacted = excluded.redacted
     `),
     deleteComment: db.prepare('DELETE FROM comments WHERE id = ?'),
     clearComments: db.prepare('DELETE FROM comments'),
@@ -1224,6 +1273,16 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return row === undefined ? undefined : toFollower(row);
     },
 
+    isAvatarSource(url) {
+      return statements.isAvatarSource.get(url) !== undefined;
+    },
+
+    listAvatarSources() {
+      return (statements.listAvatarSources.all() as Record<string, unknown>[]).map((row) =>
+        String(row['url']),
+      );
+    },
+
     putFollower(follower) {
       statements.putFollower.run(
         follower.username,
@@ -1435,6 +1494,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         comment.url,
         comment.author.avatar,
         comment.notify ? 1 : 0,
+        redactedColumn(comment.redacted),
       );
       return comment;
     },
@@ -1465,6 +1525,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             comment.url,
             comment.author.avatar,
             comment.notify ? 1 : 0,
+            redactedColumn(comment.redacted),
           );
         }
       });
@@ -1780,7 +1841,28 @@ function toComment(row: Record<string, unknown>): PostComment {
     inReplyTo: nullableText(row['in_reply_to']),
     url: nullableText(row['url']),
     notify: Number(row['notify'] ?? 0) === 1,
+    ...redactedOf(row['redacted']),
   };
+}
+
+/** A comment's {@link CommentRecord.redacted} as its column holds it: JSON, or `NULL`. */
+function redactedColumn(redacted: readonly RedactedField[] | undefined): string | null {
+  return redacted === undefined || redacted.length === 0 ? null : JSON.stringify(redacted);
+}
+
+/** The column read back, as the key a record carries only when something was removed. */
+function redactedOf(value: unknown): { redacted?: readonly RedactedField[] } {
+  if (typeof value !== 'string') return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return {};
+  }
+  const fields = Array.isArray(parsed)
+    ? REDACTED_FIELDS.filter((field) => parsed.includes(field))
+    : [];
+  return fields.length === 0 ? {} : { redacted: fields };
 }
 
 /**
@@ -2422,5 +2504,22 @@ const MIGRATIONS: readonly Migration[] = [
 
       CREATE INDEX ap_inbox_recipient ON ap_inbox (recipient);
     `,
+  },
+  {
+    // The avatar proxy asks, per request for a picture, whether its URL is one
+    // the site has recorded (TASK-134). Both columns are indexed so that
+    // question is a lookup rather than a scan of every follower and comment.
+    version: 19,
+    sql: `
+      CREATE INDEX followers_icon_url ON followers (icon_url);
+      CREATE INDEX comments_author_avatar ON comments (author_avatar);
+    `,
+  },
+  {
+    // What a comment has had removed for privacy (TASK-135), as the JSON list
+    // its file carries. Nothing backfills it: the rebuild on the next boot
+    // does, and a comment nothing was removed from leaves it `NULL`.
+    version: 20,
+    sql: `ALTER TABLE comments ADD COLUMN redacted TEXT;`,
   },
 ];

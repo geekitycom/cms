@@ -3,6 +3,10 @@ import { serve as serveNode } from '@hono/node-server';
 import { Hono } from 'hono';
 
 import { createAccessLog } from './access-log.ts';
+import { createAvatarService } from './avatars/index.ts';
+import type { AvatarService } from './avatars/index.ts';
+import { createRetentionService } from './privacy/retention.ts';
+import type { RetentionService } from './privacy/retention.ts';
 import {
   baselineSecurityHeaders,
   effectiveBaseUrl,
@@ -56,6 +60,7 @@ import {
   maintenanceGate,
   mountHealth,
   mountPublicSite,
+  mountWellKnown,
   recentPosts,
   redirectBy,
   serverError,
@@ -249,7 +254,9 @@ export {
   refusedUpload,
   refuseOversizedUpload,
   returnPath,
+  SECURE_SESSION_COOKIE,
   SESSION_COOKIE,
+  sessionCookieName,
   SESSION_ID_BYTES,
   sessionIdFrom,
   setSessionCookie,
@@ -393,6 +400,7 @@ export {
 export {
   DEFAULT_IMAGE_FORMATS,
   DEFAULT_IMAGE_WIDTHS,
+  DEFAULT_SECURITY_HEADERS,
   DEFAULT_UPLOAD_MAX_BYTES,
   DEFAULT_UPLOAD_TYPES,
   defineConfig,
@@ -1233,6 +1241,27 @@ export type {
   WebmentionLogger,
   WebmentionReport,
 } from './webmention/index.ts';
+export {
+  AVATAR_PATH_PREFIX,
+  AVATAR_SIZE,
+  avatarHref,
+  avatarSourceOf,
+  createAvatarService,
+  mountAvatars,
+} from './avatars/index.ts';
+export type { AvatarAnswer, AvatarService, CreateAvatarServiceOptions } from './avatars/index.ts';
+export {
+  RECOMMENDED_ADDRESS_HASH_RETENTION_DAYS,
+  RECOMMENDED_COMMENT_EMAIL_RETENTION_DAYS,
+  RECOMMENDED_CONTACT_MESSAGE_RETENTION_DAYS,
+} from './privacy/policy.ts';
+export type { RetentionPolicy } from './privacy/policy.ts';
+export { createRetentionService, RETENTION_SWEEP_MS } from './privacy/retention.ts';
+export type {
+  CreateRetentionServiceOptions,
+  RetentionReport,
+  RetentionService,
+} from './privacy/retention.ts';
 
 /**
  * Where the scheduler's watermark lives in {@link AdminStore.getState}: the
@@ -1299,6 +1328,19 @@ export interface Cms {
    * or a test reaches for it to wait for the fetches in flight.
    */
   readonly replyContexts: ReplyContextService;
+  /**
+   * The remote avatars a conversation shows, cached under `data/avatars/` and
+   * served from `/_geekity/avatars/` (TASK-134). Swept on a timer once the site
+   * serves; a site or a test reaches for it to sweep now or to wait.
+   */
+  readonly avatars: AvatarService;
+  /**
+   * The sweep that removes commenter emails, address hashes and contact
+   * messages once they outlive the periods in the site's settings (TASK-135).
+   * Runs on a timer once the site serves; a site or a test reaches for it to
+   * sweep now or to wait.
+   */
+  readonly retention: RetentionService;
   /**
    * The site's rssCloud and WebSub client: what tells the notify server named
    * in the settings that a feed changed, so a subscriber hears at once rather
@@ -1563,6 +1605,14 @@ export function createCms(config: GeekityConfig = {}): Cms {
     lookup: resolved.hostLookup,
   });
 
+  // The faces in a conversation, fetched here and served from here so a
+  // reader's address never reaches the servers they live on (TASK-134).
+  const avatars = createAvatarService({ admin, config: resolved });
+
+  // What keeps a site from holding its readers' personal data for longer than
+  // its settings say (TASK-135).
+  const retention = createRetentionService({ admin, config: resolved });
+
   const renderer = createRenderer({
     config: resolved,
     themes,
@@ -1745,6 +1795,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('config', resolved);
     c.set('renderer', renderer);
     c.set('conversation', conversation);
+    c.set('avatars', avatars);
     c.set('announce', (change) => content.announce(change));
     c.set('rescan', () => content.sync());
     c.set('delivery', delivery);
@@ -1757,9 +1808,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
     await next();
   });
 
-  // Two headers on everything the CMS answers, admin and public alike. The
-  // admin adds a policy of its own on top; the public site does not, so a
-  // theme is free to reference whatever it likes.
+  // The baseline on everything the CMS answers, admin and public alike, and
+  // outside everything below so redirects, the 503, 404s and the onError 500
+  // carry it too. The admin sets stricter values of its own inside it; none of
+  // it restricts what a theme may reference.
   app.use('*', baselineSecurityHeaders);
 
   // And one on every redirect, whichever part of the CMS sent it.
@@ -1776,6 +1828,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // (TASK-87). It goes on before federation, the admin and the public site,
   // so no permalink can ever shadow it.
   mountHealth(app);
+
+  // The two well-known files a site answers for itself (TASK-133), before the
+  // public site can claim either path as a permalink.
+  mountWellKnown(app);
 
   // Federation goes on first. It answers its own paths and falls through on
   // every other, so putting it in front costs the rest of the app nothing and
@@ -1823,6 +1879,8 @@ export function createCms(config: GeekityConfig = {}): Cms {
     relays,
     webmentions,
     replyContexts,
+    avatars,
+    retention,
     notifier,
     mail,
     notifications,
@@ -1863,6 +1921,15 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // fetched now, in the background, for the same reason (TASK-123).
       replyContexts.catchUp();
 
+      // And the avatars the conversations show are fetched or refreshed in the
+      // background now and on a timer from here on, so a reader almost never
+      // waits on a stranger's server for one (TASK-134).
+      avatars.start();
+
+      // And whatever personal data has outlived its period is removed now and
+      // every few hours from here on (TASK-135).
+      retention.start();
+
       // The digests tick from here on. Nothing is caught up first: a digest is
       // whatever is pending when a window comes up, so a site that was down
       // over one simply sends the next one, with everything still waiting in it.
@@ -1880,6 +1947,8 @@ export function createCms(config: GeekityConfig = {}): Cms {
       server = undefined;
       scheduler.stop();
       digests.stop();
+      avatars.stop();
+      retention.stop();
       await content.stop();
       await scheduler.settled();
       await digests.settled();
@@ -1889,6 +1958,8 @@ export function createCms(config: GeekityConfig = {}): Cms {
       await relays.settled();
       await webmentions.settled();
       await replyContexts.settled();
+      await avatars.settled();
+      await retention.settled();
       await notifier.settled();
       await mail.settled();
 

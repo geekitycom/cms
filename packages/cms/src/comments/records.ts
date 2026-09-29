@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 
-import { COMMENT_KINDS, COMMENT_SOURCES, COMMENT_STATUSES } from '../admin/store.ts';
+import {
+  COMMENT_KINDS,
+  COMMENT_SOURCES,
+  COMMENT_STATUSES,
+  REDACTED_FIELDS,
+} from '../admin/store.ts';
 import type { AdminStore, CommentRecord, CommentStatus, PostComment } from '../admin/store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { hashClientAddress } from '../forms/protection.ts';
@@ -175,7 +180,15 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     // written before TASK-55 shipped, or edited by hand, has nobody waiting on
     // it, and defaulting the other way would email people who never opted in.
     notify: value['notify'] === true,
+    ...redactedIn(value['redacted']),
   };
+}
+
+/** An entry's `redacted` list, kept only when it names something this version knows. */
+function redactedIn(value: unknown): Pick<CommentRecord, 'redacted'> {
+  if (!Array.isArray(value)) return {};
+  const fields = REDACTED_FIELDS.filter((field) => value.includes(field));
+  return fields.length === 0 ? {} : { redacted: fields };
 }
 
 /**
@@ -532,6 +545,51 @@ export async function deleteComment(records: CommentRecords, id: string): Promis
   });
 }
 
+/**
+ * Rewrite one post's comments in place: `change` is shown each entry as the
+ * file holds it and answers with the entry it should become, or `undefined`
+ * to leave it alone.
+ *
+ * What the retention sweep and an erasure on request are built on (TASK-135).
+ * The read, the change and the write happen inside the file's lock, so a
+ * comment arriving or a moderator approving one in the same moment is never
+ * written over, and the file is only written when something changed, so a
+ * sweep that has nothing to do leaves it untouched. The ids of the entries
+ * that changed come back, each already put into the index.
+ */
+export async function rewriteComments(
+  records: CommentRecords,
+  slug: string,
+  change: (comment: CommentRecord) => CommentRecord | undefined,
+): Promise<string[]> {
+  const { admin, contentDir } = records;
+  const file = commentsFile(contentDir, slug);
+
+  return await withFileLock(file, () => {
+    const source = readFileIfPresentSync(file);
+    if (source === undefined) return [];
+
+    const held = fileContents(source);
+    const changed: PostComment[] = [];
+    const next = held.comments.map((entry) => {
+      const moved = change(entry);
+      if (moved === undefined) return entry;
+      changed.push({ ...moved, slug, permalink: held.post });
+      return moved;
+    });
+    if (changed.length === 0) return [];
+
+    writeFileAtomicallySync(file, commentsJson(held.post, next.map(entryOf)));
+    for (const comment of changed) admin.putComment(comment);
+    return changed.map((comment) => comment.id);
+  });
+}
+
+/** The slug of every post that has a comment file, in a stable order. */
+export function commentSlugs(contentDir: string): string[] {
+  return commentFiles(contentDir).map((file) => path.basename(file, '.json'));
+}
+
 /** What a rebuild put in the index. */
 export interface CommentIndexReport {
   /** How many comments the files held. */
@@ -606,11 +664,12 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     inReplyTo: comment.inReplyTo,
     url: comment.url,
     notify: comment.notify,
+    ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
   };
 }
 
 /** A row as the file spells it: the post it is on is the file's, not the entry's. */
-function entryOf(comment: PostComment): CommentRecord {
+function entryOf(comment: CommentRecord): CommentRecord {
   return {
     id: comment.id,
     source: comment.source,
@@ -623,6 +682,7 @@ function entryOf(comment: PostComment): CommentRecord {
     inReplyTo: comment.inReplyTo,
     url: comment.url,
     notify: comment.notify,
+    ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
   };
 }
 

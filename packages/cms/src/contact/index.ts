@@ -40,6 +40,7 @@ export {
   listContactMessages,
   readContactMessage,
   setContactMessageRead,
+  updateContactMessage,
 } from './records.ts';
 export type { ContactMessage, ContactStatus, NewContactMessage } from './records.ts';
 

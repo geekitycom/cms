@@ -64,7 +64,16 @@ export const EMAIL_SETTINGS: SettingsPage = {
   label: 'Email',
   path: settingsPagePath('email'),
   template: ADMIN_TEMPLATES.settingsEmail,
-  fields: ['mailProvider', 'mailFromName', 'mailFromAddress', 'mailReplyTo', 'contactEmail'],
+  fields: [
+    'mailProvider',
+    'mailFromName',
+    'mailFromAddress',
+    'mailReplyTo',
+    'contactEmail',
+    'securityContacts',
+    'securityPolicy',
+    'securityLanguages',
+  ],
 
   panels: (c, settings) => mailPanel(c.var.config.dataDir, settings),
 

@@ -213,7 +213,7 @@
      Resetting a colleague's password from under them is deliberately not
      offered — a fresh account is what that is for. #}
   {% if account.you %}
-    <form class="admin-settings" method="post" action="{{ changePasswordUrl }}">
+    <form class="admin-settings" id="change-password" method="post" action="{{ changePasswordUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
 
       <h2>Change your password</h2>

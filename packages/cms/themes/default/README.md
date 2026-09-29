@@ -1100,22 +1100,22 @@ the thread, because it is not an answer.
 
 Each entry — a reply, a like or a boost — is:
 
-| Key              | What it holds                                                                                                                                                                                   |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`             | What it is called: a reply's own note id, which is what an answer to it names.                                                                                                                  |
-| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here.                                                                      |
-| `kind`           | `"reply"`, `"like"`, `"boost"`, `"repost"` or `"mention"`. A `repost` comes from a webmention; a `mention` is a webmention or an approved fediverse quote.                                      |
-| `author.name`    | The best name available: their display name, else their handle, else their id. For a webmention, the source's `h-card` name, else its host.                                                     |
-| `author.handle`  | `@user@host`, or `null`. Taken from the follower profile the site holds, else guessed from the actor URL. `null` for a native comment.                                                          |
-| `author.url`     | Their profile page, the website a commenter typed, or a webmention author's `u-url`. May be `null`, so guard the link.                                                                          |
-| `author.avatar`  | Their avatar, or `null`. The site knows one for an actor that follows it and for a webmention whose `h-card` carried a `u-photo`.                                                               |
-| `author.actorId` | Their id, which is what identifies them however they are named. `null` for a native comment.                                                                                                    |
-| `url`            | Where it can be read: the remote note's `url` for a fediverse reply or quote, the source page for a webmention, and `{permalink}#comment-{id}` — this page's own anchor — for a native comment. |
-| `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.                                                                                                   |
-| `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                                                                   |
-| `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                                    |
-| `status`         | `"published"`. On the record for the sources that moderate.                                                                                                                                     |
-| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                                                                                                                     |
+| Key              | What it holds                                                                                                                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`             | What it is called: a reply's own note id, which is what an answer to it names.                                                                                                                                                    |
+| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here.                                                                                                        |
+| `kind`           | `"reply"`, `"like"`, `"boost"`, `"repost"` or `"mention"`. A `repost` comes from a webmention; a `mention` is a webmention or an approved fediverse quote.                                                                        |
+| `author.name`    | The best name available: their display name, else their handle, else their id. For a webmention, the source's `h-card` name, else its host.                                                                                       |
+| `author.handle`  | `@user@host`, or `null`. Taken from the follower profile the site holds, else guessed from the actor URL. `null` for a native comment.                                                                                            |
+| `author.url`     | Their profile page, the website a commenter typed, or a webmention author's `u-url`. May be `null`, so guard the link.                                                                                                            |
+| `author.avatar`  | Their avatar, or `null`. The site knows one for an actor that follows it and for a webmention whose `h-card` carried a `u-photo`. Always a same-origin `/_geekity/avatars/…` path, never the remote URL: see [Avatars](#avatars). |
+| `author.actorId` | Their id, which is what identifies them however they are named. `null` for a native comment.                                                                                                                                      |
+| `url`            | Where it can be read: the remote note's `url` for a fediverse reply or quote, the source page for a webmention, and `{permalink}#comment-{id}` — this page's own anchor — for a native comment.                                   |
+| `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.                                                                                                                                     |
+| `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                                                                                                     |
+| `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                                                                      |
+| `status`         | `"published"`. On the record for the sources that moderate.                                                                                                                                                                       |
+| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                                                                                                                                                       |
 
 Three rules decide what is in the thread, and they are the CMS's rather than a
 theme's: a reply whose author deleted it is gone, and its own answers move up to
@@ -1171,6 +1171,24 @@ An Eleventy build of the same content gets the same thing from the same files:
 and then loops over exactly the keys above. The slug is what names the post's
 comment file under `content/_data/comments/`; the format is documented in
 backlog doc-6.
+
+### Avatars
+
+A reader's browser never fetches a face from the server it lives on. The
+`author.avatar` a theme is handed is a path on this site, under
+`/_geekity/avatars/`, and the CMS fetches the picture, crops it to an
+80-pixel square WebP (twice the 40 pixels this theme shows a commenter at)
+and keeps it under `data/avatars/`. Print it as it is; it needs no filter.
+
+The route serves only the pictures the site shows: a follower who has
+liked, boosted, quoted or answered a post, and the author of an approved
+comment or webmention. Any other URL is a 404, and nothing is fetched for it.
+Pictures are fetched in the background when the site starts and every six
+hours after, refreshed once they are a week old, and forgotten once nothing
+shows them. A picture that cannot be fetched, is over 2 MB, or is not a JPEG,
+PNG, GIF, WebP or AVIF is served as a grey placeholder, and tried again an
+hour later. `data/avatars/` is a cache: delete it and every picture is fetched
+again.
 
 ## The comment form
 

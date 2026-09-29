@@ -25,6 +25,7 @@ import { sandbox } from '../admin/__testing__/harness.ts';
 import { COMMENT_FIELDS } from '../comments/submission.ts';
 import { CONTACT_FIELDS } from '../contact/form.ts';
 import type { Cms } from '../index.ts';
+import { avatarHref } from '../avatars/avatars.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -331,9 +332,11 @@ describe('the reactions under a post (AC #1)', () => {
 
     assert.match(likes, /<div class="facepile">/, 'the likers are not a facepile');
     // The follower the site knows: a link to their profile around their photo.
-    assert.match(
-      likes,
-      /<a class="u-url" href="https:\/\/remote\.example\/@ada"[^>]*>\s*<img class="avatar u-photo" src="https:\/\/remote\.example\/avatars\/ada\.png" alt="Ada Lovelace" width="32" height="32" loading="lazy">/,
+    const src = avatarHref('https://remote.example/avatars/ada.png');
+    assert.ok(
+      likes.includes(
+        `<a class="u-url" href="https://remote.example/@ada" title="Ada Lovelace" rel="nofollow noopener noreferrer"><img class="avatar u-photo" src="${src}" alt="Ada Lovelace" width="32" height="32" loading="lazy">`,
+      ),
       `the known liker is not a linked round avatar: ${likes}`,
     );
     // The stranger: the emoji badge and the only name there is for them.

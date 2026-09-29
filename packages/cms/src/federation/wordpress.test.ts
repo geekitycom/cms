@@ -191,6 +191,8 @@ interface DeliverOptions {
   key?: CryptoKey;
   /** Skip the signature altogether. */
   unsigned?: boolean;
+  /** Headers besides the content type, such as Fetch Metadata. */
+  headers?: Record<string, string>;
 }
 
 /** Deliver one activity, signed as a real peer would sign it. */
@@ -201,7 +203,7 @@ async function deliver(
 ): Promise<Response> {
   const request = new Request(options.inbox ?? WP_INBOX, {
     method: 'POST',
-    headers: { 'content-type': 'application/activity+json' },
+    headers: { ...options.headers, 'content-type': 'application/activity+json' },
     body: JSON.stringify(await activity.toJsonLd()),
   });
   const sent =
@@ -270,6 +272,18 @@ describe('with the switch on (AC #2)', () => {
 
     assert.equal(response.status, 202, await response.text());
     assert.equal(instance.admin.getFollower(LOCAL_USER, REMOTE_ACTOR)?.inboxId, REMOTE_INBOX);
+  });
+
+  it('accepts one at either inbox whatever Fetch Metadata it carries (TASK-132)', async () => {
+    const crossSite = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'cors' };
+
+    for (const inbox of [WP_INBOX, WP_SHARED_INBOX]) {
+      const instance = await site({ wordpressActivityPub: true });
+      const response = await deliver(instance, follow(), { inbox, headers: crossSite });
+
+      assert.equal(response.status, 202, await response.text());
+      assert.equal(instance.admin.countFollowers(LOCAL_USER), 1, inbox);
+    }
   });
 
   it('refuses an unsigned or badly signed one', async () => {

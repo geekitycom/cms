@@ -1,3 +1,4 @@
+import { avatarHref } from '../avatars/avatars.ts';
 import type { AdminStore, Follower, InboxActivity, PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
@@ -74,7 +75,10 @@ export interface InteractionAuthor {
   readonly handle: string | null;
   /** Their profile page, for a reader following the link. */
   readonly url: string | null;
-  /** Their avatar, when the site knows one. */
+  /**
+   * Their avatar, when the site knows one: always a same-origin path, never
+   * the remote URL, so a reader's browser asks this site for it (TASK-134).
+   */
   readonly avatar: string | null;
   /** Their id, which is what identifies them however they are named. */
   readonly actorId: string | null;
@@ -501,7 +505,7 @@ function interactionOf(comment: PostComment, permalink: string): Interaction {
       url: comment.author.url,
       // Only a webmention has one: it came out of the source page's `h-card`,
       // and a form asks nobody for a picture.
-      avatar: comment.author.avatar,
+      avatar: comment.author.avatar === null ? null : avatarHref(comment.author.avatar),
       actorId: null,
     },
     // Where it can be read. A comment written here lives here, at its own
@@ -817,11 +821,12 @@ function authorNaming(admin: AdminStore): (actorId: string) => InteractionAuthor
     profiles ??= new Map(admin.listFollowers().map((entry) => [entry.actorId, entry]));
     const follower = profiles.get(actorId);
     const handle = follower?.handle ?? actorHandle(actorId) ?? null;
+    const icon = follower?.iconUrl ?? null;
     const author: InteractionAuthor = {
       name: follower?.name ?? handle ?? actorId,
       handle,
       url: follower?.url ?? actorId,
-      avatar: follower?.iconUrl ?? null,
+      avatar: icon === null ? null : avatarHref(icon),
       actorId,
     };
     known.set(actorId, author);

@@ -60,6 +60,9 @@
             {% if row.address %}
               &middot; <code title="A salted hash of the address it came from">{{ row.address }}</code>
             {% endif %}
+            {% if row.removed %}
+              &middot; {{ row.removed }}
+            {% endif %}
           </p>
 
           <div class="admin-comment-body">{{ row.html | safe }}</div>

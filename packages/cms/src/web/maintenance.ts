@@ -7,6 +7,7 @@ import { THEME_ASSET_PREFIX } from './assets.ts';
 import { representationOf } from './errors.ts';
 import { HEALTH_PATH } from './health.ts';
 import { requestPath } from './routes.ts';
+import { CHANGE_PASSWORD_WELL_KNOWN_PATH, SECURITY_TXT_PATH } from './well-known.ts';
 
 /**
  * What a client is told to wait when the operator named no return time: long
@@ -53,13 +54,17 @@ const JSON_BODY = `${JSON.stringify(
 /**
  * Paths that answer as usual during maintenance: the health checks, so an
  * orchestrator can tell a site that is down on purpose from a broken one; the
- * admin, login page included, so an admin can sign in and work; and the
- * theme's files, so the maintenance page is drawn in the site's own style.
+ * admin, login page included, so an admin can sign in and work; the
+ * theme's files, so the maintenance page is drawn in the site's own style;
+ * security.txt, since an outage is when a researcher may most need to reach
+ * somebody; and change-password, which only points into the admin.
  */
 function isExempt(pathname: string): boolean {
   return (
     pathname === HEALTH_PATH ||
     pathname === '/_geekity/health' ||
+    pathname === SECURITY_TXT_PATH ||
+    pathname === CHANGE_PASSWORD_WELL_KNOWN_PATH ||
     pathname === ADMIN_PREFIX ||
     pathname.startsWith(`${ADMIN_PREFIX}/`) ||
     pathname.startsWith(THEME_ASSET_PREFIX)

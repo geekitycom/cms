@@ -26,6 +26,7 @@ import { NAVIGATION_PATH } from './navigation.ts';
 import { settingsPagePath } from './settings-page.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { CATEGORY_KIND, TAG_KIND } from './taxonomy.ts';
+import { PERSONAL_DATA_CHILD, PERSONAL_DATA_PATH } from './personal-data.ts';
 import { TOOLS_PATH } from './tools.ts';
 import { ADD_USER_PATH, USERS_PATH } from './users.ts';
 
@@ -120,7 +121,10 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   // something you type and save; this is a job you run, so it is not a
   // seventh settings page — the children of Settings are the settings pages,
   // and nothing else belongs in that list.
-  section('tools', 'Tools', [{ child: 'index', label: 'Content index', url: TOOLS_PATH }]),
+  section('tools', 'Tools', [
+    { child: 'index', label: 'Content index', url: TOOLS_PATH },
+    { child: PERSONAL_DATA_CHILD, label: 'Personal data', url: PERSONAL_DATA_PATH },
+  ]),
   // WordPress's own pages, in its own order. General is first because the
   // heading lands on the first child and General is `/admin/settings` itself.
   // Federation's settings are not here: they are a child of the Federation

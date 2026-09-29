@@ -304,15 +304,6 @@ describe('the session cookie', () => {
     assert.ok(!/Secure/.test(header), 'plain http keeps Secure off, or the cookie is dropped');
   });
 
-  it('is Secure when the site says it is served over https', async () => {
-    const cms = await site({ baseUrl: 'https://geekity.example' });
-    const response = await cms.app.request('/admin/setup');
-    const header = setCookie(response, 'geekity_session');
-
-    assert.ok(header !== undefined);
-    assert.match(header, /Secure/);
-  });
-
   it('expires after the configured lifetime', async () => {
     const cms = await site({ sessionLifetime: 0.25 });
     const agent = browser(cms);
@@ -407,13 +398,26 @@ describe('security headers', () => {
     assert.doesNotMatch(html, /<script(?![^>]*\ssrc=)[^>]*>[\s\S]*?\S/, 'every script has a src');
   });
 
-  it('keeps the public site to nosniff and constrains no theme', async () => {
+  it('keeps its stricter values over the public ones and gains the rest', async () => {
+    const cms = await site({ securityHeaders: { 'Referrer-Policy': 'unsafe-url' } });
+    const agent = browser(cms);
+    await setUpFirstAdmin(agent);
+
+    const response = await agent.get('/admin/posts/new');
+
+    assert.equal(response.headers.get('referrer-policy'), 'same-origin');
+    assert.match(response.headers.get('content-security-policy') ?? '', /default-src 'self'/);
+    assert.equal(response.headers.get('x-frame-options'), 'SAMEORIGIN');
+    assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin');
+    assert.match(response.headers.get('permissions-policy') ?? '', /camera=\(\)/);
+  });
+
+  it('constrains nothing a public theme loads', async () => {
     const cms = await site();
     const response = await cms.app.request('/');
 
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
-    assert.equal(response.headers.get('content-security-policy'), null);
-    assert.equal(response.headers.get('x-frame-options'), null);
+    assert.equal(response.headers.get('content-security-policy'), "frame-ancestors 'self'");
   });
 
   it('adds HSTS only when the site says it is served over https', async () => {

@@ -9,8 +9,14 @@
       { "label": "About", "url": "/about/" },
       { "label": "Search", "url": "/search/" }
     ],
-    "footer": [{ "label": "RSS", "url": "/feed/" }]
+    "footer": [
+      { "label": "RSS", "url": "/feed/" },
+      { "label": "Privacy", "url": "/privacy/" }
+    ]
   },
+  "commentEmailRetentionDays": 180,
+  "addressHashRetentionDays": 30,
+  "contactMessageRetentionDays": 365,
   "postsPerPage": 10,
   "feedSize": 20
 }

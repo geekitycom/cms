@@ -2,6 +2,7 @@ import { statSync } from 'node:fs';
 import path from 'node:path';
 
 import { DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from '../comments/policy.ts';
+import type { RetentionPolicy } from '../privacy/policy.ts';
 import type { ResolvedConfig } from '../config.ts';
 import {
   readFileIfPresentSync,
@@ -146,6 +147,19 @@ export interface SiteSettings {
    */
   commentsCloseAfterDays: number;
   /**
+   * How many days a comment keeps its author's email (TASK-135). Zero keeps it
+   * forever. Past it the email is removed from the comment file and the index,
+   * and with it the author's subscription to replies.
+   */
+  commentEmailRetentionDays: number;
+  /**
+   * How many days a comment or a contact message keeps the salted hash of the
+   * address it came from. Zero keeps it forever.
+   */
+  addressHashRetentionDays: number;
+  /** How many days a contact message is kept at all. Zero keeps it forever. */
+  contactMessageRetentionDays: number;
+  /**
    * Whether the site tells the pages a post links to that it has (TASK-51).
    *
    * On by default, because a link nobody is told about is half a conversation.
@@ -197,6 +211,23 @@ export interface SiteSettings {
    * in the HTML of the page the form is on however a theme is written.
    */
   contactEmail: string;
+  /**
+   * Where a security researcher reports a vulnerability: the `Contact` lines
+   * of `/.well-known/security.txt` (RFC 9116, TASK-133), each a `mailto:`,
+   * `https:` or `tel:` URI, in the order the site prefers them.
+   *
+   * Empty means the site answers that path with a 404. There is no fallback
+   * to {@link SiteSettings.contactEmail}: that address is promised never to
+   * appear on the public site, and this one is published by definition.
+   */
+  securityContacts: readonly string[];
+  /** The `Policy` line of security.txt: an https URL, or empty for none. */
+  securityPolicy: string;
+  /**
+   * The `Preferred-Languages` line of security.txt: language tags joined by
+   * `, `, or empty for none.
+   */
+  securityLanguages: string;
   /**
    * The relay inboxes the site subscribes to (FEP-ae0c): a Mastodon-style
    * relay boosts every public post it is sent, which is how a small site
@@ -286,6 +317,11 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
   comments: true,
   commentsCloseAfterDays: DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
+  // Forever, so a site that upgrades loses nothing it never chose to lose.
+  // `geekity init` writes the recommended periods for a new site.
+  commentEmailRetentionDays: 0,
+  addressHashRetentionDays: 0,
+  contactMessageRetentionDays: 0,
   webmentionsSend: true,
   webmentionsReceive: true,
   notifyServer: DEFAULT_NOTIFY_SERVER,
@@ -294,6 +330,9 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   mailFromAddress: '',
   mailReplyTo: '',
   contactEmail: '',
+  securityContacts: [],
+  securityPolicy: '',
+  securityLanguages: '',
   relays: [],
   wordpressActivityPub: false,
   menus: {},
@@ -316,6 +355,9 @@ export const SETTINGS_FIELDS = {
   categoryBase: 'category_base',
   comments: 'comments',
   commentsCloseAfterDays: 'comments_close_after_days',
+  commentEmailRetentionDays: 'comment_email_retention_days',
+  addressHashRetentionDays: 'address_hash_retention_days',
+  contactMessageRetentionDays: 'contact_message_retention_days',
   webmentionsSend: 'webmentions_send',
   webmentionsReceive: 'webmentions_receive',
   notifyServer: 'notify_server',
@@ -324,6 +366,9 @@ export const SETTINGS_FIELDS = {
   mailFromAddress: 'mail_from_address',
   mailReplyTo: 'mail_reply_to',
   contactEmail: 'contact_email',
+  securityContacts: 'security_contacts',
+  securityPolicy: 'security_policy',
+  securityLanguages: 'security_languages',
   relays: 'relays',
   wordpressActivityPub: 'wordpress_activitypub',
 } as const satisfies Record<SettingsField, string>;
@@ -394,6 +439,9 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(Number.isInteger(closeAfterDays) && closeAfterDays >= 0
       ? { commentsCloseAfterDays: closeAfterDays }
       : {}),
+    ...wholeDays(file, 'commentEmailRetentionDays'),
+    ...wholeDays(file, 'addressHashRetentionDays'),
+    ...wholeDays(file, 'contactMessageRetentionDays'),
     ...(typeof file['webmentionsSend'] === 'boolean'
       ? { webmentionsSend: file['webmentionsSend'] }
       : {}),
@@ -414,6 +462,22 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
       : {}),
     ...(typeof file['mailReplyTo'] === 'string' ? { mailReplyTo: file['mailReplyTo'] } : {}),
     ...(typeof file['contactEmail'] === 'string' ? { contactEmail: file['contactEmail'] } : {}),
+    // Through the form's own normalisers, and dropped when they refuse: these
+    // three are printed line by line into security.txt, so a hand edit with a
+    // line break in it must not become a field nobody set.
+    ...(Array.isArray(file['securityContacts'])
+      ? {
+          securityContacts: securityContactList(
+            file['securityContacts'].filter((entry) => typeof entry === 'string').join('\n'),
+          ),
+        }
+      : {}),
+    ...(typeof file['securityPolicy'] === 'string'
+      ? { securityPolicy: normalizeSecurityPolicy(file['securityPolicy']) ?? '' }
+      : {}),
+    ...(typeof file['securityLanguages'] === 'string'
+      ? { securityLanguages: normalizeLanguageList(file['securityLanguages']) ?? '' }
+      : {}),
     // Through the same normaliser a submitted form goes through, so the file
     // and the screen cannot mean different things by the same line.
     ...(Array.isArray(file['relays'])
@@ -477,6 +541,9 @@ export function siteJsonFor(
     categoryBase: settings.categoryBase,
     comments: settings.comments,
     commentsCloseAfterDays: settings.commentsCloseAfterDays,
+    commentEmailRetentionDays: settings.commentEmailRetentionDays,
+    addressHashRetentionDays: settings.addressHashRetentionDays,
+    contactMessageRetentionDays: settings.contactMessageRetentionDays,
     webmentionsSend: settings.webmentionsSend,
     webmentionsReceive: settings.webmentionsReceive,
     notifyServer: settings.notifyServer,
@@ -485,6 +552,9 @@ export function siteJsonFor(
     mailFromAddress: settings.mailFromAddress,
     mailReplyTo: settings.mailReplyTo,
     contactEmail: settings.contactEmail,
+    securityContacts: [...settings.securityContacts],
+    securityPolicy: settings.securityPolicy,
+    securityLanguages: settings.securityLanguages,
     relays: [...settings.relays],
     // Every menu the site holds, written whole. A settings page never has
     // them off its own form — it reads them out of the file inside the write
@@ -776,6 +846,12 @@ const FIELD_CHECKS: Record<
       : undefined;
   },
 
+  commentEmailRetentionDays: (form) => retentionProblem(form.commentEmailRetentionDays),
+
+  addressHashRetentionDays: (form) => retentionProblem(form.addressHashRetentionDays),
+
+  contactMessageRetentionDays: (form) => retentionProblem(form.contactMessageRetentionDays),
+
   webmentionsSend: () => undefined,
 
   webmentionsReceive: () => undefined,
@@ -813,6 +889,28 @@ const FIELD_CHECKS: Record<
   contactEmail: (form) =>
     form.contactEmail.trim() !== '' && !EMAIL_PATTERN.test(form.contactEmail.trim())
       ? 'A contact address is an email address, such as hello@example.com, or empty for the first admin with one.'
+      : undefined,
+
+  // Line by line, like the relays, and for the same reason.
+  securityContacts: (form) => {
+    const bad = relayLines(form.securityContacts).find(
+      (line) => normalizeSecurityContact(line) === undefined,
+    );
+    return bad === undefined
+      ? undefined
+      : 'A security contact is an email address, an https:// URL or a tel: number, one per line. ' +
+          `"${bad}" is not one.`;
+  },
+
+  // RFC 9116 wants every web URI in the file to be https.
+  securityPolicy: (form) =>
+    form.securityPolicy.trim() !== '' && normalizeSecurityPolicy(form.securityPolicy) === undefined
+      ? 'A security policy is an https:// URL, or empty for none.'
+      : undefined,
+
+  securityLanguages: (form) =>
+    normalizeLanguageList(form.securityLanguages) === undefined
+      ? 'Preferred languages are language tags separated by commas, such as en, fr, or empty for none.'
       : undefined,
 
   // A relay list is checked line by line, and the first bad line is what the
@@ -901,6 +999,9 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     // empty string here means.
     comments: form.comments !== '',
     commentsCloseAfterDays: Number(form.commentsCloseAfterDays),
+    commentEmailRetentionDays: Number(form.commentEmailRetentionDays),
+    addressHashRetentionDays: Number(form.addressHashRetentionDays),
+    contactMessageRetentionDays: Number(form.contactMessageRetentionDays),
     webmentionsSend: form.webmentionsSend !== '',
     webmentionsReceive: form.webmentionsReceive !== '',
     notifyServer: normalizeBaseUrl(form.notifyServer) ?? '',
@@ -911,6 +1012,9 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     mailFromAddress: form.mailFromAddress.trim(),
     mailReplyTo: form.mailReplyTo.trim(),
     contactEmail: form.contactEmail.trim(),
+    securityContacts: securityContactList(form.securityContacts),
+    securityPolicy: normalizeSecurityPolicy(form.securityPolicy) ?? '',
+    securityLanguages: normalizeLanguageList(form.securityLanguages) ?? '',
     relays: relayList(form.relays),
     wordpressActivityPub: form.wordpressActivityPub !== '',
   };
@@ -933,6 +1037,9 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     categoryBase: settings.categoryBase,
     comments: settings.comments ? '1' : '',
     commentsCloseAfterDays: String(settings.commentsCloseAfterDays),
+    commentEmailRetentionDays: String(settings.commentEmailRetentionDays),
+    addressHashRetentionDays: String(settings.addressHashRetentionDays),
+    contactMessageRetentionDays: String(settings.contactMessageRetentionDays),
     webmentionsSend: settings.webmentionsSend ? '1' : '',
     webmentionsReceive: settings.webmentionsReceive ? '1' : '',
     notifyServer: settings.notifyServer,
@@ -941,6 +1048,9 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     mailFromAddress: settings.mailFromAddress,
     mailReplyTo: settings.mailReplyTo,
     contactEmail: settings.contactEmail,
+    securityContacts: settings.securityContacts.join('\n'),
+    securityPolicy: settings.securityPolicy,
+    securityLanguages: settings.securityLanguages,
     relays: settings.relays.join('\n'),
     wordpressActivityPub: settings.wordpressActivityPub ? '1' : '',
   };
@@ -1042,6 +1152,61 @@ export function normalizeRelayInbox(value: string): string | undefined {
   return href.endsWith('/') && parsed.pathname !== '/' ? href.slice(0, -1) : href;
 }
 
+/** A security contact textarea as its URIs, in order, repeats dropped. */
+function securityContactList(value: string): string[] {
+  const contacts: string[] = [];
+  for (const line of relayLines(value)) {
+    const contact = normalizeSecurityContact(line);
+    if (contact !== undefined && !contacts.includes(contact)) contacts.push(contact);
+  }
+  return contacts;
+}
+
+/** A phone number as a `tel:` URI writes it: digits and visual separators. */
+const TEL_PATTERN = /^tel:\+?[0-9][0-9().-]*$/i;
+
+/**
+ * One security contact as the URI security.txt carries, or `undefined`.
+ *
+ * A bare address is taken as the `mailto:` it means, since that is what
+ * somebody filling in a settings form types.
+ */
+function normalizeSecurityContact(value: string): string | undefined {
+  const trimmed = value.trim();
+  const address = trimmed.toLowerCase().startsWith('mailto:') ? trimmed.slice(7) : trimmed;
+  if (EMAIL_PATTERN.test(address)) return `mailto:${address}`;
+  if (TEL_PATTERN.test(trimmed)) return `tel:${trimmed.slice(4)}`;
+  return httpsUrl(trimmed);
+}
+
+/** A security policy URL, or `undefined` when it is not an https one. */
+function normalizeSecurityPolicy(value: string): string | undefined {
+  return httpsUrl(value.trim());
+}
+
+/** An absolute https URL as `URL` spells it, or `undefined`. */
+function httpsUrl(value: string): string | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return undefined;
+  }
+  return parsed.protocol === 'https:' ? parsed.href : undefined;
+}
+
+/**
+ * A comma-separated list of language tags, joined the way RFC 9116's example
+ * writes them, or `undefined` when one of them is not a tag. Empty is a value.
+ */
+function normalizeLanguageList(value: string): string | undefined {
+  const tags = value
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag !== '');
+  return tags.every((tag) => LANGUAGE_TAG_PATTERN.test(tag)) ? tags.join(', ') : undefined;
+}
+
 /**
  * What a page slug may be made of on this screen: the shape
  * {@link slugify} produces, which is what the editor writes.
@@ -1087,4 +1252,34 @@ function parseSiteJson(source: string): Record<string, unknown> {
   return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
     ? (parsed as Record<string, unknown>)
     : {};
+}
+
+/** The three retention periods, as the sweep reads them. */
+export function retentionPolicyOf(settings: SiteSettings): RetentionPolicy {
+  return {
+    commentEmailDays: settings.commentEmailRetentionDays,
+    addressHashDays: settings.addressHashRetentionDays,
+    contactMessageDays: settings.contactMessageRetentionDays,
+  };
+}
+
+/** A retention key from `site.json`, when it holds a whole number of days. */
+function wholeDays(
+  file: Record<string, unknown>,
+  key: 'commentEmailRetentionDays' | 'addressHashRetentionDays' | 'contactMessageRetentionDays',
+): Partial<SiteSettings> {
+  const days = file[key];
+  return typeof days === 'number' && Number.isInteger(days) && days >= 0 ? { [key]: days } : {};
+}
+
+/**
+ * What is wrong with a typed retention period, if anything. Empty is refused
+ * rather than read as zero, because zero keeps the data forever and a cleared
+ * field should not be how a site says that.
+ */
+function retentionProblem(typed: string): string | undefined {
+  const days = Number(typed.trim());
+  return typed.trim() === '' || !Number.isInteger(days) || days < 0
+    ? 'Keep it for a whole number of days, or 0 to keep it forever.'
+    : undefined;
 }

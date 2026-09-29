@@ -210,6 +210,8 @@ interface PostOptions {
   keyId?: string;
   /** Skip the signature altogether. */
   unsigned?: boolean;
+  /** Headers besides the content type, such as Fetch Metadata. */
+  headers?: Record<string, string>;
 }
 
 /** How a POST to the inbox is addressed, signed and delivered. */
@@ -227,7 +229,7 @@ async function deliver(
   const body = JSON.stringify(await activity.toJsonLd());
   const request = new Request(options.inbox ?? SITE_INBOX, {
     method: 'POST',
-    headers: { 'content-type': 'application/activity+json' },
+    headers: { ...options.headers, 'content-type': 'application/activity+json' },
     body,
   });
   const sent =
@@ -359,6 +361,21 @@ describe('a Follow', () => {
       [REMOTE_ACTOR],
       'and the file the site publishes says so',
     );
+  });
+
+  it('is accepted at either inbox whatever Fetch Metadata it carries (TASK-132)', async () => {
+    // The admin refuses a cross-site POST. A peer's delivery is one by
+    // definition, and it acts on no session, so nothing in front of the inbox
+    // may read that header.
+    const crossSite = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'cors' };
+
+    for (const inbox of [SITE_INBOX, SHARED_INBOX]) {
+      const instance = await site();
+      const response = await deliver(instance, follow(), { inbox, headers: crossSite });
+
+      assert.equal(response.status, 202, await response.text());
+      assert.equal(instance.admin.countFollowers(LOCAL_USER), 1, inbox);
+    }
   });
 
   it('records which user the inbox was told about', async () => {

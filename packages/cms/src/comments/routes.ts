@@ -1,6 +1,6 @@
 import type { Context, Hono } from 'hono';
 
-import { csrfTokenMatches } from '../admin/session.ts';
+import { CROSS_SITE_REFUSAL, crossSiteWrite, csrfTokenMatches } from '../admin/session.ts';
 import type { AdminStore } from '../admin/store.ts';
 import { clientAddress, createLoginThrottle } from '../admin/throttle.ts';
 import type { ResolvedConfig } from '../config.ts';
@@ -75,6 +75,11 @@ export function mountComments(app: Hono<GeekityEnv>): void {
     // matching token a page on another site could make them say something they
     // never typed. Refused in the words and with the status the admin guard
     // uses, because it is the same check on the same token.
+    //
+    // Fetch Metadata first, as in the admin: a browser that says the form was
+    // on another site is refused whatever token it carries. A stranger's form
+    // is left alone, because it acts on nobody's behalf.
+    if (viewer !== undefined && crossSiteWrite(c)) return c.text(CROSS_SITE_REFUSAL, 403);
     if (viewer !== undefined && !csrfTokenMatches(viewer.csrfToken, form.csrf)) {
       return c.text('That form was stale or came from somewhere else. Reload and try again.', 403);
     }

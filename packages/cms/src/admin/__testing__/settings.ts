@@ -40,6 +40,9 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     comments_close_after_days: '14',
     webmentions_send: '1',
     webmentions_receive: '1',
+    comment_email_retention_days: '0',
+    address_hash_retention_days: '0',
+    contact_message_retention_days: '0',
   },
   email: {
     mail_provider: 'none',
@@ -47,6 +50,9 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     mail_from_address: '',
     mail_reply_to: '',
     contact_email: '',
+    security_contacts: '',
+    security_policy: '',
+    security_languages: '',
   },
   federation: {
     actor_handle: 'blog',

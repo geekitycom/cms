@@ -203,23 +203,33 @@ export function readContactMessage(dataDir: string, id: string): ContactMessage 
 
 /**
  * Mark a message read, or unread again, and hand back what it now says.
- *
- * The file is re-read inside the write, so two admins with the screen open
- * cannot make one of them undo the other's delete by writing back a message
- * that is not there any more.
  */
 export async function setContactMessageRead(
   dataDir: string,
   id: string,
   read: boolean,
 ): Promise<ContactMessage | undefined> {
+  return await updateContactMessage(dataDir, id, (message) => ({ ...message, read }));
+}
+
+/**
+ * Rewrite one message and hand back what it now says: `change` answers with
+ * the message it should become, or `undefined` to leave the file alone.
+ *
+ * The file is re-read inside the write, so two admins with the screen open
+ * cannot make one of them undo the other's delete by writing back a message
+ * that is not there any more, and the retention sweep (TASK-135) cannot write
+ * over a Mark read that landed a moment before it.
+ */
+export async function updateContactMessage(
+  dataDir: string,
+  id: string,
+  change: (message: ContactMessage) => ContactMessage | undefined,
+): Promise<ContactMessage | undefined> {
   if (!SAFE_ID.test(id)) return undefined;
 
   const file = contactMessageFile(dataDir, id);
 
-  // The read, the change and the write inside one lock, with the writer that
-  // does not queue: a message deleted while this screen was open must not be
-  // written back by a Mark read that arrived a moment later.
   return await withFileLock(file, () => {
     const current = readFileIfPresentSync(file);
     if (current === undefined) return undefined;
@@ -227,7 +237,8 @@ export async function setContactMessageRead(
     const message = messageFrom(current, id);
     if (message === undefined) return undefined;
 
-    const updated: ContactMessage = { ...message, read };
+    const updated = change(message);
+    if (updated === undefined) return message;
     writeFileAtomicallySync(file, `${JSON.stringify(updated, null, 2)}\n`, { mode: 0o600 });
     return updated;
   });

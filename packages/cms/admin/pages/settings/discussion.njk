@@ -2,6 +2,17 @@
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
 
+{# What a retention field says about the period as it stands: kept forever at
+   0, removed after so many days otherwise. Nothing for a value the form is
+   about to refuse, which has its own error line. #}
+{% macro retention(days) %}
+  {%- if days == '0' -%}
+    <strong>Kept forever.</strong>
+  {%- elif days | int > 0 -%}
+    <strong>Removed after {{ days }} day{% if days != '1' %}s{% endif %}.</strong>
+  {%- endif -%}
+{% endmacro %}
+
 {% block settingsFields %}
   <h2>Comments</h2>
 
@@ -41,6 +52,48 @@
   {% endset %}
   {{ field.checkbox('settings-webmentions-receive', fields.webmentionsReceive,
        'Accept webmentions sent here', checked=form.webmentionsReceive, hint=receiveHint) }}
+
+  <h2>Keeping personal data</h2>
+
+  <p class="admin-hint">
+    How long the site keeps what commenters and people writing through the
+    contact form hand it, in days from when it arrived; <code>0</code> keeps
+    it forever. A site that has never set these keeps everything, so upgrading
+    removes nothing. The recommended periods are 180 days for emails, 30 for
+    address hashes and 365 for contact messages, which is what a new site
+    starts with. A sweep removes whatever has outlived its period every few
+    hours. Tools &rsaquo; Personal data erases one person's data on request.
+  </p>
+
+  {% set emailHint %}
+    {{ retention(form.commentEmailRetentionDays) }}
+    Past this a comment loses its author's email. The comment, its place in
+    the thread and its moderation status stay; the author is no longer told
+    about replies, and their next comment waits for a moderator. Recommended:
+    <code>180</code>.
+  {% endset %}
+  {{ field.text('settings-comment-email-retention', fields.commentEmailRetentionDays,
+       'Keep commenter emails for', form.commentEmailRetentionDays, type='number', min='0',
+       step='1', error=problems.commentEmailRetentionDays, hint=emailHint) }}
+
+  {% set hashHint %}
+    {{ retention(form.addressHashRetentionDays) }}
+    The salted hash of the address a comment, webmention or contact message
+    came from, which shows a moderator that two came from one place.
+    Recommended: <code>30</code>.
+  {% endset %}
+  {{ field.text('settings-address-hash-retention', fields.addressHashRetentionDays,
+       'Keep address hashes for', form.addressHashRetentionDays, type='number', min='0',
+       step='1', error=problems.addressHashRetentionDays, hint=hashHint) }}
+
+  {% set contactHint %}
+    {{ retention(form.contactMessageRetentionDays) }}
+    Past this a contact message is deleted from the Messages screen and from
+    <code>data/contact/</code>. Recommended: <code>365</code>.
+  {% endset %}
+  {{ field.text('settings-contact-message-retention', fields.contactMessageRetentionDays,
+       'Keep contact messages for', form.contactMessageRetentionDays, type='number', min='0',
+       step='1', error=problems.contactMessageRetentionDays, hint=contactHint) }}
 {% endblock %}
 
 {% block settingsPanels %}

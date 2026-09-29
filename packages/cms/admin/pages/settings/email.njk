@@ -39,6 +39,26 @@
   {% endset %}
   {{ field.text('settings-contact-email', fields.contactEmail, 'Contact address',
        form.contactEmail, error=problems.contactEmail, hint=contactHint, inputmode='email') }}
+
+  <h2>Security contact</h2>
+
+  {% set securityContactsHint %}
+    Where somebody who finds a vulnerability in this site should report it, one per line:
+    an email address, an <code>https://</code> URL or a <code>tel:</code> number. They are
+    published at <a href="/.well-known/security.txt"><code>/.well-known/security.txt</code></a>,
+    which is not served at all while this is empty.
+  {% endset %}
+  {{ field.textarea('settings-security-contacts', fields.securityContacts, 'Contacts',
+       form.securityContacts, error=problems.securityContacts, hint=securityContactsHint,
+       rows='2', spellcheck='false') }}
+
+  {{ field.text('settings-security-policy', fields.securityPolicy, 'Disclosure policy',
+       form.securityPolicy, error=problems.securityPolicy, inputmode='url',
+       hint='Optional. An https:// URL for the page that says how reports are handled.') }}
+
+  {{ field.text('settings-security-languages', fields.securityLanguages, 'Preferred languages',
+       form.securityLanguages, error=problems.securityLanguages,
+       hint='Optional. The languages a report may be written in, such as en, fr.') }}
 {% endblock %}
 
 {% block settingsPanels %}

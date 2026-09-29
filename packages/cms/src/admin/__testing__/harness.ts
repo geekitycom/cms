@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { seedActorKeys } from '../../federation/__testing__/keys.ts';
 import { createCms } from '../../index.ts';
+import { sessionCookieName } from '../session.ts';
 import type { Cms, GeekityConfig } from '../../index.ts';
 
 /**
@@ -142,7 +143,12 @@ export interface UploadedFile {
  */
 export interface Browser {
   get(url: string): Promise<Response>;
-  post(url: string, fields: Record<string, string>): Promise<Response>;
+  /** Post a form. `extra` adds request headers, such as the Fetch Metadata a browser sends. */
+  post(
+    url: string,
+    fields: Record<string, string>,
+    extra?: Record<string, string>,
+  ): Promise<Response>;
   /**
    * Post one file as `multipart/form-data`, the way the editor's upload
    * control does. The CSRF token is a field of its own because the guard reads
@@ -158,27 +164,29 @@ export interface Browser {
 
 export function browser(cms: Cms): Browser {
   let cookie: string | undefined;
+  // `__Host-geekity_session` under an https base URL, as a browser would hold it.
+  const name = sessionCookieName(cms.config);
 
   function remember(response: Response): Response {
-    const value = cookieValue(response, 'geekity_session');
+    const value = cookieValue(response, name);
     if (value !== undefined) cookie = value === '' ? undefined : value;
     return response;
   }
 
   function headers(extra: Record<string, string> = {}): Record<string, string> {
-    return cookie === undefined ? extra : { ...extra, cookie: `geekity_session=${cookie}` };
+    return cookie === undefined ? extra : { ...extra, cookie: `${name}=${cookie}` };
   }
 
   return {
     async get(url) {
       return remember(await cms.app.request(url, { headers: headers() }));
     },
-    async post(url, fields) {
+    async post(url, fields, extra = {}) {
       const body = new URLSearchParams(fields).toString();
       return remember(
         await cms.app.request(url, {
           method: 'POST',
-          headers: headers({ 'content-type': 'application/x-www-form-urlencoded' }),
+          headers: headers({ ...extra, 'content-type': 'application/x-www-form-urlencoded' }),
           body,
         }),
       );

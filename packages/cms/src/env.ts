@@ -1,5 +1,6 @@
 import type { AdminStore } from './admin/store.ts';
 import type { Session } from './admin/store.ts';
+import type { AvatarService } from './avatars/avatars.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { ContentStore } from './content/store.ts';
 import type { DocumentChange, SyncResult } from './content/sync.ts';
@@ -43,6 +44,11 @@ export interface GeekityEnv {
      * to show one.
      */
     conversation: ConversationReader;
+    /**
+     * The remote avatars a conversation shows, fetched and served from this
+     * site so a reader's browser never asks the server they live on (TASK-134).
+     */
+    avatars: AvatarService;
     /**
      * Report a write this request made to the content directory.
      *

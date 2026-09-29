@@ -10,6 +10,11 @@ import {
   runCli,
   temporaryDir,
 } from './__testing__/cli.ts';
+import {
+  RECOMMENDED_ADDRESS_HASH_RETENTION_DAYS,
+  RECOMMENDED_COMMENT_EMAIL_RETENTION_DAYS,
+  RECOMMENDED_CONTACT_MESSAGE_RETENTION_DAYS,
+} from './privacy/policy.ts';
 
 after(cleanupTemporaryDirs);
 
@@ -84,6 +89,9 @@ describe('geekity init', () => {
     const posts = await fs.readdir(path.join(content, 'posts'));
     const pages = await fs.readdir(path.join(content, 'pages'));
     const site = await readJson(path.join(content, '_data', 'site.json'));
+    assert.equal(site['commentEmailRetentionDays'], RECOMMENDED_COMMENT_EMAIL_RETENTION_DAYS);
+    assert.equal(site['addressHashRetentionDays'], RECOMMENDED_ADDRESS_HASH_RETENTION_DAYS);
+    assert.equal(site['contactMessageRetentionDays'], RECOMMENDED_CONTACT_MESSAGE_RETENTION_DAYS);
 
     assert.ok(
       posts.some((name) => name.endsWith('.md')),

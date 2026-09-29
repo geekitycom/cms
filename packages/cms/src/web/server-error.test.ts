@@ -130,6 +130,8 @@ describe('an exception while rendering a public page', () => {
     assert.equal(response.status, 500);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(response.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+    assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin');
     assert.equal(response.headers.get('x-redirect-by'), null);
   });
 });

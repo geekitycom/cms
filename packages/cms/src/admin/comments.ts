@@ -93,6 +93,11 @@ export interface CommentRow {
   submitted: string;
   /** A short form of the address hash, for spotting one machine's run of them. */
   address: string | null;
+  /**
+   * What privacy took off it, in a few words, or `null` when nothing was
+   * (TASK-135): so a moderator can tell an email removed from one never given.
+   */
+  removed: string | null;
   /** The post's title, or its slug when the post is not in the index. */
   post: string;
   /** Where the post can be read, or `null` when it is not published. */
@@ -274,6 +279,15 @@ function statusOf(value: string | undefined): CommentStatus {
   return COMMENT_STATUSES.includes(value as CommentStatus) ? (value as CommentStatus) : 'pending';
 }
 
+/** What a moderator is told was removed from a comment for privacy. */
+function removedNote(redacted: PostComment['redacted']): string | null {
+  if (redacted === undefined) return null;
+  if (redacted.includes('author')) return 'author erased on request';
+  if (redacted.includes('email')) return 'email removed after the retention period';
+  if (redacted.includes('addressHash')) return 'address hash removed after the retention period';
+  return null;
+}
+
 /** The files and the index this request writes through. */
 function recordsOf(c: Context<GeekityEnv>): CommentRecords {
   return { admin: c.var.admin, contentDir: c.var.config.contentDir };
@@ -296,6 +310,7 @@ function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
     // The first eight characters are enough to see that two comments came from
     // one place, which is the only question the hash is there to answer.
     address: comment.addressHash === null ? null : comment.addressHash.slice(0, 8),
+    removed: removedNote(comment.redacted),
     post: document === undefined ? comment.slug : postLabel(document),
     postUrl: comment.permalink === '' ? null : comment.permalink,
     editUrl:

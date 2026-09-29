@@ -81,6 +81,30 @@ export async function addCommentOptOut(dataDir: string, email: string): Promise<
   return added;
 }
 
+/**
+ * Forget that an address ever asked to stop, because its owner asked for
+ * everything this site holds about them to be erased (TASK-135). Returns
+ * whether it was on the list. Nothing is written when it was not.
+ */
+export async function removeCommentOptOut(dataDir: string, email: string): Promise<boolean> {
+  const unwanted = email.trim().toLowerCase();
+  if (unwanted === '' || !hasOptedOut(dataDir, unwanted)) return false;
+
+  let removed = false;
+
+  await updateFileAtomically(
+    commentOptOutsFile(dataDir),
+    (current) => {
+      const held = optOutsIn(current);
+      removed = held.delete(unwanted);
+      return `${JSON.stringify({ addresses: [...held].sort() }, null, 2)}\n`;
+    },
+    { mode: COMMENT_OPTOUTS_FILE_MODE },
+  );
+
+  return removed;
+}
+
 /** The addresses a file's bytes hold. */
 function optOutsIn(source: string | undefined): Set<string> {
   if (source === undefined) return new Set();
