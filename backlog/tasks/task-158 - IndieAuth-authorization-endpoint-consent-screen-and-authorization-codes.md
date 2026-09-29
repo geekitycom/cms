@@ -4,6 +4,7 @@ title: 'IndieAuth authorization endpoint: consent screen and authorization codes
 status: To Do
 assignee: []
 created_date: '2026-09-29 01:52'
+updated_date: '2026-09-29 02:13'
 labels:
   - indieauth
   - indieweb
@@ -12,9 +13,8 @@ milestone: m-24
 dependencies:
   - TASK-157
 references:
-  - 'https://indieauth.spec.indieweb.org/'
-  - packages/cms/src/webmention/public-address.ts
-  - packages/cms/src/admin/session.ts
+  - 'https://www.rfc-editor.org/rfc/rfc8707'
+  - 'https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization'
 priority: medium
 type: feature
 ordinal: 182800
@@ -35,5 +35,7 @@ The authorization endpoint is where a client sends the person to approve a sign-
 - [ ] #5 Requests missing PKCE, using a method other than S256, or with a malformed client_id are refused, proven by tests
 - [ ] #6 The client_id fetch refuses private, loopback and link-local addresses and is bounded in time and size, proven by tests
 - [ ] #7 A signed-in user can only approve as their own me URL; a me for another user is ignored in favour of the signed-in user
-- [ ] #8 The consent form is protected against CSRF and the endpoint answers the maintenance-mode 503 like other admin routes
+- [ ] #8 The consent form is protected against CSRF; whether the endpoint stays usable in maintenance mode, where /admin is exempt (TASK-130), is decided and tested
+- [ ] #9 An optional resource parameter (RFC 8707) is accepted, shown on the consent screen, and carried with the code so the token is issued for that resource
+- [ ] #10 Clients identified by a client_id URL work whether its metadata is an IndieAuth h-app or a JSON client metadata document, and the task notes confirm against the current MCP authorization spec whether that covers MCP clients or dynamic client registration (RFC 7591) is also needed
 <!-- AC:END -->

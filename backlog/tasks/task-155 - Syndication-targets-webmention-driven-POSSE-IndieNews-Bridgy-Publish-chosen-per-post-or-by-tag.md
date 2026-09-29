@@ -6,10 +6,11 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-29 01:32'
-updated_date: '2026-09-29 01:32'
+updated_date: '2026-09-29 02:13'
 labels:
   - webmention
   - indieweb
+milestone: m-25
 dependencies: []
 references:
   - 'https://news.indieweb.org/how-to-submit-a-post'

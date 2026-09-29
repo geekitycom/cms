@@ -4,6 +4,7 @@ title: 'Photo posts: a photo property from Micropub, rendered and federated'
 status: To Do
 assignee: []
 created_date: '2026-09-29 01:55'
+updated_date: '2026-09-29 02:13'
 labels:
   - micropub
   - content
@@ -34,4 +35,5 @@ Most mobile Micropub clients post photos. A post can carry one or more photos, e
 - [ ] #4 The federated object carries each photo as an Image attachment with its alt as name
 - [ ] #5 The admin editor lists a post's photos and can add, remove and edit their alt text
 - [ ] #6 doc-2 documents the photo key
+- [ ] #7 A photo that is a media library item takes its default alt text from that item (TASK-141), so alt text is kept in one place rather than copied per post
 <!-- AC:END -->

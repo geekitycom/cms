@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-29 01:53'
+updated_date: '2026-09-29 02:13'
 labels:
   - indieauth
   - indieweb
@@ -14,10 +15,8 @@ milestone: m-24
 dependencies:
   - TASK-160
 references:
-  - 'https://indieauth.spec.indieweb.org/'
-  - 'https://www.rfc-editor.org/rfc/rfc7662'
-  - 'https://www.rfc-editor.org/rfc/rfc7009'
-  - 'https://www.w3.org/TR/micropub/'
+  - 'https://www.rfc-editor.org/rfc/rfc9728'
+  - 'https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization'
 priority: medium
 type: feature
 ordinal: 185800
@@ -36,4 +35,6 @@ The resource-server half that a Micropub endpoint will stand on. One piece of mi
 - [ ] #3 The revocation endpoint revokes a token so the middleware and introspection refuse it immediately
 - [ ] #4 The userinfo endpoint returns name, url, photo and email per the profile and email scopes
 - [ ] #5 The metadata document lists introspection_endpoint, revocation_endpoint and userinfo_endpoint
+- [ ] #6 Protected resource metadata (RFC 9728) is served at /.well-known/oauth-protected-resource, naming the authorization server and supported scopes
+- [ ] #7 A 401 from a guarded route carries WWW-Authenticate: Bearer with resource_metadata pointing at that document, so an MCP client can discover how to sign in
 <!-- AC:END -->

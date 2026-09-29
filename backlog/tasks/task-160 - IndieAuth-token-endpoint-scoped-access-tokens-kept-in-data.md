@@ -4,6 +4,7 @@ title: 'IndieAuth token endpoint: scoped access tokens kept in data/'
 status: To Do
 assignee: []
 created_date: '2026-09-29 01:52'
+updated_date: '2026-09-29 02:13'
 labels:
   - indieauth
   - indieweb
@@ -12,8 +13,7 @@ milestone: m-24
 dependencies:
   - TASK-159
 references:
-  - 'https://indieauth.spec.indieweb.org/'
-  - 'https://indieweb.org/scope'
+  - 'https://www.rfc-editor.org/rfc/rfc8707'
 documentation:
   - >-
     backlog/decisions/decision-9 -
@@ -37,4 +37,5 @@ Phase 2 begins here. A client that wants to act for the person (a Micropub clien
 - [ ] #4 Deleting a user revokes every token they hold
 - [ ] #5 If refresh tokens are issued, a refresh rotates the token and the old one stops working
 - [ ] #6 The decisions on token storage, lifetime and refresh are recorded
+- [ ] #7 A token is bound to the resource it was issued for (the site's Micropub and MCP endpoints are separate resources), and a resource server refuses a token issued for another
 <!-- AC:END -->
