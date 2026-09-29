@@ -251,7 +251,10 @@ function textOf(value) {
   return typeof value === 'string' ? value : undefined;
 }
 
-/** `@user@host` for an actor URL, the way the CMS guesses one. */
+/**
+ * `@user@host` for an actor URL, the way the CMS guesses one. An id ending in
+ * a number, as a current Mastodon mints them, implies no handle.
+ */
 function handleOf(actorId) {
   try {
     const url = new URL(actorId);
@@ -259,9 +262,26 @@ function handleOf(actorId) {
       .split('/')
       .filter((segment) => segment !== '')
       .pop();
-    return last === undefined ? undefined : `@${last.replace(/^@/, '')}@${url.host}`;
+    return last === undefined || /^\d+$/.test(last)
+      ? undefined
+      : `@${last.replace(/^@/, '')}@${url.host}`;
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * What the CMS names an actor it has no profile of: their handle, else their
+ * server. The CMS names everybody else from the profiles it keeps in its
+ * database, which a build of the files cannot read.
+ */
+function guessedNameOf(actorId) {
+  const handle = handleOf(actorId);
+  if (handle !== undefined) return handle;
+  try {
+    return new URL(actorId).host;
+  } catch {
+    return actorId;
   }
 }
 
@@ -334,7 +354,13 @@ function conversationIn(inbox, objectId, slug) {
 
   const author = (actorId) => {
     const handle = handleOf(actorId);
-    return { name: handle ?? actorId, handle: handle ?? null, url: actorId, avatar: null, actorId };
+    return {
+      name: guessedNameOf(actorId),
+      handle: handle ?? null,
+      url: actorId,
+      avatar: null,
+      actorId,
+    };
   };
 
   for (const activity of activities) {

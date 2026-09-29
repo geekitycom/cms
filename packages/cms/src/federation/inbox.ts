@@ -9,7 +9,6 @@ import type {
   Create,
   Delete,
   Like,
-  Link,
   QuoteRequest,
   Undo,
 } from '@fedify/vocab';
@@ -22,6 +21,7 @@ import { documentAuthor, isFederatedDocument, postByObjectId } from './article.t
 import { postObjectId } from '../web/documents.ts';
 import type { FederationContextData } from './federation.ts';
 import { authorizeQuote, quoteAuthorization, revokeQuotes } from './quotes.ts';
+import { profileFrom } from './profiles.ts';
 import { addFollower, appendInboxActivity, removeFollower } from './records.ts';
 import type { FederationRecords } from './records.ts';
 import { acceptRelay, rejectRelay } from './relays.ts';
@@ -287,18 +287,21 @@ export async function handleReject(context: SiteInboxContext, reject: Reject): P
 }
 
 /**
- * Handle a `Like`, an `Announce` or a `Create`: record it and do nothing else.
+ * Handle a `Like`, an `Announce` or a `Create`: record it, and ask for the
+ * profile of whoever sent it.
  *
- * doc-4 keeps these so a later phase can surface likes, boosts and comments.
- * Nothing about them is interpreted here, because what that phase will want
- * out of an activity is not knowable yet — which is also why the row keeps the
- * whole JSON-LD rather than a few columns of it.
+ * Nothing about the activity is interpreted here: the conversation reads it
+ * back out of the log, which is why the row keeps the whole JSON-LD rather
+ * than a few columns of it. The profile is what a conversation names the
+ * sender by when they are not a follower (TASK-184), and it is fetched in the
+ * background, so the inbox answers without waiting for it.
  */
 export async function handleLoggedActivity(
   context: SiteInboxContext,
   activity: Like | Announce | Create,
 ): Promise<void> {
   await logActivity(context, activity);
+  if (activity.actorId !== null) context.data.actorProfiles.capture(activity.actorId.href);
 }
 
 /**
@@ -349,39 +352,15 @@ export async function followerFrom(
   context: SiteInboxContext,
   actor: Actor,
 ): Promise<Omit<NewFollower, 'username'> | undefined> {
-  if (actor.id === null || actor.inboxId === null) return undefined;
-
-  const icon = await actor.getIcon({ ...dereference(context), suppressError: true });
+  if (actor.inboxId === null) return undefined;
+  const profile = await profileFrom(actor, dereference(context));
+  if (profile === undefined) return undefined;
 
   return {
-    actorId: actor.id.href,
+    ...profile,
     inboxId: actor.inboxId.href,
     sharedInboxId: actor.endpoints?.sharedInbox?.href ?? null,
-    handle: actorHandle(actor),
-    name: actor.name === null ? null : actor.name.toString(),
-    iconUrl: linkHref(icon?.url ?? null) ?? actor.iconId?.href ?? null,
-    url: linkHref(actor.url) ?? null,
   };
-}
-
-/**
- * `@name@host` for an actor, built from what the actor document says rather
- * than from WebFinger.
- *
- * A canonical handle would take a WebFinger round trip per follow to confirm
- * the host, and this is display data: the id is what identifies the follower,
- * and the id is what every other part of the system keys on.
- */
-function actorHandle(actor: Actor): string | null {
-  const username = actor.preferredUsername;
-  if (username === null || actor.id === null) return null;
-  return `@${username.toString()}@${actor.id.host}`;
-}
-
-/** A `URL` or a `Link` as a plain href, or `null`. */
-function linkHref(value: URL | Link | null): string | null {
-  if (value === null) return null;
-  return value instanceof URL ? value.href : (value.href?.href ?? null);
 }
 
 /** The loaders a vocabulary getter needs to follow a link off this context. */

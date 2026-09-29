@@ -7,6 +7,7 @@ import type { Document } from './content/document.ts';
 import type { ContentStore } from './content/store.ts';
 import type { DocumentChange, SyncResult } from './content/sync.ts';
 import type { DeliveryService } from './federation/delivery.ts';
+import type { ActorProfileService } from './federation/profiles.ts';
 import type { RelayService } from './federation/relays.ts';
 import type { MailService } from './mail/service.ts';
 import type { MaintenanceSwitch } from './maintenance.ts';
@@ -51,6 +52,11 @@ export interface GeekityEnv {
      * site so a reader's browser never asks the server they live on (TASK-134).
      */
     avatars: AvatarService;
+    /**
+     * The profiles of the actors who are not followers, which the inbox asks
+     * for when one of them is heard from (TASK-184).
+     */
+    actorProfiles: ActorProfileService;
     /**
      * Report a write this request made to the content directory.
      *

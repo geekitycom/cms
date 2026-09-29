@@ -158,6 +158,33 @@ export type NewFollower = Omit<Follower, 'followedAt'> & {
   followedAt?: string | undefined;
 };
 
+/**
+ * How a remote actor presents itself: what a conversation shows of somebody
+ * who is not a follower (TASK-184).
+ *
+ * Read out of the actor document when one of their activities arrives, and
+ * kept only in the cache (decision-9): a profile is somebody else's to change,
+ * and it can always be fetched again.
+ */
+export interface ActorProfile {
+  /** The actor's ActivityStreams id, which is what identifies them. */
+  readonly actorId: string;
+  /** `@preferredUsername@host`, or `null` when the document names no username. */
+  readonly handle: string | null;
+  /** The display name the actor published, or `null`. */
+  readonly name: string | null;
+  /** The actor's avatar, or `null`. */
+  readonly iconUrl: string | null;
+  /** The actor's profile page, for a human following the link, or `null`. */
+  readonly url: string | null;
+}
+
+/** An {@link ActorProfile} as the cache holds it, with when it was fetched. */
+export interface StoredActorProfile extends ActorProfile {
+  /** When the document was read, as an ISO 8601 instant. */
+  readonly fetchedAt: string;
+}
+
 /** How {@link AdminStore.listFollowers} and its inbox-log sibling page. */
 export interface ListPageOptions {
   /** Largest number of rows to return. Everything, when it is not given. */
@@ -702,6 +729,16 @@ export interface AdminStore {
   isAvatarSource(url: string): boolean;
   /** Every URL {@link AdminStore.isAvatarSource} answers yes for, each once. */
   listAvatarSources(): string[];
+  /** The stored profile of a remote actor, or `undefined` (TASK-184). */
+  getActorProfile(actorId: string): StoredActorProfile | undefined;
+  /** Store a remote actor's profile, replacing whatever was stored for them. */
+  putActorProfile(profile: StoredActorProfile): void;
+  /**
+   * Every actor the inbox log names who is not a follower and whose profile
+   * is missing or was fetched before `fetchedBefore`, each once: the actors
+   * whose profiles are due.
+   */
+  listActorsToProfile(fetchedBefore: string): string[];
   /**
    * Store a follower, replacing whatever was known about that actor. The
    * original `followedAt` is kept, because a repeat `Follow` from an actor
@@ -935,6 +972,9 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       SELECT 1 FROM followers
       WHERE icon_url = ?1 AND actor_id IN (SELECT actor_id FROM ap_inbox)
       UNION ALL
+      SELECT 1 FROM actor_profiles
+      WHERE icon_url = ?1 AND actor_id IN (SELECT actor_id FROM ap_inbox)
+      UNION ALL
       SELECT 1 FROM comments WHERE author_avatar = ?1 AND status = 'approved'
       LIMIT 1
     `),
@@ -942,8 +982,28 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       SELECT icon_url AS url FROM followers
       WHERE icon_url IS NOT NULL AND actor_id IN (SELECT actor_id FROM ap_inbox)
       UNION
+      SELECT icon_url AS url FROM actor_profiles
+      WHERE icon_url IS NOT NULL AND actor_id IN (SELECT actor_id FROM ap_inbox)
+      UNION
       SELECT author_avatar AS url FROM comments
       WHERE author_avatar IS NOT NULL AND status = 'approved'
+    `),
+    actorProfileById: db.prepare('SELECT * FROM actor_profiles WHERE actor_id = ?'),
+    putActorProfile: db.prepare(`
+      INSERT INTO actor_profiles (actor_id, handle, name, icon_url, url, fetched_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (actor_id) DO UPDATE SET
+        handle = excluded.handle,
+        name = excluded.name,
+        icon_url = excluded.icon_url,
+        url = excluded.url,
+        fetched_at = excluded.fetched_at
+    `),
+    listActorsToProfile: db.prepare(`
+      SELECT DISTINCT actor_id FROM ap_inbox
+      WHERE actor_id NOT IN (SELECT actor_id FROM followers)
+        AND actor_id NOT IN (SELECT actor_id FROM actor_profiles WHERE fetched_at >= ?)
+      ORDER BY actor_id
     `),
     putFollower: db.prepare(`
       INSERT INTO followers (
@@ -1280,6 +1340,28 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     listAvatarSources() {
       return (statements.listAvatarSources.all() as Record<string, unknown>[]).map((row) =>
         String(row['url']),
+      );
+    },
+
+    getActorProfile(actorId) {
+      const row = statements.actorProfileById.get(actorId) as Record<string, unknown> | undefined;
+      return row === undefined ? undefined : toActorProfile(row);
+    },
+
+    putActorProfile(profile) {
+      statements.putActorProfile.run(
+        profile.actorId,
+        profile.handle,
+        profile.name,
+        profile.iconUrl,
+        profile.url,
+        profile.fetchedAt,
+      );
+    },
+
+    listActorsToProfile(fetchedBefore) {
+      return (statements.listActorsToProfile.all(fetchedBefore) as Record<string, unknown>[]).map(
+        (row) => String(row['actor_id']),
       );
     },
 
@@ -1773,6 +1855,17 @@ function toFollower(row: Record<string, unknown>): Follower {
     iconUrl: nullableText(row['icon_url']),
     url: nullableText(row['url']),
     followedAt: String(row['followed_at']),
+  };
+}
+
+function toActorProfile(row: Record<string, unknown>): StoredActorProfile {
+  return {
+    actorId: String(row['actor_id']),
+    handle: nullableText(row['handle']),
+    name: nullableText(row['name']),
+    iconUrl: nullableText(row['icon_url']),
+    url: nullableText(row['url']),
+    fetchedAt: String(row['fetched_at']),
   };
 }
 
@@ -2521,5 +2614,24 @@ const MIGRATIONS: readonly Migration[] = [
     // does, and a comment nothing was removed from leaves it `NULL`.
     version: 20,
     sql: `ALTER TABLE comments ADD COLUMN redacted TEXT;`,
+  },
+  {
+    // The profiles of actors who are not followers (TASK-184): whoever liked,
+    // boosted, answered or quoted a post, as their actor document named them.
+    // A cache and nothing else (decision-9). Nothing backfills it here: the
+    // profile sweep fetches every actor the inbox log names that has none.
+    version: 21,
+    sql: `
+      CREATE TABLE actor_profiles (
+        actor_id   TEXT PRIMARY KEY,
+        handle     TEXT,
+        name       TEXT,
+        icon_url   TEXT,
+        url        TEXT,
+        fetched_at TEXT NOT NULL
+      );
+
+      CREATE INDEX actor_profiles_icon_url ON actor_profiles (icon_url);
+    `,
   },
 ];

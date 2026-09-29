@@ -36,6 +36,7 @@ import { createCommentDigest, createCommentNotifier } from './notifications/inde
 import type { CommentDigest, CommentNotifier } from './notifications/index.ts';
 import {
   assertActorKeysUsable,
+  createActorProfileService,
   createDeliveryService,
   createRelayService,
   createSiteFederation,
@@ -44,8 +45,14 @@ import {
   migrateFederationToFiles,
   mountFederation,
   rebuildFederationIndexes,
+  signedProfileLoader,
 } from './federation/index.ts';
-import type { DeliveryService, RelayService, SiteFederation } from './federation/index.ts';
+import type {
+  ActorProfileService,
+  DeliveryService,
+  RelayService,
+  SiteFederation,
+} from './federation/index.ts';
 import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
 import {
@@ -336,6 +343,8 @@ export type {
   EditorForm,
   FlashKind,
   FlashMessage,
+  ActorProfile,
+  StoredActorProfile,
   Follower,
   FollowerRow,
   InboxActivity,
@@ -1345,6 +1354,12 @@ export interface Cms {
    */
   readonly avatars: AvatarService;
   /**
+   * The profiles of the fediverse actors who are not followers, cached in the
+   * database and fetched in the background (TASK-184). Swept on a timer once
+   * the site serves; a site or a test reaches for it to sweep now or to wait.
+   */
+  readonly actorProfiles: ActorProfileService;
+  /**
    * The sweep that removes commenter emails, address hashes and contact
    * messages once they outlive the periods in the site's settings (TASK-135).
    * Runs on a timer once the site serves; a site or a test reaches for it to
@@ -1717,7 +1732,28 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // on disk federates exactly as one saved through the editor does (doc-4).
   // It is built before the app because a handler reads it off the context: the
   // admin's Resend button is a request that sends a post out again.
-  const delivery = createDeliveryService({ federation, admin, store, config: resolved });
+  // The names and faces of the actors who are not followers (TASK-184),
+  // fetched in the background when one is heard from and on a sweep.
+  const actorProfiles = createActorProfileService({
+    admin,
+    config: resolved,
+    load: signedProfileLoader(() =>
+      federation.createContext(new URL(resolved.baseUrl), {
+        admin,
+        store,
+        config: resolved,
+        actorProfiles,
+      }),
+    ),
+  });
+
+  const delivery = createDeliveryService({
+    federation,
+    admin,
+    store,
+    config: resolved,
+    actorProfiles,
+  });
   content.events.on('change', (change) => delivery.handle(change));
 
   // Who hears about a comment (TASK-55). It reads the users file and the mail
@@ -1771,7 +1807,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // a record, so booting reconciles the two: a relay the file names and the
   // database has never heard of is followed here, which is what makes a
   // rebuilt database catch up rather than silently stop federating to it.
-  const relays = createRelayService({ federation, admin, store, config: resolved });
+  const relays = createRelayService({
+    federation,
+    admin,
+    store,
+    config: resolved,
+    actorProfiles,
+  });
   relays.sync();
 
   const maintenance = createMaintenanceSwitch({
@@ -1808,6 +1850,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('renderer', renderer);
     c.set('conversation', conversation);
     c.set('avatars', avatars);
+    c.set('actorProfiles', actorProfiles);
     c.set('announce', (change) => content.announce(change));
     c.set('rescan', () => content.sync());
     c.set('delivery', delivery);
@@ -1892,6 +1935,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     webmentions,
     replyContexts,
     avatars,
+    actorProfiles,
     retention,
     notifier,
     mail,
@@ -1938,6 +1982,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // waits on a stranger's server for one (TASK-134).
       avatars.start();
 
+      // And the profiles of whoever is in the inbox log without being a
+      // follower: missing ones are fetched now, which is the backfill of a log
+      // written before profiles were kept, and stale ones on a timer (TASK-184).
+      actorProfiles.start();
+
       // And whatever personal data has outlived its period is removed now and
       // every few hours from here on (TASK-135).
       retention.start();
@@ -1960,6 +2009,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       scheduler.stop();
       digests.stop();
       avatars.stop();
+      actorProfiles.stop();
       retention.stop();
       await content.stop();
       await scheduler.settled();
@@ -1971,6 +2021,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       await webmentions.settled();
       await replyContexts.settled();
       await avatars.settled();
+      await actorProfiles.settled();
       await retention.settled();
       await notifier.settled();
       await mail.settled();

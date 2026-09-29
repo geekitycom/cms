@@ -639,6 +639,7 @@ describe('the followers collection', () => {
       admin: instance.admin,
       store: instance.store,
       config: instance.config,
+      actorProfiles: instance.actorProfiles,
     });
 
     const everybody = followersPage(context, ADA, null);

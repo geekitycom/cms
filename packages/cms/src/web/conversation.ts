@@ -1,11 +1,17 @@
 import { avatarHref } from '../avatars/avatars.ts';
-import type { AdminStore, Follower, InboxActivity, PostComment } from '../admin/store.ts';
+import type { ActorProfile, AdminStore, InboxActivity, PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import { readAllQuoteAuthorizations } from '../federation/quotes.ts';
 import type { QuoteAuthorizationRecord } from '../federation/quotes.ts';
-import { actorHandle, quoteFrom, replyFrom, REPLY_ACTIVITY_TYPE } from '../federation/replies.ts';
+import {
+  actorHandle,
+  guessedName,
+  quoteFrom,
+  replyFrom,
+  REPLY_ACTIVITY_TYPE,
+} from '../federation/replies.ts';
 import { activityStreamsId, isPublicDocument, permalinkOfObjectId } from './documents.ts';
 import type { FeedComment } from './feeds.ts';
 import { absoluteUrl } from './negotiate.ts';
@@ -801,10 +807,11 @@ function withdrawnBy(activities: readonly InboxActivity[]): Set<string> {
 /**
  * How an actor is named, memoised for the length of one conversation.
  *
- * A follower is named from the profile it published when it followed; everyone
- * else is named by the handle their actor URL implies, which is a guess and
- * deliberately so — naming them properly would mean dereferencing the actor,
- * a network round trip per comment on the page.
+ * A follower is named from the profile it published when it followed, and
+ * anybody else from the profile the site fetched when they were first heard
+ * from (TASK-184). Both are read from the database: nothing is fetched while a
+ * page is drawn. Only an actor neither knows is named by a guess from their
+ * URL, which is their server when the URL ends in a number.
  */
 function authorNaming(admin: AdminStore): (actorId: string) => InteractionAuthor {
   const known = new Map<string, InteractionAuthor>();
@@ -812,20 +819,20 @@ function authorNaming(admin: AdminStore): (actorId: string) => InteractionAuthor
   // followers are one row per (user, actor) now (decision-14), so the same
   // stranger may be on the list several times and any of those rows names them
   // the same way — the columns read here are the actor's own name and picture.
-  let profiles: Map<string, Follower> | undefined;
+  let followers: Map<string, ActorProfile> | undefined;
 
   return (actorId) => {
     const held = known.get(actorId);
     if (held !== undefined) return held;
 
-    profiles ??= new Map(admin.listFollowers().map((entry) => [entry.actorId, entry]));
-    const follower = profiles.get(actorId);
-    const handle = follower?.handle ?? actorHandle(actorId) ?? null;
-    const icon = follower?.iconUrl ?? null;
+    followers ??= new Map(admin.listFollowers().map((entry) => [entry.actorId, entry]));
+    const profile = followers.get(actorId) ?? admin.getActorProfile(actorId);
+    const handle = profile?.handle ?? actorHandle(actorId) ?? null;
+    const icon = profile?.iconUrl ?? null;
     const author: InteractionAuthor = {
-      name: follower?.name ?? handle ?? actorId,
+      name: profile?.name ?? handle ?? guessedName(actorId),
       handle,
-      url: follower?.url ?? actorId,
+      url: profile?.url ?? actorId,
       avatar: icon === null ? null : avatarHref(icon),
       actorId,
     };
