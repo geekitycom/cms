@@ -291,8 +291,10 @@ for the images, because there is nothing to do: `rm -r data/images`.
 
 ### Personal data
 
-Commenter emails and address hashes are in the comment files under
-`content/_data/comments/`, and contact messages are in `data/contact/`. A sweep
+Commenter emails are in `data/comments/`, address hashes are in the comment
+files under `content/_data/comments/`, and contact messages are in
+`data/contact/`. Emails that a site committed while they were still in the
+comment files stay in its git history until that history is rewritten. A sweep
 removes each once it outlives the period set on **Settings > Discussion**. A
 site keeps everything until its owner sets a period, so upgrading deletes
 nothing; a new site from `geekity init` starts with 180 days for an email, 30

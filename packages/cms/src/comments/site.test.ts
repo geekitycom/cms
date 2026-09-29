@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -11,7 +11,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { COMMENT_FIELDS, MINIMUM_SUBMIT_SECONDS } from './submission.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
 import { COMMENT_POST_PATH } from './form.ts';
-import { commentsFile, updateComment } from './records.ts';
+import { commentEmailsFile, commentsFile, updateComment } from './records.ts';
 
 /**
  * Comments as a reader meets them: a form under an open post, a moderation
@@ -106,7 +106,8 @@ async function submit(cms: Cms, fields: Record<string, string>): Promise<Respons
 
 /** Approve a comment the way the moderation screen does. */
 async function approve(cms: Cms, id: string): Promise<void> {
-  await updateComment({ admin: cms.admin, contentDir: cms.config.contentDir }, id, {
+  const { contentDir, dataDir } = cms.config;
+  await updateComment({ admin: cms.admin, contentDir, dataDir }, id, {
     status: 'approved',
   });
 }
@@ -166,11 +167,26 @@ describe('leaving a comment', () => {
     // And the file says the same thing, because the file is the comment.
     const stored = JSON.parse(await readFile(commentsFile(contentDir, 'hello-world'), 'utf8')) as {
       post: string;
-      comments: { status: string; author: { email: string } }[];
+      comments: { status: string; author: { email?: string } }[];
     };
     assert.equal(stored.post, '/2026/09/hello-world/');
     assert.equal(stored.comments[0]?.status, 'approved');
-    assert.equal(stored.comments[0]?.author.email, 'ada@example.com');
+    assert.equal(stored.comments[0]?.author.email, undefined);
+  });
+
+  it('keeps the email out of every file under content/, and in data/ at 0600', async () => {
+    const { cms, contentDir, dataDir } = await site();
+
+    await submit(cms, submission());
+
+    for (const entry of await readdir(contentDir, { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const text = await readFile(path.join(entry.parentPath, entry.name), 'utf8');
+      assert.ok(!text.includes('ada@example.com'), `${entry.name} carries no email`);
+    }
+    const privateFile = commentEmailsFile(dataDir, 'hello-world');
+    assert.match(await readFile(privateFile, 'utf8'), /ada@example\.com/);
+    assert.equal((await stat(privateFile)).mode & 0o777, 0o600);
   });
 
   it('renders the comment from Markdown, with no HTML and every link marked', async () => {
@@ -620,8 +636,41 @@ describe('a database that has been deleted', () => {
     started.push(second);
     await second.sync();
 
+    assert.equal(before[0]?.author.email, 'ada@example.com');
     assert.deepEqual(second.admin.listComments({}), before);
     assert.match(await postPage(second), /Written once\./);
+
+    // The rebuilt index knows her by name and email, so she is let straight through.
+    const again = await submit(second, submission({ [COMMENT_FIELDS.body]: 'And again.' }));
+    assert.match(again.headers.get('location') ?? '', /\?comment=posted#comment-/);
+  });
+});
+
+describe('a site whose comment files still hold emails', () => {
+  it('moves them to data/ on boot and knows them all the same', async () => {
+    const legacy = {
+      post: '/2026/09/hello-world/',
+      comments: [
+        {
+          id: 'c1',
+          status: 'approved',
+          author: { name: 'Ada Lovelace', url: null, email: 'ada@example.com', avatar: null },
+          content: { markdown: 'Old words.', html: '<p>Old words.</p>' },
+          submitted: '2026-09-19T10:00:00.000Z',
+          notify: true,
+        },
+      ],
+    };
+    const { cms, contentDir } = await site({
+      'posts/2026-09-19-hello-world.md': POST,
+      '_data/comments/hello-world.json': JSON.stringify(legacy),
+    });
+
+    const published = await readFile(commentsFile(contentDir, 'hello-world'), 'utf8');
+    assert.ok(!published.includes('ada@example.com'), 'the email left content/');
+    assert.equal(cms.admin.getComment('c1')?.author.email, 'ada@example.com');
+    assert.equal(cms.admin.getComment('c1')?.notify, true);
+    assert.match(await postPage(cms), /Old words\./);
   });
 });
 

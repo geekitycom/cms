@@ -534,9 +534,13 @@ describe('a webmention on the page', () => {
     const held = stored(cms)[0];
     assert.ok(held !== undefined);
     const { updateComment } = await import('../comments/records.ts');
-    await updateComment({ admin: cms.admin, contentDir: cms.config.contentDir }, held.id, {
-      status: 'approved',
-    });
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      held.id,
+      {
+        status: 'approved',
+      },
+    );
 
     const after = await (await cms.app.request('/2026/09/hello-world/')).text();
     assert.match(after, /comment-webmention/, 'and an approved one says where it came from');

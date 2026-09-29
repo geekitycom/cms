@@ -40,17 +40,22 @@ export {
 export type { CommentPolicy } from './policy.ts';
 export {
   addComment,
+  COMMENT_EMAILS_DIRECTORY,
+  COMMENT_EMAILS_FILE_MODE,
+  commentEmailsFile,
   COMMENTS_DATA_DIRECTORY,
   commentsDirectory,
   commentsFile,
   deleteComment,
   heldWebmention,
   intakeComment,
+  migrateCommentEmails,
   readComments,
   rebuildCommentIndexes,
   updateComment,
 } from './records.ts';
 export type {
+  CommentEmailMigrationReport,
   CommentIndexReport,
   CommentIntakeOutcome,
   CommentNotices,

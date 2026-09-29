@@ -9,7 +9,7 @@ import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { COMMENT_FIELDS } from '../comments/submission.ts';
 import type { CommentChecker } from '../comments/submission.ts';
 import { COMMENT_POST_PATH } from '../comments/form.ts';
-import { readComments, updateComment } from '../comments/records.ts';
+import { readComments, rebuildCommentIndexes, updateComment } from '../comments/records.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
@@ -189,7 +189,7 @@ async function confirm(site: Site, link: string): Promise<{ status: number; html
 
 /** The comments the file holds, which is what a comment really is. */
 function stored(site: Site) {
-  return readComments(site.contentDir, 'hello-world');
+  return readComments(site.cms.config, 'hello-world');
 }
 
 describe('a comment waiting for a moderator (AC #1)', () => {
@@ -266,7 +266,7 @@ describe('a comment waiting for a moderator (AC #1)', () => {
 
     // Put it back where it was, so a link that still worked would show.
     await updateComment(
-      { admin: box.cms.admin, contentDir: box.contentDir },
+      { admin: box.cms.admin, contentDir: box.contentDir, dataDir: box.cms.config.dataDir },
       stored(box)[0]?.id ?? '',
       { status: 'pending' },
     );
@@ -402,6 +402,35 @@ describe('telling a commenter about a reply (AC #2)', () => {
     );
     assert.match(told.text, /Alan Turing/);
     assert.match(told.text, /I agree\./);
+  });
+
+  it('writes to the address data/ holds once the index is rebuilt from the files', async () => {
+    const box = await site({ email: 'ada@example.com' });
+    const parent = await graceCommented(box);
+    const { contentDir, dataDir } = box.cms.config;
+    box.cms.admin.replaceComments([]);
+    rebuildCommentIndexes({ admin: box.cms.admin, contentDir, dataDir });
+
+    await submit(
+      box,
+      submission({
+        [COMMENT_FIELDS.name]: 'Alan Turing',
+        [COMMENT_FIELDS.email]: 'alan@example.com',
+        [COMMENT_FIELDS.body]: 'I agree.',
+        [COMMENT_FIELDS.inReplyTo]: parent,
+      }),
+    );
+    const moderation = onlyMessage(box.provider);
+    box.provider.clear();
+    await confirm(box, linkFor(moderation, 'approve'));
+
+    const told = onlyMessage(box.provider);
+    assert.deepEqual(
+      told.to.map((to) => to.address),
+      ['grace@example.com'],
+    );
+    const landing = await open(box, linkFor(told, 'unsubscribe'));
+    assert.match(landing.html, /grace@example\.com/, 'the unsubscribe link names her');
   });
 
   it('says nothing to somebody who never ticked the box', async () => {

@@ -112,7 +112,11 @@ export function createWebmentionService(
   const logger = options.logger ?? console;
 
   /** The comment files an incoming webmention is written into. */
-  const records: CommentRecords = { admin, contentDir: config.contentDir };
+  const records: CommentRecords = {
+    admin,
+    contentDir: config.contentDir,
+    dataDir: config.dataDir,
+  };
 
   // Incoming checks run one after another too, and on a chain of their own: a
   // page of this site's own that is slow to answer must not hold up the check

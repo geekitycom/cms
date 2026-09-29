@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { commentEmailsFile } from '../comments/records.ts';
 import { addContactMessage, readContactMessage } from '../contact/records.ts';
 import type { Cms } from '../index.ts';
 import { addCommentOptOut, hasOptedOut } from '../notifications/optouts.ts';
@@ -133,10 +134,11 @@ describe('Tools > Personal data', () => {
     assert.equal(response.status, 303);
 
     const written = await readFile(file, 'utf8');
-    assert.doesNotMatch(written, /ada@example\.com/i, 'the address is nowhere in the file');
-    assert.doesNotMatch(written, /ada\.example/, 'nor their website');
+    assert.doesNotMatch(written, /ada\.example/, 'their website is nowhere in the file');
     assert.doesNotMatch(written, /"Ada"/, 'nor their name');
-    assert.match(written, /grace@example\.com/, 'somebody else’s comment is untouched');
+    const emails = await readFile(commentEmailsFile(dataDir, 'hello-world'), 'utf8');
+    assert.doesNotMatch(emails, /ada@example\.com/i, 'nor their address in data/');
+    assert.match(emails, /grace@example\.com/, 'somebody else’s address is untouched');
 
     const one = cms.admin.getComment('one');
     assert.equal(one?.author.name, 'Anonymous');

@@ -76,6 +76,8 @@ export interface RebuildContentIndexOptions {
   admin: AdminStore;
   /** The content directory every one of them is read from. */
   contentDir: string;
+  /** The data directory the commenters' emails are read from. */
+  dataDir: string;
   /** The full scan, which is `cms.sync()`: see {@link GeekityEnv} `rescan`. */
   rescan: () => Promise<SyncResult>;
 }
@@ -105,12 +107,12 @@ export interface RebuildContentIndexOptions {
 export async function rebuildContentIndex(
   options: RebuildContentIndexOptions,
 ): Promise<ContentIndexRebuild> {
-  const { store, admin, contentDir, rescan } = options;
+  const { store, admin, contentDir, dataDir, rescan } = options;
 
   store.clear();
 
   const federation = rebuildFederationIndexes({ admin, contentDir });
-  const comments = rebuildCommentIndexes({ admin, contentDir });
+  const comments = rebuildCommentIndexes({ admin, contentDir, dataDir });
   const scan = await rescan();
 
   return {
@@ -178,6 +180,7 @@ export function mountToolsScreen(app: Hono<GeekityEnv>, options: MountToolsOptio
       store: c.var.store,
       admin: c.var.admin,
       contentDir: c.var.config.contentDir,
+      dataDir: c.var.config.dataDir,
       rescan: c.var.rescan,
     });
 

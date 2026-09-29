@@ -364,6 +364,7 @@ the same directory reads all of it, and everything in it is meant to be public:
 | `data/users.json`                 | Usernames and argon2id password hashes. Mode `0600`.                                                                            |
 | `data/keys/`                      | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                      |
 | `data/comment-salt`               | What hides commenters' addresses in the published comment files. Mode `0600`.                                                   |
+| `data/comments/{slug}.json`       | The emails of that post's commenters, and whether each asked to hear about replies, keyed by comment id. Mode `0600`.           |
 | `data/akismet.json`               | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                         |
 | `data/mail.json`                  | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                 |
 | `data/notification-secret`        | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else. |
@@ -979,7 +980,12 @@ comments — id, source, kind, status, author, the Markdown and the HTML it
 rendered to, when it was submitted, a salted hash of the address, and what it
 answers — so they are in git beside the posts, an Eleventy build of the same
 directory shows them, and the `comments` table is an index emptied and read
-back on every boot.
+back on every boot. The commenter's email is not in that file: it is in
+`data/comments/{slug}.json` (mode `0600`), keyed by comment id, because
+everything under `content/` is published and goes into git. A site upgrading
+from a version that kept the email in the comment file has it moved there on
+the next boot, and so does an email somebody types into a comment file by
+hand.
 
 Three settings and one front-matter key decide whether a post is still taking
 them, and they are read in one place so the form and the endpoint can never
@@ -1040,7 +1046,7 @@ on one comment, lasts a week, and is spent the first time it is used.
 
 Commenters get the other half. The form offers "email me when somebody replies
 to this", but only on a site that can actually send mail; ticking it stores
-`notify: true` beside the address that is already in the comment file, and
+`notify: true` beside the commenter's address in `data/comments/{slug}.json`, and
 nothing about either is ever rendered — not on the page, not in the JSON or
 Markdown representations, and not in the comments feeds. When a reply to that
 comment is **approved**, one message goes out with the reply in it and an
@@ -1396,22 +1402,22 @@ This is every piece of personal data the CMS stores, where it is, and how long
 it stays. "Kept" means until somebody deletes it, unless a retention period
 says otherwise.
 
-| What                                                                                                                 | Where                                                             | How long                                                                       |
-| -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| A commenter's name, website and words                                                                                | `content/_data/comments/{slug}.json`, public and in git           | Kept. Erasing on request replaces the name and drops the website.              |
-| A commenter's email, and whether they asked to be told about replies                                                 | `content/_data/comments/{slug}.json`, **never shown**, but in git | `commentEmailRetentionDays`: forever unless set, 180 on a new site.            |
-| A salted hash of the address a comment, webmention or contact message came from (the address itself is never stored) | The comment file, or the contact message file                     | `addressHashRetentionDays`: forever unless set, 30 on a new site.              |
-| A webmention's author name, website, avatar URL and the source page's words                                          | `content/_data/comments/{slug}.json`                              | Kept, as a copy of a page that is public already.                              |
-| A contact message: the sender's name, email, subject and message                                                     | `data/contact/{id}.json`, mode `0600`                             | `contactMessageRetentionDays`: forever unless set, 365 on a new site.          |
-| The addresses that unsubscribed from reply notices                                                                   | `data/comment-optouts.json`, mode `0600`                          | Kept, so the site goes on not writing to them. Erasing on request removes one. |
-| Followers: actor id, handle, display name, avatar URL, profile URL                                                   | `content/_data/federation/{username}/followers.json`, in git      | Until they unfollow.                                                           |
-| Inbound likes, boosts, replies and quotes, with the actor who sent them                                              | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`, in git        | Kept.                                                                          |
-| What a reply shows of the post it answers: its title, words and author                                               | `content/_data/replyContexts.json`, in git                        | Kept.                                                                          |
-| Remote avatars, shrunk                                                                                               | `data/avatars/`                                                   | Deleted by the avatar sweep once nothing shown names them.                     |
-| Users: username, email, argon2id password hash, profile                                                              | `data/users.json`, mode `0600`                                    | Until the user is deleted.                                                     |
-| An index of all of the above, and sessions, reset tokens and spent link tokens                                       | `data/geekity.db`                                                 | A cache of the files. Sessions and tokens are pruned when they expire.         |
-| Client addresses in the rate limits                                                                                  | Memory                                                            | Until the window passes or the site restarts.                                  |
-| Client addresses in the access log                                                                                   | stdout, and whatever collects it                                  | Only with `accessLogAddress` on. The collector keeps them.                     |
+| What                                                                                                                 | Where                                                         | How long                                                                       |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| A commenter's name, website and words                                                                                | `content/_data/comments/{slug}.json`, public and in git       | Kept. Erasing on request replaces the name and drops the website.              |
+| A commenter's email, and whether they asked to be told about replies                                                 | `data/comments/{slug}.json`, mode `0600`, keyed by comment id | `commentEmailRetentionDays`: forever unless set, 180 on a new site.            |
+| A salted hash of the address a comment, webmention or contact message came from (the address itself is never stored) | The comment file, or the contact message file                 | `addressHashRetentionDays`: forever unless set, 30 on a new site.              |
+| A webmention's author name, website, avatar URL and the source page's words                                          | `content/_data/comments/{slug}.json`                          | Kept, as a copy of a page that is public already.                              |
+| A contact message: the sender's name, email, subject and message                                                     | `data/contact/{id}.json`, mode `0600`                         | `contactMessageRetentionDays`: forever unless set, 365 on a new site.          |
+| The addresses that unsubscribed from reply notices                                                                   | `data/comment-optouts.json`, mode `0600`                      | Kept, so the site goes on not writing to them. Erasing on request removes one. |
+| Followers: actor id, handle, display name, avatar URL, profile URL                                                   | `content/_data/federation/{username}/followers.json`, in git  | Until they unfollow.                                                           |
+| Inbound likes, boosts, replies and quotes, with the actor who sent them                                              | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`, in git    | Kept.                                                                          |
+| What a reply shows of the post it answers: its title, words and author                                               | `content/_data/replyContexts.json`, in git                    | Kept.                                                                          |
+| Remote avatars, shrunk                                                                                               | `data/avatars/`                                               | Deleted by the avatar sweep once nothing shown names them.                     |
+| Users: username, email, argon2id password hash, profile                                                              | `data/users.json`, mode `0600`                                | Until the user is deleted.                                                     |
+| An index of all of the above, and sessions, reset tokens and spent link tokens                                       | `data/geekity.db`                                             | A cache of the files. Sessions and tokens are pruned when they expire.         |
+| Client addresses in the rate limits                                                                                  | Memory                                                        | Until the window passes or the site restarts.                                  |
+| Client addresses in the access log                                                                                   | stdout, and whatever collects it                              | Only with `accessLogAddress` on. The collector keeps them.                     |
 
 Two services outside the site see personal data when a site turns them on.
 Akismet is sent a commenter's or sender's address, user agent, referrer, name,
@@ -1475,9 +1481,11 @@ skip the queue. Its author is no longer told about replies, and their next
 comment waits for a moderator. A moderation link in an inbox names the comment
 by id, so it goes on working.
 
-The sweep changes the files as they are now. A comment file in git keeps its
-history, so an email committed before it was removed is still in the
-repository's history until that history is rewritten.
+The sweep changes the files as they are now. The emails are in `data/`, which
+is not in git, so removing one removes it. Emails from before they moved out of
+the comment files (TASK-182) were committed with those files, and they stay in
+the repository's history until that history is rewritten, whatever the sweep or
+an erasure does to the files today.
 
 ### Erasing one person's data
 

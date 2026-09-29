@@ -9,7 +9,7 @@ import type { Browser } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { COMMENT_POST_PATH } from './form.ts';
-import { commentsFile } from './records.ts';
+import { commentsFile, readComments } from './records.ts';
 import { COMMENT_FIELDS } from './submission.ts';
 import type { CommentChecker, CommentSubmission } from './submission.ts';
 
@@ -160,9 +160,9 @@ describe('a comment from somebody signed in', () => {
     const posted = await agent.post(COMMENT_POST_PATH, submission(token));
     assert.equal(posted.status, 303);
 
-    const [comment] = await storedComments(cms);
+    const [comment] = readComments(cms.config, 'hello-world');
     assert.ok(comment !== undefined, 'the comment was written to the post file');
-    assert.deepEqual(comment['author'], {
+    assert.deepEqual(comment.author, {
       name: ADA.displayName,
       url: `/author/${ADA.username}/`,
       email: ADA.email,
@@ -196,8 +196,8 @@ describe('a comment from somebody signed in', () => {
       }),
     );
 
-    const [comment] = await storedComments(cms);
-    assert.deepEqual(comment?.['author'], {
+    const [comment] = readComments(cms.config, 'hello-world');
+    assert.deepEqual(comment?.author, {
       name: ADA.displayName,
       url: `/author/${ADA.username}/`,
       email: ADA.email,

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readdirSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import {
@@ -33,6 +33,14 @@ import type { CommentChecker, CommentSubmission, CommentVerdict } from './submis
  * - **The index is derived, never told.** A row is built from a file entry by
  *   {@link commentFrom} whether it is being written for the first time or
  *   rebuilt at boot.
+ *
+ * **The email is not in the file.** Everything under `content/` is published
+ * and goes into git, where a removed line stays in history until somebody
+ * rewrites it, so a commenter's `author.email` and the `notify` that only
+ * means anything beside it live in `data/comments/{slug}.json` instead (mode
+ * `0600`), keyed by comment id. A record read here has both merged back in, and
+ * a record written here is split again, so nothing outside this module knows
+ * there are two files (TASK-182).
  *
  * The entry shape is deliberately wider than a form submission. A webmention
  * (TASK-51) is somebody else's post pointing at this one: it has a `url` and no
@@ -77,6 +85,35 @@ export function commentsFile(contentDir: string, slug: string): string {
 /** Slugs a file may be named after: what {@link slugify} produces, and no more. */
 const SAFE_SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
+/** Where commenters' emails live, relative to the data directory. */
+export const COMMENT_EMAILS_DIRECTORY = 'comments';
+
+/** Nobody but the site's own user reads a commenter's email. */
+export const COMMENT_EMAILS_FILE_MODE = 0o600;
+
+/**
+ * The absolute path of the private file holding one post's commenters' emails:
+ * `data/comments/{slug}.json`, beside the post's own file in `content/` but
+ * never published with it.
+ */
+export function commentEmailsFile(dataDir: string, slug: string): string {
+  if (!SAFE_SLUG.test(slug)) {
+    throw new Error(`"${slug}" is not a slug a comment file can be named after.`);
+  }
+  return path.join(dataDir, COMMENT_EMAILS_DIRECTORY, `${slug}.json`);
+}
+
+/** What `data/` holds about one comment: how to reach whoever wrote it. */
+interface CommentContact {
+  email: string;
+  notify: boolean;
+}
+
+/** A comment as `content/` spells it: everything but the email and `notify`. */
+type PublishedComment = Omit<CommentRecord, 'author' | 'notify'> & {
+  author: Omit<CommentRecord['author'], 'email'>;
+};
+
 /** A {@link CommentRecord} on its way in, before the store has named it. */
 export type NewComment = Omit<CommentRecord, 'id'> & {
   /** The post it is on. */
@@ -93,10 +130,12 @@ export interface CommentRecords {
   readonly admin: AdminStore;
   /** The content directory the files live under. */
   readonly contentDir: string;
+  /** The data directory the commenters' emails live under. */
+  readonly dataDir: string;
 }
 
 /**
- * One post's comments, as its file says them, oldest first.
+ * One post's comments, as its files say them, oldest first.
  *
  * A missing file is no comments, which is what almost every post has. Unlike
  * `followers.json`, an entry that will not parse is dropped rather than
@@ -105,15 +144,106 @@ export interface CommentRecords {
  * down on the next boot. Nothing irreplaceable is at stake — a comment that
  * cannot be read is one nobody could have shown either way.
  */
-export function readComments(contentDir: string, slug: string): CommentRecord[] {
-  const source = readFileIfPresentSync(commentsFile(contentDir, slug));
-  if (source === undefined) return [];
+export function readComments(
+  records: Pick<CommentRecords, 'contentDir' | 'dataDir'>,
+  slug: string,
+): CommentRecord[] {
+  return readPost(records, slug).comments;
+}
 
-  return commentsIn(source);
+/**
+ * One post's comments with their emails merged back in.
+ *
+ * `data/` wins over `content/`. An email still in a comment file is read too,
+ * so a site that has not booted since upgrading loses nothing before
+ * {@link migrateCommentEmails} moves it.
+ */
+function readPost(
+  records: Pick<CommentRecords, 'contentDir' | 'dataDir'>,
+  slug: string,
+): { post: string; comments: CommentRecord[] } {
+  const held = fileContents(readFileIfPresentSync(commentsFile(records.contentDir, slug)));
+  const contacts = contactsIn(readFileIfPresentSync(commentEmailsFile(records.dataDir, slug)));
+  return {
+    post: held.post,
+    comments: held.comments.map((comment) => {
+      const contact = contacts.get(comment.id);
+      if (contact === undefined) return comment;
+      return {
+        ...comment,
+        author: { ...comment.author, email: contact.email },
+        notify: contact.notify,
+      };
+    }),
+  };
+}
+
+/**
+ * Write one post's comments: the emails to `data/`, everything else to
+ * `content/`. Called inside the lock on the post's comment file, which is the
+ * lock on both, because nothing writes the private file but this.
+ *
+ * `data/` goes first, so a crash between the two writes leaves an email in
+ * both places or in `data/` alone, and never in neither.
+ */
+function writePost(
+  records: Pick<CommentRecords, 'contentDir' | 'dataDir'>,
+  slug: string,
+  permalink: string,
+  comments: readonly CommentRecord[],
+): void {
+  const contacts = new Map<string, CommentContact>();
+  for (const comment of comments) {
+    if (comment.author.email !== null) {
+      contacts.set(comment.id, { email: comment.author.email, notify: comment.notify });
+    }
+  }
+
+  const privateFile = commentEmailsFile(records.dataDir, slug);
+  if (contacts.size > 0) {
+    writeFileAtomicallySync(privateFile, contactsJson(contacts), {
+      mode: COMMENT_EMAILS_FILE_MODE,
+    });
+  } else {
+    rmSync(privateFile, { force: true });
+  }
+
+  writeFileAtomicallySync(
+    commentsFile(records.contentDir, slug),
+    commentsJson(permalink, comments.map(publishedEntryOf)),
+  );
+}
+
+/** The emails a private file holds, by comment id. A damaged file holds none. */
+function contactsIn(source: string | undefined): Map<string, CommentContact> {
+  const contacts = new Map<string, CommentContact>();
+  if (source === undefined) return contacts;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    return contacts;
+  }
+  if (!isRecord(parsed) || !isRecord(parsed['comments'])) return contacts;
+
+  for (const [id, value] of Object.entries(parsed['comments'])) {
+    if (!isRecord(value)) continue;
+    const email = optionalText(value['email']);
+    if (email !== null) contacts.set(id, { email, notify: value['notify'] === true });
+  }
+  return contacts;
+}
+
+/** A private file's contents: indented, newline ended. */
+function contactsJson(contacts: ReadonlyMap<string, CommentContact>): string {
+  return `${JSON.stringify({ comments: Object.fromEntries(contacts) }, null, 2)}\n`;
 }
 
 /** One post's comment file as the post it names and the comments it holds. */
-function fileContents(source: string): { post: string; comments: CommentRecord[] } {
+function fileContents(source: string | undefined): { post: string; comments: CommentRecord[] } {
+  if (source === undefined) return { post: '', comments: [] };
+
   let parsed: unknown;
   try {
     parsed = JSON.parse(source);
@@ -129,11 +259,6 @@ function fileContents(source: string): { post: string; comments: CommentRecord[]
       ? entries.map(commentFrom).filter((entry) => entry !== undefined)
       : [],
   };
-}
-
-/** Just the comments, for the readers that have the post already. */
-function commentsIn(source: string): CommentRecord[] {
-  return fileContents(source).comments;
 }
 
 /**
@@ -202,8 +327,7 @@ export async function addComment(
   records: CommentRecords,
   comment: NewComment,
 ): Promise<PostComment> {
-  const { admin, contentDir } = records;
-  const file = commentsFile(contentDir, comment.slug);
+  const file = commentsFile(records.contentDir, comment.slug);
   const stored: PostComment = {
     ...commentRecordOf(comment),
     slug: comment.slug,
@@ -211,9 +335,9 @@ export async function addComment(
   };
 
   return await withFileLock(file, () => {
-    const held = readCommentFile(file);
-    writeFileAtomicallySync(file, commentsJson(comment.permalink, [...held, entryOf(stored)]));
-    admin.putComment(stored);
+    const held = readPost(records, comment.slug).comments;
+    writePost(records, comment.slug, comment.permalink, [...held, stored]);
+    records.admin.putComment(stored);
     return stored;
   });
 }
@@ -501,20 +625,19 @@ export async function updateComment(
   id: string,
   change: Partial<Pick<CommentRecord, 'status' | 'content' | 'author' | 'kind' | 'submitted'>>,
 ): Promise<PostComment | undefined> {
-  const { admin, contentDir } = records;
-  const known = admin.getComment(id);
+  const known = records.admin.getComment(id);
   if (known === undefined) return undefined;
 
-  const file = commentsFile(contentDir, known.slug);
+  const file = commentsFile(records.contentDir, known.slug);
 
   return await withFileLock(file, () => {
-    const held = readCommentFile(file);
+    const held = readPost(records, known.slug).comments;
     const at = held.findIndex((entry) => entry.id === id);
     if (at === -1) return undefined;
 
     const moved: PostComment = { ...known, ...(held[at] as CommentRecord), ...change };
-    writeFileAtomicallySync(file, commentsJson(known.permalink, held.with(at, entryOf(moved))));
-    admin.putComment(moved);
+    writePost(records, known.slug, known.permalink, held.with(at, moved));
+    records.admin.putComment(moved);
     return moved;
   });
 }
@@ -527,20 +650,17 @@ export async function updateComment(
  * edited by hand cannot go on being shown.
  */
 export async function deleteComment(records: CommentRecords, id: string): Promise<boolean> {
-  const { admin, contentDir } = records;
-  const known = admin.getComment(id);
+  const known = records.admin.getComment(id);
   if (known === undefined) return false;
 
-  const file = commentsFile(contentDir, known.slug);
+  const file = commentsFile(records.contentDir, known.slug);
 
   return await withFileLock(file, () => {
-    const held = readCommentFile(file);
+    const held = readPost(records, known.slug).comments;
     const next = held.filter((entry) => entry.id !== id);
-    if (next.length !== held.length) {
-      writeFileAtomicallySync(file, commentsJson(known.permalink, next));
-    }
+    if (next.length !== held.length) writePost(records, known.slug, known.permalink, next);
 
-    const indexed = admin.deleteComment(id);
+    const indexed = records.admin.deleteComment(id);
     return next.length !== held.length || indexed;
   });
 }
@@ -562,14 +682,10 @@ export async function rewriteComments(
   slug: string,
   change: (comment: CommentRecord) => CommentRecord | undefined,
 ): Promise<string[]> {
-  const { admin, contentDir } = records;
-  const file = commentsFile(contentDir, slug);
+  const file = commentsFile(records.contentDir, slug);
 
   return await withFileLock(file, () => {
-    const source = readFileIfPresentSync(file);
-    if (source === undefined) return [];
-
-    const held = fileContents(source);
+    const held = readPost(records, slug);
     const changed: PostComment[] = [];
     const next = held.comments.map((entry) => {
       const moved = change(entry);
@@ -579,8 +695,8 @@ export async function rewriteComments(
     });
     if (changed.length === 0) return [];
 
-    writeFileAtomicallySync(file, commentsJson(held.post, next.map(entryOf)));
-    for (const comment of changed) admin.putComment(comment);
+    writePost(records, slug, held.post, next);
+    for (const comment of changed) records.admin.putComment(comment);
     return changed.map((comment) => comment.id);
   });
 }
@@ -609,22 +725,92 @@ export interface CommentIndexReport {
  * synchronous because both callers are.
  */
 export function rebuildCommentIndexes(records: CommentRecords): CommentIndexReport {
-  const { admin, contentDir } = records;
   const comments: PostComment[] = [];
 
-  for (const file of commentFiles(contentDir)) {
-    const source = readFileIfPresentSync(file);
-    if (source === undefined) continue;
-
-    const slug = path.basename(file, '.json');
-    const held = fileContents(source);
+  for (const slug of commentSlugs(records.contentDir)) {
+    const held = readPost(records, slug);
     for (const entry of held.comments) {
       comments.push({ ...entry, slug, permalink: held.post });
     }
   }
 
-  admin.replaceComments(comments);
+  records.admin.replaceComments(comments);
   return { comments: comments.length };
+}
+
+/** What moving the emails out of `content/` changed. */
+export interface CommentEmailMigrationReport {
+  /** How many comment files were rewritten. */
+  files: number;
+}
+
+/**
+ * Move every email still in a comment file into `data/` (TASK-182).
+ *
+ * A site that kept comments before the emails moved has them in
+ * `content/_data/comments/`, and a comment file somebody edits by hand may
+ * gain one again. Boot calls this before {@link rebuildCommentIndexes}, so
+ * both end up in the private file and out of the published one. It edits each
+ * file's JSON as it finds it, taking off `author.email` and `notify` and
+ * nothing else, so a key this version does not know and an entry it cannot
+ * read survive it. An email `data/` already holds for that comment wins. A file
+ * with nothing to take off is not written, so a second boot writes nothing.
+ *
+ * Synchronous, like the other boot migrations, and run before anything else
+ * can be writing a comment.
+ */
+export function migrateCommentEmails(
+  records: Pick<CommentRecords, 'contentDir' | 'dataDir'>,
+): CommentEmailMigrationReport {
+  let files = 0;
+
+  for (const slug of commentSlugs(records.contentDir)) {
+    const file = commentsFile(records.contentDir, slug);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(readFileIfPresentSync(file) ?? '');
+    } catch {
+      continue;
+    }
+    if (!isRecord(parsed) || !Array.isArray(parsed['comments'])) continue;
+
+    const found = new Map<string, CommentContact>();
+    let stripped = false;
+    const entries = parsed['comments'].map((entry: unknown) => {
+      if (!isRecord(entry)) return entry;
+      const author = isRecord(entry['author']) ? entry['author'] : undefined;
+      if (!('notify' in entry) && !(author !== undefined && 'email' in author)) return entry;
+
+      stripped = true;
+      const email = optionalText(author?.['email']);
+      const id = entry['id'];
+      if (typeof id === 'string' && id !== '' && email !== null) {
+        found.set(id, { email, notify: entry['notify'] === true });
+      }
+      const kept = without(entry, 'notify');
+      if (author !== undefined) kept['author'] = without(author, 'email');
+      return kept;
+    });
+    if (!stripped) continue;
+
+    const privateFile = commentEmailsFile(records.dataDir, slug);
+    const contacts = contactsIn(readFileIfPresentSync(privateFile));
+    for (const [id, contact] of found) if (!contacts.has(id)) contacts.set(id, contact);
+    if (contacts.size > 0) {
+      writeFileAtomicallySync(privateFile, contactsJson(contacts), {
+        mode: COMMENT_EMAILS_FILE_MODE,
+      });
+    }
+    writeFileAtomicallySync(file, `${JSON.stringify({ ...parsed, comments: entries }, null, 2)}\n`);
+    files += 1;
+  }
+
+  return { files };
+}
+
+/** A copy of a record without one key, every other key where it was. */
+function without(record: Record<string, unknown>, key: string): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(record).filter(([name]) => name !== key));
 }
 
 /** Every comment file a site has, in a stable order. */
@@ -642,12 +828,6 @@ function commentFiles(contentDir: string): string[] {
     .filter((name) => name.endsWith('.json') && SAFE_SLUG.test(name.slice(0, -'.json'.length)))
     .sort()
     .map((name) => path.join(commentsDirectory(contentDir), name));
-}
-
-/** One file's comments, read inside a lock the caller already holds. */
-function readCommentFile(file: string): CommentRecord[] {
-  const source = readFileIfPresentSync(file);
-  return source === undefined ? [] : commentsIn(source);
 }
 
 /** A new comment as the record it becomes, id and all. */
@@ -668,26 +848,28 @@ function commentRecordOf(comment: NewComment): CommentRecord {
   };
 }
 
-/** A row as the file spells it: the post it is on is the file's, not the entry's. */
-function entryOf(comment: CommentRecord): CommentRecord {
+/**
+ * A row as `content/` spells it: the post it is on is the file's, not the
+ * entry's, and the email and `notify` are `data/`'s.
+ */
+function publishedEntryOf(comment: CommentRecord): PublishedComment {
   return {
     id: comment.id,
     source: comment.source,
     kind: comment.kind,
     status: comment.status,
-    author: { ...comment.author },
+    author: { name: comment.author.name, url: comment.author.url, avatar: comment.author.avatar },
     content: { ...comment.content },
     submitted: comment.submitted,
     addressHash: comment.addressHash,
     inReplyTo: comment.inReplyTo,
     url: comment.url,
-    notify: comment.notify,
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
   };
 }
 
 /** One post's comments as the file spells them: indented, newline ended. */
-function commentsJson(permalink: string, comments: readonly CommentRecord[]): string {
+function commentsJson(permalink: string, comments: readonly PublishedComment[]): string {
   return `${JSON.stringify({ post: permalink, comments }, null, 2)}\n`;
 }
 

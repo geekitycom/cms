@@ -84,7 +84,7 @@ async function moderationLanding(c: Context<GeekityEnv>, act: boolean): Promise<
   admin.pruneSpentTokens(config.now());
 
   const outcome = await moderateComment({
-    records: { admin, contentDir: config.contentDir },
+    records: { admin, contentDir: config.contentDir, dataDir: config.dataDir },
     id: claim.subject,
     action,
     checker: config.commentChecker,

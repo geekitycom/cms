@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-29 03:45'
+updated_date: '2026-09-29 23:14'
 ---
 # Native comments
 
@@ -42,7 +42,6 @@ Eleventy build of the same content directory reads it.
       "author": {
         "name": "Ada Lovelace",
         "url": "https://ada.example/",
-        "email": "ada@example.com",
         "avatar": null
       },
       "content": {
@@ -52,8 +51,7 @@ Eleventy build of the same content directory reads it.
       "submitted": "2026-09-20T10:00:00.000Z",
       "addressHash": "0123456789abcdef0123456789abcdef",
       "inReplyTo": null,
-      "url": null,
-      "notify": true
+      "url": null
     }
   ]
 }
@@ -70,7 +68,7 @@ belong. `comments` is the list, oldest first.
 | `status`      | `pending`, `approved` or `spam`. Only `approved` reaches a reader.                                 |
 | `author.name` | What the page shows.                                                                              |
 | `author.url`  | Their website, or `null`. Marked `nofollow ugc` like every link in a comment.                     |
-| `author.email`| **Never shown.** For the moderator, the auto-approval rule and the spam checker.                  |
+| `author.email`| **Not in this file** (TASK-182). It lives in `data/comments/{slug}.json`; see "The email, in `data/`" below. For the moderator, the auto-approval rule, reply notices and the spam checker. |
 | `author.avatar`| Their face, or `null`. Only a webmention has one; a form asks nobody for a picture.               |
 | `content.markdown` | What was typed, which is the thing a person wrote.                                           |
 | `content.html`| That Markdown through the restricted profile below.                                               |
@@ -78,7 +76,7 @@ belong. `comments` is the list, oldest first.
 | `addressHash` | A salted SHA-256 of the address it came from, truncated, or `null`.                               |
 | `inReplyTo`   | The comment it answers, or `null` for one answering the post.                                     |
 | `url`         | Where it lives when it lives somewhere else: a webmention's source page, `null` for one written here. |
-| `notify`      | Whether the commenter asked to be told when somebody answers them. Only ever `true` alongside an `author.email`; an entry that does not say it asked for nothing. |
+| `notify`      | **Not in this file** either: it sits beside the email in `data/comments/{slug}.json`. Whether the commenter asked to be told when somebody answers them, only ever `true` alongside an email; a comment with no entry there asked for nothing. |
 | `redacted`    | What was removed from it for privacy (TASK-135): any of `email`, `addressHash` and `author`. Absent when nothing was. An author whose email was removed does not count toward auto-approval. |
 
 The shape is deliberately wider than a form submission, because a webmention
@@ -96,7 +94,6 @@ looks like this, and every rule below applies to it unchanged:
   "author": {
     "name": "Grace Hopper",
     "url": "https://grace.example/",
-    "email": null,
     "avatar": "https://grace.example/me.jpg"
   },
   "content": {
@@ -106,8 +103,7 @@ looks like this, and every rule below applies to it unchanged:
   "submitted": "2026-09-21T09:00:00.000Z",
   "addressHash": "0123456789abcdef0123456789abcdef",
   "inReplyTo": null,
-  "url": "https://grace.example/2026/09/about-that/",
-  "notify": false
+  "url": "https://grace.example/2026/09/about-that/"
 }
 ```
 
@@ -119,6 +115,50 @@ Markdown to keep — and a like or a repost carries neither, because a page's
 title is not something its author said about this post. `addressHash` is the
 hash of the address the webmention was *sent from*, hashed exactly as a
 commenter's is.
+
+### The email, in `data/`
+
+Everything under `content/` is published and goes into git, and a line removed
+from a file in git stays in its history until somebody rewrites it, which few
+site owners will do. So a commenter's email, and the `notify` flag that only
+means anything beside it, are kept in a private file per post instead:
+
+```
+data/comments/{slug}.json   (mode 0600)
+```
+
+```json
+{
+  "comments": {
+    "0199e5f4-...-a1b2": { "email": "ada@example.com", "notify": true }
+  }
+}
+```
+
+Keyed by comment id, holding only the comments that have an email: a post
+whose comments are all webmentions has no file here. `src/comments/records.ts`
+is the only reader and writer of both files. A comment read there has its
+email merged back in, so the index, the auto-approval rule, the reply notices,
+the spam checker and the moderation screen see the same `CommentRecord` they
+always did; a comment written there is split again. The private file is written
+inside the lock on the post's comment file and **before** it, so a crash
+between the two leaves an email in both places or in `data/` alone, never in
+neither.
+
+**Migration.** Boot runs `migrateCommentEmails` before rebuilding the index. A
+comment file that still carries `author.email` or `notify` — written before
+TASK-182, or edited by hand since — has them moved into the private file and
+taken off the entry, editing the JSON as it finds it so a key this version does
+not know and an entry it cannot read both survive. An email the private file
+already holds for that id wins. A file with nothing to take off is not written,
+so a second boot writes nothing. Until boot has run, a reader still reads an
+email left in the comment file, so nothing is lost in between.
+
+**Git history.** Moving the emails out of `content/` stops new ones reaching
+git. It does nothing about the ones a site committed while they were still in
+the comment files: those stay in the repository's history until that history
+is rewritten, whatever the retention sweep or an erasure does to the files
+today.
 
 ### Reading and writing them
 
@@ -147,7 +187,7 @@ else.
 
 ### Retention (TASK-135)
 
-A sweep removes `author.email` (and `notify` with it) and `addressHash` once
+A sweep removes the email (and `notify` with it) from `data/comments/{slug}.json` and `addressHash` from the comment file once
 they outlive `commentEmailRetentionDays` and `addressHashRetentionDays` in
 `site.json` and marks the entry `redacted`. An absent key is `0`, forever,
 so an upgraded site loses nothing it did not choose to; `geekity init` writes
@@ -416,7 +456,7 @@ Reply notices to commenters are unaffected and stay immediate — they are one m
 
 ### To the commenter
 
-The form offers **"Email me when somebody replies to this"**, but only on a site that can send mail — a box promising a message nothing could deliver would be a lie on a form. Ticking it stores `notify: true` on the entry, beside the `author.email` that is already there. Neither is ever rendered: not in the thread, not in the JSON or Markdown representation of the post, and not in the comments feeds.
+The form offers **"Email me when somebody replies to this"**, but only on a site that can send mail — a box promising a message nothing could deliver would be a lie on a form. Ticking it stores `notify: true` beside the commenter's email in `data/comments/{slug}.json`. Neither is ever rendered: not in the thread, not in the JSON or Markdown representation of the post, and not in the comments feeds.
 
 One message goes out, and only when a reply to that comment is **approved**. Not when it is submitted: an unapproved reply is not something a stranger should be emailed the text of, and a moderator should be able to delete a nasty one before anybody hears about it. Three things stop it — no address, an address that has unsubscribed, and a reply written by the very person who would be told.
 

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
-import { rebuildCommentIndexes } from '../comments/records.ts';
+import { commentEmailsFile, readComments, rebuildCommentIndexes } from '../comments/records.ts';
 import { addContactMessage, contactDirectory, readContactMessage } from '../contact/records.ts';
 import type { Cms } from '../index.ts';
 import { moderationLink } from '../notifications/links.ts';
@@ -112,11 +112,6 @@ async function fileEntries(file: string): Promise<Record<string, unknown>[]> {
   return parsed.comments;
 }
 
-function authorOf(one: Record<string, unknown> | undefined): Record<string, unknown> {
-  assert.ok(one !== undefined, 'the entry is still in the file');
-  return one['author'] as Record<string, unknown>;
-}
-
 async function message(dataDir: string, received: string, email: string): Promise<string> {
   const stored = await addContactMessage(dataDir, {
     received,
@@ -143,19 +138,22 @@ describe('the retention sweep', () => {
 
     await cms.retention.sweep();
 
-    const [old, middling, recent] = await fileEntries(file);
-    assert.equal(authorOf(old)['email'], null, 'the 211-day-old email is gone from the file');
-    assert.equal(old?.['addressHash'], null);
-    assert.equal(old?.['notify'], false, 'and with it the reply subscription');
-    assert.deepEqual(old?.['redacted'], ['email', 'addressHash']);
+    const emails = await readFile(commentEmailsFile(dataDir, 'hello-world'), 'utf8');
+    assert.doesNotMatch(emails, /ada@example\.com/, 'the 211-day-old email is gone from data/');
+    const [old, middling, recent] = readComments(cms.config, 'hello-world');
+    assert.equal(old?.author.email, null, 'and from the comment as the files say it');
+    assert.equal(old?.addressHash, null);
+    assert.equal(old?.notify, false, 'and with it the reply subscription');
+    assert.deepEqual(old?.redacted, ['email', 'addressHash']);
+    assert.deepEqual((await fileEntries(file))[0]?.['redacted'], ['email', 'addressHash']);
 
-    assert.equal(authorOf(middling)['email'], 'grace@example.com', 'a 44-day-old email stays');
-    assert.equal(middling?.['addressHash'], null, 'but its address hash is past 30 days');
-    assert.deepEqual(middling?.['redacted'], ['addressHash']);
+    assert.equal(middling?.author.email, 'grace@example.com', 'a 44-day-old email stays');
+    assert.equal(middling?.addressHash, null, 'but its address hash is past 30 days');
+    assert.deepEqual(middling?.redacted, ['addressHash']);
 
-    assert.equal(authorOf(recent)['email'], 'alan@example.com');
-    assert.equal(recent?.['addressHash'], 'hash-recent');
-    assert.equal(recent?.['redacted'], undefined, 'nothing removed, nothing marked');
+    assert.equal(recent?.author.email, 'alan@example.com');
+    assert.equal(recent?.addressHash, 'hash-recent');
+    assert.equal(recent?.redacted, undefined, 'nothing removed, nothing marked');
 
     const indexed = cms.admin.getComment('old');
     assert.equal(indexed?.author.email, null, 'the index says what the file says');
@@ -237,14 +235,14 @@ describe('the retention sweep', () => {
   });
 
   it('runs once the site serves', async () => {
-    const { cms, file } = await siteWith([
+    const { cms } = await siteWith([
       { id: 'old', name: 'Ada', email: 'ada@example.com', submitted: OLD },
     ]);
 
     await cms.serve();
     await cms.retention.settled();
 
-    assert.equal(authorOf((await fileEntries(file))[0])['email'], null);
+    assert.equal(readComments(cms.config, 'hello-world')[0]?.author.email, null);
     await cms.close();
   });
 });
@@ -321,7 +319,11 @@ describe('a comment whose email has been removed', () => {
     await cms.retention.sweep();
 
     cms.admin.replaceComments([]);
-    rebuildCommentIndexes({ admin: cms.admin, contentDir: cms.config.contentDir });
+    rebuildCommentIndexes({
+      admin: cms.admin,
+      contentDir: cms.config.contentDir,
+      dataDir: cms.config.dataDir,
+    });
 
     assert.deepEqual(cms.admin.getComment('old')?.redacted, ['email', 'addressHash']);
     assert.equal(cms.admin.hasApprovedAuthor('Ada', null), false);
