@@ -56,6 +56,7 @@ import {
   mountPublicSite,
   recentPosts,
   redirectBy,
+  serverError,
   themeName,
 } from './web/index.ts';
 import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
@@ -1705,6 +1706,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
   relays.sync();
 
   const app = new Hono<GeekityEnv>();
+
+  // A handler that throws is answered here rather than with Hono's plain-text
+  // 500. The middleware above the handler still runs on the way out, so the
+  // baseline and admin headers land on this response like any other.
+  app.onError(serverError);
 
   // One line per request, before anything else is registered so that every
   // route is on it: /healthz, the federation endpoints, the admin and the

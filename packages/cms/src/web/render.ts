@@ -45,6 +45,7 @@ export const TEMPLATES = {
   author: 'layouts/author.njk',
   search: 'layouts/search.njk',
   notFound: 'layouts/404.njk',
+  serverError: 'layouts/500.njk',
 } as const;
 
 /**
@@ -181,6 +182,8 @@ export interface Renderer {
   renderSearch(search: SearchPage): string;
   /** The 404 page, for a path that resolved to nothing. */
   renderNotFound(url: string): string;
+  /** The 500 page, for a request whose handler threw. */
+  renderServerError(url: string): string;
   /** Any template by name, with the site data already in the context. */
   render(template: string, context?: Record<string, unknown>): string;
   /**
@@ -654,6 +657,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     renderNotFound(url) {
       return render(TEMPLATES.notFound, {
         title: 'Not found',
+        url,
+        page: { url },
+      });
+    },
+
+    renderServerError(url) {
+      return render(TEMPLATES.serverError, {
+        title: 'Something went wrong',
         url,
         page: { url },
       });

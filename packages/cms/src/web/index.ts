@@ -292,4 +292,5 @@ export type {
   ThemeSource,
 } from './themes.ts';
 export { createRedirectSource, redirectBy, REDIRECT_BY, REDIRECTS_FILE } from './redirects.ts';
+export { serverError } from './errors.ts';
 export type { RedirectSource } from './redirects.ts';
