@@ -155,7 +155,7 @@ echo "ok  GET /healthz"
 # is `set -e`, so a 404 or a 500 fails the run here.
 log "checking the home page is the starter site in the default theme"
 home="$(curl -fsS "${base}/")"
-for expected in 'Hello, world' 'href="/theme/style.css"' 'data-is-root-path'; do
+for expected in 'Hello, world' 'href="/theme/style.css?v=' 'data-is-root-path'; do
   if ! grep -qF -- "${expected}" <<<"${home}"; then
     fail "GET / answered 200 but did not contain '${expected}'"
   fi
