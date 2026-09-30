@@ -68,9 +68,8 @@ export function eraseCommentAuthor(comment: CommentRecord): CommentRecord {
 /** What the site holds under `email`, without changing any of it. */
 export function findPersonalData(stores: PersonalDataStores, email: string): PersonalDataReport {
   const wanted = folded(email);
-  const { contentDir } = stores.records;
-  const comments = commentSlugs(contentDir)
-    .flatMap((slug) => readComments(contentDir, slug))
+  const comments = commentSlugs(stores.records.contentDir)
+    .flatMap((slug) => readComments(stores.records, slug))
     .filter((comment) => isTheirs(comment, wanted)).length;
   const messages = listContactMessages(stores.dataDir).filter(
     (message) => folded(message.from.email) === wanted,

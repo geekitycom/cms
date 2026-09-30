@@ -101,7 +101,7 @@ export function mountComments(app: Hono<GeekityEnv>): void {
     }
 
     const outcome = await submitComment({
-      records: { admin, contentDir: config.contentDir },
+      records: { admin, contentDir: config.contentDir, dataDir: config.dataDir },
       document,
       form,
       dataDir: config.dataDir,

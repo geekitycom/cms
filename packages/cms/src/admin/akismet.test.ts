@@ -237,7 +237,7 @@ describe('the Akismet key on the settings screen', () => {
     akismet = [];
 
     await addComment(
-      { admin: cms.admin, contentDir },
+      { admin: cms.admin, contentDir, dataDir: cms.config.dataDir },
       {
         slug: 'hello-world',
         permalink: '/2026/09/hello-world/',
@@ -291,7 +291,7 @@ describe('the corrections the moderation screen sends', () => {
   /** One stored comment on the post, at `status`. */
   async function comment(cms: Cms, status: 'pending' | 'approved' | 'spam'): Promise<string> {
     const written = await addComment(
-      { admin: cms.admin, contentDir: cms.config.contentDir },
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
       {
         slug: 'hello-world',
         permalink: '/2026/09/hello-world/',

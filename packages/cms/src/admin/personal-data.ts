@@ -105,7 +105,11 @@ function screen(state: {
 /** Where a person's data can be, for this request's site. */
 function storesOf(c: Context<GeekityEnv>): PersonalDataStores {
   return {
-    records: { admin: c.var.admin, contentDir: c.var.config.contentDir },
+    records: {
+      admin: c.var.admin,
+      contentDir: c.var.config.contentDir,
+      dataDir: c.var.config.dataDir,
+    },
     dataDir: c.var.config.dataDir,
   };
 }

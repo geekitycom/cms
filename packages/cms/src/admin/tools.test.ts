@@ -138,7 +138,7 @@ describe('rebuilding the content index from the admin (TASK-95)', () => {
   it('reads the followers, the inbox log and the comments back too (AC #2)', async () => {
     const { cms, agent, token } = await toolsSite();
     const contentDir = cms.config.contentDir;
-    const records = { admin: cms.admin, contentDir };
+    const records = { admin: cms.admin, contentDir, dataDir: cms.config.dataDir };
 
     await addFollower(records, FIRST_ADMIN.username, {
       actorId: 'https://peer.example/users/bob',

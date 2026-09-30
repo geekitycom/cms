@@ -140,7 +140,7 @@ export function createRetentionService(options: CreateRetentionServiceOptions): 
     // the next sweep without a restart.
     const policy = retentionPolicyOf(readSiteSettings(config.contentDir));
     const now = config.now();
-    const records = { admin, contentDir: config.contentDir };
+    const records = { admin, contentDir: config.contentDir, dataDir: config.dataDir };
 
     let comments = 0;
     for (const slug of commentSlugs(config.contentDir)) {

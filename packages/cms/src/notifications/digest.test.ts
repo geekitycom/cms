@@ -232,7 +232,7 @@ async function confirm(box: Site, link: string): Promise<number> {
 
 /** The comments the file holds, which is what a comment really is. */
 function stored(box: Site) {
-  return readComments(box.contentDir, 'hello-world');
+  return readComments(box.cms.config, 'hello-world');
 }
 
 describe('a user who has asked for a digest (AC #2)', () => {
@@ -380,9 +380,13 @@ describe('what a digest is built from (AC #3)', () => {
     // Approved on the moderation screen, before anybody was told about it.
     const first = stored(box).find((entry) => entry.content.markdown.includes('first'));
     assert.ok(first !== undefined);
-    await updateComment({ admin: box.cms.admin, contentDir: box.contentDir }, first.id, {
-      status: 'approved',
-    });
+    await updateComment(
+      { admin: box.cms.admin, contentDir: box.contentDir, dataDir: box.cms.config.dataDir },
+      first.id,
+      {
+        status: 'approved',
+      },
+    );
 
     await runDigests(box);
 

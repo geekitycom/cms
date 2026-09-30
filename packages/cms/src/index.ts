@@ -48,7 +48,12 @@ import {
 import type { DeliveryService, RelayService, SiteFederation } from './federation/index.ts';
 import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
-import { commentFormFor, createAkismetChecker, rebuildCommentIndexes } from './comments/index.ts';
+import {
+  commentFormFor,
+  createAkismetChecker,
+  migrateCommentEmails,
+  rebuildCommentIndexes,
+} from './comments/index.ts';
 import { contactFormFor } from './contact/index.ts';
 import { createMaintenanceSwitch } from './maintenance.ts';
 import {
@@ -435,6 +440,8 @@ export {
   COMMENT_RATE_LIMIT,
   COMMENT_RATE_WINDOW_SECONDS,
   COMMENT_REPLY_PARAM,
+  COMMENT_EMAILS_DIRECTORY,
+  COMMENT_EMAILS_FILE_MODE,
   COMMENT_SALT_FILE,
   COMMENTS_DATA_DIRECTORY,
   COMMENTS_FRONT_MATTER_KEY,
@@ -444,6 +451,7 @@ export {
   commentNoticeFor,
   commentPolicyOf,
   commentProblems,
+  commentEmailsFile,
   commentsDirectory,
   commentsFile,
   commentsOpen,
@@ -454,6 +462,7 @@ export {
   heldWebmention,
   intakeComment,
   isModerationAction,
+  migrateCommentEmails,
   MAXIMUM_BODY_LENGTH,
   MAXIMUM_FORM_AGE_SECONDS,
   MAXIMUM_NAME_LENGTH,
@@ -484,6 +493,7 @@ export type {
   CommentChecker,
   CommentForm,
   CommentFormContext,
+  CommentEmailMigrationReport,
   CommentIndexReport,
   CommentIntakeOutcome,
   CommentNotices,
@@ -1512,12 +1522,14 @@ export function createCms(config: GeekityConfig = {}): Cms {
   migrateFederationToFiles({ admin, contentDir: resolved.contentDir });
   rebuildFederationIndexes({ admin, contentDir: resolved.contentDir });
 
-  // And the comments, which are files under content/_data/comments/ and
-  // nothing else (TASK-50). No migration goes with this one, because no
-  // earlier version of this CMS stored a comment anywhere: the rebuild is the
-  // whole of it, and it runs on every boot for the same reason the federation
-  // one does.
-  rebuildCommentIndexes({ admin, contentDir: resolved.contentDir });
+  // And the comments, which are files under content/_data/comments/ with
+  // their authors' emails under data/comments/ (TASK-50, TASK-182). A comment
+  // file that still holds an email, from before they moved or from a hand
+  // edit, has it moved first; then the index is rebuilt, on every boot for the
+  // same reason the federation one is.
+  const commentRecords = { admin, contentDir: resolved.contentDir, dataDir: resolved.dataDir };
+  migrateCommentEmails(commentRecords);
+  rebuildCommentIndexes(commentRecords);
 
   // And, once the files are the whole story, that every user's keys are
   // readable. This is the one thing here that can stop a boot: an actor that

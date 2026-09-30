@@ -290,7 +290,8 @@ function removedNote(redacted: PostComment['redacted']): string | null {
 
 /** The files and the index this request writes through. */
 function recordsOf(c: Context<GeekityEnv>): CommentRecords {
-  return { admin: c.var.admin, contentDir: c.var.config.contentDir };
+  const { contentDir, dataDir } = c.var.config;
+  return { admin: c.var.admin, contentDir, dataDir };
 }
 
 /** One stored comment as the screen shows it. */

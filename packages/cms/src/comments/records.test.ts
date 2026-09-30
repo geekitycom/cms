@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -15,9 +15,11 @@ import { createMailService } from '../mail/service.ts';
 import { createCommentNotifier } from '../notifications/comments.ts';
 import {
   addComment,
+  commentEmailsFile,
   commentsFile,
   deleteComment,
   intakeComment,
+  migrateCommentEmails,
   readComments,
   rebuildCommentIndexes,
   updateComment,
@@ -50,7 +52,18 @@ async function temporaryDir(): Promise<string> {
 async function records(): Promise<CommentRecords> {
   const admin = openAdminStore({ dataDir: await temporaryDir() });
   openStores.push(admin);
-  return { admin, contentDir: await temporaryDir() };
+  return { admin, contentDir: await temporaryDir(), dataDir: await temporaryDir() };
+}
+
+/** Every file under a directory, as its text, keyed by its path relative to it. */
+async function filesUnder(dir: string): Promise<Record<string, string>> {
+  const found: Record<string, string> = {};
+  for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const file = path.join(entry.parentPath, entry.name);
+    found[path.relative(dir, file)] = await readFile(file, 'utf8');
+  }
+  return found;
 }
 
 /** One comment on `hello-world`, as the form would submit it. */
@@ -96,7 +109,6 @@ describe('a comment file', () => {
             author: {
               name: 'Ada Lovelace',
               url: 'https://ada.example/',
-              email: 'ada@example.com',
               avatar: null,
             },
             content: { markdown: 'Good post.', html: '<p>Good post.</p>\n' },
@@ -104,11 +116,41 @@ describe('a comment file', () => {
             addressHash: 'abc123',
             inReplyTo: null,
             url: null,
-            notify: false,
           },
         ],
       },
     );
+  });
+
+  it('keeps the commenter’s email out of content/, in a 0600 file under data/', async () => {
+    const site = await records();
+
+    const stored = await addComment(site, ada({ notify: true }));
+
+    const published = await filesUnder(site.contentDir);
+    assert.ok(Object.keys(published).length > 0, 'the comment file was written');
+    for (const [file, text] of Object.entries(published)) {
+      assert.ok(!text.includes('ada@example.com'), `${file} carries no email`);
+      assert.ok(!text.includes('"notify"'), `${file} says nothing about notices`);
+    }
+
+    const privateFile = commentEmailsFile(site.dataDir, 'hello-world');
+    assert.deepEqual(JSON.parse(await readFile(privateFile, 'utf8')), {
+      comments: { [stored.id]: { email: 'ada@example.com', notify: true } },
+    });
+    assert.equal((await stat(privateFile)).mode & 0o777, 0o600);
+    assert.equal(readComments(site, 'hello-world')[0]?.author.email, 'ada@example.com');
+  });
+
+  it('writes no private file for a post whose comments carry no email', async () => {
+    const site = await records();
+
+    await addComment(
+      site,
+      ada({ author: { name: 'Grace', url: null, email: null, avatar: null } }),
+    );
+
+    assert.deepEqual(await filesUnder(site.dataDir).then(Object.keys), []);
   });
 
   it('records whether the commenter asked to hear about replies', async () => {
@@ -116,7 +158,7 @@ describe('a comment file', () => {
 
     const stored = await addComment(site, ada({ notify: true }));
 
-    assert.equal(readComments(site.contentDir, 'hello-world')[0]?.notify, true);
+    assert.equal(readComments(site, 'hello-world')[0]?.notify, true);
     assert.equal(site.admin.getComment(stored.id)?.notify, true);
   });
 
@@ -131,7 +173,7 @@ describe('a comment file', () => {
       }),
     );
 
-    assert.equal(readComments(site.contentDir, 'hello-world')[0]?.notify, false);
+    assert.equal(readComments(site, 'hello-world')[0]?.notify, false);
   });
 
   it('is appended to, oldest first, by the next comment on the same post', async () => {
@@ -143,7 +185,7 @@ describe('a comment file', () => {
       ada({ author: { name: 'Grace', url: null, email: null, avatar: null } }),
     );
 
-    const held = readComments(site.contentDir, 'hello-world');
+    const held = readComments(site, 'hello-world');
     assert.deepEqual(
       held.map((comment) => comment.author.name),
       ['Ada Lovelace', 'Grace'],
@@ -166,8 +208,8 @@ describe('a comment file', () => {
     await addComment(site, ada());
     await addComment(site, ada({ slug: 'second-post', permalink: '/2026/09/second-post/' }));
 
-    assert.equal(readComments(site.contentDir, 'hello-world').length, 1);
-    assert.equal(readComments(site.contentDir, 'second-post').length, 1);
+    assert.equal(readComments(site, 'hello-world').length, 1);
+    assert.equal(readComments(site, 'second-post').length, 1);
   });
 });
 
@@ -243,7 +285,7 @@ describe('moderating a stored comment', () => {
     const moved = await updateComment(site, stored.id, { status: 'approved' });
 
     assert.equal(moved?.status, 'approved');
-    assert.equal(readComments(site.contentDir, 'hello-world')[0]?.status, 'approved');
+    assert.equal(readComments(site, 'hello-world')[0]?.status, 'approved');
     assert.equal(site.admin.getComment(stored.id)?.status, 'approved');
   });
 
@@ -253,10 +295,119 @@ describe('moderating a stored comment', () => {
 
     assert.equal(await deleteComment(site, stored.id), true);
 
-    assert.deepEqual(readComments(site.contentDir, 'hello-world'), []);
+    assert.deepEqual(readComments(site, 'hello-world'), []);
     assert.equal(site.admin.getComment(stored.id), undefined);
+    assert.ok(
+      !Object.values(await filesUnder(site.dataDir)).some((text) => text.includes('ada@')),
+      'its email went with it',
+    );
     // And says so when there is nothing to delete.
     assert.equal(await deleteComment(site, stored.id), false);
+  });
+});
+
+describe('a comment file written before emails moved to data/', () => {
+  /** A legacy file: two emails, a webmention with none, and an entry nothing can read. */
+  const LEGACY = {
+    post: '/2026/09/hello-world/',
+    comments: [
+      {
+        id: 'c1',
+        status: 'approved',
+        author: { name: 'Ada', url: null, email: 'ada@example.com', avatar: null },
+        content: { markdown: 'Hi', html: '<p>Hi</p>' },
+        notify: true,
+        someday: 'a key this version does not know',
+      },
+      {
+        id: 'c2',
+        source: 'webmention',
+        author: { name: 'Grace', url: 'https://grace.example/', email: null, avatar: null },
+        notify: false,
+      },
+      { author: { name: 'Nameless', email: 'nameless@example.com' } },
+    ],
+  };
+
+  async function legacySite(): Promise<CommentRecords> {
+    const site = await records();
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, `${JSON.stringify(LEGACY, null, 2)}\n`);
+    return site;
+  }
+
+  it('is read with its emails before anything has moved them', async () => {
+    const site = await legacySite();
+
+    assert.equal(readComments(site, 'hello-world')[0]?.author.email, 'ada@example.com');
+    assert.equal(readComments(site, 'hello-world')[0]?.notify, true);
+  });
+
+  it('has them moved to data/ on boot, and nothing else about it changed', async () => {
+    const site = await legacySite();
+
+    migrateCommentEmails(site);
+
+    const published = await readFile(commentsFile(site.contentDir, 'hello-world'), 'utf8');
+    assert.ok(!published.includes('@example.com'), 'no email is left under content/');
+    assert.deepEqual(JSON.parse(published), {
+      post: '/2026/09/hello-world/',
+      comments: [
+        {
+          id: 'c1',
+          status: 'approved',
+          author: { name: 'Ada', url: null, avatar: null },
+          content: { markdown: 'Hi', html: '<p>Hi</p>' },
+          someday: 'a key this version does not know',
+        },
+        {
+          id: 'c2',
+          source: 'webmention',
+          author: { name: 'Grace', url: 'https://grace.example/', avatar: null },
+        },
+        // An entry nothing can read has no id to key an email by, so the email
+        // is taken off it and not kept: there is nothing it could ever be used for.
+        { author: { name: 'Nameless' } },
+      ],
+    });
+
+    const privateFile = commentEmailsFile(site.dataDir, 'hello-world');
+    assert.deepEqual(JSON.parse(await readFile(privateFile, 'utf8')), {
+      comments: { c1: { email: 'ada@example.com', notify: true } },
+    });
+    assert.equal((await stat(privateFile)).mode & 0o777, 0o600);
+
+    rebuildCommentIndexes(site);
+    assert.equal(site.admin.getComment('c1')?.author.email, 'ada@example.com');
+    assert.equal(site.admin.getComment('c1')?.notify, true);
+  });
+
+  it('is migrated once: a second boot writes nothing', async () => {
+    const site = await legacySite();
+
+    assert.equal(migrateCommentEmails(site).files, 1);
+    const content = await filesUnder(site.contentDir);
+    const data = await filesUnder(site.dataDir);
+
+    assert.equal(migrateCommentEmails(site).files, 0);
+    assert.deepEqual(await filesUnder(site.contentDir), content);
+    assert.deepEqual(await filesUnder(site.dataDir), data);
+  });
+
+  it('keeps an email data/ already holds over one somebody wrote into content/', async () => {
+    const site = await legacySite();
+    const privateFile = commentEmailsFile(site.dataDir, 'hello-world');
+    await mkdir(path.dirname(privateFile), { recursive: true });
+    await writeFile(
+      privateFile,
+      JSON.stringify({ comments: { c1: { email: 'ada@new.example', notify: false } } }),
+    );
+
+    migrateCommentEmails(site);
+
+    assert.equal(readComments(site, 'hello-world')[0]?.author.email, 'ada@new.example');
+    assert.equal(readComments(site, 'hello-world')[0]?.notify, false);
   });
 });
 
@@ -276,7 +427,7 @@ describe('a comment file somebody edited by hand', () => {
       })}\n`,
     );
 
-    const held = readComments(site.contentDir, 'hello-world');
+    const held = readComments(site, 'hello-world');
 
     assert.equal(held.length, 1);
     assert.equal(held[0]?.id, 'c1');
@@ -408,7 +559,7 @@ async function intakeSite(): Promise<IntakeSite> {
     email: 'moderator@example.com',
   });
 
-  const records: CommentRecords = { admin, contentDir };
+  const records: CommentRecords = { admin, contentDir, dataDir };
 
   return {
     admin,
@@ -451,7 +602,7 @@ describe('the comment intake', () => {
     const stored = onlyStored(await site.take());
 
     assert.equal(stored.status, 'pending');
-    assert.equal(readComments(site.contentDir, 'hello-world')[0]?.status, 'pending');
+    assert.equal(readComments(site, 'hello-world')[0]?.status, 'pending');
     assert.equal(site.admin.getComment(stored.id)?.status, 'pending');
     assert.equal(site.provider.sent.length, 1);
     assert.deepEqual(
@@ -478,7 +629,7 @@ describe('the comment intake', () => {
 
     assert.ok(stored.addressHash !== null);
     assert.doesNotMatch(stored.addressHash, /198\.51\.100\.7/);
-    assert.equal(readComments(site.contentDir, 'hello-world')[0]?.addressHash, stored.addressHash);
+    assert.equal(readComments(site, 'hello-world')[0]?.addressHash, stored.addressHash);
   });
 
   it('files what a checker calls spam, and tells nobody about it', async () => {
@@ -505,7 +656,7 @@ describe('the comment intake', () => {
     const outcome = await site.take({ checker: checkerSaying('discard') });
 
     assert.deepEqual(outcome, { kind: 'discarded', removed: false });
-    assert.deepEqual(readComments(site.contentDir, 'hello-world'), []);
+    assert.deepEqual(readComments(site, 'hello-world'), []);
     assert.deepEqual(site.admin.listComments({}), []);
     assert.equal(site.provider.sent.length, 0);
   });
@@ -599,7 +750,7 @@ describe('the comment intake', () => {
     assert.equal(outcome.created, false);
     assert.equal(outcome.comment.id, first.id);
     assert.equal(outcome.comment.content.markdown, 'Edited');
-    assert.equal(readComments(site.contentDir, 'hello-world').length, 1);
+    assert.equal(readComments(site, 'hello-world').length, 1);
     // A page that is edited and re-sent is not news: the moderators heard the
     // first time and the entry has been in the queue ever since.
     assert.equal(site.provider.sent.length, 0);
@@ -645,7 +796,7 @@ describe('the comment intake', () => {
     });
 
     assert.deepEqual(outcome, { kind: 'discarded', removed: true });
-    assert.deepEqual(readComments(site.contentDir, 'hello-world'), []);
+    assert.deepEqual(readComments(site, 'hello-world'), []);
     assert.equal(site.admin.getComment(first.id), undefined);
   });
 

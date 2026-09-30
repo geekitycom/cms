@@ -89,7 +89,7 @@ function comment(overrides: Partial<NewComment> = {}): NewComment {
 /** Store one comment straight into the files, the way the form would. */
 async function stored(cms: Cms, overrides: Partial<NewComment> = {}): Promise<string> {
   const written = await addComment(
-    { admin: cms.admin, contentDir: cms.config.contentDir },
+    { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
     comment(overrides),
   );
   return written.id;
