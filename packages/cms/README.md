@@ -1676,6 +1676,7 @@ shadow the login form.
 | `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it.    |
 | `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.             |
 | `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.         |
+| `/admin/media/alt`                               | `POST` only. Sets a picture's alt text, or marks it decorative, in `media.json`.    |
 | `/admin/comments`                                | Pending, approved and spam, with approve, spam, delete and reply.                   |
 | `/admin/comments/moderate`                       | `POST` only. Approves one comment, files it as spam, or deletes it.                 |
 | `/admin/comments/reply`                          | `POST` only. Posts an approved reply under the comment it answers.                  |
@@ -1930,8 +1931,9 @@ written by an Eleventy build is on the screen without a restart, and one
 removed the same way is off it. The only question the index is asked is which
 documents mention a URL, which is the one thing a directory cannot answer.
 
-Each row carries the public URL and the ready-made Markdown — `![name](url)`
-for a picture and `[name](url)` for anything else, from the same function the
+Each row carries the public URL and the ready-made Markdown — `![alt](url)`
+for a picture, with its alt text from the library or empty when it has none or
+is decorative, and `[name](url)` for anything else, from the same function the
 editor's upload control pastes from — as readonly text fields, which select and
 copy on their own. `admin/static/copy.js` reveals a Copy button beside each and
 does nothing else, so the screen is complete before it loads and a browser
@@ -1956,7 +1958,17 @@ name a file elsewhere in the content directory.
 content-relative path once the original is gone. The original under
 `content/uploads` is the only source of truth (decision-10) and anything
 generated from it is derived state that must not outlive it; the hook defaults
-to `removeImageVariants`, which takes the file's derived images with it.
+to `removeImageVariants`, which takes the file's derived images with it. The
+file's entry in `content/_data/media.json` goes too.
+
+A picture's row also carries its alt text: a text field, a Decorative checkbox
+that wins over the text, and a line saying which of the two the library holds
+or that it holds neither. The form posts to `/admin/media/alt`, which writes
+`content/_data/media.json` atomically, keeping every other entry. The file is
+the truth (decision-9) and is read on each request, so an entry written by hand
+shows up without a restart. `readAltTexts(contentDir)` and
+`undescribedImages(html, library)` in `src/images/alt-text.ts` are what the
+editor's publish check and the federated `Image` attachments read.
 
 ### Image variants
 

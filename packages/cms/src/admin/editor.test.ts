@@ -129,7 +129,7 @@ describe('the preview endpoint', () => {
 });
 
 describe('the upload endpoint', () => {
-  it('files an image under the year and month and answers with its Markdown', async () => {
+  it('files an image under the year and month and embeds it without the file name as alt text (TASK-141 AC #2)', async () => {
     const { cms, agent, token } = await admin();
 
     const response = await agent.upload('/admin/uploads', token, {
@@ -144,7 +144,9 @@ describe('the upload endpoint', () => {
     const now = new Date();
     const month = `${String(now.getUTCFullYear())}/${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
     assert.equal(body.url, `/uploads/${month}/my-holiday-photo.png`);
-    assert.equal(body.markdown, `![My Holiday Photo](/uploads/${month}/my-holiday-photo.png)`);
+    // A fresh upload has no alt text yet, and a file name is not one: the
+    // embed is left empty for the author to describe, and publishing says so.
+    assert.equal(body.markdown, `![](/uploads/${month}/my-holiday-photo.png)`);
 
     const file = path.join(
       cms.config.contentDir,

@@ -18,6 +18,7 @@
   --admin-link: #2271b1;
   --admin-notice: #00a32a;
   --admin-error: #d63638;
+  --admin-warning: #dba617;
   --admin-unread: #f0f6fc;
   --admin-nav-width: 11rem;
 }
@@ -180,6 +181,12 @@ h2 {
 
 .admin-flash-error {
   border-left-color: var(--admin-error);
+}
+
+/* Done, but with something still to fix: a post published with an image
+   nobody has described. */
+.admin-flash-warning {
+  border-left-color: var(--admin-warning);
 }
 
 /* Panels, the box every group of things on the dashboard sits in. */
@@ -891,6 +898,32 @@ button[type='submit']:hover,
 
 .admin-media-links {
   min-width: 18rem;
+}
+
+/* An image's alt text, edited in its row. The state underneath says what
+   inserting it will do, and a missing one reads as a problem. */
+
+.admin-media-alt {
+  min-width: 16rem;
+}
+
+.admin-media-alt form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+}
+
+.admin-media-alt input[type='text'] {
+  flex: 1 1 100%;
+}
+
+.admin-media-alt .admin-status {
+  flex: 1 1 100%;
+}
+
+.admin-status-missing {
+  color: var(--admin-error);
 }
 
 /* The copy control: a readonly field that works on its own, and a button that

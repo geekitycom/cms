@@ -63,6 +63,7 @@
       <thead>
         <tr>
           <th scope="col">File</th>
+          <th scope="col">Alt text</th>
           <th scope="col">Uploaded</th>
           <th scope="col">Size</th>
           <th scope="col">Link</th>
@@ -82,6 +83,43 @@
                 <span class="admin-media-icon" aria-hidden="true">{{ file.extension | replace('.', '') | upper }}</span>
               {% endif %}
               <a href="{{ file.url }}">{{ file.path }}</a>
+            </td>
+            <td class="admin-media-alt">
+              {% if file.image %}
+                <form method="post" action="{{ altUrl }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                  <input type="hidden" name="{{ fields.path }}" value="{{ file.path }}" />
+                  <input type="hidden" name="{{ fields.page }}" value="{{ page }}" />
+                  <label class="admin-visually-hidden" for="media-alt-{{ loop.index }}">
+                    Alt text for {{ file.name }}
+                  </label>
+                  <input
+                    id="media-alt-{{ loop.index }}"
+                    name="{{ fields.alt }}"
+                    type="text"
+                    value="{% if file.alt and file.alt.kind == 'described' %}{{ file.alt.text }}{% endif %}"
+                    aria-describedby="media-alt-state-{{ loop.index }}"
+                  />
+                  <span class="admin-check">
+                    <input
+                      id="media-decorative-{{ loop.index }}"
+                      name="{{ fields.decorative }}"
+                      type="checkbox"
+                      value="1"
+                      {% if file.alt and file.alt.kind == 'decorative' %}checked{% endif %}
+                    />
+                    <label for="media-decorative-{{ loop.index }}">Decorative</label>
+                  </span>
+                  <button type="submit">Save</button>
+                  <span id="media-alt-state-{{ loop.index }}" class="admin-status{% if not file.alt %} admin-status-missing{% endif %}">
+                    {%- if not file.alt %}Missing: describe it, or mark it decorative
+                    {%- elif file.alt.kind == 'decorative' %}Decorative: inserted with an empty alt
+                    {%- else %}Offered when it is inserted{% endif -%}
+                  </span>
+                </form>
+              {% else %}
+                <span class="admin-status">Not an image</span>
+              {% endif %}
             </td>
             <td>{{ file.modified | date('html') }}</td>
             <td>{{ file.bytes }}</td>

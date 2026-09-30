@@ -164,6 +164,7 @@ The admin adds eight more:
 | `imageOptimization` | `true`                      | `GEEKITY_IMAGE_OPTIMIZATION` | Derive smaller copies of uploaded images and offer them in the pages.      |
 | `imageWidths`       | `320, 640, 960, 1280, 1920` | `GEEKITY_IMAGE_WIDTHS`       | The widths those copies are made at, in pixels.                            |
 | `imageFormats`      | `['webp']`                  | `GEEKITY_IMAGE_FORMATS`      | The formats besides the original's own. `avif` is opt-in.                  |
+| `requireAltText`    | `false`                     | `GEEKITY_REQUIRE_ALT_TEXT`   | Refuse to publish an image with no alt text, rather than warn about it.    |
 | `loginAttempts`     | `5`                         | `GEEKITY_LOGIN_ATTEMPTS`     | Failed sign-ins a username or an address may make before it is locked out. |
 | `loginLockout`      | `900` (15 minutes)          | `GEEKITY_LOGIN_LOCKOUT`      | How long the first lockout lasts, in seconds.                              |
 | `trustProxy`        | `false`                     | `GEEKITY_TRUST_PROXY`        | Believe `X-Forwarded-For` when deciding which address a sign-in came from. |
@@ -264,6 +265,7 @@ reads the same directory, and everything in it is meant to be public:
 | `content/posts/`, `content/pages/`                   | The Markdown documents, `_trash/` included.        |
 | `content/uploads/`                                   | Uploaded files exactly as they arrived.            |
 | `content/_data/site.json`                            | Every site setting.                                |
+| `content/_data/media.json`                           | The media library's alt text, keyed by upload.     |
 | `content/_data/federation/{username}/followers.json` | Who follows that user.                             |
 | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`   | Every activity the inbox was handed, one per line. |
 
@@ -784,6 +786,38 @@ change the documents, and a trashed post can be restored tomorrow. Whatever was
 derived from the file goes with it, which is the hook the image variants hang
 on. The paths the form carries are resolved against `content/uploads` and
 refused if they land outside it.
+
+### Alt text
+
+Every picture in the library has an alt-text field and a Decorative checkbox.
+What they say is kept in `content/_data/media.json`, keyed by the file's path
+under `content/uploads`, because it is public and cannot be rebuilt from
+anything else (decision-9):
+
+```json
+{
+  "2026/09/dog.jpg": { "alt": "A dog asleep on a rug" },
+  "2026/09/rule.png": { "decorative": true }
+}
+```
+
+The Markdown the library offers embeds a picture with its alt text, and a
+decorative one with an empty alt, which renders `alt=""`. A file name is never
+used as alt text: the editor's upload control embeds a fresh upload as
+`![](…)`, for the author to describe. Once an image is in a post, the post's
+own `![…](…)` is its alt text there, since the same picture can need
+describing differently in two posts. Deleting an upload forgets its entry.
+
+Publishing a post or page checks every image it shows. An image is described
+when its `![…](…)` or `alt` says something, or when it is an upload the library
+marks decorative. Anything else, including an `<img>` with no `alt` at all,
+publishes with a warning that names each image. A site that sets
+`requireAltText` gets a refusal instead, and nothing is written. A draft is
+never checked.
+
+A federated post carries each picture from `content/uploads` as an `Image`
+attachment whose `name` is its alt text, which is where Mastodon reads the
+description from. Decorative pictures are left out.
 
 ## Image optimization
 
