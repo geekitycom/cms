@@ -228,7 +228,11 @@ describe('the demo with its theme unchosen', () => {
 
     const withoutCode = await bareText('/2026/08/one-url-many-representations/');
     assert.doesNotMatch(withoutCode, /highlight\.js/, 'a post with no code ships JavaScript');
-    assert.doesNotMatch(withoutCode, /<script(?![^>]*application\/ld\+json)/, 'and any script');
+    assert.doesNotMatch(
+      withoutCode,
+      /<script(?![^>]*(?:application\/ld\+json|speculationrules))/,
+      'and any script',
+    );
   });
 
   it('serves the packaged token colours with the packaged stylesheet', async () => {

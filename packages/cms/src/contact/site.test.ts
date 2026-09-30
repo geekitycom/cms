@@ -166,11 +166,15 @@ describe('a page that asks for a contact form', () => {
     assert.match(html, new RegExp(`name="${CONTACT_FIELDS.email}"`));
     assert.match(html, new RegExp(`name="${CONTACT_FIELDS.subject}"`));
     assert.match(html, new RegExp(`name="${CONTACT_FIELDS.message}"`));
-    // No script that runs: the form is a form. The one script the page does
-    // carry is the head's JSON-LD (TASK-81), which is data rather than code —
-    // every page has one and no browser executes it.
+    // No script that runs: the form is a form. The scripts the page does
+    // carry are the head's JSON-LD (TASK-81) and its speculation rules
+    // (TASK-140), which are data rather than code — every page has both and no
+    // browser executes either.
     assert.doesNotMatch(
-      html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, ''),
+      html.replace(
+        /<script type="(?:application\/ld\+json|speculationrules)">[\s\S]*?<\/script>/g,
+        '',
+      ),
       /<script/i,
       'the page carries a script that runs',
     );
