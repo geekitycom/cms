@@ -421,5 +421,10 @@ function canonicalResource(resource: string): string {
 
 /** What the dispatchers are handed, off the Hono context. */
 function contextData(c: Context<GeekityEnv>): FederationContextData {
-  return { admin: c.var.admin, store: c.var.store, config: c.var.config };
+  return {
+    admin: c.var.admin,
+    store: c.var.store,
+    config: c.var.config,
+    actorProfiles: c.var.actorProfiles,
+  };
 }

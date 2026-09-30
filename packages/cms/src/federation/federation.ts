@@ -35,6 +35,7 @@ import {
   handleUndo,
 } from './inbox.ts';
 import { loadActorKeyPairs } from './keys.ts';
+import type { ActorProfileService } from './profiles.ts';
 import {
   ACTOR_PATH,
   federationOrigin,
@@ -68,6 +69,8 @@ export interface FederationContextData {
   readonly store: ContentStore;
   /** Config after defaults and environment overrides. */
   readonly config: ResolvedConfig;
+  /** Where the inbox asks for the profile of an actor it has just heard from (TASK-184). */
+  readonly actorProfiles: Pick<ActorProfileService, 'capture'>;
 }
 
 /** A CMS federation object, with the context data its dispatchers expect. */

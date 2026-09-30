@@ -58,6 +58,8 @@ export interface CreateDeliveryServiceOptions {
   store: ContentStore;
   /** Config after defaults and environment overrides. */
   config: ResolvedConfig;
+  /** What the federation context carries for the inbox; nothing here calls it. */
+  actorProfiles: FederationContextData['actorProfiles'];
   /** Where failures are reported. Defaults to `console`. */
   logger?: DeliveryLogger | undefined;
 }
@@ -150,7 +152,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
 
   /** A context outside any request, which is where a delivery happens from. */
   function deliveryContext(): Context<FederationContextData> {
-    return federation.createContext(new URL(config.baseUrl), { admin, store, config });
+    return federation.createContext(new URL(config.baseUrl), {
+      admin,
+      store,
+      config,
+      actorProfiles: options.actorProfiles,
+    });
   }
 
   /**

@@ -58,7 +58,7 @@ export function replyFrom(
 
   return {
     ...note.said,
-    author: nameFor?.(note.said.actorId) ?? actorHandle(note.said.actorId) ?? note.said.actorId,
+    author: nameFor?.(note.said.actorId) ?? guessedName(note.said.actorId),
     inReplyTo,
   };
 }
@@ -135,10 +135,13 @@ function noteFrom(activity: InboxActivity):
 /**
  * `@user@host` for an actor URL, or `undefined` when the URL implies none.
  *
- * A guess, and deliberately so: naming the author properly would mean
- * dereferencing the actor, which is a network round trip per comment shown. A
- * follower the site already knows is named from its stored profile instead,
- * and this is the fallback for everybody else.
+ * A guess, and the last resort: a follower is named from the profile it
+ * published when it followed, and anybody else from the profile the site
+ * fetched when they were first heard from (TASK-184). This is for an actor
+ * neither of those knows yet.
+ *
+ * An id whose last segment is a number implies nothing. A current Mastodon
+ * mints `/ap/users/117132440785278319`, and a number is nobody's handle.
  */
 export function actorHandle(actorId: string): string | undefined {
   let url: URL;
@@ -152,8 +155,23 @@ export function actorHandle(actorId: string): string | undefined {
     .split('/')
     .filter((segment) => segment !== '')
     .pop();
-  if (last === undefined || last === '') return undefined;
+  if (last === undefined || last === '' || /^\d+$/.test(last)) return undefined;
   return `@${last.replace(/^@/, '')}@${url.host}`;
+}
+
+/**
+ * The best name an actor URL alone gives: the handle it implies, else the
+ * server it is on, else the id itself. What a conversation shows for an actor
+ * the site has no profile of.
+ */
+export function guessedName(actorId: string): string {
+  const handle = actorHandle(actorId);
+  if (handle !== undefined) return handle;
+  try {
+    return new URL(actorId).host;
+  } catch {
+    return actorId;
+  }
 }
 
 /**

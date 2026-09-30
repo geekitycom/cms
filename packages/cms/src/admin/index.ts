@@ -316,6 +316,8 @@ export type {
   DeliveryStatus,
   FlashKind,
   FlashMessage,
+  ActorProfile,
+  StoredActorProfile,
   Follower,
   InboxActivity,
   LegacyActorKey,

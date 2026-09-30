@@ -130,6 +130,20 @@ export type {
   RelayService,
   RelaySyncReport,
 } from './relays.ts';
+export {
+  createActorProfileService,
+  profileFrom,
+  PROFILE_MAX_AGE_MS,
+  PROFILE_RETRY_MS,
+  PROFILE_SWEEP_MS,
+  signedProfileLoader,
+} from './profiles.ts';
+export type {
+  ActorProfileLoader,
+  ActorProfileLogger,
+  ActorProfileService,
+  CreateActorProfileServiceOptions,
+} from './profiles.ts';
 export { actorHandle, replyFrom, replyTargetOf, REPLY_ACTIVITY_TYPE } from './replies.ts';
 export type { Reply } from './replies.ts';
 export {
