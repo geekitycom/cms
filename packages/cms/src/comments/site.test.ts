@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { databaseFiles } from '../cache.ts';
+import { tiedErrors } from '../__testing__/form-errors.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { COMMENT_FIELDS, MINIMUM_SUBMIT_SECONDS } from './submission.ts';
@@ -337,6 +338,33 @@ describe('leaving a comment', () => {
     assert.match(html, /A comment needs a name to go under\./);
     assert.match(html, /Worth keeping\./);
     assert.equal(cms.admin.listComments({}).length, 0);
+  });
+
+  it('ties each refusal to its field and leads with a summary that takes focus', async () => {
+    const { cms } = await site();
+
+    const response = await submit(
+      cms,
+      submission({ [COMMENT_FIELDS.name]: '', [COMMENT_FIELDS.body]: '' }),
+    );
+
+    assert.equal(response.status, 400);
+    const { heading, links } = tiedErrors(await response.text());
+    assert.match(heading, /not posted/);
+    assert.deepEqual(links, ['comment-name', 'comment-body']);
+  });
+
+  it('heads the summary with a refusal that is about the whole form', async () => {
+    const { cms } = await site();
+
+    const response = await submit(
+      cms,
+      submission({ [COMMENT_FIELDS.loaded]: String(NOW.getTime() - 400 * 24 * 3600 * 1000) }),
+    );
+
+    const { heading, links } = tiedErrors(await response.text());
+    assert.match(heading, /had been open a long time/);
+    assert.deepEqual(links, []);
   });
 });
 

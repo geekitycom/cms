@@ -8,7 +8,7 @@
   <p>Nobody can sign in to this site yet. Pick a username and a password.</p>
 
   {% if error %}
-    <p class="error">{{ error }}</p>
+    {{ field.summary(error) }}
   {% endif %}
 
   <form method="post" action="{{ setupUrl }}">

@@ -4,6 +4,7 @@ import {
   Create,
   Delete,
   Hashtag,
+  Image,
   InteractionPolicy,
   InteractionRule,
   Note,
@@ -13,11 +14,15 @@ import {
   Update,
 } from '@fedify/vocab';
 import { Temporal as TemporalPolyfill } from '@js-temporal/polyfill';
+import path from 'node:path';
 
 import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
+import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
+import { readAltTexts } from '../images/alt-text.ts';
+import { imagesIn } from '../images/markup.ts';
 import type { ContentStore } from '../content/store.ts';
 import { postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
@@ -206,6 +211,7 @@ export function postObject(
     // post that federates is addressed to Public, so anybody may quote it, and
     // the inbox approves each QuoteRequest on the same rule (TASK-125).
     interactionPolicy: QUOTABLE_BY_ANYONE,
+    attachments: imageAttachments(document, context.data.config),
     // Both taxonomies become hashtags: a relay or a search that keys on a
     // hashtag has no reason to care which of the two a term came from, and
     // each one points at the archive the site serves for it.
@@ -228,6 +234,40 @@ export function postObject(
     summary: summary === '' ? null : summary,
     content: document.html,
   });
+}
+
+/**
+ * Each image the post shows from the site's own uploads, as an `Image` whose
+ * `name` is its alt text (TASK-141).
+ *
+ * Mastodon strips `<img>` out of `content` and shows attachments instead, so
+ * this is how a post's pictures reach a timeline, and `name` is where it reads
+ * their description from. A decorative image is left out: it is not part of
+ * what the post says. An image from another site is left out too, since its
+ * media type is a guess this site cannot check.
+ */
+function imageAttachments(
+  document: Document,
+  config: { contentDir: string; baseUrl: string },
+): Image[] {
+  const library = readAltTexts(config.contentDir);
+  const attachments: Image[] = [];
+  for (const image of imagesIn(document.html)) {
+    if (image.source === undefined) continue;
+    if (library.get(image.source)?.kind === 'decorative') continue;
+    const extension = path.extname(image.source).toLowerCase();
+    const media = UPLOAD_MEDIA_TYPES.get(extension);
+    if (media?.image !== true) continue;
+    const alt = image.alt?.trim() ?? '';
+    attachments.push(
+      new Image({
+        url: new URL(absoluteUrl(image.src, config.baseUrl)),
+        mediaType: media.declared[0] ?? null,
+        name: alt === '' ? null : alt,
+      }),
+    );
+  }
+  return attachments;
 }
 
 const QUOTABLE_BY_ANYONE = new InteractionPolicy({

@@ -60,7 +60,12 @@
   <h1>{{ heading }}</h1>
 
   {% if hasProblems %}
-    <p class="admin-field-error">Nothing was saved. See below.</p>
+    {% call field.summary('Nothing was saved. Fix the box marked below and try again.') %}
+      {% for menu in areas.concat(others) %}
+        {{ field.problem('menu-' + menu.name, menu.problem) }}
+      {% endfor %}
+      {{ field.problem('menu-name', nameProblem) }}
+    {% endcall %}
   {% endif %}
 
   <h2>Where {{ themeName }} puts a menu</h2>

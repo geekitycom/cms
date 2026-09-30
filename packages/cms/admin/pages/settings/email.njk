@@ -3,6 +3,16 @@
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
 
+{% block settingsProblems %}
+  {{ field.problem('settings-mail-provider', problems.mailProvider) }}
+  {{ field.problem('settings-mail-from-address', problems.mailFromAddress) }}
+  {{ field.problem('settings-mail-reply-to', problems.mailReplyTo) }}
+  {{ field.problem('settings-contact-email', problems.contactEmail) }}
+  {{ field.problem('settings-security-contacts', problems.securityContacts) }}
+  {{ field.problem('settings-security-policy', problems.securityPolicy) }}
+  {{ field.problem('settings-security-languages', problems.securityLanguages) }}
+{% endblock %}
+
 {% block settingsFields %}
   {% set providerHint %}
     The key or password each one needs is a credential and is saved below,

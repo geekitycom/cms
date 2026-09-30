@@ -10,6 +10,8 @@
 :root {
   /* --admin-bar, --admin-nav and --admin-nav-text are in admin-bar.css. */
   --admin-nav-current: #2271b1;
+  --admin-nav-open: #1d2327;
+  --admin-nav-children: #32373c;
   --admin-field: #f0f0f1;
   --admin-surface: #fff;
   --admin-border: #c3c4c7;
@@ -18,7 +20,12 @@
   --admin-link: #2271b1;
   --admin-notice: #00a32a;
   --admin-error: #d63638;
+  --admin-warning: #dba617;
   --admin-unread: #f0f6fc;
+  /* The focus ring on the light field and surfaces; --admin-focus-on-dark,
+     for the bar and the menu column, is in admin-bar.css. Both are held to 3:1
+     against what they are drawn on by src/admin/keyboard.test.ts. */
+  --admin-focus: #2271b1;
   --admin-nav-width: 11rem;
 }
 
@@ -40,6 +47,35 @@ body {
 
 a {
   color: var(--admin-link);
+}
+
+/* Every control says where the keyboard is, in one colour that holds 3:1
+   against the field and the surfaces, rather than the browser's own ring,
+   which is faint on grey. Set off by 2px so it is drawn on the background
+   around the control, whatever colour the control itself is. */
+
+:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+/* Hidden until a keyboard reaches it, then drawn over the bar. */
+
+.admin-skip-link {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  padding: 0.6rem 0.9rem;
+  background: var(--admin-surface);
+  color: var(--admin-link);
+  font-weight: 600;
+  transform: translateY(-120%);
+}
+
+.admin-skip-link:focus {
+  transform: none;
+  outline-offset: -4px;
 }
 
 /* The shell: navigation column beside the screen itself. */
@@ -69,9 +105,16 @@ a {
 }
 
 .admin-nav a:hover,
-.admin-nav a:focus {
+.admin-nav a:focus-visible {
   background: var(--admin-bar);
   color: #72aee6;
+}
+
+/* Each entry fills the column, so its ring is drawn inside it. */
+
+.admin-nav a:focus-visible {
+  outline-color: var(--admin-focus-on-dark);
+  outline-offset: -2px;
 }
 
 .admin-nav a[aria-current='page'] {
@@ -92,12 +135,12 @@ a {
 }
 
 .admin-nav-open > .admin-nav-heading {
-  background: #1d2327;
+  background: var(--admin-nav-open);
   color: #fff;
 }
 
 .admin-nav-children {
-  background: #32373c;
+  background: var(--admin-nav-children);
   font-size: 0.95em;
 }
 
@@ -182,6 +225,12 @@ h2 {
   border-left-color: var(--admin-error);
 }
 
+/* Done, but with something still to fix: a post published with an image
+   nobody has described. */
+.admin-flash-warning {
+  border-left-color: var(--admin-warning);
+}
+
 /* Panels, the box every group of things on the dashboard sits in. */
 
 .admin-panels {
@@ -233,6 +282,12 @@ h2 {
 .admin-list {
   width: 100%;
   border-collapse: collapse;
+}
+
+.admin-list caption:not(.admin-visually-hidden) {
+  padding: 0.4rem 0;
+  text-align: left;
+  font-weight: 600;
 }
 
 .admin-list th {
@@ -327,6 +382,25 @@ button[type='submit']:hover,
   padding: 0.6rem 0.9rem;
   background: var(--admin-surface);
   border-left: 4px solid var(--admin-error);
+}
+
+/* A refused form's summary: what went wrong as its heading, and a link to
+   each field to put right. It takes focus on load, so the outline says
+   where the keyboard now is. */
+
+.admin-error-summary h2 {
+  margin: 0;
+  font-size: 1em;
+}
+
+.admin-error-summary ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.admin-error-summary:focus {
+  outline: 2px solid var(--admin-error);
+  outline-offset: 2px;
 }
 
 .admin-note {
@@ -891,6 +965,32 @@ button[type='submit']:hover,
 
 .admin-media-links {
   min-width: 18rem;
+}
+
+/* An image's alt text, edited in its row. The state underneath says what
+   inserting it will do, and a missing one reads as a problem. */
+
+.admin-media-alt {
+  min-width: 16rem;
+}
+
+.admin-media-alt form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+}
+
+.admin-media-alt input[type='text'] {
+  flex: 1 1 100%;
+}
+
+.admin-media-alt .admin-status {
+  flex: 1 1 100%;
+}
+
+.admin-status-missing {
+  color: var(--admin-error);
 }
 
 /* The copy control: a readonly field that works on its own, and a button that

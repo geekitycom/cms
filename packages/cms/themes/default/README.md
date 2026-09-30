@@ -303,6 +303,22 @@ later is not news. A post tagged `indienews` opens the line with a
 told the post is for it; a page never prints one, and its line is a
 `p.page-meta` rather than a `p.entry-meta`.
 
+**Every post's page has one `h1`.** A post with a name of its own is headed by
+it, as above. A note, or a reply without a title, opens on its words instead,
+so it has no `header`; in its place is an `h1` a screen reader and a crawler
+navigate by and a sighted reader never sees, saying what the post is, who wrote
+it and when:
+
+```html
+<h1 class="screen-reader-text">Note by Ada Lovelace, 11 September 2026</h1>
+```
+
+It says `Reply` for a reply and leaves out the name or the date the post does
+not have. It is not a `p-name`: a parser that found one would take the post
+for an article. The headings under it step down one level at a time: the
+conversation and the comment form are `h2`, and a refused form's error summary
+is an `h3` inside the form's section.
+
 What it is filed under is printed under the words and inside the article, so
 that each link is a `p-category` of this entry: the categories first, then the
 tags, each as one `p.post-categories` from `partials/tags.njk`.
@@ -1354,6 +1370,23 @@ that has CSS for the WordPress theme can bring it.
 technology, and give it `tabindex="-1"` and `autocomplete="off"`. A submission
 that filled it is dropped. **Do not** remove it from a replacement partial —
 it is one of three things standing between the site and a spam queue.
+
+### When a submission is refused
+
+The CMS answers a refused comment with the post again, `problems` and `error`
+filled in. The packaged partial tells assistive technology about it in two
+places, and a replacement partial should do the same:
+
+- **A summary before the form.** One element with `role="alert"`,
+  `tabindex="-1"` and `autofocus`, labelled by a heading that is `error`, or a
+  sentence of your own when there is none, and holding a link to each field in
+  `problems` (`<a href="#comment-name">…</a>`). `autofocus` moves focus to it on
+  load with no script, so it has to be the first `autofocus` on the page.
+- **On each field in `problems`.** `aria-invalid="true"` and
+  `aria-describedby` naming the element that holds its message, so a screen
+  reader reads the message with the field.
+
+The contact form below keeps the same contract.
 
 ### When somebody is signed in
 

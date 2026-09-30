@@ -91,6 +91,28 @@ export function responsiveImages(
   });
 }
 
+/** One `<img>` in a fragment of HTML, as far as alt text is concerned. */
+export interface ShownImage {
+  /** The `src` as written. */
+  src: string;
+  /** The upload it points at, relative to `content/uploads/`, when it points at one. */
+  source: string | undefined;
+  /** The `alt` attribute, or `undefined` when the tag has none at all. */
+  alt: string | undefined;
+}
+
+/** Every `<img>` in a fragment that has a `src`, in the order they appear. */
+export function imagesIn(html: string): ShownImage[] {
+  const found: ShownImage[] = [];
+  for (const match of html.matchAll(IMG_TAG)) {
+    const attributes = parseAttributes(match[1] ?? '');
+    const src = attributes.get('src');
+    if (src === undefined || src === '') continue;
+    found.push({ src, source: uploadPath(src), alt: attributes.get('alt') });
+  }
+  return found;
+}
+
 /**
  * The same rewrite, over one site's own derived images.
  *

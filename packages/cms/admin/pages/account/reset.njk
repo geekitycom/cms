@@ -17,14 +17,16 @@
     <p><a href="{{ forgotUrl }}">Ask for another one</a></p>
   {% else %}
     {% if problem %}
-      <p class="error">{{ problem }}</p>
+      {% call field.summary('The password was not set.') %}
+        {{ field.problem('password', problem) }}
+      {% endcall %}
     {% endif %}
 
     <form method="post" action="{{ resetUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
       <input type="hidden" name="{{ fields.token }}" value="{{ token }}" />
 
-      {{ field.password('password', fields.password, 'New password',
+      {{ field.password('password', fields.password, 'New password', error=problem,
            autocomplete='new-password', required=true, autofocus=true) }}
 
       {{ field.password('password_confirmation', fields.passwordConfirmation,

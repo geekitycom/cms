@@ -171,8 +171,9 @@ describe('the media screen', () => {
       'the URL is a readonly field, which copies without any script',
     );
     // An image embeds and anything else links, exactly as the editor's upload
-    // control pastes it.
-    assert.match(html, /value="!\[photo\]\(\/uploads\/2026\/01\/photo\.png\)"/);
+    // control pastes it. An image the library has no alt text for embeds with
+    // none rather than with its file name (TASK-141).
+    assert.match(html, /value="!\[\]\(\/uploads\/2026\/01\/photo\.png\)"/);
     assert.match(html, /value="\[paper\]\(\/uploads\/2026\/01\/paper\.pdf\)"/);
   });
 

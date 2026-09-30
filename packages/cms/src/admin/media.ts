@@ -20,6 +20,8 @@ import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
+import { readAltTexts, writeAltText } from '../images/alt-text.ts';
+import type { AltText } from '../images/alt-text.ts';
 import { removeImageVariants } from '../images/variants.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
 import { editorPath, PAGE_KIND, POST_KIND } from './documents.ts';
@@ -41,6 +43,9 @@ export const MEDIA_UPLOAD_PATH = `${MEDIA_PATH}/upload`;
 /** Where a row's Delete button posts. */
 export const MEDIA_DELETE_PATH = `${MEDIA_PATH}/delete`;
 
+/** Where a row's alt-text form posts. */
+export const MEDIA_ALT_PATH = `${MEDIA_PATH}/alt`;
+
 /** How many files one page of the library shows. */
 export const MEDIA_PER_PAGE = 24;
 
@@ -52,6 +57,12 @@ export const MEDIA_FIELDS = {
   path: 'path',
   /** Set once the admin has been shown what still references the file. */
   confirm: 'confirm',
+  /** An image's alt text. */
+  alt: 'alt',
+  /** Present when an image is decorative, which wins over any alt text. */
+  decorative: 'decorative',
+  /** The library page an alt-text form was on, so saving it goes back there. */
+  page: 'page',
 } as const;
 
 /** One file under `content/uploads/`, as the screen shows it. */
@@ -74,7 +85,9 @@ export interface MediaFile {
   modified: string;
   /** Whether a browser will render it as a picture, so the row shows a thumbnail. */
   image: boolean;
-  /** The Markdown for it: an embed for an image, a link for anything else. */
+  /** What the library says an image is, from `content/_data/media.json`. Unset when nothing has been said. */
+  alt: AltText | undefined;
+  /** The Markdown for it: an embed with its alt text for an image, a link for anything else. */
   markdown: string;
 }
 
@@ -101,6 +114,7 @@ export async function listUploads(contentDir: string): Promise<MediaFile[]> {
     throw error;
   }
 
+  const library = readAltTexts(contentDir);
   const found: MediaFile[] = [];
   for (const entry of entries) {
     if (!entry.isFile()) continue;
@@ -119,7 +133,7 @@ export async function listUploads(contentDir: string): Promise<MediaFile[]> {
       continue;
     }
 
-    found.push(describeUpload(relative, stats.size, stats.mtime));
+    found.push(describeUpload(relative, stats.size, stats.mtime, library.get(relative)));
   }
 
   // Newest first, and by path when two files share a timestamp, so a page of
@@ -133,7 +147,12 @@ export async function listUploads(contentDir: string): Promise<MediaFile[]> {
 }
 
 /** One upload as the screen shows it, from what a directory walk knows. */
-export function describeUpload(relative: string, bytes: number, modified: Date): MediaFile {
+export function describeUpload(
+  relative: string,
+  bytes: number,
+  modified: Date,
+  alt?: AltText,
+): MediaFile {
   const name = relative.slice(relative.lastIndexOf('/') + 1);
   const extension = path.extname(name).toLowerCase();
   const image = UPLOAD_MEDIA_TYPES.get(extension)?.image ?? false;
@@ -147,10 +166,16 @@ export function describeUpload(relative: string, bytes: number, modified: Date):
     bytes,
     modified: modified.toISOString(),
     image,
+    alt: image ? alt : undefined,
     // The same Markdown the editor's upload control pastes, from the same
     // function, so a file linked from the media screen and the same file
     // linked from the editor are written identically.
-    markdown: uploadMarkdown({ url, label: name.slice(0, name.length - extension.length), image }),
+    markdown: uploadMarkdown({
+      url,
+      label: name.slice(0, name.length - extension.length),
+      image,
+      alt,
+    }),
   };
 }
 
@@ -262,6 +287,9 @@ export async function deleteUpload(options: DeleteUploadOptions): Promise<boolea
   // variants rather than variants with no file: the first is repairable by
   // regenerating, the second is orphaned bytes.
   await options.removeDerived?.(options.path);
+  if (readAltTexts(options.contentDir).has(options.path)) {
+    await writeAltText(options.contentDir, options.path, undefined);
+  }
   return true;
 }
 
@@ -314,6 +342,29 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
 
     flash(c, 'notice', `Uploaded ${outcome.url}.`);
     return c.redirect(MEDIA_PATH, 303);
+  });
+
+  app.post(MEDIA_ALT_PATH, async (c) => {
+    const body = await c.req.parseBody();
+    const relative = field(body[MEDIA_FIELDS.path]);
+    const file = relative === '' ? undefined : resolveUpload(c.var.config.contentDir, relative);
+
+    if (file === undefined || !(await exists(file))) {
+      flash(c, 'error', 'That is not a file in this site’s uploads.');
+      return c.redirect(MEDIA_PATH, 303);
+    }
+
+    const text = field(body[MEDIA_FIELDS.alt]).replace(/\s+/g, ' ');
+    const alt: AltText | undefined =
+      body[MEDIA_FIELDS.decorative] !== undefined
+        ? { kind: 'decorative' }
+        : text === ''
+          ? undefined
+          : { kind: 'described', text };
+    await writeAltText(c.var.config.contentDir, relative, alt);
+
+    flash(c, 'notice', altSavedMessage(relative, alt));
+    return c.redirect(mediaPageUrl(pageNumber(field(body[MEDIA_FIELDS.page]))), 303);
   });
 
   app.post(MEDIA_DELETE_PATH, async (c) => {
@@ -374,6 +425,7 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
       listUrl: MEDIA_PATH,
       uploadUrl: MEDIA_UPLOAD_PATH,
       deleteUrl: MEDIA_DELETE_PATH,
+      altUrl: MEDIA_ALT_PATH,
       fields: MEDIA_FIELDS,
       accepts: c.var.config.uploadTypes.join(','),
       maxBytes: c.var.config.uploadMaxBytes,
@@ -390,6 +442,22 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
       })),
       ...extra,
     };
+  }
+}
+
+/** What the flash says once an image's alt text has been saved. */
+function altSavedMessage(relative: string, alt: AltText | undefined): string {
+  if (alt === undefined) return `${relative} has no alt text now.`;
+  if (alt.kind === 'decorative') return `${relative} is marked decorative.`;
+  return `Saved the alt text for ${relative}.`;
+}
+
+/** Whether a path is a file that exists. */
+async function exists(file: string): Promise<boolean> {
+  try {
+    return (await stat(file)).isFile();
+  } catch {
+    return false;
   }
 }
 

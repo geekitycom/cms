@@ -272,6 +272,54 @@ describe('the post object', () => {
 
 // Mastodon 4.5 reads `interactionPolicy.canQuote` by its plain keys and treats
 // a post without one as quotable by nobody (FEP-044f).
+describe('image attachments (TASK-141 AC #5)', () => {
+  it('attaches each uploaded image with its alt text as the name, leaving decorative ones out', async () => {
+    const instance = await site({
+      '_data/media.json': JSON.stringify({ '2026/09/rule.png': { decorative: true } }),
+      'posts/2026-09-02-pictures.md': post('Pictures', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/pictures/',
+        body: [
+          '![A dog asleep on a rug](/uploads/2026/09/dog.jpg)',
+          '![](/uploads/2026/09/rule.png)',
+          '![](/uploads/2026/09/undescribed.webp)',
+          '![Somebody else’s](https://elsewhere.example/theirs.png)',
+        ].join('\n\n'),
+      }),
+    });
+
+    const article = (await (
+      await get(instance, '/2026/09/pictures/', ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+
+    const raw = article['attachment'];
+    const attachments = (Array.isArray(raw) ? raw : [raw]) as Record<string, unknown>[];
+    assert.deepEqual(attachments, [
+      {
+        type: 'Image',
+        mediaType: 'image/jpeg',
+        url: `${BASE_URL}/uploads/2026/09/dog.jpg`,
+        name: 'A dog asleep on a rug',
+      },
+      {
+        type: 'Image',
+        mediaType: 'image/webp',
+        url: `${BASE_URL}/uploads/2026/09/undescribed.webp`,
+      },
+    ]);
+  });
+
+  it('attaches nothing to a post with no images', async () => {
+    const instance = await site(HELLO);
+
+    const article = (await (
+      await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+
+    assert.equal(article['attachment'], undefined);
+  });
+});
+
 describe('the quote policy (TASK-125 AC #1)', () => {
   const QUOTABLE = { canQuote: { automaticApproval: 'as:Public' } };
 

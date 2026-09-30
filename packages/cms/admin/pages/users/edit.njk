@@ -80,10 +80,9 @@
     </p>
 
     {% if profileProblems.links %}
-      <p class="admin-error">
-        Nothing was saved. Fix the Links box below and save again; every other
-        box here still holds what you typed.
-      </p>
+      {% call field.summary('Nothing was saved. Fix the Links box below and save again; every other box here still holds what you typed.') %}
+        {{ field.problem('profile-links', profileProblems.links) }}
+      {% endcall %}
     {% endif %}
 
     {{ field.text('profile-display-name', fields.displayName, 'Display name',
@@ -219,7 +218,10 @@
       <h2>Change your password</h2>
 
       {% if passwordProblems.currentPassword or passwordProblems.newPassword %}
-        <p class="admin-error">Your password was not changed. Fix the fields marked below and try again.</p>
+        {% call field.summary('Your password was not changed. Fix the fields marked below and try again.') %}
+          {{ field.problem('current-password', passwordProblems.currentPassword) }}
+          {{ field.problem('new-password', passwordProblems.newPassword) }}
+        {% endcall %}
       {% endif %}
 
       {{ field.password('current-password', fields.currentPassword, 'Current password',

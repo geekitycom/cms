@@ -40,7 +40,7 @@ export interface Session {
 }
 
 /** How loudly a flash message reads. */
-export type FlashKind = 'notice' | 'error';
+export type FlashKind = 'notice' | 'warning' | 'error';
 
 /**
  * One message queued for the next page a session asks for.
@@ -1822,7 +1822,7 @@ function isFlashMessage(value: unknown): value is FlashMessage {
   if (typeof value !== 'object' || value === null) return false;
   const entry = value as Record<string, unknown>;
   return (
-    (entry['kind'] === 'notice' || entry['kind'] === 'error') &&
+    (entry['kind'] === 'notice' || entry['kind'] === 'warning' || entry['kind'] === 'error') &&
     typeof entry['message'] === 'string'
   );
 }

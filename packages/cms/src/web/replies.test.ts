@@ -97,11 +97,12 @@ describe('a reply’s own page', () => {
     assert.deepEqual(replyLinks(article), [TARGET]);
   });
 
-  it('draws no heading for a reply with no title of its own', async () => {
+  it('draws no visible heading for a reply with no title of its own', async () => {
     const article = main(await get('/2026/09/agreed/'));
 
     assert.doesNotMatch(article, /p-name/);
-    assert.doesNotMatch(article, /<h1/);
+    assert.doesNotMatch(article, /<header>/);
+    assert.match(article, /<h1 class="screen-reader-text">Reply, 10 September 2026<\/h1>/);
   });
 
   it('heads a titled reply with its title, photo and all', async () => {

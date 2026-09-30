@@ -8,6 +8,7 @@ import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import type { UploadMediaType } from '../content/media.ts';
 import { slugify } from '../content/slug.ts';
 import type { GeekityEnv } from '../env.ts';
+import type { AltText } from '../images/alt-text.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
@@ -54,7 +55,7 @@ export interface StoredUpload {
   url: string;
   /** What the CMS decided the file is; `media.image` says whether it is one. */
   media: UploadMediaType;
-  /** The submitted name without its extension, for a caption or an alt text. */
+  /** The submitted name without its extension, for the text of a link to it. */
   label: string;
 }
 
@@ -268,10 +269,12 @@ async function writeWithoutOverwriting(
 export interface UploadMarkdownOptions {
   /** The public URL of the file. */
   url: string;
-  /** What the link says: the submitted name without its extension. */
+  /** What a link says: the submitted name without its extension. Never an image's alt text. */
   label: string;
   /** Whether the Markdown is an embed rather than a link. */
   image: boolean;
+  /** The library's alt text for an image. None, or decorative, embeds it with an empty one. */
+  alt?: AltText | undefined;
 }
 
 /**
@@ -283,8 +286,11 @@ export interface UploadMarkdownOptions {
  * linked from the other would be a difference nobody could explain.
  */
 export function uploadMarkdown(options: UploadMarkdownOptions): string {
-  const label = escapeLabel(options.label);
-  return options.image ? `![${label}](${options.url})` : `[${label}](${options.url})`;
+  if (!options.image) return `[${escapeLabel(options.label)}](${options.url})`;
+  // A file name is not a description (TASK-141): an image with no alt text in
+  // the library is embedded with none, and publishing it says so.
+  const alt = options.alt?.kind === 'described' ? escapeLabel(options.alt.text) : '';
+  return `![${alt}](${options.url})`;
 }
 
 /** What an upload over the site's limit is told, and the limit it went over. */

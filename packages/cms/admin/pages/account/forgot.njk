@@ -30,7 +30,7 @@
     <p>Type your username or your email address, and a link to set a new password is sent to the address on your account.</p>
 
     {% if error %}
-      <p class="error">{{ error }}</p>
+      {{ field.summary(error) }}
     {% endif %}
 
     <form method="post" action="{{ forgotUrl }}">

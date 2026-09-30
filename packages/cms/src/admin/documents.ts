@@ -22,6 +22,8 @@ import {
 } from '../content/time.ts';
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
+import { readAltTexts, undescribedImages } from '../images/alt-text.ts';
+import type { UndescribedImage } from '../images/alt-text.ts';
 import { isPublicDocument } from '../web/documents.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
@@ -359,6 +361,15 @@ async function saveFromForm(
     return refuse('In reply to has to be a web address, like https://example.com/a-post/.');
   }
 
+  // TASK-141: an image nobody described is a problem to fix before readers
+  // meet it. A draft is not checked, since nobody meets a draft.
+  const undescribed = draft
+    ? []
+    : undescribedImages(renderMarkdown(form.body), readAltTexts(contentDir));
+  if (undescribed.length > 0 && c.var.config.requireAltText) {
+    return refuse(`This site publishes no image without alt text. ${missingAltText(undescribed)}`);
+  }
+
   const timezone = siteTimezone(c);
 
   // decision-11: what the file gets is a UTC instant, and an offset-less field
@@ -476,7 +487,18 @@ async function saveFromForm(
   });
 
   flash(c, 'notice', savedMessage(kind, document, saved, store.now()));
+  if (undescribed.length > 0) flash(c, 'warning', missingAltText(undescribed));
   return c.redirect(editorPath(kind, saved.slug), 303);
+}
+
+/** What a save says about the images it found with no alt text, naming each. */
+function missingAltText(images: UndescribedImage[]): string {
+  const names = images.map((image) => image.name).join(', ');
+  const count = images.length === 1 ? '1 image has' : `${String(images.length)} images have`;
+  return (
+    `${count} no alt text: ${names}. Describe each one inside its ![…](…), ` +
+    'or mark an upload decorative in the media library.'
+  );
 }
 
 /** How many of an untitled post's first words its slug is made from. */

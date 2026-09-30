@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { tiedErrors } from '../__testing__/form-errors.ts';
 import { createUser } from '../admin/accounts.ts';
 import { readSiteSettings, writeSiteJson } from '../admin/settings.ts';
 import type { CommentSubmission, CommentVerdict } from '../comments/submission.ts';
@@ -332,6 +333,20 @@ describe('sending a message', () => {
     assert.match(html, /does not look like an email address/);
     assert.match(html, /It is a lovely machine\./, 'the message is still in the textarea');
     assert.equal(listContactMessages(dataDir).length, 0);
+  });
+
+  it('ties each refusal to its field and leads with a summary that takes focus', async () => {
+    const { cms } = await site();
+
+    const response = await send(
+      cms,
+      submission({ [CONTACT_FIELDS.name]: '', [CONTACT_FIELDS.email]: 'not-an-address' }),
+    );
+
+    assert.equal(response.status, 400);
+    const { heading, links } = tiedErrors(await response.text());
+    assert.match(heading, /not sent/);
+    assert.deepEqual(links, ['contact-name', 'contact-email']);
   });
 });
 

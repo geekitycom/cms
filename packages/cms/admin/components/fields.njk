@@ -34,9 +34,9 @@
    with. `errorHtml` is the rare second thing a field has to say — the Reading
    page's "that page is no longer published" — already written as its own
    paragraph. #}
-{% macro _below(hint, error, errorHtml) %}
+{% macro _below(id, hint, error, errorHtml) %}
 {% if error %}
-  <p class="admin-field-error">{{ error }}</p>
+  <p class="admin-field-error" id="{{ id }}-error">{{ error }}</p>
 {% endif %}
 {% if errorHtml %}
 {{ errorHtml | safe }}
@@ -45,6 +45,14 @@
   <p class="admin-hint">{{ hint | safe }}</p>
 {% endif %}
 {% endmacro %}
+
+{# What a control says about itself when the form refused it: that it is
+   invalid, and which paragraph says why, so a screen reader reads the message
+   with the field rather than leaving it to be found. `errorHtml` is not named
+   here: it is a standing note about the stored value, not a refusal. #}
+{% macro _invalid(id, error) -%}
+{% if error %} aria-invalid="true" aria-describedby="{{ id }}-error"{% endif %}
+{%- endmacro %}
 
 {# A box somebody types into: text, email, number, or whatever `type` says.
 
@@ -71,8 +79,8 @@
   disabled=false
 ) %}
   <label for="{{ id }}">{{ label | safe }}</label>
-  <input id="{{ id }}" name="{{ name }}" type="{{ type }}"{% if min %} min="{{ min }}"{% endif %}{% if step %} step="{{ step }}"{% endif %}{% if inputmode %} inputmode="{{ inputmode }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %} value="{{ value }}"{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %} />
-{{ _below(hint, error, errorHtml) }}
+  <input id="{{ id }}" name="{{ name }}" type="{{ type }}"{% if min %} min="{{ min }}"{% endif %}{% if step %} step="{{ step }}"{% endif %}{% if inputmode %} inputmode="{{ inputmode }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %} value="{{ value }}"{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }} />
+{{ _below(id, hint, error, errorHtml) }}
 {%- endmacro %}
 
 {# A password box. It carries `value=""` and no way to set one: nothing typed
@@ -93,8 +101,8 @@
   autofocus=false
 ) %}
   <label for="{{ id }}">{{ label | safe }}</label>
-  <input id="{{ id }}" name="{{ name }}" type="password" value=""{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %} />
-{{ _below(hint, error, errorHtml) }}
+  <input id="{{ id }}" name="{{ name }}" type="password" value=""{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{{ _invalid(id, error) }} />
+{{ _below(id, hint, error, errorHtml) }}
 {%- endmacro %}
 
 {# A box of several lines. #}
@@ -114,8 +122,8 @@
   disabled=false
 ) %}
   <label for="{{ id }}">{{ label | safe }}</label>
-  <textarea id="{{ id }}" name="{{ name }}"{% if rows %} rows="{{ rows }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}>{{ value }}</textarea>
-{{ _below(hint, error, errorHtml) }}
+  <textarea id="{{ id }}" name="{{ name }}"{% if rows %} rows="{{ rows }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }}>{{ value }}</textarea>
+{{ _below(id, hint, error, errorHtml) }}
 {%- endmacro %}
 
 {# A list to pick from. The options are the call's body, because which of them
@@ -137,10 +145,10 @@
   disabled=false
 ) %}
   <label for="{{ id }}">{{ label | safe }}</label>
-  <select id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if disabled %} disabled{% endif %}>
+  <select id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }}>
 {{ caller() }}
   </select>
-{{ _below(hint, error, errorHtml) }}
+{{ _below(id, hint, error, errorHtml) }}
 {%- endmacro %}
 
 {# A switch. The label follows the box rather than heading it, which is what a
@@ -158,8 +166,43 @@
   disabled=false
 ) %}
   <p class="admin-check">
-    <input id="{{ id }}" name="{{ name }}" type="checkbox" value="{{ value }}"{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %} />
+    <input id="{{ id }}" name="{{ name }}" type="checkbox" value="{{ value }}"{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }} />
     <label for="{{ id }}">{{ label | safe }}</label>
   </p>
-{{ _below(hint, error, errorHtml) }}
+{{ _below(id, hint, error, errorHtml) }}
+{%- endmacro %}
+
+{# The top of a refused form: what went wrong, and a link to every field that
+   needs putting right. It is an alert and takes focus when the page loads, so
+   a screen reader hears it at once and a keyboard starts from it, with no
+   script. It comes before the form, so its `autofocus` is the first on the
+   page and wins over any a field carries.
+
+   A form with one thing to say calls it bare, with the message as the heading.
+   A form with fields to fix calls it with a `problem` per field; one given no
+   message writes nothing, so a page lists every field it could fault:
+
+     {% call field.summary('Nothing was saved. Fix the fields marked below.') %}
+       {{ field.problem('settings-title', problems.title) }}
+     {% endcall %}
+
+   Only one form on a page is ever refused at a time, which is why the ids are
+   fixed. #}
+{% macro summary(heading) %}
+{% set problems = (caller() if caller else '') | trim %}
+  <div class="admin-error admin-error-summary" role="alert" tabindex="-1" autofocus aria-labelledby="admin-error-summary-heading">
+    <h2 id="admin-error-summary-heading">{{ heading }}</h2>
+{% if problems %}
+    <ul>
+{{ problems | safe }}
+    </ul>
+{% endif %}
+  </div>
+{%- endmacro %}
+
+{# One field's line in the summary: its message, linking to the field. #}
+{% macro problem(id, message) %}
+{% if message %}
+      <li><a href="#{{ id }}">{{ message }}</a></li>
+{% endif %}
 {%- endmacro %}

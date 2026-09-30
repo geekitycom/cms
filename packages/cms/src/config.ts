@@ -172,6 +172,15 @@ export interface GeekityConfig {
    */
   imageFormats?: string[];
   /**
+   * Refuse to publish a post or page that shows an image with no alt text.
+   * Default `false`, which publishes it and warns, naming the image.
+   * Overridden by `GEEKITY_REQUIRE_ALT_TEXT`.
+   *
+   * An image is described when its own `![…](…)` says something, or when it
+   * is an upload the media library marks decorative. A draft is never checked.
+   */
+  requireAltText?: boolean;
+  /**
    * How many failed sign-ins a username or a client address may make before
    * the admin locks it out. Default 5. Overridden by `GEEKITY_LOGIN_ATTEMPTS`.
    */
@@ -357,6 +366,7 @@ export interface ResolvedConfig {
   imageWidths: number[];
   /** Normalised: lower case, in the order the `<source>` elements go. */
   imageFormats: string[];
+  requireAltText: boolean;
   loginAttempts: number;
   loginLockout: number;
   trustProxy: boolean;
@@ -513,6 +523,12 @@ export function resolveConfig(
     ),
     imageWidths: resolveImageWidths(env['GEEKITY_IMAGE_WIDTHS'], config.imageWidths),
     imageFormats: resolveImageFormats(env['GEEKITY_IMAGE_FORMATS'], config.imageFormats),
+    requireAltText: resolveBoolean(
+      'GEEKITY_REQUIRE_ALT_TEXT',
+      env['GEEKITY_REQUIRE_ALT_TEXT'],
+      config.requireAltText,
+      false,
+    ),
     loginAttempts: resolveCount(
       'GEEKITY_LOGIN_ATTEMPTS',
       'loginAttempts',

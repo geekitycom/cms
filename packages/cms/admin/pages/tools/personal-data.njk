@@ -49,6 +49,11 @@
       {% endif %}
     </form>
   {% else %}
+    {% if problem %}
+      {% call field.summary('Nothing was looked up.') %}
+        {{ field.problem('personal-data-email', problem) }}
+      {% endcall %}
+    {% endif %}
     <form class="admin-settings" method="post" action="{{ actionUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
       {{ field.text('personal-data-email', fields.email, 'Email address', email,

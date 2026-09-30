@@ -17,9 +17,13 @@
     <link rel="stylesheet" href="{{ assetPrefix }}admin.css" />
   </head>
   <body>
+    {# First on every screen, so a keyboard gets past the bar and the menu
+       in one key. It moves no focus of its own: a refused form's summary
+       still takes focus on load (TASK-142). #}
+    <a class="admin-skip-link" href="#main">Skip to main content</a>
     {% block chrome %}{% endblock %}
     {% block main %}
-      <main class="admin-plain">
+      <main id="main" class="admin-plain">
         {% include "components/flash.njk" %}
         {% block content %}{% endblock %}
       </main>

@@ -175,7 +175,11 @@ dd {
 
 /* HTML elements */
 
+/* `scrollbar-gutter` keeps the scrollbar's room whether or not the page is
+   long enough to scroll, so moving from a short page to a long one does not
+   shift the column sideways. */
 html {
+  scrollbar-gutter: stable;
   font-size: var(--fontSize-root);
   line-height: var(--lineHeight-relaxed);
   -webkit-text-size-adjust: 100%;
@@ -245,6 +249,7 @@ h6 {
   font-weight: var(--fontWeight-bold);
   line-height: var(--lineHeight-tight);
   letter-spacing: -0.025em;
+  text-wrap: balance;
 }
 
 h1 {
@@ -329,6 +334,16 @@ a:focus-visible {
 
 /* Prose */
 
+/* Prose wraps `pretty`, which keeps a paragraph from ending on one short word;
+   headings wrap `balance` above. A browser without either wraps as it always
+   did. */
+
+p,
+li,
+dd {
+  text-wrap: pretty;
+}
+
 p {
   margin: var(--spacing-0) var(--spacing-0) var(--spacing-4) var(--spacing-0);
   padding: var(--spacing-0);
@@ -337,10 +352,8 @@ p {
 
 ul,
 ol {
-  margin-top: var(--spacing-0);
-  margin-right: var(--spacing-0);
-  margin-bottom: var(--spacing-8);
-  margin-left: var(--spacing-4);
+  margin-block: var(--spacing-0) var(--spacing-8);
+  margin-inline: var(--spacing-4) var(--spacing-0);
   padding: var(--spacing-0);
   list-style-position: inside;
   list-style-image: none;
@@ -349,7 +362,7 @@ ol {
 ul li,
 ol li {
   margin-bottom: var(--spacing-0);
-  padding-left: var(--spacing-0);
+  padding-inline-start: var(--spacing-0);
 }
 
 li > p {
@@ -361,7 +374,7 @@ li *:last-child {
 }
 
 details {
-  margin-left: var(--spacing-4);
+  margin-inline-start: var(--spacing-4);
 }
 
 details summary {
@@ -380,14 +393,17 @@ details summary {
 
 .hlist li {
   margin: 0;
-  padding: 0 0.5em 0 0;
+  padding: 0;
+  padding-inline-end: 0.5em;
   list-style-type: none;
 }
 
 blockquote {
-  margin: var(--spacing-8) var(--spacing-8) var(--spacing-8) var(--spacing-0);
-  padding: var(--spacing-0) var(--spacing-0) var(--spacing-0) var(--spacing-6);
-  border-left: var(--spacing-1) solid var(--color-secondary);
+  margin-block: var(--spacing-8);
+  margin-inline: var(--spacing-0) var(--spacing-8);
+  padding: var(--spacing-0);
+  padding-inline-start: var(--spacing-6);
+  border-inline-start: var(--spacing-1) solid var(--color-secondary);
   color: var(--color-secondary);
   font-size: var(--fontSize-2);
   font-style: italic;
@@ -555,10 +571,8 @@ pre code {
 .hljs-addition,
 .hljs-deletion {
   display: block;
-  margin-right: calc(-1 * var(--spacing-4));
-  margin-left: calc(-1 * var(--spacing-4));
-  padding-right: var(--spacing-4);
-  padding-left: var(--spacing-4);
+  margin-inline: calc(-1 * var(--spacing-4));
+  padding-inline: var(--spacing-4);
   color: var(--color-code-text);
   text-decoration: none;
 }
@@ -590,8 +604,8 @@ pre code {
   display: block;
   width: auto;
   height: auto;
-  top: var(--spacing-2);
-  left: var(--spacing-2);
+  inset-block-start: var(--spacing-2);
+  inset-inline-start: var(--spacing-2);
   padding: var(--spacing-4);
   clip-path: none;
   background-color: var(--color-base-3);
@@ -719,7 +733,7 @@ pre code {
 .bio-avatar {
   display: inline-block;
   min-width: 55px;
-  margin-right: var(--spacing-4);
+  margin-inline-end: var(--spacing-4);
   margin-bottom: var(--spacing-0);
   border: 3px solid var(--color-base-3);
   border-radius: 50%;
@@ -771,7 +785,7 @@ pre code {
 
 .post-categories a {
   display: inline-block;
-  margin-right: var(--spacing-2);
+  margin-inline-end: var(--spacing-2);
 }
 
 /* The categories are already small; inside the meta line they would be small
@@ -1071,7 +1085,7 @@ pre code {
 }
 
 .comment-list .children {
-  margin-left: var(--spacing-8);
+  margin-inline-start: var(--spacing-8);
 }
 
 .comment-body {
@@ -1225,6 +1239,19 @@ pre code {
   border-inline-start-color: var(--color-error);
 }
 
+/* A refused form's summary: what went wrong as its heading, then a link to
+   each field to put right. */
+.comment-error h3,
+.contact-error h3 {
+  margin: 0;
+  font-size: var(--fontSize-1);
+}
+
+.comment-error ul,
+.contact-error ul {
+  margin: var(--spacing-1) 0 0;
+}
+
 .comment-replying-to,
 .comment-signed-in {
   margin: 0 0 var(--spacing-4);
@@ -1251,6 +1278,40 @@ pre code {
   color: var(--color-error);
 }
 
+/* Target size. A link that stands on its own rather than inside a sentence,
+   and every button, is at least 24 by 24 CSS pixels, the WCAG 2.2 AA minimum
+   for something a finger or an unsteady pointer has to hit. A link inside a
+   sentence is exempt and keeps the line it sits on. `inline-flex` grows the
+   box without moving the text off the baseline it shares with its line. */
+
+.site-nav a,
+.post-categories a,
+.blog-post-nav a,
+.pagination a,
+.comment-metadata a,
+.reply a,
+.comment-error a,
+.contact-error a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  min-inline-size: 24px;
+}
+
+.search-form button,
+.comment-respond .form-submit button,
+.comment-respond .form-submit input[type='submit'] {
+  min-block-size: 24px;
+  min-inline-size: 24px;
+}
+
+.comment-respond input[type='checkbox'] {
+  inline-size: 24px;
+  block-size: 24px;
+  margin: 0;
+  vertical-align: middle;
+}
+
 /*
   The honeypot. Taken out of the flow rather than `display: none`, because some
   form fillers skip fields a browser would not paint at all and this one is
@@ -1259,7 +1320,7 @@ pre code {
 .comment-trap,
 .contact-trap {
   position: absolute;
-  left: -10000px;
+  inset-inline-start: -10000px;
   width: 1px;
   height: 1px;
   overflow: hidden;
@@ -1273,13 +1334,13 @@ pre code {
   }
 
   .bio-avatar {
-    margin-right: var(--spacing-0);
+    margin-inline-end: var(--spacing-0);
     margin-bottom: var(--spacing-4);
   }
 
   blockquote {
-    margin-left: var(--spacing-0);
-    padding: var(--spacing-0) var(--spacing-0) var(--spacing-0) var(--spacing-4);
+    margin-inline-start: var(--spacing-0);
+    padding-inline-start: var(--spacing-4);
   }
 
   ul,
@@ -1288,6 +1349,30 @@ pre code {
   }
 
   .comment-list .children {
-    margin-left: var(--spacing-4);
+    margin-inline-start: var(--spacing-4);
+  }
+}
+
+/* Forced colours: Windows High Contrast and the like, where the reader's own
+   palette replaces every colour here. Borders and outlines survive that and
+   backgrounds do not, so anything drawn by a background alone takes a border
+   in a system colour: the buttons, which are otherwise a block of the primary
+   colour, the rule, which is a 1px background, and a block of code. Focus
+   needs nothing: every ring here is an outline, which the forced palette
+   redraws in its own colour. */
+
+@media (forced-colors: active) {
+  .search-form button,
+  .comment-respond .form-submit button,
+  .comment-respond .form-submit input[type='submit'] {
+    border: 1px solid ButtonText;
+  }
+
+  hr {
+    border-block-start: 1px solid CanvasText;
+  }
+
+  pre {
+    border: 1px solid CanvasText;
   }
 }
