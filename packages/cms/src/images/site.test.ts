@@ -86,7 +86,7 @@ describe('image optimization end to end', () => {
     const html = await fetched(cms, permalink);
 
     assert.match(html, /<picture>/);
-    assert.match(html, /<source type="image\/webp" srcset="[^"]*320\.webp 320w/);
+    assert.match(html, /<source type="image\/webp" srcset="[^"]*320\.webp\?v=[0-9a-f]{12} 320w/);
     assert.match(html, /<img src="\/uploads\/[^"]*\.png"/);
     assert.match(html, /width="1000" height="500" fetchpriority="high" decoding="async"/);
     assert.match(html, /alt="A photo"/);
@@ -100,7 +100,6 @@ describe('image optimization end to end', () => {
     const derived = await cms.app.request(`/uploads/_/${url.slice('/uploads/'.length)}/320.webp`);
     assert.equal(derived.headers.get('content-type'), 'image/webp');
     assert.equal((await sharp(Buffer.from(await derived.arrayBuffer())).metadata()).width, 320);
-    assert.equal(derived.headers.get('cache-control'), 'public, max-age=31536000, immutable');
   });
 
   it('keeps the plain image in the feed, the JSON and the Markdown', async () => {
@@ -246,6 +245,88 @@ describe('image optimization end to end', () => {
     assert.equal(response.status, 303);
 
     await assert.rejects(() => readFile(sidecar));
+  });
+});
+
+/** Every derived-file URL a page offers, in document order. */
+function variantHrefs(html: string): string[] {
+  return [...html.matchAll(/(\/uploads\/_\/[^\s",]+)/g)].map((match) => match[1] ?? '');
+}
+
+/** Delete one upload through the media screen, past the "a post uses it" confirmation. */
+async function deleteUpload(agent: Browser, relative: string): Promise<void> {
+  const fresh = csrfField(await (await agent.get('/admin/media')).text());
+  assert.ok(fresh !== undefined);
+  const response = await agent.post('/admin/media/delete', {
+    csrf_token: fresh,
+    path: relative,
+    confirm: '1',
+  });
+  assert.equal(response.status, 303);
+}
+
+describe('variant URLs name the bytes they were derived from', () => {
+  it('gives a reupload under a freed name new variant URLs', async () => {
+    const { cms, agent, token, contentDir } = await siteWithAdmin();
+    const url = await uploaded(
+      agent,
+      token,
+      'Photo.png',
+      await rectangle(1000, 500).png().toBuffer(),
+      'image/png',
+    );
+    const permalink = await postEmbedding(cms, contentDir, url);
+    const before = variantHrefs(await fetched(cms, permalink));
+    assert.ok(before.length > 0, 'the page offers variants');
+
+    await deleteUpload(agent, url.slice('/uploads/'.length));
+    const again = await uploaded(
+      agent,
+      token,
+      'Photo.png',
+      await sharp({
+        create: { width: 1000, height: 500, channels: 3, background: { r: 200, g: 30, b: 30 } },
+      })
+        .png()
+        .toBuffer(),
+      'image/png',
+    );
+    assert.equal(again, url, 'the freed name was reused');
+    await cms.sync();
+
+    const after = variantHrefs(await fetched(cms, permalink));
+    assert.equal(after.length, before.length);
+    for (const href of after) {
+      assert.ok(!before.includes(href), `${href} was offered for the old bytes too`);
+    }
+  });
+
+  it('caches a URL naming the current bytes for a year and any other for a day', async () => {
+    const { cms, agent, token, contentDir } = await siteWithAdmin();
+    const url = await uploaded(
+      agent,
+      token,
+      'Photo.png',
+      await rectangle(1000, 500).png().toBuffer(),
+      'image/png',
+    );
+    const permalink = await postEmbedding(cms, contentDir, url);
+    const hrefs = variantHrefs(await fetched(cms, permalink));
+    assert.ok(hrefs.length > 0);
+
+    for (const href of hrefs) {
+      assert.match(href, /\?v=[0-9a-f]{12}$/);
+      const response = await cms.app.request(href);
+      assert.equal(response.status, 200, `${href} answered ${String(response.status)}`);
+      assert.equal(response.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    }
+
+    const plain = `/uploads/_/${url.slice('/uploads/'.length)}/320.webp`;
+    for (const legacy of [plain, `${plain}?v=000000000000`]) {
+      const response = await cms.app.request(legacy);
+      assert.equal(response.status, 200, `${legacy} no longer resolves`);
+      assert.equal(response.headers.get('cache-control'), 'public, max-age=86400');
+    }
   });
 });
 

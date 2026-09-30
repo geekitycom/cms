@@ -813,13 +813,13 @@ A post page then renders the picture as
 <picture>
   <source
     type="image/webp"
-    srcset="/uploads/_/2026/09/photo.jpg/320.webp 320w, …"
+    srcset="/uploads/_/2026/09/photo.jpg/320.webp?v=3f9a1c0e7b2d 320w, …"
     sizes="100vw"
   />
   <img
     src="/uploads/2026/09/photo.jpg"
     alt="A photo"
-    srcset="/uploads/_/2026/09/photo.jpg/320.jpg 320w, …"
+    srcset="/uploads/_/2026/09/photo.jpg/320.jpg?v=3f9a1c0e7b2d 320w, …"
     sizes="100vw"
     width="2400"
     height="1600"
@@ -1212,8 +1212,11 @@ receiving updates to every other template. Assets under `/theme/` resolve in
 the same order, and so do the mail templates under `mail/`. A layout links a
 theme file with `{{ "style.css" | asset }}`, which writes a URL with a hash of
 the file's bytes in it; that URL is cached for a year as `immutable`, and the
-plain `/theme/style.css` for an hour. Image variants under `/uploads/_/` are
-immutable too, because a variant's URL names one width of one upload.
+plain `/theme/style.css` for an hour. Image variants and icons under
+`/uploads/_/` work the same way: the page links them with a hash of the
+original upload's bytes as `v`, so a picture deleted and replaced under the
+same name gets new URLs. A matching `v` is cached for a year as `immutable`;
+no `v`, or a stale one, still gets the file, for a day.
 
 **Appearance > Themes** in the admin is where the choice is made: the packaged
 theme and everything under `themes/` with its name and description, the active

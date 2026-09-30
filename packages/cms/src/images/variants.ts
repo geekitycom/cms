@@ -9,7 +9,14 @@ import { writeFileAtomically } from '../files/atomic.ts';
 import { findAsset } from '../web/assets.ts';
 import type { StaticAsset } from '../web/assets.ts';
 import { deriveSiteIcon, iconSize } from './icons.ts';
-import { derivedDir, sourceFile, IMAGE_DIRECTORY, VARIANT_ASSET_PREFIX } from './paths.ts';
+import {
+  derivedDir,
+  sourceFile,
+  sourceVersion,
+  versioned,
+  IMAGE_DIRECTORY,
+  VARIANT_ASSET_PREFIX,
+} from './paths.ts';
 import type { ImageConfig } from './paths.ts';
 
 /**
@@ -109,9 +116,20 @@ export function imageMediaType(format: string): string | undefined {
   return FORMAT_MEDIA_TYPES.get(format);
 }
 
-/** The public URL of one derived file. */
-export function variantUrl(source: string, variant: ImageVariant): string {
-  return `${VARIANT_ASSET_PREFIX}${source}/${variant.file}`;
+/**
+ * A record as a page renders it: what was derived, and the hash of the
+ * original's bytes that every derived URL carries. The hash is not in the
+ * sidecar; it is read off the original, so a sidecar written before URLs
+ * carried it needs no rewrite.
+ */
+export interface DescribedImage extends ImageRecord {
+  /** See {@link sourceVersion}. Without it a derived URL is served for a day, not a year. */
+  version?: string | undefined;
+}
+
+/** The public URL of one derived file, naming the original's bytes when `version` is given. */
+export function variantUrl(source: string, variant: ImageVariant, version?: string): string {
+  return versioned(`${VARIANT_ASSET_PREFIX}${source}/${variant.file}`, version);
 }
 
 /**
@@ -286,17 +304,18 @@ function formatted(pipeline: Sharp, format: string): Sharp {
  * renders. `undefined` means the caller should serve the plain original: the
  * upload is not an image, or nothing has been derived from it yet.
  */
-export function describeImage(config: ImageConfig, source: string): ImageRecord | undefined {
+export function describeImage(config: ImageConfig, source: string): DescribedImage | undefined {
   const directory = derivedDir(config, source);
 
-  const remembered = records.get(directory);
-  if (remembered !== undefined) return current(config, remembered) ? remembered : undefined;
+  let record = records.get(directory);
+  if (record === undefined) {
+    record = readRecord(path.join(directory, IMAGE_RECORD_NAME), source);
+    if (record === undefined) return undefined;
+    records.set(directory, record);
+  }
 
-  const record = readRecord(path.join(directory, IMAGE_RECORD_NAME), source);
-  if (record === undefined) return undefined;
-
-  records.set(directory, record);
-  return current(config, record) ? record : undefined;
+  if (!current(config, record)) return undefined;
+  return { ...record, version: sourceVersion(config, source) };
 }
 
 /**

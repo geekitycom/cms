@@ -9,6 +9,7 @@ import { postLabel } from '../content/post-type.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { mountAvatars } from '../avatars/routes.ts';
+import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
 import {
   ASSET_VERSION_PARAM,
@@ -1410,18 +1411,24 @@ function themeAsset(c: Context<GeekityEnv>): Response {
  * offer is a 404 and encodes nothing, so the URL space cannot be used to make
  * the server work.
  *
- * A variant is cached for a year without revalidation: its URL names one
- * width of one upload, and the upload endpoint never overwrites a file, it
- * suffixes the name.
+ * A variant is cached for a year without revalidation only when its `v` is
+ * the hash of the upload it was derived from, which is what the page markup
+ * and the icon links write. The name alone cannot promise that: deleting an
+ * upload frees its name for different bytes. Any other `v`, or none, as in a
+ * page cached before URLs carried one, still gets the file, for a day.
  */
 async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
-  const relative = requestPath(c).slice(VARIANT_ASSET_PREFIX.length);
-  const asset = await findImageVariant(c.var.config, decodeVariantPath(relative));
+  const relative = decodeVariantPath(requestPath(c).slice(VARIANT_ASSET_PREFIX.length));
+  const asset = await findImageVariant(c.var.config, relative);
   if (asset === undefined) return notFound(c);
 
+  const source = relative.slice(0, relative.lastIndexOf('/'));
+  const version = sourceVersion(c.var.config, source);
+  const fingerprinted = version !== undefined && c.req.query(ASSET_VERSION_PARAM) === version;
+  const options = fingerprinted ? IMMUTABLE_ASSET : { maxAge: UPLOAD_ASSET_MAX_AGE };
   return matchesEtag(c.req.header('if-none-match'), asset.etag)
-    ? assetNotModified(asset, IMMUTABLE_ASSET)
-    : assetResponse(asset, IMMUTABLE_ASSET);
+    ? assetNotModified(asset, options)
+    : assetResponse(asset, options);
 }
 
 /** A request path as a path on disk: percent-encoding off, segment by segment. */

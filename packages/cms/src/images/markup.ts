@@ -5,7 +5,8 @@ import {
   imageMediaType,
   VARIANT_ASSET_PREFIX,
 } from './variants.ts';
-import type { ImageConfig, ImageRecord, ImageVariant } from './variants.ts';
+import { versioned } from './paths.ts';
+import type { DescribedImage, ImageConfig, ImageVariant } from './variants.ts';
 
 /**
  * Responsive markup for the site's own pages.
@@ -19,7 +20,7 @@ import type { ImageConfig, ImageRecord, ImageVariant } from './variants.ts';
  */
 
 /** What the markup asks about an upload. See {@link describeImage}. */
-export type DescribeImage = (source: string) => ImageRecord | undefined;
+export type DescribeImage = (source: string) => DescribedImage | undefined;
 
 /**
  * The `sizes` every image is given.
@@ -125,7 +126,7 @@ export function siteImageMarkup(
 function picture(input: {
   tag: string;
   attributes: Map<string, string>;
-  record: ImageRecord;
+  record: DescribedImage;
   lead: boolean;
 }): string {
   const { record } = input;
@@ -143,7 +144,7 @@ function picture(input: {
     const type = imageMediaType(format);
     if (type === undefined) continue;
     sources.push(
-      `<source type="${type}" srcset="${srcset(record.source, variants)}" sizes="${IMAGE_SIZES}">`,
+      `<source type="${type}" srcset="${srcset(record, variants)}" sizes="${IMAGE_SIZES}">`,
     );
   }
 
@@ -162,13 +163,13 @@ function picture(input: {
 function image(
   tag: string,
   attributes: Map<string, string>,
-  record: ImageRecord,
+  record: DescribedImage,
   fallback: ImageVariant[],
   lead: boolean,
 ): string {
   const additions: string[] = [];
 
-  if (fallback.length > 0) additions.push(`srcset="${srcset(record.source, fallback)}"`);
+  if (fallback.length > 0) additions.push(`srcset="${srcset(record, fallback)}"`);
   additions.push(`sizes="${IMAGE_SIZES}"`);
   additions.push(`width="${String(record.width)}"`);
   additions.push(`height="${String(record.height)}"`);
@@ -189,19 +190,22 @@ function image(
 }
 
 /** A `srcset`: every variant of one format, narrowest first, with its width descriptor. */
-function srcset(source: string, variants: ImageVariant[]): string {
+function srcset(record: DescribedImage, variants: ImageVariant[]): string {
   return [...variants]
     .sort((a, b) => a.width - b.width)
-    .map((variant) => `${variantHref(source, variant)} ${String(variant.width)}w`)
+    .map((variant) => `${variantHref(record, variant)} ${String(variant.width)}w`)
     .join(', ');
 }
 
-/** The URL of one derived file, with every path segment encoded as a URL wants. */
-function variantHref(source: string, variant: ImageVariant): string {
-  const segments = [...source.split('/'), variant.file].map((segment) =>
+/**
+ * The URL of one derived file, with every path segment encoded as a URL wants
+ * and the original's version on the end.
+ */
+function variantHref(record: DescribedImage, variant: ImageVariant): string {
+  const segments = [...record.source.split('/'), variant.file].map((segment) =>
     encodeURIComponent(segment),
   );
-  return `${VARIANT_ASSET_PREFIX}${segments.join('/')}`;
+  return versioned(`${VARIANT_ASSET_PREFIX}${segments.join('/')}`, record.version);
 }
 
 /**

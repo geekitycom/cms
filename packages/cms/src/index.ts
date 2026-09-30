@@ -631,6 +631,7 @@ export {
   VARIANT_ASSET_PREFIX,
 } from './images/index.ts';
 export type {
+  DescribedImage,
   DescribeImage,
   ImageConfig,
   ImageLoading,

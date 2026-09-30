@@ -672,8 +672,10 @@ describe('the icons (TASK-81 AC #2)', () => {
     for (const icon of icons) {
       assert.equal(icon.type, 'image/png', `${icon.href} is not announced as a PNG`);
 
+      assert.match(icon.href, /\?v=[0-9a-f]{12}$/, `${icon.href} does not name the avatar's bytes`);
       const response = await cms.app.request(icon.href);
       assert.equal(response.status, 200, `GET ${icon.href} answered ${String(response.status)}`);
+      assert.equal(response.headers.get('cache-control'), 'public, max-age=31536000, immutable');
       assert.equal(response.headers.get('content-type'), 'image/png');
 
       const size = Number(icon.sizes.split('x')[0]);

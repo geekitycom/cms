@@ -13,4 +13,4 @@ export {
   IMAGE_RECORD_NAME,
   VARIANT_ASSET_PREFIX,
 } from './variants.ts';
-export type { ImageConfig, ImageRecord, ImageVariant } from './variants.ts';
+export type { DescribedImage, ImageConfig, ImageRecord, ImageVariant } from './variants.ts';
