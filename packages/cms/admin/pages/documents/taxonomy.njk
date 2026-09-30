@@ -42,6 +42,7 @@
     <p>Nothing carries a {{ label }} yet.</p>
   {% else %}
     <table class="admin-list">
+      <caption class="admin-visually-hidden">{{ heading }}</caption>
       <thead>
         <tr>
           <th scope="col">{{ kind.singular | capitalize }}</th>

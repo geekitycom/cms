@@ -15,6 +15,7 @@
   --admin-bar: #1d2327;
   --admin-nav: #2c3338;
   --admin-nav-text: #f0f0f1;
+  --admin-focus-on-dark: #fff;
 }
 
 .admin-bar,
@@ -51,6 +52,15 @@
 .admin-bar a:hover,
 .admin-bar a:focus {
   color: #72aee6;
+}
+
+/* The ring where the keyboard is, white on the dark bar. Here rather than in
+   admin.css because on the public site this is the only stylesheet the bar
+   has. */
+
+.admin-bar :focus-visible {
+  outline: 2px solid var(--admin-focus-on-dark);
+  outline-offset: 2px;
 }
 
 .admin-bar-site {
@@ -126,6 +136,12 @@
   text-align: left;
   text-decoration: none;
   cursor: pointer;
+}
+
+/* A menu entry fills the menu's width, so its ring is drawn inside it. */
+
+.admin-bar .admin-account-menu :focus-visible {
+  outline-offset: -2px;
 }
 
 .admin-account-menu a:hover,

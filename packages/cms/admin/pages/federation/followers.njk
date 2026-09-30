@@ -40,6 +40,7 @@
 
         {% if actor.followers.length %}
           <table class="admin-list">
+            <caption>Followers of {{ actor.handle }}</caption>
             <thead>
               <tr>
                 <th scope="col">Follower</th>
@@ -80,6 +81,7 @@
     <h2>Relays</h2>
     {% if relays.length %}
       <table class="admin-list">
+        <caption class="admin-visually-hidden">Relays</caption>
         <thead>
           <tr>
             <th scope="col">Relay</th>
@@ -174,6 +176,7 @@
     <h2>Delivery</h2>
     {% if posts.length %}
       <table class="admin-list">
+        <caption class="admin-visually-hidden">Delivery</caption>
         <thead>
           <tr>
             <th scope="col">Post</th>

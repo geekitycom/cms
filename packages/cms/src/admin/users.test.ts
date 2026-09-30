@@ -261,7 +261,11 @@ describe('the edit user screen (TASK-97 AC #1, #7)', () => {
     assert.doesNotMatch(html, /name="email"/, 'no email box in the table');
     assert.doesNotMatch(html, /name="mode"/, 'no how-often select in the table');
     assert.doesNotMatch(html, /name="event"/, 'no notice switch in the table');
-    assert.doesNotMatch(html, /admin-visually-hidden/, 'and so no hidden labels either');
+    assert.doesNotMatch(
+      html,
+      /<label class="admin-visually-hidden"/,
+      'and so no hidden labels either',
+    );
     assert.doesNotMatch(html, /Change your password/, 'which belongs on your own page');
   });
 });

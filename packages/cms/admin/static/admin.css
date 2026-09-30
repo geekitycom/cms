@@ -10,6 +10,8 @@
 :root {
   /* --admin-bar, --admin-nav and --admin-nav-text are in admin-bar.css. */
   --admin-nav-current: #2271b1;
+  --admin-nav-open: #1d2327;
+  --admin-nav-children: #32373c;
   --admin-field: #f0f0f1;
   --admin-surface: #fff;
   --admin-border: #c3c4c7;
@@ -20,6 +22,10 @@
   --admin-error: #d63638;
   --admin-warning: #dba617;
   --admin-unread: #f0f6fc;
+  /* The focus ring on the light field and surfaces; --admin-focus-on-dark,
+     for the bar and the menu column, is in admin-bar.css. Both are held to 3:1
+     against what they are drawn on by src/admin/keyboard.test.ts. */
+  --admin-focus: #2271b1;
   --admin-nav-width: 11rem;
 }
 
@@ -41,6 +47,35 @@ body {
 
 a {
   color: var(--admin-link);
+}
+
+/* Every control says where the keyboard is, in one colour that holds 3:1
+   against the field and the surfaces, rather than the browser's own ring,
+   which is faint on grey. Set off by 2px so it is drawn on the background
+   around the control, whatever colour the control itself is. */
+
+:focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+/* Hidden until a keyboard reaches it, then drawn over the bar. */
+
+.admin-skip-link {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  padding: 0.6rem 0.9rem;
+  background: var(--admin-surface);
+  color: var(--admin-link);
+  font-weight: 600;
+  transform: translateY(-120%);
+}
+
+.admin-skip-link:focus {
+  transform: none;
+  outline-offset: -4px;
 }
 
 /* The shell: navigation column beside the screen itself. */
@@ -70,9 +105,16 @@ a {
 }
 
 .admin-nav a:hover,
-.admin-nav a:focus {
+.admin-nav a:focus-visible {
   background: var(--admin-bar);
   color: #72aee6;
+}
+
+/* Each entry fills the column, so its ring is drawn inside it. */
+
+.admin-nav a:focus-visible {
+  outline-color: var(--admin-focus-on-dark);
+  outline-offset: -2px;
 }
 
 .admin-nav a[aria-current='page'] {
@@ -93,12 +135,12 @@ a {
 }
 
 .admin-nav-open > .admin-nav-heading {
-  background: #1d2327;
+  background: var(--admin-nav-open);
   color: #fff;
 }
 
 .admin-nav-children {
-  background: #32373c;
+  background: var(--admin-nav-children);
   font-size: 0.95em;
 }
 
@@ -240,6 +282,12 @@ h2 {
 .admin-list {
   width: 100%;
   border-collapse: collapse;
+}
+
+.admin-list caption:not(.admin-visually-hidden) {
+  padding: 0.4rem 0;
+  text-align: left;
+  font-weight: 600;
 }
 
 .admin-list th {
