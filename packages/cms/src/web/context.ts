@@ -7,6 +7,7 @@ import { isNamed, postLabel, postTypeOf, replyTarget } from '../content/post-typ
 import type { PostType } from '../content/post-type.ts';
 import { DEFAULT_TIMEZONE } from '../content/time.ts';
 import { siteImageMarkup } from '../images/markup.ts';
+import type { ImageLoading } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import type { AuthorContext } from './authors.ts';
 import { feedExcerpt } from './feed-item.ts';
@@ -204,11 +205,15 @@ export interface NeighbourContext {
  * login, a display name from before decision-14, or somebody who has no
  * account here at all. Without one the file's own string is left where it was,
  * which is what a test over a single template renders.
+ *
+ * `loading` says whether this document opens the page it is printed on, and
+ * so whether its first image is fetched at once rather than lazily.
  */
 export function documentContext(
   document: Document,
   images?: ImageConfig,
   author?: AuthorContext,
+  loading?: ImageLoading,
 ): DocumentContext {
   const date = toDate(document.date);
 
@@ -230,7 +235,7 @@ export function documentContext(
     ...optional('date', date),
     tags: document.tags,
     categories: document.categories,
-    content: images === undefined ? document.html : siteImageMarkup(images, document.html),
+    content: images === undefined ? document.html : siteImageMarkup(images, document.html, loading),
     // The plain-text summary, taken off the document rather than off the
     // markup above: an excerpt is text, and the `<picture>` a site's image
     // config puts in the HTML is not something to cut words out of.

@@ -336,7 +336,7 @@ describe('what a cache in front of the site is told', () => {
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-cache');
-    assert.equal(response.headers.get('vary'), 'Accept');
+    assert.equal(response.headers.get('vary'), 'Accept, Accept-Encoding');
     assert.ok(response.headers.get('etag') !== null, 'it still has a validator');
     assert.ok(!(await response.text()).includes('Commenting as'));
   });

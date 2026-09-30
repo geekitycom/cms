@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+import { brotliDecompressSync } from 'node:zlib';
 
 import { readSiteSettings, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
@@ -814,6 +815,86 @@ describe('the conversation under a post', () => {
     assert.ok(!html.includes('class="conversation"'), 'and the section goes with it');
   });
 
+  it('changes the page validator whenever the conversation it shows changes (TASK-181)', async () => {
+    const cms = await federated();
+    const etagOf = async (): Promise<string> =>
+      (await cms.app.request('/2026/09/hello/')).headers.get('etag') ?? '';
+    const seen = new Set([await etagOf()]);
+    const changed = async (what: string): Promise<void> => {
+      const etag = await etagOf();
+      assert.ok(!seen.has(etag), `${what} changes the ETag`);
+      seen.add(etag);
+    };
+
+    reply(cms, { id: 'https://remote.example/notes/1', inReplyTo: HELLO });
+    await changed('a reply arriving');
+    reaction(cms, 'Like', 'https://remote.example/likes/1', 'https://remote.example/users/bob');
+    await changed('a like arriving');
+    reaction(
+      cms,
+      'Announce',
+      'https://remote.example/boosts/1',
+      'https://remote.example/users/cal',
+    );
+    await changed('a boost arriving');
+    cms.admin.putFollower({
+      username: 'ada',
+      actorId: 'https://remote.example/users/ada',
+      inboxId: 'https://remote.example/users/ada/inbox',
+      sharedInboxId: null,
+      handle: '@ada@remote.example',
+      name: 'Ada Lovelace',
+      iconUrl: null,
+      url: 'https://remote.example/@ada',
+    });
+    await changed('a replier being named');
+    cms.admin.logInboxActivity({
+      activityId: 'https://remote.example/deletes/1',
+      activityType: 'Delete',
+      actorId: 'https://remote.example/users/ada',
+      objectId: 'https://remote.example/notes/1',
+      json: JSON.stringify({
+        type: 'Delete',
+        actor: 'https://remote.example/users/ada',
+        object: { id: 'https://remote.example/notes/1', type: 'Tombstone' },
+      }),
+    });
+    await changed('a reply being deleted');
+  });
+
+  it('answers a revalidation with the new reply, and 304 when nothing is new (TASK-181)', async () => {
+    const cms = await federated();
+
+    for (const encoding of ['identity', 'br']) {
+      const headers = { 'accept-encoding': encoding };
+      const first = await cms.app.request('/2026/09/hello/', { headers });
+      const etag = first.headers.get('etag') ?? '';
+      assert.equal(first.headers.get('last-modified'), null, `${encoding}: no Last-Modified`);
+
+      const unchanged = await cms.app.request('/2026/09/hello/', {
+        headers: { ...headers, 'if-none-match': etag },
+      });
+      assert.equal(unchanged.status, 304, `${encoding}: nothing new is still a 304`);
+
+      reply(cms, {
+        id: `https://remote.example/notes/${encoding}`,
+        inReplyTo: HELLO,
+        content: `<p>Reply over ${encoding}.</p>`,
+      });
+
+      const revalidated = await cms.app.request('/2026/09/hello/', {
+        headers: { ...headers, 'if-none-match': etag },
+      });
+      assert.equal(revalidated.status, 200, `${encoding}: a new reply is a 200`);
+      assert.ok(revalidated.headers.get('etag') !== etag, `${encoding}: under a new ETag`);
+      const html =
+        encoding === 'br'
+          ? brotliDecompressSync(Buffer.from(await revalidated.arrayBuffer())).toString('utf8')
+          : await revalidated.text();
+      assert.ok(html.includes(`<p>Reply over ${encoding}.</p>`), `${encoding}: with the reply`);
+    }
+  });
+
   it('renders no section at all under a post nobody has answered', async () => {
     const cms = await federated();
 
@@ -894,6 +975,129 @@ describe('theme assets', () => {
     const { cms } = await site({});
 
     assert.equal((await cms.app.request('/theme/nope.css')).status, 404);
+  });
+});
+
+/** The `href` of the page's stylesheet link. */
+async function stylesheetHref(cms: Cms, pathname = '/'): Promise<string> {
+  const html = await (await cms.app.request(pathname)).text();
+  const href = /<link rel="stylesheet" href="([^"]+)">/.exec(html)?.[1];
+  assert.ok(href !== undefined, 'the page links a stylesheet');
+  return href;
+}
+
+describe('fingerprinted theme assets (TASK-138)', () => {
+  it('links the stylesheet and the script at URLs carrying a content hash', async () => {
+    const { cms } = await site({
+      'posts/2026-09-02-code.md': post('Code', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/code/',
+        body: '```js\nconst a = 1;\n```',
+      }),
+    });
+
+    const html = await (await cms.app.request('/2026/09/code/')).text();
+
+    assert.match(html, /<link rel="stylesheet" href="\/theme\/style\.css\?v=[0-9a-f]{12}">/);
+    assert.match(html, /<script src="\/theme\/highlight\.js\?v=[0-9a-f]{12}" defer>/);
+  });
+
+  it('hashes the file the chosen theme ships, so two themes get two URLs', async () => {
+    const packaged = await stylesheetHref((await site({})).cms);
+    const themesDir = await fixtureTheme({ 'static/style.css': 'body { color: teal }\n' });
+    const themed = await stylesheetHref((await site(choosing(), { themesDir })).cms);
+
+    assert.notEqual(themed, packaged);
+    assert.match(themed, /^\/theme\/style\.css\?v=[0-9a-f]{12}$/);
+  });
+
+  it('puts the base path in front of a hashed URL', async () => {
+    const { cms } = await site({}, { baseUrl: 'https://example.com/blog/' });
+
+    assert.match(await stylesheetHref(cms), /^\/blog\/theme\/style\.css\?v=[0-9a-f]{12}$/);
+  });
+
+  it('serves the hashed URL for a year, immutable', async () => {
+    const { cms } = await site({});
+    const href = await stylesheetHref(cms);
+
+    const response = await cms.app.request(href);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    const etag = response.headers.get('etag') ?? '';
+    const revalidated = await cms.app.request(href, { headers: { 'if-none-match': etag } });
+    assert.equal(revalidated.status, 304);
+    assert.equal(revalidated.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  });
+
+  it('keeps the unhashed URL working at a short lifetime', async () => {
+    const { cms } = await site({});
+
+    const response = await cms.app.request('/theme/style.css');
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'public, max-age=3600');
+  });
+
+  it('does not pin a stale hash to the bytes the file holds now', async () => {
+    const { cms } = await site({});
+
+    const response = await cms.app.request('/theme/style.css?v=000000000000');
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'public, max-age=3600');
+  });
+
+  it('changes the URL when the theme file is edited, without a restart', async () => {
+    const themesDir = await fixtureTheme({ 'static/style.css': 'body { color: teal }\n' });
+    const { cms } = await site(choosing(), { themesDir, watch: true });
+    const before = await stylesheetHref(cms);
+
+    await writeFile(
+      path.join(themesDir, 'fixture', 'static', 'style.css'),
+      'body { color: rebeccapurple; background: white }\n',
+      'utf8',
+    );
+    const after = await stylesheetHref(cms);
+
+    assert.notEqual(after, before, 'the edit moved the URL');
+    const response = await cms.app.request(after);
+    assert.equal(await response.text(), 'body { color: rebeccapurple; background: white }\n');
+    assert.match(response.headers.get('cache-control') ?? '', /immutable/);
+  });
+});
+
+describe('the HTML validator (TASK-181)', () => {
+  it('follows a template edited under a watching server, without a restart', async () => {
+    const themesDir = await fixtureTheme({ 'layouts/post.njk': '<h1>{{ title }}</h1>\n' });
+    const { cms } = await site(
+      {
+        ...choosing(),
+        'posts/2026-09-02-hello.md': post('Hello', {
+          date: '2026-09-02T09:00:00Z',
+          permalink: '/2026/09/hello/',
+        }),
+      },
+      { themesDir, watch: true },
+    );
+    const before = (await cms.app.request('/2026/09/hello/')).headers.get('etag') ?? '';
+    const unchanged = await cms.app.request('/2026/09/hello/', {
+      headers: { 'if-none-match': before },
+    });
+    assert.equal(unchanged.status, 304, 'an unedited page revalidates');
+
+    await writeFile(
+      path.join(themesDir, 'fixture', 'layouts', 'post.njk'),
+      '<h1 class="edited">{{ title }}</h1>\n',
+      'utf8',
+    );
+    const after = await cms.app.request('/2026/09/hello/', {
+      headers: { 'if-none-match': before },
+    });
+
+    assert.equal(after.status, 200, 'the edited page is sent, not a 304');
+    assert.ok((await after.text()).includes('class="edited"'), 'drawn by the edited template');
   });
 });
 

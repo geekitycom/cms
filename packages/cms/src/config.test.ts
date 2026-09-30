@@ -538,6 +538,25 @@ describe('baseUrlSource', () => {
     );
   });
 
+  it('compresses by default, and turns it off from config or GEEKITY_COMPRESSION', () => {
+    assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).compression, true);
+    assert.equal(
+      resolveConfig({ compression: false }, { cwd: '/srv/site', env: {} }).compression,
+      false,
+    );
+    assert.equal(
+      resolveConfig(
+        { compression: true },
+        { cwd: '/srv/site', env: { GEEKITY_COMPRESSION: 'false' } },
+      ).compression,
+      false,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_COMPRESSION: 'sometimes' } }),
+      /GEEKITY_COMPRESSION/,
+    );
+  });
+
   it('forces maintenance mode from GEEKITY_MAINTENANCE, and is off by default', () => {
     assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).maintenance, false);
     assert.equal(

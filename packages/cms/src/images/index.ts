@@ -1,5 +1,5 @@
 export { IMAGE_SIZES, responsiveImages, siteImageMarkup } from './markup.ts';
-export type { DescribeImage } from './markup.ts';
+export type { DescribeImage, ImageLoading } from './markup.ts';
 export { siteIcons } from './icons.ts';
 export type { SiteIcon } from './icons.ts';
 export {
@@ -13,4 +13,4 @@ export {
   IMAGE_RECORD_NAME,
   VARIANT_ASSET_PREFIX,
 } from './variants.ts';
-export type { ImageConfig, ImageRecord, ImageVariant } from './variants.ts';
+export type { DescribedImage, ImageConfig, ImageRecord, ImageVariant } from './variants.ts';

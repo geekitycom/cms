@@ -283,6 +283,7 @@ directory; absolute ones are used as given.
 | `accessLogAddress` | `false`                               | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address on the end of each access-log line. `trustProxy` decides which address that is.                                                                                    |
 | `accessLogWriter`  | stdout                                | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                        |
 | `maintenance`      | `false`                               | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode, answering 503, until a restart without it.                                                                                                             |
+| `compression`      | `true`                                | `GEEKITY_COMPRESSION`        | Compress text responses with brotli or gzip. Turn it off behind a proxy that compresses. See [Compression](#compression).                                                                 |
 | `securityHeaders`  | [see below](#security-headers)        | —                            | Headers every response carries. A string replaces a default or adds a header, `false` removes one.                                                                                        |
 | `onDocumentChange` | none                                  | —                            | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                              |
 | `onPublish`        | none                                  | —                            | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                            |
@@ -2248,6 +2249,46 @@ uploads. Four directives say more than that:
 - `frame-ancestors 'self'` rather than `'none'` — the editor's preview is a
   sandboxed `srcdoc` iframe, which inherits this policy, and its one ancestor is
   the admin page itself.
+
+### Compression
+
+Text responses are compressed on the way out: HTML, CSS, JavaScript, feeds,
+JSON, Markdown, SVG, sitemaps and anything else whose media type is `text/*`,
+`+json` or `+xml`. A client that accepts brotli (`br`) gets brotli, at quality
+5 because every page is built per request; one that accepts only gzip gets
+gzip; one that accepts neither gets the plain bytes.
+
+Some responses go out as they are:
+
+- Images, video, WOFF and WOFF2 fonts and other formats that carry their own
+  compression. Encoding them again costs CPU and can make them bigger.
+- Bodies under 1024 bytes, where the saving is smaller than the cost.
+- A response that already has a `Content-Encoding`, or whose `Cache-Control`
+  says `no-transform`.
+- A response that may hold a secret: anything whose `Cache-Control` says
+  `private` or `no-store`, which every page drawn for somebody signed in does,
+  and every admin screen under `/admin`, the setup and login forms included.
+  These carry CSRF tokens next to text a visitor can influence, and compressing
+  them would let an attacker who watches response sizes recover the token a
+  byte at a time (the BREACH attack). Their `Vary` is left as it was. The
+  admin's static files under `/admin/_static/` hold no secret and are
+  compressed. Error pages say `no-store`, so they go out plain too.
+
+Every other text response carries `Vary: Accept-Encoding`, whether it was
+compressed or not, and so does every `304`. A cache in front of the site
+therefore keeps a copy per encoding and never hands brotli to a client that
+cannot decode it.
+
+A compressed response's `ETag` is the plain response's with `W/` in front: the
+bytes differ, but the representation is the same. `If-None-Match` compares
+weakly, so a browser holding the brotli copy and a feed reader holding the gzip
+copy both revalidate to `304`, and each gets back the validator it sent.
+
+`compression: false`, or `GEEKITY_COMPRESSION=false`, turns all of this off.
+Turn it off when a reverse proxy or CDN in front of the site compresses
+responses itself (Caddy's `encode`, nginx's `gzip on`, Cloudflare), so the work
+is done once and the proxy's settings apply. Leave it on when nothing in front
+compresses, as in the Docker deployment the repository documents.
 
 ### security.txt and change-password
 

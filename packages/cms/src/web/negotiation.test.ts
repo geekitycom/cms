@@ -214,7 +214,7 @@ describe('choosing from Accept', () => {
 
     assert.equal(response.status, 406);
     assert.match(response.headers.get('content-type') ?? '', /^application\/json/);
-    assert.equal(response.headers.get('vary'), 'Accept');
+    assert.equal(response.headers.get('vary'), 'Accept, Accept-Encoding');
     assert.deepEqual((body as { alternates: unknown }).alternates, [
       { type: 'text/html', url: '/2026/09/hello/' },
       { type: 'text/markdown', url: '/2026/09/hello/index.md' },
@@ -257,12 +257,16 @@ describe('validators and alternates', () => {
       ],
     ] as const) {
       const response = await cms.app.request('/2026/09/hello/', { headers: { accept } });
-      assert.equal(response.headers.get('vary'), 'Accept', `${accept} varies on Accept`);
+      assert.equal(
+        response.headers.get('vary'),
+        'Accept, Accept-Encoding',
+        `${accept} varies on Accept`,
+      );
       assert.equal(response.headers.get('link'), expected, `${accept} links its alternates`);
     }
   });
 
-  it('gives each representation its own ETag and a Last-Modified from updated', async () => {
+  it('gives each representation its own ETag, and the file-shaped ones a Last-Modified', async () => {
     const { cms } = await site(HELLO);
     const etags = new Set<string>();
 
@@ -273,10 +277,12 @@ describe('validators and alternates', () => {
       assert.ok(etag !== null, `${accept} carries an ETag`);
       assert.match(etag, /^"[0-9a-f]{32}"$/, `${accept} has a quoted hex ETag`);
       etags.add(etag);
+      // The HTML also shows the conversation, which has no date to agree with
+      // its ETag, so only the Markdown and the JSON report the file's.
       assert.equal(
         response.headers.get('last-modified'),
-        new Date('2026-09-04T11:30:00Z').toUTCString(),
-        `${accept} reports the updated date`,
+        accept === 'text/html' ? null : new Date('2026-09-04T11:30:00Z').toUTCString(),
+        `${accept} reports the updated date only when the file is all it shows`,
       );
     }
 
@@ -297,7 +303,7 @@ describe('validators and alternates', () => {
       assert.equal(second.status, 304, `${accept} revalidates to 304`);
       assert.equal(await second.text(), '', `${accept} sends no body`);
       assert.equal(second.headers.get('etag'), etag, `${accept} repeats the validator`);
-      assert.equal(second.headers.get('vary'), 'Accept');
+      assert.equal(second.headers.get('vary'), 'Accept, Accept-Encoding');
     }
   });
 
@@ -332,18 +338,6 @@ describe('validators and alternates', () => {
       },
     });
     assert.equal(stale.status, 200);
-  });
-
-  it('withholds the HTML validator while the watcher is on, because the theme can change', async () => {
-    const { cms } = await site(HELLO, { watch: true });
-
-    const html = await cms.app.request('/2026/09/hello/', { headers: { accept: 'text/html' } });
-    const markdown = await cms.app.request('/2026/09/hello/', {
-      headers: { accept: 'text/markdown' },
-    });
-
-    assert.equal(html.headers.get('etag'), null, 'no HTML validator in a watching server');
-    assert.ok(markdown.headers.get('etag') !== null, 'the file representation still has one');
   });
 });
 
@@ -459,7 +453,7 @@ describe('listings', () => {
     });
     const etag = response.headers.get('etag') ?? '';
 
-    assert.equal(response.headers.get('vary'), 'Accept');
+    assert.equal(response.headers.get('vary'), 'Accept, Accept-Encoding');
     assert.equal(response.headers.get('link'), '</tag/notes/>; rel="alternate"; type="text/html"');
     assert.match(etag, /^"[0-9a-f]{32}"$/);
 

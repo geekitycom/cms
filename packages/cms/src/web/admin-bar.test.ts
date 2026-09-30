@@ -132,8 +132,22 @@ const HEADLESS_THEME: Record<string, string> = {
     '<!doctype html>\n<html lang="en"><title>{{ site.title }}</title>\n<body>{% block content %}{% endblock %}</body></html>\n',
 };
 
+/**
+ * The bare theme with speculation rules of its own, one of them written the
+ * way a hand-written page might spell it.
+ */
+const SPECULATIVE_THEME: Record<string, string> = {
+  ...BARE_THEME,
+  'layouts/base.njk': BARE_BASE.replace(
+    '</head>',
+    '<script type="speculationrules">{"prefetch":[{"source":"document","eagerness":"moderate"}]}</script>\n' +
+      '<SCRIPT TYPE=\'SpeculationRules\' >{"prerender":[{"urls":["/about/"]}]}</SCRIPT >\n' +
+      '</head>',
+  ),
+};
+
 interface SiteOptions {
-  theme?: 'bare' | 'broken' | 'classed' | 'headless' | undefined;
+  theme?: 'bare' | 'broken' | 'classed' | 'headless' | 'speculative' | undefined;
   homepage?: string | undefined;
 }
 
@@ -147,6 +161,7 @@ async function site(options: SiteOptions = {}): Promise<Cms> {
   await writeTree(path.join(themesDir, 'broken'), BROKEN_THEME);
   await writeTree(path.join(themesDir, 'classed'), CLASSED_THEME);
   await writeTree(path.join(themesDir, 'headless'), HEADLESS_THEME);
+  await writeTree(path.join(themesDir, 'speculative'), SPECULATIVE_THEME);
   await writeTree(contentDir, {
     ...CONTENT,
     '_data/site.json': JSON.stringify({
@@ -445,6 +460,37 @@ describe('the admin bar for a signed-in user', () => {
       assert.ok(!body.includes('geekity-admin-bar'), `${url} ${JSON.stringify(headers)}`);
       assert.doesNotMatch(response.headers.get('content-type') ?? '', /text\/html/, url);
     }
+  });
+});
+
+describe('speculation rules for a signed-in reader (TASK-140 AC #2)', () => {
+  const SPECULATION_RULES = /<script\b[^>]*speculationrules/i;
+
+  it('are left off every page the packaged theme draws for one', async () => {
+    const cms = await site();
+    const agent = await signedInTo(cms);
+
+    for (const [kind, url] of Object.entries(HTML_PAGES)) {
+      const anonymous = await (await cms.app.request(url)).text();
+      assert.match(anonymous, SPECULATION_RULES, `${kind}: an anonymous reader gets the rules`);
+
+      const signedIn = await (await agent.get(url)).text();
+      assert.ok(barIn(signedIn) !== undefined, `${kind}: carries the bar`);
+      assert.doesNotMatch(signedIn, SPECULATION_RULES, `${kind}: the signed-in page has rules`);
+    }
+  });
+
+  it("are taken out of a theme's own page, however it spells the tag", async () => {
+    const cms = await site({ theme: 'speculative' });
+    const agent = await signedInTo(cms);
+
+    const anonymous = await (await cms.app.request(POST_URL)).text();
+    assert.equal(anonymous.match(new RegExp(SPECULATION_RULES, 'gi'))?.length, 2);
+
+    const signedIn = await (await agent.get(POST_URL)).text();
+    assert.doesNotMatch(signedIn, SPECULATION_RULES);
+    assert.doesNotMatch(signedIn, /prerender|"prefetch"/);
+    assert.match(signedIn, /<link rel="stylesheet" href="\/theme\/style\.css">/);
   });
 });
 

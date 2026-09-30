@@ -93,7 +93,11 @@ reason rather than quietly left out.
 Resolution order for any template is then that theme first, this directory
 second, one file at a time. The theme above replaces the post layout and keeps
 receiving updates to every other template, and `static/style.css` replaces the
-stylesheet the same way — assets under `/theme/` resolve in the same order. A
+stylesheet the same way — assets under `/theme/` resolve in the same order.
+Link a theme file with the `asset` filter rather than a literal `/theme/`
+path: `{{ "style.css" | asset }}` puts a hash of the file in the URL, so a
+reader's browser keeps it for a year and still fetches the new one the moment
+it changes. The plain `/theme/style.css` keeps working, cached for an hour. A
 site that has chosen no theme reads this one and nothing else, and a theme
 sitting in `themes/` that the setting does not name is never on the path at
 all. A `theme` naming a folder that is not there, or is not a theme, falls back
@@ -117,8 +121,9 @@ packaged ones by name:
 {% endblock %}
 ```
 
-`layouts/base.njk` defines the blocks `title`, `head`, `alternates`, `header`,
-`content`, `footer` and `scripts`, so most sites never have to copy it.
+`layouts/base.njk` defines the blocks `title`, `speculationRules`,
+`viewTransitions`, `head`, `alternates`, `header`, `content`, `footer` and
+`scripts`, so most sites never have to copy it.
 
 Two layouts are named for the pages the Reading settings pick:
 
@@ -605,6 +610,59 @@ IndieWeb. The graph holds:
 A site that wants a different graph — more types, an `Organization` publisher,
 nothing at all — writes its own `partials/jsonld.njk` and that file replaces
 this one, like any other partial.
+
+### Prefetching and page transitions
+
+Two tags near the top of `<head>` make moving between pages feel faster. Both
+are progressive enhancement: a browser that does not support one ignores it.
+
+**Speculation rules.** The `speculationRules` block prints one `<script
+type="speculationrules">` that asks the browser to prefetch a page the reader
+is about to open. It covers links to this site's own pages, at `moderate`
+eagerness, which in Chrome is a hover of about 200 milliseconds or the start of
+a tap. It never prefetches:
+
+- `/admin` and anything under `/admin/`, which includes `/admin/logout`.
+- Any path with `logout` in it.
+- A feed: `/feed/`, `/feed/atom/`, `/feed/json/`, and any other path that has
+  a `/feed/` segment, such as a tag's feed or a post's comments feed.
+- A file under `/uploads/`.
+- A URL with a query, such as `/search/?q=words`.
+
+Every pattern is written through the `url` filter, so a site served from a
+subdirectory prefetches only its own pages.
+
+**No rules reach a signed-in reader.** The CMS removes every `<script
+type="speculationrules">` from a page it draws for somebody signed in, the same
+page that carries [the admin bar](#the-admin-bar). That page is drawn for one
+person and never stored, so a prefetch of it is wasted work. A site theme that
+writes its own rules does not have to check who is reading.
+
+**View transitions.** The `viewTransitions` block prints a `<style>` that opts
+into cross-document view transitions. The browser cross-fades from one page of
+the site to the next, with no JavaScript. The rule is inside `@media
+(prefers-reduced-motion: no-preference)`, so a reader who asks for reduced
+motion gets no transition:
+
+```css
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+```
+
+A site theme that wants a different animation adds `::view-transition-*` rules
+to its own stylesheet.
+
+**Turning either off.** Override its block with nothing in it:
+
+```njk
+{% extends "layouts/base.njk" %}
+
+{% block speculationRules %}{% endblock %}
+{% block viewTransitions %}{% endblock %}
+```
 
 ### Colours
 
@@ -1422,6 +1480,7 @@ the import above carries `with context`: a macro imported without it cannot see
 | `date(format, zone)` | Formats a `Date` or a date string. `readable` (the default) gives `2 September 2026`, `html` gives `2026-09-02` for a `<time datetime>`, `year` gives `2026`, `month` gives `September 2026`, `iso` gives the full ISO 8601 instant. A date in a file is a UTC instant; every format but `iso` is rendered in the site's `timezone` setting, and `iso` stays the instant. Pass `zone` — an IANA name — to override the setting for one call. A value that is not a date renders as the empty string. |
 | `url`                | Prefixes a root-relative path with the base URL's path, so a site served from a subdirectory links correctly. Eleventy's filter of the same name.                                                                                                                                                                                                                                                                                                                                                    |
 | `absoluteUrl`        | The same path as a fully qualified URL against the site's `baseUrl`.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `asset`              | The URL of a file in the theme's `static/` directory, with the base path in front and a hash of the file's bytes on the end: `{{ "style.css" \| asset }}` gives `/theme/style.css?v=3f2a9c01b7d4`. The file is found the way `/theme/` finds it, the chosen theme first. A hashed URL is served with `Cache-Control: public, max-age=31536000, immutable`, and editing the file changes the hash on the next render. A file no theme has gets its plain `/theme/` URL.                               |
 
 `date` reads one word rather than parsing it: `{{ "now" | date("year") }}` is
 the year at the moment the page is rendered, in the site's own timezone. It is

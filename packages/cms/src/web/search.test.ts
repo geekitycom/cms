@@ -150,7 +150,7 @@ describe('GET /search/', () => {
       html.headers.get('link') ?? '',
       /<\/search\/index\.json\?q=otters>; rel="alternate"; type="application\/json"/,
     );
-    assert.equal(html.headers.get('vary'), 'Accept');
+    assert.equal(html.headers.get('vary'), 'Accept, Accept-Encoding');
   });
 
   it('answers 406 to a client that accepts neither', async () => {

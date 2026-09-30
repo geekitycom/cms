@@ -559,10 +559,10 @@ describe('the head (AC #5)', () => {
       'title="Comments on: Hello" href="/2026/09/hello/feed/"',
       'type="application/activity+json"',
       'rel="webmention"',
-      '<link rel="stylesheet" href="/theme/style.css">',
     ]) {
       assert.ok(html.includes(marker), `the head lost ${marker}`);
     }
+    assert.match(html, /<link rel="stylesheet" href="\/theme\/style\.css\?v=[0-9a-f]{12}">/);
   });
 });
 
@@ -672,8 +672,10 @@ describe('the icons (TASK-81 AC #2)', () => {
     for (const icon of icons) {
       assert.equal(icon.type, 'image/png', `${icon.href} is not announced as a PNG`);
 
+      assert.match(icon.href, /\?v=[0-9a-f]{12}$/, `${icon.href} does not name the avatar's bytes`);
       const response = await cms.app.request(icon.href);
       assert.equal(response.status, 200, `GET ${icon.href} answered ${String(response.status)}`);
+      assert.equal(response.headers.get('cache-control'), 'public, max-age=31536000, immutable');
       assert.equal(response.headers.get('content-type'), 'image/png');
 
       const size = Number(icon.sizes.split('x')[0]);
@@ -898,7 +900,7 @@ describe('the code highlighter in the shell (TASK-86 AC #2)', () => {
 
     assert.match(
       html,
-      /<script src="\/theme\/highlight\.js" defer><\/script>/,
+      /<script src="\/theme\/highlight\.js\?v=[0-9a-f]{12}" defer><\/script>/,
       'the page with code on it loads no highlighter',
     );
     assert.match(html, /<pre tabindex="0"><code class="language-js">/, 'nothing to highlight');
@@ -915,7 +917,7 @@ describe('the code highlighter in the shell (TASK-86 AC #2)', () => {
 
     for (const pathname of ['/', '/about/', '/2026/09/hello/', '/tag/notes/']) {
       const other = scripts(await body(cms, pathname)).filter(
-        (script) => script.type !== 'application/ld+json',
+        (script) => script.type !== 'application/ld+json' && script.type !== 'speculationrules',
       );
       assert.deepEqual(other, [], `${pathname} ships JavaScript and has no code on it`);
     }
@@ -1258,5 +1260,135 @@ describe('every nav reads as links, at the page’s size (TASK-111)', () => {
       /background-color:\s*var\(--color-primary\);\s*color:\s*var\(--color-body\);/,
       'the site title and the link home no longer invert on hover',
     );
+  });
+});
+
+describe('speculation rules and view transitions (TASK-140)', () => {
+  /** A where clause of a document rule, as far as this theme writes one. */
+  type Predicate =
+    { and: Predicate[] } | { not: Predicate } | { href_matches: string } | Record<string, unknown>;
+
+  interface SpeculationRules {
+    prefetch?: { source?: string; eagerness?: string; where?: Predicate }[];
+  }
+
+  /** Every `<script type="speculationrules">` on a page, parsed. */
+  function ruleSets(html: string): SpeculationRules[] {
+    return [...html.matchAll(/<script type="speculationrules">([\s\S]*?)<\/script>/g)].map(
+      (match) => JSON.parse(match[1] ?? '') as SpeculationRules,
+    );
+  }
+
+  /**
+   * Whether a link to `href`, on a page at `pageUrl`, matches the where clause,
+   * read the way a browser reads it: each `href_matches` is a URL pattern
+   * resolved against the page.
+   */
+  function matches(predicate: Predicate, href: string, pageUrl: string): boolean {
+    if ('and' in predicate && Array.isArray(predicate.and)) {
+      return (predicate.and as Predicate[]).every((each) => matches(each, href, pageUrl));
+    }
+    if ('not' in predicate) return !matches(predicate.not as Predicate, href, pageUrl);
+    if ('href_matches' in predicate && typeof predicate.href_matches === 'string') {
+      return new URLPattern(predicate.href_matches, pageUrl).test(new URL(href, pageUrl));
+    }
+    assert.fail(`the rules use a condition this test cannot read: ${JSON.stringify(predicate)}`);
+  }
+
+  /** The links, of `hrefs`, the page's rules prefetch at moderate eagerness. */
+  function prefetched(html: string, pageUrl: string, hrefs: readonly string[]): string[] {
+    const [rules, ...extra] = ruleSets(html);
+    assert.ok(rules !== undefined, 'the page has no speculation rules');
+    assert.equal(extra.length, 0, 'the page has more than one rule set');
+
+    return hrefs.filter((href) =>
+      (rules.prefetch ?? []).some(
+        (rule) =>
+          rule.source === 'document' &&
+          rule.eagerness === 'moderate' &&
+          rule.where !== undefined &&
+          matches(rule.where, href, pageUrl),
+      ),
+    );
+  }
+
+  const PUBLIC = ['/', '/2026/09/hello/', '/about/', '/tag/notes/', '/page/2/', '/search/'];
+  const NOT_PUBLIC = [
+    '/admin',
+    '/admin/',
+    '/admin/posts/new',
+    '/admin/logout',
+    '/logout/',
+    '/feed/',
+    '/feed/atom/',
+    '/feed/json/',
+    '/tag/notes/feed/',
+    '/comments/feed/',
+    '/2026/09/hello/comments/feed/',
+    '/uploads/2026/09/hero.png',
+    '/search/?q=words',
+    '/?page=2',
+    'https://elsewhere.example/2026/09/hello/',
+  ];
+
+  it('prefetches same-origin public links at moderate eagerness, and nothing else (AC #1)', async () => {
+    const cms = await site();
+    const origin = new URL(cms.config.baseUrl).origin;
+
+    for (const pathname of ['/', '/2026/09/hello/', '/about/', '/tag/notes/', '/nope/']) {
+      const response = await cms.app.request(pathname);
+      const html = await response.text();
+      const pageUrl = `${origin}${pathname}`;
+
+      assert.deepEqual(
+        prefetched(html, pageUrl, [...PUBLIC, ...NOT_PUBLIC]),
+        PUBLIC,
+        `${pathname} prefetches the wrong links`,
+      );
+    }
+  });
+
+  it('keeps the rules inside the base path of a site in a subdirectory (AC #1)', async () => {
+    const cms = await site({}, { baseUrl: 'https://example.com/blog/' });
+    const html = await body(cms, '/2026/09/hello/');
+    const pageUrl = 'https://example.com/blog/2026/09/hello/';
+
+    assert.deepEqual(
+      prefetched(html, pageUrl, [
+        ...PUBLIC.map((href) => `/blog${href}`),
+        ...NOT_PUBLIC.filter((href) => href.startsWith('/')).map((href) => `/blog${href}`),
+        '/elsewhere/on/the/host/',
+      ]),
+      PUBLIC.map((href) => `/blog${href}`),
+    );
+  });
+
+  it('opts into cross-document view transitions, only without reduced motion (AC #3)', async () => {
+    const html = await body(await site(), '/2026/09/hello/');
+    const style = /<style>([\s\S]*?)<\/style>/.exec(html)?.[1] ?? '';
+
+    assert.match(
+      style.replace(/\s+/g, ' '),
+      /^ ?@media \(prefers-reduced-motion: no-preference\) \{ @view-transition \{ navigation: auto; \} \} ?$/,
+      'the page does not opt into view transitions, or not only without reduced motion',
+    );
+  });
+
+  it('lets a site theme turn both off by overriding their blocks (AC #4)', async () => {
+    const themesDir = await box.dir('geekity-shell-themes-');
+    await writeTree(path.join(themesDir, 'still'), {
+      'theme.json': JSON.stringify({ name: 'Still', kind: 'site' }),
+      'layouts/page.njk':
+        '{% extends "layouts/base.njk" %}\n' +
+        '{% block speculationRules %}{% endblock %}\n' +
+        '{% block viewTransitions %}{% endblock %}\n' +
+        '{% block content %}{{ content | safe }}{% endblock %}\n',
+    });
+
+    const cms = await site({ theme: 'still' }, { themesDir });
+    const html = await body(cms, '/about/');
+    assert.match(html, /About us\./, 'the site theme did not render the page');
+    assert.doesNotMatch(html, /speculationrules/);
+    assert.doesNotMatch(html, /view-transition/);
   });
 });

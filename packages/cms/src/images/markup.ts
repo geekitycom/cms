@@ -5,7 +5,8 @@ import {
   imageMediaType,
   VARIANT_ASSET_PREFIX,
 } from './variants.ts';
-import type { ImageConfig, ImageRecord, ImageVariant } from './variants.ts';
+import { versioned } from './paths.ts';
+import type { DescribedImage, ImageConfig, ImageVariant } from './variants.ts';
 
 /**
  * Responsive markup for the site's own pages.
@@ -19,7 +20,7 @@ import type { ImageConfig, ImageRecord, ImageVariant } from './variants.ts';
  */
 
 /** What the markup asks about an upload. See {@link describeImage}. */
-export type DescribeImage = (source: string) => ImageRecord | undefined;
+export type DescribeImage = (source: string) => DescribedImage | undefined;
 
 /**
  * The `sizes` every image is given.
@@ -31,6 +32,18 @@ export type DescribeImage = (source: string) => ImageRecord | undefined;
  * candidate that is too wide, never one that is too small.
  */
 export const IMAGE_SIZES = '100vw';
+
+/**
+ * How a fragment's images are fetched.
+ *
+ * `lead` marks the fragment that opens the page, a single post's body or a
+ * listing's first entry. Its first image is usually the page's Largest
+ * Contentful Paint, so it is fetched at once and ahead of everything else
+ * rather than lazily; every other image waits until it is scrolled near.
+ */
+export interface ImageLoading {
+  lead?: boolean;
+}
 
 /** Every `<img>` tag, with its attribute text. Void elements have no closing half. */
 const IMG_TAG = /<img\s([^>]*?)\/?>/gi;
@@ -51,10 +64,18 @@ const ATTRIBUTE = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|
  * body, the only tags it has to understand are `<img>` ones, and a parser
  * would have to reproduce the exact HTML around them to hand it back.
  */
-export function responsiveImages(html: string, describe: DescribeImage): string {
+export function responsiveImages(
+  html: string,
+  describe: DescribeImage,
+  loading: ImageLoading = {},
+): string {
   if (!html.includes('<img')) return html;
 
+  // Counted over every `<img>`, rewritten or not: a first image from
+  // somewhere else is still the one a reader sees first.
+  let seen = 0;
   return html.replace(IMG_TAG, (tag: string, attributes: string) => {
+    const lead = loading.lead === true && seen++ === 0;
     const parsed = parseAttributes(attributes);
 
     const src = parsed.get('src');
@@ -66,7 +87,7 @@ export function responsiveImages(html: string, describe: DescribeImage): string 
     const record = describe(source);
     if (record === undefined || record.variants.length === 0) return tag;
 
-    return picture({ tag, attributes: parsed, record });
+    return picture({ tag, attributes: parsed, record, lead });
   });
 }
 
@@ -78,26 +99,35 @@ export function responsiveImages(html: string, describe: DescribeImage): string 
  * renders at once and the one after it is responsive. Nothing waits on an
  * encoder while a reader waits on a page.
  */
-export function siteImageMarkup(config: ImageConfig, html: string): string {
+export function siteImageMarkup(
+  config: ImageConfig,
+  html: string,
+  loading: ImageLoading = {},
+): string {
   if (!config.imageOptimization) return html;
 
-  return responsiveImages(html, (source) => {
-    const record = describeImage(config, source);
-    if (record === undefined) {
-      void generateImageVariants(config, source).catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn(`Could not derive image variants for ${source}: ${message}`);
-      });
-    }
-    return record;
-  });
+  return responsiveImages(
+    html,
+    (source) => {
+      const record = describeImage(config, source);
+      if (record === undefined) {
+        void generateImageVariants(config, source).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(`Could not derive image variants for ${source}: ${message}`);
+        });
+      }
+      return record;
+    },
+    loading,
+  );
 }
 
 /** One `<picture>`: a `<source>` per derived format, then the original's `<img>`. */
 function picture(input: {
   tag: string;
   attributes: Map<string, string>;
-  record: ImageRecord;
+  record: DescribedImage;
+  lead: boolean;
 }): string {
   const { record } = input;
 
@@ -114,12 +144,12 @@ function picture(input: {
     const type = imageMediaType(format);
     if (type === undefined) continue;
     sources.push(
-      `<source type="${type}" srcset="${srcset(record.source, variants)}" sizes="${IMAGE_SIZES}">`,
+      `<source type="${type}" srcset="${srcset(record, variants)}" sizes="${IMAGE_SIZES}">`,
     );
   }
 
   const fallback = byFormat.get(record.format) ?? [];
-  return `<picture>${sources.join('')}${image(input.tag, input.attributes, record, fallback)}</picture>`;
+  return `<picture>${sources.join('')}${image(input.tag, input.attributes, record, fallback, input.lead)}</picture>`;
 }
 
 /**
@@ -133,16 +163,18 @@ function picture(input: {
 function image(
   tag: string,
   attributes: Map<string, string>,
-  record: ImageRecord,
+  record: DescribedImage,
   fallback: ImageVariant[],
+  lead: boolean,
 ): string {
   const additions: string[] = [];
 
-  if (fallback.length > 0) additions.push(`srcset="${srcset(record.source, fallback)}"`);
+  if (fallback.length > 0) additions.push(`srcset="${srcset(record, fallback)}"`);
   additions.push(`sizes="${IMAGE_SIZES}"`);
   additions.push(`width="${String(record.width)}"`);
   additions.push(`height="${String(record.height)}"`);
-  additions.push('loading="lazy"');
+  additions.push(lead ? 'fetchpriority="high"' : 'loading="lazy"');
+  additions.push('decoding="async"');
 
   const wanted = additions.filter((addition) => {
     const name = addition.slice(0, addition.indexOf('='));
@@ -158,19 +190,22 @@ function image(
 }
 
 /** A `srcset`: every variant of one format, narrowest first, with its width descriptor. */
-function srcset(source: string, variants: ImageVariant[]): string {
+function srcset(record: DescribedImage, variants: ImageVariant[]): string {
   return [...variants]
     .sort((a, b) => a.width - b.width)
-    .map((variant) => `${variantHref(source, variant)} ${String(variant.width)}w`)
+    .map((variant) => `${variantHref(record, variant)} ${String(variant.width)}w`)
     .join(', ');
 }
 
-/** The URL of one derived file, with every path segment encoded as a URL wants. */
-function variantHref(source: string, variant: ImageVariant): string {
-  const segments = [...source.split('/'), variant.file].map((segment) =>
+/**
+ * The URL of one derived file, with every path segment encoded as a URL wants
+ * and the original's version on the end.
+ */
+function variantHref(record: DescribedImage, variant: ImageVariant): string {
+  const segments = [...record.source.split('/'), variant.file].map((segment) =>
     encodeURIComponent(segment),
   );
-  return `${VARIANT_ASSET_PREFIX}${segments.join('/')}`;
+  return versioned(`${VARIANT_ASSET_PREFIX}${segments.join('/')}`, record.version);
 }
 
 /**

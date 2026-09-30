@@ -56,7 +56,7 @@ export const publicAdminBar: MiddlewareHandler<GeekityEnv> = async (c, next) => 
   headers.delete('content-length');
 
   const { status } = c.res;
-  const body = withAdminBar(await c.res.text(), renderBar(c, account));
+  const body = withAdminBar(withoutSpeculationRules(await c.res.text()), renderBar(c, account));
   // Cleared first, because assigning over a response copies its headers onto
   // the new one, and the validators being dropped would come straight back.
   c.res = undefined;
@@ -89,6 +89,22 @@ function renderBar(c: Context<GeekityEnv>, account: SignedInAccount): string {
       csrfToken: account.csrfToken,
     })
     .trim();
+}
+
+/**
+ * `html` with every `<script type="speculationrules">` taken out (TASK-140).
+ *
+ * A signed-in reader's pages are drawn for them alone and never stored, so a
+ * prefetch is a second render nobody may see, and a speculative request that
+ * carries a session is one the site would rather not be sent. Removed here
+ * rather than left to each theme, so a theme's rules stay one static block and
+ * the anonymous page keeps its bytes.
+ */
+function withoutSpeculationRules(html: string): string {
+  return html.replace(
+    /<script\b[^>]*\btype\s*=\s*(["']?)speculationrules\1[^>]*>[\s\S]*?<\/script\s*>/gi,
+    '',
+  );
 }
 
 /** The class on `<html>` of a page that carries the bar, for a theme to key off. */

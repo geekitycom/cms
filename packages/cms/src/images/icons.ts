@@ -5,7 +5,7 @@ import sharp from 'sharp';
 
 import { writeFileAtomically } from '../files/atomic.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
-import { derivedDir, sourceFile, VARIANT_ASSET_PREFIX } from './paths.ts';
+import { derivedDir, sourceFile, sourceVersion, versioned, VARIANT_ASSET_PREFIX } from './paths.ts';
 import type { ImageConfig } from './paths.ts';
 
 /**
@@ -108,10 +108,11 @@ export function siteIcons(config: ImageConfig, avatar: string | undefined): Site
   const source = iconSource(avatar);
   if (source === undefined) return [];
 
+  const version = sourceVersion(config, source);
   return ICONS.map(({ rel, size }) => ({
     rel,
     sizes: `${String(size)}x${String(size)}`,
-    href: iconHref(source, size),
+    href: versioned(iconHref(source, size), version),
   }));
 }
 

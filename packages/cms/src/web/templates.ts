@@ -1,6 +1,7 @@
 import { Environment, FileSystemLoader } from 'nunjucks';
 
 import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
+import { themeAssetUrl } from './assets.ts';
 import { themeSearchPath } from './themes.ts';
 
 /** Where a {@link createTemplateEnvironment} looks, and how it caches. */
@@ -52,7 +53,7 @@ export function createTemplateEnvironment(options: CreateTemplateEnvironmentOpti
     lstripBlocks: true,
   });
 
-  return addFilters(environment, options.baseUrl);
+  return addFilters(environment, options.baseUrl, loader);
 }
 
 /**
@@ -106,7 +107,11 @@ export type DateFormat = 'readable' | 'iso' | 'html' | 'year' | 'month';
  * without a file changing. An Eleventy build of the same content applies the
  * same lens with Luxon and `zone` read from `site.json`.
  */
-function addFilters(environment: Environment, baseUrl: string): Environment {
+function addFilters(
+  environment: Environment,
+  baseUrl: string,
+  loader: FileSystemLoader,
+): Environment {
   const base = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
   const basePath = base.pathname === '/' ? '' : base.pathname.replace(/\/$/, '');
 
@@ -129,6 +134,15 @@ function addFilters(environment: Environment, baseUrl: string): Environment {
   };
 
   environment.addFilter('url', withBasePath);
+
+  // A theme file's URL with a hash of its bytes in it, so it can be cached for
+  // a year. The directories are the loader's own, read on every call, so a
+  // theme switch through `useThemeDirs` moves assets and layouts together.
+  // The same cast as `useThemeDirs`, for the same undeclared field.
+  const searchPaths = loader as unknown as { searchPaths: string[] };
+  environment.addFilter('asset', (value: unknown) =>
+    withBasePath(themeAssetUrl(typeof value === 'string' ? value : '', searchPaths.searchPaths)),
+  );
 
   // A fully qualified URL, for canonical links, feeds and ActivityPub ids.
   // The base path goes on first, because a root-relative URL resolved against

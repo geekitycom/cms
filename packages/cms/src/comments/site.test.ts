@@ -139,6 +139,66 @@ describe('the comment form', () => {
   });
 });
 
+describe('revalidating a post that takes comments (TASK-181)', () => {
+  /** A site whose clock the case moves, and a way to move it. */
+  async function ticking(): Promise<{ cms: Cms; advance: (ms: number) => void }> {
+    let now = NOW.getTime();
+    const { cms } = await site(undefined, { now: () => new Date(now) });
+    return { cms, advance: (ms) => (now += ms) };
+  }
+
+  /** The loaded-at stamp a form on the page carries. */
+  function loadedIn(html: string): string | undefined {
+    return new RegExp(`name="${COMMENT_FIELDS.loaded}" value="(\\d+)"`).exec(html)?.[1];
+  }
+
+  it('answers 304 when only the form stamp moved, and serves a fresh stamp on a 200', async () => {
+    const { cms, advance } = await ticking();
+    const first = await cms.app.request('/2026/09/hello-world/');
+    const etag = first.headers.get('etag') ?? '';
+    assert.equal(loadedIn(await first.text()), String(NOW.getTime()), 'the form is stamped now');
+
+    advance(1_000);
+    const conditional = await cms.app.request('/2026/09/hello-world/', {
+      headers: { 'if-none-match': etag },
+    });
+    assert.equal(conditional.status, 304, 'the stamp alone is not a new page');
+    assert.equal(conditional.headers.get('etag'), etag, 'under the same ETag');
+
+    const fresh = await cms.app.request('/2026/09/hello-world/');
+    assert.equal(fresh.headers.get('etag'), etag, 'a full response shares the ETag');
+    assert.equal(
+      loadedIn(await fresh.text()),
+      String(NOW.getTime() + 1_000),
+      'and carries the stamp of the request that drew it',
+    );
+  });
+
+  it('moves the ETag before a revalidated form could go stale', async () => {
+    const { cms, advance } = await ticking();
+    const etag = (await cms.app.request('/2026/09/hello-world/')).headers.get('etag') ?? '';
+
+    advance(24 * 60 * 60 * 1000);
+    const conditional = await cms.app.request('/2026/09/hello-world/', {
+      headers: { 'if-none-match': etag },
+    });
+    assert.equal(conditional.status, 200, 'a day-old form is drawn again');
+  });
+
+  it('moves the ETag when a comment is approved', async () => {
+    const { cms } = await ticking();
+    const before = (await cms.app.request('/2026/09/hello-world/')).headers.get('etag');
+    await submit(cms, submission());
+    const held = cms.admin.listComments({ status: 'pending' })[0];
+    const pending = (await cms.app.request('/2026/09/hello-world/')).headers.get('etag');
+    assert.equal(pending, before, 'a pending comment is not on the page');
+
+    await approve(cms, held?.id ?? '');
+    const after = (await cms.app.request('/2026/09/hello-world/')).headers.get('etag');
+    assert.notEqual(after, before, 'an approved comment is');
+  });
+});
+
 describe('leaving a comment', () => {
   it('holds it for a moderator, and shows it once approved', async () => {
     const { cms, contentDir } = await site();

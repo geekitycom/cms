@@ -1,4 +1,5 @@
-import { createReadStream, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { createReadStream, readFileSync, statSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -29,8 +30,17 @@ export function findUpload(relative: string, contentDir: string): StaticAsset | 
 /** Directory inside a theme that holds the files served over HTTP. */
 export const THEME_STATIC_DIR = 'static';
 
-/** How long a browser may keep a theme asset. One hour. */
+/** How long a browser may keep a theme asset at its unhashed URL. One hour. */
 export const THEME_ASSET_MAX_AGE = 3600;
+
+/**
+ * How long a browser may keep a file whose URL names its bytes. A year, the
+ * longest lifetime HTTP caches are asked to honour.
+ */
+export const IMMUTABLE_ASSET_MAX_AGE = 31536000;
+
+/** The query parameter a fingerprinted theme asset URL carries its hash in. */
+export const ASSET_VERSION_PARAM = 'v';
 
 /** A file on disk, located and described, ready to be served. */
 export interface StaticAsset {
@@ -106,6 +116,47 @@ export function findThemeAsset(
 export interface AssetResponseOptions {
   /** Seconds. Defaults to {@link THEME_ASSET_MAX_AGE}. */
   maxAge?: number | undefined;
+  /** Whether the bytes at this URL can never change, so a browser need not revalidate. */
+  immutable?: boolean | undefined;
+}
+
+/** The lifetime of a response whose URL names its bytes. */
+export const IMMUTABLE_ASSET: AssetResponseOptions = {
+  maxAge: IMMUTABLE_ASSET_MAX_AGE,
+  immutable: true,
+};
+
+const versions = new Map<string, { etag: string; version: string }>();
+
+/**
+ * A short hash of an asset's bytes, the part of a fingerprinted URL that
+ * changes when the file does.
+ *
+ * Memoised per file on the size-and-mtime validator, so a page pays a `stat`
+ * rather than a read, and an edit in place is seen on the next render with no
+ * restart and no watcher.
+ */
+export function assetVersion(asset: StaticAsset): string {
+  const known = versions.get(asset.file);
+  if (known?.etag === asset.etag) return known.version;
+
+  const version = createHash('sha256').update(readFileSync(asset.file)).digest('hex').slice(0, 12);
+  versions.set(asset.file, { etag: asset.etag, version });
+  return version;
+}
+
+/**
+ * The URL a theme should link one of its files at: under
+ * {@link THEME_ASSET_PREFIX} with a hash of the bytes the search path resolves
+ * to, so it can be cached for a year and still change the moment the file
+ * does. A file no theme has gets its plain URL, which will 404 as it would
+ * have anyway.
+ */
+export function themeAssetUrl(relative: string, themeDirs: readonly string[]): string {
+  const pathname = `${THEME_ASSET_PREFIX}${relative.replace(/^\/+/, '')}`;
+  const asset = findThemeAsset(relative, themeDirs);
+  if (asset === undefined) return pathname;
+  return `${pathname}?${ASSET_VERSION_PARAM}=${assetVersion(asset)}`;
 }
 
 /** The response body and headers for an asset. */
@@ -144,10 +195,11 @@ export function matchesEtag(ifNoneMatch: string | undefined, etag: string): bool
 
 function assetHeaders(asset: StaticAsset, options: AssetResponseOptions): Headers {
   const maxAge = options.maxAge ?? THEME_ASSET_MAX_AGE;
+  const immutable = options.immutable === true ? ', immutable' : '';
   return new Headers({
     'content-type': asset.contentType,
     'content-length': String(asset.stats.size),
-    'cache-control': `public, max-age=${String(maxAge)}`,
+    'cache-control': `public, max-age=${String(maxAge)}${immutable}`,
     'last-modified': new Date(asset.stats.mtimeMs).toUTCString(),
     etag: asset.etag,
   });

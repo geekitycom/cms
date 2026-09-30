@@ -46,6 +46,7 @@ export function mountPreview(app: Hono<GeekityEnv>): void {
           document,
           c.var.config,
           authorContext(listUsers(c.var.config.dataDir), document.author),
+          { lead: true },
         ),
       ),
     );

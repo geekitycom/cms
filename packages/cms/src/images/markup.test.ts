@@ -37,7 +37,7 @@ describe('responsiveImages', () => {
         '<source type="image/webp" srcset="/uploads/_/2026/09/photo.png/320.webp 320w, /uploads/_/2026/09/photo.png/1000.webp 1000w" sizes="100vw">' +
         '<img src="/uploads/2026/09/photo.png" alt="A photo"' +
         ' srcset="/uploads/_/2026/09/photo.png/320.png 320w, /uploads/_/2026/09/photo.png/1000.png 1000w"' +
-        ' sizes="100vw" width="1000" height="500" loading="lazy">' +
+        ' sizes="100vw" width="1000" height="500" loading="lazy" decoding="async">' +
         '</picture></p>\n',
     );
   });
@@ -126,5 +126,55 @@ describe('responsiveImages', () => {
     const html = '<p>Words, and <a href="/uploads/2026/09/photo.png">a link to a photo</a>.</p>\n';
 
     assert.equal(responsiveImages(html, known), html);
+  });
+});
+
+describe('responsiveImages loading priority', () => {
+  const upload = (alt: string) => `<img src="/uploads/2026/09/photo.png" alt="${alt}">`;
+  const imgs = (html: string) => html.match(/<img [^>]*>/g) ?? [];
+
+  it('loads the lone image of a lead fragment eagerly, at high priority', () => {
+    const [only] = imgs(responsiveImages(upload('Only'), known, { lead: true }));
+
+    assert.ok(only !== undefined);
+    assert.doesNotMatch(only, /loading=/);
+    assert.match(only, /fetchpriority="high"/);
+    assert.match(only, /decoding="async"/);
+  });
+
+  it('keeps every image after the lead lazy', () => {
+    const tags = imgs(
+      responsiveImages([upload('One'), upload('Two'), upload('Three')].join('\n'), known, {
+        lead: true,
+      }),
+    );
+
+    assert.equal(tags.length, 3);
+    assert.match(tags[0] ?? '', /fetchpriority="high"/);
+    for (const tag of tags.slice(1)) {
+      assert.match(tag, /loading="lazy"/);
+      assert.doesNotMatch(tag, /fetchpriority/);
+      assert.match(tag, /decoding="async"/);
+    }
+  });
+
+  it('lazy-loads every image of a fragment that is not the lead', () => {
+    const tags = imgs(responsiveImages([upload('One'), upload('Two')].join('\n'), known));
+
+    assert.equal(tags.length, 2);
+    for (const tag of tags) {
+      assert.match(tag, /loading="lazy"/);
+      assert.doesNotMatch(tag, /fetchpriority/);
+      assert.match(tag, /decoding="async"/);
+    }
+  });
+
+  it('gives the lead to the first image even when it is from somewhere else', () => {
+    const elsewhere = '<img src="https://example.com/photo.png" alt="Elsewhere">';
+    const html = responsiveImages(`${elsewhere}\n${upload('Second')}`, known, { lead: true });
+
+    assert.ok(html.startsWith(elsewhere));
+    assert.match(imgs(html)[1] ?? '', /loading="lazy"/);
+    assert.doesNotMatch(html, /fetchpriority/);
   });
 });

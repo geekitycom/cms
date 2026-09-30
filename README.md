@@ -153,6 +153,7 @@ directory; absolute ones are used as given.
 | `accessLogAddress` | `false`                                   | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address at the end of each access-log line. Off unless asked for: an address is personal data and needs a reason and a retention policy. Which address is right is `trustProxy`'s answer.                                                                                                                                                                                   |
 | `seedContent`      | `false`                                   | `GEEKITY_SEED_CONTENT`       | When `geekity serve` starts and `contentDir` is missing or has no entries at all, fill it with the starter site `geekity init` writes, its `site.json` `url` set to the base URL. A directory with anything in it, even a dotfile, is never touched. Off so a site run from npm is never written to unasked.                                                                               |
 | `maintenance`      | `false`                                   | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode until a restart without it. `geekity maintenance on` and `off` are the everyday switch; see [Maintenance mode](#maintenance-mode).                                                                                                                                                                                                                       |
+| `compression`      | `true`                                    | `GEEKITY_COMPRESSION`        | Compress text responses (HTML, CSS, JavaScript, feeds, JSON, Markdown, SVG, sitemaps) with brotli, or gzip for a client without it. Turn it off when a proxy in front already compresses; see [Compression](packages/cms/README.md#compression).                                                                                                                                           |
 
 The admin adds eight more:
 
@@ -812,25 +813,34 @@ A post page then renders the picture as
 <picture>
   <source
     type="image/webp"
-    srcset="/uploads/_/2026/09/photo.jpg/320.webp 320w, …"
+    srcset="/uploads/_/2026/09/photo.jpg/320.webp?v=3f9a1c0e7b2d 320w, …"
     sizes="100vw"
   />
   <img
     src="/uploads/2026/09/photo.jpg"
     alt="A photo"
-    srcset="/uploads/_/2026/09/photo.jpg/320.jpg 320w, …"
+    srcset="/uploads/_/2026/09/photo.jpg/320.jpg?v=3f9a1c0e7b2d 320w, …"
     sizes="100vw"
     width="2400"
     height="1600"
     loading="lazy"
+    decoding="async"
   />
 </picture>
 ```
 
+The first image a page shows is the exception to `loading="lazy"`. It is
+usually the page's Largest Contentful Paint, and waiting to lazy-load it slows
+that paint down, so it carries `fetchpriority="high"` and no `loading` instead.
+On a single post or page that is the first image in the body. On a listing, and
+on a front page with its recent posts under it, it is the first image in the
+page's own body when that has one, and otherwise the first image of the first
+entry. Every other image stays lazy.
+
 `sizes` is `100vw`, which is 11ty/image's default and the only honest one a CMS
 can give: how wide a picture is drawn is a fact about the theme's stylesheet.
-Attributes the author wrote win — a hand-written `width`, `loading` or
-`srcset` is left alone — and an image pointing at another origin is untouched.
+Attributes the author wrote win — a hand-written `width`, `loading`,
+`fetchpriority` or `srcset` is left alone — and an image pointing at another origin is untouched.
 
 Only the theme's HTML gets that markup. The RSS and Atom `content:encoded`, the
 JSON and Markdown representations of a document and the ActivityStreams
@@ -1199,7 +1209,14 @@ The directory's name is the theme's id, and the one setting that picks a theme,
 the chosen theme first and in the packaged theme second, one file at a time, so
 a theme that ships only `layouts/post.njk` replaces the post layout and keeps
 receiving updates to every other template. Assets under `/theme/` resolve in
-the same order, and so do the mail templates under `mail/`.
+the same order, and so do the mail templates under `mail/`. A layout links a
+theme file with `{{ "style.css" | asset }}`, which writes a URL with a hash of
+the file's bytes in it; that URL is cached for a year as `immutable`, and the
+plain `/theme/style.css` for an hour. Image variants and icons under
+`/uploads/_/` work the same way: the page links them with a hash of the
+original upload's bytes as `v`, so a picture deleted and replaced under the
+same name gets new URLs. A matching `v` is cached for a year as `immutable`;
+no `v`, or a stale one, still gets the file, for a day.
 
 **Appearance > Themes** in the admin is where the choice is made: the packaged
 theme and everything under `themes/` with its name and description, the active
@@ -1218,7 +1235,7 @@ shadow the login form or the CSRF field inside it.
 The context mirrors what an Eleventy layout receives — `title`, `date`, `tags`,
 `categories`, `content`, `page.url`, and every front matter key the file carried — so a
 layout can move between an Eleventy build and the CMS with few edits. The
-context, the blocks and the filter set (`date`, `url`, `absoluteUrl`) are part
+context, the blocks and the filter set (`date`, `url`, `absoluteUrl`, `asset`) are part
 of the semver contract; they are documented in
 [`packages/cms/themes/default/README.md`](packages/cms/themes/default/README.md).
 
@@ -1366,6 +1383,12 @@ location / {
     client_max_body_size 10m;  # at least GEEKITY_UPLOAD_MAX_BYTES
 }
 ```
+
+Geekity compresses its own text responses, brotli or gzip, so the proxy does
+not need to. If the proxy compresses anyway (nginx with `gzip on`, Caddy with
+`encode`, or a CDN such as Cloudflare), add `GEEKITY_COMPRESSION=false` to the
+`.env` so each response is compressed once, by the proxy. Leave it on when the
+proxy only forwards, as the nginx block above does.
 
 `GET /healthz` is also what an uptime monitor should poll; see
 [Health check](#health-check).

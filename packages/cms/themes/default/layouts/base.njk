@@ -13,14 +13,19 @@
   off an account. The search form is on the search page and nowhere else.
 
   Blocks a site can override without copying the whole file:
-    title       the contents of <title>
-    head        the cards, the icons and the structured data, at the end of
-                <head>. Call `super()` from an override that only adds to it.
-    alternates  <link rel="alternate"> tags, where the feeds go
-    header      the site header, with the site menu
-    content     the page body
-    footer      the site footer
-    scripts     scripts at the end of <body>
+    title             the contents of <title>
+    speculationRules  the <script type="speculationrules"> that prefetches the
+                      site's own pages; empty it to prefetch nothing
+    viewTransitions   the <style> that opts into cross-document view
+                      transitions; empty it to turn them off
+    head              the cards, the icons and the structured data, at the end
+                      of <head>. Call `super()` from an override that only
+                      adds to it.
+    alternates        <link rel="alternate"> tags, where the feeds go
+    header            the site header, with the site menu
+    content           the page body
+    footer            the site footer
+    scripts           scripts at the end of <body>
 #}{% import "partials/feeds.njk" as feeds %}
 {%- import "partials/menu.njk" as nav %}
 {#- Whether this is the front page, which is the one page the header and the
@@ -55,7 +60,43 @@
     <meta name="description" content="{{ metaDescription }}">
     {% endif %}
     <link rel="canonical" href="{{ (page.url or "/") | absoluteUrl }}">
-    <link rel="stylesheet" href="{{ "/theme/style.css" | url }}">
+    <link rel="stylesheet" href="{{ "style.css" | asset }}">
+    {% block speculationRules %}
+    {#
+      Prefetch the page behind a link the reader is about to follow: a hover
+      or a press on one of this site's own pages (TASK-140). Not the admin,
+      logout, a feed, an upload or a URL with a query, which are not pages to
+      read or not safe to fetch unasked. Every pattern goes through `url`, so
+      a site in a subdirectory prefetches only its own pages. The CMS drops
+      this script from a page drawn for somebody signed in.
+    #}
+    {% set speculationRules = { "prefetch": [{
+      "source": "document",
+      "eagerness": "moderate",
+      "where": { "and": [
+        { "href_matches": "/*" | url },
+        { "not": { "href_matches": "/admin" | url } },
+        { "not": { "href_matches": "/admin/*" | url } },
+        { "not": { "href_matches": "/*logout*" | url } },
+        { "not": { "href_matches": "/feed/*" | url } },
+        { "not": { "href_matches": "/*/feed/*" | url } },
+        { "not": { "href_matches": "/uploads/*" | url } },
+        { "not": { "href_matches": "/*\\?(.+)" | url } }
+      ] }
+    }] } %}
+    <script type="speculationrules">{{ speculationRules | dump | safe }}</script>
+    {% endblock %}
+    {% block viewTransitions %}
+    {#
+      Cross-document view transitions: the default cross-fade between two of
+      this site's pages, and none for a reader who asks for reduced motion.
+    #}
+    <style>
+      @media (prefers-reduced-motion: no-preference) {
+        @view-transition { navigation: auto; }
+      }
+    </style>
+    {% endblock %}
     {% block alternates %}
     {{ feeds.feedLinks("/", site.title) }}
     {{ feeds.commentsFeedLink("/comments/feed/", site.title + " comments") }}
@@ -184,7 +225,7 @@
       See the theme README.
     #}
     {% if content and "language-" in content %}
-    <script src="{{ "/theme/highlight.js" | url }}" defer></script>
+    <script src="{{ "highlight.js" | asset }}" defer></script>
     {% endif %}
     {% endblock %}
   </body>

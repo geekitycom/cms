@@ -9,15 +9,17 @@ import { postLabel } from '../content/post-type.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { mountAvatars } from '../avatars/routes.ts';
+import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
 import {
+  ASSET_VERSION_PARAM,
   assetNotModified,
   assetResponse,
+  assetVersion,
   findThemeAsset,
   findUpload,
+  IMMUTABLE_ASSET,
   matchesEtag,
-  themeAssetNotModified,
-  themeAssetResponse,
   THEME_ASSET_PREFIX,
   UPLOAD_ASSET_MAX_AGE,
   UPLOAD_ASSET_PREFIX,
@@ -591,24 +593,25 @@ function negotiateDocument(
   // And which document it is, so the admin bar can offer its editor.
   if (representation === 'html') c.set('shownDocument', document);
 
+  // The thank-you after a comment was posted, which the redirect carried back
+  // as a query, is the only thing about a document's HTML that the URL rather
+  // than the file decides. A document served at `/` is the site's front page,
+  // and the front page is the one place a theme may lay a page out differently.
+  const page =
+    representation === 'html'
+      ? c.var.renderer.renderPage(document, {
+          frontPage: href === '/',
+          extra: commentNotice(c, document),
+          viewer,
+        })
+      : undefined;
+
   const body =
     representation === 'markdown'
       ? serializeDocument(document)
       : representation === 'json'
         ? documentJson(document, { baseUrl: c.var.config.baseUrl })
-        : // The thank-you after a comment was posted, which the redirect
-          // carried back as a query. It is the only thing about a document's
-          // HTML that the URL rather than the file decides.
-          // A document served at `/` is the site's front page, and the front
-          // page is the one place a theme may lay a page out differently.
-          href === '/'
-          ? c.var.renderer.renderFrontPage(document, commentNotice(c, document), viewer)
-          : c.var.renderer.renderDocument(document, commentNotice(c, document), viewer);
-
-  // The theme can change without the document changing, and only the document
-  // is hashed. While the watcher is on — a development server, where a template
-  // edit lands mid-process — the HTML gets no validator rather than a stale one.
-  const validated = representation !== 'html' || !c.var.config.watch;
+        : page?.html;
 
   return representationResponse({
     body,
@@ -624,12 +627,18 @@ function negotiateDocument(
     // post, so nothing shared may hold it and it carries no validator. A page
     // drawn for everybody is exactly what it has always been.
     ...(viewer === undefined ? {} : { private: true }),
-    ...(validated
+    // The Markdown and the JSON are the file, so the file's hash and dates
+    // validate them. The HTML also draws the theme, the conversation, the
+    // neighbours and whatever else the site holds, none of which the file's
+    // hash sees, so it is validated by the page it drew (TASK-181). Nothing
+    // records when a withdrawn reply stopped being shown, so the HTML has no
+    // date that could agree with that ETag and carries no Last-Modified.
+    ...(page === undefined
       ? {
           etag: representationEtag(representation, document.hash),
           lastModified: lastModifiedOf(document),
         }
-      : {}),
+      : { etag: representationEtag(representation, page.fingerprint) }),
     conditional: conditionalHeaders(c),
   });
 }
@@ -1375,17 +1384,22 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
  * A file from the theme's `static/` directory, the site's copy first.
  *
  * Assets are cacheable and validated, so a browser that already has one pays a
- * conditional request rather than a download.
+ * conditional request rather than a download. A URL whose `v` is the hash of
+ * the bytes being served, which is what the `asset` filter writes, is cached
+ * for a year without revalidation. Any other `v`, or none, gets the short
+ * lifetime: a stale hash from a cached page still gets the file, but the
+ * current bytes are never pinned under a name that describes older ones.
  */
 function themeAsset(c: Context<GeekityEnv>): Response {
   const relative = requestPath(c).slice(THEME_ASSET_PREFIX.length);
   const asset = findThemeAsset(relative, c.var.renderer.themeDirs());
   if (asset === undefined) return notFound(c);
 
-  if (matchesEtag(c.req.header('if-none-match'), asset.etag)) {
-    return themeAssetNotModified(asset);
-  }
-  return themeAssetResponse(asset);
+  const fingerprinted = c.req.query(ASSET_VERSION_PARAM) === assetVersion(asset);
+  const options = fingerprinted ? IMMUTABLE_ASSET : {};
+  return matchesEtag(c.req.header('if-none-match'), asset.etag)
+    ? assetNotModified(asset, options)
+    : assetResponse(asset, options);
 }
 
 /**
@@ -1397,16 +1411,21 @@ function themeAsset(c: Context<GeekityEnv>): Response {
  * offer is a 404 and encodes nothing, so the URL space cannot be used to make
  * the server work.
  *
- * The cache lifetime is the uploads' own, and it is honest for the same
- * reason: a derived URL names one width of one file, and the file it was
- * derived from is never overwritten.
+ * A variant is cached for a year without revalidation only when its `v` is
+ * the hash of the upload it was derived from, which is what the page markup
+ * and the icon links write. The name alone cannot promise that: deleting an
+ * upload frees its name for different bytes. Any other `v`, or none, as in a
+ * page cached before URLs carried one, still gets the file, for a day.
  */
 async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
-  const relative = requestPath(c).slice(VARIANT_ASSET_PREFIX.length);
-  const asset = await findImageVariant(c.var.config, decodeVariantPath(relative));
+  const relative = decodeVariantPath(requestPath(c).slice(VARIANT_ASSET_PREFIX.length));
+  const asset = await findImageVariant(c.var.config, relative);
   if (asset === undefined) return notFound(c);
 
-  const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
+  const source = relative.slice(0, relative.lastIndexOf('/'));
+  const version = sourceVersion(c.var.config, source);
+  const fingerprinted = version !== undefined && c.req.query(ASSET_VERSION_PARAM) === version;
+  const options = fingerprinted ? IMMUTABLE_ASSET : { maxAge: UPLOAD_ASSET_MAX_AGE };
   return matchesEtag(c.req.header('if-none-match'), asset.etag)
     ? assetNotModified(asset, options)
     : assetResponse(asset, options);
