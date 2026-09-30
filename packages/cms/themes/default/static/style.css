@@ -1225,6 +1225,19 @@ pre code {
   border-inline-start-color: var(--color-error);
 }
 
+/* A refused form's summary: what went wrong as its heading, then a link to
+   each field to put right. */
+.comment-error h3,
+.contact-error h3 {
+  margin: 0;
+  font-size: var(--fontSize-1);
+}
+
+.comment-error ul,
+.contact-error ul {
+  margin: var(--spacing-1) 0 0;
+}
+
 .comment-replying-to,
 .comment-signed-in {
   margin: 0 0 var(--spacing-4);

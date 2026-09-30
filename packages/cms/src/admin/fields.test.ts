@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 
+import { tiedErrors } from '../__testing__/form-errors.ts';
 import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.ts';
 
 /**
@@ -80,7 +81,20 @@ describe('every field macro', () => {
     it(`${what} writes the field error where the form says something went wrong`, () => {
       const html = render(callWith(body, `, error='That is not a URL.'`));
 
-      assert.match(html, /<p class="admin-field-error">That is not a URL\.<\/p>/);
+      assert.match(html, /<p class="admin-field-error" id="f-error">That is not a URL\.<\/p>/);
+    });
+
+    it(`${what} marks its control invalid and points it at the error`, () => {
+      const tag = control(render(callWith(body, `, error='That is not a URL.'`)));
+
+      assert.match(tag, /\saria-invalid="true"/, `${what} is marked invalid: ${tag}`);
+      assert.match(tag, /\saria-describedby="f-error"/, `${what} names its error: ${tag}`);
+    });
+
+    it(`${what} says nothing about validity where there is no error`, () => {
+      const tag = control(render(callWith(body, `, hint='A note.'`)));
+
+      assert.doesNotMatch(tag, /aria-invalid|aria-describedby/, `${what} is left alone: ${tag}`);
     });
 
     it(`${what} puts the error above the hint, next to the box it is about`, () => {
@@ -111,6 +125,11 @@ describe('every field macro', () => {
       });
 
       assert.match(html, /<p class="admin-field-error">And <code>that<\/code> is gone\.<\/p>/);
+      assert.match(
+        control(html),
+        /aria-describedby="f-error"/,
+        'the field error is still the one named',
+      );
       assert.ok(
         html.indexOf('Wrong.') < html.indexOf('And <code>') &&
           html.indexOf('And <code>') < html.indexOf('admin-hint'),
@@ -280,6 +299,40 @@ describe('the checkbox macro', () => {
   it('sends 1 unless it is told to send something else', () => {
     assert.match(render(`{{ field.checkbox('f', 'n', 'L') }}`), /value="1"/);
     assert.match(render(`{{ field.checkbox('f', 'n', 'L', value='yes') }}`), /value="yes"/);
+  });
+});
+
+describe('the error summary', () => {
+  it('is an alert that takes focus, headed by what went wrong, linking to each field', () => {
+    const html = render(
+      `{% call field.summary('Nothing was saved.') %}
+         {{ field.problem('f', 'That is not a URL.') }}
+         {{ field.problem('g', '') }}
+       {% endcall %}
+       {{ field.text('f', 'n', 'L', error='That is not a URL.', autofocus=true) }}
+       {{ field.text('g', 'm', 'M') }}`,
+    );
+
+    const { heading, links } = tiedErrors(html);
+    assert.equal(heading, 'Nothing was saved.');
+    assert.deepEqual(links, ['f'], 'a field with nothing to say is not listed');
+    assert.match(html, /<a href="#f">That is not a URL\.<\/a>/);
+  });
+
+  it('stands on its own for a form that has one thing to say', () => {
+    const html = render(`{{ field.summary(error) }}`, { error: 'Those do not match.' });
+
+    assert.equal(tiedErrors(html).heading, 'Those do not match.');
+    assert.doesNotMatch(html, /<ul/, 'there is no empty list');
+  });
+
+  it('escapes the messages the server handed it', () => {
+    const html = render(
+      `{% call field.summary(error) %}{{ field.problem('f', error) }}{% endcall %}`,
+      { error: '<script>alert(1)</script>' },
+    );
+
+    assert.doesNotMatch(html, /<script>/);
   });
 });
 

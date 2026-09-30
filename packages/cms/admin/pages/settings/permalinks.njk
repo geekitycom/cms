@@ -3,6 +3,11 @@
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
 
+{% block settingsProblems %}
+  {{ field.problem('settings-tag-base', problems.tagBase) }}
+  {{ field.problem('settings-category-base', problems.categoryBase) }}
+{% endblock %}
+
 {% block settingsFields %}
   {% set tagBaseHint %}The tag archives live at <code>/{{ form.tagBase }}/{tag}/</code>. One path segment, no slashes.{% endset %}
   {{ field.text('settings-tag-base', fields.tagBase, 'Tag base', form.tagBase,

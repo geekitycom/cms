@@ -7,6 +7,10 @@
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
 
+{% block settingsProblems %}
+  {{ field.problem('settings-relays', problems.relays) }}
+{% endblock %}
+
 {% block settingsFields %}
   {% set relaysHint %}
     One relay inbox per line, such as

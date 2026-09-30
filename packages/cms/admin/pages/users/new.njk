@@ -16,7 +16,11 @@
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
 
     {% if addProblems.username or addProblems.password or addProblems.email %}
-      <p class="admin-error">Nobody was added. Fix the fields marked below and try again.</p>
+      {% call field.summary('Nobody was added. Fix the fields marked below and try again.') %}
+        {{ field.problem('add-username', addProblems.username) }}
+        {{ field.problem('add-email', addProblems.email) }}
+        {{ field.problem('add-password', addProblems.password) }}
+      {% endcall %}
     {% endif %}
 
     {{ field.text('add-username', fields.username, 'Username', addForm.username,

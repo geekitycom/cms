@@ -1355,6 +1355,23 @@ technology, and give it `tabindex="-1"` and `autocomplete="off"`. A submission
 that filled it is dropped. **Do not** remove it from a replacement partial —
 it is one of three things standing between the site and a spam queue.
 
+### When a submission is refused
+
+The CMS answers a refused comment with the post again, `problems` and `error`
+filled in. The packaged partial tells assistive technology about it in two
+places, and a replacement partial should do the same:
+
+- **A summary before the form.** One element with `role="alert"`,
+  `tabindex="-1"` and `autofocus`, labelled by a heading that is `error`, or a
+  sentence of your own when there is none, and holding a link to each field in
+  `problems` (`<a href="#comment-name">…</a>`). `autofocus` moves focus to it on
+  load with no script, so it has to be the first `autofocus` on the page.
+- **On each field in `problems`.** `aria-invalid="true"` and
+  `aria-describedby` naming the element that holds its message, so a screen
+  reader reads the message with the field.
+
+The contact form below keeps the same contract.
+
 ### When somebody is signed in
 
 Two more keys are on `commentForm` when — and only when — the request carries a

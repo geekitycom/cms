@@ -1,7 +1,10 @@
 {# What every settings page is: a heading, one form that saves the fields that
    page carries, and whatever panels sit under it. A page fills in the two
-   blocks; nothing about the chrome is written six times. #}
+   blocks, and names in `settingsProblems` each field a save can refuse, so
+   the summary at the top links to it; nothing about the chrome is written six
+   times. #}
 {% extends "layouts/shell.njk" %}
+{% import "components/fields.njk" as field %}
 
 {% block title %}{{ settingsLabel }} settings{% endblock %}
 
@@ -9,7 +12,9 @@
   <h1>{{ settingsLabel }}</h1>
 
   {% if hasProblems %}
-    <p class="admin-error">Nothing was saved. Fix the fields marked below and try again.</p>
+    {% call field.summary('Nothing was saved. Fix the fields marked below and try again.') %}
+      {% block settingsProblems %}{% endblock %}
+    {% endcall %}
   {% endif %}
 
   <form class="admin-settings" method="post" action="{{ settingsUrl }}">

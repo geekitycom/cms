@@ -29,8 +29,26 @@
   {% else %}
   <h2 class="contact-form-title">Send a message</h2>
 
-  {% if contactForm.error %}
-  <p class="contact-error" role="alert">{{ contactForm.error }}</p>
+  {#
+    A refused submission leads with this, as the comment form does: what went
+    wrong, and a link to each field to put right. It is an alert and takes
+    focus on load; a field it links to is marked `aria-invalid` and names its
+    message with `aria-describedby`.
+  #}
+  {% set problems = contactForm.problems %}
+  {% if contactForm.error or problems.name or problems.email or problems.subject or problems.message %}
+  <div class="contact-error" role="alert" tabindex="-1" autofocus aria-labelledby="contact-error-heading">
+    <h3 id="contact-error-heading">{{ contactForm.error or 'Your message was not sent. Fix the fields marked below.' }}</h3>
+    {% if problems.name or problems.email or problems.subject or problems.message %}
+    <ul>
+      {% for key in ['name', 'email', 'subject', 'message'] %}
+      {% if problems[key] %}
+      <li><a href="#contact-{{ key }}">{{ problems[key] }}</a></li>
+      {% endif %}
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
   {% endif %}
 
   <form method="post" action="{{ contactForm.action }}">
@@ -49,34 +67,34 @@
 
     <p class="contact-field">
       <label for="contact-name">Name</label>
-      <input id="contact-name" name="{{ contactForm.fields.name }}" type="text" value="{{ contactForm.values.name }}" maxlength="{{ contactForm.nameLength }}" autocomplete="name" required />
-      {% if contactForm.problems.name %}
-      <span class="contact-field-error">{{ contactForm.problems.name }}</span>
+      <input id="contact-name" name="{{ contactForm.fields.name }}" type="text" value="{{ contactForm.values.name }}" maxlength="{{ contactForm.nameLength }}" autocomplete="name" required{% if problems.name %} aria-invalid="true" aria-describedby="contact-name-error"{% endif %} />
+      {% if problems.name %}
+      <span class="contact-field-error" id="contact-name-error">{{ problems.name }}</span>
       {% endif %}
     </p>
 
     <p class="contact-field">
       <label for="contact-email">Email</label>
-      <input id="contact-email" name="{{ contactForm.fields.email }}" type="email" value="{{ contactForm.values.email }}" autocomplete="email" required />
-      {% if contactForm.problems.email %}
-      <span class="contact-field-error">{{ contactForm.problems.email }}</span>
+      <input id="contact-email" name="{{ contactForm.fields.email }}" type="email" value="{{ contactForm.values.email }}" autocomplete="email" required{% if problems.email %} aria-invalid="true" aria-describedby="contact-email-error"{% endif %} />
+      {% if problems.email %}
+      <span class="contact-field-error" id="contact-email-error">{{ problems.email }}</span>
       {% endif %}
       <span class="contact-hint">So there is somewhere to reply to. It is never shown on the site.</span>
     </p>
 
     <p class="contact-field">
       <label for="contact-subject">Subject <span class="contact-optional">(optional)</span></label>
-      <input id="contact-subject" name="{{ contactForm.fields.subject }}" type="text" value="{{ contactForm.values.subject }}" maxlength="{{ contactForm.subjectLength }}" />
-      {% if contactForm.problems.subject %}
-      <span class="contact-field-error">{{ contactForm.problems.subject }}</span>
+      <input id="contact-subject" name="{{ contactForm.fields.subject }}" type="text" value="{{ contactForm.values.subject }}" maxlength="{{ contactForm.subjectLength }}"{% if problems.subject %} aria-invalid="true" aria-describedby="contact-subject-error"{% endif %} />
+      {% if problems.subject %}
+      <span class="contact-field-error" id="contact-subject-error">{{ problems.subject }}</span>
       {% endif %}
     </p>
 
     <p class="contact-field">
       <label for="contact-message">Message</label>
-      <textarea id="contact-message" name="{{ contactForm.fields.message }}" rows="8" maxlength="{{ contactForm.messageLength }}" required>{{ contactForm.values.message }}</textarea>
-      {% if contactForm.problems.message %}
-      <span class="contact-field-error">{{ contactForm.problems.message }}</span>
+      <textarea id="contact-message" name="{{ contactForm.fields.message }}" rows="8" maxlength="{{ contactForm.messageLength }}" required{% if problems.message %} aria-invalid="true" aria-describedby="contact-message-error"{% endif %}>{{ contactForm.values.message }}</textarea>
+      {% if problems.message %}
+      <span class="contact-field-error" id="contact-message-error">{{ problems.message }}</span>
       {% endif %}
     </p>
 

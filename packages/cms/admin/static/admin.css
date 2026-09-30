@@ -336,6 +336,25 @@ button[type='submit']:hover,
   border-left: 4px solid var(--admin-error);
 }
 
+/* A refused form's summary: what went wrong as its heading, and a link to
+   each field to put right. It takes focus on load, so the outline says
+   where the keyboard now is. */
+
+.admin-error-summary h2 {
+  margin: 0;
+  font-size: 1em;
+}
+
+.admin-error-summary ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.admin-error-summary:focus {
+  outline: 2px solid var(--admin-error);
+  outline-offset: 2px;
+}
+
 .admin-note {
   color: var(--admin-muted);
 }

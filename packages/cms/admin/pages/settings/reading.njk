@@ -4,6 +4,13 @@
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
 
+{% block settingsProblems %}
+  {{ field.problem('settings-homepage', problems.homepage) }}
+  {{ field.problem('settings-posts-page', problems.postsPage) }}
+  {{ field.problem('settings-posts-per-page', problems.postsPerPage) }}
+  {{ field.problem('settings-notify-server', problems.notifyServer) }}
+{% endblock %}
+
 {% block settingsFields %}
   {# WordPress's "Your homepage displays": the empty option is Your latest
      posts, so the choice and the page it needs are one control rather than a

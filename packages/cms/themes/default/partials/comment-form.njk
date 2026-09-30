@@ -29,8 +29,27 @@
   <p class="comment-notice" role="status">{{ commentNotice }}</p>
   {% endif %}
 
-  {% if commentForm.error %}
-  <p class="comment-error" role="alert">{{ commentForm.error }}</p>
+  {#
+    A refused submission leads with this: what went wrong, and a link to each
+    field to put right. It is an alert and takes focus on load, so a screen
+    reader hears it at once and a keyboard starts from it, with no script. A
+    field it links to is marked `aria-invalid` and names its message with
+    `aria-describedby`, so the message is read with the field.
+  #}
+  {% set problems = commentForm.problems %}
+  {% if commentForm.error or problems.name or problems.email or problems.url or problems.body %}
+  <div class="comment-error" role="alert" tabindex="-1" autofocus aria-labelledby="comment-error-heading">
+    <h3 id="comment-error-heading">{{ commentForm.error or 'Your comment was not posted. Fix the fields marked below.' }}</h3>
+    {% if problems.name or problems.email or problems.url or problems.body %}
+    <ul>
+      {% for key in ['name', 'email', 'url', 'body'] %}
+      {% if problems[key] %}
+      <li><a href="#comment-{{ key }}">{{ problems[key] }}</a></li>
+      {% endif %}
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
   {% endif %}
 
   <form method="post" action="{{ commentForm.action }}">
@@ -83,34 +102,34 @@
 
     <p class="comment-field">
       <label for="comment-name">Name</label>
-      <input id="comment-name" name="{{ commentForm.fields.name }}" type="text" value="{{ commentForm.values.name }}" maxlength="{{ commentForm.nameLength }}" autocomplete="name" required />
-      {% if commentForm.problems.name %}
-      <span class="comment-field-error">{{ commentForm.problems.name }}</span>
+      <input id="comment-name" name="{{ commentForm.fields.name }}" type="text" value="{{ commentForm.values.name }}" maxlength="{{ commentForm.nameLength }}" autocomplete="name" required{% if problems.name %} aria-invalid="true" aria-describedby="comment-name-error"{% endif %} />
+      {% if problems.name %}
+      <span class="comment-field-error" id="comment-name-error">{{ problems.name }}</span>
       {% endif %}
     </p>
 
     <p class="comment-field">
       <label for="comment-email">Email <span class="comment-optional">(optional, never shown)</span></label>
-      <input id="comment-email" name="{{ commentForm.fields.email }}" type="email" value="{{ commentForm.values.email }}" autocomplete="email" />
-      {% if commentForm.problems.email %}
-      <span class="comment-field-error">{{ commentForm.problems.email }}</span>
+      <input id="comment-email" name="{{ commentForm.fields.email }}" type="email" value="{{ commentForm.values.email }}" autocomplete="email"{% if problems.email %} aria-invalid="true" aria-describedby="comment-email-error"{% endif %} />
+      {% if problems.email %}
+      <span class="comment-field-error" id="comment-email-error">{{ problems.email }}</span>
       {% endif %}
     </p>
 
     <p class="comment-field">
       <label for="comment-url">Your site <span class="comment-optional">(optional)</span></label>
-      <input id="comment-url" name="{{ commentForm.fields.url }}" type="text" inputmode="url" value="{{ commentForm.values.url }}" autocomplete="url" />
-      {% if commentForm.problems.url %}
-      <span class="comment-field-error">{{ commentForm.problems.url }}</span>
+      <input id="comment-url" name="{{ commentForm.fields.url }}" type="text" inputmode="url" value="{{ commentForm.values.url }}" autocomplete="url"{% if problems.url %} aria-invalid="true" aria-describedby="comment-url-error"{% endif %} />
+      {% if problems.url %}
+      <span class="comment-field-error" id="comment-url-error">{{ problems.url }}</span>
       {% endif %}
     </p>
     {% endif %}
 
     <p class="comment-field">
       <label for="comment-body">Comment</label>
-      <textarea id="comment-body" name="{{ commentForm.fields.body }}" rows="6" maxlength="{{ commentForm.bodyLength }}" required>{{ commentForm.values.body }}</textarea>
-      {% if commentForm.problems.body %}
-      <span class="comment-field-error">{{ commentForm.problems.body }}</span>
+      <textarea id="comment-body" name="{{ commentForm.fields.body }}" rows="6" maxlength="{{ commentForm.bodyLength }}" required{% if problems.body %} aria-invalid="true" aria-describedby="comment-body-error"{% endif %}>{{ commentForm.values.body }}</textarea>
+      {% if problems.body %}
+      <span class="comment-field-error" id="comment-body-error">{{ problems.body }}</span>
       {% endif %}
       <span class="comment-hint">Markdown works. Links are marked <code>nofollow ugc</code>; HTML is not.</span>
     </p>

@@ -2,6 +2,13 @@
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
 
+{% block settingsProblems %}
+  {{ field.problem('settings-title', problems.title) }}
+  {{ field.problem('settings-base-url', problems.baseUrl) }}
+  {{ field.problem('settings-timezone', problems.timezone) }}
+  {{ field.problem('settings-language', problems.language) }}
+{% endblock %}
+
 {% block settingsFields %}
   {{ field.text('settings-title', fields.title, 'Title', form.title,
        error=problems.title, required=true, autofocus=true) }}

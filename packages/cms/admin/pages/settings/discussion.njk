@@ -13,6 +13,13 @@
   {%- endif -%}
 {% endmacro %}
 
+{% block settingsProblems %}
+  {{ field.problem('settings-comments-close', problems.commentsCloseAfterDays) }}
+  {{ field.problem('settings-comment-email-retention', problems.commentEmailRetentionDays) }}
+  {{ field.problem('settings-address-hash-retention', problems.addressHashRetentionDays) }}
+  {{ field.problem('settings-contact-message-retention', problems.contactMessageRetentionDays) }}
+{% endblock %}
+
 {% block settingsFields %}
   <h2>Comments</h2>
 
