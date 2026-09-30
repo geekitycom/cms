@@ -155,6 +155,26 @@ async function send(
   });
 }
 
+describe('revalidating the contact page (TASK-181)', () => {
+  it('answers 304 when only the form stamp moved, and serves a fresh stamp on a 200', async () => {
+    let now = NOW.getTime();
+    const { cms } = await site(PAGES, { now: () => new Date(now) });
+    const etag = (await cms.app.request('/contact/')).headers.get('etag') ?? '';
+
+    now += 1_000;
+    const conditional = await cms.app.request('/contact/', {
+      headers: { 'if-none-match': etag },
+    });
+    assert.equal(conditional.status, 304, 'the stamp alone is not a new page');
+
+    const fresh = await (await cms.app.request('/contact/')).text();
+    assert.ok(
+      fresh.includes(`name="${CONTACT_FIELDS.loaded}" value="${String(now)}"`),
+      'a full response carries the stamp of the request that drew it',
+    );
+  });
+});
+
 describe('a page that asks for a contact form', () => {
   it('renders one below its content, posting to the CMS endpoint (AC #1, #4)', async () => {
     const { cms } = await site();

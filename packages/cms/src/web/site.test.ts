@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+import { brotliDecompressSync } from 'node:zlib';
 
 import { readSiteSettings, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
@@ -814,6 +815,86 @@ describe('the conversation under a post', () => {
     assert.ok(!html.includes('class="conversation"'), 'and the section goes with it');
   });
 
+  it('changes the page validator whenever the conversation it shows changes (TASK-181)', async () => {
+    const cms = await federated();
+    const etagOf = async (): Promise<string> =>
+      (await cms.app.request('/2026/09/hello/')).headers.get('etag') ?? '';
+    const seen = new Set([await etagOf()]);
+    const changed = async (what: string): Promise<void> => {
+      const etag = await etagOf();
+      assert.ok(!seen.has(etag), `${what} changes the ETag`);
+      seen.add(etag);
+    };
+
+    reply(cms, { id: 'https://remote.example/notes/1', inReplyTo: HELLO });
+    await changed('a reply arriving');
+    reaction(cms, 'Like', 'https://remote.example/likes/1', 'https://remote.example/users/bob');
+    await changed('a like arriving');
+    reaction(
+      cms,
+      'Announce',
+      'https://remote.example/boosts/1',
+      'https://remote.example/users/cal',
+    );
+    await changed('a boost arriving');
+    cms.admin.putFollower({
+      username: 'ada',
+      actorId: 'https://remote.example/users/ada',
+      inboxId: 'https://remote.example/users/ada/inbox',
+      sharedInboxId: null,
+      handle: '@ada@remote.example',
+      name: 'Ada Lovelace',
+      iconUrl: null,
+      url: 'https://remote.example/@ada',
+    });
+    await changed('a replier being named');
+    cms.admin.logInboxActivity({
+      activityId: 'https://remote.example/deletes/1',
+      activityType: 'Delete',
+      actorId: 'https://remote.example/users/ada',
+      objectId: 'https://remote.example/notes/1',
+      json: JSON.stringify({
+        type: 'Delete',
+        actor: 'https://remote.example/users/ada',
+        object: { id: 'https://remote.example/notes/1', type: 'Tombstone' },
+      }),
+    });
+    await changed('a reply being deleted');
+  });
+
+  it('answers a revalidation with the new reply, and 304 when nothing is new (TASK-181)', async () => {
+    const cms = await federated();
+
+    for (const encoding of ['identity', 'br']) {
+      const headers = { 'accept-encoding': encoding };
+      const first = await cms.app.request('/2026/09/hello/', { headers });
+      const etag = first.headers.get('etag') ?? '';
+      assert.equal(first.headers.get('last-modified'), null, `${encoding}: no Last-Modified`);
+
+      const unchanged = await cms.app.request('/2026/09/hello/', {
+        headers: { ...headers, 'if-none-match': etag },
+      });
+      assert.equal(unchanged.status, 304, `${encoding}: nothing new is still a 304`);
+
+      reply(cms, {
+        id: `https://remote.example/notes/${encoding}`,
+        inReplyTo: HELLO,
+        content: `<p>Reply over ${encoding}.</p>`,
+      });
+
+      const revalidated = await cms.app.request('/2026/09/hello/', {
+        headers: { ...headers, 'if-none-match': etag },
+      });
+      assert.equal(revalidated.status, 200, `${encoding}: a new reply is a 200`);
+      assert.ok(revalidated.headers.get('etag') !== etag, `${encoding}: under a new ETag`);
+      const html =
+        encoding === 'br'
+          ? brotliDecompressSync(Buffer.from(await revalidated.arrayBuffer())).toString('utf8')
+          : await revalidated.text();
+      assert.ok(html.includes(`<p>Reply over ${encoding}.</p>`), `${encoding}: with the reply`);
+    }
+  });
+
   it('renders no section at all under a post nobody has answered', async () => {
     const cms = await federated();
 
@@ -984,6 +1065,39 @@ describe('fingerprinted theme assets (TASK-138)', () => {
     const response = await cms.app.request(after);
     assert.equal(await response.text(), 'body { color: rebeccapurple; background: white }\n');
     assert.match(response.headers.get('cache-control') ?? '', /immutable/);
+  });
+});
+
+describe('the HTML validator (TASK-181)', () => {
+  it('follows a template edited under a watching server, without a restart', async () => {
+    const themesDir = await fixtureTheme({ 'layouts/post.njk': '<h1>{{ title }}</h1>\n' });
+    const { cms } = await site(
+      {
+        ...choosing(),
+        'posts/2026-09-02-hello.md': post('Hello', {
+          date: '2026-09-02T09:00:00Z',
+          permalink: '/2026/09/hello/',
+        }),
+      },
+      { themesDir, watch: true },
+    );
+    const before = (await cms.app.request('/2026/09/hello/')).headers.get('etag') ?? '';
+    const unchanged = await cms.app.request('/2026/09/hello/', {
+      headers: { 'if-none-match': before },
+    });
+    assert.equal(unchanged.status, 304, 'an unedited page revalidates');
+
+    await writeFile(
+      path.join(themesDir, 'fixture', 'layouts', 'post.njk'),
+      '<h1 class="edited">{{ title }}</h1>\n',
+      'utf8',
+    );
+    const after = await cms.app.request('/2026/09/hello/', {
+      headers: { 'if-none-match': before },
+    });
+
+    assert.equal(after.status, 200, 'the edited page is sent, not a 304');
+    assert.ok((await after.text()).includes('class="edited"'), 'drawn by the edited template');
   });
 });
 

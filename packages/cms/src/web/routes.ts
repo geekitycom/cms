@@ -592,24 +592,25 @@ function negotiateDocument(
   // And which document it is, so the admin bar can offer its editor.
   if (representation === 'html') c.set('shownDocument', document);
 
+  // The thank-you after a comment was posted, which the redirect carried back
+  // as a query, is the only thing about a document's HTML that the URL rather
+  // than the file decides. A document served at `/` is the site's front page,
+  // and the front page is the one place a theme may lay a page out differently.
+  const page =
+    representation === 'html'
+      ? c.var.renderer.renderPage(document, {
+          frontPage: href === '/',
+          extra: commentNotice(c, document),
+          viewer,
+        })
+      : undefined;
+
   const body =
     representation === 'markdown'
       ? serializeDocument(document)
       : representation === 'json'
         ? documentJson(document, { baseUrl: c.var.config.baseUrl })
-        : // The thank-you after a comment was posted, which the redirect
-          // carried back as a query. It is the only thing about a document's
-          // HTML that the URL rather than the file decides.
-          // A document served at `/` is the site's front page, and the front
-          // page is the one place a theme may lay a page out differently.
-          href === '/'
-          ? c.var.renderer.renderFrontPage(document, commentNotice(c, document), viewer)
-          : c.var.renderer.renderDocument(document, commentNotice(c, document), viewer);
-
-  // The theme can change without the document changing, and only the document
-  // is hashed. While the watcher is on — a development server, where a template
-  // edit lands mid-process — the HTML gets no validator rather than a stale one.
-  const validated = representation !== 'html' || !c.var.config.watch;
+        : page?.html;
 
   return representationResponse({
     body,
@@ -625,12 +626,18 @@ function negotiateDocument(
     // post, so nothing shared may hold it and it carries no validator. A page
     // drawn for everybody is exactly what it has always been.
     ...(viewer === undefined ? {} : { private: true }),
-    ...(validated
+    // The Markdown and the JSON are the file, so the file's hash and dates
+    // validate them. The HTML also draws the theme, the conversation, the
+    // neighbours and whatever else the site holds, none of which the file's
+    // hash sees, so it is validated by the page it drew (TASK-181). Nothing
+    // records when a withdrawn reply stopped being shown, so the HTML has no
+    // date that could agree with that ETag and carries no Last-Modified.
+    ...(page === undefined
       ? {
           etag: representationEtag(representation, document.hash),
           lastModified: lastModifiedOf(document),
         }
-      : {}),
+      : { etag: representationEtag(representation, page.fingerprint) }),
     conditional: conditionalHeaders(c),
   });
 }

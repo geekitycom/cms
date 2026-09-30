@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Environment } from 'nunjucks';
 
 import type { User } from '../admin/accounts.ts';
@@ -5,6 +7,7 @@ import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
+import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
 import { siteIcons } from '../images/icons.ts';
 import { archiveMonths, archiveOpen } from './archive.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';
@@ -145,6 +148,11 @@ export interface Renderer {
    * still names a published page.
    */
   frontPageSlugs(): FrontPageSlugs;
+  /**
+   * One document's page, as {@link renderDocument} or, with `frontPage`,
+   * {@link renderFrontPage} draws it, together with what validates it.
+   */
+  renderPage(document: Document, options: RenderPageOptions): RenderedPage;
   /**
    * One document through its type's layout.
    *
@@ -318,9 +326,39 @@ export interface CreateRendererOptions {
  * switch as "this is a development server": with `watch: true` a template edit
  * shows up on the next request, exactly as a content edit does.
  */
+/** Which page of a document {@link Renderer.renderPage} draws, and for whom. */
+export interface RenderPageOptions {
+  /** Whether it is being served at `/` as the site's front page. */
+  frontPage?: boolean | undefined;
+  /** Context that goes on last and wins, as {@link Renderer.renderDocument} takes it. */
+  extra?: Record<string, unknown> | undefined;
+  /** Who the request's session says is reading, when it says anybody. */
+  viewer?: CommentViewer | undefined;
+}
+
+/** A document's page and the fingerprint its ETag is made from (TASK-181). */
+export interface RenderedPage {
+  /** The page as it is sent. */
+  readonly html: string;
+  /**
+   * Everything the page shows except the forms' loaded-at stamps, which are
+   * the clock rather than the page: the same page drawn a second later is
+   * the same page. The window each stamp falls in goes in instead, so a
+   * browser revalidating an old copy is told it is fresh only while the stamp
+   * it holds is young enough to submit.
+   */
+  readonly fingerprint: string;
+}
+
+/** Half the time a form stays submittable: the oldest stamp a 304 hands back. */
+const STAMP_WINDOW_MS = (MAXIMUM_FORM_AGE_SECONDS * 1000) / 2;
+
 export function createRenderer(options: CreateRendererOptions): Renderer {
   const { config } = options;
   const siteData = createSiteDataSource(config);
+  // What a form's loaded-at stamp is drawn as while its page is fingerprinted.
+  // Random per renderer so no post, reply or theme text can spell it.
+  const stampMark = `geekity-stamp-${randomUUID()}`;
   // Which theme every render below reads from. Built here when the caller did
   // not bring one so that a renderer made on its own — a test over one
   // template, a site rendering a fragment of its own — still follows the
@@ -467,7 +505,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       extra: Record<string, unknown>;
       viewer?: CommentViewer | undefined;
     },
-  ): string {
+  ): RenderedPage {
     const { template, extra } = options_;
     // The profile behind the document's `author`, resolved here rather than in
     // `documentContext` for the reason the object id is: it needs the site's
@@ -493,12 +531,13 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // `commentForm` is on the context only when the post is open, so the
     // theme asks `{% if commentForm %}` rather than working the rules out
     // for itself — and a closed post shows the thread with no form.
-    const form = options.commentForm?.(document, options_.viewer);
+    const stamps: [mark: string, loaded: string][] = [];
+    const form = heldStamp(options.commentForm?.(document, options_.viewer), 'comment', stamps);
     // And the contact form, when the page's front matter asked for one
     // (TASK-56). Nothing about where a message would go is on the context:
     // the address is read when a submission arrives, so a theme cannot
     // print it however it is written.
-    const contact = options.contactForm?.(document);
+    const contact = heldStamp(options.contactForm?.(document), 'contact', stamps);
     // Where a webmention about this page is sent (TASK-51). On the context
     // only when the site takes them, so a theme asks `{% if webmention %}`
     // and a site that has turned them off advertises nothing.
@@ -513,7 +552,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     const target = replyTarget(document);
     const cited = target === undefined ? undefined : options.replyContext?.(target);
 
-    return render(template, {
+    const drawn = render(template, {
       ...context,
       // This page's own person, which is the site's author everywhere else:
       // the byline and the identity a theme prints are one object, so what a
@@ -540,6 +579,61 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(cited === undefined ? {} : { replyContext: replyContextFor(cited) }),
       ...extra,
     });
+
+    // Only a stamp the theme printed can go stale in a reader's browser.
+    const printed = stamps.filter(([mark]) => drawn.includes(mark));
+    return {
+      html: printed.reduce((html, [mark, loaded]) => html.replaceAll(mark, loaded), drawn),
+      fingerprint: [
+        // The mark is random per renderer; a restart must not change every ETag.
+        drawn.replaceAll(stampMark, 'geekity-stamp'),
+        ...printed.map(([, loaded]) => String(Math.floor(Number(loaded) / STAMP_WINDOW_MS))),
+      ].join('\n'),
+    };
+  }
+
+  /** One document's page and its fingerprint, as {@link Renderer.renderPage} says. */
+  function renderPage(
+    document: Document,
+    { frontPage = false, extra = {}, viewer }: RenderPageOptions,
+  ): RenderedPage {
+    if (!frontPage) {
+      return documentPage(document, {
+        template: document.type === 'post' ? TEMPLATES.post : TEMPLATES.page,
+        extra,
+        viewer,
+      });
+    }
+    return documentPage(document, {
+      // A theme's own front page if it has written one, and the layout every
+      // other page uses if it has not.
+      template: themeTemplate(themes.current().dirs, OPTIONAL_TEMPLATES.frontPage, TEMPLATES.page),
+      // At `/`, which is where it is being read: the canonical link, the
+      // menu's current item and anything else a theme takes off `page.url`
+      // should say the URL this is served at rather than the one that
+      // redirects here.
+      url: '/',
+      // The newest posts under the page's own words, which is what a front
+      // page is for (decision-16). Built here rather than by the route
+      // because it is the same document context every listing entry is, and
+      // resolved once for the whole list the way a listing's bylines are.
+      // `postsPage` goes with them: the front page is the one page that
+      // links the listing by name rather than by menu item.
+      extra: { ...recentPostsContext(document), ...postsPageContext(), ...extra },
+      viewer,
+    });
+  }
+
+  /** A form with its loaded-at stamp swapped for a mark, noted for putting back. */
+  function heldStamp<Form extends { loaded: string }>(
+    form: Form | undefined,
+    key: string,
+    stamps: [mark: string, loaded: string][],
+  ): Form | undefined {
+    if (form === undefined) return undefined;
+    const mark = `${stampMark}-${key}`;
+    stamps.push([mark, form.loaded]);
+    return { ...form, loaded: mark };
   }
 
   return {
@@ -569,37 +663,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       return frontPageSlugs(siteData.read());
     },
 
+    renderPage,
+
     renderDocument(document, extra = {}, viewer = undefined) {
-      return documentPage(document, {
-        template: document.type === 'post' ? TEMPLATES.post : TEMPLATES.page,
-        extra,
-        viewer,
-      });
+      return renderPage(document, { extra, viewer }).html;
     },
 
     renderFrontPage(document, extra = {}, viewer = undefined) {
-      return documentPage(document, {
-        // A theme's own front page if it has written one, and the layout every
-        // other page uses if it has not.
-        template: themeTemplate(
-          themes.current().dirs,
-          OPTIONAL_TEMPLATES.frontPage,
-          TEMPLATES.page,
-        ),
-        // At `/`, which is where it is being read: the canonical link, the
-        // menu's current item and anything else a theme takes off `page.url`
-        // should say the URL this is served at rather than the one that
-        // redirects here.
-        url: '/',
-        // The newest posts under the page's own words, which is what a front
-        // page is for (decision-16). Built here rather than by the route
-        // because it is the same document context every listing entry is, and
-        // resolved once for the whole list the way a listing's bylines are.
-        // `postsPage` goes with them: the front page is the one page that
-        // links the listing by name rather than by menu item.
-        extra: { ...recentPostsContext(document), ...postsPageContext(), ...extra },
-        viewer,
-      });
+      return renderPage(document, { frontPage: true, extra, viewer }).html;
     },
 
     renderListing(listing) {
