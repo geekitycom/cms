@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.11.0](https://github.com/geekitycom/cms/compare/v0.10.0...v0.11.0) (2026-09-30)
+
+
+### Features
+
+* **cms:** add a skip link, visible focus rings and table captions to the admin ([550118e](https://github.com/geekitycom/cms/commit/550118e87410a14f46803f9bfc2fff0e0a49814d))
+* **cms:** make the default theme hold up under forced colours, touch and right-to-left ([73ce796](https://github.com/geekitycom/cms/commit/73ce7968bdc50f768412d33fb65f6e80f35df0f9))
+* **cms:** milestone M22 accessible by default ([16995d2](https://github.com/geekitycom/cms/commit/16995d2026ef6df9a5ef6e7822b5da7f60573db1))
+* **cms:** store alt text in the media library and check it before publishing ([ec2750b](https://github.com/geekitycom/cms/commit/ec2750b9880b5d62ca05c2afb628623c71159ece))
+* **cms:** tie form errors to their fields for assistive technology ([a8702d2](https://github.com/geekitycom/cms/commit/a8702d204369c16d106cea1dae9635aecc9aeffe))
+
+
+### Bug Fixes
+
+* **cms:** give untitled notes and replies an h1 on their page ([37a0039](https://github.com/geekitycom/cms/commit/37a0039f8756a111deb6a95d9ac8372832e33603))
+
 ## [0.10.0](https://github.com/geekitycom/cms/compare/v0.9.0...v0.10.0) (2026-09-30)
 
 
