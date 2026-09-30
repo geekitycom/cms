@@ -153,6 +153,7 @@ directory; absolute ones are used as given.
 | `accessLogAddress` | `false`                                   | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address at the end of each access-log line. Off unless asked for: an address is personal data and needs a reason and a retention policy. Which address is right is `trustProxy`'s answer.                                                                                                                                                                                   |
 | `seedContent`      | `false`                                   | `GEEKITY_SEED_CONTENT`       | When `geekity serve` starts and `contentDir` is missing or has no entries at all, fill it with the starter site `geekity init` writes, its `site.json` `url` set to the base URL. A directory with anything in it, even a dotfile, is never touched. Off so a site run from npm is never written to unasked.                                                                               |
 | `maintenance`      | `false`                                   | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode until a restart without it. `geekity maintenance on` and `off` are the everyday switch; see [Maintenance mode](#maintenance-mode).                                                                                                                                                                                                                       |
+| `compression`      | `true`                                    | `GEEKITY_COMPRESSION`        | Compress text responses (HTML, CSS, JavaScript, feeds, JSON, Markdown, SVG, sitemaps) with brotli, or gzip for a client without it. Turn it off when a proxy in front already compresses; see [Compression](packages/cms/README.md#compression).                                                                                                                                           |
 
 The admin adds eight more:
 
@@ -1379,6 +1380,12 @@ location / {
     client_max_body_size 10m;  # at least GEEKITY_UPLOAD_MAX_BYTES
 }
 ```
+
+Geekity compresses its own text responses, brotli or gzip, so the proxy does
+not need to. If the proxy compresses anyway (nginx with `gzip on`, Caddy with
+`encode`, or a CDN such as Cloudflare), add `GEEKITY_COMPRESSION=false` to the
+`.env` so each response is compressed once, by the proxy. Leave it on when the
+proxy only forwards, as the nginx block above does.
 
 `GET /healthz` is also what an uptime monitor should poll; see
 [Health check](#health-check).

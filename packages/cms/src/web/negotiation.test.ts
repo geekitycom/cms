@@ -214,7 +214,7 @@ describe('choosing from Accept', () => {
 
     assert.equal(response.status, 406);
     assert.match(response.headers.get('content-type') ?? '', /^application\/json/);
-    assert.equal(response.headers.get('vary'), 'Accept');
+    assert.equal(response.headers.get('vary'), 'Accept, Accept-Encoding');
     assert.deepEqual((body as { alternates: unknown }).alternates, [
       { type: 'text/html', url: '/2026/09/hello/' },
       { type: 'text/markdown', url: '/2026/09/hello/index.md' },
@@ -257,7 +257,11 @@ describe('validators and alternates', () => {
       ],
     ] as const) {
       const response = await cms.app.request('/2026/09/hello/', { headers: { accept } });
-      assert.equal(response.headers.get('vary'), 'Accept', `${accept} varies on Accept`);
+      assert.equal(
+        response.headers.get('vary'),
+        'Accept, Accept-Encoding',
+        `${accept} varies on Accept`,
+      );
       assert.equal(response.headers.get('link'), expected, `${accept} links its alternates`);
     }
   });
@@ -297,7 +301,7 @@ describe('validators and alternates', () => {
       assert.equal(second.status, 304, `${accept} revalidates to 304`);
       assert.equal(await second.text(), '', `${accept} sends no body`);
       assert.equal(second.headers.get('etag'), etag, `${accept} repeats the validator`);
-      assert.equal(second.headers.get('vary'), 'Accept');
+      assert.equal(second.headers.get('vary'), 'Accept, Accept-Encoding');
     }
   });
 
@@ -459,7 +463,7 @@ describe('listings', () => {
     });
     const etag = response.headers.get('etag') ?? '';
 
-    assert.equal(response.headers.get('vary'), 'Accept');
+    assert.equal(response.headers.get('vary'), 'Accept, Accept-Encoding');
     assert.equal(response.headers.get('link'), '</tag/notes/>; rel="alternate"; type="text/html"');
     assert.match(etag, /^"[0-9a-f]{32}"$/);
 

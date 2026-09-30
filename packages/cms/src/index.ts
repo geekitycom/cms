@@ -3,6 +3,7 @@ import { serve as serveNode } from '@hono/node-server';
 import { Hono } from 'hono';
 
 import { createAccessLog } from './access-log.ts';
+import { compression } from './web/compression.ts';
 import { createAvatarService } from './avatars/index.ts';
 import type { AvatarService } from './avatars/index.ts';
 import { createRetentionService } from './privacy/retention.ts';
@@ -1843,6 +1844,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
       }),
     );
   }
+
+  // Outside everything after it, so it compresses the body the client is
+  // about to get, the error pages and the 503 included (TASK-139).
+  if (resolved.compression) app.use('*', compression());
 
   app.use('*', async (c, next) => {
     c.set('store', store);

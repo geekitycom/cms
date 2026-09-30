@@ -247,6 +247,16 @@ export interface GeekityConfig {
    */
   maintenance?: boolean;
   /**
+   * Compress text responses (HTML, CSS, JavaScript, feeds, JSON, Markdown,
+   * SVG, sitemaps) with brotli, or gzip for a client without it. Default
+   * `true`. Overridden by `GEEKITY_COMPRESSION`.
+   *
+   * On because the documented Docker deployment has nothing in front of it
+   * that is guaranteed to compress. Turn it off behind a proxy or CDN that
+   * compresses already, so the work is done once.
+   */
+  compression?: boolean;
+  /**
    * Security headers every response carries, merged over
    * {@link DEFAULT_SECURITY_HEADERS} by name, case aside. A string replaces a
    * default or adds a header of the site's own; `false` removes a default.
@@ -356,6 +366,7 @@ export interface ResolvedConfig {
   accessLogWriter: AccessLogWriter | undefined;
   seedContent: boolean;
   maintenance: boolean;
+  compression: boolean;
   /** Header name, lower case, to value: the defaults with the site's changes applied. */
   securityHeaders: Readonly<Record<string, string>>;
   onDocumentChange: DocumentChangeHook | undefined;
@@ -546,6 +557,12 @@ export function resolveConfig(
       env['GEEKITY_MAINTENANCE'],
       config.maintenance,
       false,
+    ),
+    compression: resolveBoolean(
+      'GEEKITY_COMPRESSION',
+      env['GEEKITY_COMPRESSION'],
+      config.compression,
+      true,
     ),
     securityHeaders: resolveSecurityHeaders(config.securityHeaders),
     onDocumentChange: config.onDocumentChange,
