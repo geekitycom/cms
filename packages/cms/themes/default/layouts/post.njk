@@ -24,11 +24,20 @@
 {% set entryUrl = page.url or url %}
 <article class="blog-post h-entry">
   {#- A post with no name of its own (a note, or a reply without a title) is
-      its words, so it opens on them rather than on an empty heading. -#}
+      its words, so it opens on them in sight. Its page still needs one h1 to
+      navigate by, so it gets one that says what it is, who wrote it and when,
+      hidden from sight. It is no `p-name`: a parser would take that as a
+      title and read the note as an article. -#}
   {% if named %}
   <header>
     <h1 class="p-name">{{ title }}</h1>
   </header>
+  {% else %}
+  <h1 class="screen-reader-text">
+    {{- "Reply" if postType == "reply" else "Note" }}
+    {%- if bioAuthor.name %} by {{ bioAuthor.name }}{% endif %}
+    {%- if date %}, {{ date | date }}{% endif -%}
+  </h1>
   {% endif %}
 
   {#- A reply cites the post it answers, whose URL is also the link its

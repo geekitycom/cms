@@ -303,6 +303,22 @@ later is not news. A post tagged `indienews` opens the line with a
 told the post is for it; a page never prints one, and its line is a
 `p.page-meta` rather than a `p.entry-meta`.
 
+**Every post's page has one `h1`.** A post with a name of its own is headed by
+it, as above. A note, or a reply without a title, opens on its words instead,
+so it has no `header`; in its place is an `h1` a screen reader and a crawler
+navigate by and a sighted reader never sees, saying what the post is, who wrote
+it and when:
+
+```html
+<h1 class="screen-reader-text">Note by Ada Lovelace, 11 September 2026</h1>
+```
+
+It says `Reply` for a reply and leaves out the name or the date the post does
+not have. It is not a `p-name`: a parser that found one would take the post
+for an article. The headings under it step down one level at a time: the
+conversation and the comment form are `h2`, and a refused form's error summary
+is an `h3` inside the form's section.
+
 What it is filed under is printed under the words and inside the article, so
 that each link is a `p-category` of this entry: the categories first, then the
 tags, each as one `p.post-categories` from `partials/tags.njk`.

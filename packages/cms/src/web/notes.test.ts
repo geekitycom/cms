@@ -81,11 +81,16 @@ function blockFor(html: string, pattern: RegExp, url: string): string {
 }
 
 describe('a note’s own page', () => {
-  it('draws no heading and no p-name, only the content', async () => {
+  it('draws no visible heading and no p-name, only the content', async () => {
     const article = main(await get(NOTE));
 
     assert.doesNotMatch(article, /p-name/, 'a note prints a p-name');
-    assert.doesNotMatch(article, /<h1/, 'a note prints a heading');
+    assert.doesNotMatch(article, /<header>/, 'a note prints a visible header');
+    assert.match(
+      article,
+      /<h1 class="screen-reader-text">Note, 10 September 2026<\/h1>/,
+      'a note’s page has no hidden h1 to navigate by',
+    );
     assert.match(
       article,
       /<section class="e-content">\s*<p>Coffee first\. Then <strong>the<\/strong> inbox/,
