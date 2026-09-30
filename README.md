@@ -104,7 +104,12 @@ they run the checks where they are cheapest:
 | ------------ | ------------------------------------------------------------ |
 | `commit-msg` | commitlint, so every message is a Conventional Commit.       |
 | `pre-commit` | lint-staged: eslint and prettier over the staged files only. |
-| `pre-push`   | `pnpm typecheck` and `pnpm test`.                            |
+| `pre-push`   | `pnpm typecheck` only; the test suite is CI's gate.          |
+
+The suite is not in the hook because it takes about fourteen minutes, longer
+than GitHub keeps an idle push connection open, so a push that ran it first
+died after the tests had passed (decision-21). CI runs the suite on every push
+and pull request as a required check, and that is the gate.
 
 Commit messages are Conventional Commits and drive release-please; the format
 and the allowed scopes are in [`CLAUDE.md`](CLAUDE.md) and

@@ -1,4 +1,6 @@
-# The slow gates, once per push. Skippable with --no-verify in an emergency;
-# CI runs them again and is not skippable.
+# Typecheck only: seven seconds, and it catches the type error in a file you
+# did not run. The test suite is not here. It takes about fourteen minutes,
+# which is longer than GitHub keeps an idle push connection open, so a push
+# that ran it died after passing; CI runs the suite on every push and pull
+# request as a required check, and that gate is not skippable (decision-21).
 pnpm typecheck
-pnpm test
