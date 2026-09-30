@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.10.0](https://github.com/geekitycom/cms/compare/v0.9.0...v0.10.0) (2026-09-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** createDeliveryService and createRelayService require an actorProfiles option, and FederationContextData carries actorProfiles.
+* **cms:** CommentRecords requires dataDir, readComments takes the records instead of a content directory, and comment files no longer carry author.email or notify.
+
+### Features
+
+* **cms:** compress text responses with brotli and gzip ([ee3041e](https://github.com/geekitycom/cms/commit/ee3041ef38a6e5224220a1131c07c821ed44a832))
+* **cms:** keep commenter emails out of content files ([a1f5e0a](https://github.com/geekitycom/cms/commit/a1f5e0a1754bd01e90c5f6531972311cc251f126))
+* **cms:** milestone M21 fast by default ([b3b18f9](https://github.com/geekitycom/cms/commit/b3b18f9265b83912c6a18df0c798888f97599923))
+* **cms:** prefetch same-origin pages and cross-fade between them ([943ec58](https://github.com/geekitycom/cms/commit/943ec58666e44a0a9c6e5ceb58648972c70f04b3))
+* **cms:** serve fingerprinted theme assets with immutable caching ([2544e40](https://github.com/geekitycom/cms/commit/2544e4088aa3b7f2056cc4fe618ed87a4bbe357f))
+* **cms:** show the admin bar on the public site for signed-in users ([9e66b64](https://github.com/geekitycom/cms/commit/9e66b644462c0e4e53ab2be1c4892f4df603d37c))
+* **cms:** show the admin bar on the public site for signed-in users ([cc111de](https://github.com/geekitycom/cms/commit/cc111deb03c1fea7fb4ddcb0708c8796aa623a27))
+
+
+### Bug Fixes
+
+* **cms:** fetch the first image on a page eagerly at high priority ([20b0398](https://github.com/geekitycom/cms/commit/20b0398d9992546a822d30fe8c4f258038dfb43b))
+* **cms:** name and picture every fediverse actor, not only followers ([53cfb38](https://github.com/geekitycom/cms/commit/53cfb384a21ca2c0d01084a6e0bc7891145386b7))
+* **cms:** name the original's bytes in image variant URLs ([4dc920c](https://github.com/geekitycom/cms/commit/4dc920c692d89005470a570190446790f1de8f69))
+* **cms:** pin the admin bar to the window edges whatever the theme pads ([8c30b2d](https://github.com/geekitycom/cms/commit/8c30b2d40ced3d06904625d1ca7a8f64d1316738))
+* **cms:** validate post pages by the page they render ([b6f0271](https://github.com/geekitycom/cms/commit/b6f0271d91ed48e321d2b71b0c4bed2fb8e068c4))
+
 ## [0.9.0](https://github.com/geekitycom/cms/compare/v0.8.0...v0.9.0) (2026-09-29)
 
 
