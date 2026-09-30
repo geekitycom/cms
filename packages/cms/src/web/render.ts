@@ -5,6 +5,7 @@ import type { Environment } from 'nunjucks';
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
@@ -420,6 +421,38 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   }
 
   /**
+   * What the post a reply answers says about itself, as a theme reads it, when
+   * it was fetched (TASK-123). Undefined for a post that answers nothing and
+   * for a reply whose target has not been fetched, so a theme draws the bare
+   * link from `inReplyTo` and fills it in from `replyContext`.
+   */
+  function citedBy(document: Document): Record<string, unknown> | undefined {
+    const target = replyTarget(document);
+    const cited = target === undefined ? undefined : options.replyContext?.(target);
+    return cited === undefined ? undefined : replyContextFor(cited);
+  }
+
+  /**
+   * One entry of a listing: the document as a template sees it, and what it
+   * answers when it is a reply, so a feed cites a reply's target the way the
+   * reply's own page does (doc-9).
+   */
+  function entryContext(
+    document: Document,
+    people: readonly User[],
+    loading: ImageLoading,
+  ): DocumentContext {
+    const context = documentContext(
+      document,
+      config,
+      authorContext(people, document.author),
+      loading,
+    );
+    const replyContext = citedBy(document);
+    return replyContext === undefined ? context : { ...context, replyContext };
+  }
+
+  /**
    * The front page's recent posts, as the entries a listing prints, or nothing
    * at all when the renderer was built without a source for them.
    *
@@ -437,9 +470,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     const pageLeads = page.html.includes('<img');
     return {
       recentPosts: posts.map((document, index) =>
-        documentContext(document, config, authorContext(people, document.author), {
-          lead: !pageLeads && index === 0,
-        }),
+        entryContext(document, people, { lead: !pageLeads && index === 0 }),
       ),
     };
   }
@@ -546,11 +577,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // an entry (TASK-79). Each is on the context only when there is one, so a
     // theme asks `{% if previous %}` and the ends of the archive draw nothing.
     const either = options.neighbours?.(document) ?? {};
-    // What the post a reply answers says about itself, when it was fetched
-    // (TASK-123). On the context only when there is some, so a theme draws
-    // the bare link from `inReplyTo` and fills it in from `replyContext`.
-    const target = replyTarget(document);
-    const cited = target === undefined ? undefined : options.replyContext?.(target);
+    // What the post a reply answers says about itself (TASK-123), on the
+    // context only when there is some.
+    const cited = citedBy(document);
 
     const drawn = render(template, {
       ...context,
@@ -576,7 +605,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(form === undefined ? {} : { commentForm: form }),
       ...(contact === undefined ? {} : { contactForm: contact }),
       ...(webmention === undefined ? {} : { webmention }),
-      ...(cited === undefined ? {} : { replyContext: replyContextFor(cited) }),
+      ...(cited === undefined ? {} : { replyContext: cited }),
       ...extra,
     });
 
@@ -682,9 +711,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // first entry's.
       const bodyLeads = listing.document?.html.includes('<img') === true;
       const items: DocumentContext[] = listing.documents.map((document, index) =>
-        documentContext(document, config, authorContext(people, document.author), {
-          lead: !bodyLeads && index === 0,
-        }),
+        entryContext(document, people, { lead: !bodyLeads && index === 0 }),
       );
       // The posts page's own front matter and rendered body, under the
       // listing's title, URL and posts: a theme prints `{{ content | safe }}`

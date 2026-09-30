@@ -320,9 +320,18 @@ describe('the reactions under a post (AC #1)', () => {
     const section = reactions(html);
 
     assert.notEqual(section, '', `no reactions section on the page: ${html}`);
-    assert.match(group(section, 'p-like'), /<h2 class="reaction-title">Likes \(2\)<\/h2>/);
-    assert.match(group(section, 'p-repost'), /<h2 class="reaction-title">Boosts \(1\)<\/h2>/);
-    assert.match(group(section, 'p-mention'), /<h2 class="reaction-title">Mentions \(1\)<\/h2>/);
+    assert.match(
+      group(section, 'p-like'),
+      /<h2 class="reaction-title">Likes <span class="reaction-count">2<\/span><\/h2>/,
+    );
+    assert.match(
+      group(section, 'p-repost'),
+      /<h2 class="reaction-title">Boosts <span class="reaction-count">1<\/span><\/h2>/,
+    );
+    assert.match(
+      group(section, 'p-mention'),
+      /<h2 class="reaction-title">Mentions <span class="reaction-count">1<\/span><\/h2>/,
+    );
     assert.doesNotMatch(section, /<details/, 'the disclosure groups are gone');
   });
 
@@ -354,32 +363,37 @@ describe('the reactions under a post (AC #1)', () => {
     const html = await body(await site(), '/2026/09/quiet/');
     const section = reactions(html);
 
-    assert.match(section, /<h2 class="reaction-title">Likes \(1\)<\/h2>/);
+    assert.match(
+      section,
+      /<h2 class="reaction-title">Likes <span class="reaction-count">1<\/span><\/h2>/,
+    );
     assert.doesNotMatch(section, /p-repost/, 'a post nobody boosted has no boost group');
     assert.doesNotMatch(section, /p-mention/, 'and no mention group');
   });
 });
 
 describe('the comments under a post (AC #2)', () => {
-  it('is a comments-area with the count and the title over the list', async () => {
+  it('is a comments-area with the count over the list', async () => {
     const html = await body(await site(), '/2026/09/hello/');
     const area = comments(html);
 
     assert.notEqual(area, '', `no comments area on the page: ${html}`);
     assert.match(
       area,
-      /<h2 class="comments-title">\s*3 comments on &ldquo;<span>Hello<\/span>&rdquo;\s*<\/h2>/,
+      // Replies, and no quoted title: the post is the page it sits under, and
+      // a note has no title to quote (TASK-186).
+      /<h2 class="comments-title">3 replies<\/h2>/,
       `the title does not count the three answers: ${area}`,
     );
     assert.match(area, /<ol class="comment-list">/);
   });
 
-  it('says One comment where there is one', async () => {
+  it('says One reply where there is one', async () => {
     const html = await body(await site(), '/2026/09/closed/');
 
     assert.match(
       comments(html),
-      /One comment on &ldquo;<span>Closed<\/span>&rdquo;/,
+      /<h2 class="comments-title">One reply<\/h2>/,
       'a single comment is not counted in words',
     );
   });

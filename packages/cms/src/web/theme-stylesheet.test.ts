@@ -5,8 +5,9 @@
  * that it mirrors under `dir="rtl"`, and that the page does not shift sideways
  * when a scrollbar comes and goes.
  *
- * Read out of the file rather than a browser, because the package has none to
- * test with. Each assertion names the rule a reader depends on, so a change
+ * Read out of the compiled file rather than a browser, because the package has
+ * none to test with. The file is Tailwind's output (TASK-187), so what is
+ * checked is what a reader is served, preflight included. Each assertion names the rule a reader depends on, so a change
  * that drops one fails here rather than on a Windows High Contrast screen or an
  * Arabic site.
  */
@@ -21,7 +22,12 @@ interface Rule {
   declarations: Map<string, string>;
 }
 
-/** Every rule in a stylesheet, one level of `@media` deep, comments removed. */
+/**
+ * Every rule in a stylesheet, comments removed, each with the `@media` it sits
+ * in. `@layer` and `@supports` blocks, which Tailwind wraps its output in, are
+ * looked through: a rule inside one applies wherever the layer does, and a
+ * `@layer` statement with no block is skipped.
+ */
 function parse(css: string): Rule[] {
   const rules: Rule[] = [];
   const source = css.replaceAll(/\/\*[\s\S]*?\*\//g, '');
@@ -30,7 +36,7 @@ function parse(css: string): Rule[] {
     while (at < text.length) {
       const open = text.indexOf('{', at);
       if (open === -1) return;
-      const prelude = text.slice(at, open).trim();
+      const prelude = (text.slice(at, open).split(';').at(-1) ?? '').trim();
       let depth = 1;
       let close = open + 1;
       for (; depth > 0; close++) {
@@ -40,6 +46,8 @@ function parse(css: string): Rule[] {
       const body = text.slice(open + 1, close - 1);
       if (prelude.startsWith('@media')) {
         walk(body, prelude.slice('@media'.length).trim());
+      } else if (prelude.startsWith('@layer') || prelude.startsWith('@supports')) {
+        walk(body, media);
       } else {
         const declarations = new Map<string, string>();
         for (const declaration of body.split(';')) {
@@ -132,14 +140,14 @@ describe('the default theme stylesheet', () => {
       '.contact-error a',
       '.search-form button',
       '.comment-respond .form-submit button',
-      ".comment-respond .form-submit input[type='submit']",
+      '.comment-respond .form-submit input[type="submit"]',
     ];
     for (const control of controls) {
       const own = declared(control);
       assert.equal(own.get('min-block-size'), '24px', `${control} min-block-size`);
       assert.equal(own.get('min-inline-size'), '24px', `${control} min-inline-size`);
     }
-    const checkbox = declared(".comment-respond input[type='checkbox']");
+    const checkbox = declared('.comment-respond input[type="checkbox"]');
     assert.equal(checkbox.get('inline-size'), '24px');
     assert.equal(checkbox.get('block-size'), '24px');
   });
@@ -150,15 +158,18 @@ describe('the default theme stylesheet', () => {
       rules.some((rule) => rule.media === forced),
       'there is a forced-colors block',
     );
+    // A system colour is a keyword, and the compiler prints it lower case.
+    const border = (selector: string, property: string) =>
+      declared(selector, forced).get(property)?.toLowerCase();
     for (const control of [
       '.search-form button',
       '.comment-respond .form-submit button',
-      ".comment-respond .form-submit input[type='submit']",
+      '.comment-respond .form-submit input[type="submit"]',
     ]) {
-      assert.equal(declared(control, forced).get('border'), '1px solid ButtonText', control);
+      assert.equal(border(control, 'border'), '1px solid buttontext', control);
     }
-    assert.equal(declared('hr', forced).get('border-block-start'), '1px solid CanvasText');
-    assert.equal(declared('pre', forced).get('border'), '1px solid CanvasText');
+    assert.equal(border('hr', 'border-block-start'), '1px solid canvastext');
+    assert.equal(border('pre', 'border'), '1px solid canvastext');
   });
 
   it('never takes a focus ring away, which a forced palette would otherwise redraw', () => {

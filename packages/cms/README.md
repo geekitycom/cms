@@ -3190,8 +3190,13 @@ The admin is not themed. Its templates and its static files live in a tree of
 their own with a loader of their own, deliberately off this search path, so no
 theme can shadow the login form or the CSRF field inside it.
 
-The packaged theme is the andrewshell.org design (decision-16). `base.njk` is
-its shell: a skip link, a `.global-wrapper` carrying `data-is-root-path="true"`
+The packaged theme is the Paper design (doc-9) on the andrewshell.org shell
+(decision-16). Its stylesheet is written in Tailwind v4 in
+`themes/default/src/style.css` and compiled to `themes/default/static/style.css`
+when the package is built (decision-22), so what ships is one plain CSS file; a
+site theme's own `static/style.css` replaces it wholesale and needs no
+Tailwind. Every colour is a `--color-*` custom property a site can override.
+`base.njk` is its shell: a skip link, a `.global-wrapper` carrying `data-is-root-path="true"`
 at `/` only, a header that is the site title and tagline on the front page and a
 small link home on every other — with `menus.primary` inside it on every page
 — `<main id="main">`, and a footer with the copyright year, the site author,

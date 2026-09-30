@@ -42,7 +42,7 @@
 {% macro group(items, label, kind, icon, source=false) %}
 {% if items.length %}
 <div class="reaction-group {{ kind }}">
-  <h2 class="reaction-title">{{ label }} ({{ items.length }})</h2>
+  <h2 class="reaction-title">{{ label }} <span class="reaction-count">{{ items.length }}</span></h2>
   <div class="facepile">
     {%- for item in items %}{{ face(item, icon, (item.url or item.author.url) if source else (item.author.url or item.url)) }}{% endfor %}
   </div>
@@ -61,6 +61,8 @@
       <div class="comment-author vcard p-author h-card">
         {%- if reply.author.avatar %}
         <img class="avatar u-photo" src="{{ reply.author.avatar }}" alt="" width="40" height="40" loading="lazy">
+        {%- else %}
+        <span class="comment-avatar-empty" aria-hidden="true">{{ reply.author.name | first | upper }}</span>
         {%- endif %}
         <b class="fn p-name">{% if reply.author.url %}<a class="url u-url" href="{{ reply.author.url }}" rel="nofollow ugc noopener noreferrer">{{ reply.author.name }}</a>{% else %}{{ reply.author.name }}{% endif %}</b>
       </div>
@@ -69,6 +71,11 @@
         <a class="u-url" href="{{ reply.url }}"{% if reply.source != "comment" %} rel="nofollow noopener noreferrer"{% endif %}><time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time></a>
         {%- else %}
         <time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time>
+        {%- endif %}
+        {%- if reply.source == "webmention" %}
+        <span class="comment-source">via webmention</span>
+        {%- elif reply.source == "activitypub" %}
+        <span class="comment-source">via the fediverse</span>
         {%- endif %}
       </div>
     </footer>
@@ -111,8 +118,8 @@
 
 {#
   And the thread. The title counts the whole of it rather than the top level,
-  which is what `counts.replies` is, and names the post the way the source
-  theme does.
+  which is what `counts.replies` is. It does not quote the post's title: the
+  post is the page it sits under, and a note has no title to quote (TASK-186).
 
   "Comments are closed." is printed under a post that has been answered and is
   no longer taking comments. That a post is closed is what the absence of
@@ -123,7 +130,7 @@
 {% if conversation.replies.length %}
 <div id="comments" class="comments-area">
   <h2 class="comments-title">
-    {%- if conversation.counts.replies == 1 %}One comment{% else %}{{ conversation.counts.replies }} comments{% endif %} on &ldquo;<span>{{ title }}</span>&rdquo;
+    {%- if conversation.counts.replies == 1 %}One reply{% else %}{{ conversation.counts.replies }} replies{% endif -%}
   </h2>
 
   <ol class="comment-list">

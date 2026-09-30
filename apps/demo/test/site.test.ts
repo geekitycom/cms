@@ -369,7 +369,7 @@ describe('the demo front page and archive page', () => {
     const body = await text('/');
 
     assert.match(body, /The demo site exists so the CMS/, 'the homepage’s own words');
-    assert.match(body, /<h2>Recent Posts<\/h2>/);
+    assert.match(body, /<h2 class="section-title">Recent Posts<\/h2>/);
     assert.match(body, /<h3 class="feed-title p-name">/, 'the entries are headed under the h2');
     assert.match(body, /The theme is just templates/, 'the newest post is not listed');
     assert.match(body, /<p class="front-links">[\s\S]*?href="\/posts\/"/, 'no link to the listing');

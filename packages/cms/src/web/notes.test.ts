@@ -117,7 +117,9 @@ describe('a note’s own page', () => {
   it('is linked from its neighbour by its first words', async () => {
     assert.match(
       main(await get('/2026/09/on-gardens/')),
-      new RegExp(`<a rel="next" href="${NOTE}">${NOTE_LABEL} &rarr;</a>`),
+      new RegExp(
+        `<a rel="next" href="${NOTE}"><span class="blog-post-nav-label">Next</span> ${NOTE_LABEL}</a>`,
+      ),
       'the next link to a note is not its first words',
     );
   });

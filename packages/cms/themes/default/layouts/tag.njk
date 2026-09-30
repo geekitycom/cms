@@ -9,8 +9,14 @@
 {{ feeds.feedLinks(tagRoot, site.title + ": " + tag) }}
 {% endblock %}
 
+{% import "partials/kicker.njk" as kicker with context %}
 {% block content %}
-<h1 class="page-title">Tagged &ldquo;{{ tag }}&rdquo;</h1>
+{# The archive's header: the kicker says what kind of archive, the heading
+   whose. #}
+<header class="archive-header">
+  {{ kicker.line("Tag") }}
+  <h1 class="page-title">{{ tag }}</h1>
+</header>
 {% include "partials/post-list.njk" %}
 {% include "partials/pagination.njk" %}
 {% endblock %}

@@ -8,8 +8,10 @@
  * override — everything the theme's markup needs has to be here — which is the
  * trade a site accepts when it wants its own look rather than a few tweaks.
  *
- * Plain CSS, no build step, same as the packaged one. The markup it styles is
- * the packaged theme's, so the class names are that theme's contract.
+ * Plain CSS with no build step. The packaged stylesheet is compiled from
+ * Tailwind when the package is built, but a site theme owes it nothing: the
+ * markup this file styles is the packaged theme's, so the class names are that
+ * theme's contract, and any CSS that knows them will do.
  */
 
 :root {
@@ -99,61 +101,93 @@ a:visited {
   color: var(--accent-visited);
 }
 
-.skip-link {
+/* The skip link, which the packaged shell prints as screen-reader text until
+   it is focused. */
+.screen-reader-text {
   position: absolute;
-  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
-
-.skip-link:focus {
-  position: static;
-  display: inline-block;
+.screen-reader-text:focus {
+  width: auto;
+  height: auto;
   padding: 0.5rem;
+  clip-path: none;
+  background: var(--paper);
 }
-
-/* Header and footer */
-
-.site-header,
-.site-footer,
-.site-main {
+/* The honeypots in the comment and contact forms: out of sight, but still
+   painted, so a form filler finds them. */
+.comment-trap,
+.contact-trap {
+  position: absolute;
+  inset-inline-start: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+/* The packaged shell: one wrapper at the measure, the header, main and the
+   footer inside it. */
+.global-wrapper {
   max-width: var(--measure);
   margin-inline: auto;
+  padding-block: 0 3rem;
 }
-
-.site-header {
+.global-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  align-items: baseline;
+  margin-bottom: 2.5rem;
   padding: 3rem 0 1.5rem;
   border-bottom: 2px solid var(--ink);
 }
-
-.site-title {
+.global-wrapper[data-is-root-path='true'] .global-header {
+  display: block;
+}
+.main-heading,
+.header-link-home {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
-
-.site-title a {
+.main-heading a,
+.header-link-home {
   color: inherit;
   text-decoration: none;
 }
-
 .site-tagline {
   margin: 0.4rem 0 0;
   color: var(--ink-muted);
   font-style: italic;
 }
-
-.site-main {
-  padding: 2.5rem 0 3rem;
+.hlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-
-.site-footer {
-  padding: 1.5rem 0 3rem;
+.site-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+}
+.global-wrapper[data-is-root-path='true'] .site-nav {
+  margin-top: 1rem;
+}
+.global-wrapper > footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
   border-top: 1px solid var(--rule);
   color: var(--ink-muted);
   font-size: 0.9rem;
 }
-
 /* Titles, byline and meta */
 
 .page-title,
@@ -213,7 +247,10 @@ a:visited {
   font-size: 0.9rem;
 }
 
-.feed-meta {
+/* The kicker the packaged theme puts above an entry, a page and an archive,
+   naming what it is (TASK-187), set like the demo's own meta line. */
+.feed-meta,
+.kicker {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -225,8 +262,44 @@ a:visited {
   text-transform: uppercase;
 }
 
-.feed-meta p {
+.feed-meta p,
+.kicker {
+  margin: 0 0 0.35rem;
+}
+.kicker-kind {
+  color: var(--accent);
+  font-weight: 700;
+}
+/* What a reply answers: the packaged citation block, a rule and a quote. */
+.cite {
+  margin: 0 0 1rem;
+  padding-inline-start: 1rem;
+  border-inline-start: 3px solid var(--accent);
+}
+.cite-line {
   margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+.cite-quote {
+  margin: 0.25rem 0 0;
+  color: var(--ink-muted);
+  font-style: italic;
+}
+/* An article page's summary under its title, which the packaged page layout
+   prints and the demo's own post layout does not. */
+.post-deck {
+  margin: 0.5rem 0 1.5rem;
+  color: var(--ink-muted);
+  font-size: 1.15rem;
+  font-style: italic;
+}
+.section-title {
+  margin-top: 2.5rem;
+  font-size: 1.2rem;
+}
+.archive-header {
+  margin-bottom: 2rem;
 }
 
 .post-categories a {
@@ -510,4 +583,106 @@ a:visited {
 
 .post-footer {
   margin-top: 2.5rem;
+}
+
+/* The conversation and the forms. The packaged partials gained a count beside
+   each reaction label, a letter standing in for a missing avatar, the door a
+   reply came through, a webmention line and a row holding name and email
+   (TASK-187). */
+.reactions-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2.5rem;
+  margin-top: 2.5rem;
+}
+.reaction-title,
+.comments-title,
+.comment-reply-title,
+.contact-form-title {
+  font-size: 1.2rem;
+}
+.facepile {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.facepile img {
+  border-radius: 50%;
+}
+.comment-list,
+.comment-list .children {
+  padding-inline-start: 0;
+  list-style: none;
+}
+.comment-list .children {
+  padding-inline-start: 1.5rem;
+  border-inline-start: 1px solid var(--rule);
+}
+.comment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  align-items: center;
+  font-size: 0.9rem;
+}
+.comment-author {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.comment-respond label {
+  display: block;
+  font-size: 0.9rem;
+}
+.comment-respond input:not([type='checkbox']),
+.comment-respond textarea {
+  width: 100%;
+  padding: 0.4rem;
+  border: 1px solid var(--ink-muted);
+  background: var(--paper-sunk);
+  color: var(--ink);
+  font: inherit;
+}
+.comment-respond .form-submit button {
+  padding: 0.5rem 1rem;
+  border: 0;
+  background: var(--accent);
+  color: var(--paper);
+  font: inherit;
+  cursor: pointer;
+}
+.reaction-count {
+  margin-inline-start: 0.25rem;
+  font-weight: 700;
+}
+.comment-avatar-empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--paper-sunk);
+  color: var(--ink-muted);
+}
+.comment-source,
+.comment-help {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+.field-row {
+  display: grid;
+  gap: 0 1rem;
+}
+@media (min-width: 40rem) {
+  .field-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.blog-post-nav-label {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }

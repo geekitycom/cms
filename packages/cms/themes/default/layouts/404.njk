@@ -1,7 +1,9 @@
 {% extends "layouts/base.njk" %}
+{% import "partials/kicker.njk" as kicker with context %}
 
 {% block content %}
 <article class="not-found">
+  {{ kicker.line("Not found") }}
   <h1 class="page-title">Content not found.</h1>
   <p>Go <a href="{{ "/" | url }}">home</a>, or <a href="{{ "/search/" | url }}">search the site</a>.</p>
 </article>

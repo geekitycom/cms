@@ -166,7 +166,24 @@ describe('a reply’s preview of the post it answers, in the default theme', () 
     assert.match(citation, /<time class="dt-published" datetime="2026-09-01T12:00:00(\.000)?Z">/);
     assert.match(
       citation,
-      /<blockquote class="p-content">Tomatoes want sun, water and patience\.<\/blockquote>/,
+      /<blockquote class="cite-quote p-content">Tomatoes want sun, water and patience\.<\/blockquote>/,
+    );
+  });
+
+  it('cites the target the same way in a listing, from the stored preview (TASK-187)', async () => {
+    const items = (await get(cms, '/')).split('<article class="feed-item h-entry">');
+    const item = items.find((each) => each.includes('href="/2026/09/entry/"')) ?? '';
+    const citation = cite(item);
+
+    assert.ok(citation !== undefined, 'the feed entry embeds no h-cite');
+    assert.match(
+      citation,
+      new RegExp(`<a class="u-url p-name" href="${ENTRY}">Growing tomatoes</a>`),
+      'the feed cites the reply by its bare URL rather than the preview',
+    );
+    assert.match(
+      citation,
+      /<blockquote class="cite-quote p-content">Tomatoes want sun, water and patience\.<\/blockquote>/,
     );
   });
 
@@ -175,7 +192,7 @@ describe('a reply’s preview of the post it answers, in the default theme', () 
 
     assert.ok(citation !== undefined);
     assert.match(citation, new RegExp(`<a class="u-url p-name" href="${PLAIN}">Just a page</a>`));
-    assert.match(citation, /<blockquote class="p-content">About it\.<\/blockquote>/);
+    assert.match(citation, /<blockquote class="cite-quote p-content">About it\.<\/blockquote>/);
     assert.doesNotMatch(citation, /p-author/);
   });
 

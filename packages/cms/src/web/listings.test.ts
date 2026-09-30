@@ -149,7 +149,7 @@ describe('a listing’s feed (AC #1)', () => {
     );
   });
 
-  it('gives each entry a linked p-name, an excerpt, Continue reading and its meta', async () => {
+  it('gives each entry a kicker, a linked p-name, an excerpt and Continue reading', async () => {
     const [hello] = items(await body(await site(), '/'));
     assert.ok(hello !== undefined, 'the newest post is not in the feed');
 
@@ -170,18 +170,22 @@ describe('a listing’s feed (AC #1)', () => {
     );
     assert.match(
       hello,
-      /<div class="feed-meta">[\s\S]*<time class="feed-date dt-published" datetime="2026-09-02T09:00:00\.000Z">\s*2 September 2026\s*<\/time>/,
-      'the date is not a dt-published inside the meta',
+      /<p class="kicker">\s*<span class="kicker-kind">Article<\/span>[\s\S]*?<time class="feed-date dt-published" datetime="2026-09-02T09:00:00\.000Z">2 September 2026<\/time>/,
+      'the kicker does not name the kind over a dt-published date',
+    );
+    assert.ok(
+      hello.indexOf('class="kicker"') < hello.indexOf('feed-title'),
+      'the kicker is not above the headline',
     );
   });
 
-  it('links the categories as p-category and prints no tags', async () => {
+  it('links the categories as p-category in the kicker and prints no tags', async () => {
     const [hello] = items(await body(await site(), '/'));
     assert.ok(hello !== undefined);
 
     assert.match(
       hello,
-      /<p class="post-categories">\s*<a href="\/category\/notes\/" class="p-category" rel="category">notes<\/a>/,
+      /<p class="kicker">[\s\S]*?<a href="\/category\/notes\/" class="p-category" rel="category">notes<\/a>[\s\S]*?<\/p>/,
       'the first category is not a p-category link',
     );
     assert.match(hello, /rel="category">meta<\/a>/, 'the second category is missing');
@@ -238,15 +242,21 @@ describe('the excerpt an entry carries (AC #2)', () => {
 });
 
 describe('what heads a listing (AC #3)', () => {
-  it('heads every archive, and counts nothing', async () => {
+  it('heads every archive with a kicker naming its kind over its name, and counts nothing', async () => {
     const cms = await site();
 
-    for (const [pathname, heading] of [
-      ['/tag/introductions/', 'Tagged'],
-      ['/category/notes/', 'Filed under'],
+    for (const [pathname, kind, name] of [
+      ['/tag/introductions/', 'Tag', 'introductions'],
+      ['/category/notes/', 'Category', 'notes'],
     ] as const) {
       const inside = main(await body(cms, pathname));
-      assert.match(inside, new RegExp(`<h1[^>]*>[^<]*${heading}`), `${pathname} has no heading`);
+      assert.match(
+        inside,
+        new RegExp(
+          `<span class="kicker-kind">${kind}</span>\\s*</p>\\s*<h1 class="page-title">${name}</h1>`,
+        ),
+        `${pathname} has no heading`,
+      );
       assert.doesNotMatch(inside, /\d+ entr(y|ies)/, `${pathname} still counts its entries`);
     }
   });
@@ -271,7 +281,7 @@ describe('what heads a listing (AC #3)', () => {
 
     assert.match(
       inside,
-      /<header class="category-header">\s*<h1[^>]*>[\s\S]*?notes/,
+      /<header class="category-header archive-header">[\s\S]*?<h1[^>]*>notes<\/h1>/,
       'the category name does not head the archive',
     );
     assert.doesNotMatch(

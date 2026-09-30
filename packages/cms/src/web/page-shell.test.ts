@@ -234,7 +234,7 @@ describe('the page shell (AC #1)', () => {
     const front = header(await body(await site(), '/'));
 
     assert.match(front, /<h1 class="main-heading">\s*<a href="\/">A Site<\/a>\s*<\/h1>/);
-    assert.match(front, /<p>Words about words<\/p>/);
+    assert.match(front, /<p class="site-tagline">Words about words<\/p>/);
     assert.doesNotMatch(front, /header-link-home/, 'the front page also has the small home link');
   });
 
@@ -295,7 +295,7 @@ describe('the page shell (AC #1)', () => {
 
     assert.match(
       header(await body(cms, '/')),
-      /<p>Words about words<\/p>\s*<nav class="site-nav" aria-label="Site">/,
+      /<p class="site-tagline">Words about words<\/p>\s*<nav class="site-nav" aria-label="Site">/,
       'the menu does not follow the tagline in the root header',
     );
   });
@@ -316,7 +316,7 @@ describe('the page shell (AC #1)', () => {
     // home everywhere else, which is the stylesheet's half of the same rule.
     assert.match(
       await readFile(path.join(PACKAGED_THEME_DIR, 'static', 'style.css'), 'utf8'),
-      /\.global-wrapper:not\(\[data-is-root-path='true'\]\) \.global-header \{[^}]*display: flex;/,
+      /\.global-wrapper:not\(\[data-is-root-path=["']true["']\]\) \.global-header \{[^}]*display: flex;/,
       'the stylesheet does not lay the header of an inside page out as one line',
     );
   });
@@ -1050,25 +1050,6 @@ function hooksToLinks(html: string, inside: Anchor): string[] {
   return [...hooks];
 }
 
-/** Whether a rule declares `property` — `font-size` rather than `font-family`. */
-function declares(rule: { declarations: string }, property: string): boolean {
-  return new RegExp(`(?:^|;)\\s*${property}\\s*:`).test(rule.declarations);
-}
-
-/**
- * The rules that decide how the links `inside` picks read: their colour, their
- * underline and their size, which is what TASK-111 is about. Two sets of links
- * that read by the same rules read the same.
- */
-function readsBy(html: string, inside: Anchor): string[] {
-  return rulesReaching(hooksToLinks(html, inside))
-    .filter(
-      (rule) =>
-        declares(rule, 'color') || declares(rule, 'text-decoration') || declares(rule, 'font-size'),
-    )
-    .map((rule) => rule.selector);
-}
-
 /**
  * What `property` settles at for the links `inside` picks, before anybody
  * hovers or tabs: the last rule that reaches them and says so.
@@ -1091,7 +1072,13 @@ function atRest(html: string, inside: Anchor, property: string): string | undefi
     ?.trim();
 }
 
-describe('every nav reads as links, at the page’s size (TASK-111)', () => {
+/*
+ * TASK-111 held every nav to the prose's link rules and size. The Paper design
+ * (TASK-187, doc-9) deliberately sets the menus apart as small quiet links, so
+ * what these hold now is doc-9's link contract: a link says it is one at rest,
+ * whatever nav it is in, and stands at least 24px tall.
+ */
+describe('every nav reads as links (TASK-111, TASK-187)', () => {
   /**
    * One post carrying all three navigation lists at once — the site menu in
    * the header, the person's own links in the bio, the site's list in the page
@@ -1142,7 +1129,9 @@ describe('every nav reads as links, at the page’s size (TASK-111)', () => {
 
   /** A link in the post's own words, which is what the three are measured against. */
   const PROSE = (stack: readonly string[][]): boolean =>
-    stack.some((open) => open.includes('.e-content')) && stack.at(-1)?.[0] === 'p';
+    stack.some((open) => open.includes('.e-content')) &&
+    stack.at(-1)?.[0] === 'p' &&
+    !stack.at(-1)?.includes('.entry-meta');
 
   it('carries all three navs, and a prose link, on one post (AC #1)', async () => {
     const html = await postWithEveryNav();
@@ -1155,38 +1144,23 @@ describe('every nav reads as links, at the page’s size (TASK-111)', () => {
     }
   });
 
-  it('reads a link in any nav by the same rules as one in the prose (AC #1)', async () => {
+  it('underlines a link in any nav at rest, as a link in the prose is (AC #1)', async () => {
     const html = await postWithEveryNav();
-    const prose = readsBy(html, PROSE);
 
-    // The generic link rules and the page's own colour and size, and nothing
-    // between the document and the link that changes any of the three.
-    assert.deepEqual(
-      prose,
-      ['html', 'body', 'a, a:visited', 'a:hover, a:focus', 'a:focus-visible'],
-      'a link in the post’s words is not read by the generic link rules alone',
-    );
-
-    // Which comes out as the link colour, the browser's own underline, and the
-    // body's size rather than the small print's.
     assert.equal(atRest(html, PROSE, 'color'), 'var(--color-primary)');
-    assert.equal(atRest(html, PROSE, 'text-decoration'), undefined);
-    assert.equal(atRest(html, PROSE, 'font-size'), 'var(--fontSize-1)');
+    assert.equal(atRest(html, PROSE, 'text-decoration-line'), 'underline');
 
     for (const { what, inside } of NAVS) {
-      assert.deepEqual(
-        readsBy(html, inside),
-        prose,
-        `${what} is coloured, underlined or sized by something a link in the prose is not`,
+      assert.equal(
+        atRest(html, inside, 'text-decoration-line'),
+        'underline',
+        `${what} does not say it is a link at rest`,
       );
-
-      for (const property of ['color', 'text-decoration', 'font-size']) {
-        assert.equal(
-          atRest(html, inside, property),
-          atRest(html, PROSE, property),
-          `${what} settles on a different ${property} than a link in the prose`,
-        );
-      }
+      assert.equal(
+        atRest(html, inside, 'min-block-size'),
+        '24px',
+        `${what} is a smaller target than 24px`,
+      );
     }
   });
 
@@ -1219,15 +1193,15 @@ describe('every nav reads as links, at the page’s size (TASK-111)', () => {
         'var(--color-text)',
         `${what} is no longer the body colour`,
       );
-      assert.equal(atRest(page, which, 'text-decoration'), 'none', `${what} is underlined`);
+      assert.equal(atRest(page, which, 'text-decoration-line'), 'none', `${what} is underlined`);
     }
   });
 
   it('leaves a link inside a post’s own header a normal link (AC #3)', async () => {
     assert.match(
       await postWithEveryNav(),
-      /<article class="blog-post h-entry">\s*<header>/,
-      'a post no longer heads itself with a bare header',
+      /<article class="blog-post h-entry">\s*<header class="post-header">/,
+      'a post no longer heads itself with its own header',
     );
 
     const reaching = themeRules().filter((rule) =>
@@ -1240,26 +1214,22 @@ describe('every nav reads as links, at the page’s size (TASK-111)', () => {
     );
   });
 
-  it('leaves the hover flourish and the focus outline alone (AC #4)', () => {
+  it('changes more than the colour on hover, and outlines focus (AC #4)', () => {
     const bySelector = new Map(themeRules().map((rule) => [rule.selector, rule.declarations]));
 
     assert.match(
-      bySelector.get('a:hover, a:focus') ?? '',
-      /background-color:\s*var\(--color-primary\);\s*color:\s*var\(--color-body\);\s*text-decoration:\s*none;/,
-      'a link no longer inverts to the primary colour on hover',
+      bySelector.get('a:hover') ?? '',
+      /text-decoration-color:\s*var\(--color-primary\)/,
+      'a link’s underline no longer turns solid on hover',
     );
     assert.match(
-      bySelector.get('a:focus-visible') ?? '',
-      /outline:\s*2px solid var\(--color-primary\);/,
-      'a keyboard reader no longer gets an outline',
+      bySelector.get('.site-nav a:hover') ?? '',
+      /text-decoration-thickness:\s*2px/,
+      'a menu link’s underline no longer thickens on hover, so only its colour changes',
     );
-    assert.match(
-      bySelector.get(
-        '.main-heading a:hover, .main-heading a:focus, .header-link-home:hover, .header-link-home:focus',
-      ) ?? '',
-      /background-color:\s*var\(--color-primary\);\s*color:\s*var\(--color-body\);/,
-      'the site title and the link home no longer invert on hover',
-    );
+    const focus = bySelector.get(':focus-visible') ?? '';
+    assert.match(focus, /outline-width:\s*2px/, 'a keyboard reader no longer gets an outline');
+    assert.match(focus, /outline-color:\s*var\(--color-secondary\)/);
   });
 });
 

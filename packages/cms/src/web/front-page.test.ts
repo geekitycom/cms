@@ -97,7 +97,7 @@ describe('a site whose homepage is a page', () => {
     // The archive is not what `/` is: the posts under the page's words are the
     // front page's own Recent Posts (TASK-85), not the paginated listing,
     // which has a `page-title` heading and lives on the posts page now.
-    assert.match(html, /<h2>Recent Posts<\/h2>/);
+    assert.match(html, /<h2 class="section-title">Recent Posts<\/h2>/);
     assert.doesNotMatch(html, /class="page-title"/, 'the listing is still at the root');
   });
 
@@ -160,7 +160,11 @@ describe('a site whose homepage is a page', () => {
     const html = await (await (await themedSite({})).app.request('/')).text();
 
     assert.match(html, /Hello and welcome\./, 'the page’s own words are still the front page');
-    assert.match(html, /<h2>Recent Posts<\/h2>/, 'over the posts the packaged layout prints');
+    assert.match(
+      html,
+      /<h2 class="section-title">Recent Posts<\/h2>/,
+      'over the posts the packaged layout prints',
+    );
     assert.doesNotMatch(html, /<p class="page-meta">/, 'and not through the page layout');
   });
 
