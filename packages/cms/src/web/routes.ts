@@ -36,14 +36,16 @@ import { advertiseIndieAuthMetadata } from '../indieauth/discovery.ts';
 import { publicAdminBar } from './admin-bar.ts';
 import {
   authorFeedHref,
+  authorContext,
   authorHref,
   authorNames,
   parseAuthorPath,
   profileContext,
+  siteAuthorContext,
 } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import { feedComments, spokenIn } from './conversation.ts';
-import { isPublicDocument, publicDocumentAt } from './documents.ts';
+import { isPublicDocument, permalinkOfObjectId, publicDocumentAt } from './documents.ts';
 import {
   commentsFeedPath,
   commentsFeedResponse,
@@ -79,6 +81,8 @@ import { robotsResponse, ROBOTS_PATH } from './robots.ts';
 import { sitemapResponse, SITEMAP_CHILD_ROUTE, SITEMAP_PATH } from './sitemap.ts';
 import type { SitemapUrl } from './sitemap.ts';
 import { FAVICON_PATH, manifestResponse, MANIFEST_PATH, webManifest } from './manifest.ts';
+import { openSearchDescription, openSearchResponse, OPENSEARCH_PATH } from './opensearch.ts';
+import { OEMBED_PATH, oEmbedFor, oEmbedRequest, oEmbedResponse } from './oembed.ts';
 import {
   generatedLlmsTxt,
   LLMS_TXT_LINK,
@@ -220,6 +224,20 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   });
   app.get(FAVICON_PATH, favicon);
 
+  // The OpenSearch description (TASK-204), a fixed path at the root for the
+  // same reason, read off the site data per request so a new title or icon
+  // shows on the next one.
+  app.get(OPENSEARCH_PATH, (c) =>
+    openSearchResponse(
+      openSearchDescription({ config: c.var.config, site: c.var.renderer.site() }),
+      conditionalHeaders(c),
+    ),
+  );
+
+  // The oEmbed provider (TASK-205), under the CMS's own prefix like the
+  // comment endpoint, so no permalink can take it.
+  app.get(OEMBED_PATH, oEmbed);
+
   // The index for language models (TASK-149), a fixed path at the root for
   // the same reason. Off is a 404; a file of the site's own wins over the
   // generated one.
@@ -260,6 +278,55 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // resolved per request in the not-found handler, from the base the site
   // holds at that moment (TASK-36).
   app.notFound(resolveRequest);
+}
+
+/**
+ * The oEmbed of the post or page a URL names, a 404 when it names none, and a
+ * 501 for a format the spec allows and this provider does not serve.
+ */
+function oEmbed(c: Context<GeekityEnv>): Response {
+  const request = oEmbedRequest((name) => c.req.query(name));
+  const found = embeddableAt(c, request.url);
+  if (found === undefined) return notFound(c);
+  if (request.format === undefined) return c.text('Not Implemented', 501);
+
+  const site = c.var.renderer.site();
+  const users = listUsers(c.var.config.dataDir);
+  const embed = oEmbedFor({
+    ...found,
+    // Who the byline names: the document's author, else the site's.
+    author: authorContext(users, found.document.author) ?? siteAuthorContext(users, site.author),
+    config: c.var.config,
+    site,
+    request,
+  });
+  return oEmbedResponse(embed, request.format, conditionalHeaders(c));
+}
+
+/**
+ * The published post or page an absolute URL is the page of, and where it is
+ * served, or `undefined`.
+ *
+ * The same lookup a request for that URL makes, so an embed exists exactly
+ * where a page does: a URL on this site's origin and under its base path,
+ * with no query, at a public document's permalink. `/` is the static
+ * homepage when there is one, and the posts page is the listing it carries
+ * rather than a page to embed.
+ */
+function embeddableAt(
+  c: Context<GeekityEnv>,
+  url: string,
+): { document: Document; href: string } | undefined {
+  const pathname = permalinkOfObjectId(url, c.var.config.baseUrl);
+  if (pathname === undefined) return undefined;
+
+  const pages = frontPages(c);
+  if (pathname === '/')
+    return pages.home === undefined ? undefined : { document: pages.home, href: '/' };
+
+  const document = publicDocumentAt(c.var.store, pathname);
+  if (document === undefined || document.path === pages.posts?.path) return undefined;
+  return { document, href: document.path === pages.home?.path ? '/' : document.permalink };
 }
 
 /**

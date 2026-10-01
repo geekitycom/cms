@@ -3,6 +3,7 @@ import type { StatementSync } from 'node:sqlite';
 import { databaseFile, openDatabase } from '../cache.ts';
 import type { Migration } from '../cache.ts';
 import type { ActivityPubMetadata, Document, DocumentType } from './document.ts';
+import { featuredPosts, PINNED_FRONT_MATTER_KEY } from './pinned.ts';
 import { searchExpression, searchText, SNIPPET_CLOSE, SNIPPET_OPEN } from './search.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
@@ -177,6 +178,13 @@ export interface ContentStore {
    * of the furniture of the site rather than of anybody's body of work.
    */
   listByAuthor(names: readonly string[], options?: ListOptions): Document[];
+  /**
+   * The posts of one user's archive that carry a `pinned` key, most recently
+   * pinned first and capped at `PINNED_POST_LIMIT`: their featured collection
+   * (TASK-207). The same archive {@link ContentStore.listByAuthor} reads, so a
+   * draft, a trashed post or a scheduled one is never featured.
+   */
+  listPinnedByAuthor(names: readonly string[]): Document[];
   /** Everything the admin may see, trash and drafts included unless filtered. */
   listAll(options?: ListAllOptions): Document[];
   /**
@@ -403,6 +411,14 @@ const DUE_CLAUSE = '(date_sort IS NULL OR date_sort <= ?)';
 
 /** The reverse: a document whose date is still ahead of the clock. */
 const SCHEDULED_CLAUSE = '(date_sort IS NOT NULL AND date_sort > ?)';
+
+/**
+ * A document whose front matter carries a `pinned` key that is not `false`.
+ * Which moment it was pinned at, and whether it is readable at all, is
+ * `content/pinned.ts`'s to decide; this only keeps the rest of an archive from
+ * being hydrated to find out.
+ */
+const PINNED_CLAUSE = `COALESCE(json_extract(extra, '$.${PINNED_FRONT_MATTER_KEY}'), 0) NOT IN (0, '')`;
 
 /**
  * The clause that picks out a document some follower holds a copy of: one
@@ -851,6 +867,24 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         ["type = 'post'", 'draft = 0', 'trashed = 0', DUE_CLAUSE, authorClause(names)],
         [nowKey(), ...names],
         options,
+      );
+    },
+
+    listPinnedByAuthor(names) {
+      if (names.length === 0) return [];
+      return featuredPosts(
+        select(
+          [
+            "type = 'post'",
+            'draft = 0',
+            'trashed = 0',
+            DUE_CLAUSE,
+            authorClause(names),
+            PINNED_CLAUSE,
+          ],
+          [nowKey(), ...names],
+          {},
+        ),
       );
     },
 

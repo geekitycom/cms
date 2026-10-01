@@ -2,15 +2,18 @@ import type { Context } from '@fedify/fedify';
 import { Activity, getTypeId, PUBLIC_COLLECTION, Update } from '@fedify/vocab';
 import type { Recipient } from '@fedify/vocab';
 
+import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore, Delivery, DeliveryStatus, Follower } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { pinnedAt } from '../content/pinned.ts';
 import { saveDocument } from '../content/save.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { documentContent } from '../content/writer.ts';
+import { authorNames } from '../web/authors.ts';
 import { actorId, senderKeyPairs, userActor } from './actor.ts';
 import {
   articleObjectId,
@@ -18,6 +21,7 @@ import {
   isFederatedDocument,
   postCreateActivity,
   postDeleteActivity,
+  postPinActivity,
   postUpdateActivity,
 } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
@@ -298,6 +302,37 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     };
   }
 
+  /**
+   * Tell the followers a published post went into its author's featured
+   * collection or came out of it (TASK-207), after the activity that
+   * announced the post itself, so a peer never meets the pin of an object it
+   * has not been sent.
+   *
+   * `before` is the post as followers last knew it, or `undefined` when they
+   * are about to meet it for the first time. Whether it is featured *now* is
+   * the collection's own answer, so a pin past the limit is never announced as
+   * one. A post that stops being published sends no `Remove`: its `Delete`
+   * already takes the pin with it on Mastodon, and the collection drops it.
+   */
+  function queuePinChange(
+    context: Context<FederationContextData>,
+    before: Document | undefined,
+    after: Document,
+  ): void {
+    const author = documentAuthor(context, after);
+    const names = author === undefined ? [] : authorNames(listUsers(config.dataDir), author);
+    const featured = store.listPinnedByAuthor(names).some((post) => post.path === after.path);
+    const wasPinned = before !== undefined && pinnedAt(before) !== undefined;
+
+    if (featured && !wasPinned) {
+      const revision = pinnedAt(after) ?? new Date().toISOString();
+      queue(() => send(context, postPinActivity(context, after, 'pin', revision), after));
+    } else if (!featured && wasPinned) {
+      const revision = new Date().toISOString();
+      queue(() => send(context, postPinActivity(context, after, 'unpin', revision), after));
+    }
+  }
+
   return {
     async handle(change) {
       // A full scan is a rebuild of the index, not news about the site.
@@ -324,6 +359,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
 
         if (before === undefined) {
           queue(() => send(context, postCreateActivity(context, stamped), stamped));
+          queuePinChange(context, undefined, stamped);
           return;
         }
 
@@ -334,12 +370,14 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         const previousId = articleObjectId(context, before).href;
         if (previousId === articleObjectId(context, stamped).href) {
           queue(() => send(context, postUpdateActivity(context, stamped), stamped));
+          queuePinChange(context, before, stamped);
           return;
         }
 
         const deleted = new Date().toISOString();
         queue(() => send(context, postDeleteActivity(context, before, deleted), before));
         queue(() => send(context, postCreateActivity(context, stamped), stamped));
+        queuePinChange(context, undefined, stamped);
       }
     },
 

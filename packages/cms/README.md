@@ -2363,6 +2363,8 @@ Booting mounts the public site on the app. The routes are:
 | `/sitemap.xml`                          | Every public URL, for a search engine.                                                                                 |
 | `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                                      |
 | `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                                     |
+| `/opensearch.xml`                       | The OpenSearch description, so a browser can offer the site's search from its address bar.                             |
+| `/_geekity/oembed?url=…`                | The oEmbed card of the post or page at `url`, as JSON or with `format=xml`; a 404 for anything else.                   |
 | `/llms.txt`                             | The site's pages and recent posts for a language model, each linked to its Markdown. See [below](#llmstxt).            |
 | `/{key}.txt`                            | The IndexNow key, while the site has IndexNow on. See [below](#indexnow).                                              |
 | `/.well-known/security.txt`             | Where to report a vulnerability; a 404 until a security contact is set. See [above](#securitytxt-and-change-password). |

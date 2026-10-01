@@ -9,6 +9,7 @@ import {
   Delete,
   Follow,
   Like,
+  type Object as APObject,
   QuoteAuthorization,
   QuoteRequest,
   Reject,
@@ -23,7 +24,12 @@ import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import { authorNames } from '../web/authors.ts';
 import { userActor, userByUsername } from './actor.ts';
-import { isFederatedDocument, postByObjectId, postCreateActivity } from './article.ts';
+import {
+  articleObjectId,
+  isFederatedDocument,
+  postByObjectId,
+  postCreateActivity,
+} from './article.ts';
 import { followersPage, lastFollowersCursor } from './followers.ts';
 import {
   handleAccept,
@@ -38,6 +44,7 @@ import { loadActorKeyPairs } from './keys.ts';
 import type { ActorProfileService } from './profiles.ts';
 import {
   ACTOR_PATH,
+  FEATURED_PATH,
   federationOrigin,
   FOLLOWERS_PATH,
   FOLLOWING_PATH,
@@ -233,6 +240,28 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
   federation.setFollowingDispatcher(FOLLOWING_PATH, (context, identifier) =>
     actorFor(context, identifier) === undefined ? null : { items: [] },
   );
+
+  // One user's pinned posts, as bare ids. Mastodon reads an embedded item
+  // only when it is a `Note` and skips an `Article`, which every titled post
+  // here is; an id it fetches like any other status. Few enough by
+  // construction (PINNED_POST_LIMIT) that it is never paged.
+  federation
+    .setFeaturedDispatcher(FEATURED_PATH, (context, identifier) => {
+      const user = actorFor(context, identifier);
+      if (user === undefined) return null;
+      const posts = context.data.store.listPinnedByAuthor(namesOf(context, user));
+      // Fedify types featured items as objects, but serialises a `URL` item
+      // as the bare id (`filterCollectionItems`), which is the shape wanted.
+      // featured.test.ts pins that down, so a Fedify that stops doing it fails.
+      const ids = posts.map((post) => articleObjectId(context, post));
+      return { items: ids as unknown as APObject[] };
+    })
+    .setCounter((context, identifier) => {
+      const user = actorFor(context, identifier);
+      return user === undefined
+        ? null
+        : context.data.store.listPinnedByAuthor(namesOf(context, user)).length;
+    });
 
   // The inbox, personal and shared. Fedify has already verified the signature
   // by the time a listener runs — an unsigned or badly signed delivery never

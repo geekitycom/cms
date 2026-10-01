@@ -152,6 +152,16 @@
     {% if webmention %}
     <link rel="webmention" href="{{ webmention | url }}">
     {% endif %}
+    {#- The site's search, for a browser to offer from its address bar
+        (TASK-204). #}
+    <link rel="search" type="application/opensearchdescription+xml" title="{{ site.title }}" href="{{ "/opensearch.xml" | url }}">
+    {#- Where a tool that is pasted this post's URL asks for its card
+        (TASK-205), as JSON and as XML. #}
+    {% if isEntry %}
+    {% set oembed = "/_geekity/oembed?url=" + (metaUrl | urlencode) + "&format=" %}
+    <link rel="alternate" type="application/json+oembed" href="{{ (oembed + "json") | absoluteUrl }}" title="{{ metaTitle }}">
+    <link rel="alternate" type="text/xml+oembed" href="{{ (oembed + "xml") | absoluteUrl }}" title="{{ metaTitle }}">
+    {% endif %}
     {#- The site's index for language models (TASK-149), from the front page,
         which is where a tool that found the site looks for it. #}
     {% if llmsTxt and atRoot %}
