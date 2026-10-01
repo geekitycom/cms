@@ -81,6 +81,7 @@ import {
   serverError,
   themeName,
 } from './web/index.ts';
+import { mountIndieAuthDiscovery } from './indieauth/discovery.ts';
 import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
 import type { ReplyContextService, WebmentionService } from './webmention/index.ts';
 
@@ -1917,6 +1918,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // The two well-known files a site answers for itself (TASK-133), before the
   // public site can claim either path as a permalink.
   mountWellKnown(app);
+
+  // IndieAuth's authorization server metadata (TASK-157), here for the reason
+  // the well-known files are.
+  mountIndieAuthDiscovery(app);
 
   // Federation goes on first. It answers its own paths and falls through on
   // every other, so putting it in front costs the rest of the app nothing and

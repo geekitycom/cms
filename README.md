@@ -1232,6 +1232,33 @@ out of logging in. With no mail configured the page says so and points at
 [The package README](packages/cms/README.md#forgotten-passwords) has the
 detail.
 
+## Signing in with your own site
+
+Your site is your IndieAuth identity. Type its URL into the sign-in form of an
+IndieAuth client, such as indielogin.com or a Micropub app, and the client
+sends you back to your own site to sign in. No GitHub account or other
+`rel="me"` provider is involved.
+
+Which URL you type depends on the site:
+
+- **Every user** can type their author URL, `https://example.com/author/{username}/`.
+- **On a solo author site** (Solo author blog on Settings > General), the
+  author the site names can type the site URL, `https://example.com/`.
+- **On a multi-author site** the site URL also works. You sign in as whoever
+  you log in as, and the client is told your author URL.
+
+`http://`, a `www.` prefix and a missing trailing slash are all read as the
+same URL. Any other page of the site is nobody's identity. decision-23 records
+the rules.
+
+The site root and every author archive advertise the site's authorization
+server with a `Link: <…>; rel="indieauth-metadata"` header and a
+`<link rel="indieauth-metadata">` in the head. The CMS adds both to the
+response, so a custom theme carries them without printing anything. The
+metadata document itself is served at `/_geekity/indieauth/metadata` and at
+`/.well-known/oauth-authorization-server` (RFC 8414), where generic OAuth and
+MCP clients look for it.
+
 ## The theme
 
 Templates are Nunjucks (decision-4). The default theme lives in
