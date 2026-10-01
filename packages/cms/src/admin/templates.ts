@@ -60,6 +60,8 @@ export const ADMIN_TEMPLATES = {
   usersEdit: 'pages/users/edit.njk',
   federation: 'pages/federation/followers.njk',
   federationSettings: 'pages/federation/settings.njk',
+  indieauthConsent: 'pages/indieauth/consent.njk',
+  indieauthRefused: 'pages/indieauth/refused.njk',
   serverError: 'pages/error.njk',
   publicAdminBar: 'components/public-admin-bar.njk',
 } as const;

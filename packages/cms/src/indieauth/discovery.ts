@@ -30,6 +30,11 @@ export interface AuthorizationServerMetadata {
   code_challenge_methods_supported: readonly string[];
   scopes_supported: readonly string[];
   authorization_response_iss_parameter_supported: boolean;
+  /**
+   * That a client may use the URL of a JSON client metadata document as its
+   * client_id, which the MCP authorization spec asks for (TASK-158).
+   */
+  client_id_metadata_document_supported: boolean;
 }
 
 /**
@@ -51,6 +56,7 @@ export function authorizationServerMetadata(baseUrl: string): AuthorizationServe
     code_challenge_methods_supported: ['S256'],
     scopes_supported: SCOPES,
     authorization_response_iss_parameter_supported: true,
+    client_id_metadata_document_supported: true,
   };
 }
 

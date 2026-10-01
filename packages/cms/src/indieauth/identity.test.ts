@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { User } from '../admin/accounts.ts';
-import { userForMe } from './identity.ts';
+import { meForSignIn, userForMe } from './identity.ts';
 
 const ADA: User = { id: 1, username: 'ada', createdAt: '2026-09-01T00:00:00.000Z' };
 const BOB: User = { id: 2, username: 'bob', createdAt: '2026-09-01T00:00:00.000Z' };
@@ -108,6 +108,44 @@ describe('userForMe', () => {
     assert.equal(
       who('https://blog.example/author/bob/', SOLO, 'https://blog.example/notes'),
       undefined,
+    );
+  });
+});
+
+describe('meForSignIn', () => {
+  const site = (settings = SOLO) => ({ baseUrl: 'https://blog.example', users: USERS, settings });
+
+  it('hands back the root to the solo author who typed it, spelled canonically', () => {
+    assert.equal(meForSignIn('http://www.blog.example', ADA, site()), 'https://blog.example/');
+  });
+
+  it('hands back the signed-in user’s author URL for their own author URL', () => {
+    assert.equal(
+      meForSignIn('https://blog.example/author/bob', BOB, site()),
+      'https://blog.example/author/bob/',
+    );
+  });
+
+  it('ignores a me that names somebody else, and hands back the signed-in user’s author URL', () => {
+    assert.equal(
+      meForSignIn('https://blog.example/author/ada/', BOB, site()),
+      'https://blog.example/author/bob/',
+    );
+    assert.equal(
+      meForSignIn('https://blog.example/', BOB, site()),
+      'https://blog.example/author/bob/',
+    );
+    assert.equal(
+      meForSignIn('https://elsewhere.example/', ADA, site()),
+      'https://blog.example/author/ada/',
+    );
+  });
+
+  it('hands back the author URL when no me was given, or on a multi-author site', () => {
+    assert.equal(meForSignIn(undefined, ADA, site()), 'https://blog.example/author/ada/');
+    assert.equal(
+      meForSignIn('https://blog.example/', ADA, site(SHARED)),
+      'https://blog.example/author/ada/',
     );
   });
 });

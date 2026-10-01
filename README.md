@@ -1259,6 +1259,20 @@ metadata document itself is served at `/_geekity/indieauth/metadata` and at
 `/.well-known/oauth-authorization-server` (RFC 8414), where generic OAuth and
 MCP clients look for it.
 
+When a client sends you to the site, you sign in to the admin if you are not
+signed in already, and then see a consent screen. It names the app (or its
+URL when the app publishes no name), the host it will send you back to, the
+URL you are signing in as and each piece of information it asks for. Untick
+anything you do not want to share, then choose Approve or Deny. You can only
+ever sign in as yourself: a URL that names another user is replaced with your
+own author URL.
+
+The site reads the app's details from its `client_id` URL, which can be an
+IndieAuth `h-app` page or a JSON client metadata document such as MCP clients
+publish. An app may send you back to its own origin, or to an address it lists
+in those details, and to nothing else. While the site is in maintenance mode
+the sign-in endpoint answers 503, like the URLs that advertise it.
+
 ## The theme
 
 Templates are Nunjucks (decision-4). The default theme lives in

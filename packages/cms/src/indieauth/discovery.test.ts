@@ -78,6 +78,8 @@ describe('the authorization server metadata', () => {
       assert.deepEqual(metadata['scopes_supported'], ['profile', 'email']);
       assert.deepEqual(metadata['response_types_supported'], ['code']);
       assert.equal(metadata['authorization_response_iss_parameter_supported'], true);
+      // MCP's client registration of choice since 2025-11-25 (TASK-158).
+      assert.equal(metadata['client_id_metadata_document_supported'], true);
     });
   }
 

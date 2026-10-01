@@ -1347,3 +1347,22 @@ button[type='submit']:hover,
   background: var(--admin-surface);
   border: 1px solid var(--admin-border);
 }
+
+/* The IndieAuth consent screen (TASK-158): who is asking, where the answer
+   goes and who it names, as label and value pairs a person reads down. */
+
+.admin-consent {
+  display: grid;
+  margin: 0 0 1.5rem;
+  gap: 0.4rem 1.5rem;
+  grid-template-columns: max-content 1fr;
+}
+
+.admin-consent dt {
+  color: var(--admin-muted);
+}
+
+.admin-consent dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

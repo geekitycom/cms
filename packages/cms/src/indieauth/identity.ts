@@ -1,6 +1,6 @@
 import type { User } from '../admin/accounts.ts';
 import type { SiteSettings } from '../admin/settings.ts';
-import { parseAuthorPath, userForAuthor } from '../web/authors.ts';
+import { authorHref, parseAuthorPath, userForAuthor } from '../web/authors.ts';
 
 /** What resolving a me URL needs to know about the site. */
 export interface IdentitySite {
@@ -25,6 +25,28 @@ export interface IdentitySite {
  * redirects pass through, and the me handed back is always the canonical one.
  */
 export function userForMe(me: string, site: IdentitySite): User | undefined {
+  return identityNamed(me, site)?.user;
+}
+
+/**
+ * The me a sign-in hands back for `user`, who has just approved it
+ * (decision-23).
+ *
+ * The URL the person typed when it names them, spelled canonically: the root
+ * for the solo author who typed it, their author URL otherwise. A typed URL
+ * that names somebody else, or nobody, is ignored, and the answer is the
+ * signed-in user's own author URL: a person can only ever sign in as
+ * themselves.
+ */
+export function meForSignIn(typed: string | undefined, user: User, site: IdentitySite): string {
+  const named = typed === undefined ? undefined : identityNamed(typed, site);
+  const base = site.baseUrl.replace(/\/$/, '');
+  if (named?.user.id === user.id && named.root) return `${base}/`;
+  return `${base}${authorHref(user.username)}`;
+}
+
+/** The user a me URL names, and whether it named them by the site root. */
+function identityNamed(me: string, site: IdentitySite): { user: User; root: boolean } | undefined {
   const typed = URL.parse(me);
   const base = URL.parse(site.baseUrl);
   if (typed === null || base === null) return undefined;
@@ -44,11 +66,15 @@ export function userForMe(me: string, site: IdentitySite): User | undefined {
   // The author setting may hold a display name, which the homepage's bio reads
   // the same way; an author path holds a username, matched exactly.
   if (local === '/') {
-    return site.settings.soloAuthor ? userForAuthor(site.users, site.settings.author) : undefined;
+    const author = site.settings.soloAuthor
+      ? userForAuthor(site.users, site.settings.author)
+      : undefined;
+    return author === undefined ? undefined : { user: author, root: true };
   }
   const author = parseAuthorPath(local);
   if (author?.pageNumber !== 0) return undefined;
-  return site.users.find((user) => user.username === author.username);
+  const user = site.users.find((candidate) => candidate.username === author.username);
+  return user === undefined ? undefined : { user, root: false };
 }
 
 function withoutWww(hostname: string): string {

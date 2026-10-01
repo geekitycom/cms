@@ -81,7 +81,9 @@ import {
   serverError,
   themeName,
 } from './web/index.ts';
+import { mountAuthorizationEndpoint } from './indieauth/consent.ts';
 import { mountIndieAuthDiscovery } from './indieauth/discovery.ts';
+import { createIndieAuthState } from './indieauth/grants.ts';
 import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
 import type { ReplyContextService, WebmentionService } from './webmention/index.ts';
 
@@ -1849,6 +1851,8 @@ export function createCms(config: GeekityConfig = {}): Cms {
     now: resolved.now,
   });
 
+  const indieauth = createIndieAuthState(resolved.now);
+
   const app = new Hono<GeekityEnv>();
 
   // A handler that throws is answered here rather than with Hono's plain-text
@@ -1891,6 +1895,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('notifications', notifications);
     c.set('redirects', redirects);
     c.set('maintenance', maintenance);
+    c.set('indieauth', indieauth);
     await next();
   });
 
@@ -1919,9 +1924,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // public site can claim either path as a permalink.
   mountWellKnown(app);
 
-  // IndieAuth's authorization server metadata (TASK-157), here for the reason
-  // the well-known files are.
+  // IndieAuth's authorization server metadata (TASK-157) and the endpoint
+  // that starts a sign-in (TASK-158), here for the reason the well-known files
+  // are.
   mountIndieAuthDiscovery(app);
+  mountAuthorizationEndpoint(app);
 
   // Federation goes on first. It answers its own paths and falls through on
   // every other, so putting it in front costs the rest of the app nothing and

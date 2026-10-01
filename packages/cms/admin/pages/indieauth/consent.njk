@@ -1,0 +1,47 @@
+{# The IndieAuth consent screen (TASK-158): an app wants to know who the
+   signed-in person is. A bare page like the login form, because the person
+   arrived from another site and has one thing to decide here. #}
+{% extends "layouts/base.njk" %}
+{% import "components/fields.njk" as field %}
+
+{% block title %}Sign in to {{ client.name }}{% endblock %}
+
+{% block content %}
+  <h1>Sign in to {{ client.name }}?</h1>
+
+  <dl class="admin-consent">
+    <dt>App</dt>
+    <dd>{{ client.name }}{% if client.named %} <span class="admin-hint">({{ client.id }})</span>{% endif %}</dd>
+    <dt>Sends you back to</dt>
+    <dd>{{ redirectHost }}</dd>
+    <dt>Signs you in as</dt>
+    <dd>{{ identity }}</dd>
+    {% if resource %}
+      <dt>For use at</dt>
+      <dd>{{ resource }}</dd>
+    {% endif %}
+  </dl>
+
+  {% if loopback %}
+    <p class="admin-hint">This app runs on your own computer or network. Approve only if you started this sign-in yourself.</p>
+  {% endif %}
+
+  <form method="post" action="{{ consentUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    <input type="hidden" name="request" value="{{ pending }}" />
+
+    {% if scopes | length %}
+      <fieldset>
+        <legend>It also asks for</legend>
+        {% for scope in scopes %}
+          {{ field.checkbox('scope-' ~ scope.name, 'scope', scope.label, checked=true, value=scope.name) }}
+        {% endfor %}
+      </fieldset>
+    {% else %}
+      <p>It asks only who you are.</p>
+    {% endif %}
+
+    <button type="submit" name="decision" value="approve">Approve</button>
+    <button type="submit" name="decision" value="deny">Deny</button>
+  </form>
+{% endblock %}

@@ -146,7 +146,7 @@ export interface Browser {
   /** Post a form. `extra` adds request headers, such as the Fetch Metadata a browser sends. */
   post(
     url: string,
-    fields: Record<string, string>,
+    fields: Record<string, string> | [string, string][],
     extra?: Record<string, string>,
   ): Promise<Response>;
   /**
