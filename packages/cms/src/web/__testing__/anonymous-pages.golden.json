@@ -389,7 +389,8 @@
       "strict-transport-security": "max-age=31536000; includeSubDomains",
       "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
-      "x-frame-options": "SAMEORIGIN"
+      "x-frame-options": "SAMEORIGIN",
+      "x-robots-tag": "noindex"
     },
     "body": "{\n  \"schema\": 1,\n  \"url\": \"https://blog.example/2026/09/hello-world/\",\n  \"frontMatter\": {\n    \"title\": \"Hello world\",\n    \"date\": \"2026-09-19T09:00:00Z\",\n    \"permalink\": \"/2026/09/hello-world/\",\n    \"tags\": [\n      \"engines\"\n    ]\n  },\n  \"markdown\": \"Words about engines.\",\n  \"html\": \"<p>Words about engines.</p>\\n\"\n}\n"
   },
@@ -409,7 +410,8 @@
       "strict-transport-security": "max-age=31536000; includeSubDomains",
       "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
-      "x-frame-options": "SAMEORIGIN"
+      "x-frame-options": "SAMEORIGIN",
+      "x-robots-tag": "noindex"
     },
     "body": "---\ntitle: Hello world\ndate: '2026-09-19T09:00:00Z'\npermalink: /2026/09/hello-world/\ntags:\n  - engines\n---\n\nWords about engines.\n"
   },

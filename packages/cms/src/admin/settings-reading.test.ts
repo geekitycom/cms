@@ -308,3 +308,88 @@ describe('the menu box that moved to Navigation (TASK-108)', () => {
     );
   });
 });
+
+describe('what crawlers are told (TASK-148)', () => {
+  it('offers the three AI-crawler policies and the three Content-Signal choices (AC #2, #3)', async () => {
+    const cms = await box.site({ contentDir: await withPages() });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(html, /<option value="allow" selected>/, 'a new site allows every crawler');
+    assert.match(html, /<option value="block-training"/);
+    assert.match(html, /<option value="block-all"/);
+    for (const name of [
+      'content_signal_search',
+      'content_signal_ai_input',
+      'content_signal_ai_train',
+    ]) {
+      assert.match(html, new RegExp(`name="${name}"`), `${name} is on the page`);
+    }
+    assert.match(html, /name="robots_rules"/);
+  });
+
+  it('writes the policy, the signals and the rules to site.json and serves them (AC #1, #2, #3)', async () => {
+    const contentDir = await withPages();
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await saveSettings(agent, 'reading', {
+      ai_crawlers: 'block-training',
+      content_signal_search: 'yes',
+      content_signal_ai_input: '',
+      content_signal_ai_train: 'no',
+      robots_rules: 'User-agent: SlowBot\r\nCrawl-delay: 10\r\n',
+    });
+    assert.equal(response.status, 303);
+
+    const written = await siteJson(contentDir);
+    assert.equal(written['aiCrawlers'], 'block-training');
+    assert.equal(written['contentSignalSearch'], 'yes');
+    assert.equal(written['contentSignalAiInput'], '');
+    assert.equal(written['contentSignalAiTrain'], 'no');
+    assert.deepEqual(written['robotsRules'], ['User-agent: SlowBot', 'Crawl-delay: 10']);
+
+    const robots = await (await cms.app.request('/robots.txt')).text();
+    assert.match(robots, /^User-agent: GPTBot\nDisallow: \/$/m);
+    assert.match(robots, /^Content-Signal: search=yes, ai-train=no$/m);
+    assert.match(
+      robots,
+      /^User-agent: SlowBot\nDisallow: \/admin\/\nCrawl-delay: 10\nContent-Signal: search=yes, ai-train=no$/m,
+    );
+    assert.match(robots, /^Disallow: \/admin\/$/m);
+    assert.match(robots, /^Sitemap: .*\/sitemap\.xml$/m);
+
+    const back = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(back, /<option value="block-training" selected>/, 'the policy comes back chosen');
+    assert.match(back, /SlowBot/);
+  });
+
+  it('refuses rules that are not robots.txt, or that would reopen the admin (AC #1)', async () => {
+    const contentDir = await withPages();
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    for (const [rules, says] of [
+      ['Disallow: /x/', /User-agent/],
+      ['User-agent: Bot\nWhatever', /not a robots\.txt rule/],
+      ['User-agent: Bot\nAllow: /admin/users', /admin/],
+    ] as const) {
+      const response = await saveSettings(agent, 'reading', { robots_rules: rules });
+      assert.equal(response.status, 400, rules);
+      assert.match(await response.text(), says, rules);
+    }
+
+    assert.deepEqual(readSiteSettings(contentDir).robotsRules, [], 'nothing was written');
+  });
+
+  it('refuses a policy or a signal that is not one on offer', async () => {
+    const cms = await box.site({ contentDir: await withPages() });
+    const agent = await signedIn(cms);
+
+    assert.equal((await saveSettings(agent, 'reading', { ai_crawlers: 'maybe' })).status, 400);
+    assert.equal(
+      (await saveSettings(agent, 'reading', { content_signal_ai_train: 'perhaps' })).status,
+      400,
+    );
+  });
+});

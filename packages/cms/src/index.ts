@@ -1203,6 +1203,7 @@ export type {
   Representation,
   RepresentationExtension,
   RepresentationResponseOptions,
+  RobotsPolicy,
   SearchJson,
   SearchJsonOptions,
   SearchPage,

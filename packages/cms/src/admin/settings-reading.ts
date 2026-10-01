@@ -51,7 +51,17 @@ export const READING_SETTINGS: SettingsPage = {
   label: 'Reading',
   path: settingsPagePath('reading'),
   template: ADMIN_TEMPLATES.settingsReading,
-  fields: ['homepage', 'postsPage', 'postsPerPage', 'notifyServer'],
+  fields: [
+    'homepage',
+    'postsPage',
+    'postsPerPage',
+    'notifyServer',
+    'aiCrawlers',
+    'contentSignalSearch',
+    'contentSignalAiInput',
+    'contentSignalAiTrain',
+    'robotsRules',
+  ],
 
   panels: (c, settings) => {
     const choices = pageChoices(c);

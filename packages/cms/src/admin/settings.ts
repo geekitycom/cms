@@ -14,6 +14,13 @@ import type { MailProviderName } from '../mail/provider.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
 import { DEFAULT_MENU_NAME, menuItemsFromText, menusOf } from '../web/navigation.ts';
+import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from '../web/robots.ts';
+import type {
+  AiCrawlerPolicy,
+  ContentSignal,
+  ContentSignalName,
+  RobotsPolicy,
+} from '../web/robots.ts';
 import type { NavigationMenus } from '../web/navigation.ts';
 import {
   DEFAULT_TAXONOMY_BASES,
@@ -184,6 +191,26 @@ export interface SiteSettings {
    */
   notifyServer: string;
   /**
+   * How the site treats the crawlers that feed AI products, as the robots file
+   * spells it in per-agent groups (TASK-148). `allow` by default.
+   */
+  aiCrawlers: AiCrawlerPolicy;
+  /**
+   * The three Content-Signal preferences the robots file declares: `yes`,
+   * `no`, or empty for a signal the site says nothing about.
+   */
+  contentSignalSearch: ContentSignalChoice;
+  /** Whether the site's pages may be fed to an AI answer live. */
+  contentSignalAiInput: ContentSignalChoice;
+  /** Whether the site's pages may be used to train a model. */
+  contentSignalAiTrain: ContentSignalChoice;
+  /**
+   * Lines the robots file carries beyond the CMS's own: groups of
+   * `User-agent` lines and their rules, one line per entry, blank lines
+   * between groups. Every group still keeps crawlers out of the admin.
+   */
+  robotsRules: readonly string[];
+  /**
    * How the site sends email, or `none` for a site that does not (TASK-53).
    *
    * The name of the provider only. The key or the SMTP password that makes it
@@ -277,6 +304,32 @@ export interface SiteSettings {
   taxonomyRedirects: readonly TaxonomyRedirect[];
 }
 
+/** What a site says about one Content-Signal: yes, no, or nothing. */
+export type ContentSignalChoice = '' | 'yes' | 'no';
+
+/** Whether a string is a {@link ContentSignalChoice}. */
+function isContentSignalChoice(value: unknown): value is ContentSignalChoice {
+  return value === '' || value === 'yes' || value === 'no';
+}
+
+/** Whether a string is an {@link AiCrawlerPolicy}. */
+function isAiCrawlerPolicy(value: unknown): value is AiCrawlerPolicy {
+  return (AI_CRAWLER_POLICIES as readonly unknown[]).includes(value);
+}
+
+/** What the settings say the robots file should carry. */
+export function robotsPolicyOf(settings: SiteSettings): RobotsPolicy {
+  const choices: [ContentSignalName, ContentSignalChoice][] = [
+    ['search', settings.contentSignalSearch],
+    ['ai-input', settings.contentSignalAiInput],
+    ['ai-train', settings.contentSignalAiTrain],
+  ];
+  const contentSignal: ContentSignal = {};
+  for (const [name, choice] of choices) if (choice !== '') contentSignal[name] = choice;
+
+  return { aiCrawlers: settings.aiCrawlers, contentSignal, rules: settings.robotsRules };
+}
+
 /**
  * The settings the form on the settings screen carries.
  *
@@ -325,6 +378,11 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   webmentionsSend: true,
   webmentionsReceive: true,
   notifyServer: DEFAULT_NOTIFY_SERVER,
+  aiCrawlers: 'allow',
+  contentSignalSearch: '',
+  contentSignalAiInput: '',
+  contentSignalAiTrain: '',
+  robotsRules: [],
   mailProvider: 'none',
   mailFromName: '',
   mailFromAddress: '',
@@ -361,6 +419,11 @@ export const SETTINGS_FIELDS = {
   webmentionsSend: 'webmentions_send',
   webmentionsReceive: 'webmentions_receive',
   notifyServer: 'notify_server',
+  aiCrawlers: 'ai_crawlers',
+  contentSignalSearch: 'content_signal_search',
+  contentSignalAiInput: 'content_signal_ai_input',
+  contentSignalAiTrain: 'content_signal_ai_train',
+  robotsRules: 'robots_rules',
   mailProvider: 'mail_provider',
   mailFromName: 'mail_from_name',
   mailFromAddress: 'mail_from_address',
@@ -449,6 +512,26 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
       ? { webmentionsReceive: file['webmentionsReceive'] }
       : {}),
     ...(typeof file['notifyServer'] === 'string' ? { notifyServer: file['notifyServer'] } : {}),
+    // Read the way the form checks them, so a hand edit naming a policy or a
+    // signal this version does not know is the default rather than a line of
+    // robots.txt nobody chose, and a rule the form would refuse is left out.
+    ...(isAiCrawlerPolicy(file['aiCrawlers']) ? { aiCrawlers: file['aiCrawlers'] } : {}),
+    ...(isContentSignalChoice(file['contentSignalSearch'])
+      ? { contentSignalSearch: file['contentSignalSearch'] }
+      : {}),
+    ...(isContentSignalChoice(file['contentSignalAiInput'])
+      ? { contentSignalAiInput: file['contentSignalAiInput'] }
+      : {}),
+    ...(isContentSignalChoice(file['contentSignalAiTrain'])
+      ? { contentSignalAiTrain: file['contentSignalAiTrain'] }
+      : {}),
+    ...(Array.isArray(file['robotsRules'])
+      ? {
+          robotsRules: robotsRuleLines(
+            file['robotsRules'].filter((entry) => typeof entry === 'string'),
+          ),
+        }
+      : {}),
     // Only a provider this version ships, for the reason the actor type is
     // read that way: a file naming one it has never heard of is a site that
     // sends no mail rather than a boot that fails.
@@ -547,6 +630,11 @@ export function siteJsonFor(
     webmentionsSend: settings.webmentionsSend,
     webmentionsReceive: settings.webmentionsReceive,
     notifyServer: settings.notifyServer,
+    aiCrawlers: settings.aiCrawlers,
+    contentSignalSearch: settings.contentSignalSearch,
+    contentSignalAiInput: settings.contentSignalAiInput,
+    contentSignalAiTrain: settings.contentSignalAiTrain,
+    robotsRules: [...settings.robotsRules],
     mailProvider: settings.mailProvider,
     mailFromName: settings.mailFromName,
     mailFromAddress: settings.mailFromAddress,
@@ -864,6 +952,19 @@ const FIELD_CHECKS: Record<
       ? 'A notify server is an absolute http:// or https:// URL, or empty for none.'
       : undefined,
 
+  aiCrawlers: (form) =>
+    isAiCrawlerPolicy(form.aiCrawlers)
+      ? undefined
+      : `An AI-crawler policy is one of ${AI_CRAWLER_POLICIES.join(', ')}.`,
+
+  contentSignalSearch: (form) => contentSignalProblem(form.contentSignalSearch),
+
+  contentSignalAiInput: (form) => contentSignalProblem(form.contentSignalAiInput),
+
+  contentSignalAiTrain: (form) => contentSignalProblem(form.contentSignalAiTrain),
+
+  robotsRules: (form) => robotsRuleProblem([form.robotsRules]),
+
   mailProvider: (form) =>
     (MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)
       ? undefined
@@ -938,6 +1039,11 @@ const FIELD_CHECKS: Record<
     taxonomyBaseProblems({ tag: form.tagBase, category: form.categoryBase }).category,
 };
 
+/** What is wrong with a submitted Content-Signal choice. */
+function contentSignalProblem(value: string): string | undefined {
+  return isContentSignalChoice(value) ? undefined : 'A content signal is yes, no, or not said.';
+}
+
 /** Every field of the settings, in the order the form fields name them. */
 export const SETTINGS_FIELD_NAMES: readonly SettingsField[] = Object.keys(
   SETTINGS_FIELDS,
@@ -1005,6 +1111,17 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     webmentionsSend: form.webmentionsSend !== '',
     webmentionsReceive: form.webmentionsReceive !== '',
     notifyServer: normalizeBaseUrl(form.notifyServer) ?? '',
+    aiCrawlers: isAiCrawlerPolicy(form.aiCrawlers) ? form.aiCrawlers : 'allow',
+    contentSignalSearch: isContentSignalChoice(form.contentSignalSearch)
+      ? form.contentSignalSearch
+      : '',
+    contentSignalAiInput: isContentSignalChoice(form.contentSignalAiInput)
+      ? form.contentSignalAiInput
+      : '',
+    contentSignalAiTrain: isContentSignalChoice(form.contentSignalAiTrain)
+      ? form.contentSignalAiTrain
+      : '',
+    robotsRules: robotsRuleLines([form.robotsRules]),
     mailProvider: (MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)
       ? (form.mailProvider as MailProviderName)
       : 'none',
@@ -1043,6 +1160,11 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     webmentionsSend: settings.webmentionsSend ? '1' : '',
     webmentionsReceive: settings.webmentionsReceive ? '1' : '',
     notifyServer: settings.notifyServer,
+    aiCrawlers: settings.aiCrawlers,
+    contentSignalSearch: settings.contentSignalSearch,
+    contentSignalAiInput: settings.contentSignalAiInput,
+    contentSignalAiTrain: settings.contentSignalAiTrain,
+    robotsRules: settings.robotsRules.join('\n'),
     mailProvider: settings.mailProvider,
     mailFromName: settings.mailFromName,
     mailFromAddress: settings.mailFromAddress,

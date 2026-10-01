@@ -2705,6 +2705,10 @@ without changing the document, so a development server would otherwise answer
 `304` with a page that had already moved on. The `.md` and `.json`
 representations are validated either way.
 
+Every representation but the HTML carries `X-Robots-Tag: noindex`, whether it
+was asked for by extension or by `Accept`. They say what the page says, and a
+search engine that indexed them would list one page two or three times.
+
 Adding a representation — an ActivityStreams object, say — means adding it to
 `Representation` in `src/web/negotiate.ts` with its media type and, if it wants
 one, its extension. The selection, the `Link` alternates, the `ETag` and the
@@ -3096,7 +3100,7 @@ holding its own slice and dated by the newest URL in it. The address a search
 engine holds does not change, which is the point of the index living there.
 While the whole sitemap fits in one file the children name nothing and 404.
 
-`/robots.txt` is short:
+`/robots.txt` starts short:
 
 ```
 User-agent: *
@@ -3110,6 +3114,44 @@ collections are deliberately left open — an actor and an object exist to be
 fetched, they carry the same
 content as the pages that link to them, and a crawler that follows one gets
 JSON it will ignore.
+
+The Crawlers section of Settings → Reading adds to it, and writes what it sets
+to `site.json`:
+
+| Setting               | `site.json` key                                                       | What the file gains                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AI crawlers           | `aiCrawlers`                                                          | `allow` (the default) adds nothing. `block-training` adds a `Disallow: /` group for each training crawler: GPTBot, ClaudeBot, anthropic-ai, Google-Extended, Applebot-Extended, Bytespider, CCBot and meta-externalagent. `block-all` also blocks the retrieval crawlers: OAI-SearchBot, ChatGPT-User, PerplexityBot, Perplexity-User, Claude-SearchBot and Claude-User. |
+| Content signals       | `contentSignalSearch`, `contentSignalAiInput`, `contentSignalAiTrain` | Each `yes`, `no` or empty. The ones set become one line, such as `Content-Signal: search=yes, ai-input=yes, ai-train=no`.                                                                                                                                                                                                                                                |
+| More robots.txt rules | `robotsRules`                                                         | Groups of the site's own, one line per array entry: `User-agent`, then `Allow`, `Disallow`, `Crawl-delay`, `Content-Signal` or `Sitemap` lines.                                                                                                                                                                                                                          |
+
+A crawler obeys only the one group that names it (RFC 9309), so the CMS puts
+`Disallow: /admin/` and the content signal into every group, its own and the
+site's, unless the group already disallows everything or carries a signal of
+its own. The form refuses a line that is not a robots.txt field, a rule with no
+`User-agent` above it, and an `Allow` under `/admin/`; a hand edit of
+`site.json` that does any of these loses that line. The site's own `Sitemap:`
+line is always there.
+
+For example, `block-training`, `ai-train` set to `no` and a rule of
+`User-agent: SlowBot` / `Crawl-delay: 10` serve:
+
+```
+User-agent: *
+Disallow: /admin/
+Content-Signal: ai-train=no
+
+User-agent: GPTBot
+Disallow: /
+
+…one group per training crawler…
+
+User-agent: SlowBot
+Disallow: /admin/
+Crawl-delay: 10
+Content-Signal: ai-train=no
+
+Sitemap: https://example.com/sitemap.xml
+```
 
 Both are registered routes rather than anything resolved from the content
 index, so a document permalinked at `/sitemap.xml` cannot take the URL a

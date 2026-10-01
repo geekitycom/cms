@@ -30,6 +30,11 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     posts_page: '',
     posts_per_page: '10',
     notify_server: 'https://rpc.rsscloud.io',
+    ai_crawlers: 'allow',
+    content_signal_search: '',
+    content_signal_ai_input: '',
+    content_signal_ai_train: '',
+    robots_rules: '',
   },
   permalinks: {
     tag_base: 'tag',

@@ -9,6 +9,11 @@
   {{ field.problem('settings-posts-page', problems.postsPage) }}
   {{ field.problem('settings-posts-per-page', problems.postsPerPage) }}
   {{ field.problem('settings-notify-server', problems.notifyServer) }}
+  {{ field.problem('settings-ai-crawlers', problems.aiCrawlers) }}
+  {{ field.problem('settings-content-signal-search', problems.contentSignalSearch) }}
+  {{ field.problem('settings-content-signal-ai-input', problems.contentSignalAiInput) }}
+  {{ field.problem('settings-content-signal-ai-train', problems.contentSignalAiTrain) }}
+  {{ field.problem('settings-robots-rules', problems.robotsRules) }}
 {% endblock %}
 
 {% block settingsFields %}
@@ -68,4 +73,49 @@
   {% endset %}
   {{ field.text('settings-notify-server', fields.notifyServer, 'Notify server', form.notifyServer,
        error=problems.notifyServer, hint=notifyHint, inputmode='url') }}
+
+  {# TASK-148. What /robots.txt tells crawlers beyond keeping them out of the
+     admin, which it does whatever is set here. #}
+  <h2>Crawlers</h2>
+
+  {% set aiHint %}
+    Training crawlers gather pages to train AI models. Retrieval crawlers fetch a
+    page when somebody asks an assistant about it, so blocking them also stops the
+    site being cited. Each choice writes its own groups into
+    <a href="/robots.txt"><code>/robots.txt</code></a>.
+  {% endset %}
+  {% call field.select('settings-ai-crawlers', fields.aiCrawlers, 'AI crawlers',
+       error=problems.aiCrawlers, hint=aiHint) %}
+    {% for option in [
+         ['allow', 'Allow all'],
+         ['block-training', 'Block training crawlers'],
+         ['block-all', 'Block all AI crawlers']] %}
+      <option value="{{ option[0] }}"{% if option[0] == form.aiCrawlers %} selected{% endif %}>{{ option[1] }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% for signal in [
+       ['contentSignalSearch', 'settings-content-signal-search', 'Content signal: search',
+        'Whether pages may be indexed and shown as search results.'],
+       ['contentSignalAiInput', 'settings-content-signal-ai-input', 'Content signal: AI input',
+        'Whether pages may be fed to an AI model to answer a question.'],
+       ['contentSignalAiTrain', 'settings-content-signal-ai-train', 'Content signal: AI training',
+        'Whether pages may be used to train or fine-tune an AI model.']] %}
+    {% call field.select(signal[1], fields[signal[0]], signal[2],
+         error=problems[signal[0]], hint=signal[3]) %}
+      {% for option in [['', 'Not said'], ['yes', 'Yes'], ['no', 'No']] %}
+        <option value="{{ option[0] }}"{% if option[0] == form[signal[0]] %} selected{% endif %}>{{ option[1] }}</option>
+      {% endfor %}
+    {% endcall %}
+  {% endfor %}
+
+  {% set rulesHint %}
+    More <code>robots.txt</code> groups, written as they would be in the file: one or
+    more <code>User-agent</code> lines, then <code>Allow</code>, <code>Disallow</code>,
+    <code>Crawl-delay</code> or <code>Content-Signal</code> lines. Every group still
+    keeps crawlers out of <code>/admin/</code>, and the sitemap is always named.
+  {% endset %}
+  {{ field.textarea('settings-robots-rules', fields.robotsRules, 'More robots.txt rules',
+       form.robotsRules, error=problems.robotsRules, hint=rulesHint,
+       rows='5', spellcheck='false') }}
 {% endblock %}

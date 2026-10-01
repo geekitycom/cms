@@ -2,7 +2,7 @@ import type { Context, Hono, MiddlewareHandler } from 'hono';
 
 import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
-import { readSiteSettings } from '../admin/settings.ts';
+import { readSiteSettings, robotsPolicyOf } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
@@ -74,13 +74,8 @@ import type { ConditionalHeaders, Representation } from './negotiate.ts';
 import { offsetForPage, paginate } from './pagination.ts';
 import type { Pagination } from './pagination.ts';
 import { TEMPLATES } from './render.ts';
-import {
-  robotsResponse,
-  sitemapResponse,
-  ROBOTS_PATH,
-  SITEMAP_CHILD_ROUTE,
-  SITEMAP_PATH,
-} from './sitemap.ts';
+import { robotsResponse, ROBOTS_PATH } from './robots.ts';
+import { sitemapResponse, SITEMAP_CHILD_ROUTE, SITEMAP_PATH } from './sitemap.ts';
 import type { SitemapUrl } from './sitemap.ts';
 import { FAVICON_PATH, manifestResponse, MANIFEST_PATH, webManifest } from './manifest.ts';
 import {
@@ -183,7 +178,13 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // search engine polls.
   app.get(SITEMAP_PATH, (c) => sitemap(c, undefined));
   app.get(SITEMAP_CHILD_ROUTE, (c) => sitemap(c, Number(c.req.param('page'))));
-  app.get(ROBOTS_PATH, (c) => robotsResponse(c.var.config.baseUrl, conditionalHeaders(c)));
+  app.get(ROBOTS_PATH, (c) =>
+    robotsResponse(
+      c.var.config.baseUrl,
+      conditionalHeaders(c),
+      robotsPolicyOf(readSiteSettings(c.var.config.contentDir)),
+    ),
+  );
 
   // The web app manifest and the root favicon (TASK-147), fixed paths at the
   // root for the same reason: a browser asks for `/favicon.ico` whatever the

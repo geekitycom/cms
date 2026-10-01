@@ -68,6 +68,12 @@ describe('content/_data/site.json', () => {
       webmentionsSend: true,
       webmentionsReceive: true,
       notifyServer: 'https://rpc.rsscloud.io',
+      // What robots.txt says beyond the admin rule and the sitemap (TASK-148).
+      aiCrawlers: 'allow',
+      contentSignalSearch: '',
+      contentSignalAiInput: '',
+      contentSignalAiTrain: '',
+      robotsRules: [],
       // The mail settings the file carries. The key and the SMTP password are
       // not among them: those are credentials and live in `data/mail.json`.
       mailProvider: 'none',

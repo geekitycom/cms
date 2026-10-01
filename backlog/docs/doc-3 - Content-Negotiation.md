@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-23 19:13'
+updated_date: '2026-10-01 12:42'
 ---
 # Content Negotiation
 
@@ -136,11 +136,11 @@ Two more fixed routes, at the only paths a crawler looks for them:
 | --- | --- |
 | `/sitemap.xml` | Every public URL as a `<urlset>`, or a `<sitemapindex>` once there are more than 50,000 |
 | `/sitemap-{n}.xml` | One file of an index, numbered from one; 404 while the whole sitemap fits in one |
-| `/robots.txt` | `User-agent: *`, `Disallow: /admin/`, and an absolute `Sitemap:` line |
+| `/robots.txt` | `User-agent: *`, `Disallow: /admin/`, the site's AI-crawler groups, Content-Signal and own rules (TASK-148), and an absolute `Sitemap:` line |
 
 The sitemap lists the home archive and each of its pages, every public post and page, and every tag and category archive with each of its pages, under the bases the site holds at that moment. `<lastmod>` is `updated` else `date` for a document, and the newest of those on a listing page; something nothing dates carries no `<lastmod>` rather than an invented one. Drafts, the trash and posts whose date has not arrived are absent, because the sitemap is drawn from the same queries and the same `isPublicDocument` the listings use.
 
-Nothing else is disallowed in `robots.txt`. `/ap/` is left open on purpose: the actor and its collections are documents meant to be fetched, and a crawler that follows one gets JSON it will ignore.
+Nothing else is disallowed in `robots.txt` unless the site's settings say so. Every group the file carries keeps `Disallow: /admin/`, because a crawler obeys only the group that names it. The `.md` and `.json` representations carry `X-Robots-Tag: noindex`, so search results list the HTML alone. `/ap/` is left open on purpose: the actor and its collections are documents meant to be fetched, and a crawler that follows one gets JSON it will ignore.
 
 Both are registered routes rather than anything resolved from the index, so a document permalinked at `/sitemap.xml` cannot take the URL a search engine polls, and both carry `ETag` and `Last-Modified` and answer conditional requests with 304 the way the feeds do.
 

@@ -338,6 +338,12 @@ export function representationResponse(options: RepresentationResponseOptions): 
       .join(', '),
   });
 
+  // The Markdown and the JSON say what the HTML says, for programs rather
+  // than readers. A search engine that indexed them would list the same page
+  // two or three times, and the copies would compete with the one a reader
+  // should land on (TASK-148).
+  if (options.representation !== 'html') headers.set('x-robots-tag', 'noindex');
+
   const personal = options.private === true;
   if (!personal) {
     if (options.etag !== undefined) headers.set('etag', options.etag);
