@@ -4,11 +4,12 @@ title: Per-language syndication targets
 status: To Do
 assignee: []
 created_date: '2026-09-29 01:32'
+updated_date: '2026-10-01 13:37'
 labels:
   - i18n
   - webmention
   - indieweb
-milestone: m-23
+milestone: m-25
 dependencies:
   - TASK-155
   - TASK-154
@@ -31,3 +32,9 @@ Some syndication targets are per language: IndieNews has a feed and a webmention
 - [ ] #2 A target can restrict itself to a set of languages, and a post in a language it does not list does not link to or notify it
 - [ ] #3 A German post tagged for IndieNews links to and notifies news.indieweb.org/de; an English one, /en
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Moved from M24 to M26 on 2026-10-01: it depends on TASK-155, which is in M26, so it cannot be built in M24.
+<!-- SECTION:NOTES:END -->
