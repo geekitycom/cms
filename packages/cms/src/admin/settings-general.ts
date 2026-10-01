@@ -20,7 +20,7 @@ export const GENERAL_SETTINGS: SettingsPage = {
   label: 'General',
   path: settingsPagePath('general'),
   template: ADMIN_TEMPLATES.settingsGeneral,
-  fields: ['title', 'tagline', 'author', 'baseUrl', 'timezone', 'language'],
+  fields: ['title', 'tagline', 'author', 'baseUrl', 'timezone', 'language', 'locale'],
 
   // The base URL field shows the one in effect rather than the one the file
   // happens to hold: a site.json with no `url` at all would otherwise render an

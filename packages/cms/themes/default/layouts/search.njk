@@ -28,10 +28,8 @@
 <p class="search-summary" role="status">
   {%- if pagination.total == 0 -%}
   Nothing found for &ldquo;{{ query }}&rdquo;.
-  {%- elif pagination.total == 1 -%}
-  One result for &ldquo;{{ query }}&rdquo;.
   {%- else -%}
-  {{ pagination.total }} results for &ldquo;{{ query }}&rdquo;.
+  {{ pagination.total | plural({ one: "One result", other: "# results" }, "en") }} for &ldquo;{{ query }}&rdquo;.
   {%- endif -%}
 </p>
 {% if posts.length %}

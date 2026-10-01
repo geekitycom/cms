@@ -19,6 +19,7 @@ import {
   documentContext,
   frontPageSlugs,
   postsPerPage,
+  siteLocale,
   siteTimezone,
   taxonomyBases,
   termRedirects,
@@ -515,7 +516,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     const posts = options.archivePosts?.();
     if (posts === undefined) return {};
 
-    return { archiveMonths: archiveMonths(posts, siteTimezone(siteData.read())) };
+    const site = siteData.read();
+    return { archiveMonths: archiveMonths(posts, siteTimezone(site), siteLocale(site)) };
   }
 
   /**

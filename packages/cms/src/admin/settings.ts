@@ -16,6 +16,7 @@ import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from '../web/fee
 import type { UpdatePeriod } from '../web/feed-source.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
 import { generateIndexNowKey, isIndexNowKey } from '../web/indexnow.ts';
+import { canonicalLocale } from '../web/locale.ts';
 import { DEFAULT_MENU_NAME, menuItemsFromText, menusOf } from '../web/navigation.ts';
 import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from '../web/robots.ts';
 import type {
@@ -97,6 +98,12 @@ export interface SiteSettings {
    * Atom feed's `xml:lang`.
    */
   language: string;
+  /**
+   * The locale the public site's dates and counts are written in, when it is
+   * not the language: `en-US` on an `en` site, say. Empty, the default, means
+   * the language.
+   */
+  locale: string;
   /** How many posts a listing page holds. A positive integer. */
   postsPerPage: number;
   /**
@@ -401,6 +408,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   baseUrl: '',
   timezone: 'UTC',
   language: 'en',
+  locale: '',
   postsPerPage: 10,
   homepage: '',
   postsPage: '',
@@ -449,6 +457,7 @@ export const SETTINGS_FIELDS = {
   baseUrl: 'base_url',
   timezone: 'timezone',
   language: 'language',
+  locale: 'locale',
   postsPerPage: 'posts_per_page',
   homepage: 'homepage',
   postsPage: 'posts_page',
@@ -534,6 +543,7 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(typeof file['language'] === 'string' && file['language'] !== ''
       ? { language: file['language'] }
       : {}),
+    ...(typeof file['locale'] === 'string' ? { locale: file['locale'] } : {}),
     // Absent is the ordinary state of this one: a site on the packaged theme
     // has never written the key, so anything but a string is that site.
     ...(typeof file['theme'] === 'string' ? { theme: file['theme'] } : {}),
@@ -732,8 +742,9 @@ export function siteJsonFor(
   // `theme` is absent for a site on the packaged theme, on the same rule and
   // for the same reason as the two above: running what the package ships is
   // not a choice a site should have to write down, and a `theme` of `""` would
-  // be a name no directory has.
-  for (const key of ['homepage', 'postsPage', 'theme'] as const) {
+  // be a name no directory has. `locale` too: a site whose dates follow its
+  // language has made no choice to write down.
+  for (const key of ['homepage', 'postsPage', 'theme', 'locale'] as const) {
     if (settings[key] === '') delete file[key];
     else file[key] = settings[key];
   }
@@ -973,6 +984,15 @@ const FIELD_CHECKS: Record<
       ? undefined
       : 'That is not a language tag, such as en, en-GB or pt-BR.',
 
+  // Empty is the ordinary value: the dates follow the language.
+  locale: (form) => {
+    const locale = form.locale.trim();
+    return locale === '' ||
+      (LANGUAGE_TAG_PATTERN.test(locale) && canonicalLocale(locale) !== undefined)
+      ? undefined
+      : 'That is not a locale, such as en-US, fr-CA or pt-BR, or empty for the language.';
+  },
+
   // Empty is a value here — it is how a site says "the theme the package
   // ships" — so only a name has anything to check. A name that is not a theme
   // is refused rather than saved and warned about later: the screen has a list
@@ -1175,6 +1195,7 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     baseUrl: normalizeBaseUrl(form.baseUrl) ?? '',
     timezone: form.timezone.trim(),
     language: form.language.trim(),
+    locale: form.locale.trim(),
     postsPerPage: Number(form.postsPerPage),
     homepage: form.homepage.trim(),
     // A posts page means nothing without a homepage, and the validator has
@@ -1243,6 +1264,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     baseUrl: settings.baseUrl,
     timezone: settings.timezone,
     language: settings.language,
+    locale: settings.locale,
     postsPerPage: String(settings.postsPerPage),
     homepage: settings.homepage,
     postsPage: settings.postsPage,

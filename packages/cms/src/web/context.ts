@@ -11,6 +11,7 @@ import type { ImageLoading } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import type { AuthorContext } from './authors.ts';
 import { feedExcerpt } from './feed-item.ts';
+import { canonicalLocale, DEFAULT_LOCALE } from './locale.ts';
 import { DEFAULT_TAXONOMY_BASES, taxonomyBasesOrDefault, taxonomyRedirectsOf } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 
@@ -42,6 +43,12 @@ export interface SiteData {
    * feed's `xml:lang`.
    */
   language?: string | undefined;
+  /**
+   * The locale dates and counts are written in, as a BCP 47 tag, when it is
+   * not the language: `en-US` on an `en` site, say. Absent or empty means the
+   * language. {@link siteLocale} is the one reading of it.
+   */
+  locale?: string | undefined;
   /**
    * The site's avatar, as the public path it is served at. Empty until one has
    * been uploaded on the settings screen; the ActivityPub actor's `icon`.
@@ -365,6 +372,20 @@ export function themeName(site: SiteData): string {
 export function siteTimezone(site: SiteData): string {
   const timezone = site['timezone'];
   return typeof timezone === 'string' && timezone !== '' ? timezone : DEFAULT_TIMEZONE;
+}
+
+/**
+ * The locale this site's dates and counts are written in: the `locale`
+ * setting, else the `language`, else `en`. A tag Intl will not take is passed
+ * over, so a hand-edited `site.json` costs the locale and not the page.
+ */
+export function siteLocale(site: SiteData): string {
+  for (const tag of [site['locale'], site['language']]) {
+    if (typeof tag !== 'string' || tag.trim() === '') continue;
+    const locale = canonicalLocale(tag);
+    if (locale !== undefined) return locale;
+  }
+  return DEFAULT_LOCALE;
 }
 
 /** WordPress's Reading choice, as `site.json` spells it. */

@@ -1686,7 +1686,7 @@ shadow the login form.
 | `/admin/appearance/themes`                       | Appearance > Themes: the themes on disk. `POST` activates the one named.            |
 | `/admin/tools`                                   | Tools > Content index: what the index holds, and the button that rebuilds it.       |
 | `/admin/tools/rebuild-index`                     | `POST` only. Offers the rebuild, then reads every file again on the live site.      |
-| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language.          |
+| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language, locale.  |
 | `/admin/settings/reading`                        | What the homepage displays, posts per page, the notify server.                      |
 | `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.             |
 | `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                  |
@@ -1838,7 +1838,7 @@ at once cannot each keep half of what the other kept.
 
 The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `homepage`, `postsPage`,
-`timezone`, `language`, `tagBase`,
+`timezone`, `language`, `locale` (when it is set), `tagBase`,
 `categoryBase`, `notifyServer`, `feedUpdatePeriod`, `feedUpdateFrequency`,
 `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
