@@ -79,6 +79,7 @@ import { robotsResponse, ROBOTS_PATH } from './robots.ts';
 import { sitemapResponse, SITEMAP_CHILD_ROUTE, SITEMAP_PATH } from './sitemap.ts';
 import type { SitemapUrl } from './sitemap.ts';
 import { FAVICON_PATH, manifestResponse, MANIFEST_PATH, webManifest } from './manifest.ts';
+import { openSearchDescription, openSearchResponse, OPENSEARCH_PATH } from './opensearch.ts';
 import {
   generatedLlmsTxt,
   LLMS_TXT_LINK,
@@ -219,6 +220,16 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
     return manifestResponse(manifest, conditionalHeaders(c));
   });
   app.get(FAVICON_PATH, favicon);
+
+  // The OpenSearch description (TASK-204), a fixed path at the root for the
+  // same reason, read off the site data per request so a new title or icon
+  // shows on the next one.
+  app.get(OPENSEARCH_PATH, (c) =>
+    openSearchResponse(
+      openSearchDescription({ config: c.var.config, site: c.var.renderer.site() }),
+      conditionalHeaders(c),
+    ),
+  );
 
   // The index for language models (TASK-149), a fixed path at the root for
   // the same reason. Off is a 404; a file of the site's own wins over the

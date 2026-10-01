@@ -734,6 +734,16 @@ site with no icon. `/manifest.webmanifest` gives the site's title as `name` and
 pixels plus a maskable 512 whose picture sits inside the middle 80%, padded
 with its own dominant colour. The head links it on every page.
 
+**The search description** is a route too. `/opensearch.xml` is an OpenSearch
+1.1 description that names the site by its title (cut to the 16 characters
+`ShortName` allows), describes it by its tagline, else its title, shows
+`/favicon.ico` as its `Image` when the site has an icon, and searches
+`/search/?q={searchTerms}`. Every URL in it is absolute and carries the base
+path. The head links it on every page with `<link rel="search"
+type="application/opensearchdescription+xml">`, outside the `head` block, so a
+browser offers the site as a search engine. A theme that replaces `base.njk`
+copies that line to keep the offer.
+
 **The structured data** is `partials/jsonld.njk`, one `<script
 type="application/ld+json">` holding one `@graph` per page, and it is the only
 structured data the theme emits — there is no Microdata anywhere, by

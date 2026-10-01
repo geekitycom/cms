@@ -152,6 +152,9 @@
     {% if webmention %}
     <link rel="webmention" href="{{ webmention | url }}">
     {% endif %}
+    {#- The site's search, for a browser to offer from its address bar
+        (TASK-204). #}
+    <link rel="search" type="application/opensearchdescription+xml" title="{{ site.title }}" href="{{ "/opensearch.xml" | url }}">
     {#- The site's index for language models (TASK-149), from the front page,
         which is where a tool that found the site looks for it. #}
     {% if llmsTxt and atRoot %}
