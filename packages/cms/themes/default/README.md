@@ -1030,6 +1030,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `page.inputPath`                            | The source file, relative to the content directory.                                                               |
 | `type`                                      | `post` or `page`.                                                                                                 |
 | `permalink`, `slug`, `draft`, `description` | Straight from the front matter.                                                                                   |
+| `lang`                                      | The `lang` front matter as a canonical tag, such as `fr-CA`. Absent when it names none or no tag.                 |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
 | `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |
@@ -1060,7 +1061,9 @@ archive — adds:
 How many posts a listing page holds comes from `postsPerPage` in
 `content/_data/site.json`, and defaults to 10. How many entries a feed holds
 comes from `feedSize` in the same file, and defaults to 20. The `<html lang>`
-comes from `language`, and defaults to `en`. The rssCloud and WebSub server the
+comes from `language`, and defaults to `en`. A document whose `lang` names
+another language carries it on its own `<article>`, in an entry, a listing and
+search results alike, through `partials/lang.njk`. The rssCloud and WebSub server the
 feeds advertise comes from `notifyServer`, and is empty for none; the theme
 writes nothing for it, because a cloud is advertised in the feed rather than on
 the page.

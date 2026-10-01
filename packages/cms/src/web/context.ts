@@ -11,7 +11,7 @@ import type { ImageLoading } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import type { AuthorContext } from './authors.ts';
 import { feedExcerpt } from './feed-item.ts';
-import { canonicalLocale, DEFAULT_LOCALE } from './locale.ts';
+import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from './locale.ts';
 import { DEFAULT_TAXONOMY_BASES, taxonomyBasesOrDefault, taxonomyRedirectsOf } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 
@@ -148,6 +148,13 @@ export interface DocumentContext {
   /** The URL a reply answers, present only on a reply. */
   inReplyTo?: string | undefined;
   /**
+   * The language the document is written in, as a canonical BCP 47 tag, when
+   * its front matter names one (TASK-154). A theme marks the article with it
+   * where it is not the site's `language`. A value that is no tag is
+   * `undefined` here, so a typo in one file never reaches an attribute.
+   */
+  lang?: string | undefined;
+  /**
    * The words a link to the document says: its title, or an untitled post's
    * first words.
    */
@@ -244,6 +251,8 @@ export function documentContext(
     postType: postTypeOf(document),
     named: isNamed(document),
     ...optional('inReplyTo', replyTarget(document)),
+    // Over the raw front-matter value the spread above put here.
+    lang: documentLanguage(document),
     label: postLabel(document),
     ...optional('date', date),
     tags: document.tags,

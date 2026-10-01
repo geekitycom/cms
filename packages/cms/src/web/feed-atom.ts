@@ -87,7 +87,9 @@ function atomCloud(site: SiteData): string[] {
  */
 export function atomEntry(item: FeedItem): string[] {
   return [
-    '  <entry>',
+    // `xml:lang` is inherited, so only an entry in a language other than the
+    // feed's needs one.
+    item.language === undefined ? '  <entry>' : `  <entry xml:lang="${escapeXml(item.language)}">`,
     element('id', item.id, 2),
     element('title', item.title ?? '', 2),
     element('updated', (item.updated ?? EMPTY_FEED_UPDATED).toISOString(), 2),

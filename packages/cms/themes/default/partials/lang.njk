@@ -1,0 +1,7 @@
+{#- The `lang` attribute of an article written in a language other than the
+    site's (TASK-154), with its leading space, and nothing for one in the
+    site's own: the `<html lang>` already names that. Imported with context,
+    since the site's language is what it compares against. -#}
+{% macro attr(tag) -%}
+{%- if tag and tag != (site.language | default("en")) %} lang="{{ tag }}"{% endif -%}
+{%- endmacro %}

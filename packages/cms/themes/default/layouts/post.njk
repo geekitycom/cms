@@ -17,6 +17,7 @@
 {% extends "layouts/base.njk" %}
 {% import "partials/tags.njk" as taxonomy with context %}
 {% import "partials/kicker.njk" as kicker with context %}
+{% import "partials/lang.njk" as language with context %}
 
 {#- Who the bio credits: the person the file names, and otherwise whoever the
     site is by, which is what the source theme's bio reads. A post naming
@@ -28,7 +29,7 @@
 
 {% block content %}
 {% set entryUrl = page.url or url %}
-<article class="blog-post h-entry">
+<article class="blog-post h-entry"{{ language.attr(lang) }}>
   {#- A post with no name of its own (a note, or a reply without a title) is
       its words, so it opens on them in sight. Its page still needs one h1 to
       navigate by, so it gets one that says what it is, who wrote it and when,

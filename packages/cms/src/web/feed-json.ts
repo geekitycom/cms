@@ -1,6 +1,6 @@
 import { feedItems } from './feed-item.ts';
 import type { FeedItem } from './feed-item.ts';
-import { notifyServerOf } from './feed-source.ts';
+import { feedLanguage, notifyServerOf } from './feed-source.ts';
 import type { FeedSource } from './feed-source.ts';
 import { absoluteUrl } from './negotiate.ts';
 
@@ -33,6 +33,8 @@ export interface JsonFeed {
   description?: string;
   /** Site-level authors, when the site names one. */
   authors?: JsonFeedAuthor[];
+  /** The site's language, which an item in another one overrides. */
+  language: string;
   /**
    * Where a subscriber can be told the feed changed rather than polling it.
    * One entry, the site's notify server, when it names one.
@@ -81,6 +83,8 @@ export interface JsonFeedItem {
   tags?: string[];
   /** The post's own author, when it names one. */
   authors?: JsonFeedAuthor[];
+  /** The post's own language, when it is not the feed's (TASK-154). */
+  language?: string;
   /**
    * This CMS's extension object, which JSON Feed 1.1 allows under any key that
    * starts with an underscore, and which a reader that does not know it
@@ -107,6 +111,7 @@ export function jsonFeed(source: FeedSource): JsonFeed {
     feed_url: absoluteUrl(source.feedHref, baseUrl),
     ...(site.tagline === undefined ? {} : { description: site.tagline }),
     ...(site.author === undefined ? {} : { authors: [{ name: site.author }] }),
+    language: feedLanguage(site),
     ...(notify === undefined ? {} : { hubs: [{ type: JSON_FEED_HUB_TYPE, url: notify.hub }] }),
     items: feedItems(source.documents, source).map(jsonFeedItem),
   };
@@ -128,6 +133,7 @@ export function jsonFeedItem(item: FeedItem): JsonFeedItem {
   if (item.updated !== undefined) entry.date_modified = item.updated.toISOString();
   if (item.terms.length > 0) entry.tags = [...item.terms];
   if (item.author !== undefined) entry.authors = [{ name: item.author }];
+  if (item.language !== undefined) entry.language = item.language;
   if (item.inReplyTo !== undefined) entry._geekity = { in_reply_to: item.inReplyTo };
 
   return entry;

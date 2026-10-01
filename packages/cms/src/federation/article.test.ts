@@ -463,6 +463,58 @@ function rawPost(frontMatter: string[], body: string): string {
   return `---\n${[...frontMatter, `author: ${ADA}`].join('\n')}\n---\n\n${body}\n`;
 }
 
+// A fediverse client filters and translates by the language a status names,
+// which is the key of its contentMap (TASK-154).
+describe('the post language (TASK-154 AC #4)', () => {
+  const FRENCH = rawPost(
+    [
+      'title: Bonjour',
+      "date: '2026-09-02T09:00:00Z'",
+      'permalink: /2026/09/bonjour/',
+      'lang: fr-CA',
+    ],
+    'Un *premier* billet.',
+  );
+  const NOTE = rawPost(
+    ["date: '2026-09-02T09:00:00Z'", 'permalink: /2026/09/note/', 'lang: de'],
+    'Nur ein Gedanke.',
+  );
+  const ENGLISH = rawPost(
+    ['title: Hello', "date: '2026-09-02T09:00:00Z'", 'permalink: /2026/09/hello/'],
+    'A *first* post.',
+  );
+
+  it('keys an Article’s contentMap and summaryMap by the language its front matter names', async () => {
+    const instance = await site({ 'posts/2026-09-02-bonjour.md': FRENCH });
+
+    const article = await articleAt(instance, '/2026/09/bonjour/');
+
+    assert.equal(article['content'], '<p>Un <em>premier</em> billet.</p>\n');
+    assert.deepEqual(article['contentMap'], { 'fr-ca': '<p>Un <em>premier</em> billet.</p>\n' });
+    assert.equal(article['summary'], 'Un premier billet.');
+    assert.deepEqual(article['summaryMap'], { 'fr-ca': 'Un premier billet.' });
+  });
+
+  it('keys a Note’s contentMap by its language and sends no summaryMap', async () => {
+    const instance = await site({ 'posts/2026-09-02-note.md': NOTE });
+
+    const note = await articleAt(instance, '/2026/09/note/');
+
+    assert.equal(note['type'], 'Note');
+    assert.deepEqual(note['contentMap'], { de: '<p>Nur ein Gedanke.</p>\n' });
+    assert.equal('summaryMap' in note, false);
+  });
+
+  it('keys them by the site’s language for a post that names none', async () => {
+    const instance = await site({ 'posts/2026-09-02-hello.md': ENGLISH }, { language: 'en-GB' });
+
+    const article = await articleAt(instance, '/2026/09/hello/');
+
+    assert.deepEqual(article['contentMap'], { 'en-gb': '<p>A <em>first</em> post.</p>\n' });
+    assert.deepEqual(article['summaryMap'], { 'en-gb': 'A first post.' });
+  });
+});
+
 // Post Type Discovery decides the object type, and Mastodon reads the two
 // differently: a Note's `content` is the status and its `summary` a content
 // warning, an Article's `content` is dropped for `name` and `summary`.

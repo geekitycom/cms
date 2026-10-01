@@ -2,7 +2,8 @@ import type { Document } from '../content/document.ts';
 import { isNamed, replyTarget } from '../content/post-type.ts';
 import type { SiteData } from './context.ts';
 import { activityStreamsId } from './documents.ts';
-import { feedPathUnder } from './feed-source.ts';
+import { feedLanguage, feedPathUnder } from './feed-source.ts';
+import { canonicalLocale, documentLanguage } from './locale.ts';
 import { absoluteUrl, lastModifiedOf } from './negotiate.ts';
 
 /**
@@ -93,6 +94,14 @@ export interface FeedItem {
    * has nowhere to put it.
    */
   inReplyTo?: string | undefined;
+  /**
+   * The language the post is written in, when its front matter names one that
+   * is not the feed's own (TASK-154). A post in the feed's language says
+   * nothing, since every format already declares that once for the whole
+   * feed. RSS writes it as `dc:language`, Atom as `xml:lang` on the entry and
+   * JSON Feed as the item's `language`.
+   */
+  language?: string | undefined;
 }
 
 /**
@@ -103,7 +112,8 @@ export interface FeedItem {
  * are not in that hash, so a release that changes them — revision 2 changed
  * every RSS `guid`, the other formats' ids, their terms and their summaries,
  * revision 3 dropped the title of a post whose title only repeats its opening
- * words, and revision 4 named a reply's target in Atom and JSON Feed — would
+ * words, and revision 4 named a reply's target in Atom and JSON Feed, and
+ * revision 5 named a post's own language in all three — would
  * leave the validator where it was, and a reader polling with `If-None-Match`
  * would be handed a 304 that hides the new bytes.
  *
@@ -111,7 +121,7 @@ export interface FeedItem {
  * never again until the next such change. The comments feeds do not carry it:
  * a comment is not a {@link FeedItem} and its bytes are untouched.
  */
-export const FEED_ITEM_REVISION = 4;
+export const FEED_ITEM_REVISION = 5;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -167,6 +177,11 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
 
   const inReplyTo = replyTarget(document);
   if (inReplyTo !== undefined) item.inReplyTo = inReplyTo;
+
+  const language = documentLanguage(document);
+  if (language !== undefined && language !== canonicalLocale(feedLanguage(context.site))) {
+    item.language = language;
+  }
 
   const creator = document.author ?? context.site.author;
   if (creator !== undefined && creator !== '') item.creator = creator;

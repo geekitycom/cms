@@ -714,6 +714,42 @@ describe('the three formats over one post', () => {
   });
 });
 
+describe('a post in another language (TASK-154 AC #3)', () => {
+  const files = {
+    '_data/site.json': JSON.stringify({ title: 'Geekity Demo', language: 'en' }),
+    'posts/2026-09-02-bonjour.md':
+      "---\ntitle: Bonjour\ndate: '2026-09-02T09:00:00Z'\npermalink: /2026/09/bonjour/\nlang: fr\n---\n\nUn billet.\n",
+    'posts/2026-09-01-hello.md': post('Hello', {
+      date: '2026-09-01T09:00:00Z',
+      permalink: '/2026/09/hello/',
+    }),
+  };
+
+  it('names its language in every format, and the feed’s on the rest', async () => {
+    const { cms } = await site(files);
+
+    const { channel } = await rss(cms, '/feed/');
+    assert.equal(child(channel, 'language').text, 'en');
+    const [frenchItem, englishItem] = childrenNamed(channel, 'item');
+    assert.deepEqual(
+      childrenNamed(frenchItem as XmlElement, 'dc:language').map((element) => element.text),
+      ['fr'],
+    );
+    assert.deepEqual(childrenNamed(englishItem as XmlElement, 'dc:language'), []);
+
+    const { feed } = await atom(cms, '/feed/atom/');
+    assert.equal(feed.attributes['xml:lang'], 'en');
+    const [frenchEntry, englishEntry] = childrenNamed(feed, 'entry');
+    assert.equal(frenchEntry?.attributes['xml:lang'], 'fr');
+    assert.equal(englishEntry?.attributes['xml:lang'], undefined);
+
+    const { feed: json, items } = await jsonFeedAt(cms, '/feed/json/');
+    assert.equal(json['language'], 'en');
+    assert.equal((items[0] as Record<string, unknown>)['language'], 'fr');
+    assert.equal('language' in (items[1] as Record<string, unknown>), false);
+  });
+});
+
 describe('the taxonomy feeds', () => {
   const filed = {
     'posts/2026-09-02-one.md': post('Tagged and Filed', {

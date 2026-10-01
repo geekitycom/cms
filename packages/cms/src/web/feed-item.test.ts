@@ -127,8 +127,18 @@ describe('a feed item', () => {
     }
   });
 
-  it('is at revision 4, so feeds cached before replies named their target are refetched', () => {
-    assert.equal(FEED_ITEM_REVISION, 4);
+  it('is at revision 5, so feeds cached before items named their language are refetched', () => {
+    assert.equal(FEED_ITEM_REVISION, 5);
+  });
+
+  it('names the post’s language when it differs from the feed’s (TASK-154 AC #3)', () => {
+    const site = { ...CONTEXT, site: { ...SITE, language: 'en' } };
+
+    assert.equal(feedItem(post({ extra: { lang: 'fr-ca' } }), site).language, 'fr-CA');
+    assert.equal('language' in feedItem(post({ extra: { lang: 'en' } }), site), false);
+    assert.equal('language' in feedItem(post(), site), false);
+    // A tag that is not one is no language to declare.
+    assert.equal('language' in feedItem(post({ extra: { lang: 'not a tag' } }), site), false);
   });
 
   it('points at its comments, counted, only when the feed resolved the counts', () => {
