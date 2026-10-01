@@ -79,6 +79,14 @@ import { sitemapResponse, SITEMAP_CHILD_ROUTE, SITEMAP_PATH } from './sitemap.ts
 import type { SitemapUrl } from './sitemap.ts';
 import { FAVICON_PATH, manifestResponse, MANIFEST_PATH, webManifest } from './manifest.ts';
 import {
+  generatedLlmsTxt,
+  LLMS_TXT_LINK,
+  LLMS_TXT_PATH,
+  llmsTxtResponse,
+  ownLlmsTxt,
+} from './llms.ts';
+import type { LlmsEntry, LlmsIndex } from './llms.ts';
+import {
   searchHref,
   searchJson,
   searchPageIndex,
@@ -139,8 +147,16 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
     // `site.json` so a save on the settings screen moves the front page on the
     // very next one.
     const home = frontPages(c).home;
-    if (home === undefined) return listing(c, { term: undefined, pageNumber: 0 });
-    return negotiateDocument(c, home, selectFromAccept(c, DOCUMENT_REPRESENTATIONS), '/');
+    const response =
+      home === undefined
+        ? listing(c, { term: undefined, pageNumber: 0 })
+        : negotiateDocument(c, home, selectFromAccept(c, DOCUMENT_REPRESENTATIONS), '/');
+    // The home page is where a tool that found the site looks for its index
+    // (TASK-149): a header, so it is found without parsing the page.
+    if (readSiteSettings(c.var.config.contentDir).llmsTxt) {
+      response.headers.append('link', LLMS_TXT_LINK);
+    }
+    return response;
   });
 
   app.get(`/${PAGE_SEGMENT}/:page{[0-9]+}/`, (c) => {
@@ -200,6 +216,16 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
     return manifestResponse(manifest, conditionalHeaders(c));
   });
   app.get(FAVICON_PATH, favicon);
+
+  // The index for language models (TASK-149), a fixed path at the root for
+  // the same reason. Off is a 404; a file of the site's own wins over the
+  // generated one.
+  app.get(LLMS_TXT_PATH, (c) => {
+    const { contentDir, baseUrl } = c.var.config;
+    if (!readSiteSettings(contentDir).llmsTxt) return notFound(c);
+    const file = ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl);
+    return llmsTxtResponse(file, conditionalHeaders(c));
+  });
 
   // The site's search (TASK-22): a route at a fixed path for the reason the
   // feeds are, so the form in every theme's footer submits somewhere no
@@ -1396,6 +1422,45 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   }
 
   return urls;
+}
+
+/**
+ * What a generated `/llms.txt` lists: every public page by title, then the
+ * posts the feeds carry, newest first, each linked to its Markdown.
+ *
+ * The homepage is listed at `/`, which is where it is published; its own
+ * permalink redirects there.
+ */
+function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
+  const { store, renderer } = c.var;
+  const site = renderer.site();
+  const now = store.now();
+  const home = frontPages(c).home;
+
+  const entry = (document: Document): LlmsEntry => ({
+    title: postLabel(document),
+    href: representationHref(
+      document.path === home?.path ? '/' : encodePath(document.permalink),
+      'markdown',
+    ),
+    description: document.description,
+    lastModified: lastModifiedOf(document),
+  });
+
+  const pages = store
+    .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
+    .filter((document) => isPublicDocument(document, now))
+    .sort((a, b) => postLabel(a).localeCompare(postLabel(b)));
+  const posts = store
+    .listPosts({ limit: feedSize(site) })
+    .filter((document) => isPublicDocument(document, now));
+
+  return {
+    title: site.title,
+    description: site.tagline ?? '',
+    pages: pages.map(entry),
+    posts: posts.map(entry),
+  };
 }
 
 /**

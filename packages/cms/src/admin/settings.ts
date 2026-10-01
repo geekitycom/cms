@@ -211,6 +211,12 @@ export interface SiteSettings {
    */
   robotsRules: readonly string[];
   /**
+   * Whether the site serves `/llms.txt` and advertises it from the home page
+   * (TASK-149). On by default. A site that wants to write the file itself
+   * leaves this on and puts it at `content/llms.txt`.
+   */
+  llmsTxt: boolean;
+  /**
    * How the site sends email, or `none` for a site that does not (TASK-53).
    *
    * The name of the provider only. The key or the SMTP password that makes it
@@ -383,6 +389,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   contentSignalAiInput: '',
   contentSignalAiTrain: '',
   robotsRules: [],
+  llmsTxt: true,
   mailProvider: 'none',
   mailFromName: '',
   mailFromAddress: '',
@@ -424,6 +431,7 @@ export const SETTINGS_FIELDS = {
   contentSignalAiInput: 'content_signal_ai_input',
   contentSignalAiTrain: 'content_signal_ai_train',
   robotsRules: 'robots_rules',
+  llmsTxt: 'llms_txt',
   mailProvider: 'mail_provider',
   mailFromName: 'mail_from_name',
   mailFromAddress: 'mail_from_address',
@@ -532,6 +540,7 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
           ),
         }
       : {}),
+    ...(typeof file['llmsTxt'] === 'boolean' ? { llmsTxt: file['llmsTxt'] } : {}),
     // Only a provider this version ships, for the reason the actor type is
     // read that way: a file naming one it has never heard of is a site that
     // sends no mail rather than a boot that fails.
@@ -635,6 +644,7 @@ export function siteJsonFor(
     contentSignalAiInput: settings.contentSignalAiInput,
     contentSignalAiTrain: settings.contentSignalAiTrain,
     robotsRules: [...settings.robotsRules],
+    llmsTxt: settings.llmsTxt,
     mailProvider: settings.mailProvider,
     mailFromName: settings.mailFromName,
     mailFromAddress: settings.mailFromAddress,
@@ -965,6 +975,8 @@ const FIELD_CHECKS: Record<
 
   robotsRules: (form) => robotsRuleProblem([form.robotsRules]),
 
+  llmsTxt: () => undefined,
+
   mailProvider: (form) =>
     (MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)
       ? undefined
@@ -1122,6 +1134,7 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
       ? form.contentSignalAiTrain
       : '',
     robotsRules: robotsRuleLines([form.robotsRules]),
+    llmsTxt: form.llmsTxt !== '',
     mailProvider: (MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)
       ? (form.mailProvider as MailProviderName)
       : 'none',
@@ -1165,6 +1178,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     contentSignalAiInput: settings.contentSignalAiInput,
     contentSignalAiTrain: settings.contentSignalAiTrain,
     robotsRules: settings.robotsRules.join('\n'),
+    llmsTxt: settings.llmsTxt ? '1' : '',
     mailProvider: settings.mailProvider,
     mailFromName: settings.mailFromName,
     mailFromAddress: settings.mailFromAddress,

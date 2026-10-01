@@ -61,6 +61,7 @@ export const READING_SETTINGS: SettingsPage = {
     'contentSignalAiInput',
     'contentSignalAiTrain',
     'robotsRules',
+    'llmsTxt',
   ],
 
   panels: (c, settings) => {

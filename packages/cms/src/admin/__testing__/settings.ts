@@ -35,6 +35,7 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     content_signal_ai_input: '',
     content_signal_ai_train: '',
     robots_rules: '',
+    llms_txt: '1',
   },
   permalinks: {
     tag_base: 'tag',

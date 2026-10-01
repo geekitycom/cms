@@ -118,4 +118,13 @@
   {{ field.textarea('settings-robots-rules', fields.robotsRules, 'More robots.txt rules',
        form.robotsRules, error=problems.robotsRules, hint=rulesHint,
        rows='5', spellcheck='false') }}
+
+  {# TASK-149. The index for language models, beside the file for crawlers. #}
+  {% set llmsHint %}
+    <a href="/llms.txt"><code>/llms.txt</code></a> lists the site's pages and recent
+    posts, each linked to its Markdown, for AI tools to read. The home page points
+    to it. To write it yourself, put your own file at <code>content/llms.txt</code>.
+  {% endset %}
+  {{ field.checkbox('settings-llms-txt', fields.llmsTxt, 'Serve /llms.txt',
+       checked=form.llmsTxt, hint=llmsHint) }}
 {% endblock %}

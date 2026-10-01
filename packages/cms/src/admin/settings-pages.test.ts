@@ -202,6 +202,7 @@ const READING: Record<string, string> = {
   content_signal_ai_input: '',
   content_signal_ai_train: '',
   robots_rules: '',
+  llms_txt: '1',
 };
 
 /** The CSRF token on one settings page, as a browser would carry it. */

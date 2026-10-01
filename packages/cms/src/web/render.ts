@@ -10,6 +10,7 @@ import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
+import { LLMS_TXT_PATH } from './llms.ts';
 import { archiveMonths, archiveOpen } from './archive.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
@@ -437,6 +438,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       icons,
       // The colours the head declares before the stylesheet loads (TASK-146).
       theme: chosen.colors,
+      // Where the index for language models is (TASK-149), while the site
+      // serves one, so a theme asks `{% if llmsTxt %}`.
+      ...(site['llmsTxt'] === false ? {} : { llmsTxt: LLMS_TXT_PATH }),
       ...(image === undefined ? {} : { shareImage: image }),
       ...(owner === undefined ? {} : { siteAuthor: owner }),
       ...context,

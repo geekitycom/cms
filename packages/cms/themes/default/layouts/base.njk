@@ -127,6 +127,11 @@
     {% if webmention %}
     <link rel="webmention" href="{{ webmention | url }}">
     {% endif %}
+    {#- The site's index for language models (TASK-149), from the front page,
+        which is where a tool that found the site looks for it. #}
+    {% if llmsTxt and atRoot %}
+    <link rel="describedby" type="text/markdown" href="{{ llmsTxt | url }}">
+    {% endif %}
     {% block head %}
     {#
       What a link to this page looks like when somebody posts it: the same

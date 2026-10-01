@@ -393,3 +393,22 @@ describe('what crawlers are told (TASK-148)', () => {
     );
   });
 });
+
+describe('whether the site serves /llms.txt (TASK-149)', () => {
+  it('is on by default, and clearing it takes the file away (AC #4)', async () => {
+    const contentDir = await withPages();
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(html, /name="llms_txt" type="checkbox" value="1" checked/);
+    assert.equal((await cms.app.request('/llms.txt')).status, 200);
+
+    assert.equal((await saveSettings(agent, 'reading', { llms_txt: '' })).status, 303);
+    assert.equal((await siteJson(contentDir))['llmsTxt'], false);
+    assert.equal((await cms.app.request('/llms.txt')).status, 404);
+
+    const back = await (await agent.get('/admin/settings/reading')).text();
+    assert.doesNotMatch(back, /name="llms_txt" type="checkbox" value="1" checked/);
+  });
+});

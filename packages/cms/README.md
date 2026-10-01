@@ -2354,6 +2354,7 @@ Booting mounts the public site on the app. The routes are:
 | `/sitemap.xml`                          | Every public URL, for a search engine.                                                                                 |
 | `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                                      |
 | `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                                     |
+| `/llms.txt`                             | The site's pages and recent posts for a language model, each linked to its Markdown. See [below](#llmstxt).            |
 | `/.well-known/security.txt`             | Where to report a vulnerability; a 404 until a security contact is set. See [above](#securitytxt-and-change-password). |
 | `/.well-known/change-password`          | A redirect to the signed-in user's change-password form, or to the login form.                                         |
 | `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                                              |
@@ -3161,6 +3162,46 @@ robots without one, because nothing dates it.
 
 Nothing links the sitemap from a page: `robots.txt` names it, which is where a
 crawler looks.
+
+## llms.txt
+
+`/llms.txt` describes the site for a language model, in the
+[llms.txt](https://llmstxt.org/) format. It holds the site's title as a heading
+and its tagline as a quote. Then it lists every public page by title and the
+posts the feeds carry, newest first. Each entry links to the document's
+Markdown, which is what a model reads best:
+
+```markdown
+# Field Notes
+
+> Notes from the field.
+
+## Pages
+
+- [About](https://example.com/about/index.md): Who writes this.
+
+## Recent posts
+
+- [Third post](https://example.com/third/index.md)
+```
+
+A document's `description` follows its link. A static homepage is listed at
+`/index.md`, because `/` is where it is published. The file is served as
+`text/markdown` and carries an `ETag` and a `Last-Modified`, the newest date
+among its entries. It answers a conditional request with 304, as the sitemap
+does.
+
+The home page advertises the file twice. The response carries
+`Link: </llms.txt>; rel="describedby"; type="text/markdown"`, for a tool that
+reads no HTML. The default theme's head carries
+`<link rel="describedby" type="text/markdown" href="/llms.txt">`. A theme
+gets the path as `llmsTxt` while the site serves the file.
+
+To write the file yourself, put it at `content/llms.txt`. The CMS serves it
+exactly as written in place of the generated one, dated by the file. To serve
+no file at all, clear **Serve /llms.txt** under Settings → Reading. This
+writes `"llmsTxt": false` to `site.json`. `/llms.txt` then answers 404, even
+when `content/llms.txt` exists, and the home page stops advertising it.
 
 ## Theme overrides
 

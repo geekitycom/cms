@@ -995,6 +995,7 @@ Every template gets:
 | `icons`      | The site's icons, as `{ rel, sizes, type, href }`. Empty until the site has an icon or an avatar to derive them from. See [The head](#the-head).                                                        |
 | `theme`      | The colours the theme declares, as `{ colorScheme, themeColor: { light, dark } }`, each absent when no theme declares it. See [The manifest](#the-manifest).                                            |
 | `shareImage` | The picture a shared link shows, as `{ url, alt, size: { width, height }, card }`. `size` is absent when it is not known. **Absent** when there is no picture. See [The head](#the-head).               |
+| `llmsTxt`    | The path of `/llms.txt`, while the site serves it. **Absent** when the site has turned it off. The default theme links it from the front page only.                                                     |
 
 A document — one post, one page, or one entry of a listing — adds:
 
@@ -1291,6 +1292,15 @@ when the site is taking webmentions, so a theme asks `{% if webmention %}` and a
 site that has turned them off advertises nothing. The CMS also sends the same
 endpoint as a `Link` header on every representation of a document, so a sender
 that does not parse HTML still finds it.
+
+On the front page it also writes the site's index for language models:
+
+```html
+<link rel="describedby" type="text/markdown" href="/llms.txt" />
+```
+
+It comes from `llmsTxt` on the context, which is absent once the site turns the
+file off. The CMS sends the same link as a `Link` header on the front page.
 
 `layouts/tag.njk` and `layouts/category.njk` override that block, call `super()`
 and add the archive's own three feeds:
