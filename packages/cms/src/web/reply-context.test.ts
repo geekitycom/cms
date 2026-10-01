@@ -360,12 +360,29 @@ describe('saving a reply', () => {
   });
 });
 
-describe('a reply’s preview in the demo theme', () => {
-  it('embeds the same h-cite inside the demo’s h-entry', async () => {
-    const themesDir = path.resolve(import.meta.dirname, '../../../../apps/demo/themes');
+describe('a reply’s preview in a site theme’s own post layout', () => {
+  it('embeds the same h-cite inside that layout’s h-entry', async () => {
+    const themesDir = await box.dir('geekity-reply-context-themes-');
+    const files = {
+      'own/theme.json': JSON.stringify({ name: 'Own', kind: 'site' }),
+      'own/layouts/post.njk': [
+        '{% extends "layouts/base.njk" %}',
+        '{% block content %}',
+        '<article class="post h-entry">',
+        '{% include "partials/reply-context.njk" %}',
+        '<div class="e-content">{{ content | safe }}</div>',
+        '</article>',
+        '{% endblock %}',
+      ].join('\n'),
+    };
+    for (const [relative, contents] of Object.entries(files)) {
+      const file = path.join(themesDir, ...relative.split('/'));
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, contents, 'utf8');
+    }
     const { cms } = await site(
       {
-        '_data/site.json': JSON.stringify({ title: 'Demo', theme: 'demo' }),
+        '_data/site.json': JSON.stringify({ title: 'Own', theme: 'own' }),
         'posts/2026-09-10-entry.md': post('entry', ENTRY),
       },
       themesDir,
@@ -374,7 +391,7 @@ describe('a reply’s preview in the demo theme', () => {
     const html = await get(cms, '/2026/09/entry/');
     const article = /<article class="post h-entry">[\s\S]*?<\/article>/.exec(html)?.[0] ?? '';
 
-    assert.ok(article !== '', 'the demo layout drew the post');
+    assert.ok(article !== '', 'the site theme’s layout drew the post');
     const citation = cite(article);
     assert.ok(citation !== undefined, 'the h-cite is inside the entry');
     assert.match(

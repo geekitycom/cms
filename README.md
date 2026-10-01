@@ -37,9 +37,11 @@ packages/cms/          published as @geekity/cms
 apps/demo/             private site that consumes the package via workspace:*
   geekity.config.ts
   server.ts
-  content/           six posts, three pages and _data/site.json
+  content/           the seed: six posts, three pages and _data/site.json
     _includes/       the two layouts an Eleventy build of the same files needs
-  themes/demo/       the theme this site wears: post.njk, style.css, theme.json
+  playground/        the copy of content/ that `pnpm dev` serves, gitignored
+  playground.ts      makes playground/ when it is missing; --reset remakes it
+  themes/demo/       a theme to activate in Appearance: post.njk, style.css, theme.json
   eleventy.config.js re-exports the documented example config
   test/              boots the demo over HTTP, and builds it with Eleventy
 scripts/               pack-install-smoke.sh and docker-smoke.sh, the bodies of those CI jobs,
@@ -72,6 +74,7 @@ Run from the repository root.
 | `pnpm install`           | Installs both workspace packages and links `apps/demo` to `packages/cms`.   |
 | `pnpm dev`               | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`).           |
 | `pnpm start`             | Starts the demo site once, without watching.                                |
+| `pnpm demo:reset`        | Replaces the demo's `playground/` with a fresh copy of `content/`.          |
 | `pnpm build`             | Compiles `packages/cms`, bundles the editor and the default theme's CSS.    |
 | `pnpm test`              | Runs the `node:test` suites in every package through `tsx`.                 |
 | `pnpm test:coverage`     | The same suites with `--experimental-test-coverage`.                        |
@@ -1286,16 +1289,16 @@ context, the blocks and the filter set (`date`, `url`, `absoluteUrl`, `asset`) a
 of the semver contract; they are documented in
 [`packages/cms/themes/default/README.md`](packages/cms/themes/default/README.md).
 
-`apps/demo/themes/demo/` is the worked example, and the demo's
-`content/_data/site.json` says `"theme": "demo"`, so the demo proves the choice
-rather than the default. Beside its `theme.json` it holds two files:
+`apps/demo/themes/demo/` is the worked example. The demo ships wearing the
+packaged theme, so `pnpm dev` shows what a new site gets, and the demo theme is
+one Appearance screen away. Beside its `theme.json` it holds two files:
 `layouts/post.njk`, which extends the packaged base layout and adds a byline of
 its own and a reading time, and `static/style.css`, which replaces the packaged
 stylesheet at `/theme/style.css`. Everything else the demo serves still comes
 from the package. `apps/demo/test/site.test.ts` asserts both halves over HTTP:
-the byline, the reading time and the demo stylesheet while the theme is chosen,
-and — against a copy of the content with the setting taken out — the packaged
-post layout and the packaged stylesheet when it is not. A stylesheet is the one
+the packaged post layout and the packaged stylesheet as the demo ships, and,
+against a copy of the content with `"theme": "demo"` written in, the byline,
+the reading time and the demo stylesheet. A stylesheet is the one
 all-or-nothing override: assets resolve file by file the way templates do, so a
 site's `style.css` is served instead of the packaged one, not after it.
 

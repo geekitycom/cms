@@ -2,7 +2,6 @@
   "title": "Geekity Demo",
   "tagline": "A file-first site, served straight from Markdown",
   "url": "http://localhost:3000",
-  "theme": "demo",
   "homepage": "about",
   "postsPage": "posts",
   "author": "Joe Blog",

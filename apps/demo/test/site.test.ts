@@ -1,17 +1,18 @@
 /**
  * The demo site, booted the way `pnpm --filter demo dev` boots it.
  *
- * The point of these tests is the override mechanism of decision-6 and the
- * named themes of decision-15: the demo ships one theme, `themes/demo/`, whose
- * whole content is `layouts/post.njk` and `static/style.css`; its `site.json`
- * chooses it by name, and everything else — the home page, the tag archives,
- * the 404 — still comes from the package. So the assertions are about what the
- * site actually serves over HTTP, not about which file was read.
+ * The demo ships wearing the packaged theme, so what a person sees on
+ * `pnpm dev` is what a new site gets. It also ships one theme of its own,
+ * `themes/demo/`, whose whole content is `layouts/post.njk` and
+ * `static/style.css`: the worked example of the override mechanism of
+ * decision-6 and the named themes of decision-15, chosen here on a copy of the
+ * content the way the Appearance screen would choose it. The assertions are
+ * about what the site serves over HTTP, not about which file was read.
  *
- * The content directory and the themes directory are the demo's own, from
- * `geekity.config.ts`. Only the port and the data directory are replaced: the
- * index is derived state, so a run gets a fresh one in a temporary directory
- * and leaves `apps/demo/data/` alone.
+ * Every site in this file runs on a copy of `apps/demo/content/` in a
+ * temporary directory, with a fresh data directory beside it. The tracked
+ * content is the seed `pnpm dev` copies into `playground/`, so a test never
+ * writes to it, not even residue.
  */
 import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -33,19 +34,61 @@ import type { Cms } from '@geekity/cms';
 
 import config from '../geekity.config.ts';
 
-/** The demo's content directory, absolute, for the readers that want a path. */
-const CONTENT_DIR = fileURLToPath(new URL('../content', import.meta.url));
+/** The demo's tracked content, absolute: the seed every site here is copied from. */
+const SEED_DIR = fileURLToPath(new URL('../content', import.meta.url));
 
 /** The demo's themes directory, absolute: one folder, `demo/`. */
 const THEMES_DIR = fileURLToPath(new URL('../themes', import.meta.url));
 
-let cms: Cms;
-let origin: string;
-let dataDir: string;
+/** A running copy of the demo: where it serves and where its files are. */
+interface DemoSite {
+  cms: Cms;
+  origin: string;
+  sandbox: string;
+  contentDir: string;
+  dataDir: string;
+}
+
+/**
+ * Boot a copy of the seed, with `edit` given the copy's settings to change
+ * before the CMS reads them.
+ */
+async function bootCopy(edit?: (settings: Record<string, unknown>) => void): Promise<DemoSite> {
+  const sandbox = await mkdtemp(path.join(tmpdir(), 'geekity-demo-'));
+  const contentDir = path.join(sandbox, 'content');
+  const dataDir = path.join(sandbox, 'data');
+  await cp(SEED_DIR, contentDir, { recursive: true });
+  await mkdir(dataDir, { recursive: true });
+
+  if (edit !== undefined) {
+    const settingsFile = path.join(contentDir, '_data', 'site.json');
+    const settings = JSON.parse(await readFile(settingsFile, 'utf8')) as Record<string, unknown>;
+    edit(settings);
+    await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  }
+
+  const cms = createCms({
+    ...config,
+    port: 0,
+    contentDir,
+    dataDir,
+    themesDir: THEMES_DIR,
+    watch: false,
+  });
+  const { port } = await cms.serve();
+  return { cms, origin: `http://127.0.0.1:${String(port)}`, sandbox, contentDir, dataDir };
+}
+
+async function shutDown(site: DemoSite): Promise<void> {
+  await site.cms.close();
+  await rm(site.sandbox, { recursive: true, force: true });
+}
+
+let demo: DemoSite;
 
 /** GET a path from the running demo site. */
 async function get(pathname: string, init?: RequestInit): Promise<Response> {
-  return fetch(new URL(pathname, origin), init);
+  return fetch(new URL(pathname, demo.origin), init);
 }
 
 /** GET a path and assert it came back 200, returning the body. */
@@ -56,44 +99,53 @@ async function text(pathname: string): Promise<string> {
 }
 
 before(async () => {
-  dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-demo-'));
-  cms = createCms({ ...config, port: 0, dataDir, watch: false });
-  const { port } = await cms.serve();
-  origin = `http://127.0.0.1:${String(port)}`;
+  demo = await bootCopy();
 });
 
 after(async () => {
-  await cms.close();
-  await rm(dataDir, { recursive: true, force: true });
+  await shutDown(demo);
 });
 
-describe('the theme the demo chose', () => {
-  it('serves a post through the demo post layout, not the packaged one', async () => {
-    const body = await text('/2026/08/markdown-on-disk/');
+describe('the demo as it ships, on the packaged theme', () => {
+  it('chooses no theme, so pnpm dev shows what a new site gets', async () => {
+    const settings = JSON.parse(
+      await readFile(path.join(SEED_DIR, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
 
-    // The packaged `layouts/post.njk` prints its byline in the meta line and
-    // no reading time; the demo's override gives the byline a line of its own
-    // and adds the reading time, and that is the whole visible difference.
-    assert.match(body, /<p class="post-byline">[\s\S]{0,200}Andrew Shell/);
-    assert.match(body, /\d+ minute read/);
+    assert.equal(settings['theme'], undefined, 'the demo has chosen a theme of its own');
   });
 
-  it('keeps the packaged layouts it did not override', async () => {
-    // `layouts/home.njk` and `partials/post-list.njk` are the package's, and
-    // the listing they draw is on the posts page now (TASK-85).
-    const listing = await text('/posts/');
-    assert.match(listing, /<div class="feed h-feed">/);
-    assert.match(listing, /<article class="feed-item h-entry">/);
+  it('serves a post through the packaged post layout', async () => {
+    const body = await text('/2026/08/markdown-on-disk/');
 
+    // The packaged entry is the andrewshell.org one (TASK-83): the Published
+    // line lives inside the `e-content`, not in a meta line under the title.
+    assert.match(body, /<article class="blog-post h-entry">/, 'not the packaged entry');
+    assert.match(body, /<p class="entry-meta">[\s\S]*?Published/, 'not the packaged meta line');
+    assert.doesNotMatch(body, /post-byline/, 'the unchosen theme is on the search path');
+    assert.doesNotMatch(body, /minute read/, 'the unchosen theme is on the search path');
+  });
+
+  it('serves the packaged stylesheet at /theme/style.css', async () => {
+    const response = await get('/theme/style.css');
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'text/css; charset=utf-8');
+
+    const packaged = await readFile(path.join(PACKAGED_THEME_DIR, 'static', 'style.css'), 'utf8');
+    assert.equal(await response.text(), packaged, 'not the stylesheet inside the package');
+  });
+
+  it('wears the packaged shell on every page of it', async () => {
     const body = await text('/');
 
-    // So is `layouts/base.njk` — the shell of the andrewshell.org design
-    // (decision-16): the skip link, the wrapper that says it is the root path,
-    // and the site title as the heading with the tagline under it.
+    // The shell of the andrewshell.org design (decision-16): the skip link,
+    // the wrapper that says it is the root path, and the site title as the
+    // heading with the tagline under it.
     assert.match(body, /<a class="screen-reader-text" href="#main">Skip to content<\/a>/);
     assert.match(body, /<div class="global-wrapper" data-is-root-path="true">/);
     assert.match(body, /<h1 class="main-heading">\s*<a href="\/">Geekity Demo<\/a>/);
     assert.match(body, /A file-first site, served straight from Markdown/);
+    assert.match(await text('/colophon/'), /<a class="header-link-home" href="\/">/);
   });
 
   it('links the footer out of menus.footer and off no account', async () => {
@@ -122,124 +174,89 @@ describe('the theme the demo chose', () => {
     assert.doesNotMatch(body, /main-heading/, 'the front page heading is on an entry');
   });
 
-  it('serves the demo stylesheet at /theme/style.css', async () => {
-    const response = await get('/theme/style.css');
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get('content-type'), 'text/css; charset=utf-8');
+  it('serves the packaged token colours with the packaged stylesheet', async () => {
+    const css = await text('/theme/style.css');
 
-    const body = await response.text();
-    assert.match(body, /Geekity demo/, 'the packaged stylesheet is being served, not the demo one');
+    assert.match(css, /--color-code-keyword:/, 'the stylesheet has no highlighting palette');
+    assert.match(css, /\.hljs-addition \{/, 'the stylesheet has no diff treatment');
   });
 });
 
 /**
- * The same content with the choice taken out (decision-15).
- *
- * `themes/demo/` is still on disk and `themesDir` still points at it; the only
- * difference is that `site.json` no longer names it, which is exactly what the
- * Appearance screen writes when the packaged theme is activated. So this is
- * the other half of the override mechanism: an unchosen theme is not on the
- * search path at all, and the site falls back to the theme inside the package
- * rather than to nothing.
- *
- * It runs against a copy of the demo's content in a temporary directory.
- * `apps/demo/content/` is a working site that a person may have running, so a
- * test never edits it — not even to put it back afterwards, because a crashed
- * run would leave the demo wearing no theme.
+ * The same content with the demo's theme chosen (decision-15), which is what
+ * the Appearance screen writes into `site.json` when `themes/demo/` is
+ * activated. Only `layouts/post.njk` and the stylesheet change; every other
+ * template still comes from the package.
  */
-describe('the demo with its theme unchosen', () => {
-  let bare: Cms;
-  let bareOrigin: string;
-  let sandbox: string;
+describe('the demo with its own theme chosen', () => {
+  let themed: DemoSite;
 
-  /** GET a path from the second site and assert it came back 200. */
-  async function bareText(pathname: string): Promise<string> {
-    const response = await fetch(new URL(pathname, bareOrigin));
+  /** GET a path from the themed copy and assert it came back 200. */
+  async function themedText(pathname: string): Promise<string> {
+    const response = await fetch(new URL(pathname, themed.origin));
     assert.equal(response.status, 200, `GET ${pathname} answered ${String(response.status)}`);
     return response.text();
   }
 
   before(async () => {
-    sandbox = await mkdtemp(path.join(tmpdir(), 'geekity-demo-unchosen-'));
-    const contentDir = path.join(sandbox, 'content');
-    const bareDataDir = path.join(sandbox, 'data');
-    await cp(CONTENT_DIR, contentDir, { recursive: true });
-    await mkdir(bareDataDir, { recursive: true });
-
-    const settingsFile = path.join(contentDir, '_data', 'site.json');
-    const settings = JSON.parse(await readFile(settingsFile, 'utf8')) as Record<string, unknown>;
-    assert.equal(settings['theme'], 'demo', 'the demo does not choose a theme to unchoose');
-    delete settings['theme'];
-    await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
-
-    bare = createCms({
-      ...config,
-      port: 0,
-      contentDir,
-      dataDir: bareDataDir,
-      themesDir: THEMES_DIR,
-      watch: false,
+    themed = await bootCopy((settings) => {
+      settings['theme'] = 'demo';
     });
-    const { port } = await bare.serve();
-    bareOrigin = `http://127.0.0.1:${String(port)}`;
   });
 
   after(async () => {
-    await bare.close();
-    await rm(sandbox, { recursive: true, force: true });
+    await shutDown(themed);
   });
 
-  it('serves a post through the packaged post layout', async () => {
-    const body = await bareText('/2026/08/markdown-on-disk/');
+  it('serves a post through the demo post layout, not the packaged one', async () => {
+    const body = await themedText('/2026/08/markdown-on-disk/');
 
-    // The packaged entry is the andrewshell.org one (TASK-83): the Published
-    // line lives inside the `e-content`, not in a meta line under the title.
-    assert.match(body, /<article class="blog-post h-entry">/, 'not the packaged entry');
-    assert.match(body, /<p class="entry-meta">[\s\S]*?Published/, 'not the packaged meta line');
-    assert.doesNotMatch(body, /post-byline/, 'the unchosen theme is still on the search path');
-    assert.doesNotMatch(body, /minute read/, 'the unchosen theme is still on the search path');
+    // The packaged `layouts/post.njk` prints its byline in the meta line and
+    // no reading time; the demo's override gives the byline a line of its own
+    // and adds the reading time, and that is the whole visible difference.
+    assert.match(body, /<p class="post-byline">[\s\S]{0,200}Andrew Shell/);
+    assert.match(body, /\d+ minute read/);
   });
 
-  it('serves the packaged stylesheet at /theme/style.css', async () => {
-    const response = await fetch(new URL('/theme/style.css', bareOrigin));
-    assert.equal(response.status, 200);
+  it('keeps the packaged layouts it did not override', async () => {
+    // `layouts/home.njk` and `partials/post-list.njk` are the package's, and
+    // the listing they draw is on the posts page now (TASK-85).
+    const listing = await themedText('/posts/');
+    assert.match(listing, /<div class="feed h-feed">/);
+    assert.match(listing, /<article class="feed-item h-entry">/);
 
-    const packaged = await readFile(path.join(PACKAGED_THEME_DIR, 'static', 'style.css'), 'utf8');
-    assert.equal(await response.text(), packaged, 'not the stylesheet inside the package');
-  });
-
-  it('serves the rest of the site exactly as before', async () => {
-    assert.match(await bareText('/'), /<div class="feed h-feed">/);
-    assert.match(await bareText('/colophon/'), /Colophon/);
-  });
-
-  it('wears the packaged shell on every page of it', async () => {
-    assert.match(await bareText('/'), /<div class="global-wrapper" data-is-root-path="true">/);
-    assert.match(await bareText('/colophon/'), /<a class="header-link-home" href="\/">/);
-  });
-
-  it('loads the highlighter only on the post with code on it (TASK-86)', async () => {
-    const withCode = await bareText('/2026/07/six-tables-and-a-migration/');
-
-    assert.match(withCode, /<pre tabindex="0"><code class="language-sql">/);
-    assert.match(withCode, /<pre tabindex="0"><code class="language-typescript">/);
-    assert.match(withCode, /<pre tabindex="0"><code class="language-diff">/);
-    assert.match(withCode, /<script src="\/theme\/highlight\.js\?v=[0-9a-f]{12}" defer><\/script>/);
-
-    const withoutCode = await bareText('/2026/08/one-url-many-representations/');
-    assert.doesNotMatch(withoutCode, /highlight\.js/, 'a post with no code ships JavaScript');
-    assert.doesNotMatch(
-      withoutCode,
-      /<script(?![^>]*(?:application\/ld\+json|speculationrules))/,
-      'and any script',
+    assert.match(
+      await themedText('/'),
+      /<div class="global-wrapper" data-is-root-path="true">/,
+      'the packaged base layout is not the shell',
     );
   });
 
-  it('serves the packaged token colours with the packaged stylesheet', async () => {
-    const css = await bareText('/theme/style.css');
+  it('serves the demo stylesheet at /theme/style.css', async () => {
+    const css = await themedText('/theme/style.css');
 
-    assert.match(css, /--color-code-keyword:/, 'the stylesheet has no highlighting palette');
-    assert.match(css, /\.hljs-addition \{/, 'the stylesheet has no diff treatment');
+    assert.match(css, /Geekity demo/, 'the packaged stylesheet is being served, not the demo one');
+  });
+
+  it('gives the demo stylesheet its own token colours for what the bundle marks up', async () => {
+    // A stylesheet is an all-or-nothing override, so the theme that ships one
+    // owns the highlighter's colours too. Without these the bundle would still
+    // run and every token would come out the colour of the code around it.
+    const css = await themedText('/theme/style.css');
+
+    assert.match(css, /--code-keyword:/, 'the demo stylesheet has no highlighting palette');
+    assert.match(css, /\.hljs-addition \{/, 'the demo stylesheet has no diff treatment');
+  });
+
+  it('serves the packaged bundle, because the demo theme has no static of its own', async () => {
+    const response = await fetch(new URL('/theme/highlight.js', themed.origin));
+    assert.equal(response.status, 200);
+
+    const packaged = await readFile(
+      path.join(PACKAGED_THEME_DIR, 'static', 'highlight.js'),
+      'utf8',
+    );
+    assert.equal(await response.text(), packaged);
   });
 });
 
@@ -262,12 +279,12 @@ describe('the demo content', () => {
     // a fresh checkout has, because `data/` is not in git — the name is still
     // printed, it simply links nowhere.
     const andrew = await createUser({
-      dataDir,
+      dataDir: demo.dataDir,
       username: 'andrew',
       password: 'a password for the demo',
     });
     await setUserProfile({
-      dataDir,
+      dataDir: demo.dataDir,
       userId: andrew.id,
       profile: { displayName: 'Andrew Shell', bio: 'Writes the CMS this runs on.' },
     });
@@ -425,7 +442,7 @@ describe('the demo contact page', () => {
   });
 
   it('keeps the address a message goes to out of the HTML', async () => {
-    const { contactEmail } = readSiteSettings(CONTENT_DIR);
+    const { contactEmail } = readSiteSettings(demo.contentDir);
     assert.notEqual(contactEmail, '', 'the demo configures no contact address to look for');
 
     // Both what a visitor asks for and what the form itself is rendered into:
@@ -436,7 +453,7 @@ describe('the demo contact page', () => {
 });
 
 /**
- * Code highlighting (TASK-86), on the two sites this file boots.
+ * Code highlighting (TASK-86), on the demo as it ships.
  *
  * The packaged base layout loads `/theme/highlight.js` on a page whose rendered
  * body holds a `language-` class and on no other page, so the demo is where
@@ -462,33 +479,18 @@ describe('the demo highlights code where there is code', () => {
     }
   });
 
-  it('loads the highlighter there and nowhere else, on the theme the demo chose', async () => {
+  it('loads the highlighter there and nowhere else', async () => {
     assert.match(
       await text(WITH_CODE),
       /<script src="\/theme\/highlight\.js\?v=[0-9a-f]{12}" defer><\/script>/,
     );
-    assert.doesNotMatch(await text(WITHOUT_CODE), /highlight\.js/);
-    assert.doesNotMatch(await text('/'), /highlight\.js/);
-  });
-
-  it('gives the demo stylesheet its own token colours for what the bundle marks up', async () => {
-    // A stylesheet is an all-or-nothing override, so the theme that ships one
-    // owns the highlighter's colours too. Without these the bundle would still
-    // run and every token would come out the colour of the code around it.
-    const css = await text('/theme/style.css');
-
-    assert.match(css, /--code-keyword:/, 'the demo stylesheet has no highlighting palette');
-    assert.match(css, /\.hljs-addition \{/, 'the demo stylesheet has no diff treatment');
-  });
-
-  it('serves the packaged bundle, because the demo theme has no static of its own', async () => {
-    const response = await get('/theme/highlight.js');
-    assert.equal(response.status, 200);
-
-    const packaged = await readFile(
-      path.join(PACKAGED_THEME_DIR, 'static', 'highlight.js'),
-      'utf8',
+    const withoutCode = await text(WITHOUT_CODE);
+    assert.doesNotMatch(withoutCode, /highlight\.js/, 'a post with no code ships JavaScript');
+    assert.doesNotMatch(
+      withoutCode,
+      /<script(?![^>]*(?:application\/ld\+json|speculationrules))/,
+      'and any script',
     );
-    assert.equal(await response.text(), packaged);
+    assert.doesNotMatch(await text('/'), /highlight\.js/);
   });
 });
