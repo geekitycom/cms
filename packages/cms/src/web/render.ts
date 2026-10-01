@@ -9,7 +9,7 @@ import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
-import { siteIcons } from '../images/icons.ts';
+import { iconSetting, siteIcons } from '../images/icons.ts';
 import { archiveMonths, archiveOpen } from './archive.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
@@ -36,7 +36,7 @@ import { snippetHtml } from './search.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 import { createTemplateEnvironment, useThemeDirs } from './templates.ts';
 import { createThemeSource, findThemeFile } from './themes.ts';
-import type { ThemeSource } from './themes.ts';
+import type { ThemeColors, ThemeSource } from './themes.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 
@@ -208,6 +208,11 @@ export interface Renderer {
    * the page that links to it can never come from two different themes.
    */
   themeDirs(): readonly string[];
+  /**
+   * The colours of the theme a render wears right now, gap-filled from the
+   * packaged theme: what the head declares and the web manifest repeats.
+   */
+  themeColors(): ThemeColors;
   /** The Nunjucks environment, for a site that wants to add its own filters. */
   readonly environment: Environment;
 }
@@ -407,12 +412,12 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // context by the callers below, and win by going on last.
     const siteOwner = siteAuthorContext(users(), site.author);
     const owner = context['siteAuthor'] === undefined ? siteOwner : undefined;
-    // The site's icons, as the three links a head carries (TASK-81). They are
-    // computed here rather than in the layout because only this side knows
+    // The site's icons, as the links a head carries (TASK-81, TASK-147). They
+    // are computed here rather than in the layout because only this side knows
     // where a derived file is served and whether the site can derive one at
-    // all: a theme that was handed the avatar path would have to build the URL
-    // itself and would link three 404s on a site with image optimization off.
-    const icons = siteIcons(config, site.avatar);
+    // all: a theme that was handed the icon's path would have to build the URL
+    // itself and would link 404s on a site with image optimization off.
+    const icons = siteIcons(config, iconSetting(site));
     // The picture a shared link shows (TASK-146), here for the reason the
     // icons are: its alt text and its size are in files only this side reads.
     const title = [context['title'], context['label']].find(
@@ -692,6 +697,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     themeDirs() {
       return themes.current().dirs;
+    },
+
+    themeColors() {
+      return themes.current().colors;
     },
 
     pageSize() {

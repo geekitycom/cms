@@ -9,6 +9,7 @@ import { postLabel } from '../content/post-type.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { mountAvatars } from '../avatars/routes.ts';
+import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
 import {
@@ -81,6 +82,7 @@ import {
   SITEMAP_PATH,
 } from './sitemap.ts';
 import type { SitemapUrl } from './sitemap.ts';
+import { FAVICON_PATH, manifestResponse, MANIFEST_PATH, webManifest } from './manifest.ts';
 import {
   searchHref,
   searchJson,
@@ -182,6 +184,21 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   app.get(SITEMAP_PATH, (c) => sitemap(c, undefined));
   app.get(SITEMAP_CHILD_ROUTE, (c) => sitemap(c, Number(c.req.param('page'))));
   app.get(ROBOTS_PATH, (c) => robotsResponse(c.var.config.baseUrl, conditionalHeaders(c)));
+
+  // The web app manifest and the root favicon (TASK-147), fixed paths at the
+  // root for the same reason: a browser asks for `/favicon.ico` whatever the
+  // head links, and no permalink may take either URL.
+  app.get(MANIFEST_PATH, (c) => {
+    const site = c.var.renderer.site();
+    const manifest = webManifest({
+      config: c.var.config,
+      title: site.title,
+      iconSetting: iconSetting(site),
+      colors: c.var.renderer.themeColors(),
+    });
+    return manifestResponse(manifest, conditionalHeaders(c));
+  });
+  app.get(FAVICON_PATH, favicon);
 
   // The site's search (TASK-22): a route at a fixed path for the reason the
   // feeds are, so the form in every theme's footer submits somewhere no
@@ -1426,6 +1443,25 @@ async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
   const version = sourceVersion(c.var.config, source);
   const fingerprinted = version !== undefined && c.req.query(ASSET_VERSION_PARAM) === version;
   const options = fingerprinted ? IMMUTABLE_ASSET : { maxAge: UPLOAD_ASSET_MAX_AGE };
+  return matchesEtag(c.req.header('if-none-match'), asset.etag)
+    ? assetNotModified(asset, options)
+    : assetResponse(asset, options);
+}
+
+/**
+ * `/favicon.ico`, derived from the site's icon beside its other icons.
+ *
+ * Its URL carries no version, so it is cached like an upload rather than for
+ * a year: a site that changes its icon is seen with the new one within a day.
+ */
+async function favicon(c: Context<GeekityEnv>): Promise<Response> {
+  const source = siteIconSource(c.var.config, iconSetting(c.var.renderer.site()));
+  if (source === undefined) return notFound(c);
+
+  const asset = await findImageVariant(c.var.config, `${source}/${FAVICON_FILE}`);
+  if (asset === undefined) return notFound(c);
+
+  const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
   return matchesEtag(c.req.header('if-none-match'), asset.etag)
     ? assetNotModified(asset, options)
     : assetResponse(asset, options);

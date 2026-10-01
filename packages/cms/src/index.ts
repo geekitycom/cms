@@ -625,6 +625,8 @@ export {
   IMAGE_SIZES,
   removeImageVariants,
   responsiveImages,
+  iconSetting,
+  manifestIcons,
   siteIcons,
   siteImageMarkup,
   variantUrl,
@@ -637,6 +639,7 @@ export type {
   ImageLoading,
   ImageRecord,
   ImageVariant,
+  ManifestIcon,
   SiteIcon,
 } from './images/index.ts';
 

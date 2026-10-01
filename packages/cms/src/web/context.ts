@@ -47,6 +47,12 @@ export interface SiteData {
    * been uploaded on the settings screen; the ActivityPub actor's `icon`.
    */
   avatar?: string | undefined;
+  /**
+   * The upload the site's icons are drawn from, when it is not the avatar: a
+   * logo, say, for a site whose avatar is a face. An SVG is linked as itself
+   * as well as rasterised. Absent means the avatar.
+   */
+  icon?: string | undefined;
   /** How many posts a listing page holds. */
   postsPerPage?: number | undefined;
   /**

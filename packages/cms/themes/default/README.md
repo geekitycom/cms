@@ -693,14 +693,25 @@ sidecar rather than from the file. `twitter:card` is `summary_large_image` for a
 picture at least 1200 pixels wide and wider than it is tall. Everything else,
 the avatar included, is `summary`, the small picture beside the words.
 
-**The icons** come from the site's avatar through the derived images
-(decision-10): `icon` at 32 and 16 pixels and `apple-touch-icon` at 180, each a
-square PNG cropped from the middle of the avatar and encoded the first time a
-browser asks for it. They are on the context as `icons`, a list of
-`{ rel, sizes, href }`, which is empty — and the links are not printed at all —
-when the site has no avatar, when its avatar is a file no icon can be made of,
-or when image optimization is off. There is no web manifest; a site that wants
-one adds it in its own `head` block.
+**The icons** come from the site's `icon` setting in `site.json`, else
+`site.avatar`, through the derived images (decision-10). `icon` exists for a
+site whose avatar is a face and whose mark is a logo. The head links `icon` at
+32 and 16 pixels and `apple-touch-icon` at 180, each a square PNG cropped from
+the middle of the picture and encoded the first time a browser asks for it. An
+SVG icon is linked first as itself, with `type="image/svg+xml"` and no
+`sizes`, and the PNGs are rasterised from it. They are on the context as
+`icons`, a list of `{ rel, sizes, type, href }`, which is empty, and the links
+are not printed at all, when the site has neither setting, when it names a
+file no icon can be made of, or when image optimization is off.
+
+**The favicon and the manifest** are routes, not templates. `/favicon.ico`
+holds 16, 32 and 48 pixel frames drawn from the same picture, because browsers
+and crawlers ask the root for it whatever the head links; it answers 404 on a
+site with no icon. `/manifest.webmanifest` gives the site's title as `name` and
+`short_name`, `start_url` `/`, `display` `minimal-ui`, the theme's light
+`themeColor` as `theme_color` and `background_color`, and icons at 192 and 512
+pixels plus a maskable 512 whose picture sits inside the middle 80%, padded
+with its own dominant colour. The head links it on every page.
 
 **The structured data** is `partials/jsonld.njk`, one `<script
 type="application/ld+json">` holding one `@graph` per page, and it is the only
@@ -981,7 +992,7 @@ Every template gets:
 | `site`       | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
 | `menus`      | Every menu the site stores, by name, marked for this page: `menus.primary`, `menus.footer`, and any other name. See [Navigation](#navigation).                                                          |
 | `siteAuthor` | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
-| `icons`      | The site's icons, as `{ rel, sizes, href }`. Empty until the site has an avatar to derive them from. See [The head](#the-head).                                                                         |
+| `icons`      | The site's icons, as `{ rel, sizes, type, href }`. Empty until the site has an icon or an avatar to derive them from. See [The head](#the-head).                                                        |
 | `theme`      | The colours the theme declares, as `{ colorScheme, themeColor: { light, dark } }`, each absent when no theme declares it. See [The manifest](#the-manifest).                                            |
 | `shareImage` | The picture a shared link shows, as `{ url, alt, size: { width, height }, card }`. `size` is absent when it is not known. **Absent** when there is no picture. See [The head](#the-head).               |
 

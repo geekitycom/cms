@@ -9,8 +9,8 @@ import { derivedDir, sourceFile, sourceVersion, versioned, VARIANT_ASSET_PREFIX 
 import type { ImageConfig } from './paths.ts';
 
 /**
- * The site's icons: the two favicons and the touch icon, derived from the
- * site's avatar.
+ * The site's icons: the favicons, the touch icon, the manifest's icons and
+ * `/favicon.ico`, derived from the site's `icon` setting, else its avatar.
  *
  * They are derived copies of an upload like every other file under
  * {@link VARIANT_ASSET_PREFIX} — rebuildable, disposable, never read by a feed
@@ -23,8 +23,8 @@ import type { ImageConfig } from './paths.ts';
  * `icon-32.png` rather than `32.png` so it can never be confused with the
  * width of that number.
  *
- * Nothing is derived until somebody asks: the head links three URLs, and the
- * first browser to follow one encodes it. That keeps the three sizes out of
+ * Nothing is derived until somebody asks: the head and the manifest link URLs,
+ * and the first browser to follow one encodes it. That keeps the sizes out of
  * every upload's variant set, where they would turn up in a `srcset` as
  * candidates nobody wants.
  */
@@ -33,28 +33,82 @@ import type { ImageConfig } from './paths.ts';
 export interface SiteIcon {
   /** `icon` or `apple-touch-icon`. */
   rel: string;
-  /** The `sizes` attribute, `32x32`. */
+  /** The `sizes` attribute, `32x32`; empty for an SVG, which has every size. */
   sizes: string;
-  /** Where the derived file is served, as a site-root path. */
+  /** `image/png`, or `image/svg+xml` for a site whose icon is an SVG. */
+  type: string;
+  /** Where the file is served, as a site-root path. */
   href: string;
 }
 
+/** One icon as a web app manifest lists it. */
+export interface ManifestIcon {
+  src: string;
+  sizes: string;
+  type: string;
+  /** Present only for the maskable icon; a manifest reads an absent one as `any`. */
+  purpose?: 'maskable';
+}
+
 /**
- * The icons a site offers, in the order the head lists them: the 32 and 16
- * pixel favicons and the 180 pixel touch icon Apple asks for.
+ * How one derived file is drawn.
  *
- * Three is the whole set. A site that wants a web manifest, a mask icon or a
- * tile colour writes them into its own theme's `head` block; the package links
- * what every browser reads and nothing that needs a second file to explain it.
+ * `square` is the picture cropped to its middle at one size. `maskable` is the
+ * same crop shrunk into the middle 80% of the canvas and padded out opaque,
+ * because a platform that masks an icon to a circle or a squircle may cut
+ * anything outside that zone. `ico` is several squares in one Windows icon
+ * file, for the `/favicon.ico` every browser and crawler asks for.
  */
-const ICONS: readonly { rel: string; size: number }[] = [
-  { rel: 'icon', size: 32 },
-  { rel: 'icon', size: 16 },
-  { rel: 'apple-touch-icon', size: 180 },
+type IconShape =
+  | { readonly kind: 'square'; readonly size: number }
+  | { readonly kind: 'maskable'; readonly size: number }
+  | { readonly kind: 'ico'; readonly sizes: readonly number[] };
+
+/**
+ * Every file derived from the site's icon, by the name it is served under.
+ *
+ * The request path is checked against this table, so the URL space cannot be
+ * used to make the server encode arbitrary sizes, the rule the widths already
+ * follow.
+ */
+const DERIVED_ICONS: ReadonlyMap<string, IconShape> = new Map<string, IconShape>([
+  ['icon-32.png', { kind: 'square', size: 32 }],
+  ['icon-16.png', { kind: 'square', size: 16 }],
+  ['icon-180.png', { kind: 'square', size: 180 }],
+  ['icon-192.png', { kind: 'square', size: 192 }],
+  ['icon-512.png', { kind: 'square', size: 512 }],
+  ['maskable-512.png', { kind: 'maskable', size: 512 }],
+  ['favicon.ico', { kind: 'ico', sizes: [16, 32, 48] }],
+]);
+
+/** The derived file `/favicon.ico` serves. */
+export const FAVICON_FILE = 'favicon.ico';
+
+/**
+ * The icons the head links, in order: the 32 and 16 pixel favicons and the 180
+ * pixel touch icon Apple asks for. An SVG icon goes ahead of them as itself.
+ */
+const HEAD_ICONS: readonly { rel: string; file: string; size: number }[] = [
+  { rel: 'icon', file: 'icon-32.png', size: 32 },
+  { rel: 'icon', file: 'icon-16.png', size: 16 },
+  { rel: 'apple-touch-icon', file: 'icon-180.png', size: 180 },
 ];
 
-/** What a derived icon is called inside its source's directory. */
-const ICON_FILE = /^icon-(\d{1,4})\.png$/;
+/**
+ * The icons the manifest lists: the 192 and 512 a browser needs before it
+ * offers to install the site, and the maskable 512 a launcher crops.
+ */
+const MANIFEST_ICONS: readonly { file: string; size: number; maskable: boolean }[] = [
+  { file: 'icon-192.png', size: 192, maskable: false },
+  { file: 'icon-512.png', size: 512, maskable: false },
+  { file: 'maskable-512.png', size: 512, maskable: true },
+];
+
+/**
+ * How much of a maskable icon's width the picture may fill: the safe zone is
+ * a circle of 40% radius, so the picture is drawn 80% wide in the middle.
+ */
+const MASKABLE_SAFE_ZONE = 0.8;
 
 /**
  * The extensions an icon may be derived from.
@@ -62,7 +116,7 @@ const ICON_FILE = /^icon-(\d{1,4})\.png$/;
  * Wider than the responsive variants' set — an SVG has no pixels to resize but
  * rasterises to a square perfectly well, and only the first frame of a GIF was
  * ever going to be a favicon — and narrower than "anything sharp might open",
- * so a site whose avatar setting points at a PDF links no icons rather than
+ * so a site whose icon setting points at a PDF links no icons rather than
  * three that 404.
  */
 const ICON_SOURCES: ReadonlySet<string> = new Set([
@@ -77,87 +131,211 @@ const ICON_SOURCES: ReadonlySet<string> = new Set([
   '.webp',
 ]);
 
-/** The name one size is derived under. */
-export function iconFileName(size: number): string {
-  return `icon-${String(size)}.png`;
+/** Whether a derived filename names an icon this site offers. */
+export function isDerivedIcon(file: string): boolean {
+  return DERIVED_ICONS.has(file);
 }
 
 /**
- * The size a derived filename names, or `undefined` when it names no icon this
- * site offers.
+ * The upload the site's icons are drawn from, as the setting names it: the
+ * `icon` setting when the site has one, else its avatar.
  *
- * The check the request path goes through, so the URL space cannot be used to
- * make the server encode arbitrary sizes — the rule the widths already follow.
+ * A site whose mark is a logo rather than a face sets `icon` and keeps the
+ * avatar for the fediverse and the share card.
  */
-export function iconSize(file: string): number | undefined {
-  const size = Number(ICON_FILE.exec(file)?.[1] ?? NaN);
-  return ICONS.some((icon) => icon.size === size) ? size : undefined;
+export function iconSetting(site: { icon?: unknown; avatar?: unknown }): string | undefined {
+  for (const value of [site.icon, site.avatar]) {
+    if (typeof value === 'string' && value.trim() !== '') return value.trim();
+  }
+  return undefined;
 }
 
 /**
- * The icons of a site whose avatar is this upload, or none at all.
+ * The upload a site's icons are derived from, as a path under the uploads
+ * directory, or `undefined` when there is none to derive from.
  *
- * None when the site has no avatar, when the avatar is not one of its own
- * uploads, when it is a file no icon can be made of, or when image
- * optimization is off — because the head must never link a file this server
- * would answer 404 for.
+ * None when the setting is empty, names no upload of this site, names a file
+ * no icon can be made of, or when image optimization is off, because nothing
+ * may link a file this server would answer 404 for.
  */
-export function siteIcons(config: ImageConfig, avatar: string | undefined): SiteIcon[] {
-  if (!config.imageOptimization) return [];
+export function siteIconSource(
+  config: ImageConfig,
+  setting: string | undefined,
+): string | undefined {
+  return config.imageOptimization ? iconSource(setting) : undefined;
+}
 
-  const source = iconSource(avatar);
+/** The icons the head of a site whose icon setting is this links, or none at all. */
+export function siteIcons(config: ImageConfig, setting: string | undefined): SiteIcon[] {
+  const source = siteIconSource(config, setting);
   if (source === undefined) return [];
 
   const version = sourceVersion(config, source);
-  return ICONS.map(({ rel, size }) => ({
-    rel,
-    sizes: `${String(size)}x${String(size)}`,
-    href: versioned(iconHref(source, size), version),
-  }));
+  const svg: SiteIcon[] = isSvg(source)
+    ? [{ rel: 'icon', sizes: '', type: 'image/svg+xml', href: uploadHref(source) }]
+    : [];
+  return [
+    ...svg,
+    ...HEAD_ICONS.map(({ rel, file, size }) => ({
+      rel,
+      sizes: squareSizes(size),
+      type: 'image/png',
+      href: versioned(iconHref(source, file), version),
+    })),
+  ];
+}
+
+/** The icons a web app manifest lists for a site whose icon setting is this. */
+export function manifestIcons(config: ImageConfig, setting: string | undefined): ManifestIcon[] {
+  const source = siteIconSource(config, setting);
+  if (source === undefined) return [];
+
+  const version = sourceVersion(config, source);
+  const svg: ManifestIcon[] = isSvg(source)
+    ? [{ src: uploadHref(source), sizes: 'any', type: 'image/svg+xml' }]
+    : [];
+  return [
+    ...svg,
+    ...MANIFEST_ICONS.map(({ file, size, maskable }) => ({
+      src: versioned(iconHref(source, file), version),
+      sizes: squareSizes(size),
+      type: 'image/png',
+      ...(maskable ? { purpose: 'maskable' as const } : {}),
+    })),
+  ];
 }
 
 /**
- * Derive one icon, or answer `false` having written nothing.
+ * Derive one icon file, or answer `false` having written nothing.
  *
- * Enlarging is allowed, unlike a width variant: 180 pixels is what the touch
- * icon has to be, and a site whose avatar is smaller than that is better
- * served a soft icon than none. The crop is the middle of the picture, which
- * is where a face is.
+ * Enlarging is allowed, unlike a width variant: 512 pixels is what a launcher
+ * asks for, and a site whose icon is smaller than that is better served a soft
+ * icon than none. The crop is the middle of the picture, which is where a face
+ * is.
  */
 export async function deriveSiteIcon(
   config: ImageConfig,
   source: string,
-  size: number,
+  name: string,
 ): Promise<boolean> {
+  const shape = DERIVED_ICONS.get(name);
   const file = sourceFile(config, source);
-  if (file === undefined || !ICON_SOURCES.has(path.extname(source).toLowerCase())) return false;
-
-  const directory = derivedDir(config, source);
+  if (shape === undefined || file === undefined) return false;
+  if (!ICON_SOURCES.has(path.extname(source).toLowerCase())) return false;
 
   try {
-    // `autoOrient` applies the EXIF rotation, and sharp keeps no metadata
-    // unless asked, so the icon comes out the right way up carrying no camera
-    // and no location.
-    const encoded = await sharp(file, { autoOrient: true })
-      .resize({ width: size, height: size, fit: 'cover', position: 'centre' })
-      .png({ compressionLevel: 9 })
-      .toBuffer();
-
+    const encoded = await drawIcon(file, shape);
+    const directory = derivedDir(config, source);
     await mkdir(directory, { recursive: true });
-    await writeFileAtomically(path.join(directory, iconFileName(size)), encoded);
+    await writeFileAtomically(path.join(directory, name), encoded);
     return true;
   } catch {
-    // An avatar sharp cannot read is a site with no icons, not a failed
+    // An icon sharp cannot read is a site with no icons, not a failed
     // request: the handler answers 404 and the page it came from is fine.
     return false;
   }
 }
 
-/** The upload an avatar setting names, or `undefined` when it names none. */
-function iconSource(avatar: string | undefined): string | undefined {
-  if (avatar === undefined || !avatar.startsWith(UPLOAD_ASSET_PREFIX)) return undefined;
+async function drawIcon(file: string, shape: IconShape): Promise<Buffer> {
+  switch (shape.kind) {
+    case 'square':
+      return square(file, shape.size);
+    case 'maskable':
+      return maskable(file, shape.size);
+    case 'ico':
+      return icoFile(
+        await Promise.all(
+          shape.sizes.map(async (size) => ({ size, png: await square(file, size) })),
+        ),
+      );
+  }
+}
 
-  const relative = avatar.slice(UPLOAD_ASSET_PREFIX.length);
+/**
+ * The picture cropped to its middle at one size.
+ *
+ * `autoOrient` applies the EXIF rotation, and sharp keeps no metadata unless
+ * asked, so the icon comes out the right way up carrying no camera and no
+ * location.
+ */
+async function square(file: string, size: number): Promise<Buffer> {
+  return sharp(file, { autoOrient: true })
+    .resize({ width: size, height: size, fit: 'cover', position: 'centre' })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+/**
+ * The picture inside the safe zone, padded out to the full square with its
+ * own dominant colour so the padding reads as part of it, and flattened onto
+ * that colour, because a launcher draws a maskable icon's transparency as
+ * black.
+ */
+async function maskable(file: string, size: number): Promise<Buffer> {
+  const inner = Math.round(size * MASKABLE_SAFE_ZONE);
+  const edge = Math.floor((size - inner) / 2);
+  const { dominant } = await sharp(file, { autoOrient: true }).stats();
+  const background = { ...dominant, alpha: 1 };
+
+  const picture = await sharp(file, { autoOrient: true })
+    .resize({ width: inner, height: inner, fit: 'cover', position: 'centre' })
+    .toBuffer();
+  return sharp(picture)
+    .flatten({ background })
+    .extend({
+      top: edge,
+      left: edge,
+      bottom: size - inner - edge,
+      right: size - inner - edge,
+      background,
+    })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+/**
+ * A Windows icon file holding one PNG per size.
+ *
+ * Every browser since Internet Explorer 9 reads PNG frames in an ICO, which
+ * keeps this to a header, a directory and the PNGs as they are.
+ */
+function icoFile(frames: readonly { size: number; png: Buffer }[]): Buffer {
+  const header = Buffer.alloc(6 + frames.length * 16);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(frames.length, 4);
+
+  let offset = header.length;
+  frames.forEach(({ size, png }, index) => {
+    const entry = 6 + index * 16;
+    // A dimension of 256 is written as 0: the field is one byte.
+    header.writeUInt8(size >= 256 ? 0 : size, entry);
+    header.writeUInt8(size >= 256 ? 0 : size, entry + 1);
+    header.writeUInt8(0, entry + 2);
+    header.writeUInt8(0, entry + 3);
+    header.writeUInt16LE(1, entry + 4);
+    header.writeUInt16LE(32, entry + 6);
+    header.writeUInt32LE(png.length, entry + 8);
+    header.writeUInt32LE(offset, entry + 12);
+    offset += png.length;
+  });
+
+  return Buffer.concat([header, ...frames.map((frame) => frame.png)]);
+}
+
+function squareSizes(size: number): string {
+  return `${String(size)}x${String(size)}`;
+}
+
+function isSvg(source: string): boolean {
+  return path.extname(source).toLowerCase() === '.svg';
+}
+
+/** The upload an icon setting names, or `undefined` when it names none. */
+function iconSource(setting: string | undefined): string | undefined {
+  if (setting === undefined || !setting.startsWith(UPLOAD_ASSET_PREFIX)) return undefined;
+
+  const relative = setting.slice(UPLOAD_ASSET_PREFIX.length);
   if (relative === '' || relative.includes('..')) return undefined;
   if (!ICON_SOURCES.has(path.extname(relative).toLowerCase())) return undefined;
 
@@ -170,10 +348,19 @@ function iconSource(avatar: string | undefined): string | undefined {
   }
 }
 
-/** Where one size of one upload's icon is served. */
-function iconHref(source: string, size: number): string {
-  const segments = [...source.split('/'), iconFileName(size)].map((segment) =>
-    encodeURIComponent(segment),
-  );
-  return `${VARIANT_ASSET_PREFIX}${segments.join('/')}`;
+/** Where one derived icon of one upload is served. */
+function iconHref(source: string, file: string): string {
+  return `${VARIANT_ASSET_PREFIX}${encodedPath(source)}/${file}`;
+}
+
+/** Where the upload itself is served. */
+function uploadHref(source: string): string {
+  return `${UPLOAD_ASSET_PREFIX}${encodedPath(source)}`;
+}
+
+function encodedPath(source: string): string {
+  return source
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
 }

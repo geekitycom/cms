@@ -181,13 +181,15 @@
     <meta name="twitter:image:alt" content="{{ shareImage.alt }}">
     {% endif %}
     {#
-      The site's icons, derived from its avatar. `icons` is empty — and these
-      lines print nothing — until a site has one, so a site with no avatar
-      links no icon rather than three that answer 404.
+      The site's icons, derived from its `icon` setting, else its avatar.
+      `icons` is empty — and these lines print nothing — until a site has one,
+      so a site with neither links no icon rather than links that answer 404.
+      An SVG icon has every size, so it carries no `sizes`.
     #}
     {% for icon in icons %}
-    <link rel="{{ icon.rel }}" type="image/png" sizes="{{ icon.sizes }}" href="{{ icon.href | url }}">
+    <link rel="{{ icon.rel }}" type="{{ icon.type }}"{% if icon.sizes %} sizes="{{ icon.sizes }}"{% endif %} href="{{ icon.href | url }}">
     {% endfor %}
+    <link rel="manifest" href="{{ "/manifest.webmanifest" | url }}">
     {% include "partials/jsonld.njk" %}
     {% endblock %}
   </head>
