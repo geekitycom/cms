@@ -83,7 +83,9 @@ overrides the `--color-*` custom properties instead; see [Colours](#colours).
 {
   "name": "Default",
   "kind": "site",
-  "description": "One line about the theme."
+  "description": "One line about the theme.",
+  "colorScheme": "light dark",
+  "themeColor": { "light": "#faf7f2", "dark": "#171412" }
 }
 ```
 
@@ -92,6 +94,14 @@ the field exists so another can be added later without the format changing —
 and `description` is optional. The directory name is the theme's id. A
 directory without a readable manifest, or one naming a kind this CMS does not
 have, is not a theme.
+
+`colorScheme` and `themeColor` are the colours the head declares before the
+stylesheet loads (see [The head](#the-head)). `colorScheme` is one of `normal`,
+`light`, `dark`, `light dark`, `dark light` or `only light`, preferred scheme
+first. `themeColor` is the colour of the browser around the page, one per
+scheme, as a three- or six-digit hex colour with no alpha. Make it the page's
+own background. A value outside those is ignored, and so is one a theme leaves
+out: each falls back to this theme's, just as a template does.
 
 ## Overriding a template
 
@@ -656,16 +666,32 @@ the entry's `summary` — the line the feeds publish — else `site.tagline`. It
 printed once, as `<meta name="description">`, and the Open Graph and Twitter
 descriptions say the same thing.
 
+**The colours** come from the theme's `theme.json` (see
+[The manifest](#the-manifest)), on the context as `theme`.
+`<meta name="color-scheme">` comes before the stylesheet, so a reader in dark
+mode gets a dark canvas rather than a white flash while the stylesheet loads.
+`<meta name="theme-color">` is printed twice, once with
+`media="(prefers-color-scheme: light)"` and once for dark.
+
 **The card.** `og:title` is the page's title, or the site's on the front page;
 `og:site_name` is always the site's. `og:type` is `article` on a rendered post
 or page and `website` everywhere else, a listing carrying a page's front matter
-included. `og:url` is the canonical URL. `twitter:card` is `summary`, the small
-square picture beside the words, because the picture is usually a face rather
-than a wide photograph.
+included. `og:url` is the canonical URL. An article also carries
+`article:published_time`, `article:modified_time` (the `updated` date, else the
+publish date), `article:author` (the author's profile URL here, else their
+name) and one `article:tag` per tag.
 
-**The picture** is the `image` in the entry's front matter, else `site.avatar`.
-A site with neither prints no `og:image` and no `twitter:image` rather than an
-empty one.
+**The picture** is the `image` in the entry's front matter, else `site.avatar`,
+on the context as `shareImage`. A site with neither prints no `og:image` and no
+`twitter:image` rather than an empty one. The picture always carries
+`og:image:alt` and `twitter:image:alt`. For the entry's own picture, the alt
+text is its `imageAlt` front matter, else what the media library says about the
+upload, else the entry's title. For the avatar, it is the media library's text,
+else the site's author. `og:image:width` and `og:image:height` are printed when
+the image's variants have been derived, because the size is read from their
+sidecar rather than from the file. `twitter:card` is `summary_large_image` for a
+picture at least 1200 pixels wide and wider than it is tall. Everything else,
+the avatar included, is `summary`, the small picture beside the words.
 
 **The icons** come from the site's avatar through the derived images
 (decision-10): `icon` at 32 and 16 pixels and `apple-touch-icon` at 180, each a
@@ -956,6 +982,8 @@ Every template gets:
 | `menus`      | Every menu the site stores, by name, marked for this page: `menus.primary`, `menus.footer`, and any other name. See [Navigation](#navigation).                                                          |
 | `siteAuthor` | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
 | `icons`      | The site's icons, as `{ rel, sizes, href }`. Empty until the site has an avatar to derive them from. See [The head](#the-head).                                                                         |
+| `theme`      | The colours the theme declares, as `{ colorScheme, themeColor: { light, dark } }`, each absent when no theme declares it. See [The manifest](#the-manifest).                                            |
+| `shareImage` | The picture a shared link shows, as `{ url, alt, size: { width, height }, card }`. `size` is absent when it is not known. **Absent** when there is no picture. See [The head](#the-head).               |
 
 A document — one post, one page, or one entry of a listing — adds:
 

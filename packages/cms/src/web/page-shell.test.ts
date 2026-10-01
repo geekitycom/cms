@@ -28,6 +28,7 @@ import sharp from 'sharp';
 
 import { createUser, setUserProfile } from '../admin/accounts.ts';
 import { sandbox } from '../admin/__testing__/harness.ts';
+import { generateImageVariants } from '../images/variants.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { PACKAGED_THEME_DIR } from './themes.ts';
 
@@ -83,6 +84,7 @@ async function site(
 async function siteWithContent(
   settings: Record<string, unknown> = {},
   config: GeekityConfig = {},
+  files: Record<string, string> = {},
 ): Promise<{ cms: Cms; contentDir: string }> {
   const contentDir = await box.dir('geekity-shell-content-');
   const dataDir = await box.dir('geekity-shell-data-');
@@ -94,6 +96,7 @@ async function siteWithContent(
       null,
       2,
     ),
+    ...files,
   });
 
   const cms = await box.open({ contentDir, dataDir, now: () => new Date(NOW), ...config });
@@ -655,6 +658,202 @@ describe('the description, Open Graph and Twitter card tags (TASK-81 AC #1)', ()
     assert.equal(metaContent(html, 'og:image'), undefined, 'an image was invented');
     assert.equal(metaContent(html, 'twitter:image'), undefined);
     assert.equal(metaContent(html, 'twitter:card'), 'summary', 'and the card is still a summary');
+  });
+});
+
+/** Every value a page gives one meta key, in document order. */
+function metaContents(html: string, key: string): string[] {
+  const tag = new RegExp(`<meta (?:name|property)="${key}" content="([^"]*)"`, 'g');
+  return [...html.matchAll(tag)].map((match) => match[1] ?? '');
+}
+
+/** Write an image of one size to an upload path, and derive its variants. */
+async function upload(cms: Cms, at: string, width: number, height: number): Promise<void> {
+  const file = path.join(cms.config.contentDir, ...at.slice(1).split('/'));
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(
+    file,
+    await sharp({ create: { width, height, channels: 3, background: { r: 40, g: 80, b: 120 } } })
+      .png()
+      .toBuffer(),
+  );
+  await generateImageVariants(cms.config, at.slice('/uploads/'.length));
+}
+
+describe('the colour scheme and the theme colour (TASK-146 AC #1)', () => {
+  const declared = JSON.parse(
+    readFileSync(path.join(PACKAGED_THEME_DIR, 'theme.json'), 'utf8'),
+  ) as { colorScheme: string; themeColor: { light: string; dark: string } };
+
+  it('declares the colour scheme before the stylesheet can paint anything', async () => {
+    const html = await body(await site(), '/2026/09/hello/');
+
+    assert.equal(metaContent(html, 'color-scheme'), declared.colorScheme);
+    const scheme = html.indexOf('<meta name="color-scheme"');
+    const stylesheet = html.indexOf('<link rel="stylesheet"');
+    assert.ok(scheme !== -1 && scheme < stylesheet, 'the scheme comes after the stylesheet');
+  });
+
+  it('colours the browser chrome from theme.json, once for each scheme', async () => {
+    for (const pathname of ['/', '/2026/09/hello/', '/tag/notes/']) {
+      const html = await body(await site(), pathname);
+      assert.ok(
+        html.includes(
+          `<meta name="theme-color" content="${declared.themeColor.light}" media="(prefers-color-scheme: light)">`,
+        ),
+        `${pathname} has no light theme-color`,
+      );
+      assert.ok(
+        html.includes(
+          `<meta name="theme-color" content="${declared.themeColor.dark}" media="(prefers-color-scheme: dark)">`,
+        ),
+        `${pathname} has no dark theme-color`,
+      );
+    }
+  });
+
+  it('takes the colours of the theme a site has chosen', async () => {
+    const themesDir = await box.dir('geekity-shell-themes-');
+    await writeTree(themesDir, {
+      'night/theme.json': JSON.stringify({
+        name: 'Night',
+        kind: 'site',
+        colorScheme: 'dark',
+        themeColor: { dark: '#000000' },
+      }),
+    });
+    const html = await body(await site({ theme: 'night' }, { themesDir }), '/');
+
+    assert.equal(metaContent(html, 'color-scheme'), 'dark');
+    assert.ok(html.includes('content="#000000" media="(prefers-color-scheme: dark)"'));
+    assert.ok(
+      html.includes(`content="${declared.themeColor.light}" media="(prefers-color-scheme: light)"`),
+      'the colour it left out is not the packaged one',
+    );
+  });
+});
+
+describe('a post as an Open Graph article (TASK-146 AC #2)', () => {
+  it('carries its times, its author and its tags', async () => {
+    const cms = await siteWearingAnAvatar({ url: 'https://example.com', author: 'ada' });
+    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    const html = await body(cms, '/2026/09/hello/');
+
+    assert.equal(metaContent(html, 'article:published_time'), '2026-09-02T09:00:00.000Z');
+    assert.equal(metaContent(html, 'article:modified_time'), '2026-09-05T09:00:00.000Z');
+    assert.equal(metaContent(html, 'article:author'), 'https://example.com/author/ada/');
+    assert.deepEqual(metaContents(html, 'article:tag'), ['notes']);
+  });
+
+  it('is modified when it was published, when it was never updated', async () => {
+    const html = await body(await site(), '/2026/09/photo/');
+
+    assert.equal(metaContent(html, 'article:modified_time'), '2026-09-03T09:00:00.000Z');
+    assert.deepEqual(metaContents(html, 'article:tag'), [], 'a tag was invented');
+  });
+
+  it('names an author who has no profile here by name', async () => {
+    const html = await body(await site({ author: 'Joe Blog' }), '/2026/09/hello/');
+
+    assert.equal(metaContent(html, 'article:author'), 'Joe Blog');
+  });
+
+  it('leaves the article tags off a listing', async () => {
+    const html = await body(await site(), '/tag/notes/');
+
+    assert.equal(metaContent(html, 'article:published_time'), undefined);
+    assert.deepEqual(metaContents(html, 'article:tag'), []);
+  });
+});
+
+describe('the share image’s alt text and card (TASK-146 AC #3, AC #4)', () => {
+  it('describes the avatar with the media library’s alt text', async () => {
+    const cms = await siteWearingAnAvatar({ url: 'https://example.com' });
+    await writeFile(
+      path.join(cms.config.contentDir, '_data', 'media.json'),
+      JSON.stringify({ '2026/09/avatar.png': { alt: 'A rust-coloured square' } }),
+    );
+
+    for (const pathname of ['/', '/2026/09/hello/']) {
+      const html = await body(cms, pathname);
+      assert.equal(metaContent(html, 'og:image:alt'), 'A rust-coloured square', pathname);
+      assert.equal(metaContent(html, 'twitter:image:alt'), 'A rust-coloured square', pathname);
+    }
+  });
+
+  it('describes an avatar nobody has described by whose it is', async () => {
+    const cms = await siteWearingAnAvatar({ author: 'Joe Blog' });
+
+    assert.equal(metaContent(await body(cms, '/'), 'og:image:alt'), 'Joe Blog');
+  });
+
+  it('prefers the alt text the front matter gives the entry’s own picture', async () => {
+    const { cms } = await siteWithContent(
+      {},
+      {},
+      {
+        'posts/photo.md':
+          "---\ntitle: A photo\ndate: '2026-09-03T09:00:00Z'\npermalink: /2026/09/photo/\nimage: /uploads/2026/09/hero.png\nimageAlt: A harbour at dawn\n---\n\nLook at it.\n",
+        '_data/media.json': JSON.stringify({ '2026/09/hero.png': { alt: 'Boats' } }),
+      },
+    );
+
+    assert.equal(
+      metaContent(await body(cms, '/2026/09/photo/'), 'og:image:alt'),
+      'A harbour at dawn',
+    );
+  });
+
+  it('never prints an image without alt text', async () => {
+    const cms = await siteWearingAnAvatar();
+
+    for (const pathname of ['/', '/about/', '/2026/09/hello/', '/2026/09/photo/', '/tag/notes/']) {
+      const html = await body(cms, pathname);
+      const alt = metaContent(html, 'og:image:alt');
+      assert.ok(metaContent(html, 'og:image') !== undefined, `${pathname} has no image`);
+      assert.ok(alt !== undefined && alt !== '', `${pathname} has an image and no alt`);
+    }
+    assert.equal(
+      metaContent(await body(cms, '/2026/09/photo/'), 'og:image:alt'),
+      'A photo',
+      'an undescribed picture of an entry is not named after the entry',
+    );
+  });
+
+  it('prints no alt text when there is no image', async () => {
+    const html = await body(await site(), '/2026/09/hello/');
+
+    assert.equal(metaContent(html, 'og:image:alt'), undefined);
+  });
+
+  it('cards a wide picture large, with its size', async () => {
+    const cms = await siteWearingAnAvatar();
+    await upload(cms, '/uploads/2026/09/hero.png', 1600, 900);
+    const html = await body(cms, '/2026/09/photo/');
+
+    assert.equal(metaContent(html, 'twitter:card'), 'summary_large_image');
+    assert.equal(metaContent(html, 'og:image:width'), '1600');
+    assert.equal(metaContent(html, 'og:image:height'), '900');
+  });
+
+  it('keeps a square avatar, or a narrow picture, a summary', async () => {
+    const cms = await siteWearingAnAvatar();
+    await upload(cms, AVATAR, 1400, 1400);
+    await upload(cms, '/uploads/2026/09/hero.png', 800, 420);
+
+    const avatar = await body(cms, '/2026/09/hello/');
+    assert.equal(metaContent(avatar, 'twitter:card'), 'summary', 'a square went large');
+    assert.equal(metaContent(avatar, 'og:image:width'), '1400');
+
+    const narrow = await body(cms, '/2026/09/photo/');
+    assert.equal(metaContent(narrow, 'twitter:card'), 'summary', 'a small picture went large');
+  });
+
+  it('keeps a picture it knows no size for a summary, with no size', async () => {
+    const html = await body(await siteWearingAnAvatar(), '/2026/09/photo/');
+
+    assert.equal(metaContent(html, 'twitter:card'), 'summary');
+    assert.equal(metaContent(html, 'og:image:width'), undefined);
   });
 });
 

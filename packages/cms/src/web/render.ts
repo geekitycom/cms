@@ -30,6 +30,7 @@ import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, FrontPageSlugs, NeighbourContext, SiteData } from './context.ts';
 import { navigationMenus } from './navigation.ts';
+import { shareImage } from './share-image.ts';
 import type { Pagination } from './pagination.ts';
 import { snippetHtml } from './search.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
@@ -383,7 +384,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // written into `site.json` by hand, decides this very render rather than
     // the next boot. It costs a comparison of two short arrays when nothing
     // has changed, which is every render of a site that is not being rethemed.
-    useThemeDirs(environment, themes.current().dirs);
+    const chosen = themes.current();
+    useThemeDirs(environment, chosen.dirs);
     // The menus are built here rather than by each caller because every page
     // of the site carries them: a listing, a document, the 404 and the
     // editor's preview all go through here, and a menu that appeared on some
@@ -403,18 +405,34 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // the site's own author only when the page is about nobody in particular:
     // a document's byline and an author archive's person are put on the
     // context by the callers below, and win by going on last.
-    const owner =
-      context['siteAuthor'] === undefined ? siteAuthorContext(users(), site.author) : undefined;
+    const siteOwner = siteAuthorContext(users(), site.author);
+    const owner = context['siteAuthor'] === undefined ? siteOwner : undefined;
     // The site's icons, as the three links a head carries (TASK-81). They are
     // computed here rather than in the layout because only this side knows
     // where a derived file is served and whether the site can derive one at
     // all: a theme that was handed the avatar path would have to build the URL
     // itself and would link three 404s on a site with image optimization off.
     const icons = siteIcons(config, site.avatar);
+    // The picture a shared link shows (TASK-146), here for the reason the
+    // icons are: its alt text and its size are in files only this side reads.
+    const title = [context['title'], context['label']].find(
+      (value): value is string => typeof value === 'string' && value !== '',
+    );
+    const image = shareImage({
+      config,
+      image: context['image'],
+      imageAlt: context['imageAlt'],
+      title: title ?? site.title,
+      avatar: site.avatar,
+      owner: siteOwner?.name ?? site.author ?? site.title,
+    });
     return environment.render(template, {
       site,
       menus,
       icons,
+      // The colours the head declares before the stylesheet loads (TASK-146).
+      theme: chosen.colors,
+      ...(image === undefined ? {} : { shareImage: image }),
       ...(owner === undefined ? {} : { siteAuthor: owner }),
       ...context,
     });

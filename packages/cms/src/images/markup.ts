@@ -128,20 +128,22 @@ export function siteImageMarkup(
 ): string {
   if (!config.imageOptimization) return html;
 
-  return responsiveImages(
-    html,
-    (source) => {
-      const record = describeImage(config, source);
-      if (record === undefined) {
-        void generateImageVariants(config, source).catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : String(error);
-          console.warn(`Could not derive image variants for ${source}: ${message}`);
-        });
-      }
-      return record;
-    },
-    loading,
-  );
+  return responsiveImages(html, (source) => siteImageRecord(config, source), loading);
+}
+
+/**
+ * What is known about one of the site's uploads, deriving its variants in the
+ * background when nothing is yet, so the next render knows.
+ */
+export function siteImageRecord(config: ImageConfig, source: string): DescribedImage | undefined {
+  const record = describeImage(config, source);
+  if (record === undefined && config.imageOptimization) {
+    void generateImageVariants(config, source).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`Could not derive image variants for ${source}: ${message}`);
+    });
+  }
+  return record;
 }
 
 /** One `<picture>`: a `<source>` per derived format, then the original's `<img>`. */
@@ -238,7 +240,7 @@ function variantHref(record: DescribedImage, variant: ImageVariant): string {
  * feed on its own output, whether that is a page rendered twice or an author
  * who pasted a variant URL by hand.
  */
-function uploadPath(src: string): string | undefined {
+export function uploadPath(src: string): string | undefined {
   if (src.startsWith(VARIANT_ASSET_PREFIX)) return undefined;
   if (!src.startsWith(UPLOAD_ASSET_PREFIX)) return undefined;
 

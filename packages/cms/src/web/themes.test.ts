@@ -242,6 +242,72 @@ describe('the menu areas a theme declares', () => {
   });
 });
 
+describe('the colours a theme declares (TASK-146 AC #1)', () => {
+  it('reads the colour scheme and a theme colour per scheme out of a theme.json', async () => {
+    const { dir } = await themeDir('midnight', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({
+        name: 'Midnight',
+        kind: 'site',
+        colorScheme: 'dark light',
+        themeColor: { light: '#FFFFFF', dark: '#0b1020' },
+      }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.colors, {
+      colorScheme: 'dark light',
+      themeColor: { light: '#FFFFFF', dark: '#0b1020' },
+    });
+  });
+
+  it('drops a value a browser would not take, and keeps the theme', async () => {
+    const { dir } = await themeDir('broken', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({
+        name: 'Broken',
+        kind: 'site',
+        colorScheme: 'only dark',
+        themeColor: { light: 'red"><script>', dark: '#0b102080' },
+      }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.colors, { themeColor: {} });
+  });
+
+  it('is what the packaged theme declares: light and dark, on its own paper', () => {
+    const read = readTheme(PACKAGED_THEME_DIR);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.colors, {
+      colorScheme: 'light dark',
+      themeColor: { light: '#faf7f2', dark: '#171412' },
+    });
+  });
+
+  it('takes from the packaged theme whatever a chosen theme does not declare', async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), 'geekity-themes-colours-'));
+    temporaryDirs.push(parent);
+    await mkdir(path.join(parent, 'dusk'));
+    await writeFile(
+      path.join(parent, 'dusk', THEME_MANIFEST_FILE),
+      JSON.stringify({ name: 'Dusk', kind: 'site', themeColor: { dark: '#000000' } }),
+    );
+
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: 'dusk' }).colors, {
+      colorScheme: 'light dark',
+      themeColor: { light: '#faf7f2', dark: '#000000' },
+    });
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: '' }).colors, {
+      colorScheme: 'light dark',
+      themeColor: { light: '#faf7f2', dark: '#171412' },
+    });
+  });
+});
+
 describe('the site theme search path', () => {
   it('is the site theme first and the packaged theme second', () => {
     assert.deepEqual(themeSearchPath('/srv/site/theme'), ['/srv/site/theme', PACKAGED_THEME_DIR]);

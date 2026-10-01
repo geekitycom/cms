@@ -2,6 +2,8 @@
   "name": "Default",
   "kind": "site",
   "description": "The theme that ships with Geekity: Nunjucks and one stylesheet compiled from Tailwind, in the Paper design, and the layer every other theme is laid over.",
+  "colorScheme": "light dark",
+  "themeColor": { "light": "#faf7f2", "dark": "#171412" },
   "areas": [
     { "name": "primary", "label": "Site menu" },
     { "name": "footer", "label": "Footer links" }
