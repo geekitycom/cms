@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -264,6 +265,26 @@ async function deleteUpload(agent: Browser, relative: string): Promise<void> {
   });
   assert.equal(response.status, 303);
 }
+
+describe('closing a site while its images derive', () => {
+  it('waits for the variants a render started before close returns', async () => {
+    const contentDir = await box.dir('geekity-image-content-');
+    const dataDir = await box.dir('geekity-image-data-');
+    const own = sandbox();
+    const cms = await own.open({ contentDir, dataDir });
+    const upload = path.join(contentDir, 'uploads', '2026', '01', 'photo.png');
+    await mkdir(path.dirname(upload), { recursive: true });
+    await writeFile(upload, await rectangle(4000, 3000).png().toBuffer());
+    const permalink = await postEmbedding(cms, contentDir, '/uploads/2026/01/photo.png');
+
+    const html = await fetched(cms, permalink);
+    assert.doesNotMatch(html, /<picture>/, 'the variants were already there before the render');
+    await own.cleanup();
+
+    const record = path.join(dataDir, 'images', '2026', '01', 'photo.png', 'image.json');
+    assert.ok(existsSync(record), 'close returned before the variants were recorded');
+  });
+});
 
 describe('variant URLs name the bytes they were derived from', () => {
   it('gives a reupload under a freed name new variant URLs', async () => {

@@ -65,6 +65,7 @@ import {
   rebuildCommentIndexes,
 } from './comments/index.ts';
 import { contactFormFor } from './contact/index.ts';
+import { settleImageVariants } from './images/variants.ts';
 import { createMaintenanceSwitch } from './maintenance.ts';
 import {
   createConversation,
@@ -2076,6 +2077,9 @@ export function createCms(config: GeekityConfig = {}): Cms {
       indexNow.close();
       await indexNow.settled();
       await mail.settled();
+      // A page render derives an upload's variants in the background; the
+      // encode finishes before the directories it writes into can be removed.
+      await settleImageVariants(resolved);
 
       if (running !== undefined) {
         await new Promise<void>((resolve, reject) => {

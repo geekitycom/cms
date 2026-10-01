@@ -171,6 +171,27 @@ export function generateImageVariants(
   return started;
 }
 
+/**
+ * Wait for every generation still running under one site's data directory.
+ *
+ * A render starts derivation in the background and returns, so an encode can
+ * outlive the request that asked for it and, without this, the site it was
+ * writing into: closing a site waits here so nothing is left writing under
+ * `dataDir` once close returns. One that starts while these finish is waited
+ * for too. A failure is not this caller's to report; the render that started
+ * the generation already logged it.
+ */
+export async function settleImageVariants(config: Pick<ImageConfig, 'dataDir'>): Promise<void> {
+  const root = path.join(config.dataDir, IMAGE_DIRECTORY) + path.sep;
+  for (;;) {
+    const running = [...generating]
+      .filter(([directory]) => directory.startsWith(root))
+      .map(([, generation]) => generation);
+    if (running.length === 0) return;
+    await Promise.allSettled(running);
+  }
+}
+
 async function derive(
   config: ImageConfig,
   source: string,
