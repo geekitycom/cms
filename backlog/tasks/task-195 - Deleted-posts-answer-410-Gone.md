@@ -4,10 +4,12 @@ title: Deleted posts answer 410 Gone
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:01'
+updated_date: '2026-10-01 17:04'
 labels:
   - indieweb
   - webmention
   - federation
+milestone: m-28
 dependencies: []
 references:
   - packages/cms/src/web/routes.ts

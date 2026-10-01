@@ -4,10 +4,12 @@ title: Reply context shows the cited author's photo
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:02'
+updated_date: '2026-10-01 17:04'
 labels:
   - indieweb
   - webmention
   - theme
+milestone: m-28
 dependencies: []
 references:
   - packages/cms/src/webmention/reply-context.ts

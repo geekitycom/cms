@@ -4,10 +4,12 @@ title: Event posts that collect RSVPs
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:02'
+updated_date: '2026-10-01 17:04'
 labels:
   - indieweb
   - post-types
   - webmention
+milestone: m-28
 dependencies:
   - TASK-198
 references:

@@ -4,9 +4,11 @@ title: 'Original-post-discovery: reply to the original, not a silo copy'
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:01'
+updated_date: '2026-10-01 17:04'
 labels:
   - indieweb
   - webmention
+milestone: m-28
 dependencies:
   - TASK-155
 references:

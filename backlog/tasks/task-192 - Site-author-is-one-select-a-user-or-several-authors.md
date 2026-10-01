@@ -4,11 +4,12 @@ title: 'Site author is one select: a user, or several authors'
 status: To Do
 assignee: []
 created_date: '2026-10-01 16:45'
-updated_date: '2026-10-01 16:45'
+updated_date: '2026-10-01 17:04'
 labels:
   - settings
   - admin
   - indieauth
+milestone: m-27
 dependencies:
   - TASK-180
 references:

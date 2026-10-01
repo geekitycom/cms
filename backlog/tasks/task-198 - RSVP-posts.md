@@ -4,10 +4,12 @@ title: RSVP posts
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:01'
+updated_date: '2026-10-01 17:04'
 labels:
   - indieweb
   - post-types
   - webmention
+milestone: m-28
 dependencies: []
 references:
   - packages/cms/src/content/post-type.ts

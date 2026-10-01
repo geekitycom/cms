@@ -4,10 +4,12 @@ title: Pages show and accept comments like posts
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:01'
+updated_date: '2026-10-01 17:04'
 labels:
   - indieweb
   - webmention
   - theme
+milestone: m-28
 dependencies: []
 references:
   - packages/cms/themes/default/layouts/page.njk

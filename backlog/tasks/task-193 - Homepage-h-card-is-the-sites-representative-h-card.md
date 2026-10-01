@@ -4,11 +4,14 @@ title: Homepage h-card is the site's representative h-card
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:01'
+updated_date: '2026-10-01 17:04'
 labels:
   - indieweb
   - microformats
   - theme
-dependencies: []
+milestone: m-27
+dependencies:
+  - TASK-192
 references:
   - packages/cms/themes/default/partials/bio.njk
   - packages/cms/themes/default/layouts/home.njk
