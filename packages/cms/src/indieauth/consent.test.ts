@@ -23,14 +23,20 @@ const CONSENT = '/admin/indieauth/consent';
 const APP = 'https://app.example/';
 const NAMELESS = 'https://nameless.example/';
 const MCP = 'https://mcp.example/client.json';
+const HEADER = 'https://header.example/';
 
-const PAGES: Record<string, { type: string; body: string }> = {
+const PAGES: Record<string, { type: string; body: string; link?: string }> = {
   [APP]: {
     type: 'text/html',
     body: `<html><head><link rel="redirect_uri" href="https://callback.example/listed"></head>
       <body><div class="h-app"><a class="u-url p-name" href="/">Quill</a></div></body></html>`,
   },
   [NAMELESS]: { type: 'text/html', body: '<html><body>Hello.</body></html>' },
+  [HEADER]: {
+    type: 'text/html',
+    body: '<html><body><div class="h-app"><span class="p-name">Header App</span></div></body></html>',
+    link: '<https://callback.example/from-header>; rel="redirect_uri"',
+  },
   [MCP]: {
     type: 'application/json',
     body: JSON.stringify({
@@ -45,7 +51,14 @@ const original = globalThis.fetch;
 globalThis.fetch = ((input: string | URL | Request) => {
   const page = PAGES[new Request(input).url];
   if (page === undefined) return Promise.reject(new TypeError('fetch failed'));
-  return Promise.resolve(new Response(page.body, { headers: { 'content-type': page.type } }));
+  return Promise.resolve(
+    new Response(page.body, {
+      headers: {
+        'content-type': page.type,
+        ...(page.link === undefined ? {} : { link: page.link }),
+      },
+    }),
+  );
 }) as typeof fetch;
 
 after(async () => {
@@ -354,6 +367,20 @@ describe('where a client may be sent back to', () => {
       redirect_uri: 'https://callback.example/listed',
     });
     assert.match(html, /callback\.example/);
+  });
+
+  it('accepts one the client lists only in its Link header, through to a code', async () => {
+    const cms = await site();
+    const agent = await signIn(cms);
+    const redirectUri = 'https://callback.example/from-header';
+    const form = await consent(agent, { client_id: HEADER, redirect_uri: redirectUri });
+    assert.match(form.html, /Header App/);
+
+    const back = await decide(agent, form, 'approve');
+    assert.equal(`${back.origin}${back.pathname}`, redirectUri);
+    const issued = await grant(cms, back.searchParams.get('code') ?? '');
+    assert.equal(issued?.['clientId'], HEADER);
+    assert.equal(issued?.['redirectUri'], redirectUri);
   });
 
   it('shows an error page and never redirects for one it does not list', async () => {

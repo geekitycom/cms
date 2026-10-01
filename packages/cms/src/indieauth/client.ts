@@ -1,3 +1,4 @@
+import { linkTargets } from '../webmention/discovery.ts';
 import { fetchPublic } from '../webmention/fetch-public.ts';
 import { elementsIn, hasRel, parseHtml } from '../webmention/html.ts';
 import { itemsIn } from '../webmention/microformats.ts';
@@ -55,7 +56,10 @@ export async function fetchClientInformation(
   });
   if (!fetched.ok) return fetched;
   const body = new TextDecoder().decode(fetched.body);
-  return { ok: true, client: readClientInformation(body, fetched.type, clientId, fetched.url) };
+  return {
+    ok: true,
+    client: readClientInformation(body, fetched.type, clientId, fetched.url, fetched.link),
+  };
 }
 
 /**
@@ -65,15 +69,16 @@ export async function fetchClientInformation(
  * Metadata Document draft and MCP use. Its `client_id` must be its own URL;
  * one that names another client is read as saying nothing. Anything else is
  * read as an HTML page with an IndieAuth `h-app` (or the older `h-x-app`) and
- * `rel="redirect_uri"` links.
+ * `rel="redirect_uri"` links, in the response's `Link` header or in the page.
  */
 export function readClientInformation(
   body: string,
   type: string,
   clientId: string,
   base: string = clientId,
+  link: string | null = null,
 ): ClientInformation {
-  return /json/i.test(type) ? fromJson(body, clientId) : fromHtml(body, base);
+  return /json/i.test(type) ? fromJson(body, clientId) : fromHtml(body, base, link);
 }
 
 function fromJson(body: string, clientId: string): ClientInformation {
@@ -99,20 +104,19 @@ function fromJson(body: string, clientId: string): ClientInformation {
   };
 }
 
-function fromHtml(body: string, base: string): ClientInformation {
+function fromHtml(body: string, base: string, link: string | null): ClientInformation {
   const root = parseHtml(body);
   const app = firstApp(itemsIn(root, base));
   const name = app?.properties['name']?.[0]?.text.trim();
   const url = app?.properties['url']?.[0]?.text;
 
-  const redirectUris: string[] = [];
+  const hrefs = linkTargets(link, 'redirect_uri');
   for (const element of elementsIn(root)) {
-    if ((element.name !== 'link' && element.name !== 'a') || !hasRel(element, 'redirect_uri')) {
-      continue;
+    if ((element.name === 'link' || element.name === 'a') && hasRel(element, 'redirect_uri')) {
+      hrefs.push(element.attributes['href'] ?? '');
     }
-    const href = URL.parse(element.attributes['href'] ?? '', base);
-    if (href !== null) redirectUris.push(href.href);
   }
+  const redirectUris = hrefs.flatMap((href) => URL.parse(href, base)?.href ?? []);
 
   return {
     ...(name === undefined || name === '' ? {} : { name }),

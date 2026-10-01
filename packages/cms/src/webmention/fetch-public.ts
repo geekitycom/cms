@@ -37,6 +37,8 @@ export type PublicFetch =
       readonly url: string;
       /** The response's `Content-Type`. */
       readonly type: string;
+      /** The response's `Link` header, or `null` when it sent none. */
+      readonly link: string | null;
       readonly body: Uint8Array;
     }
   | { readonly ok: false; readonly reason: string };
@@ -85,7 +87,7 @@ export async function fetchPublic(
       const body = await readWithin(response, options.maxBytes);
       if (body === undefined) return refuse(`larger than ${String(options.maxBytes)} bytes`);
 
-      return { ok: true, url: url.href, type, body };
+      return { ok: true, url: url.href, type, link: response.headers.get('link'), body };
     }
   } catch (thrown) {
     return refuse(thrown instanceof Error ? thrown.message : String(thrown));

@@ -112,6 +112,39 @@ describe('fetchClientInformation', () => {
     });
   });
 
+  it('reads redirect URLs from the Link header, relative ones against the client_id', async () => {
+    answer = () =>
+      Promise.resolve(
+        new Response('<link rel="redirect_uri" href="https://other.example/from-html">', {
+          headers: {
+            'content-type': 'text/html',
+            link: [
+              '</cb>; rel="redirect_uri"',
+              '<https://other.example/a,b>; rel="redirect_uri"',
+              '<https://hub.example/>; rel="hub"',
+              '<https://app.example/me>; rel="me authorization_endpoint"',
+              '<https://other.example/both>; rel="me redirect_uri"',
+            ].join(', '),
+          },
+        }),
+      );
+    const result = await fetchClientInformation('https://app.example/client/', {
+      lookup: PUBLIC,
+      ...LIMITS,
+    });
+    assert.deepEqual(result, {
+      ok: true,
+      client: {
+        redirectUris: [
+          'https://app.example/cb',
+          'https://other.example/a,b',
+          'https://other.example/both',
+          'https://other.example/from-html',
+        ],
+      },
+    });
+  });
+
   it('refuses private, loopback and link-local addresses without fetching', async () => {
     const cases: [string, HostLookup][] = [
       ['http://127.0.0.1/', PUBLIC],
