@@ -1,11 +1,11 @@
 ---
 id: TASK-159
 title: 'IndieAuth profile redemption: sign in to other sites as your own URL'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-29 01:52'
-updated_date: '2026-10-01 14:43'
+updated_date: '2026-10-01 16:45'
 labels:
   - indieauth
   - indieweb
@@ -31,7 +31,7 @@ Completes phase 1. A client that only needs to know who the person is redeems it
 - [x] #2 A wrong code_verifier, client_id or redirect_uri, an expired code or a code already redeemed returns invalid_grant, and a replayed code is refused, proven by tests
 - [x] #3 The returned me shares a host with the URL the person typed, so clients accept it
 - [x] #4 An end-to-end test drives a simulated client from discovery through consent to redemption against the running app
-- [ ] #5 Signing in to indielogin.com with the deployed site URL succeeds with no rel="me" provider involved, and the result is noted on the task
+- [x] #5 Signing in to indielogin.com with the deployed site URL succeeds with no rel="me" provider involved, and the result is noted on the task
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -54,10 +54,12 @@ README: one paragraph under Signing in with your own site on what the app gets b
 Evidence: redeem.test.ts (19 unit tests: each refusal, expiry, replay, grant_type, missing fields, response shape); consent.test.ts 'redeeming a code for the profile' and 'the me a redemption hands back' (HTTP through login and consent; me shares a host with the typed URL for the root, the root without slash, an author URL without slash, and another user's URL); sign-in.test.ts drives a client over real HTTP against cms.serve() on a free port: Link discovery from the typed URL, metadata, authorization endpoint, admin login, consent, approve with iss check, redemption with no session, then rediscovery of the returned me. pnpm build, test (2912 + 30 pass), typecheck, lint, format:check all pass. Curled the running demo: unknown code 400 invalid_grant with cache-control no-store, missing fields 400 invalid_request, grant_type=password 400 unsupported_grant_type.
 AC3 caveat: decision-23 reads a typed www. host as the bare host, so typing www.example.com hands back example.com; the client then accepts it by discovering the same authorization endpoint, as the spec allows. AC3 is proven for every non-www spelling.
 AC5 left unchecked: it needs the deployed site and a real indielogin.com sign-in, which this run cannot do. Task stays In Progress until someone signs in to indielogin.com with the deployed URL and notes the result here.
+
+2026-10-01: the site owner verified signing in to indielogin.com with https://shll.me as the URL, which completed against this site's own IndieAuth server with no rel="me" provider involved.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Profile redemption at POST /_geekity/indieauth/auth: a client posts its code with the PKCE verifier and gets back the canonical me, plus name, url and photo for the profile scope and email for the email scope, never a token. redeemCode in src/indieauth/redeem.ts is the single redemption rule for TASK-160 to reuse. Verified by redeem.test.ts, the new consent.test.ts suites, a real-HTTP end-to-end client in sign-in.test.ts, the full build/test/typecheck/lint/format run, and curl against the running demo. AC5 (indielogin.com on the deployed site) is still open, so the task stays In Progress.
+Codes redeem at the authorization endpoint for the canonical me and scoped profile through one shared redeemCode (client_id, redirect_uri and PKCE checked; failures spend the code). Verified by redeem/consent/sign-in tests over real HTTP, curl against a running site, and a live indielogin.com sign-in with https://shll.me confirmed by the site owner.
 <!-- SECTION:FINAL_SUMMARY:END -->
