@@ -14,7 +14,9 @@
   rather than an index.
 #}
 {% if archiveMonths.length %}
-<section class="archive">
+{#- The month headings are in the site's locale, so a page in another
+    language hands the section back to the site's language. -#}
+<section class="archive"{% if lang and lang != (site.language | default("en")) %} lang="{{ site.language | default("en") }}"{% endif %}>
   {% for group in archiveMonths %}
   <h2>{{ group.month }}</h2>
   <ol class="list-none">

@@ -64,29 +64,36 @@ export async function discoverEndpoint(target: string): Promise<string | undefin
   return endpointInHtml(await readCapped(response), arrivedAt);
 }
 
+/** The endpoint one or more `Link` headers name, or `undefined`. */
+export function endpointInHeader(header: string | null, base: string): string | undefined {
+  const [target] = linkTargets(header, 'webmention');
+  return target === undefined ? undefined : resolve(target, base);
+}
+
 /**
- * The endpoint one or more `Link` headers name, or `undefined`.
+ * Every target a `Link` header names for `rel`, in order and unresolved.
  *
  * A header may carry several links separated by commas and each may name
  * several relations, so both are split. Splitting on commas that are not
  * inside angle brackets or quotes is what keeps a URL holding a comma — which
  * is legal — from being torn in half.
  */
-export function endpointInHeader(header: string | null, base: string): string | undefined {
-  if (header === null) return undefined;
+export function linkTargets(header: string | null, rel: string): string[] {
+  if (header === null) return [];
 
+  const targets: string[] = [];
   for (const value of splitLinkHeader(header)) {
     const match = /^\s*<([^>]*)>\s*(.*)$/.exec(value);
     if (match === null) continue;
 
     const relations = /(?:^|;)\s*rel\s*=\s*("([^"]*)"|'([^']*)'|([^;\s]*))/i.exec(match[2] ?? '');
-    const rel = relations?.[2] ?? relations?.[3] ?? relations?.[4] ?? '';
-    if (!rel.split(/\s+/).some((token) => token.toLowerCase() === 'webmention')) continue;
-
-    return resolve(match[1] ?? '', base);
+    const names = relations?.[2] ?? relations?.[3] ?? relations?.[4] ?? '';
+    if (names.split(/\s+/).some((token) => token.toLowerCase() === rel)) {
+      targets.push(match[1] ?? '');
+    }
   }
 
-  return undefined;
+  return targets;
 }
 
 /**

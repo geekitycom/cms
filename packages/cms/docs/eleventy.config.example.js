@@ -58,24 +58,30 @@ function siteTimezone() {
 }
 
 /**
+ * A tag as Intl spells it, or `undefined` for a value that is empty or that
+ * Intl will not take.
+ */
+function canonicalLocale(tag) {
+  if (typeof tag !== 'string' || tag.trim() === '') return undefined;
+  try {
+    return Intl.getCanonicalLocales(tag.trim())[0];
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * The locale the CMS writes dates and counts in: the `locale` setting, else
  * the `language`, else `en`, read from `site.json` like the zone.
  */
 function siteLocale() {
   try {
     const site = JSON.parse(readFileSync('content/_data/site.json', 'utf8'));
-    for (const tag of [site.locale, site.language]) {
-      if (typeof tag !== 'string' || tag.trim() === '') continue;
-      try {
-        return Intl.getCanonicalLocales(tag.trim())[0];
-      } catch {
-        // A tag Intl will not take: try the next one.
-      }
-    }
+    return canonicalLocale(site.locale) ?? canonicalLocale(site.language) ?? 'en';
   } catch {
     // No site.json: the default.
+    return 'en';
   }
-  return 'en';
 }
 
 /** What Intl is asked for by each of the `date` filter's word formats. */
@@ -693,20 +699,25 @@ export default function (eleventyConfig) {
   // `medium` and `short` styles, `month` and `year`) are that day written in
   // the site's locale. Bare `en` is written as `en-GB` writes it, day first,
   // which is what the CMS printed before it had locales. Pass a zone as the
-  // second argument to override.
+  // second argument to override, and a locale as the third to write the words
+  // in another language: the default theme passes a post's `lang` for the
+  // dates inside its article, `{{ date | date("readable", none, lang) }}`, so
+  // `none` keeps the site's zone and a post with no `lang` keeps its locale.
   //
   // `'now'` is the one word the filter reads rather than parses: the default
   // theme's footer writes `{{ "now" | date("year") }}` for its copyright line,
   // because that is the one date a page has that no file carries.
   const defaultZone = siteTimezone();
   const locale = siteLocale();
-  eleventyConfig.addFilter('date', (value, format = 'readable', zone = defaultZone) => {
+  eleventyConfig.addFilter('date', (value, format = 'readable', zone, tag) => {
     const at = value === 'now' ? new Date() : value instanceof Date ? value : new Date(value);
     if (Number.isNaN(at.getTime())) return '';
     if (format === 'iso') return at.toISOString();
+    zone ||= defaultZone;
     if (format === 'html') return calendarDayIn(at, zone);
 
-    return new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : locale, {
+    const written = canonicalLocale(tag) ?? locale;
+    return new Intl.DateTimeFormat(written === 'en' ? 'en-GB' : written, {
       ...(DATE_FORMATS[format] ?? DATE_FORMATS.long),
       timeZone: zone,
     }).format(at);

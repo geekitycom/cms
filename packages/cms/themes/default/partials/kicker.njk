@@ -14,17 +14,19 @@
   an error page. `date` is the entry's `dt-published`, printed long. With
   `href` the date is the entry's `u-url`, which is how a feed links an entry
   that has no title to link; an entry with no date links `label` instead.
-  `categories` are printed as `p-category` links.
+  `categories` are printed as `p-category` links. `lang` is the entry's own
+  language when it names one, so its date is written in that language rather
+  than the site's (TASK-189); a listing passes `lang=post.lang`.
 #}
-{% macro line(kind, date=false, href=false, categories=[], label="") %}
+{% macro line(kind, date=false, href=false, categories=[], label="", lang=false) %}
 <p class="kicker">
   <span class="kicker-kind">{{ kind }}</span>
   {%- if href %}
   <span class="kicker-dot" aria-hidden="true">·</span>
-  <a href="{{ href | url }}" class="u-url">{% if date %}<time class="feed-date dt-published" datetime="{{ date | date("iso") }}">{{ date | date }}</time>{% else %}{{ label }}{% endif %}</a>
+  <a href="{{ href | url }}" class="u-url">{% if date %}<time class="feed-date dt-published" datetime="{{ date | date("iso") }}">{{ date | date("readable", none, lang) }}</time>{% else %}{{ label }}{% endif %}</a>
   {%- elif date %}
   <span class="kicker-dot" aria-hidden="true">·</span>
-  <time class="feed-date dt-published" datetime="{{ date | date("iso") }}">{{ date | date }}</time>
+  <time class="feed-date dt-published" datetime="{{ date | date("iso") }}">{{ date | date("readable", none, lang) }}</time>
   {%- endif %}
   {%- for category in categories %}
   <span class="kicker-dot" aria-hidden="true">·</span>

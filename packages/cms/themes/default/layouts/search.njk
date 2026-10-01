@@ -37,7 +37,7 @@
 <div class="search-results">
   {% for post in posts %}
   <article class="search-result h-entry"{{ language.attr(post.lang) }}>
-    {{ kicker.line(("Page" if post.type == "page" else post.postType) | capitalize, post.date) }}
+    {{ kicker.line(("Page" if post.type == "page" else post.postType) | capitalize, post.date, lang=post.lang) }}
     {#- A post with no name of its own has none to claim, so its first words
         link it without being marked up as one. -#}
     <h2 class="feed-title{% if post.named %} p-name{% endif %}">

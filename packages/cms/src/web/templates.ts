@@ -104,7 +104,9 @@ export type DateFormat =
  * Per decision-11 a date in a file is a UTC instant and the site's `timezone`
  * setting is the lens it is read through, so every format but `iso` is
  * rendered in the site's zone and `iso` stays the instant; the words are the
- * site's locale (TASK-153). Both come from the `site` global of the render in
+ * site's locale (TASK-153), unless a template passes a locale of its own
+ * after the zone, as the default theme does for a date inside an article
+ * written in another language (TASK-189). Both come from the `site` global of the render in
  * hand — Nunjucks calls a filter with the template context as `this`, so
  * nothing has to be threaded through every template — which is what lets a
  * setting change what every page shows without a file changing. An Eleventy
@@ -121,13 +123,19 @@ function addFilters(
 
   environment.addFilter(
     'date',
-    function (this: unknown, value: unknown, format: unknown = 'readable', timezone?: unknown) {
+    function (
+      this: unknown,
+      value: unknown,
+      format: unknown = 'readable',
+      timezone?: unknown,
+      locale?: unknown,
+    ) {
       const site = renderSite(this);
       return formatDate(
         value,
         typeof format === 'string' ? format : 'readable',
         typeof timezone === 'string' && timezone !== '' ? timezone : siteTimezone(site),
-        siteLocale(site),
+        (typeof locale === 'string' ? canonicalLocale(locale) : undefined) ?? siteLocale(site),
       );
     },
   );

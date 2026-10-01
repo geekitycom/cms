@@ -1,6 +1,9 @@
 <article class="post">
   <h1>{{ title }}</h1>
   {{ content | safe }}
+  {#- In the post's own language when it names one, as the default theme
+      writes it (TASK-189). -#}
+  <p class="published">Published {{ date | date("readable", none, lang) }}</p>
 </article>
 
 {#

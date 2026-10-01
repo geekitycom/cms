@@ -1366,3 +1366,11 @@ button[type='submit']:hover,
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+.admin-consent-logo {
+  display: block;
+  width: 4rem;
+  height: 4rem;
+  margin: 0 0 1rem;
+  object-fit: contain;
+}

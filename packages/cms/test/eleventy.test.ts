@@ -433,6 +433,20 @@ describe('the fixtures content directory under Eleventy', () => {
     assert.ok(html.includes('class="mention comment-webmention"'), 'and it says what it is');
   });
 
+  it('writes a post’s date in its own language, and the others in the site’s', async () => {
+    const french = await readFile(
+      path.join(buildDir, '_site', '2026/07/cafe-au-lait/index.html'),
+      'utf8',
+    );
+    const english = await readFile(
+      path.join(buildDir, '_site', '2026/09/hello-world/index.html'),
+      'utf8',
+    );
+
+    assert.ok(french.includes('Published 4 juillet 2026'), `the date is French: ${french}`);
+    assert.ok(english.includes('Published 2 September 2026'), `the date is English: ${english}`);
+  });
+
   it('renders no conversation under a post nobody has answered', async () => {
     const html = await readFile(path.join(buildDir, '_site', 'notes/renamed/index.html'), 'utf8');
 
