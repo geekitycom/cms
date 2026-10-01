@@ -532,6 +532,80 @@ describe('the post language in the editor (TASK-154 AC #1)', () => {
   });
 });
 
+describe('pinning a post in the editor (TASK-207 AC #1)', () => {
+  const PINNED_AT = '2026-05-01T12:00:00.000Z';
+
+  /** Six published posts by ada, the first `pinned` of them already pinned. */
+  async function posts(pinned = 0): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded(
+      Array.from({ length: 6 }, (_, index) => ({
+        file: `posts/2026-01-0${String(index + 1)}-post-${String(index + 1)}.md`,
+        title: `Post ${String(index + 1)}`,
+        date: `2026-01-0${String(index + 1)}`,
+        permalink: `/2026/01/post-${String(index + 1)}/`,
+        author: 'ada',
+        extra: index < pinned ? [`pinned: 2026-02-0${String(index + 1)}T00:00:00Z`] : [],
+      })),
+    );
+    const cms = await box.site({ contentDir, now: () => new Date(PINNED_AT) });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  async function file(contentDir: string, n: number): Promise<string> {
+    return await readFile(
+      path.join(contentDir, 'posts', `2026-01-0${String(n)}-post-${String(n)}.md`),
+      'utf8',
+    );
+  }
+
+  it('offers an unticked Pinned box on a post', async () => {
+    const { agent } = await posts();
+
+    const html = await (await agent.get('/admin/posts/post-1')).text();
+
+    assert.match(html, /<input id="editor-pinned" name="pinned" type="checkbox" value="1" \/>/);
+    assert.match(html, /<label for="editor-pinned">Pinned<\/label>/);
+  });
+
+  it('pins with the moment it was pinned, and unpins', async () => {
+    const { contentDir, agent } = await posts();
+
+    assert.equal((await submit(agent, '/admin/posts/post-1', { pinned: '1' })).status, 303);
+    assert.match(await file(contentDir, 1), /^pinned: '2026-05-01T12:00:00Z'$/m);
+    const reloaded = await (await agent.get('/admin/posts/post-1')).text();
+    assert.match(reloaded, /name="pinned" type="checkbox" value="1" checked/);
+
+    assert.equal((await submit(agent, '/admin/posts/post-1', {})).status, 303);
+    assert.doesNotMatch(await file(contentDir, 1), /^pinned:/m, 'the key is gone, not false');
+  });
+
+  it('refuses a sixth pin for the same author, and writes nothing', async () => {
+    const { contentDir, agent } = await posts(5);
+    const before = await file(contentDir, 6);
+
+    const response = await submit(agent, '/admin/posts/post-6', { pinned: '1' });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /You can pin up to 5 posts\. Unpin one first\./);
+    assert.equal(await file(contentDir, 6), before);
+  });
+
+  it('lets an already pinned post be saved when the author has five pins', async () => {
+    const { contentDir, agent } = await posts(5);
+
+    const response = await submit(agent, '/admin/posts/post-1', { pinned: '1', title: 'Again' });
+
+    assert.equal(response.status, 303);
+    const written = await file(contentDir, 1);
+    assert.match(written, /^title: Again$/m);
+    assert.match(
+      written,
+      /^pinned: '?2026-02-01T00:00:00(\.000)?Z'?$/m,
+      'a save keeps the moment the post was first pinned',
+    );
+  });
+});
+
 describe('writing a post', () => {
   it('names the file for its date and slug, writes an explicit permalink, and is public at once', async () => {
     const contentDir = await seeded([]);

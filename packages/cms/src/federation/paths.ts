@@ -25,6 +25,13 @@ export const FOLLOWERS_PATH = `${ACTOR_PATH}followers/` as const;
 export const FOLLOWING_PATH = `${ACTOR_PATH}following/` as const;
 
 /**
+ * The actor's pinned posts (TASK-207): Mastodon's `toot:featured`, which it
+ * reads to show pins at the top of a profile and names as the `target` of the
+ * `Add` and `Remove` that pin and unpin one.
+ */
+export const FEATURED_PATH = `${ACTOR_PATH}featured/` as const;
+
+/**
  * Where one quote approval (FEP-044f) is served: under the author who granted
  * it, on this site's host, which is where Mastodon checks a stamp comes from.
  */
@@ -82,6 +89,19 @@ export function updateActivityId(objectId: URL | string, revision: string): URL 
  */
 export function deleteActivityId(objectId: URL | string, revision: string): URL {
   return new URL(`${objectId.toString()}#delete/${encodeURIComponent(revision)}`);
+}
+
+/**
+ * The id of the `Add` that pinned an object or the `Remove` that unpinned it
+ * (TASK-207), one per pin and per unpin for the same reason a `Delete` carries
+ * its moment: a post can be pinned, unpinned and pinned again.
+ */
+export function pinActivityId(
+  objectId: URL | string,
+  change: 'pin' | 'unpin',
+  revision: string,
+): URL {
+  return new URL(`${objectId.toString()}#${change}/${encodeURIComponent(revision)}`);
 }
 
 /**

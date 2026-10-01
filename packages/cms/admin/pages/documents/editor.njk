@@ -128,6 +128,19 @@
         <label for="editor-draft">Draft</label>
       </p>
 
+      {% if kind.type == "post" %}
+        {# TASK-207: shown at the top of the author's fediverse profile, from
+           the featured collection their actor links. #}
+        <p class="admin-check">
+          <input id="editor-pinned" name="pinned" type="checkbox" value="1"{% if form.pinned %} checked{% endif %} />
+          <label for="editor-pinned">Pinned</label>
+        </p>
+        <p class="admin-hint">
+          Writes <code>pinned:</code> and the moment you pinned it into the front matter. Pinned posts
+          show first on your fediverse profile, newest pin first, up to five.
+        </p>
+      {% endif %}
+
       {# What this document says about comments, if anything. Three answers
          rather than two: the site's own rules, always open, always closed. #}
       <label for="editor-comments">Comments</label>

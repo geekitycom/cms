@@ -6,6 +6,7 @@ import type { Context, Hono } from 'hono';
 import type { Document, DocumentContent, DocumentType } from '../content/document.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
+import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
 import { scheduledFor } from '../content/schedule.ts';
@@ -29,7 +30,7 @@ import { LANG_FRONT_MATTER_KEY } from '../web/locale.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
 import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
-import { userForAuthor } from '../web/authors.ts';
+import { authorNames, userForAuthor } from '../web/authors.ts';
 import { findUserById, listUsers } from './accounts.ts';
 import type { User } from './accounts.ts';
 import { flash } from './flash.ts';
@@ -331,6 +332,7 @@ async function saveFromForm(
     draft: body['draft'] !== undefined,
     exclude: body['exclude'] !== undefined,
     contact: body['contact'] !== undefined,
+    pinned: kind.type === 'post' && body['pinned'] !== undefined,
     comments: commentSetting(text(body['comments'])),
     body: normalizeBody(text(body['body'])),
     hash: text(body['hash']),
@@ -365,6 +367,17 @@ async function saveFromForm(
 
   if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
     return refuse('That is not a language tag, such as en, fr or pt-BR.');
+  }
+
+  // TASK-207: a pin is new when the file does not carry one yet, and only a
+  // new one can take an author past Mastodon's limit.
+  if (form.pinned && (document === undefined || pinnedAt(document) === undefined)) {
+    const users = listUsers(c.var.config.dataDir);
+    const author = userForAuthor(users, chosenAuthor(c, form.author, document) ?? '');
+    const names = author === undefined ? [] : authorNames(users, author);
+    if (store.listPinnedByAuthor(names).length >= PINNED_POST_LIMIT) {
+      return refuse(`You can pin up to ${String(PINNED_POST_LIMIT)} posts. Unpin one first.`);
+    }
   }
 
   // TASK-141: an image nobody described is a problem to fix before readers
@@ -455,7 +468,7 @@ async function saveFromForm(
     ...optional('author', chosenAuthor(c, form.author, document)),
     ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', keptIdentity(document, promised, permalink, c.var.config.baseUrl)),
-    extra: resolveExtra(kind, document, form),
+    extra: resolveExtra(kind, document, form, store.now()),
     body: form.body,
   };
 
@@ -730,9 +743,19 @@ function normalizePermalink(value: string): string | undefined {
 function resolveExtra(
   kind: DocumentKind,
   document: Document | undefined,
-  form: Pick<EditorForm, 'exclude' | 'comments' | 'contact' | 'lang'>,
+  form: Pick<EditorForm, 'exclude' | 'comments' | 'contact' | 'lang' | 'pinned'>,
+  now: Date,
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
+
+  // The moment a post was pinned is what orders the featured collection, so a
+  // pin the file already carries keeps its moment through every later save,
+  // and unpinning takes the key out rather than writing `false` (TASK-207).
+  if (kind.type === 'post') {
+    const pinned = document === undefined ? undefined : pinnedAt(document);
+    if (!form.pinned) delete extra[PINNED_FRONT_MATTER_KEY];
+    else if (pinned === undefined) extra[PINNED_FRONT_MATTER_KEY] = toUtcInstant(now, 'UTC');
+  }
 
   // Empty is the site's language, which is the key's absence (TASK-154).
   if (form.lang === '') delete extra[LANG_FRONT_MATTER_KEY];
@@ -928,7 +951,7 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     ...optional('author', document.author),
     ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', document.activitypub),
-    extra: resolveExtra(kind, document, form),
+    extra: resolveExtra(kind, document, form, c.var.store.now()),
     body: form.body,
   });
 
@@ -1098,6 +1121,8 @@ export interface EditorForm {
   exclude: boolean;
   /** Whether the page offers a contact form. Pages only. */
   contact: boolean;
+  /** Whether the post is pinned to its author's profile (TASK-207). Posts only. */
+  pinned: boolean;
   /**
    * What the document says about comments: one of {@link COMMENT_SETTINGS}.
    *
@@ -1141,6 +1166,7 @@ export function blankForm(
     draft: false,
     exclude: false,
     contact: false,
+    pinned: false,
     comments: COMMENT_SETTINGS.site,
     body: '',
     hash: '',
@@ -1173,6 +1199,7 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     draft: document.draft,
     exclude: document.extra[EXCLUDE_KEY] === true,
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
+    pinned: pinnedAt(document) !== undefined,
     comments: commentSettingOf(document),
     body: document.body,
     hash: document.hash,

@@ -210,6 +210,7 @@ export async function userActor(
     outbox: context.getOutboxUri(user.username),
     followers: context.getFollowersUri(user.username),
     following: context.getFollowingUri(user.username),
+    featured: context.getFeaturedUri(user.username),
     endpoints: new Endpoints({ sharedInbox: context.getInboxUri() }),
     // Every URL this person answers to, which is what a peer reads to know
     // that two ids are one account. WordPress's plugin publishes exactly this

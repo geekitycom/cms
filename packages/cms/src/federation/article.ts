@@ -1,5 +1,6 @@
 import type { Context } from '@fedify/fedify';
 import {
+  Add,
   Article,
   Create,
   Delete,
@@ -10,6 +11,7 @@ import {
   LanguageString,
   Note,
   PUBLIC_COLLECTION,
+  Remove,
   Source,
   Tombstone,
   Update,
@@ -36,7 +38,7 @@ import { absoluteUrl } from '../web/negotiate.ts';
 import { categoryHref, tagHref } from '../web/taxonomy.ts';
 import { actorId } from './actor.ts';
 import type { FederationContextData } from './federation.ts';
-import { createActivityId, deleteActivityId, updateActivityId } from './paths.ts';
+import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } from './paths.ts';
 
 /**
  * The user a post is announced by: the one its `author` names, and the site's
@@ -402,6 +404,43 @@ export function postDeleteActivity(
     cc: followers,
   });
 }
+
+/**
+ * The `Add` that pins a post, or the `Remove` that unpins it: the post's id
+ * moved in or out of its author's featured collection (TASK-207).
+ *
+ * Mastodon acts on one only when the `target` is exactly the `featured` URL
+ * the actor publishes, and fetches the object by its id when it does not hold
+ * it yet, so the object goes as a bare id, as Mastodon sends its own. The
+ * revision makes each pin and each unpin an activity of its own.
+ */
+export function postPinActivity(
+  context: Context<FederationContextData>,
+  document: Document,
+  change: PinChange,
+  revision: string,
+): Add | Remove {
+  const user = documentAuthor(context, document);
+  if (user === undefined) {
+    throw new Error(
+      `The post "${document.slug}" cannot be pinned: the site has no accounts, ` +
+        'and decision-14 makes a user the actor a post is announced by.',
+    );
+  }
+  const objectId = articleObjectId(context, document);
+  const values = {
+    id: pinActivityId(objectId, change, revision),
+    actor: actorId(context, user),
+    object: objectId,
+    target: context.getFeaturedUri(user.username),
+    to: PUBLIC_COLLECTION,
+    cc: context.getFollowersUri(user.username),
+  };
+  return change === 'pin' ? new Add(values) : new Remove(values);
+}
+
+/** Whether a post went into its author's featured collection or out of it. */
+export type PinChange = 'pin' | 'unpin';
 
 /**
  * A post's ActivityStreams object id, off the Fedify context: its permalink,

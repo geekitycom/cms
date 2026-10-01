@@ -601,6 +601,88 @@ describe('unpublishing a post', () => {
   });
 });
 
+describe('pinning a post (TASK-207 AC #3)', () => {
+  const POST_ID = `${BASE_URL}/2026/03/hello-world/`;
+  const FEATURED = `${ACTOR_URL}featured/`;
+
+  /** The activity types delivered, in the order they went out. */
+  function types(): unknown[] {
+    return deliveries.map((delivery) => delivery.body['type']);
+  }
+
+  async function publishedThenCleared(): Promise<{ cms: Cms; agent: Browser }> {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    deliveries.length = 0;
+    return { cms, agent };
+  }
+
+  it('sends an Add of the post to the featured collection after its Update', async () => {
+    const { cms, agent } = await publishedThenCleared();
+
+    await submitEditor(agent, '/admin/posts/hello-world', { pinned: '1' });
+    await cms.delivery.settled();
+
+    assert.deepEqual(types(), ['Update', 'Add']);
+    const add = delivered('Add')[0] as Delivery;
+    assert.equal(add.url, REMOTE_SHARED_INBOX);
+    assert.equal(add.body['actor'], ACTOR_URL);
+    assert.equal(add.body['object'], POST_ID);
+    assert.equal(add.body['target'], FEATURED);
+  });
+
+  it('sends a Remove when it is unpinned, and nothing about pins for an ordinary edit', async () => {
+    const { cms, agent } = await publishedThenCleared();
+    await submitEditor(agent, '/admin/posts/hello-world', { pinned: '1' });
+    await cms.delivery.settled();
+
+    deliveries.length = 0;
+    await submitEditor(agent, '/admin/posts/hello-world', { pinned: '1', body: 'Edited.' });
+    await cms.delivery.settled();
+    assert.deepEqual(types(), ['Update'], 'still pinned is not news');
+
+    deliveries.length = 0;
+    await submitEditor(agent, '/admin/posts/hello-world', {});
+    await cms.delivery.settled();
+
+    assert.deepEqual(types(), ['Update', 'Remove']);
+    const remove = delivered('Remove')[0] as Delivery;
+    assert.equal(remove.body['actor'], ACTOR_URL);
+    assert.equal(remove.body['object'], POST_ID);
+    assert.equal(remove.body['target'], FEATURED);
+    assert.notEqual(remove.body['id'], undefined);
+  });
+
+  it('sends a Create then an Add for a post published already pinned', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+
+    await publishNewPost(agent, { pinned: '1' });
+    await cms.delivery.settled();
+
+    assert.deepEqual(types(), ['Create', 'Add']);
+  });
+
+  it('drops a pinned post that is unpublished: its Delete goes out and the collection forgets it', async () => {
+    const { cms, agent } = await publishedThenCleared();
+    await submitEditor(agent, '/admin/posts/hello-world', { pinned: '1' });
+    await cms.delivery.settled();
+
+    deliveries.length = 0;
+    await submitEditor(agent, '/admin/posts/hello-world', { pinned: '1', action: 'save-draft' });
+    await cms.delivery.settled();
+
+    assert.deepEqual(types(), ['Delete']);
+    const response = await cms.app.request(FEATURED, {
+      headers: { accept: 'application/activity+json' },
+    });
+    const collection = (await response.json()) as Record<string, unknown>;
+    assert.equal(collection['totalItems'], 0);
+  });
+});
+
 describe('restoring a post from the trash', () => {
   it('announces it again under the object id it was first published with', async () => {
     const { cms } = await site();
