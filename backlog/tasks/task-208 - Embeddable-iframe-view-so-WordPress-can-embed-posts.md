@@ -1,11 +1,11 @@
 ---
 id: TASK-208
 title: Embeddable iframe view so WordPress can embed posts
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-01 17:40'
-updated_date: '2026-10-01 19:14'
+updated_date: '2026-10-01 19:22'
 labels:
   - interop
   - embed
@@ -30,10 +30,10 @@ Add a per-post embed view, like WordPress's own /embed/ pages: a minimal page at
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Pasting a post URL into the WordPress block editor shows the embedded card, checked with WordPress's own oEmbed code or a real WordPress site
-- [ ] #2 Only the embed route can be framed by another origin; every other page still sends X-Frame-Options SAMEORIGIN and frame-ancestors 'self'
-- [ ] #3 The embed page shows only the card, never drafts, and nothing from an admin session
-- [ ] #4 The oEmbed html is the blockquote followed by a sandboxed iframe of the embed page, and consumers that strip iframes still get the blockquote
+- [x] #1 Pasting a post URL into the WordPress block editor shows the embedded card, checked with WordPress's own oEmbed code or a real WordPress site
+- [x] #2 Only the embed route can be framed by another origin; every other page still sends X-Frame-Options SAMEORIGIN and frame-ancestors 'self'
+- [x] #3 The embed page shows only the card, never drafts, and nothing from an admin session
+- [x] #4 The oEmbed html is the blockquote followed by a sandboxed iframe of the embed page, and consumers that strip iframes still get the blockquote
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -65,4 +65,12 @@ Mutation checks (scripted, each caught by at least one new test): baseline keepi
 Docs: README route table row and security headers paragraph; themes/default/README.md embed card paragraph.
 
 Checks: pnpm build, test (3061 + 30 pass), typecheck, lint, format:check clean.
+
+Orchestrator verification against the demo on :3417 with WordPress 7.1.2's own code (wp-includes/class-wp-oembed.php discovery plus wp_filter_oembed_result, run under PHP 8.5 with only HTTP and option functions stubbed). Discovery found /_geekity/oembed. The filter now returns the blockquote plus the sandboxed iframe with #?secret= and data-secret. Before this branch it returned false. The filtered html, hosted on another origin (:8765) with WordPress's own wp-embed.js in Chrome, ends with the iframe visible and the blockquote hidden. The frame reports height 151 and WordPress clamps it to 200. A same-origin copy of the page answers a dispatched click with {message:'link', value:<post URL>}, default prevented. The extension's synthetic click does not reach cross-origin frames, so the click path was checked this way. The real inline script ran under the embed CSP, so the hashes match in Chrome. Headers on the live demo: the embed sends frame-ancestors * and no X-Frame-Options, and the post page sends SAMEORIGIN and frame-ancestors 'self'. Observed: a frame loaded in a hidden background tab has a 0px viewport, so its first report is 2473px. When the tab becomes visible, the resize corrects it to 151 and then 200. The script is unchanged because no reader sees the hidden-tab value.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Each post and page now has an embed view at /_geekity/embed?url=. It is a standalone card page with a hash-pinned inline style and the WordPress height/link postMessage script. It is the only response another origin may frame: frame-ancestors * and no X-Frame-Options, via a typed frameable flag that the baseline headers and the admin bar both honour. The oEmbed html is now the blockquote followed by a hidden sandboxed iframe of that page, the shape WordPress's own provider sends. Verified with 10 HTTP tests and 16 mutation checks, WordPress 7.1.2's own discovery and filter code under PHP (previously it returned false), and wp-embed.js in Chrome swapping the card in at the right height.
+<!-- SECTION:FINAL_SUMMARY:END -->
