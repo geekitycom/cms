@@ -161,6 +161,15 @@ describe('the headings on a post’s page', () => {
     assert.equal(h1?.markup, '<h1 class="screen-reader-text">Reply, 12 September 2026</h1>');
   });
 
+  it('counts the note’s thread without quoting a title it does not have (TASK-186)', async () => {
+    const markup = headings(await get(PAGES.note)).map((heading) => heading.markup);
+
+    assert.ok(
+      markup.includes('<h2 class="comments-title">One reply</h2>'),
+      `the note's thread is not headed One reply: ${markup.join(' ')}`,
+    );
+  });
+
   it('gives an untitled post no name, so it is still a note to a parser', async () => {
     for (const url of [PAGES.note, PAGES.reply]) {
       assert.doesNotMatch(await get(url), /p-name[^>]*>\s*(Note|Reply) by/, `${url} names itself`);
