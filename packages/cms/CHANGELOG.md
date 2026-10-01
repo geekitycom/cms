@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0](https://github.com/geekitycom/cms/compare/v0.11.0...v0.12.0) (2026-10-01)
+
+
+### Features
+
+* **cms:** restyle the default theme as paper on a compiled tailwind stylesheet ([7f97d47](https://github.com/geekitycom/cms/commit/7f97d4739c79d59e335b4519b6848f412774a964))
+* **cms:** restyle the default theme as paper on a compiled tailwind stylesheet ([3288d82](https://github.com/geekitycom/cms/commit/3288d829c32142617d54b3cf26cedf1453d14eb8))
+
 ## [0.11.0](https://github.com/geekitycom/cms/compare/v0.10.0...v0.11.0) (2026-09-30)
 
 
