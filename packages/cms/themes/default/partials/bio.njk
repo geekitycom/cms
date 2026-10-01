@@ -33,6 +33,11 @@
   Links box typed it — followed by whatever else that line carried, so this
   prints one attribute rather than one of its own beside one of theirs.
 
+  `bioRelMe` set to `false` keeps the card and drops its claims: the name is
+  linked `rel="author"` alone and `me` comes off every profile link. The
+  homepage of a site that is not a solo author blog sets it (TASK-180), because
+  that page speaks for nobody even when it shows the site author's card.
+
   The `p-note` and the `rel="me"` links are printed wherever the card is, which
   is what `bioProfile` used to ask for on an author archive alone. An entry
   left that switch unset because the page footer carried the site's identity
@@ -40,6 +45,7 @@
   wrote rather than one page further on.
 #}
 {% if bioAuthor %}
+{%- set bioClaims = bioRelMe !== false %}
 <div class="bio p-author h-card">
   {%- if bioAuthor.avatar %}
   <div class="bio-avatar">
@@ -51,7 +57,7 @@
     <p>
       {{ bioLead | default("Written by") }}
       {%- if bioAuthor.url %}
-      <a class="u-url p-name" rel="author me" href="{{ bioAuthor.url | url }}">{{ bioAuthor.name }}</a>
+      <a class="u-url p-name" rel="author{% if bioClaims %} me{% endif %}" href="{{ bioAuthor.url | url }}">{{ bioAuthor.name }}</a>
       {%- else %}
       <strong class="p-name">{{ bioAuthor.name }}</strong>
       {%- endif %}
@@ -66,7 +72,8 @@
     {%- if bioAuthor.links.length %}
     <ul class="hlist bio-links">
       {%- for link in bioAuthor.links %}
-      <li><a class="u-url" rel="{{ link.rel }}" href="{{ link.href }}">{{ link.label }}</a></li>
+      {%- set linkRel = link.rel if bioClaims else (link.rel.split(" ") | reject("equalto", "me") | join(" ")) %}
+      <li><a class="u-url"{% if linkRel %} rel="{{ linkRel }}"{% endif %} href="{{ link.href }}">{{ link.label }}</a></li>
       {%- endfor %}
     </ul>
     {%- endif %}

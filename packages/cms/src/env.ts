@@ -7,6 +7,7 @@ import type { Document } from './content/document.ts';
 import type { ContentStore } from './content/store.ts';
 import type { DocumentChange, SyncResult } from './content/sync.ts';
 import type { DeliveryService } from './federation/delivery.ts';
+import type { IndieAuthState } from './indieauth/grants.ts';
 import type { ActorProfileService } from './federation/profiles.ts';
 import type { RelayService } from './federation/relays.ts';
 import type { MailService } from './mail/service.ts';
@@ -135,6 +136,19 @@ export interface GeekityEnv {
      * where there is no policy to be part of.
      */
     cspNonce: string | undefined;
+    /**
+     * One more source the admin's `form-action` allows on this response, or
+     * `undefined` for none. The IndieAuth consent screen names the client's
+     * redirect origin here, because a browser holds the redirect after a form
+     * post to the page's `form-action` as well (TASK-158).
+     */
+    cspFormAction: string | undefined;
+    /**
+     * The authorization server's codes and the consent screens waiting on an
+     * answer (TASK-158), shared by the consent screen that issues a code and
+     * the endpoints that redeem one.
+     */
+    indieauth: IndieAuthState;
     /**
      * Who the public site's session names, set once at the public site's door
      * (TASK-183): the page drawn for them carries the admin bar and is theirs

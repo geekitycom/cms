@@ -12,6 +12,9 @@
 
   <form method="post" action="{{ loginUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    {% if returnTo %}
+      <input type="hidden" name="return_to" value="{{ returnTo }}" />
+    {% endif %}
 
     {{ field.text('username', 'username', 'Username', username,
          autocomplete='username', required=true, autofocus=true) }}

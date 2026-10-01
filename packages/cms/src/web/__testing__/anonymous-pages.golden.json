@@ -8,7 +8,7 @@
       "cross-origin-opener-policy": "same-origin",
       "etag": "\"b75a534b2d7a37890f6f685bc65c43eb\"",
       "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
-      "link": "</index.json>; rel=\"alternate\"; type=\"application/json\", </llms.txt>; rel=\"describedby\"; type=\"text/markdown\"",
+      "link": "</index.json>; rel=\"alternate\"; type=\"application/json\", </llms.txt>; rel=\"describedby\"; type=\"text/markdown\", <https://blog.example/_geekity/indieauth/metadata>; rel=\"indieauth-metadata\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
@@ -16,7 +16,7 @@
       "x-content-type-options": "nosniff",
       "x-frame-options": "SAMEORIGIN"
     },
-    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>A Site</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>A Site</h1><ul></ul></main>\n  </body>\n</html>\n"
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>A Site</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  <link rel=\"indieauth-metadata\" href=\"https://blog.example/_geekity/indieauth/metadata\"></head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>A Site</h1><ul></ul></main>\n  </body>\n</html>\n"
   },
   "home (stranger)": {
     "status": 200,
@@ -27,7 +27,7 @@
       "cross-origin-opener-policy": "same-origin",
       "etag": "\"b75a534b2d7a37890f6f685bc65c43eb\"",
       "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
-      "link": "</index.json>; rel=\"alternate\"; type=\"application/json\", </llms.txt>; rel=\"describedby\"; type=\"text/markdown\"",
+      "link": "</index.json>; rel=\"alternate\"; type=\"application/json\", </llms.txt>; rel=\"describedby\"; type=\"text/markdown\", <https://blog.example/_geekity/indieauth/metadata>; rel=\"indieauth-metadata\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
@@ -35,7 +35,7 @@
       "x-content-type-options": "nosniff",
       "x-frame-options": "SAMEORIGIN"
     },
-    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>A Site</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>A Site</h1><ul></ul></main>\n  </body>\n</html>\n"
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>A Site</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  <link rel=\"indieauth-metadata\" href=\"https://blog.example/_geekity/indieauth/metadata\"></head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>A Site</h1><ul></ul></main>\n  </body>\n</html>\n"
   },
   "home (revalidated)": {
     "status": 304,
@@ -45,7 +45,7 @@
       "cross-origin-opener-policy": "same-origin",
       "etag": "\"b75a534b2d7a37890f6f685bc65c43eb\"",
       "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
-      "link": "</index.json>; rel=\"alternate\"; type=\"application/json\", </llms.txt>; rel=\"describedby\"; type=\"text/markdown\"",
+      "link": "</index.json>; rel=\"alternate\"; type=\"application/json\", </llms.txt>; rel=\"describedby\"; type=\"text/markdown\", <https://blog.example/_geekity/indieauth/metadata>; rel=\"indieauth-metadata\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
@@ -225,7 +225,7 @@
       "content-type": "text/html; charset=utf-8",
       "cross-origin-opener-policy": "same-origin",
       "etag": "\"9e2959125d3a1dd2dda8c4427dc12b93\"",
-      "link": "</author/ada/index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "link": "</author/ada/index.json>; rel=\"alternate\"; type=\"application/json\", <https://blog.example/_geekity/indieauth/metadata>; rel=\"indieauth-metadata\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
@@ -233,7 +233,7 @@
       "x-content-type-options": "nosniff",
       "x-frame-options": "SAMEORIGIN"
     },
-    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Ada Lovelace</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Ada Lovelace</h1><ul></ul></main>\n  </body>\n</html>\n"
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Ada Lovelace</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  <link rel=\"indieauth-metadata\" href=\"https://blog.example/_geekity/indieauth/metadata\"></head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Ada Lovelace</h1><ul></ul></main>\n  </body>\n</html>\n"
   },
   "author (stranger)": {
     "status": 200,
@@ -243,7 +243,7 @@
       "content-type": "text/html; charset=utf-8",
       "cross-origin-opener-policy": "same-origin",
       "etag": "\"9e2959125d3a1dd2dda8c4427dc12b93\"",
-      "link": "</author/ada/index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "link": "</author/ada/index.json>; rel=\"alternate\"; type=\"application/json\", <https://blog.example/_geekity/indieauth/metadata>; rel=\"indieauth-metadata\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
@@ -251,7 +251,7 @@
       "x-content-type-options": "nosniff",
       "x-frame-options": "SAMEORIGIN"
     },
-    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Ada Lovelace</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Ada Lovelace</h1><ul></ul></main>\n  </body>\n</html>\n"
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Ada Lovelace</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  <link rel=\"indieauth-metadata\" href=\"https://blog.example/_geekity/indieauth/metadata\"></head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Ada Lovelace</h1><ul></ul></main>\n  </body>\n</html>\n"
   },
   "author (revalidated)": {
     "status": 304,
@@ -260,7 +260,7 @@
       "content-security-policy": "frame-ancestors 'self'",
       "cross-origin-opener-policy": "same-origin",
       "etag": "\"9e2959125d3a1dd2dda8c4427dc12b93\"",
-      "link": "</author/ada/index.json>; rel=\"alternate\"; type=\"application/json\"",
+      "link": "</author/ada/index.json>; rel=\"alternate\"; type=\"application/json\", <https://blog.example/_geekity/indieauth/metadata>; rel=\"indieauth-metadata\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
@@ -364,7 +364,7 @@
       "content-type": "text/html; charset=utf-8",
       "cross-origin-opener-policy": "same-origin",
       "etag": "\"11b43e05b0a06ae4840f27251936a9e6\"",
-      "link": "</index.md>; rel=\"alternate\"; type=\"text/markdown\", </index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\", </llms.txt>; rel=\"describedby\"; type=\"text/markdown\"",
+      "link": "</index.md>; rel=\"alternate\"; type=\"text/markdown\", </index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\", </llms.txt>; rel=\"describedby\"; type=\"text/markdown\", <https://blog.example/_geekity/indieauth/metadata>; rel=\"indieauth-metadata\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
@@ -372,7 +372,7 @@
       "x-content-type-options": "nosniff",
       "x-frame-options": "SAMEORIGIN"
     },
-    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>About</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>About</h1><p>Me.</p>\n</main>\n  </body>\n</html>\n"
+    "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>About</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  <link rel=\"indieauth-metadata\" href=\"https://blog.example/_geekity/indieauth/metadata\"></head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>About</h1><p>Me.</p>\n</main>\n  </body>\n</html>\n"
   },
   "post json": {
     "status": 200,

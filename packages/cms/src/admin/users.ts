@@ -70,6 +70,16 @@ function pathId(segment: string): number | undefined {
   return Number(segment);
 }
 
+/**
+ * Users > Connected apps: the apps holding a token for whoever is signed in
+ * (TASK-162). Mounted by `indieauth/connected-apps.ts`; named here so the
+ * menu can link it without importing the IndieAuth side.
+ */
+export const CONNECTED_APPS_PATH = `${USERS_PATH}/apps`;
+
+/** The child of Users the connected apps screen is. */
+export const CONNECTED_APPS_CHILD = 'apps';
+
 /** Where the signed-in admin's change-password form posts. */
 export const CHANGE_PASSWORD_PATH = `${USERS_PATH}/password`;
 
@@ -661,6 +671,7 @@ function userScreen(
     userEmailUrl: USER_EMAIL_PATH,
     userNotificationsUrl: USER_NOTIFICATIONS_PATH,
     userNotificationModeUrl: USER_NOTIFICATION_MODE_PATH,
+    connectedAppsUrl: CONNECTED_APPS_PATH,
     fields: USER_FIELDS,
     // `account` rather than `user`, which the chrome already holds: the bar
     // says who is signed in, and this screen is about somebody who may well be

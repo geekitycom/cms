@@ -427,7 +427,16 @@ What the bio prints: a round `u-photo` at 50px when they have an avatar,
 their archive, then `p-job-title` and `p-locality` when the profile says, then
 their `p-note` and their `rel="me"` links as a `ul.hlist.bio-links` — each
 link's `rel` is on it ready to print, `me` first and then whatever else the
-Links box typed. Each of
+Links box typed. Set `bioRelMe` to `false` to keep the card and drop its
+claims: the name is linked `rel="author"` alone and `me` comes off every
+link.
+
+**The homepage** speaks for the site's author only on a solo author blog,
+which `soloAuthor` on the context says. Then both `layouts/home.njk` at `/` and
+`layouts/front-page.njk` end with that person's card, with its `rel="me"`
+claims, and their author archive's link home carries `rel="me"` back, so the
+homepage and the archive name each other. On any other site a listing homepage
+prints no card, and the front page prints its card with `bioRelMe` false. Each of
 those is printed only when the profile says it, so a profile holding a name
 alone prints a name alone. A name this site has no account for is printed
 unlinked, because the file still said somebody wrote this.
@@ -733,7 +742,8 @@ IndieWeb. The graph holds:
 
 - `WebSite`, always, with the site's title, tagline and URL, and a `publisher`
   pointing at the Person, and a `potentialAction` that is a `SearchAction` on
-  `/search/?q={search_term_string}`.
+  `/search/?q={search_term_string}`. On the homepage of a solo author blog it
+  also has an `about` pointing at the site author's Person.
 - `Person`, from `siteAuthor`: their name, archive URL, avatar, bio, job title
   and location, and a `sameAs` of their profile links and their actor id, which
   is what asserts that the schema.org Person and the fediverse actor are one
@@ -1007,6 +1017,7 @@ Every template gets:
 | `site`       | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
 | `menus`      | Every menu the site stores, by name, marked for this page: `menus.primary`, `menus.footer`, and any other name. See [Navigation](#navigation).                                                          |
 | `siteAuthor` | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
+| `soloAuthor` | The site author's profile, on a site whose Solo author blog setting is on. **Absent** when it is off or the author setting names nobody. See [The bio](#the-bio).                                       |
 | `icons`      | The site's icons, as `{ rel, sizes, type, href }`. Empty until the site has an icon or an avatar to derive them from. See [The head](#the-head).                                                        |
 | `theme`      | The colours the theme declares, as `{ colorScheme, themeColor: { light, dark } }`, each absent when no theme declares it. See [The manifest](#the-manifest).                                            |
 | `shareImage` | The picture a shared link shows, as `{ url, alt, size: { width, height }, card }`. `size` is absent when it is not known. **Absent** when there is no picture. See [The head](#the-head).               |

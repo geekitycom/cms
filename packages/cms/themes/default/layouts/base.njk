@@ -246,7 +246,9 @@
         <p class="site-tagline">{{ site.tagline }}</p>
         {% endif %}
         {% else %}
-        <a class="header-link-home" href="{{ "/" | url }}">{{ site.title }}</a>
+        {#- The solo author's own archive claims the homepage back, so the
+            two URLs are provably one person (TASK-180). -#}
+        <a class="header-link-home"{% if isAuthorArchive and soloAuthor.url == author.url %} rel="me"{% endif %} href="{{ "/" | url }}">{{ site.title }}</a>
         {% endif %}
         {{ nav.list(menus.primary, "Site") }}
       </header>

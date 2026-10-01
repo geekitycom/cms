@@ -53,7 +53,7 @@ describe('the admin menu registry', () => {
       ADMIN_SECTIONS.find((section) => section.section === 'users')?.children.map(
         (child) => child.url,
       ),
-      ['/admin/users', '/admin/users/new'],
+      ['/admin/users', '/admin/users/new', '/admin/users/apps'],
     );
   });
 

@@ -5,6 +5,7 @@ import {
   updateFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
+import { revokeTokensForUser } from '../indieauth/tokens.ts';
 import {
   deliveryMode,
   notificationEvent,
@@ -644,6 +645,9 @@ export class UnknownUserError extends Error {
 /**
  * Take a user out of the file. Returns `false` when there was nothing to take.
  *
+ * Their IndieAuth tokens go with them (TASK-160): a token is a file in
+ * `data/` too, so it is revoked here, where every caller deletes a user.
+ *
  * Their sessions are not ended here: sessions are in the database, and the
  * screen that deletes a user ends them itself. A session that outlives this —
  * one in a database restored from a backup, say — names a user the file no
@@ -656,6 +660,7 @@ export async function deleteUser(input: { dataDir: string; userId: number }): Pr
     deleted = contents.users.some((user) => user.id === input.userId);
     return { ...contents, users: contents.users.filter((user) => user.id !== input.userId) };
   });
+  await revokeTokensForUser(input.dataDir, input.userId);
 
   return deleted;
 }

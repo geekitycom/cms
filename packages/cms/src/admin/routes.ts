@@ -4,6 +4,8 @@ import type { Environment } from 'nunjucks';
 import type { ResolvedConfig } from '../config.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { GeekityEnv } from '../env.ts';
+import { mountConnectedApps } from '../indieauth/connected-apps.ts';
+import { CONSENT_PATH, mountConsentScreen } from '../indieauth/consent.ts';
 import {
   countUsers,
   createUser,
@@ -224,6 +226,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       loginUrl: LOGIN_PATH,
       forgotUrl: FORGOT_PATH,
       username: '',
+      returnTo: returnPath(c.req.query(RETURN_TO_FIELD)),
     });
   });
 
@@ -237,6 +240,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const body = await c.req.parseBody();
     const username = text(body[USERNAME_FIELD]).trim();
     const password = text(body[PASSWORD_FIELD]);
+    const returnTo = returnPath(body[RETURN_TO_FIELD]);
 
     const address = clientAddress(c, config);
     const keys = loginKeys(username, address);
@@ -257,6 +261,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
         loginUrl: LOGIN_PATH,
         forgotUrl: FORGOT_PATH,
         username,
+        returnTo,
         // Says nothing about whether that username exists: an unknown one is
         // counted and locked out exactly as a real one is.
         error: `Too many sign-in attempts. Try again in ${describeWait(wait)}.`,
@@ -277,12 +282,13 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
         loginUrl: LOGIN_PATH,
         forgotUrl: FORGOT_PATH,
         username,
+        returnTo,
         error: 'That username and password do not match.',
       });
     }
 
     throttle.succeed(keys);
-    return logIn(c, user);
+    return logIn(c, user, returnTo);
   });
 
   app.post(LOGOUT_PATH, (c) => {
@@ -370,6 +376,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // screen reads that file and writes it back (decision-9).
   mountSettings(app, { render });
 
+  // The apps that hold a token for whoever is signed in (TASK-162). Before the
+  // users screens, whose `/admin/users/:id` answers anything else with a 404.
+  mountConnectedApps(app, { render });
+
   // Who may sign in: the list, the add form, and the change-password form for
   // whoever is looking at it.
   mountUsers(app, { render });
@@ -377,6 +387,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // The fediverse side: the actor, the followers, the inbox log, and what the
   // site sent to whom.
   mountFederationScreen(app, { render });
+
+  // Where a person approves signing in to another site as this one (TASK-158).
+  mountConsentScreen(app, { render });
 
   // `/admin/` is the same screen as `/admin`, and only one of them is the URL.
   app.get(`${ADMIN_PREFIX}/`, (c) => c.redirect(ADMIN_PREFIX, 301));
@@ -403,13 +416,14 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   }
 
   /**
-   * Start an authenticated session and send the browser to the dashboard.
+   * Start an authenticated session and send the browser to the dashboard, or
+   * back to the admin page the login was interrupting.
    *
    * The session the request arrived with is deleted rather than promoted, so a
    * session id an attacker planted before login is not the id that ends up
    * logged in.
    */
-  function logIn(c: Context<GeekityEnv>, user: User): Response {
+  function logIn(c: Context<GeekityEnv>, user: User, returnTo?: string): Response {
     const admin = c.var.admin;
     const previous = c.var.session;
     if (previous !== undefined) admin.deleteSession(previous.id);
@@ -422,12 +436,38 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     });
     setSessionCookie(c, session.id, { config: c.var.config, expiresAt: session.expiresAt });
     c.set('session', session);
-    return c.redirect(ADMIN_PREFIX, 303);
+    return c.redirect(returnTo ?? ADMIN_PREFIX, 303);
   }
 }
 
 const USERNAME_FIELD = 'username';
 const PASSWORD_FIELD = 'password';
+/** Where to go once signed in, carried through the login form. */
+const RETURN_TO_FIELD = 'return_to';
+
+/**
+ * Pages a login carries a return address for: the IndieAuth consent screen,
+ * which somebody reaches signed out from another site and must come back to
+ * with the request intact (TASK-158).
+ */
+const RETURNABLE_PATHS: ReadonlySet<string> = new Set([CONSENT_PATH]);
+
+/**
+ * A return address that stays in the admin, or `undefined`.
+ *
+ * Only a path under `/admin`, in printable ASCII with no backslash, which a
+ * browser could read as a different host, and no space or control character,
+ * which a header would refuse: the login form can never be used to send
+ * somebody off the site.
+ */
+function returnPath(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !/^[!-[\]-~]+$/.test(value)) return undefined;
+  const url = URL.parse(value, 'http://admin.invalid');
+  if (url === null || url.origin !== 'http://admin.invalid') return undefined;
+  const { pathname } = url;
+  if (pathname !== ADMIN_PREFIX && !pathname.startsWith(`${ADMIN_PREFIX}/`)) return undefined;
+  return value.startsWith('/') ? value : undefined;
+}
 
 /** `Clear-Site-Data` on logout: every kind of data a browser keeps for the site. */
 const CLEAR_ON_LOGOUT = '"cache", "cookies", "storage"';
@@ -478,7 +518,14 @@ export const guard: MiddlewareHandler<GeekityEnv> = async (c, next) => {
     // Setup is over. Offering the form again would be an open door.
     if (isSetup) return c.redirect(session?.userId == null ? LOGIN_PATH : ADMIN_PREFIX, 302);
     if (!isAnonymous && (session === undefined || session.userId === null)) {
-      return c.redirect(LOGIN_PATH, 302);
+      const returnable = c.req.method === 'GET' && RETURNABLE_PATHS.has(pathname);
+      const search = new URL(c.req.url).search;
+      return c.redirect(
+        returnable
+          ? `${LOGIN_PATH}?${RETURN_TO_FIELD}=${encodeURIComponent(`${pathname}${search}`)}`
+          : LOGIN_PATH,
+        302,
+      );
     }
   }
 

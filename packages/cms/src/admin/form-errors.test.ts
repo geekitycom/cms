@@ -62,13 +62,23 @@ const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> =
   'pages/users/edit.njk': [{ profileProblems: everyProblem }, { passwordProblems: everyProblem }],
 };
 
+/**
+ * Screens whose form is never shown back refused. The IndieAuth consent form
+ * has nothing to type, only boxes to untick: a request it cannot answer is a
+ * page of its own (`pages/indieauth/refused.njk`), never this form again.
+ */
+const NEVER_REFUSED: ReadonlySet<string> = new Set(['pages/indieauth/consent.njk']);
+
 async function templatesUsingFields(): Promise<string[]> {
   const pages = path.join(PACKAGED_ADMIN_DIR, 'pages');
   const found: string[] = [];
   for (const entry of await readdir(pages, { recursive: true })) {
     if (!entry.endsWith('.njk')) continue;
     const source = await readFile(path.join(pages, entry), 'utf8');
-    if (source.includes('"components/fields.njk"')) found.push(`pages/${entry}`);
+    const template = `pages/${entry}`;
+    if (source.includes('"components/fields.njk"') && !NEVER_REFUSED.has(template)) {
+      found.push(template);
+    }
   }
   return found.sort();
 }

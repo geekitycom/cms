@@ -1,0 +1,74 @@
+{# /admin/users/apps: the apps that can act as whoever is signed in (TASK-162).
+
+   Only your own connections, each with a Revoke button that names the app,
+   so a screen reader moving between buttons hears which one it is on. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}Connected apps{% endblock %}
+
+{% block content %}
+  <h1>Connected apps</h1>
+
+  {% if connections | length %}
+    <p class="admin-hint">
+      These apps signed in as you and can act as you, within the permissions
+      listed. An app that keeps using its connection stays connected; one left
+      unused is disconnected on the date shown. Revoking disconnects it now:
+      its next request is refused, and it has to ask you again.
+    </p>
+
+    <table class="admin-list">
+      <caption class="admin-visually-hidden">Connected apps</caption>
+      <thead>
+        <tr>
+          <th scope="col">App</th>
+          <th scope="col">Can</th>
+          <th scope="col">Connected</th>
+          <th scope="col">Last used</th>
+          <th scope="col">Expires</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for connection in connections %}
+          <tr>
+            <td><a href="{{ connection.url }}">{{ connection.name }}</a></td>
+            <td>
+              <ul>
+                {% for scope in connection.scopes %}
+                  <li>{{ scope }}</li>
+                {% else %}
+                  <li>Confirm who you are</li>
+                {% endfor %}
+              </ul>
+            </td>
+            <td><time datetime="{{ connection.issued.iso }}">{{ connection.issued.text }}</time></td>
+            <td>
+              {% if connection.lastUsed %}
+                <time datetime="{{ connection.lastUsed.iso }}">{{ connection.lastUsed.text }}</time>
+              {% else %}
+                <span class="admin-status">Not yet</span>
+              {% endif %}
+            </td>
+            <td><time datetime="{{ connection.expires.iso }}">{{ connection.expires.text }}</time></td>
+            <td class="admin-actions">
+              <form method="post" action="{{ revokeUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ connectionField }}" value="{{ connection.id }}" />
+                <button type="submit">Revoke {{ connection.name }}</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No apps are connected to your account.</p>
+    <p class="admin-hint">
+      An app connects here when you sign in to it with your site's address and
+      approve what it asks for: a Micropub app such as Quill that posts to
+      your site, or an MCP client such as an AI assistant. Each one you approve
+      is listed here, with a button to disconnect it.
+    </p>
+  {% endif %}
+{% endblock %}

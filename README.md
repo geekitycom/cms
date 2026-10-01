@@ -941,6 +941,18 @@ messages are kept), **Email** (how the site sends mail and where a message writt
 it goes) and **Federation** (the relays the site subscribes to). They live in
 `content/_data/site.json`, which is published with the site and in git.
 
+**Solo author blog** on the General page says the site is one person's, the
+person the author setting names. It is off for a new site. Turned on, the
+homepage speaks for that author, whether it lists posts or shows a static front
+page. It shows their bio card, carries their `rel="me"` profile links, and
+links their author archive with `rel="me"`. The archive links back to the
+homepage with `rel="me"`, so the two URLs are provably the same person. A
+Mastodon profile that links the homepage then verifies, and the homepage's
+structured data names the author as what the site is about. Turned off, the
+homepage speaks for nobody. A post-listing homepage shows no bio, and a static
+front page keeps its bio card but makes no `rel="me"` claims. The bio always
+links `/author/{username}/`, which stays the author's canonical page.
+
 Nothing on those pages is an ActivityPub profile. Every user is an actor with a
 name, a summary, a picture and links of their own, edited on that user's own
 screen under `/admin/users`; saving one sends an `Update` of that actor to
@@ -1219,6 +1231,119 @@ out of logging in. With no mail configured the page says so and points at
 `geekity user add`, which is how a site nobody can reach gets a fresh admin.
 [The package README](packages/cms/README.md#forgotten-passwords) has the
 detail.
+
+## Signing in with your own site
+
+Your site is your IndieAuth identity. Type its URL into the sign-in form of an
+IndieAuth client, such as indielogin.com or a Micropub app, and the client
+sends you back to your own site to sign in. No GitHub account or other
+`rel="me"` provider is involved.
+
+Which URL you type depends on the site:
+
+- **Every user** can type their author URL, `https://example.com/author/{username}/`.
+- **On a solo author site** (Solo author blog on Settings > General), the
+  author the site names can type the site URL, `https://example.com/`.
+- **On a multi-author site** the site URL also works. You sign in as whoever
+  you log in as, and the client is told your author URL.
+
+`http://`, a `www.` prefix and a missing trailing slash are all read as the
+same URL. Any other page of the site is nobody's identity. decision-23 records
+the rules.
+
+The site root and every author archive advertise the site's authorization
+server with a `Link: <…>; rel="indieauth-metadata"` header and a
+`<link rel="indieauth-metadata">` in the head. The CMS adds both to the
+response, so a custom theme carries them without printing anything. The
+metadata document itself is served at `/_geekity/indieauth/metadata` and at
+`/.well-known/oauth-authorization-server` (RFC 8414), where generic OAuth and
+MCP clients look for it.
+
+When a client sends you to the site, you sign in to the admin if you are not
+signed in already, and then see a consent screen. It names the app (or its
+URL when the app publishes no name), the host it will send you back to, the
+URL you are signing in as and each piece of information it asks for. Untick
+anything you do not want to share, then choose Approve or Deny. You can only
+ever sign in as yourself: a URL that names another user is replaced with your
+own author URL.
+
+The site reads the app's details from its `client_id` URL, which can be an
+IndieAuth `h-app` page or a JSON client metadata document such as MCP clients
+publish. An app may send you back to its own origin, or to an address it lists
+in those details, and to nothing else. While the site is in maintenance mode
+the sign-in endpoint answers 503, like the URLs that advertise it.
+
+After you approve, the app exchanges the code it was sent for the URL you
+signed in as, by posting it back to the same endpoint with its PKCE
+verifier. It also gets your name, URL and profile picture if you left
+profile ticked, and your email address if you left email ticked. It gets no
+access token this way. A code works once, for five minutes, and only for the
+app and return address it was issued to.
+
+An app that wants to act for you, such as a Micropub client, can also ask for
+the scopes create, update, delete and media, which the consent screen lists as
+creating, editing and deleting your posts and uploading media. It redeems its
+code at `/_geekity/indieauth/token` instead, under the same rules, and gets a
+bearer access token for the scopes you approved, with the URL you signed in as
+and the same profile details. The access token works for seven days. It comes
+with a refresh token that the app can trade for a new pair, which stops the old
+pair working. A refresh token lapses after 60 days without use. A code
+approved with no scope gets no token.
+
+The site keeps only a SHA-256 hash of each token, in
+`data/indieauth-tokens.json`, written so only the site's own user can read it.
+Back it up with the rest of `data/`. Deleting `geekity.db` keeps every token,
+and deleting a user revokes every token they hold. A token issued for one
+resource, such as an MCP endpoint, works only there. decision-24 records the
+rules.
+
+An app sends its token in an `Authorization: Bearer` header, or in an
+`access_token` form field as Micropub allows. A request with no token, or with
+one that is unknown, expired or revoked, gets 401. A token without the scope a
+route needs gets 403 `insufficient_scope`. Each refusal carries a
+`WWW-Authenticate: Bearer` header whose `resource_metadata` points at
+`/.well-known/oauth-protected-resource`. That RFC 9728 document names the site
+as its own authorization server and lists the scopes, so an MCP client can find
+out where to sign in. The metadata document also lists three more endpoints:
+
+- `/_geekity/indieauth/userinfo` answers your name, URL and profile picture
+  for a token with the profile scope, and your email address when it also has
+  the email scope.
+- `/_geekity/indieauth/revoke` ends the connection a posted `token` belongs
+  to, access or refresh, so both stop working at once. It answers 200 whether
+  or not the token was live.
+- `/_geekity/indieauth/introspect` says whether a posted `token` is live, and
+  if so its `me`, `client_id`, `scope` and `exp`. The request needs a live
+  token of its own in the `Authorization` header, and it answers only for
+  tokens held by the same person. Any other token is reported inactive.
+
+All three, and the resource metadata, answer 503 in maintenance mode.
+
+### Connected apps
+
+Users > Connected apps, at `/admin/users/apps`, lists every app that holds a
+token for you. Your own user screen links to it. You see only your own
+connections, never another user's. Each row shows:
+
+- The app's name, linked to its `client_id` URL. An app that published no name
+  is shown by that URL.
+- What it can do, in the words the consent screen used.
+- When you connected it.
+- When it last used its token. "Not yet" means it has not called the site
+  since you approved it.
+- When the connection expires if the app stops using it. An app that refreshes
+  its token stays connected.
+
+The site records last use when it accepts a token, but writes it to
+`data/indieauth-tokens.json` at most once an hour per connection. So the time
+shown can be up to an hour early, and an app that calls the API many times a
+minute does not rewrite the file each time.
+
+Each row has a Revoke button that names the app. Revoking deletes the
+connection: its access token and its refresh token stop working at once, the
+app's next request gets 401 `invalid_token`, and the screen confirms with a
+message. The app has to ask you again through the consent screen to reconnect.
+With no apps connected, the screen says what kinds of app connect here.
 
 ## The theme
 

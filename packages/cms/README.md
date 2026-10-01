@@ -370,6 +370,7 @@ the same directory reads all of it, and everything in it is meant to be public:
 | `data/mail.json`                  | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                 |
 | `data/notification-secret`        | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else. |
 | `data/comment-optouts.json`       | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                           |
+| `data/indieauth-tokens.json`      | A SHA-256 hash of each IndieAuth access and refresh token, with its user, app, scopes and expiry (decision-24). Mode `0600`.    |
 | `data/notification-digests.json`  | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                         |
 | `data/wordpress-activitypub.json` | When each WordPress compatibility path was last asked for. Losing it resets the answer the switch is watched by.                |
 
@@ -1423,6 +1424,7 @@ says otherwise.
 | Other actors who liked, boosted, answered or quoted: handle, display name, avatar URL, profile URL                   | `data/geekity.db`, fetched from their actor document          | A cache. Refetched weekly while the inbox log names them.                      |
 | Remote avatars, shrunk                                                                                               | `data/avatars/`                                               | Deleted by the avatar sweep once nothing shown names them.                     |
 | Users: username, email, argon2id password hash, profile                                                              | `data/users.json`, mode `0600`                                | Until the user is deleted.                                                     |
+| The apps a user signed in to with IndieAuth: app, scopes, hashes of its tokens, when they expire                     | `data/indieauth-tokens.json`, mode `0600`                     | Until the user is deleted, or 60 days after the app last refreshed.            |
 | An index of all of the above, and sessions, reset tokens and spent link tokens                                       | `data/geekity.db`                                             | A cache of the files. Sessions and tokens are pruned when they expire.         |
 | Client addresses in the rate limits                                                                                  | Memory                                                        | Until the window passes or the site restarts.                                  |
 | Client addresses in the access log                                                                                   | stdout, and whatever collects it                              | Only with `accessLogAddress` on. The collector keeps them.                     |

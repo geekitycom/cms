@@ -64,6 +64,9 @@
         "query-input": "required name=search_term_string"
       }) }}
       {{- member("publisher", person) }}
+      {#- What the site is about, on the homepage of a solo author blog
+          (TASK-180): the site's author, and nobody on any other site. #}
+      {{- member("about", { "@id": (soloAuthor.url | absoluteUrl) + "#person" } if atRoot and soloAuthor.url else "") }}
     }{% endset %}
 {% set _ = nodes.push(website) %}
 {% if personId %}

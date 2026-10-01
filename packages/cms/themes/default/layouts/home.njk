@@ -22,4 +22,14 @@
 {% endif %}
 {% include "partials/post-list.njk" %}
 {% include "partials/pagination.njk" %}
+{#- On a solo author blog the homepage speaks for the site's author, so it
+    ends with their card, as the front page does (TASK-180). Any other
+    listing, and the homepage of any other site, is nobody's. -#}
+{% if atRoot and soloAuthor %}
+{% set bioAuthor = soloAuthor %}
+<hr>
+<footer>
+  {% include "partials/bio.njk" %}
+</footer>
+{% endif %}
 {% endblock %}

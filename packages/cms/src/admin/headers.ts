@@ -58,7 +58,7 @@ export const adminSecurityHeaders: MiddlewareHandler<GeekityEnv> = async (c, nex
 
   const headers = c.res.headers;
   applyBaseline(headers, c.var.config);
-  headers.set('Content-Security-Policy', adminContentSecurityPolicy(nonce));
+  headers.set('Content-Security-Policy', adminContentSecurityPolicy(nonce, c.var.cspFormAction));
   headers.set('Referrer-Policy', 'same-origin');
   // Not DENY: the editor puts its preview in a sandboxed iframe of its own, and
   // `frame-ancestors 'self'` below is the modern half of the same statement.
@@ -96,15 +96,19 @@ export function createNonce(): string {
  *   is a `srcdoc` iframe, which inherits this policy, and its ancestor is the
  *   admin page itself.
  *
+ * `formAction` adds one source to `form-action`, for the one form whose post
+ * is answered with a redirect off the site: the IndieAuth consent screen,
+ * which sends the person back to the app that asked.
+ *
  * There is no inline script at all — the slug and permalink enhancement moved
  * into `admin/static/slug.js` — so `script-src` needs neither a nonce nor
  * `'unsafe-inline'`.
  */
-export function adminContentSecurityPolicy(nonce: string): string {
+export function adminContentSecurityPolicy(nonce: string, formAction?: string): string {
   return [
     "default-src 'self'",
     "base-uri 'self'",
-    "form-action 'self'",
+    formAction === undefined ? "form-action 'self'" : `form-action 'self' ${formAction}`,
     "frame-ancestors 'self'",
     "object-src 'none'",
     "script-src 'self'",
