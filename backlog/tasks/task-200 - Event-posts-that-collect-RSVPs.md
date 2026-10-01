@@ -4,7 +4,7 @@ title: Event posts that collect RSVPs
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:02'
-updated_date: '2026-10-01 17:04'
+updated_date: '2026-10-01 17:07'
 labels:
   - indieweb
   - post-types
@@ -13,8 +13,7 @@ milestone: m-28
 dependencies:
   - TASK-198
 references:
-  - packages/cms/src/content/post-type.ts
-  - 'https://indieweb.org/event'
+  - packages/cms/themes/default/partials/jsonld.njk
 priority: low
 type: feature
 ordinal: 216800
@@ -32,4 +31,5 @@ IndieMark level 5 asks for event posts that receive and display RSVPs. Add an ev
 - [ ] #2 RSVP webmentions to the event are verified, moderated and shown grouped as going, maybe, interested and not going
 - [ ] #3 Fediverse Accept, TentativeAccept and Reject of the Event are shown in the same groups
 - [ ] #4 The admin editor can create and edit an event
+- [ ] #5 The default theme's JSON-LD (partials/jsonld.njk, decision-16) describes an event post as a schema.org Event with name, startDate, endDate when set, location (Place with address, or VirtualLocation with url), eventAttendanceMode, eventStatus, description, and organizer referencing the author's Person node, and passes Google's Rich Results Test for events
 <!-- AC:END -->
