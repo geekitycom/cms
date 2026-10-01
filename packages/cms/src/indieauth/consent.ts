@@ -12,6 +12,7 @@ import { fetchClientInformation } from './client.ts';
 import type { ClientInformation } from './client.ts';
 import { AUTHORIZATION_PATH, authorizationServerMetadata } from './discovery.ts';
 import { meForSignIn } from './identity.ts';
+import { profileResponse, redeemCode } from './redeem.ts';
 import { parseAuthorizationRequest } from './request.ts';
 import type { Scope } from './request.ts';
 
@@ -28,18 +29,46 @@ const SCOPE_LABELS: Readonly<Record<Scope, string>> = {
 };
 
 /**
- * The authorization endpoint a client sends the person to (TASK-158).
+ * The authorization endpoint (TASK-158, TASK-159).
  *
- * It hands the request, query and all, to the consent screen. The screen is
- * under `/admin` so that the admin's guard, login and headers apply to it;
- * the endpoint is not, because the code redemption that TASK-159 adds at the
- * same URL is a client's POST and has no admin session. Not exempt from
- * maintenance mode: the identity URLs that advertise it answer 503 then too.
+ * A GET is the person arriving from a client, and is handed, query and all,
+ * to the consent screen. The screen is under `/admin` so that the admin's
+ * guard, login and headers apply to it; the endpoint is not, because a POST
+ * here is a client redeeming its code for the profile, with no admin session.
+ * No access token is issued on this path; that is the token endpoint's job.
+ * Not exempt from maintenance mode: the identity URLs that advertise it
+ * answer 503 then too.
  */
 export function mountAuthorizationEndpoint(app: Hono<GeekityEnv>): void {
   app.get(AUTHORIZATION_PATH, (c) =>
     c.redirect(`${CONSENT_PATH}${new URL(c.req.url).search}`, 302),
   );
+
+  app.post(AUTHORIZATION_PATH, async (c) => {
+    c.header('cache-control', 'no-store');
+    const { config } = c.var;
+    const body = await c.req.parseBody();
+    const form = Object.fromEntries(
+      Object.entries(body).map(([name, value]) => [
+        name,
+        typeof value === 'string' ? value : undefined,
+      ]),
+    );
+    const redeemed = redeemCode(c.var.indieauth.codes, form);
+    if (!redeemed.ok) {
+      return c.json({ error: redeemed.error, error_description: redeemed.description }, 400);
+    }
+    const { grant } = redeemed;
+    const user = findUserById(config.dataDir, grant.userId);
+    if (user === undefined) {
+      return c.json(
+        { error: 'invalid_grant', error_description: 'The person who approved this is gone.' },
+        400,
+      );
+    }
+    const baseUrl = effectiveBaseUrl(config, readSiteSettings(config.contentDir));
+    return c.json(profileResponse(grant, user, baseUrl));
+  });
 }
 
 /** Register the consent screen and the Approve and Deny buttons behind it. */

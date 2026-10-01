@@ -63,7 +63,12 @@ async function site(config: { maintenance?: boolean } = {}): Promise<Cms> {
     path.join(contentDir, '_data', 'site.json'),
     JSON.stringify({ title: 'A Site', author: 'ada', soloAuthor: true }),
   );
-  await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
+  await createUser({
+    dataDir,
+    username: 'ada',
+    password: 'correct horse battery',
+    email: 'ada@blog.example',
+  });
   await createUser({ dataDir, username: 'bob', password: 'another horse battery' });
   const cms = await box.open(
     { contentDir, dataDir, baseUrl: BASE, hostLookup: PUBLIC, ...config },
@@ -390,4 +395,130 @@ describe('where a client may be sent back to', () => {
     assert.match(html, /Example MCP Client/);
     assert.match(html, /127\.0\.0\.1/);
   });
+});
+
+const VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+
+/** Post a code back to the authorization endpoint, the way a client redeems it. */
+async function redeem(
+  cms: Cms,
+  code: string,
+  changes: Record<string, string | undefined> = {},
+): Promise<{ status: number; headers: Headers; body: Record<string, unknown> }> {
+  const fields: Record<string, string | undefined> = {
+    grant_type: 'authorization_code',
+    code,
+    client_id: APP,
+    redirect_uri: `${APP}callback`,
+    code_verifier: VERIFIER,
+    ...changes,
+  };
+  const body = new URLSearchParams();
+  for (const [name, value] of Object.entries(fields)) {
+    if (value !== undefined) body.set(name, value);
+  }
+  const response = await cms.app.request('/_geekity/indieauth/auth', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+    body: body.toString(),
+  });
+  return {
+    status: response.status,
+    headers: response.headers,
+    body: (await response.json()) as Record<string, unknown>,
+  };
+}
+
+/** Sign in as ada, approve a request with `scopes` ticked, and answer the code. */
+async function approved(
+  cms: Cms,
+  scopes: string[],
+  changes: Record<string, string | undefined> = {},
+  credentials?: { username: string; password: string },
+): Promise<string> {
+  const agent = await signIn(cms, credentials);
+  const back = await decide(agent, await consent(agent, changes), 'approve', scopes);
+  return back.searchParams.get('code') ?? '';
+}
+
+describe('redeeming a code for the profile', () => {
+  it('answers me, the profile and the email when both were approved, never a token', async () => {
+    const cms = await site();
+    const answer = await redeem(cms, await approved(cms, ['profile', 'email']));
+    assert.equal(answer.status, 200);
+    assert.equal(answer.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(answer.body, {
+      me: `${BASE}/`,
+      profile: { name: 'ada', url: `${BASE}/`, email: 'ada@blog.example' },
+    });
+  });
+
+  it('leaves the email out when only profile was approved', async () => {
+    const cms = await site();
+    const answer = await redeem(cms, await approved(cms, ['profile']));
+    assert.deepEqual(answer.body, { me: `${BASE}/`, profile: { name: 'ada', url: `${BASE}/` } });
+  });
+
+  it('answers me alone when no scope was approved', async () => {
+    const cms = await site();
+    const answer = await redeem(cms, await approved(cms, []));
+    assert.deepEqual(answer.body, { me: `${BASE}/` });
+  });
+
+  it('refuses a replayed code with invalid_grant', async () => {
+    const cms = await site();
+    const code = await approved(cms, ['profile']);
+    assert.equal((await redeem(cms, code)).status, 200);
+    const replayed = await redeem(cms, code);
+    assert.equal(replayed.status, 400);
+    assert.equal(replayed.body['error'], 'invalid_grant');
+    assert.equal(replayed.body['me'], undefined);
+  });
+
+  for (const [what, changes] of [
+    ['a wrong code_verifier', { code_verifier: 'x'.repeat(43) }],
+    ['another client_id', { client_id: NAMELESS }],
+    ['another redirect_uri', { redirect_uri: `${APP}elsewhere` }],
+  ] as const) {
+    it(`refuses ${what} with invalid_grant`, async () => {
+      const cms = await site();
+      const answer = await redeem(cms, await approved(cms, ['profile']), changes);
+      assert.equal(answer.status, 400);
+      assert.equal(answer.body['error'], 'invalid_grant');
+    });
+  }
+
+  it('refuses a request missing its verifier with invalid_request', async () => {
+    const cms = await site();
+    const answer = await redeem(cms, await approved(cms, []), { code_verifier: undefined });
+    assert.equal(answer.status, 400);
+    assert.equal(answer.body['error'], 'invalid_request');
+  });
+
+  it('is down in maintenance mode, like the rest of the endpoint', async () => {
+    const cms = await site({ maintenance: true });
+    const response = await cms.app.request('/_geekity/indieauth/auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'code=x',
+    });
+    assert.equal(response.status, 503);
+  });
+});
+
+describe('the me a redemption hands back', () => {
+  for (const [typed, expected, credentials] of [
+    [`${BASE}/`, `${BASE}/`, undefined],
+    ['https://blog.example', `${BASE}/`, undefined],
+    ['https://blog.example/author/ada', `${BASE}/author/ada/`, undefined],
+    [`${BASE}/`, `${BASE}/author/bob/`, { username: 'bob', password: 'another horse battery' }],
+  ] as const) {
+    it(`shares a host with ${typed} when ${credentials?.username ?? 'ada'} signs in`, async () => {
+      const cms = await site();
+      const code = await approved(cms, [], { me: typed }, credentials);
+      const { body } = await redeem(cms, code);
+      assert.equal(body['me'], expected);
+      assert.equal(new URL(expected).host, new URL(typed).host);
+    });
+  }
 });

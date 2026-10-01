@@ -1273,6 +1273,13 @@ publish. An app may send you back to its own origin, or to an address it lists
 in those details, and to nothing else. While the site is in maintenance mode
 the sign-in endpoint answers 503, like the URLs that advertise it.
 
+After you approve, the app exchanges the code it was sent for the URL you
+signed in as, by posting it back to the same endpoint with its PKCE
+verifier. It also gets your name, URL and profile picture if you left
+profile ticked, and your email address if you left email ticked. It gets no
+access token this way. A code works once, for five minutes, and only for the
+app and return address it was issued to.
+
 ## The theme
 
 Templates are Nunjucks (decision-4). The default theme lives in
