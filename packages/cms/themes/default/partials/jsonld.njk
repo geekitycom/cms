@@ -42,9 +42,6 @@
 {% for link in siteAuthor.links %}{% set _ = sameAs.push(link.href) %}{% endfor %}
 {% if personUrl %}{% set _ = sameAs.push(personUrl) %}{% endif %}
 {% set address = { "@type": "PostalAddress", "addressLocality": siteAuthor.location } if siteAuthor.location else "" %}
-{#- An author archive is the only page that is about a person: a listing whose
-    `author` is whose page this is. -#}
-{% set isProfilePage = pagination and author.url and url and (author.url in url) %}
 {% set entryType = "BlogPosting" if type == "post" else "Article" %}
 {% set nodes = [] %}
 {% set website %}
@@ -84,7 +81,7 @@
     }{% endset %}
 {% set _ = nodes.push(profile) %}
 {% endif %}
-{% if isProfilePage %}
+{% if isAuthorArchive %}
 {% set profilePage %}
     {
       "@type": "ProfilePage"
@@ -109,6 +106,21 @@
       {{- member("publisher", person) }}
     }{% endset %}
 {% set _ = nodes.push(entry) %}
+{% endif %}
+{#- Where the page sits, from the trail `layouts/base.njk` builds and the
+    visible breadcrumb prints (TASK-150). -#}
+{% if breadcrumbs.length %}
+{% set trail = [] %}
+{% for crumb in breadcrumbs %}
+{% set _ = trail.push({ "@type": "ListItem", "position": loop.index, "name": crumb.name, "item": crumb.url | absoluteUrl }) %}
+{% endfor %}
+{% set breadcrumbList %}
+    {
+      "@type": "BreadcrumbList"
+      {{- member("@id", metaUrl + "#breadcrumb") }}
+      {{- member("itemListElement", trail) }}
+    }{% endset %}
+{% set _ = nodes.push(breadcrumbList) %}
 {% endif %}
 <script type="application/ld+json">
 {

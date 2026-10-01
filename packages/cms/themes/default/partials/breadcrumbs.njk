@@ -1,0 +1,20 @@
+{#
+  The trail from the front page down to this one (TASK-150), printed from
+  `breadcrumbs`, the list `layouts/base.njk` builds and `partials/jsonld.njk`
+  prints as a BreadcrumbList. Every crumb but the last is a link; the last is
+  the page the reader is on, so it is text marked as the current page. The
+  separators are decoration and a screen reader skips them: the list already
+  says there are steps.
+#}
+{% if breadcrumbs.length %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <ol class="hlist">
+    {% for crumb in breadcrumbs %}
+    <li>
+      {%- if not loop.first %}<span class="breadcrumbs-sep" aria-hidden="true">›</span>{% endif -%}
+      {%- if loop.last %}<span aria-current="page">{{ crumb.name }}</span>{% else %}<a href="{{ crumb.url | url }}">{{ crumb.name }}</a>{% endif -%}
+    </li>
+    {% endfor %}
+  </ol>
+</nav>
+{% endif %}

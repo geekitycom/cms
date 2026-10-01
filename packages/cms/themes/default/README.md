@@ -161,8 +161,8 @@ packaged ones by name:
 ```
 
 `layouts/base.njk` defines the blocks `title`, `speculationRules`,
-`viewTransitions`, `head`, `alternates`, `header`, `content`, `footer` and
-`scripts`, so most sites never have to copy it.
+`viewTransitions`, `head`, `alternates`, `header`, `breadcrumbs`, `content`,
+`footer` and `scripts`, so most sites never have to copy it.
 
 Two layouts are named for the pages the Reading settings pick:
 
@@ -215,6 +215,18 @@ and the copyright line stands on its own. The year is
 `{{ "now" | date("year") }}` — `now` is the one word the `date` filter reads
 rather than parses — so it is the year at the moment the page is rendered, in
 the site's own timezone.
+
+**The breadcrumb** opens `<main>` on a page with a place in the site's
+hierarchy (TASK-150): a post filed under a category, and a category, tag or
+author archive. It is `nav.breadcrumbs` labelled `Breadcrumb`, holding an `ol`
+whose items run Home, then the post's first category and the post, or the
+archive's term or person, then `Page N` past page one. Every crumb but the last
+is a link; the last is the page itself, a `span` with `aria-current="page"`.
+The trail is `breadcrumbs`, a list of `{ name, url }` that `layouts/base.njk`
+sets before anything is printed, and the JSON-LD prints the same list, so the
+two cannot disagree. Every other page has an empty trail and prints nothing. A
+site that wants no visible breadcrumb empties the `breadcrumbs` block, and the
+`BreadcrumbList` stays in the graph.
 
 Webrings, badges, a licence notice and anything else that is markup rather than
 a link are deliberately not in the package. They go in a site theme's `footer`
@@ -732,6 +744,9 @@ IndieWeb. The graph holds:
 - `BlogPosting` on a post and `Article` on a page, with the headline, URL,
   `mainEntityOfPage`, `datePublished`, `dateModified`, description, image,
   `author` and `publisher`.
+- `BreadcrumbList` wherever the page prints a breadcrumb (see
+  [The page shell](#the-page-shell)): one `ListItem` per crumb with its
+  `position`, `name` and absolute URL as `item`.
 
 A site that wants a different graph — more types, an `Organization` publisher,
 nothing at all — writes its own `partials/jsonld.njk` and that file replaces

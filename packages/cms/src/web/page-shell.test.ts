@@ -1561,3 +1561,139 @@ describe('speculation rules and view transitions (TASK-140)', () => {
     assert.doesNotMatch(html, /view-transition/);
   });
 });
+
+describe('breadcrumbs (TASK-150)', () => {
+  /** Two posts filed under `general`, one of them also under `meta`, and Ada. */
+  async function filedSite(settings: Record<string, unknown> = {}): Promise<Cms> {
+    const { cms } = await siteWithContent(
+      { url: 'https://example.com', author: 'ada', ...settings },
+      {},
+      {
+        'posts/filed.md':
+          "---\ntitle: Filed\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/filed/\ncategories:\n  - general\n  - meta\n---\n\nBody.\n",
+        'posts/older.md':
+          "---\ntitle: Older\ndate: '2026-09-01T09:00:00Z'\npermalink: /2026/09/older/\ncategories:\n  - general\n---\n\nBody.\n",
+      },
+    );
+    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    return cms;
+  }
+
+  /** The BreadcrumbList's items as `[name, item]`, after checking their positions. */
+  function jsonLdTrail(html: string): [unknown, unknown][] | undefined {
+    const list = node(graph(html), 'BreadcrumbList');
+    if (list === undefined) return undefined;
+    const items = list['itemListElement'] as Record<string, unknown>[];
+    items.forEach((item, index) => {
+      assert.equal(item['@type'], 'ListItem');
+      assert.equal(item['position'], index + 1);
+    });
+    return items.map((item) => [item['name'], item['item']]);
+  }
+
+  /** The visible trail as `[name, href]`, the current page's href being `undefined`. */
+  function visibleTrail(html: string): [string, string | undefined][] | undefined {
+    const nav = /<nav class="breadcrumbs" aria-label="Breadcrumb">([\s\S]*?)<\/nav>/.exec(
+      html,
+    )?.[1];
+    if (nav === undefined) return undefined;
+    return [...nav.matchAll(/<li>([\s\S]*?)<\/li>/g)].map((item) => {
+      const inner = item[1] ?? '';
+      const link = /<a href="([^"]*)">([^<]*)<\/a>/.exec(inner);
+      if (link) return [link[2] ?? '', link[1]];
+      const current = /<span aria-current="page">([^<]*)<\/span>/.exec(inner);
+      assert.ok(current, `a crumb is neither a link nor the current page: ${inner}`);
+      return [current[1] ?? '', undefined];
+    });
+  }
+
+  it('emits a BreadcrumbList on a post with a category and on every archive (AC #1)', async () => {
+    const cms = await filedSite();
+    const expected: Record<string, [string, string][]> = {
+      '/2026/09/filed/': [
+        ['Home', 'https://example.com/'],
+        ['general', 'https://example.com/category/general/'],
+        ['Filed', 'https://example.com/2026/09/filed/'],
+      ],
+      '/category/general/': [
+        ['Home', 'https://example.com/'],
+        ['general', 'https://example.com/category/general/'],
+      ],
+      '/tag/notes/': [
+        ['Home', 'https://example.com/'],
+        ['notes', 'https://example.com/tag/notes/'],
+      ],
+      '/author/ada/': [
+        ['Home', 'https://example.com/'],
+        ['Ada Lovelace', 'https://example.com/author/ada/'],
+      ],
+    };
+
+    for (const [pathname, trail] of Object.entries(expected)) {
+      assert.deepEqual(jsonLdTrail(await body(cms, pathname)), trail, pathname);
+    }
+  });
+
+  it('emits none where there is no hierarchy to show (AC #1)', async () => {
+    const cms = await filedSite();
+
+    for (const pathname of ['/', '/about/', '/2026/09/hello/', '/search/']) {
+      const html = await body(cms, pathname);
+      assert.equal(jsonLdTrail(html), undefined, `${pathname} has a BreadcrumbList`);
+      assert.equal(visibleTrail(html), undefined, `${pathname} has a visible breadcrumb`);
+    }
+  });
+
+  it('follows the category base and names the page past page one', async () => {
+    const cms = await filedSite({ categoryBase: 'topics', postsPerPage: 1 });
+
+    assert.deepEqual(jsonLdTrail(await body(cms, '/2026/09/filed/'))?.[1], [
+      'general',
+      'https://example.com/topics/general/',
+    ]);
+    assert.deepEqual(jsonLdTrail(await body(cms, '/topics/general/page/2/')), [
+      ['Home', 'https://example.com/'],
+      ['general', 'https://example.com/topics/general/'],
+      ['Page 2', 'https://example.com/topics/general/page/2/'],
+    ]);
+  });
+
+  it('prints the same trail in a labelled nav, the current page unlinked (AC #2)', async () => {
+    const cms = await filedSite({ postsPerPage: 1 });
+
+    for (const pathname of [
+      '/2026/09/filed/',
+      '/category/general/',
+      '/category/general/page/2/',
+      '/tag/notes/',
+      '/author/ada/',
+    ]) {
+      const html = await body(cms, pathname);
+      const visible = visibleTrail(html);
+      const structured = jsonLdTrail(html);
+      assert.ok(visible !== undefined, `${pathname} has no visible breadcrumb`);
+      assert.ok(structured !== undefined);
+
+      assert.deepEqual(
+        visible.map(([name]) => name),
+        structured.map(([name]) => name),
+        `${pathname} shows a different trail from the one it declares`,
+      );
+      assert.deepEqual(
+        visible.slice(0, -1).map(([, href]) => href && `https://example.com${href}`),
+        structured.slice(0, -1).map(([, item]) => item),
+        `${pathname} links a crumb somewhere other than the JSON-LD says`,
+      );
+      assert.equal(visible.at(-1)?.[1], undefined, `${pathname} links the page it is on`);
+    }
+  });
+
+  it('reads as links at rest and stands 24px tall (AC #2)', async () => {
+    const html = await body(await filedSite(), '/2026/09/filed/');
+    const crumbs: Anchor = (stack) => stack.some((open) => open.includes('.breadcrumbs'));
+
+    assert.ok(hooksToLinks(html, crumbs).includes('a'), 'the breadcrumb has no links');
+    assert.equal(atRest(html, crumbs, 'text-decoration-line'), 'underline');
+    assert.equal(atRest(html, crumbs, 'min-block-size'), '24px');
+  });
+});

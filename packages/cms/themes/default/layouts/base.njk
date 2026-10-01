@@ -23,6 +23,8 @@
                       adds to it.
     alternates        <link rel="alternate"> tags, where the feeds go
     header            the site header, with the site menu
+    breadcrumbs       the trail at the top of <main>; empty it to print none
+                      (the JSON-LD keeps its BreadcrumbList)
     content           the page body
     footer            the site footer
     scripts           scripts at the end of <body>
@@ -52,6 +54,29 @@
 {% set metaUrl = (page.url or "/") | absoluteUrl %}
 {% set metaImage = shareImage.url if shareImage else "" %}
 {% set isEntry = (type == "post" or type == "page") and not pagination %}
+{#- An author archive is the only page that is about a person: a listing whose
+    `author` is whose page this is, rather than the posts page's writer. -#}
+{% set isAuthorArchive = pagination and author.url and url and (author.url in url) %}
+{#- Where this page sits, as `{ name, url }` from the front page down to it
+    (TASK-150): a post under its first category, and an archive under the
+    front page, with a crumb of its own past page one. The visible breadcrumb
+    and the JSON-LD both print this list, so they cannot say different things.
+    Every other page has no hierarchy worth showing and an empty trail. -#}
+{% set crumbs = [] %}
+{% if pagination and category %}
+{% set _ = crumbs.push({ "name": category, "url": "/" + (site.categoryBase or "category") + "/" + (category | urlencode) + "/" }) %}
+{% elif pagination and tag %}
+{% set _ = crumbs.push({ "name": tag, "url": "/" + (site.tagBase or "tag") + "/" + (tag | urlencode) + "/" }) %}
+{% elif isAuthorArchive %}
+{% set _ = crumbs.push({ "name": author.name, "url": author.url }) %}
+{% elif type == "post" and isEntry and categories.length %}
+{% set _ = crumbs.push({ "name": categories[0], "url": "/" + (site.categoryBase or "category") + "/" + (categories[0] | urlencode) + "/" }) %}
+{% set _ = crumbs.push({ "name": pageTitle, "url": page.url or url }) %}
+{% endif %}
+{% if crumbs.length and pagination.pageNumber > 0 %}
+{% set _ = crumbs.push({ "name": "Page " + (pagination.pageNumber + 1), "url": page.url or url }) %}
+{% endif %}
+{% set breadcrumbs = [{ "name": "Home", "url": "/" }].concat(crumbs) if crumbs.length else [] %}
 <!doctype html>
 <html lang="{{ site.language | default("en") }}">
   <head>
@@ -228,6 +253,7 @@
       {% endblock %}
 
       <main id="main">
+        {% block breadcrumbs %}{% include "partials/breadcrumbs.njk" %}{% endblock %}
         {% block content %}{% endblock %}
       </main>
 
