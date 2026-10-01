@@ -24,6 +24,16 @@ const APP = 'https://app.example/';
 const NAMELESS = 'https://nameless.example/';
 const MCP = 'https://mcp.example/client.json';
 const HEADER = 'https://header.example/';
+const LOGO = 'https://logo.example/';
+const PNG = 'not really a png, but typed as one';
+
+/** An h-app page whose u-logo points at `src`. */
+function appWithLogo(src: string): { type: string; body: string } {
+  return {
+    type: 'text/html',
+    body: `<div class="h-app"><span class="p-name">Logo App</span><img class="u-logo" src="${src}"></div>`,
+  };
+}
 
 const PAGES: Record<string, { type: string; body: string; link?: string }> = {
   [APP]: {
@@ -37,6 +47,13 @@ const PAGES: Record<string, { type: string; body: string; link?: string }> = {
     body: '<html><body><div class="h-app"><span class="p-name">Header App</span></div></body></html>',
     link: '<https://callback.example/from-header>; rel="redirect_uri"',
   },
+  [LOGO]: appWithLogo('/logo.png'),
+  [`${LOGO}logo.png`]: { type: 'image/png', body: PNG },
+  'https://text-logo.example/': appWithLogo('/logo.png'),
+  'https://text-logo.example/logo.png': { type: 'text/html', body: '<p>not an image</p>' },
+  'https://big-logo.example/': appWithLogo('/logo.png'),
+  'https://big-logo.example/logo.png': { type: 'image/png', body: 'x'.repeat(65 * 1024) },
+  'https://gone-logo.example/': appWithLogo('https://gone.example/logo.png'),
   [MCP]: {
     type: 'application/json',
     body: JSON.stringify({
@@ -262,6 +279,37 @@ describe('the consent screen', () => {
     const policy = response.headers.get('content-security-policy') ?? '';
     assert.match(policy, /form-action 'self' https:\/\/app\.example(;|$)/);
   });
+
+  it("shows the client's logo inline, so the admin never loads the client's URL", async () => {
+    const cms = await site();
+    const agent = await signIn(cms);
+    const response = await agent.get(
+      `${CONSENT}?${query({ client_id: LOGO, redirect_uri: `${LOGO}cb` })}`,
+    );
+    const html = await response.text();
+    const src = `data:image/png;base64,${Buffer.from(PNG).toString('base64')}`;
+    assert.match(html, new RegExp(`<img[^>]*src="${src.replace(/[+/]/g, '\\$&')}"`));
+    assert.doesNotMatch(html, /logo\.example\/logo\.png/);
+    const policy = response.headers.get('content-security-policy') ?? '';
+    assert.match(policy, /img-src 'self' data:(;|$)/);
+  });
+
+  for (const [what, clientId] of [
+    ['publishes no logo', APP],
+    ['names a logo that is not an image', 'https://text-logo.example/'],
+    ['names a logo over the size limit', 'https://big-logo.example/'],
+    ['names a logo that cannot be reached', 'https://gone-logo.example/'],
+  ] as const) {
+    it(`shows the screen with no logo for a client that ${what}`, async () => {
+      const cms = await site();
+      const { html } = await consent(await signIn(cms), {
+        client_id: clientId,
+        redirect_uri: `${clientId}cb`,
+      });
+      assert.doesNotMatch(html, /<img/);
+      assert.match(html, /name="decision" value="approve"/);
+    });
+  }
 
   it('shows the resource a token is wanted for', async () => {
     const cms = await site();

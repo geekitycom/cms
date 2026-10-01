@@ -1,5 +1,5 @@
 import { linkTargets } from '../webmention/discovery.ts';
-import { fetchPublic } from '../webmention/fetch-public.ts';
+import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
 import { elementsIn, hasRel, parseHtml } from '../webmention/html.ts';
 import { itemsIn } from '../webmention/microformats.ts';
 import type { MicroformatItem } from '../webmention/microformats.ts';
@@ -11,6 +11,8 @@ export interface ClientInformation {
   readonly name?: string;
   /** Its home page. */
   readonly url?: string;
+  /** Where its logo is, an http or https URL. */
+  readonly logo?: string;
   /** Where it may be sent back to, besides its own origin. */
   readonly redirectUris: readonly string[];
 }
@@ -21,7 +23,14 @@ export const CLIENT_FETCH_TIMEOUT_MS = 5000;
 /** The most of a client's page or document that is read. */
 export const CLIENT_FETCH_MAX_BYTES = 512 * 1024;
 
-/** What {@link fetchClientInformation} needs. */
+/** The most of a client's logo that is read. */
+export const CLIENT_LOGO_MAX_BYTES = 64 * 1024;
+
+/** The image types a logo may be, which a browser shows in an `<img>`. */
+const LOGO_TYPE =
+  /^\s*(image\/(?:png|jpeg|gif|webp|avif|svg\+xml|x-icon|vnd\.microsoft\.icon))\s*(?:;|$)/i;
+
+/** What {@link fetchClientInformation} and {@link fetchClientLogo} need. */
 export interface FetchClientOptions {
   readonly lookup: HostLookup;
   readonly timeoutMs?: number | undefined;
@@ -63,6 +72,31 @@ export async function fetchClientInformation(
 }
 
 /**
+ * Fetch a client's logo as a `data:` URI, or `undefined` when it cannot be had.
+ *
+ * Fetched here rather than linked from the page, so the admin's `img-src`
+ * never names the client and the client never learns the address of the
+ * person approving it, or when. The fetch is held to {@link fetchPublic}'s
+ * rules like the client_id itself, to image types only, and to
+ * {@link CLIENT_LOGO_MAX_BYTES}.
+ */
+export async function fetchClientLogo(
+  url: string,
+  options: FetchClientOptions,
+): Promise<string | undefined> {
+  const fetched = await fetchPublic(url, {
+    lookup: options.lookup,
+    timeoutMs: options.timeoutMs ?? CLIENT_FETCH_TIMEOUT_MS,
+    maxBytes: options.maxBytes ?? CLIENT_LOGO_MAX_BYTES,
+    accept: 'image/*',
+    contentType: { pattern: LOGO_TYPE, name: 'an image' },
+  });
+  if (!fetched.ok) return undefined;
+  const type = LOGO_TYPE.exec(fetched.type)?.[1]?.toLowerCase() ?? 'image/png';
+  return `data:${type};base64,${Buffer.from(fetched.body).toString('base64')}`;
+}
+
+/**
  * What a client_id document says, by its content type.
  *
  * A JSON document is a client metadata document, which the OAuth Client ID
@@ -94,12 +128,14 @@ function fromJson(body: string, clientId: string): ClientInformation {
 
   const name = fields['client_name'];
   const url = fields['client_uri'];
+  const logo = logoUrl(fields['logo_uri']);
   const redirectUris = Array.isArray(fields['redirect_uris'])
     ? fields['redirect_uris'].filter((uri): uri is string => typeof uri === 'string')
     : [];
   return {
     ...(typeof name === 'string' && name.trim() !== '' ? { name: name.trim() } : {}),
     ...(typeof url === 'string' && URL.canParse(url) ? { url } : {}),
+    ...(logo === undefined ? {} : { logo }),
     redirectUris,
   };
 }
@@ -109,6 +145,7 @@ function fromHtml(body: string, base: string, link: string | null): ClientInform
   const app = firstApp(itemsIn(root, base));
   const name = app?.properties['name']?.[0]?.text.trim();
   const url = app?.properties['url']?.[0]?.text;
+  const logo = logoUrl(app?.properties['logo']?.[0]?.text);
 
   const hrefs = linkTargets(link, 'redirect_uri');
   for (const element of elementsIn(root)) {
@@ -121,8 +158,14 @@ function fromHtml(body: string, base: string, link: string | null): ClientInform
   return {
     ...(name === undefined || name === '' ? {} : { name }),
     ...(url === undefined ? {} : { url }),
+    ...(logo === undefined ? {} : { logo }),
     redirectUris,
   };
+}
+
+/** `value` when it is an absolute http or https URL. */
+function logoUrl(value: unknown): string | undefined {
+  return typeof value === 'string' ? webUrl(value)?.href : undefined;
 }
 
 function firstApp(items: readonly MicroformatItem[]): MicroformatItem | undefined {

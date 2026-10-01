@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { after, beforeEach, describe, it } from 'node:test';
 
 import type { HostLookup } from '../webmention/public-address.ts';
-import { fetchClientInformation, readClientInformation } from './client.ts';
+import { fetchClientInformation, fetchClientLogo, readClientInformation } from './client.ts';
 
 const fetched: string[] = [];
 let answer: (url: string, init: RequestInit | undefined) => Promise<Response> = () =>
@@ -44,6 +44,7 @@ describe('readClientInformation', () => {
         client_id: 'https://app.example/client.json',
         client_name: 'Example MCP Client',
         client_uri: 'https://app.example/',
+        logo_uri: 'https://cdn.example/logo.png',
         redirect_uris: ['http://127.0.0.1:3000/callback', 'https://app.example/cb'],
       }),
       'application/json',
@@ -52,6 +53,7 @@ describe('readClientInformation', () => {
     assert.deepEqual(client, {
       name: 'Example MCP Client',
       url: 'https://app.example/',
+      logo: 'https://cdn.example/logo.png',
       redirectUris: ['http://127.0.0.1:3000/callback', 'https://app.example/cb'],
     });
   });
@@ -80,8 +82,26 @@ describe('readClientInformation', () => {
     assert.deepEqual(client, {
       name: 'Quill',
       url: 'https://app.example/',
+      logo: 'https://app.example/logo.png',
       redirectUris: ['https://other.example/cb'],
     });
+  });
+
+  it('takes no logo that is not an http or https URL', () => {
+    for (const logo of ['javascript:alert(1)', 'data:image/png;base64,AAAA', 'not a url']) {
+      const client = readClientInformation(
+        JSON.stringify({ client_id: 'https://app.example/c.json', logo_uri: logo }),
+        'application/json',
+        'https://app.example/c.json',
+      );
+      assert.equal(client.logo, undefined, logo);
+    }
+    const page = readClientInformation(
+      '<div class="h-app"><img class="u-logo" src="javascript:alert(1)"></div>',
+      'text/html',
+      'https://app.example/',
+    );
+    assert.equal(page.logo, undefined);
   });
 
   it('reads the older h-x-app as well', () => {
@@ -202,5 +222,55 @@ describe('fetchClientInformation', () => {
       ...LIMITS,
     });
     assert.equal(result.ok, false);
+  });
+});
+
+describe('fetchClientLogo', () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+  it('fetches a public image and hands it back as a data URI', async () => {
+    answer = () =>
+      Promise.resolve(new Response(PNG, { headers: { 'content-type': 'image/PNG; foo=bar' } }));
+    const logo = await fetchClientLogo('https://app.example/logo.png', {
+      lookup: PUBLIC,
+      ...LIMITS,
+    });
+    assert.equal(logo, `data:image/png;base64,${Buffer.from(PNG).toString('base64')}`);
+  });
+
+  it('takes nothing that is not an image', async () => {
+    for (const type of ['text/html', 'image/svg+xml-ish', 'application/octet-stream', '']) {
+      answer = () => Promise.resolve(new Response(PNG, { headers: { 'content-type': type } }));
+      const logo = await fetchClientLogo('https://app.example/logo', { lookup: PUBLIC, ...LIMITS });
+      assert.equal(logo, undefined, type);
+    }
+  });
+
+  it('takes nothing over the byte limit', async () => {
+    answer = () =>
+      Promise.resolve(
+        new Response(new Uint8Array(4096), { headers: { 'content-type': 'image/png' } }),
+      );
+    const logo = await fetchClientLogo('https://app.example/big.png', {
+      lookup: PUBLIC,
+      ...LIMITS,
+    });
+    assert.equal(logo, undefined);
+  });
+
+  it('takes nothing from a host that is down or private', async () => {
+    answer = () => Promise.reject(new TypeError('fetch failed'));
+    assert.equal(
+      await fetchClientLogo('https://down.example/logo.png', { lookup: PUBLIC, ...LIMITS }),
+      undefined,
+    );
+    assert.equal(
+      await fetchClientLogo('https://lan.example/logo.png', {
+        lookup: resolvingTo('192.168.1.1'),
+        ...LIMITS,
+      }),
+      undefined,
+    );
+    assert.deepEqual(fetched, ['https://down.example/logo.png']);
   });
 });

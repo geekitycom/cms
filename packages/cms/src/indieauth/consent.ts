@@ -8,7 +8,7 @@ import { effectiveBaseUrl, readSiteSettings } from '../admin/settings.ts';
 import { ADMIN_TEMPLATES } from '../admin/templates.ts';
 import type { GeekityEnv } from '../env.ts';
 import { isPrivateHost } from '../webmention/public-address.ts';
-import { fetchClientInformation } from './client.ts';
+import { fetchClientInformation, fetchClientLogo } from './client.ts';
 import type { ClientInformation } from './client.ts';
 import { AUTHORIZATION_PATH, authorizationServerMetadata } from './discovery.ts';
 import { meForSignIn } from './identity.ts';
@@ -120,12 +120,21 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
       ...(client.name === undefined ? {} : { clientName: client.name }),
     });
     const redirect = new URL(redirectUri);
+    const logo =
+      client.logo === undefined
+        ? undefined
+        : await fetchClientLogo(client.logo, { lookup: config.hostLookup });
 
     c.set('cspFormAction', formActionSource(redirect));
     return render(c, ADMIN_TEMPLATES.indieauthConsent, {
       consentUrl: CONSENT_PATH,
       pending,
-      client: { name: client.name ?? clientId, id: clientId, named: client.name !== undefined },
+      client: {
+        name: client.name ?? clientId,
+        id: clientId,
+        named: client.name !== undefined,
+        logo,
+      },
       redirectHost: redirect.host === '' ? redirect.protocol : redirect.host,
       loopback: redirect.hostname !== '' && isPrivateHost(redirect.hostname),
       identity: me,

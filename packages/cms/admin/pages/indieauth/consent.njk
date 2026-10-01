@@ -7,6 +7,10 @@
 {% block title %}Sign in to {{ client.name }}{% endblock %}
 
 {% block content %}
+  {# A data: URI the server fetched, never the client's URL (TASK-190). #}
+  {% if client.logo %}
+    <img class="admin-consent-logo" src="{{ client.logo }}" alt="" width="64" height="64" />
+  {% endif %}
   <h1>Sign in to {{ client.name }}?</h1>
 
   <dl class="admin-consent">
