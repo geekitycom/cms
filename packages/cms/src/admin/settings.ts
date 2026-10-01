@@ -13,6 +13,7 @@ import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
+import { generateIndexNowKey, isIndexNowKey } from '../web/indexnow.ts';
 import { DEFAULT_MENU_NAME, menuItemsFromText, menusOf } from '../web/navigation.ts';
 import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from '../web/robots.ts';
 import type {
@@ -217,6 +218,19 @@ export interface SiteSettings {
    */
   llmsTxt: boolean;
   /**
+   * Whether the site tells the IndexNow search engines about every URL a
+   * publish, an edit or a deletion moved (TASK-151). Off by default: it sends
+   * the site's URLs to a third party, which is the site's call to make.
+   */
+  indexNow: boolean;
+  /**
+   * The key IndexNow verifies the site by, served at `/{key}.txt`. Generated
+   * the first time IndexNow is turned on and kept when it is turned off, so
+   * turning it back on keeps the key the search engines already checked. It
+   * is no secret: the whole point of it is that anybody can fetch it.
+   */
+  indexNowKey: string;
+  /**
    * How the site sends email, or `none` for a site that does not (TASK-53).
    *
    * The name of the provider only. The key or the SMTP password that makes it
@@ -343,7 +357,10 @@ export function robotsPolicyOf(settings: SiteSettings): RobotsPolicy {
  * archive renames, which the taxonomy screens write, and the menus, which the
  * Navigation screen writes. See {@link CarriedSettings}.
  */
-export type SettingsField = Exclude<keyof SiteSettings, 'taxonomyRedirects' | 'menus'>;
+export type SettingsField = Exclude<
+  keyof SiteSettings,
+  'taxonomyRedirects' | 'menus' | 'indexNowKey'
+>;
 
 /**
  * The settings no settings form carries, as a save takes them from the file.
@@ -353,7 +370,9 @@ export type SettingsField = Exclude<keyof SiteSettings, 'taxonomyRedirects' | 'm
  * inside the write rather than off the form — which is what makes a menu
  * edited while the settings page was open survive the save.
  */
-export type CarriedSettings = Partial<Pick<SiteSettings, 'taxonomyRedirects' | 'menus'>>;
+export type CarriedSettings = Partial<
+  Pick<SiteSettings, 'taxonomyRedirects' | 'menus' | 'indexNowKey'>
+>;
 
 /**
  * What a site is worth before anybody has said otherwise.
@@ -390,6 +409,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   contentSignalAiTrain: '',
   robotsRules: [],
   llmsTxt: true,
+  indexNow: false,
+  indexNowKey: '',
   mailProvider: 'none',
   mailFromName: '',
   mailFromAddress: '',
@@ -432,6 +453,7 @@ export const SETTINGS_FIELDS = {
   contentSignalAiTrain: 'content_signal_ai_train',
   robotsRules: 'robots_rules',
   llmsTxt: 'llms_txt',
+  indexNow: 'index_now',
   mailProvider: 'mail_provider',
   mailFromName: 'mail_from_name',
   mailFromAddress: 'mail_from_address',
@@ -541,6 +563,12 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
         }
       : {}),
     ...(typeof file['llmsTxt'] === 'boolean' ? { llmsTxt: file['llmsTxt'] } : {}),
+    ...(typeof file['indexNow'] === 'boolean' ? { indexNow: file['indexNow'] } : {}),
+    // A key IndexNow would refuse is no key: the site then has none to serve
+    // or send, which is IndexNow off rather than a stream of 403s.
+    ...(typeof file['indexNowKey'] === 'string' && isIndexNowKey(file['indexNowKey'])
+      ? { indexNowKey: file['indexNowKey'] }
+      : {}),
     // Only a provider this version ships, for the reason the actor type is
     // read that way: a file naming one it has never heard of is a site that
     // sends no mail rather than a boot that fails.
@@ -645,6 +673,7 @@ export function siteJsonFor(
     contentSignalAiTrain: settings.contentSignalAiTrain,
     robotsRules: [...settings.robotsRules],
     llmsTxt: settings.llmsTxt,
+    indexNow: settings.indexNow,
     mailProvider: settings.mailProvider,
     mailFromName: settings.mailFromName,
     mailFromAddress: settings.mailFromAddress,
@@ -688,6 +717,10 @@ export function siteJsonFor(
   // that has turned it off again should go back to saying nothing.
   if (settings.wordpressActivityPub) file['wordpressActivityPub'] = true;
   else delete file['wordpressActivityPub'];
+
+  // A site that has never turned IndexNow on has no key to write down.
+  if (settings.indexNowKey !== '') file['indexNowKey'] = settings.indexNowKey;
+  else delete file['indexNowKey'];
 
   return file;
 }
@@ -977,6 +1010,8 @@ const FIELD_CHECKS: Record<
 
   llmsTxt: () => undefined,
 
+  indexNow: () => undefined,
+
   mailProvider: (form) =>
     (MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)
       ? undefined
@@ -1135,6 +1170,15 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
       : '',
     robotsRules: robotsRuleLines([form.robotsRules]),
     llmsTxt: form.llmsTxt !== '',
+    indexNow: form.indexNow !== '',
+    // Minted the first time IndexNow is turned on and never again, so the key
+    // the search engines verified outlives turning it off and on.
+    indexNowKey:
+      carried.indexNowKey !== undefined && carried.indexNowKey !== ''
+        ? carried.indexNowKey
+        : form.indexNow !== ''
+          ? generateIndexNowKey()
+          : '',
     mailProvider: (MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)
       ? (form.mailProvider as MailProviderName)
       : 'none',
@@ -1179,6 +1223,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     contentSignalAiTrain: settings.contentSignalAiTrain,
     robotsRules: settings.robotsRules.join('\n'),
     llmsTxt: settings.llmsTxt ? '1' : '',
+    indexNow: settings.indexNow ? '1' : '',
     mailProvider: settings.mailProvider,
     mailFromName: settings.mailFromName,
     mailFromAddress: settings.mailFromAddress,

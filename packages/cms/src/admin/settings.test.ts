@@ -75,6 +75,7 @@ describe('content/_data/site.json', () => {
       contentSignalAiTrain: '',
       robotsRules: [],
       llmsTxt: true,
+      indexNow: false,
       // The mail settings the file carries. The key and the SMTP password are
       // not among them: those are credentials and live in `data/mail.json`.
       mailProvider: 'none',

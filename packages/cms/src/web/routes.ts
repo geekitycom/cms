@@ -86,6 +86,7 @@ import {
   ownLlmsTxt,
 } from './llms.ts';
 import type { LlmsEntry, LlmsIndex } from './llms.ts';
+import { indexNowKeyPath, indexNowKeyResponse } from './indexnow.ts';
 import {
   searchHref,
   searchJson,
@@ -225,6 +226,19 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
     if (!readSiteSettings(contentDir).llmsTxt) return notFound(c);
     const file = ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl);
     return llmsTxtResponse(file, conditionalHeaders(c));
+  });
+
+  // The IndexNow key file (TASK-151), at the root because that is where an
+  // engine checks for it. Any other `.txt` path is not this route's: it falls
+  // through to whatever document or 404 would have answered it.
+  app.get('/:file{[A-Za-z0-9-]{8,128}\\.txt}', async (c, next) => {
+    const settings = readSiteSettings(c.var.config.contentDir);
+    const key = settings.indexNowKey;
+    if (!settings.indexNow || key === '' || c.req.path !== indexNowKeyPath(key)) {
+      await next();
+      return;
+    }
+    return indexNowKeyResponse(key);
   });
 
   // The site's search (TASK-22): a route at a fixed path for the reason the

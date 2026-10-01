@@ -2355,6 +2355,7 @@ Booting mounts the public site on the app. The routes are:
 | `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                                      |
 | `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                                     |
 | `/llms.txt`                             | The site's pages and recent posts for a language model, each linked to its Markdown. See [below](#llmstxt).            |
+| `/{key}.txt`                            | The IndexNow key, while the site has IndexNow on. See [below](#indexnow).                                              |
 | `/.well-known/security.txt`             | Where to report a vulnerability; a 404 until a security contact is set. See [above](#securitytxt-and-change-password). |
 | `/.well-known/change-password`          | A redirect to the signed-in user's change-password form, or to the login form.                                         |
 | `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                                              |
@@ -3202,6 +3203,62 @@ exactly as written in place of the generated one, dated by the file. To serve
 no file at all, clear **Serve /llms.txt** under Settings → Reading. This
 writes `"llmsTxt": false` to `site.json`. `/llms.txt` then answers 404, even
 when `content/llms.txt` exists, and the home page stops advertising it.
+
+## IndexNow
+
+[IndexNow](https://www.indexnow.org/) gets a changed URL recrawled by Bing,
+Yandex, Naver, Seznam and the other engines that share it within minutes,
+instead of on their next visit. It is off by default, because it sends the
+site's URLs to a third party. To turn it on, select **Submit changes to
+IndexNow** under Settings → Reading.
+
+The first time you turn it on, the CMS generates a key of 32 hex digits and
+writes it to `site.json` as `indexNowKey`, beside `"indexNow": true`. The site
+then serves the key at `/{key}.txt` as plain text, which is how an engine
+checks that the submissions are yours. Turning IndexNow off takes the file away
+and keeps the key, so turning it back on reuses the key the engines already
+checked. To change the key, write a new one of 8 to 128 letters, digits or
+dashes to `indexNowKey`. A key that does not fit that pattern counts as none,
+and the site sends nothing.
+
+When a post or a page is published, changed, moved or deleted, the CMS submits
+its URL. A move submits the old URL and the new one. Unpublishing, trashing and
+deleting submit the URL that went away. The changes of the next ten seconds go
+out together as one `POST` to `https://api.indexnow.org/indexnow`:
+
+```json
+{
+  "host": "example.com",
+  "key": "0123456789abcdef0123456789abcdef",
+  "keyLocation": "https://example.com/0123456789abcdef0123456789abcdef.txt",
+  "urlList": ["https://example.com/hello/"]
+}
+```
+
+A network failure, a 429 or a 5xx answer is tried again after ten seconds, then
+after forty. Any other refusal, such as a 403 for a key the engine could not
+fetch, is not. A batch that still fails is logged as a warning, and the post
+stays published.
+
+Nothing is sent for a draft or a scheduled post, for the boot scan, or while
+the base URL's host is local: `localhost`, a `.local` name, or a private IP
+address.
+
+A site can change how the CMS sends with `indexNow` in its config. Every field
+is optional:
+
+```ts
+export default defineConfig({
+  indexNow: {
+    fetch, // what submits the URLs; a test names one
+    endpoint: 'https://www.bing.com/indexnow',
+    batchMs: 10_000,
+    attempts: 3,
+    backoffMs: (attempt) => attempt * attempt * 10_000,
+    logger: console,
+  },
+});
+```
 
 ## Theme overrides
 

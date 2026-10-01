@@ -127,4 +127,14 @@
   {% endset %}
   {{ field.checkbox('settings-llms-txt', fields.llmsTxt, 'Serve /llms.txt',
        checked=form.llmsTxt, hint=llmsHint) }}
+
+  {# TASK-151. Telling the search engines, beside the files they read. #}
+  {% set indexNowHint %}
+    Tells Bing, Yandex, Naver, Seznam and the other IndexNow search engines about
+    every post or page you publish, change or delete, so they recrawl it within
+    minutes. Turning it on creates a key the site serves at
+    <code>/{key}.txt</code>. Nothing is sent while the site's URL is local.
+  {% endset %}
+  {{ field.checkbox('settings-index-now', fields.indexNow, 'Submit changes to IndexNow',
+       checked=form.indexNow, hint=indexNowHint) }}
 {% endblock %}

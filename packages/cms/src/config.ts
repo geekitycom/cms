@@ -91,6 +91,28 @@ export interface MailOverrides {
 }
 
 /**
+ * The IndexNow pieces a site may swap (TASK-151).
+ *
+ * Whether IndexNow is on is a setting; these are how it sends. A test names
+ * `fetch` so that nothing it publishes reaches a search engine, and `batchMs`
+ * and `backoffMs` so that it waits for neither.
+ */
+export interface IndexNowOverrides {
+  /** What submits the URLs. Defaults to the global `fetch`. */
+  fetch?: typeof fetch | undefined;
+  /** Where they go. Defaults to `https://api.indexnow.org/indexnow`, which shares with every engine. */
+  endpoint?: string | undefined;
+  /** How long changes are gathered before one request carries them. Defaults to ten seconds. */
+  batchMs?: number | undefined;
+  /** How many times one batch is tried. Defaults to three. */
+  attempts?: number | undefined;
+  /** How long to wait before attempt `n + 1`, in milliseconds. Defaults to ten seconds, then forty. */
+  backoffMs?: ((attempt: number) => number) | undefined;
+  /** Where a batch that could not be sent is reported. Defaults to `console`. */
+  logger?: { warn(message: string): void } | undefined;
+}
+
+/**
  * What a site writes in `geekity.config.ts`. Every field is optional; see
  * {@link DEFAULT_PORT} and friends for what each one falls back to.
  */
@@ -313,6 +335,11 @@ export interface GeekityConfig {
    */
   mail?: MailOverrides;
   /**
+   * How the site submits URLs to IndexNow (TASK-151). Every field has a
+   * default; see {@link IndexNowOverrides}.
+   */
+  indexNow?: IndexNowOverrides;
+  /**
    * What the CMS reads the time from.
    *
    * A post's date decides whether it is public yet (TASK-44), so the index and
@@ -392,6 +419,8 @@ export interface ResolvedConfig {
   commentChecker: CommentChecker | undefined;
   /** Mail overrides, empty when the site named none. */
   mail: MailOverrides;
+  /** IndexNow overrides, empty when the site named none. */
+  indexNow: IndexNowOverrides;
   /** The clock the index and the scheduler read. */
   now: Clock;
   /** Federation stores and guards, empty when the site named none. */
@@ -585,6 +614,7 @@ export function resolveConfig(
     onPublish: config.onPublish,
     commentChecker: config.commentChecker,
     mail: config.mail ?? {},
+    indexNow: config.indexNow ?? {},
     now: config.now ?? systemClock,
     federation: config.federation ?? {},
     hostLookup: config.hostLookup ?? systemHostLookup,

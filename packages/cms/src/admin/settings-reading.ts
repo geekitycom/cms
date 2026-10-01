@@ -62,6 +62,7 @@ export const READING_SETTINGS: SettingsPage = {
     'contentSignalAiTrain',
     'robotsRules',
     'llmsTxt',
+    'indexNow',
   ],
 
   panels: (c, settings) => {
