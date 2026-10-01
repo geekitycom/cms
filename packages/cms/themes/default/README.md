@@ -744,6 +744,17 @@ type="application/opensearchdescription+xml">`, outside the `head` block, so a
 browser offers the site as a search engine. A theme that replaces `base.njk`
 copies that line to keep the offer.
 
+**The embed card** is a route too. `/_geekity/oembed?url=…` is an oEmbed
+provider: for the URL of a published post or page it answers a `rich` embed
+with the title, the author and their archive, the site as provider, a
+thumbnail when the post's own `image` has a recorded size, and an `html`
+card that is a blockquote of escaped text and links with no script. `maxwidth`
+and `maxheight` are honoured, `format=xml` gives the same fields as XML, and
+any other URL is a 404. The head of each post and page links it with
+`<link rel="alternate" type="application/json+oembed">` and its `text/xml+oembed`
+twin, outside the `head` block. A theme that replaces `base.njk` copies those
+lines to keep the card.
+
 **The structured data** is `partials/jsonld.njk`, one `<script
 type="application/ld+json">` holding one `@graph` per page, and it is the only
 structured data the theme emits — there is no Microdata anywhere, by
