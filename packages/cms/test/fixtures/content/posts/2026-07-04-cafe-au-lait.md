@@ -5,6 +5,7 @@ categories:
   - notes
 description: A hand-authored post with no permalink, so both systems compute one.
 author: andrew
+lang: fr
 ---
 
 Hand-authored files do not carry a permalink; the CMS only writes one when it

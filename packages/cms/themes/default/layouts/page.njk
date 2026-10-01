@@ -36,10 +36,10 @@
         deciding twice whether there is anything to say. -#}
     <p class="page-meta">
       {%- if date %}
-      <a href="{{ entryUrl | url }}" class="u-url"><time class="small dt-published" datetime="{{ date | date("iso") }}">Published {{ date | date }}</time></a>
+      <a href="{{ entryUrl | url }}" class="u-url"><time class="small dt-published" datetime="{{ date | date("iso") }}">Published {{ date | date("readable", none, lang) }}</time></a>
       {%- endif %}
       {%- if updated and (not date or (updated | date("html")) != (date | date("html"))) %}
-      {% if date %}<span aria-hidden="true">·</span> {% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date }}</time>
+      {% if date %}<span aria-hidden="true">·</span> {% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date("readable", none, lang) }}</time>
       {%- endif -%}
     </p>
   </section>

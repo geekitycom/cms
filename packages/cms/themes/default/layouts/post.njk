@@ -50,7 +50,7 @@
   <h1 class="screen-reader-text">
     {{- "Reply" if postType == "reply" else "Note" }}
     {%- if bioAuthor.name %} by {{ bioAuthor.name }}{% endif %}
-    {%- if date %}, {{ date | date }}{% endif -%}
+    {%- if date %}, {{ date | date("readable", none, lang) }}{% endif -%}
   </h1>
   {{ kicker.line(postType | capitalize, false, false, categories) }}
   {% include "partials/reply-context.njk" %}
@@ -65,12 +65,12 @@
       <a class="u-category small" href="https://news.indieweb.org/en">#indienews</a>
       {%- endif %}
       {%- if date %}
-      <a href="{{ entryUrl | url }}" class="u-url"><time class="small dt-published" datetime="{{ date | date("iso") }}">Published {{ date | date }}</time></a>
+      <a href="{{ entryUrl | url }}" class="u-url"><time class="small dt-published" datetime="{{ date | date("iso") }}">Published {{ date | date("readable", none, lang) }}</time></a>
       {%- endif %}
       {#- Updated only when it is a different day in the site's own timezone:
           a typo fixed an hour after publishing is not news. -#}
       {%- if updated and (not date or (updated | date("html")) != (date | date("html"))) %}
-      {% if date %}<span aria-hidden="true">·</span> {% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date }}</time>
+      {% if date %}<span aria-hidden="true">·</span> {% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date("readable", none, lang) }}</time>
       {%- endif -%}
     </p>
   </section>

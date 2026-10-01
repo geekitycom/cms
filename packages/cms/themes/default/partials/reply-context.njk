@@ -12,7 +12,9 @@
   or synced: its name, a short excerpt, its author and its date, each only when
   it said so. It is somebody else's words, so every piece is printed through
   autoescaping and none of it with `safe`. With a name, the name is the link;
-  with only an author, "a post" is; with neither, the bare URL.
+  with only an author, "a post" is; with neither, the bare URL. Its date is
+  written in `lang`, the language of the entry it sits in (TASK-189), so a
+  listing sets `lang` from each entry as it sets `replyContext`.
 #}
 {% if inReplyTo %}
 <div class="reply-context cite u-in-reply-to h-cite">
@@ -26,7 +28,7 @@
       {%- else %}<span class="p-name">{{ replyContext.author.name }}</span>{% endif -%}
     </span>
     {%- endif %}
-    {%- if replyContext.published %}, <time class="dt-published" datetime="{{ replyContext.published | date("iso") }}">{{ replyContext.published | date }}</time>
+    {%- if replyContext.published %}, <time class="dt-published" datetime="{{ replyContext.published | date("iso") }}">{{ replyContext.published | date("readable", none, lang) }}</time>
     {%- endif -%}
   </p>
   {% if replyContext.text %}

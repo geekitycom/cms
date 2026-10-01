@@ -101,6 +101,38 @@ describe('the date filter in a locale', () => {
     assert.equal(env.renderString('{{ d | date }}', { d: instant }), '2 September 2026');
   });
 
+  it('takes a locale of its own after the zone, for a date in another language', () => {
+    const env = environment();
+    const site = { language: 'en', timezone: 'America/New_York' };
+    const late = '2026-09-02T02:00:00Z';
+
+    assert.equal(
+      env.renderString('{{ d | date("long", none, "fr-ca") }}', { site, d: late }),
+      '1 septembre 2026',
+    );
+    assert.equal(
+      env.renderString('{{ d | date("long", "", lang) }}', { site, d: late, lang: 'de' }),
+      '1. September 2026',
+    );
+    assert.equal(
+      env.renderString('{{ d | date("long", "UTC", "fr") }}', { site, d: late }),
+      '2 septembre 2026',
+    );
+  });
+
+  it('writes in the site locale when the locale it is given is empty or no tag', () => {
+    const env = environment();
+    const site = { language: 'en' };
+
+    for (const lang of [undefined, null, '', 'not a tag']) {
+      assert.equal(
+        env.renderString('{{ d | date("long", none, lang) }}', { site, d: instant, lang }),
+        '2 September 2026',
+        `lang ${String(lang)}`,
+      );
+    }
+  });
+
   it('writes an ISO 8601 datetime on a time element whatever the locale', () => {
     const env = environment();
 
