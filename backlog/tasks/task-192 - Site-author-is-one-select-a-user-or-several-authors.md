@@ -4,20 +4,16 @@ title: 'Site author is one select: a user, or several authors'
 status: To Do
 assignee: []
 created_date: '2026-10-01 16:45'
-updated_date: '2026-10-01 16:45'
+updated_date: '2026-10-01 17:07'
 labels:
   - settings
   - admin
   - indieauth
+milestone: m-27
 dependencies:
   - TASK-180
 references:
-  - packages/cms/admin/pages/settings/general.njk
-  - packages/cms/src/admin/settings-general.ts
-  - packages/cms/src/web/authors.ts
-  - packages/cms/src/web/render.ts
-  - packages/cms/src/indieauth/identity.ts
-  - packages/cms/docs/eleventy.config.example.js
+  - packages/cms/themes/default/partials/jsonld.njk
 priority: medium
 type: feature
 ordinal: 208800
@@ -43,6 +39,7 @@ Breaking: an existing site.json whose author matches a username or display name 
 - [ ] #6 The Eleventy example config prints the same author name as the CMS
 - [ ] #7 decision-23 is amended and the new site.json shape is recorded as a decision
 - [ ] #8 A feed item whose post stores a username as its author prints that user's display name (shll.me's JSON Feed items currently show "a"), in feed-item.ts and the JSON Feed
+- [ ] #9 The default theme's JSON-LD follows the choice: with a user chosen, the WebSite's publisher and about reference that user's Person; with Several authors, the publisher is an Organization named for the site, there is no about, and no Person node is printed on pages about nobody in particular
 <!-- AC:END -->
 
 ## Implementation Notes

@@ -4,7 +4,7 @@ title: 'Photo posts: a photo property from Micropub, rendered and federated'
 status: To Do
 assignee: []
 created_date: '2026-09-29 01:55'
-updated_date: '2026-09-29 02:13'
+updated_date: '2026-10-01 17:07'
 labels:
   - micropub
   - content
@@ -14,8 +14,7 @@ dependencies:
   - TASK-164
   - TASK-165
 references:
-  - 'https://www.w3.org/TR/micropub/'
-  - 'https://ptd.spec.indieweb.org/'
+  - packages/cms/themes/default/partials/jsonld.njk
 priority: medium
 type: feature
 ordinal: 190800
@@ -36,4 +35,5 @@ Most mobile Micropub clients post photos. A post can carry one or more photos, e
 - [ ] #5 The admin editor lists a post's photos and can add, remove and edit their alt text
 - [ ] #6 doc-2 documents the photo key
 - [ ] #7 A photo that is a media library item takes its default alt text from that item (TASK-141), so alt text is kept in one place rather than copied per post
+- [ ] #8 A photo post's JSON-LD BlogPosting carries image with the photo's absolute URL (and alt as its caption), and a post with several photos lists each
 <!-- AC:END -->
