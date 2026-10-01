@@ -53,7 +53,7 @@ async function site(config: { maintenance?: boolean } = {}): Promise<Site> {
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
   await writeFile(
     path.join(contentDir, '_data', 'site.json'),
-    JSON.stringify({ title: 'A Site', author: 'ada', soloAuthor: true }),
+    JSON.stringify({ title: 'A Site', author: 'ada' }),
   );
   await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
   const cms = await box.open({ contentDir, dataDir, baseUrl: BASE, hostLookup: PUBLIC, ...config });

@@ -1844,8 +1844,8 @@ can get between. So a reader — an Eleventy build, the CMS's own site data
 source, another process entirely — always sees one whole version, and two saves
 at once cannot each keep half of what the other kept.
 
-The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
-`homepage`, `postsPage`,
+The file carries `title`, `tagline`, `url`, `author` (a username, when the
+site has one author), `postsPerPage`, `homepage`, `postsPage`,
 `timezone`, `language`, `locale` (when it is set), `tagBase`,
 `categoryBase`, `notifyServer`, `feedUpdatePeriod`, `feedUpdateFrequency`,
 `webmentionsSend`, `webmentionsReceive`,
@@ -2772,7 +2772,7 @@ more than an archive page, so a reader that polls once a day does not miss a
 post on a site that publishes several.
 
 ```json
-{ "title": "My Site", "tagline": "Notes", "author": "Me", "feedSize": 20 }
+{ "title": "My Site", "tagline": "Notes", "author": "me", "feedSize": 20 }
 ```
 
 Every RSS feed, the comments feeds included, tells a reader how often to poll
@@ -3377,8 +3377,9 @@ Tailwind. Every colour is a `--color-*` custom property a site can override.
 `base.njk` is its shell: a skip link, a `.global-wrapper` carrying `data-is-root-path="true"`
 at `/` only, a header that is the site title and tagline on the front page and a
 small link home on every other — with `menus.primary` inside it on every page
-— `<main id="main">`, and a footer with the copyright year, the site author,
-the colophon and `menus.footer`. The footer reads nothing off an account: it
+— `<main id="main">`, and a footer with the copyright year, the site author's
+display name (the site title on a site with several authors), the colophon and
+`menus.footer`. The footer reads nothing off an account: it
 used to print an RSS link and one `rel="me"` link per link on the site author's
 profile, and a site that wants either types it into its footer menu. Nothing
 particular to one site is in it — webrings and badges belong in a site theme's

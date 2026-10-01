@@ -204,7 +204,9 @@ stylesheet tells the two apart. `menus.primary` is printed inside the
 tagline, and everywhere else the stylesheet lays the header out as one line so
 it sits beside the link home. See [Navigation](#navigation).
 
-**The footer** prints the copyright with the current year and `site.author`,
+**The footer** prints the copyright with the current year and the site
+author's display name, `soloAuthor.name`, or the site title on a site with
+several authors,
 `Published with Geekity`, and then `menus.footer` — the `footer` area this
 theme declares, and the whole of what the footer links. A site that wants its
 feed there types an `RSS | /feed/` line into it, the way the starter site does.
@@ -431,12 +433,17 @@ Links box typed. Set `bioRelMe` to `false` to keep the card and drop its
 claims: the name is linked `rel="author"` alone and `me` comes off every
 link.
 
-**The homepage** speaks for the site's author only on a solo author blog,
-which `soloAuthor` on the context says. Then both `layouts/home.njk` at `/` and
-`layouts/front-page.njk` end with that person's card, with its `rel="me"`
-claims, and their author archive's link home carries `rel="me"` back, so the
-homepage and the archive name each other. On any other site a listing homepage
-prints no card, and the front page prints its card with `bioRelMe` false. Each of
+**The homepage** speaks for the site's author only on a site whose Site author
+setting names a user, which `soloAuthor` on the context says. Then both
+`layouts/home.njk` at `/` and `layouts/front-page.njk` end with that person's
+card, with its `rel="me"` claims, and their author archive's link home carries
+`rel="me"` back, so the homepage and the archive name each other. Those two
+layouts also set `bioHome` to the homepage's absolute URL, which puts a
+`data.u-url.u-uid` holding it first in the card, so a parser running the
+[representative h-card algorithm](https://microformats.org/wiki/representative-h-card-parsing)
+on the homepage finds this card as the site's (TASK-193). The archive stays a
+second `u-url`. No other page sets `bioHome`. On a site
+with several authors neither homepage prints a card. Each of
 those is printed only when the profile says it, so a profile holding a name
 alone prints a name alone. A name this site has no account for is printed
 unlinked, because the file still said somebody wrote this.
@@ -459,7 +466,7 @@ an overridden layout — either includes this partial instead or writes the line
 itself. It was four lines of markup, and the object behind it has not changed:
 
 ```njk
-{% set writer = author or { name: site.author } %}
+{% set writer = author or { name: site.title } %}
 <span class="p-author h-card">
   {%- if writer.url %}<a class="u-url" href="{{ writer.url | url }}">{{ writer.name }}</a>
   {%- else %}{{ writer.name }}{% endif %}
@@ -766,20 +773,30 @@ structured data the theme emits — there is no Microdata anywhere, by
 decision-16, because the visible markup already carries microformats2 for the
 IndieWeb. The graph holds:
 
-- `WebSite`, always, with the site's title, tagline and URL, and a `publisher`
-  pointing at the Person, and a `potentialAction` that is a `SearchAction` on
-  `/search/?q={search_term_string}`. On the homepage of a solo author blog it
-  also has an `about` pointing at the site author's Person.
+- `WebSite`, always, with the site's title, tagline and URL, and a
+  `potentialAction` that is a `SearchAction` on
+  `/search/?q={search_term_string}`. On a site whose author is a user, its
+  `publisher` and `about` both point at that user's Person, on every page. On
+  a site with several authors its `publisher` is the Organization below and it
+  has no `about`.
+- `Organization`, on a site with several authors only: the site itself, named
+  for its title, at `{baseUrl}/#organization`. It publishes the `WebSite` and
+  every entry.
 - `Person`, from `siteAuthor`: their name, archive URL, avatar, bio, job title
   and location, and a `sameAs` of their profile links and their actor id, which
   is what asserts that the schema.org Person and the fediverse actor are one
   identity. Identity comes from a user profile, so a site — or a byline —
-  naming nobody with an account here prints no Person, and the `author` and
-  `publisher` references go with it.
+  naming nobody with an account here prints no Person, and the `author`
+  reference goes with it. A site with several authors prints no Person on a
+  page about nobody in particular.
 - `ProfilePage` on an author archive, whose `mainEntity` is that Person.
 - `BlogPosting` on a post and `Article` on a page, with the headline, URL,
   `mainEntityOfPage`, `datePublished`, `dateModified`, description, image,
-  `author` and `publisher`.
+  `author`, and the site's `publisher`: the site author's Person, or the
+  Organization. A post with no title is headed by the words its `<title>`
+  names it by, its `label`, cut on a word boundary to at most 110 characters.
+  A post with no picture of its own, on a site with no avatar, takes its
+  author's photo, else the site's `icon` upload.
 - `BreadcrumbList` wherever the page prints a breadcrumb (see
   [The page shell](#the-page-shell)): one `ListItem` per crumb with its
   `position`, `name` and absolute URL as `item`.
@@ -1043,7 +1060,7 @@ Every template gets:
 | `site`       | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
 | `menus`      | Every menu the site stores, by name, marked for this page: `menus.primary`, `menus.footer`, and any other name. See [Navigation](#navigation).                                                          |
 | `siteAuthor` | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
-| `soloAuthor` | The site author's profile, on a site whose Solo author blog setting is on. **Absent** when it is off or the author setting names nobody. See [The bio](#the-bio).                                       |
+| `soloAuthor` | The site author's profile, on every page of a site whose Site author setting names a user. **Absent** on a site with several authors. See [The bio](#the-bio).                                          |
 | `icons`      | The site's icons, as `{ rel, sizes, type, href }`. Empty until the site has an icon or an avatar to derive them from. See [The head](#the-head).                                                        |
 | `theme`      | The colours the theme declares, as `{ colorScheme, themeColor: { light, dark } }`, each absent when no theme declares it. See [The manifest](#the-manifest).                                            |
 | `shareImage` | The picture a shared link shows, as `{ url, alt, size: { width, height }, card }`. `size` is absent when it is not known. **Absent** when there is no picture. See [The head](#the-head).               |
@@ -1147,14 +1164,12 @@ account. It resolves in this order:
 
 - the document's own `author`, on a post or a page that names one;
 - the person whose archive it is, on an author archive;
-- the profile behind the site's `author` setting, everywhere else — the home
-  page, a taxonomy archive, a page that names nobody, the 404.
+- the site author, `soloAuthor`, everywhere else — the home page, a taxonomy
+  archive, a page that names nobody, the 404.
 
-It is **absent** when none of those name anybody this site has. The site
-setting is read more strictly than a byline is: a byline prints the name a file
-gives whether or not somebody answers to it, but a site author with no profile
-behind it has no picture, no bio and nowhere to link, so there is nothing to
-print and the key is not there. Write `{% if siteAuthor %}` around the bio.
+It is **absent** when none of those name anybody this site has, which on a
+site with several authors is every page about nobody in particular. Write
+`{% if siteAuthor %}` around the bio.
 
 The URL is not only a page. Each user is an ActivityPub actor at that address,
 so it is the page a follower lands on when they click through from the

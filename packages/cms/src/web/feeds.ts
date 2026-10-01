@@ -1,3 +1,4 @@
+import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { atomFeed } from './feed-atom.ts';
 import { FEED_ITEM_REVISION } from './feed-item.ts';
@@ -212,15 +213,18 @@ function feedFingerprint(source: FeedSource): string {
     source.feedHref,
     source.title,
     source.site.tagline ?? '',
-    source.site.author ?? '',
+    siteAuthorName(source.users, source.site),
     source.site.avatar ?? '',
     feedLanguage(source.site),
     notifyServerOf(source.site)?.base ?? '',
     cadenceFingerprint(source.site),
     source.baseUrl,
-    ...source.documents.map(
-      (document) =>
-        `${document.hash} ${String(source.commentCounts?.get(document.permalink) ?? 0)}`,
+    ...source.documents.map((document) =>
+      [
+        document.hash,
+        String(source.commentCounts?.get(document.permalink) ?? 0),
+        authorName(source.users, document.author) ?? '',
+      ].join(' '),
     ),
   ].join('\n');
 }

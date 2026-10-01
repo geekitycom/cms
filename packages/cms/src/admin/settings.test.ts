@@ -41,7 +41,7 @@ describe('content/_data/site.json', () => {
       title: 'Mirrored',
       tagline: 'and mirrored again',
       base_url: 'https://mirror.example',
-      author: 'Grace',
+      author: 'ada',
       timezone: 'Europe/London',
     });
     await saveSettings(agent, 'reading', { posts_per_page: '7' });
@@ -52,8 +52,7 @@ describe('content/_data/site.json', () => {
       title: 'Mirrored',
       tagline: 'and mirrored again',
       url: 'https://mirror.example',
-      author: 'Grace',
-      soloAuthor: false,
+      author: 'ada',
       postsPerPage: 7,
       timezone: 'Europe/London',
       language: 'en',
@@ -189,9 +188,9 @@ describe('where the values come from', () => {
     }, 0);
 
     const saves = await Promise.all([
-      saveSettings(agent, 'general', { title: 'One', author: 'Ada' }),
-      saveSettings(agent, 'general', { title: 'Two', author: 'Grace' }),
-      saveSettings(agent, 'general', { title: 'Three', author: 'Katherine' }),
+      saveSettings(agent, 'general', { title: 'One', tagline: 'Ada' }),
+      saveSettings(agent, 'general', { title: 'Two', tagline: 'Grace' }),
+      saveSettings(agent, 'general', { title: 'Three', tagline: 'Katherine' }),
     ]);
     clearInterval(readers);
 
@@ -203,12 +202,12 @@ describe('where the values come from', () => {
 
     const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
     const whole = [
-      { title: 'One', author: 'Ada' },
-      { title: 'Two', author: 'Grace' },
-      { title: 'Three', author: 'Katherine' },
+      { title: 'One', tagline: 'Ada' },
+      { title: 'Two', tagline: 'Grace' },
+      { title: 'Three', tagline: 'Katherine' },
     ];
     assert.ok(
-      whole.some((one) => one.title === written['title'] && one.author === written['author']),
+      whole.some((one) => one.title === written['title'] && one.tagline === written['tagline']),
       `the file holds one whole save, not a mixture: ${JSON.stringify(written)}`,
     );
     assert.deepEqual(

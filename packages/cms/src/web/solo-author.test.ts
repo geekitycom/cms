@@ -4,16 +4,19 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { mf2 } from 'microformats-parser';
+
 import { createUser, setUserProfile } from '../admin/accounts.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 
 /**
- * The Solo author blog setting, from the outside (TASK-180).
+ * Who the site is, from the outside (TASK-180, TASK-192).
  *
- * On, the homepage speaks for the site's author: it carries their bio card and
- * their `rel="me"` links, and it and their archive point at each other with
- * `rel="me"`. Off, the homepage speaks for nobody.
+ * `author` in site.json names one user by username, and the site is then that
+ * user's: the homepage carries their bio card and their `rel="me"` links, and
+ * it and their archive point at each other with `rel="me"`. A site with no
+ * author has several authors, and its homepage speaks for nobody.
  */
 
 const started: Cms[] = [];
@@ -38,13 +41,16 @@ const POSTS: Record<string, string> = {
   'pages/welcome.md': '---\ntitle: Welcome\npermalink: /welcome/\n---\n\nHello and welcome.\n',
 };
 
-/** A site whose author setting names Ada, who has a profile with a Mastodon link. */
+/**
+ * A site with Ada, who has a profile with a Mastodon link, as a user. The
+ * settings say whether she is the site's author.
+ */
 async function site(settings: Record<string, unknown>): Promise<Cms> {
   const contentDir = await temporaryDir('geekity-solo-content-');
   const dataDir = await temporaryDir('geekity-solo-data-');
   const files = {
     ...POSTS,
-    '_data/site.json': `${JSON.stringify({ title: 'A Site', author: 'ada', ...settings }, null, 2)}\n`,
+    '_data/site.json': `${JSON.stringify({ title: 'A Site', ...settings }, null, 2)}\n`,
   };
   for (const [relative, contents] of Object.entries(files)) {
     const file = path.join(contentDir, relative);
@@ -59,6 +65,7 @@ async function site(settings: Record<string, unknown>): Promise<Cms> {
     profile: {
       displayName: 'Ada Lovelace',
       bio: 'Wrote the first program.',
+      avatar: '/uploads/ada.jpg',
       links: [{ label: 'Mastodon', href: MASTODON }],
     },
   });
@@ -96,23 +103,35 @@ function claimsMe(html: string, href: string): boolean {
 
 /** The WebSite node of a page's JSON-LD graph. */
 function website(html: string): Record<string, unknown> {
-  const json = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '{}';
-  const graph = (JSON.parse(json) as { '@graph': Record<string, unknown>[] })['@graph'];
-  const node = graph.find((entry) => entry['@type'] === 'WebSite');
+  const node = graph(html).find((entry) => entry['@type'] === 'WebSite');
   assert.ok(node !== undefined, 'the graph has a WebSite');
   return node;
 }
 
+/** Every node of a page's JSON-LD graph. */
+function graph(html: string): Record<string, unknown>[] {
+  const json = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '{}';
+  return (JSON.parse(json) as { '@graph': Record<string, unknown>[] })['@graph'];
+}
+
+/** The copyright line of the page's footer. */
+function copyright(html: string): string {
+  return /&copy; \d{4}, ([^<&]*?) &middot;/.exec(html)?.[1] ?? '';
+}
+
 const LISTING = {};
 const FRONT_PAGE = { homepage: 'welcome' };
+const SOLO = { author: 'ada' };
+const SEVERAL = {};
+const ADA_PERSON = { '@id': 'http://localhost:3000/author/ada/#person' };
 
-describe('a solo author blog (AC #2, AC #3)', () => {
+describe('a site whose author is a user (AC #2)', () => {
   for (const [shape, settings] of [
     ['a post-listing homepage', LISTING],
     ['a static front page', FRONT_PAGE],
   ] as const) {
     it(`prints the site author's bio card on ${shape}`, async () => {
-      const home = main(await body(await site({ ...settings, soloAuthor: true }), '/'));
+      const home = main(await body(await site({ ...settings, ...SOLO }), '/'));
 
       assert.match(home, /class="bio p-author h-card"/);
       assert.match(home, /Ada Lovelace/);
@@ -120,7 +139,7 @@ describe('a solo author blog (AC #2, AC #3)', () => {
     });
 
     it(`claims the author's profiles and archive with rel="me" on ${shape}`, async () => {
-      const home = await body(await site({ ...settings, soloAuthor: true }), '/');
+      const home = await body(await site({ ...settings, ...SOLO }), '/');
 
       assert.ok(claimsMe(home, MASTODON), 'a Mastodon profile linking here verifies');
       assert.ok(claimsMe(home, '/author/ada/'), 'the homepage claims the author archive');
@@ -128,26 +147,26 @@ describe('a solo author blog (AC #2, AC #3)', () => {
   }
 
   it('has the author archive claim the homepage back with rel="me"', async () => {
-    const archive = await body(await site({ soloAuthor: true }), '/author/ada/');
+    const archive = await body(await site(SOLO), '/author/ada/');
 
     assert.ok(claimsMe(archive, '/'), 'the archive claims the homepage');
   });
 });
 
-describe('a site that is not a solo author blog (AC #4)', () => {
-  it('prints no bio card on a post-listing homepage', async () => {
-    const home = main(await body(await site({}), '/'));
-
-    assert.doesNotMatch(home, /h-card/);
-    assert.doesNotMatch(home, /Wrote the first program\./);
-  });
-
+describe('a site with several authors (AC #2, AC #3)', () => {
   for (const [shape, settings] of [
     ['a post-listing homepage', LISTING],
     ['a static front page', FRONT_PAGE],
   ] as const) {
+    it(`prints no bio card on ${shape}`, async () => {
+      const home = main(await body(await site({ ...settings, ...SEVERAL }), '/'));
+
+      assert.doesNotMatch(home, /h-card/);
+      assert.doesNotMatch(home, /Wrote the first program\./);
+    });
+
     it(`makes no rel="me" claims from ${shape}`, async () => {
-      const home = await body(await site(settings), '/');
+      const home = await body(await site({ ...settings, ...SEVERAL }), '/');
 
       assert.ok(!claimsMe(home, '/author/ada/'), 'the homepage does not claim the archive');
       assert.ok(!claimsMe(home, MASTODON), 'nor the author’s profiles');
@@ -155,55 +174,207 @@ describe('a site that is not a solo author blog (AC #4)', () => {
   }
 
   it('has the author archive make no claim on the homepage', async () => {
-    const archive = await body(await site({}), '/author/ada/');
+    const archive = await body(await site(SEVERAL), '/author/ada/');
 
     assert.ok(!claimsMe(archive, '/'), 'the archive does not claim the homepage');
   });
 
-  it('is what a site with no soloAuthor key gets', async () => {
-    const off = await body(await site({ soloAuthor: false }), '/');
-    const absent = await body(await site({}), '/');
+  it('is what an empty author gets', async () => {
+    const empty = await body(await site({ author: '' }), '/');
+    const absent = await body(await site(SEVERAL), '/');
 
-    assert.equal(main(off), main(absent));
+    assert.equal(main(empty), main(absent));
   });
 });
 
-describe('the homepage’s structured data (AC #5)', () => {
-  it('names the site author as what the site is about when the switch is on', async () => {
-    const node = website(await body(await site({ soloAuthor: true }), '/'));
+describe('a site.json written before the select (AC #5)', () => {
+  it('reads an author that is a display name as that user', async () => {
+    const home = await body(await site({ author: 'Ada Lovelace', soloAuthor: false }), '/');
 
-    assert.deepEqual(node['about'], { '@id': 'http://localhost:3000/author/ada/#person' });
+    assert.match(main(home), /class="bio p-author h-card"/);
+    assert.ok(claimsMe(home, '/author/ada/'), 'the homepage claims the archive');
+    assert.equal(copyright(home), 'Ada Lovelace');
   });
 
-  it('names nobody when it is off', async () => {
-    for (const settings of [LISTING, FRONT_PAGE]) {
-      const node = website(await body(await site(settings), '/'));
-      assert.equal(node['about'], undefined);
+  it('reads an author that matches nobody as several authors', async () => {
+    const home = await body(await site({ author: 'Joe Blog', soloAuthor: true }), '/');
+
+    assert.doesNotMatch(main(home), /h-card/);
+    assert.ok(!claimsMe(home, '/author/ada/'), 'no claim on anybody’s archive');
+    assert.equal(copyright(home), 'A Site', 'the site title stands in for the old name');
+  });
+});
+
+describe('the footer (AC #4)', () => {
+  it('prints the site author’s display name, not their username', async () => {
+    for (const pathname of ['/', '/welcome/', '/2026/09/hello/']) {
+      assert.equal(copyright(await body(await site(SOLO), pathname)), 'Ada Lovelace', pathname);
     }
   });
+
+  it('prints the site title on a site with several authors', async () => {
+    assert.equal(copyright(await body(await site(SEVERAL), '/')), 'A Site');
+  });
 });
 
-describe('turning the switch on for a site with a static front page (AC #6)', () => {
-  it('changes nothing a reader sees there', async () => {
-    const before = await body(await site(FRONT_PAGE), '/');
-    const after = await body(await site({ ...FRONT_PAGE, soloAuthor: true }), '/');
-    const visible = (html: string): string =>
-      main(html)
-        .replace(/\s+rel="[^"]*"/g, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+describe('the structured data (AC #9)', () => {
+  it('has the WebSite published by and about the site author, on every page', async () => {
+    const cms = await site(SOLO);
+    for (const pathname of ['/', '/welcome/', '/2026/09/hello/', '/author/ada/']) {
+      const node = website(await body(cms, pathname));
+      assert.deepEqual(node['publisher'], ADA_PERSON, pathname);
+      assert.deepEqual(node['about'], ADA_PERSON, pathname);
+    }
+  });
 
-    assert.match(
-      visible(before),
-      /Written by Ada Lovelace/,
-      'the front page already shows the bio',
-    );
-    assert.equal(visible(after), visible(before));
-    assert.equal(
-      main(after).replace(/\s+rel="[^"]*"/g, ''),
-      main(before).replace(/\s+rel="[^"]*"/g, ''),
-      'only the rel attributes differ',
-    );
+  it('prints the site author’s Person on a page about nobody in particular', async () => {
+    const nodes = graph(await body(await site(SOLO), '/welcome/'));
+    const person = nodes.find((node) => node['@type'] === 'Person');
+
+    assert.equal(person?.['@id'], ADA_PERSON['@id']);
+    assert.equal(person?.['name'], 'Ada Lovelace');
+  });
+
+  it('has a site with several authors published by an Organization named for it', async () => {
+    const cms = await site(SEVERAL);
+    for (const pathname of ['/', '/welcome/']) {
+      const nodes = graph(await body(cms, pathname));
+      const node = website(await body(cms, pathname));
+      const organization = nodes.find((entry) => entry['@type'] === 'Organization');
+
+      assert.ok(organization !== undefined, `${pathname} has an Organization`);
+      assert.equal(organization['name'], 'A Site');
+      assert.equal(organization['url'], 'http://localhost:3000/');
+      assert.deepEqual(node['publisher'], { '@id': organization['@id'] }, pathname);
+      assert.equal(node['about'], undefined, `${pathname} is about nobody`);
+      assert.equal(
+        nodes.find((entry) => entry['@type'] === 'Person'),
+        undefined,
+        `${pathname} prints no Person`,
+      );
+    }
+  });
+
+  it('still credits a post’s writer on a site with several authors', async () => {
+    const nodes = graph(await body(await site(SEVERAL), '/2026/09/hello/'));
+    const posting = nodes.find((entry) => entry['@type'] === 'BlogPosting');
+
+    assert.deepEqual(posting?.['author'], ADA_PERSON);
+  });
+});
+
+const HOME = 'http://localhost:3000/';
+
+type Mf2Item = ReturnType<typeof mf2>['items'][number];
+
+/** Every h-card on a parsed page: top level, children, and property values. */
+function hCards(items: readonly Mf2Item[]): Mf2Item[] {
+  const found: Mf2Item[] = [];
+  for (const item of items) {
+    if (item.type?.includes('h-card')) found.push(item);
+    const nested = [
+      ...(item.children ?? []),
+      ...Object.values(item.properties).flatMap((values) =>
+        values.filter((value): value is Mf2Item => typeof value === 'object' && 'type' in value),
+      ),
+    ];
+    found.push(...hCards(nested));
+  }
+  return found;
+}
+
+function sameUrl(a: unknown, b: string): boolean {
+  if (typeof a !== 'string') return false;
+  try {
+    return new URL(a).href === new URL(b).href;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * https://microformats.org/wiki/representative-h-card-parsing: the first
+ * h-card whose uid and url both match the page URL, else the first whose url
+ * is a rel=me link, else the page's only h-card when its url is the page URL.
+ */
+function representativeHCard(html: string, pageUrl: string): Mf2Item | undefined {
+  const parsed = mf2(html, { baseUrl: pageUrl });
+  const cards = hCards(parsed.items);
+  const urls = (card: Mf2Item) => card.properties['url'] ?? [];
+  const me = parsed.rels['me'] ?? [];
+  return (
+    cards.find(
+      (card) =>
+        (card.properties['uid'] ?? []).some((uid) => sameUrl(uid, pageUrl)) &&
+        urls(card).some((url) => sameUrl(url, pageUrl)),
+    ) ??
+    cards.find((card) => urls(card).some((url) => me.some((rel) => sameUrl(url, rel)))) ??
+    (cards.length === 1 && urls(cards[0]!).some((url) => sameUrl(url, pageUrl))
+      ? cards[0]
+      : undefined)
+  );
+}
+
+/** The bio card's h-card on a page, parsed. */
+function bioCard(html: string, pageUrl: string): Mf2Item {
+  const card = hCards(mf2(html, { baseUrl: pageUrl }).items).find((item) =>
+    (item.properties['name'] ?? []).includes('Ada Lovelace'),
+  );
+  assert.ok(card !== undefined, 'the page has Ada’s h-card');
+  return card;
+}
+
+describe('the homepage h-card is the site’s representative h-card (TASK-193)', () => {
+  for (const [shape, settings] of [
+    ['a post-listing homepage', LISTING],
+    ['a static front page', FRONT_PAGE],
+  ] as const) {
+    it(`gives the bio card u-url and u-uid equal to the homepage on ${shape} (AC #1)`, async () => {
+      const card = bioCard(await body(await site({ ...settings, ...SOLO }), '/'), HOME);
+
+      assert.deepEqual(card.properties['uid'], [HOME]);
+      assert.equal(card.properties['url']?.[0], HOME, 'the homepage is the card’s first url');
+    });
+
+    it(`is what the representative h-card algorithm finds on ${shape} (AC #2)`, async () => {
+      const html = await body(await site({ ...settings, ...SOLO }), '/');
+      const card = representativeHCard(html, HOME);
+
+      assert.ok(card !== undefined, 'the homepage has a representative h-card');
+      assert.deepEqual(card.properties['name'], ['Ada Lovelace']);
+      assert.deepEqual(card.properties['uid'], [HOME]);
+      assert.equal(card.properties['url']?.[0], HOME);
+      const photo = card.properties['photo']?.[0];
+      const photoUrl = typeof photo === 'object' && 'value' in photo ? photo.value : photo;
+      assert.equal(photoUrl, `${HOME}uploads/ada.jpg`);
+    });
+
+    it(`keeps the archive link and the rel="me" links on ${shape} (AC #3)`, async () => {
+      const html = await body(await site({ ...settings, ...SOLO }), '/');
+      const card = bioCard(html, HOME);
+
+      assert.ok(claimsMe(html, '/author/ada/'), 'the name still links the archive');
+      assert.ok(relsTo(html, '/author/ada/').some((rel) => rel.split(/\s+/).includes('author')));
+      assert.ok(claimsMe(html, MASTODON), 'the profile links keep rel="me"');
+      assert.ok(card.properties['url']?.includes(`${HOME}author/ada/`), 'the archive is a url too');
+    });
+  }
+
+  for (const [page, pathname] of [
+    ['the author archive', '/author/ada/'],
+    ['a post', '/2026/09/hello/'],
+  ] as const) {
+    it(`leaves the card on ${page} as it was (AC #3)`, async () => {
+      const card = bioCard(await body(await site(SOLO), pathname), `${HOME}${pathname.slice(1)}`);
+
+      assert.equal(card.properties['uid'], undefined, 'no uid');
+      assert.equal(card.properties['url']?.[0], `${HOME}author/ada/`, 'the archive comes first');
+    });
+  }
+
+  it('gives a site with several authors no homepage uid', async () => {
+    const html = await body(await site({ ...FRONT_PAGE, ...SEVERAL }), '/');
+
+    assert.doesNotMatch(html, /u-uid/);
   });
 });

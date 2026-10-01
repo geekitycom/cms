@@ -414,11 +414,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // context by the callers below, and win by going on last.
     const siteOwner = siteAuthorContext(users(), site.author);
     const owner = context['siteAuthor'] === undefined ? siteOwner : undefined;
-    // Who the homepage speaks for, on a site that says it is one person's blog
-    // (TASK-180): the bio on the homepage and the `rel="me"` claims between it
-    // and their archive. Every page carries it, because the archive is where
-    // the claim back is printed.
-    const solo = site['soloAuthor'] === true ? siteOwner : undefined;
     // The site's icons, as the links a head carries (TASK-81, TASK-147). They
     // are computed here rather than in the layout because only this side knows
     // where a derived file is served and whether the site can derive one at
@@ -436,7 +431,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       imageAlt: context['imageAlt'],
       title: title ?? site.title,
       avatar: site.avatar,
-      owner: siteOwner?.name ?? site.author ?? site.title,
+      owner: siteOwner?.name ?? site.title,
     });
     return environment.render(template, {
       site,
@@ -449,7 +444,11 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(site['llmsTxt'] === false ? {} : { llmsTxt: LLMS_TXT_PATH }),
       ...(image === undefined ? {} : { shareImage: image }),
       ...(owner === undefined ? {} : { siteAuthor: owner }),
-      ...(solo === undefined ? {} : { soloAuthor: solo }),
+      // Who the homepage speaks for, on a site whose author is a user (TASK-180,
+      // TASK-192): the bio on the homepage and the `rel="me"` claims between
+      // it and their archive. Every page carries it, because the archive is
+      // where the claim back is printed. A site with several authors has none.
+      ...(siteOwner === undefined ? {} : { soloAuthor: siteOwner }),
       ...context,
     });
   }

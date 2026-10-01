@@ -27,6 +27,7 @@
     listing, and the homepage of any other site, is nobody's. -#}
 {% if atRoot and soloAuthor %}
 {% set bioAuthor = soloAuthor %}
+{% set bioHome = "/" | absoluteUrl %}
 <hr>
 <footer>
   {% include "partials/bio.njk" %}

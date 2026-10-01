@@ -72,7 +72,7 @@ describe('a client signing a person in with their own site', () => {
     await mkdir(path.join(contentDir, '_data'), { recursive: true });
     await writeFile(
       path.join(contentDir, '_data', 'site.json'),
-      JSON.stringify({ title: 'A Site', author: 'ada', soloAuthor: true }),
+      JSON.stringify({ title: 'A Site', author: 'ada' }),
     );
     await createUser({ dataDir, username: 'ada', password: 'correct horse battery' });
     const cms = await box.open({ contentDir, dataDir, baseUrl: base, port, hostLookup: PUBLIC });

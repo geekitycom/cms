@@ -1,3 +1,4 @@
+import type { User } from '../admin/accounts.ts';
 import type { Document } from '../content/document.ts';
 import type { SiteData } from './context.ts';
 
@@ -336,6 +337,8 @@ export const EMPTY_FEED_UPDATED = new Date(0);
 export interface FeedSource {
   /** Site-wide data, for the title, subtitle and author. */
   site: SiteData;
+  /** Everyone with an account, so the authors print as display names. */
+  users: readonly User[];
   /** The entries, newest first. Already filtered to what the public may see. */
   documents: readonly Document[];
   /** Title of this feed. The site title, or the site title and the tag. */

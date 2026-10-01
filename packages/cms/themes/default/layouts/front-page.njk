@@ -22,6 +22,7 @@
 {#- Who the bio credits: the person the site's author setting names. -#}
 {% set bioAuthor = soloAuthor or siteAuthor %}
 {% set bioRelMe = true if soloAuthor else false %}
+{% set bioHome = "/" | absoluteUrl if soloAuthor else "" %}
 
 {% block content %}
 <div class="page-body e-content">

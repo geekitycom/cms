@@ -8,13 +8,13 @@ status: accepted
 ---
 ## Context
 
-An IndieAuth client takes the URL a person types, fetches it, and follows its `indieauth-metadata` link to the authorization server. Until TASK-157 Geekity published only `rel="me"` links, so signing in as a Geekity site depended on a third party such as GitHub through indielogin.com. decision-14 already gives every user a URL of their own at `/author/{username}/`. TASK-180 added the Solo author setting, which makes the homepage speak for the user the author setting names. This decision settles which URLs are identities, how a typed URL maps to a user, and what a client is handed back.
+An IndieAuth client takes the URL a person types, fetches it, and follows its `indieauth-metadata` link to the authorization server. Until TASK-157 Geekity published only `rel="me"` links, so signing in as a Geekity site depended on a third party such as GitHub through indielogin.com. decision-14 already gives every user a URL of their own at `/author/{username}/`. TASK-180 added the Solo author setting, which makes the homepage speak for the user the author setting names. TASK-192 folded that switch into the author setting itself (decision-25): a site whose `author` names a user is a solo author site. This decision settles which URLs are identities, how a typed URL maps to a user, and what a client is handed back.
 
 ## Decision
 
 **Every user's identity is their author URL**, `{baseUrl}/author/{username}/`, on every site and whatever the settings say. It is the URL decision-14 makes their actor and their archive, so a person has one URL for following, reading and signing in.
 
-**The site root is the identity of the site author, and only on a solo author site.** The root names a user when Solo author is on and the author setting resolves to a user, by the same rule that puts the author's bio and `rel="me"` claims on the homepage (`render.ts`). On a multi-author site the root names nobody.
+**The site root is the identity of the site author, and only on a solo author site.** The root names a user when `author` in `site.json` resolves to a user, by the same rule that puts the author's bio and `rel="me"` claims on the homepage (`render.ts`). That is a solo author site; decision-25 records the shape. On a site with several authors, which has no `author`, the root names nobody.
 
 **Nothing else is an identity.** That includes posts and pages, a second page of an archive, feeds, `/@name`, and a stored ActivityPub id such as `?author=2`. A stored actor id is federation identity under decision-14. It is not a sign-in identity.
 
@@ -29,7 +29,7 @@ An IndieAuth client takes the URL a person types, fetches it, and follows its `i
 ## Consequences
 
 - A person types their site URL on a solo author site, and their author URL anywhere.
-- Turning Solo author off takes the root's identity away. A client that stored the root as somebody's me is handed their author URL at the next sign-in, which it may treat as a different account. Turning it on does the reverse.
+- Choosing Several authors for Site author on Settings > General takes the root's identity away. A client that stored the root as somebody's me is handed their author URL at the next sign-in, which it may treat as a different account. Choosing a user does the reverse, and choosing a different user moves the root's identity to them.
 - Changing the base URL changes every identity, as it changes every actor id.
 - In maintenance mode the identity URLs, the metadata and every IndieAuth endpoint answer 503, so no client can start or finish a sign-in. The consent screen stays reachable because `/admin` is exempt, but nothing can reach it from a client.
 - A resource server with its own identifier, such as an MCP endpoint at `/mcp`, needs its own protected resource document under `/.well-known/oauth-protected-resource/`.

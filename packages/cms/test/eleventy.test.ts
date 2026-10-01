@@ -19,12 +19,14 @@ import { after, before, describe, it } from 'node:test';
 
 import Eleventy from '@11ty/eleventy';
 
+import { createUser, listUsers, setUserProfile } from '../src/admin/accounts.ts';
 import {
   categoryHref,
   DEFAULT_TAXONOMY_BASES,
   frontPageSlugs,
   isTrashedPath,
   parseDocument,
+  siteAuthorName,
 } from '../src/index.ts';
 import type { Document, FrontPageSlugs, SiteData } from '../src/index.ts';
 
@@ -120,6 +122,20 @@ describe('the fixtures content directory under Eleventy', () => {
     buildDir = await mkdtemp(path.join(tmpdir(), 'geekity-11ty-'));
     await cp(PROJECT_DIR, buildDir, { recursive: true });
 
+    // The user `author` in the fixtures' site.json names, in the data
+    // directory a site keeps beside `content/`, written by the CMS itself.
+    const dataDir = path.join(buildDir, 'data');
+    const andrew = await createUser({
+      dataDir,
+      username: 'andrew',
+      password: 'correct horse battery',
+    });
+    await setUserProfile({
+      dataDir,
+      userId: andrew.id,
+      profile: { displayName: 'Andrew Fixture' },
+    });
+
     // The example config honours BUILD_DRAFTS as a local preview escape hatch.
     // The compatibility check is about the published site, so it never applies.
     delete process.env['BUILD_DRAFTS'];
@@ -141,6 +157,17 @@ describe('the fixtures content directory under Eleventy', () => {
   after(async () => {
     process.chdir(originalCwd);
     if (buildDir !== undefined) await rm(buildDir, { recursive: true, force: true });
+  });
+
+  it('prints the site author by the name the CMS prints (TASK-192 AC #6)', async () => {
+    const site = JSON.parse(
+      await readFile(path.join(CONTENT_DIR, '_data', 'site.json'), 'utf8'),
+    ) as SiteData;
+    const name = siteAuthorName(listUsers(path.join(buildDir, 'data')), site);
+    assert.equal(name, 'Andrew Fixture', 'the fixtures name a user by username');
+
+    const front = await readFile(path.join(buildDir, '_site', 'index.html'), 'utf8');
+    assert.match(front, new RegExp(`<footer class="site-footer">&copy; ${name}</footer>`));
   });
 
   it('builds without errors and writes pages', () => {

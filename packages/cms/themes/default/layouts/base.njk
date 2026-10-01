@@ -204,12 +204,22 @@
     {% endif %}
     {% if siteAuthor.url %}
     <meta property="article:author" content="{{ siteAuthor.url | absoluteUrl }}">
-    {% elif siteAuthor.name or author.name or author or site.author %}
-    <meta property="article:author" content="{{ siteAuthor.name or author.name or author or site.author }}">
+    {% elif siteAuthor.name or author.name or author %}
+    <meta property="article:author" content="{{ siteAuthor.name or author.name or author }}">
     {% endif %}
     {% for tag in tags %}
     <meta property="article:tag" content="{{ tag }}">
     {% endfor %}
+    {% endif %}
+    {#
+      Who a Mastodon link preview credits, with a follow button (TASK-202):
+      the user's own account here, on an entry by them and on the homepage of
+      a site one person writes. Mastodon shows it only when that account lists
+      this site's domain under author attribution.
+    #}
+    {% set creator = siteAuthor if isEntry else (soloAuthor if atRoot) %}
+    {% if creator.username %}
+    <meta name="fediverse:creator" content="{{ creator.username | fediverseHandle }}">
     {% endif %}
     <meta name="twitter:card" content="{{ shareImage.card if shareImage else "summary" }}">
     <meta name="twitter:title" content="{{ metaTitle }}">
@@ -271,7 +281,7 @@
 
       {% block footer %}
       <footer>
-        <p>&copy; {{ "now" | date("year") }}{% if site.author %}, {{ site.author }}{% endif %} &middot; Published with Geekity</p>
+        <p>&copy; {{ "now" | date("year") }}, {{ soloAuthor.name or site.title }} &middot; Published with Geekity</p>
         {#
           The footer menu: the `footer` area this theme declares in its
           `theme.json`, which a site fills in on the Navigation screen, and the

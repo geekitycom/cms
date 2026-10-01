@@ -121,6 +121,36 @@ export function userForAuthor(
 }
 
 /**
+ * What to print for a stored `author`: the user's display name, else their
+ * username, else the string as stored, and `undefined` when it is empty.
+ *
+ * The one rule every feed and byline prints by, so a post that stores `andrew`
+ * is credited to Andrew Shell rather than to a login.
+ */
+export function authorName(users: readonly User[], author: string | undefined): string | undefined {
+  const name = (author ?? '').trim();
+  if (name === '') return undefined;
+
+  const user = userForAuthor(users, name);
+  return user === undefined ? name : (user.profile?.displayName ?? user.username);
+}
+
+/**
+ * Who the site credits: the display name of the user `author` in `site.json`
+ * names, else the site title (TASK-192).
+ *
+ * A site whose author names nobody has several authors, and the site itself
+ * stands in for them in a footer or a feed.
+ */
+export function siteAuthorName(
+  users: readonly User[],
+  site: { title: string; author?: string | undefined },
+): string {
+  const user = userForAuthor(users, site.author);
+  return user === undefined ? site.title : (user.profile?.displayName ?? user.username);
+}
+
+/**
  * Every stored `author` string that reads as this user, for the query behind
  * their archive.
  *

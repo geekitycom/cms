@@ -7,7 +7,7 @@ export interface IdentitySite {
   /** The site's base URL, which every identity URL is under. */
   baseUrl: string;
   users: readonly User[];
-  settings: Pick<SiteSettings, 'author' | 'soloAuthor'>;
+  settings: Pick<SiteSettings, 'author'>;
 }
 
 /**
@@ -15,8 +15,8 @@ export interface IdentitySite {
  * (decision-23).
  *
  * `/author/{username}/` names that user. The root names the user the author
- * setting names, and only on a solo author site (TASK-180); on a multi-author
- * site it is nobody's. Anything else names nobody, a query or a fragment
+ * setting names, which makes it a solo author site (TASK-192); on a site with
+ * several authors it is nobody's. Anything else names nobody, a query or a fragment
  * included.
  *
  * A URL that differs from the site's only in http or https, a `www.` prefix
@@ -63,12 +63,11 @@ function identityNamed(me: string, site: IdentitySite): { user: User; root: bool
   if (!pathname.startsWith(root)) return undefined;
   const local = `/${pathname.slice(root.length)}`;
 
-  // The author setting may hold a display name, which the homepage's bio reads
-  // the same way; an author path holds a username, matched exactly.
+  // The author setting holds a username, or in a file written before the
+  // Site author select a display name, which the homepage's bio reads the same
+  // way; an author path holds a username, matched exactly.
   if (local === '/') {
-    const author = site.settings.soloAuthor
-      ? userForAuthor(site.users, site.settings.author)
-      : undefined;
+    const author = userForAuthor(site.users, site.settings.author);
     return author === undefined ? undefined : { user: author, root: true };
   }
   const author = parseAuthorPath(local);

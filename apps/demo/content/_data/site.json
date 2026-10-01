@@ -4,7 +4,6 @@
   "url": "http://localhost:3000",
   "homepage": "about",
   "postsPage": "posts",
-  "author": "Joe Blog",
   "commentEmailRetentionDays": 180,
   "addressHashRetentionDays": 30,
   "contactMessageRetentionDays": 365,

@@ -118,3 +118,14 @@ export function federationOrigin(baseUrl: string): FederationOrigin {
   const url = new URL(baseUrl);
   return { handleHost: url.host, webOrigin: url.origin };
 }
+
+/**
+ * `{username}@{host}`: the account WebFinger answers for (decision-14).
+ *
+ * WebFinger's `acct:` subject, the handle the admin shows and the
+ * `fediverse:creator` a page names (TASK-202) are each this with a prefix, so
+ * a page cannot credit an account the site does not answer for.
+ */
+export function accountOf(username: string, baseUrl: string): string {
+  return `${username}@${federationOrigin(baseUrl === '' ? 'http://localhost' : baseUrl).handleHost}`;
+}

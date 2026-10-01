@@ -22,11 +22,13 @@ export {
   authorContext,
   authorFeedHref,
   authorHref,
+  authorName,
   authorNames,
   INBOX_BASE,
   parseAuthorPath,
   profileContext,
   siteAuthorContext,
+  siteAuthorName,
   userForAuthor,
 } from './authors.ts';
 export type { AuthorContext, AuthorRequest, PublishedProfileLink } from './authors.ts';

@@ -38,6 +38,12 @@
   homepage of a site that is not a solo author blog sets it (TASK-180), because
   that page speaks for nobody even when it shows the site author's card.
 
+  `bioHome` set to the homepage's absolute URL makes the card the site's
+  representative h-card (TASK-193): its first `u-url` and its `u-uid` are that
+  URL, which is what a parser reading the homepage looks for to learn who the
+  site is. The name keeps its link to the archive, as a second `u-url`. Only
+  the homepage of a solo author blog sets it; every other card is unchanged.
+
   The `p-note` and the `rel="me"` links are printed wherever the card is, which
   is what `bioProfile` used to ask for on an author archive alone. An entry
   left that switch unset because the page footer carried the site's identity
@@ -55,6 +61,7 @@
 
   <div>
     <p>
+      {%- if bioHome %}<data class="u-url u-uid" value="{{ bioHome }}"></data>{% endif %}
       {{ bioLead | default("Written by") }}
       {%- if bioAuthor.url %}
       <a class="u-url p-name" rel="author{% if bioClaims %} me{% endif %}" href="{{ bioAuthor.url | url }}">{{ bioAuthor.name }}</a>

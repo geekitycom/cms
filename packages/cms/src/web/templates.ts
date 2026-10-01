@@ -1,6 +1,7 @@
 import { Environment, FileSystemLoader } from 'nunjucks';
 
 import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
+import { accountOf } from '../federation/paths.ts';
 import { themeAssetUrl } from './assets.ts';
 import { siteLocale, siteTimezone } from './context.ts';
 import type { SiteData } from './context.ts';
@@ -184,6 +185,13 @@ function addFilters(
       return pathname;
     }
   });
+
+  // `{{ siteAuthor.username | fediverseHandle }}`: a user's own account on
+  // this site, `@ada@example.com`, exactly as WebFinger answers for it
+  // (TASK-202), so a theme never spells the host.
+  environment.addFilter('fediverseHandle', (value: unknown) =>
+    typeof value === 'string' && value !== '' ? `@${accountOf(value, baseUrl)}` : '',
+  );
 
   return environment;
 }
