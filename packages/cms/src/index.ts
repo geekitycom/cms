@@ -84,6 +84,7 @@ import {
 import { mountAuthorizationEndpoint } from './indieauth/consent.ts';
 import { mountIndieAuthDiscovery } from './indieauth/discovery.ts';
 import { createIndieAuthState } from './indieauth/grants.ts';
+import { mountTokenEndpoint } from './indieauth/token.ts';
 import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
 import type { ReplyContextService, WebmentionService } from './webmention/index.ts';
 
@@ -1924,11 +1925,12 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // public site can claim either path as a permalink.
   mountWellKnown(app);
 
-  // IndieAuth's authorization server metadata (TASK-157) and the endpoint
-  // that starts a sign-in (TASK-158), here for the reason the well-known files
-  // are.
+  // IndieAuth's authorization server metadata (TASK-157), the endpoint that
+  // starts a sign-in (TASK-158) and the one that issues tokens (TASK-160),
+  // here for the reason the well-known files are.
   mountIndieAuthDiscovery(app);
   mountAuthorizationEndpoint(app);
+  mountTokenEndpoint(app);
 
   // Federation goes on first. It answers its own paths and falls through on
   // every other, so putting it in front costs the rest of the app nothing and

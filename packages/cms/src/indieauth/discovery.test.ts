@@ -75,7 +75,15 @@ describe('the authorization server metadata', () => {
       assert.equal(metadata['authorization_endpoint'], `${BASE}/_geekity/indieauth/auth`);
       assert.equal(metadata['token_endpoint'], `${BASE}/_geekity/indieauth/token`);
       assert.deepEqual(metadata['code_challenge_methods_supported'], ['S256']);
-      assert.deepEqual(metadata['scopes_supported'], ['profile', 'email']);
+      assert.deepEqual(metadata['scopes_supported'], [
+        'profile',
+        'email',
+        'create',
+        'update',
+        'delete',
+        'media',
+      ]);
+      assert.deepEqual(metadata['grant_types_supported'], ['authorization_code', 'refresh_token']);
       assert.deepEqual(metadata['response_types_supported'], ['code']);
       assert.equal(metadata['authorization_response_iss_parameter_supported'], true);
       // MCP's client registration of choice since 2025-11-25 (TASK-158).

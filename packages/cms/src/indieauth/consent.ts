@@ -12,7 +12,7 @@ import { fetchClientInformation } from './client.ts';
 import type { ClientInformation } from './client.ts';
 import { AUTHORIZATION_PATH, authorizationServerMetadata } from './discovery.ts';
 import { meForSignIn } from './identity.ts';
-import { profileResponse, redeemCode } from './redeem.ts';
+import { profileResponse, redeemCode, redemptionForm } from './redeem.ts';
 import { parseAuthorizationRequest } from './request.ts';
 import type { Scope } from './request.ts';
 
@@ -22,10 +22,14 @@ import type { Scope } from './request.ts';
  */
 export const CONSENT_PATH = `${ADMIN_PREFIX}/indieauth/consent`;
 
-/** What each scope lets a client learn, as the consent screen says it. */
+/** What each scope lets a client learn or do, as the consent screen says it. */
 const SCOPE_LABELS: Readonly<Record<Scope, string>> = {
   profile: 'Your name, URL and photo',
   email: 'Your email address',
+  create: 'Create posts as you',
+  update: 'Edit your posts',
+  delete: 'Delete your posts',
+  media: 'Upload media to your site',
 };
 
 /**
@@ -47,13 +51,7 @@ export function mountAuthorizationEndpoint(app: Hono<GeekityEnv>): void {
   app.post(AUTHORIZATION_PATH, async (c) => {
     c.header('cache-control', 'no-store');
     const { config } = c.var;
-    const body = await c.req.parseBody();
-    const form = Object.fromEntries(
-      Object.entries(body).map(([name, value]) => [
-        name,
-        typeof value === 'string' ? value : undefined,
-      ]),
-    );
+    const form = redemptionForm(await c.req.parseBody());
     const redeemed = redeemCode(c.var.indieauth.codes, form);
     if (!redeemed.ok) {
       return c.json({ error: redeemed.error, error_description: redeemed.description }, 400);

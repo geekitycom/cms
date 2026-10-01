@@ -14,6 +14,16 @@ export type Redemption =
 /** The form fields a client posts to redeem a code, as they arrived. */
 export type RedemptionForm = Readonly<Record<string, string | undefined>>;
 
+/** A parsed form body as a {@link RedemptionForm}, a file upload read as absent. */
+export function redemptionForm(body: Readonly<Record<string, unknown>>): RedemptionForm {
+  return Object.fromEntries(
+    Object.entries(body).map(([name, value]) => [
+      name,
+      typeof value === 'string' ? value : undefined,
+    ]),
+  );
+}
+
 /**
  * Take the code a client posts and check it against what it was issued for
  * (TASK-159). The token endpoint (TASK-160) redeems codes through this too,
@@ -72,14 +82,15 @@ export interface ProfileResponse {
 }
 
 /**
- * What profile redemption hands back for `grant`, signed in as `user`.
+ * What profile redemption hands back for `grant`, signed in as `user`. The
+ * token endpoint answers it beside the token, for a code or a refresh.
  *
  * The name, url and photo come with the profile scope and the email with the
  * email scope; the IndieAuth spec keeps all four under `profile`. The url is
  * the me, the page that already carries this person's h-card.
  */
 export function profileResponse(
-  grant: AuthorizationCode,
+  grant: Pick<AuthorizationCode, 'me' | 'scopes'>,
   user: User,
   baseUrl: string,
 ): ProfileResponse {

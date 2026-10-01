@@ -43,7 +43,7 @@ function refusal(parsed: ParsedAuthorizationRequest): string {
 describe('parseAuthorizationRequest', () => {
   it('accepts a complete request and keeps only the scopes the site offers', () => {
     const parsed = parse({
-      scope: 'profile create email',
+      scope: 'profile draft email',
       me: 'https://blog.example/',
       resource: 'https://blog.example/mcp',
     });

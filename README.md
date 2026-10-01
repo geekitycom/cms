@@ -1280,6 +1280,23 @@ profile ticked, and your email address if you left email ticked. It gets no
 access token this way. A code works once, for five minutes, and only for the
 app and return address it was issued to.
 
+An app that wants to act for you, such as a Micropub client, can also ask for
+the scopes create, update, delete and media, which the consent screen lists as
+creating, editing and deleting your posts and uploading media. It redeems its
+code at `/_geekity/indieauth/token` instead, under the same rules, and gets a
+bearer access token for the scopes you approved, with the URL you signed in as
+and the same profile details. The access token works for seven days. It comes
+with a refresh token that the app can trade for a new pair, which stops the old
+pair working. A refresh token lapses after 60 days without use. A code
+approved with no scope gets no token.
+
+The site keeps only a SHA-256 hash of each token, in
+`data/indieauth-tokens.json`, written so only the site's own user can read it.
+Back it up with the rest of `data/`. Deleting `geekity.db` keeps every token,
+and deleting a user revokes every token they hold. A token issued for one
+resource, such as an MCP endpoint, works only there. decision-24 records the
+rules.
+
 ## The theme
 
 Templates are Nunjucks (decision-4). The default theme lives in

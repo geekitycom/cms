@@ -17,8 +17,11 @@ export const AUTHORIZATION_PATH = '/_geekity/indieauth/auth';
 /** Where a client redeems a code for an access token (TASK-160). */
 export const TOKEN_PATH = '/_geekity/indieauth/token';
 
-/** The scopes a client may ask for. TASK-160 adds the Micropub ones. */
-export const SCOPES = ['profile', 'email'] as const;
+/**
+ * The scopes a client may ask for: the profile ones (TASK-158) and the
+ * Micropub ones a token is issued for (TASK-160).
+ */
+export const SCOPES = ['profile', 'email', 'create', 'update', 'delete', 'media'] as const;
 
 /** RFC 8414 authorization server metadata, as the IndieAuth spec profiles it. */
 export interface AuthorizationServerMetadata {
@@ -52,7 +55,7 @@ export function authorizationServerMetadata(baseUrl: string): AuthorizationServe
     authorization_endpoint: `${baseUrl}${AUTHORIZATION_PATH}`,
     token_endpoint: `${baseUrl}${TOKEN_PATH}`,
     response_types_supported: ['code'],
-    grant_types_supported: ['authorization_code'],
+    grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
     scopes_supported: SCOPES,
     authorization_response_iss_parameter_supported: true,
