@@ -941,6 +941,18 @@ messages are kept), **Email** (how the site sends mail and where a message writt
 it goes) and **Federation** (the relays the site subscribes to). They live in
 `content/_data/site.json`, which is published with the site and in git.
 
+**Solo author blog** on the General page says the site is one person's, the
+person the author setting names. It is off for a new site. Turned on, the
+homepage speaks for that author, whether it lists posts or shows a static front
+page. It shows their bio card, carries their `rel="me"` profile links, and
+links their author archive with `rel="me"`. The archive links back to the
+homepage with `rel="me"`, so the two URLs are provably the same person. A
+Mastodon profile that links the homepage then verifies, and the homepage's
+structured data names the author as what the site is about. Turned off, the
+homepage speaks for nobody. A post-listing homepage shows no bio, and a static
+front page keeps its bio card but makes no `rel="me"` claims. The bio always
+links `/author/{username}/`, which stays the author's canonical page.
+
 Nothing on those pages is an ActivityPub profile. Every user is an actor with a
 name, a summary, a picture and links of their own, edited on that user's own
 screen under `/admin/users`; saving one sends an `Update` of that actor to

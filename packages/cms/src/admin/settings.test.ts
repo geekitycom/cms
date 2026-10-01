@@ -53,6 +53,7 @@ describe('content/_data/site.json', () => {
       tagline: 'and mirrored again',
       url: 'https://mirror.example',
       author: 'Grace',
+      soloAuthor: false,
       postsPerPage: 7,
       timezone: 'Europe/London',
       language: 'en',

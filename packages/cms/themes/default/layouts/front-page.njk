@@ -10,13 +10,18 @@
   over the same feed a listing is made of, headed at 3 so the outline never
   skips a level, then the line of links, then the bio.
 
+  The bio is the site's author's on a solo author blog, with the `rel="me"`
+  claims that make this page their identity (TASK-180). On any other site it is
+  whoever the page is by, and it claims nothing: the homepage speaks for nobody.
+
   A theme that wants a different front page replaces this file; a site that
   wants no front page of its own sets no homepage, and `/` is the listing.
 #}
 {% extends "layouts/base.njk" %}
 
 {#- Who the bio credits: the person the site's author setting names. -#}
-{% set bioAuthor = siteAuthor %}
+{% set bioAuthor = soloAuthor or siteAuthor %}
+{% set bioRelMe = true if soloAuthor else false %}
 
 {% block content %}
 <div class="page-body e-content">

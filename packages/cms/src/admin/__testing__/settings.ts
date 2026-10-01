@@ -21,6 +21,7 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     title: 'A Site',
     tagline: 'A tagline',
     author: 'Somebody',
+    solo_author: '',
     base_url: 'http://localhost:3000',
     timezone: 'UTC',
     language: 'en',

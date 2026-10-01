@@ -126,6 +126,13 @@ export interface SiteSettings {
   /** Site author, used as the feed author. May be empty. */
   author: string;
   /**
+   * Whether the site is one person's blog (TASK-180). On, the homepage speaks
+   * for the {@link SiteSettings.author}: it carries their bio card and their
+   * `rel="me"` links, and it and their archive claim each other. Off, the
+   * default, the homepage speaks for nobody.
+   */
+  soloAuthor: boolean;
+  /**
    * The theme the site renders through: the name of one directory under the
    * configured themes directory, or empty for the theme the package ships
    * (decision-15).
@@ -413,6 +420,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   homepage: '',
   postsPage: '',
   author: '',
+  soloAuthor: false,
   theme: '',
   tagBase: DEFAULT_TAXONOMY_BASES.tag,
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
@@ -462,6 +470,7 @@ export const SETTINGS_FIELDS = {
   homepage: 'homepage',
   postsPage: 'posts_page',
   author: 'author',
+  soloAuthor: 'solo_author',
   theme: 'theme',
   tagBase: 'tag_base',
   categoryBase: 'category_base',
@@ -597,6 +606,7 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
           ),
         }
       : {}),
+    ...(typeof file['soloAuthor'] === 'boolean' ? { soloAuthor: file['soloAuthor'] } : {}),
     ...(typeof file['llmsTxt'] === 'boolean' ? { llmsTxt: file['llmsTxt'] } : {}),
     ...(typeof file['indexNow'] === 'boolean' ? { indexNow: file['indexNow'] } : {}),
     // A key IndexNow would refuse is no key: the site then has none to serve
@@ -689,6 +699,7 @@ export function siteJsonFor(
     tagline: settings.tagline,
     url: settings.baseUrl,
     author: settings.author,
+    soloAuthor: settings.soloAuthor,
     postsPerPage: settings.postsPerPage,
     timezone: settings.timezone,
     language: settings.language,
@@ -1065,6 +1076,8 @@ const FIELD_CHECKS: Record<
 
   robotsRules: (form) => robotsRuleProblem([form.robotsRules]),
 
+  soloAuthor: () => undefined,
+
   llmsTxt: () => undefined,
 
   indexNow: () => undefined,
@@ -1203,6 +1216,7 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     // the listing's own page with it rather than leave it stranded.
     postsPage: form.homepage.trim() === '' ? '' : form.postsPage.trim(),
     author: form.author.trim(),
+    soloAuthor: form.soloAuthor !== '',
     theme: form.theme.trim(),
     tagBase: form.tagBase.trim(),
     categoryBase: form.categoryBase.trim(),
@@ -1269,6 +1283,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     homepage: settings.homepage,
     postsPage: settings.postsPage,
     author: settings.author,
+    soloAuthor: settings.soloAuthor ? '1' : '',
     theme: settings.theme,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,

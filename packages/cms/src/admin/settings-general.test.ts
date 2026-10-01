@@ -252,3 +252,28 @@ describe('the base URL', () => {
     assert.equal(cms.config.baseUrl, 'https://deployed.example');
   });
 });
+
+describe('the Solo author blog switch (TASK-180)', () => {
+  it('is off for a new site, and saving it on writes soloAuthor to site.json (AC #1)', async () => {
+    const contentDir = await box.dir('geekity-settings-content-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings')).text();
+    assert.match(html, /name="solo_author" type="checkbox" value="1"/, 'General has the switch');
+    assert.doesNotMatch(html, /name="solo_author" type="checkbox" value="1" checked/);
+    assert.equal(readSiteSettings(contentDir).soloAuthor, false, 'off by default');
+
+    assert.equal((await saveSettings(agent, 'general', { solo_author: '1' })).status, 303);
+    const file = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.equal(file['soloAuthor'], true, 'stored with the other general settings');
+
+    const back = await (await agent.get('/admin/settings')).text();
+    assert.match(back, /name="solo_author" type="checkbox" value="1" checked/);
+
+    assert.equal((await saveSettings(agent, 'general', {})).status, 303);
+    assert.equal(readSiteSettings(contentDir).soloAuthor, false, 'clearing it turns it off');
+  });
+});
