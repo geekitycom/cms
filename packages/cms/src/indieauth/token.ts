@@ -2,12 +2,24 @@ import type { Context, Hono } from 'hono';
 
 import { findUserById } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
-import { effectiveBaseUrl, readSiteSettings } from '../admin/settings.ts';
 import type { GeekityEnv } from '../env.ts';
-import { TOKEN_PATH } from './discovery.ts';
+import { requireBearer } from './bearer.ts';
+import {
+  INTROSPECTION_PATH,
+  REVOCATION_PATH,
+  TOKEN_PATH,
+  USERINFO_PATH,
+  siteBaseUrl,
+} from './discovery.ts';
 import { profileResponse, redeemCode, redemptionForm } from './redeem.ts';
 import type { RedemptionForm } from './redeem.ts';
-import { ACCESS_TOKEN_LIFETIME_MS, issueTokens, refreshTokens } from './tokens.ts';
+import {
+  ACCESS_TOKEN_LIFETIME_MS,
+  findAccessToken,
+  issueTokens,
+  refreshTokens,
+  revokeToken,
+} from './tokens.ts';
 import type { IssuedTokens } from './tokens.ts';
 
 /**
@@ -57,19 +69,69 @@ function sameResource(form: RedemptionForm, approved: string | undefined): boole
 }
 
 function answer(c: Context<GeekityEnv>, issued: IssuedTokens, user: User): Response {
-  const { config } = c.var;
   const { token } = issued;
-  const baseUrl = effectiveBaseUrl(config, readSiteSettings(config.contentDir));
   return c.json({
     access_token: issued.accessToken,
     token_type: 'Bearer',
     scope: token.scopes.join(' '),
     expires_in: ACCESS_TOKEN_LIFETIME_MS / 1000,
     refresh_token: issued.refreshToken,
-    ...profileResponse(token, user, baseUrl),
+    ...profileResponse(token, user, siteBaseUrl(c)),
   });
 }
 
-function refuse(c: Context<GeekityEnv>, error: string, description: string): Response {
+function refuse<E extends GeekityEnv>(c: Context<E>, error: string, description: string): Response {
   return c.json({ error, error_description: description }, 400);
+}
+
+/**
+ * The endpoints that answer for a token once it is issued (TASK-161):
+ * introspection, revocation and userinfo. Outside `/admin` and behind the
+ * maintenance gate, like the token endpoint.
+ */
+export function mountTokenInfoEndpoints(app: Hono<GeekityEnv>): void {
+  // RFC 7662. The IndieAuth spec asks that introspection need authorization
+  // of its own: here, another live token, and it answers only for tokens held
+  // by the same person, so one person's token can never tell anything about
+  // another's.
+  app.post(INTROSPECTION_PATH, requireBearer({ audience: 'authorization-server' }), async (c) => {
+    c.header('cache-control', 'no-store');
+    const presented = (await c.req.parseBody())['token'];
+    if (typeof presented !== 'string' || presented === '') {
+      return refuse(c, 'invalid_request', 'token is required.');
+    }
+    const token = findAccessToken(c.var.config.dataDir, presented, c.var.config.now());
+    if (token === undefined || token.userId !== c.var.bearer.user.id) {
+      return c.json({ active: false });
+    }
+    return c.json({
+      active: true,
+      me: token.me,
+      client_id: token.clientId,
+      scope: token.scopes.join(' '),
+      exp: Math.floor(Date.parse(token.expiresAt) / 1000),
+    });
+  });
+
+  // RFC 7009: holding the token is the authorization, and the answer is 200
+  // whether or not it was one, so a client learns nothing by guessing.
+  app.post(REVOCATION_PATH, async (c) => {
+    c.header('cache-control', 'no-store');
+    const presented = (await c.req.parseBody())['token'];
+    if (typeof presented !== 'string' || presented === '') {
+      return refuse(c, 'invalid_request', 'token is required.');
+    }
+    await revokeToken(c.var.config.dataDir, presented, c.var.config.now());
+    return c.body(null, 200);
+  });
+
+  app.get(
+    USERINFO_PATH,
+    requireBearer({ audience: 'authorization-server', scope: 'profile' }),
+    (c) => {
+      c.header('cache-control', 'no-store');
+      const { token, user } = c.var.bearer;
+      return c.json(profileResponse(token, user, siteBaseUrl(c)).profile ?? {});
+    },
+  );
 }

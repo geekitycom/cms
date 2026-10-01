@@ -1,4 +1,4 @@
-import type { Context, Hono, MiddlewareHandler } from 'hono';
+import type { Hono, MiddlewareHandler } from 'hono';
 
 import { effectiveBaseUrl, readSiteSettings } from '../admin/settings.ts';
 import type { GeekityEnv } from '../env.ts';
@@ -17,6 +17,21 @@ export const AUTHORIZATION_PATH = '/_geekity/indieauth/auth';
 /** Where a client redeems a code for an access token (TASK-160). */
 export const TOKEN_PATH = '/_geekity/indieauth/token';
 
+/** Where a resource server asks what a token is good for (TASK-161). */
+export const INTROSPECTION_PATH = '/_geekity/indieauth/introspect';
+
+/** Where a client hands a token back to end it (TASK-161). */
+export const REVOCATION_PATH = '/_geekity/indieauth/revoke';
+
+/** Where a client asks for the profile a token was approved to see (TASK-161). */
+export const USERINFO_PATH = '/_geekity/indieauth/userinfo';
+
+/**
+ * RFC 9728's well-known location for the protected resource metadata, which
+ * an MCP client reads to learn where to sign in (TASK-161).
+ */
+export const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource';
+
 /**
  * The scopes a client may ask for: the profile ones (TASK-158) and the
  * Micropub ones a token is issued for (TASK-160).
@@ -28,6 +43,9 @@ export interface AuthorizationServerMetadata {
   issuer: string;
   authorization_endpoint: string;
   token_endpoint: string;
+  introspection_endpoint: string;
+  revocation_endpoint: string;
+  userinfo_endpoint: string;
   response_types_supported: readonly string[];
   grant_types_supported: readonly string[];
   code_challenge_methods_supported: readonly string[];
@@ -54,6 +72,9 @@ export function authorizationServerMetadata(baseUrl: string): AuthorizationServe
     issuer: baseUrl,
     authorization_endpoint: `${baseUrl}${AUTHORIZATION_PATH}`,
     token_endpoint: `${baseUrl}${TOKEN_PATH}`,
+    introspection_endpoint: `${baseUrl}${INTROSPECTION_PATH}`,
+    revocation_endpoint: `${baseUrl}${REVOCATION_PATH}`,
+    userinfo_endpoint: `${baseUrl}${USERINFO_PATH}`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: ['S256'],
@@ -63,16 +84,45 @@ export function authorizationServerMetadata(baseUrl: string): AuthorizationServe
   };
 }
 
-function siteBaseUrl(c: Context<GeekityEnv>): string {
+/** RFC 9728 protected resource metadata. */
+export interface ProtectedResourceMetadata {
+  resource: string;
+  authorization_servers: readonly string[];
+  scopes_supported: readonly string[];
+  bearer_methods_supported: readonly string[];
+}
+
+/**
+ * The protected resource metadata for a site at `baseUrl`: the site is the
+ * resource, and its own authorization server is the one to sign in at. A
+ * token may come in the header or, as Micropub allows, in a form body.
+ */
+export function protectedResourceMetadata(baseUrl: string): ProtectedResourceMetadata {
+  return {
+    resource: baseUrl,
+    authorization_servers: [authorizationServerMetadata(baseUrl).issuer],
+    scopes_supported: SCOPES,
+    bearer_methods_supported: ['header', 'body'],
+  };
+}
+
+/** The site's base URL as every absolute URL it hands out is built from. */
+export function siteBaseUrl(c: { var: Pick<GeekityEnv['Variables'], 'config'> }): string {
   const { config } = c.var;
   return effectiveBaseUrl(config, readSiteSettings(config.contentDir));
 }
 
-/** Mount the metadata document at its own path and at the well-known one. */
+/**
+ * Mount the authorization server metadata at its own path and at the
+ * well-known one, and the protected resource metadata at its well-known one.
+ */
 export function mountIndieAuthDiscovery(app: Hono<GeekityEnv>): void {
   for (const pathname of [INDIEAUTH_METADATA_PATH, OAUTH_METADATA_WELL_KNOWN_PATH]) {
     app.get(pathname, (c) => c.json(authorizationServerMetadata(siteBaseUrl(c))));
   }
+  app.get(PROTECTED_RESOURCE_METADATA_PATH, (c) =>
+    c.json(protectedResourceMetadata(siteBaseUrl(c))),
+  );
 }
 
 /**

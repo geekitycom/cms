@@ -18,6 +18,7 @@ import {
   issueTokens,
   listTokens,
   refreshTokens,
+  revokeToken,
   verifyAccessToken,
 } from './tokens.ts';
 
@@ -40,6 +41,15 @@ const GRANT: AuthorizationCode = {
 
 function later(ms: number): Date {
   return new Date(T0.getTime() + ms);
+}
+
+function refreshForm(refreshToken: string, changes: Record<string, string | undefined> = {}) {
+  return {
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: GRANT.clientId,
+    ...changes,
+  };
 }
 
 async function dataDir(): Promise<string> {
@@ -129,15 +139,6 @@ describe('the resource a token is bound to', () => {
 });
 
 describe('refreshing a token', () => {
-  function refreshForm(refreshToken: string, changes: Record<string, string | undefined> = {}) {
-    return {
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: GRANT.clientId,
-      ...changes,
-    };
-  }
-
   it('rotates both tokens, and the old ones stop working', async () => {
     const dir = await dataDir();
     const old = await issueTokens(dir, GRANT, T0);
@@ -215,6 +216,32 @@ describe('refreshing a token', () => {
     await issueTokens(dir, GRANT, T0);
     await issueTokens(dir, GRANT, later(REFRESH_TOKEN_LIFETIME_MS));
     assert.equal(listTokens(dir).length, 1);
+  });
+});
+
+describe('revoking a token', () => {
+  for (const which of ['accessToken', 'refreshToken'] as const) {
+    it(`ends the connection when handed its ${which === 'accessToken' ? 'access' : 'refresh'} token`, async () => {
+      const dir = await dataDir();
+      const issued = await issueTokens(dir, GRANT, T0);
+      const other = await issueTokens(dir, GRANT, T0);
+
+      assert.equal(await revokeToken(dir, issued[which], T0), true);
+
+      assert.equal(verifyAccessToken(dir, issued.accessToken, MICROPUB, T0), undefined);
+      const refreshed = await refreshTokens(dir, refreshForm(issued.refreshToken), T0);
+      assert.equal(refreshed.ok, false);
+      assert.deepEqual(
+        listTokens(dir).map((token) => token.id),
+        [other.token.id],
+      );
+    });
+  }
+
+  it('writes nothing for a token nobody issued', async () => {
+    const dir = await dataDir();
+    assert.equal(await revokeToken(dir, 'made-up', T0), false);
+    await assert.rejects(stat(path.join(dir, TOKENS_FILE)), { code: 'ENOENT' });
   });
 });
 

@@ -88,6 +88,9 @@ describe('the authorization server metadata', () => {
       assert.equal(metadata['authorization_response_iss_parameter_supported'], true);
       // MCP's client registration of choice since 2025-11-25 (TASK-158).
       assert.equal(metadata['client_id_metadata_document_supported'], true);
+      assert.equal(metadata['introspection_endpoint'], `${BASE}/_geekity/indieauth/introspect`);
+      assert.equal(metadata['revocation_endpoint'], `${BASE}/_geekity/indieauth/revoke`);
+      assert.equal(metadata['userinfo_endpoint'], `${BASE}/_geekity/indieauth/userinfo`);
     });
   }
 
@@ -152,5 +155,27 @@ describe('advertising the metadata', () => {
       );
       assert.doesNotMatch(await response.text(), /indieauth-metadata/, pathname);
     }
+  });
+});
+
+describe('the protected resource metadata (RFC 9728)', () => {
+  it('names this site as the resource, its authorization server and the scopes', async () => {
+    const cms = await site();
+    const response = await cms.app.request('/.well-known/oauth-protected-resource');
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /^application\/json/);
+    const metadata = (await response.json()) as Record<string, unknown>;
+    assert.equal(metadata['resource'], BASE);
+    assert.deepEqual(metadata['authorization_servers'], [BASE]);
+    assert.deepEqual(metadata['scopes_supported'], [
+      'profile',
+      'email',
+      'create',
+      'update',
+      'delete',
+      'media',
+    ]);
+    assert.deepEqual(metadata['bearer_methods_supported'], ['header', 'body']);
   });
 });

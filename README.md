@@ -1297,6 +1297,28 @@ and deleting a user revokes every token they hold. A token issued for one
 resource, such as an MCP endpoint, works only there. decision-24 records the
 rules.
 
+An app sends its token in an `Authorization: Bearer` header, or in an
+`access_token` form field as Micropub allows. A request with no token, or with
+one that is unknown, expired or revoked, gets 401. A token without the scope a
+route needs gets 403 `insufficient_scope`. Each refusal carries a
+`WWW-Authenticate: Bearer` header whose `resource_metadata` points at
+`/.well-known/oauth-protected-resource`. That RFC 9728 document names the site
+as its own authorization server and lists the scopes, so an MCP client can find
+out where to sign in. The metadata document also lists three more endpoints:
+
+- `/_geekity/indieauth/userinfo` answers your name, URL and profile picture
+  for a token with the profile scope, and your email address when it also has
+  the email scope.
+- `/_geekity/indieauth/revoke` ends the connection a posted `token` belongs
+  to, access or refresh, so both stop working at once. It answers 200 whether
+  or not the token was live.
+- `/_geekity/indieauth/introspect` says whether a posted `token` is live, and
+  if so its `me`, `client_id`, `scope` and `exp`. The request needs a live
+  token of its own in the `Authorization` header, and it answers only for
+  tokens held by the same person. Any other token is reported inactive.
+
+All three, and the resource metadata, answer 503 in maintenance mode.
+
 ## The theme
 
 Templates are Nunjucks (decision-4). The default theme lives in

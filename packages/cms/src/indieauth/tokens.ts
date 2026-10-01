@@ -175,6 +175,22 @@ export async function refreshTokens(
 }
 
 /**
+ * The connection a live access token belongs to, whoever is asking; the
+ * authorization server's own endpoints take any token it issued. `undefined`
+ * for a token that is unknown or expired.
+ */
+export function findAccessToken(
+  dataDir: string,
+  accessToken: string,
+  now: Date,
+): StoredToken | undefined {
+  const hash = hashToken(accessToken);
+  const token = listTokens(dataDir).find((candidate) => candidate.accessTokenHash === hash);
+  if (token === undefined || Date.parse(token.expiresAt) <= now.getTime()) return undefined;
+  return token;
+}
+
+/**
  * The connection a live access token belongs to, when `audience` may accept
  * it; `undefined` for a token that is unknown, expired or bound to another
  * resource.
@@ -185,12 +201,26 @@ export function verifyAccessToken(
   audience: Audience,
   now: Date,
 ): StoredToken | undefined {
-  const hash = hashToken(accessToken);
-  const token = listTokens(dataDir).find((candidate) => candidate.accessTokenHash === hash);
-  if (token === undefined || Date.parse(token.expiresAt) <= now.getTime()) return undefined;
+  const token = findAccessToken(dataDir, accessToken, now);
+  if (token === undefined) return undefined;
   const bound =
     token.resource === undefined ? audience.acceptsUnbound : token.resource === audience.resource;
   return bound ? token : undefined;
+}
+
+/**
+ * End the connection `presented` belongs to, whether it is the access token
+ * or the refresh token, so both stop working at once. Answers whether there
+ * was one.
+ */
+export async function revokeToken(dataDir: string, presented: string, now: Date): Promise<boolean> {
+  const hash = hashToken(presented);
+  const matches = (token: StoredToken) =>
+    token.accessTokenHash === hash || token.refreshTokenHash === hash;
+  // Looked for first, so a guessed token cannot make the site rewrite the file.
+  if (!listTokens(dataDir).some(matches)) return false;
+  await update(dataDir, now, (tokens) => tokens.filter((token) => !matches(token)));
+  return true;
 }
 
 /** Revoke every token `userId` holds. */
