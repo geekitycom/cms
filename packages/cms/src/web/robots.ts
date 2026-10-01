@@ -60,6 +60,8 @@ export const AI_RETRIEVAL_CRAWLERS: readonly string[] = [
   'Perplexity-User',
   'Claude-SearchBot',
   'Claude-User',
+  'meta-webindexer',
+  'meta-externalfetcher',
 ];
 
 /** The signals a `Content-Signal` line may carry, in the order it lists them. */
