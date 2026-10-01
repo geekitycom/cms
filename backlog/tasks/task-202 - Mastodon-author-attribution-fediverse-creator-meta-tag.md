@@ -4,10 +4,12 @@ title: 'Mastodon author attribution: fediverse:creator meta tag'
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:13'
+updated_date: '2026-10-01 17:18'
 labels:
   - federation
   - theme
   - seo
+milestone: m-27
 dependencies: []
 references:
   - packages/cms/themes/default/layouts/base.njk

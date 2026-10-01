@@ -4,10 +4,12 @@ title: Receive pingbacks as mentions
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:13'
+updated_date: '2026-10-01 17:18'
 labels:
   - webmention
   - wordpress
   - interop
+milestone: m-28
 dependencies: []
 references:
   - packages/cms/src/webmention/receive.ts

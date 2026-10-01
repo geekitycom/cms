@@ -4,10 +4,12 @@ title: JSON-LD headline and image for untitled notes
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:07'
+updated_date: '2026-10-01 17:18'
 labels:
   - theme
   - seo
   - schema-org
+milestone: m-27
 dependencies: []
 references:
   - packages/cms/themes/default/partials/jsonld.njk
