@@ -782,6 +782,75 @@ describe('a post as an Open Graph article (TASK-146 AC #2)', () => {
   });
 });
 
+describe('the fediverse:creator tag (TASK-202)', () => {
+  /** A post by `author`, on a site with several authors unless `settings` names one. */
+  async function siteWithPostBy(
+    author: string,
+    settings: Record<string, unknown> = {},
+  ): Promise<Cms> {
+    const { cms } = await siteWithContent(
+      settings,
+      {},
+      {
+        'posts/by.md': `---\ntitle: By someone\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/by/\nauthor: ${author}\n---\n\nHi.\n`,
+      },
+    );
+    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    return cms;
+  }
+
+  it('names the user a post is by as their own account here (AC #1)', async () => {
+    const cms = await siteWithPostBy('ada');
+    const host = new URL(cms.config.baseUrl).host;
+
+    assert.deepEqual(metaContents(await body(cms, '/2026/09/by/'), 'fediverse:creator'), [
+      `@ada@${host}`,
+    ]);
+  });
+
+  it('names an account WebFinger answers for, as that user (AC #2)', async () => {
+    const cms = await siteWithPostBy('ada');
+    const handle = metaContent(await body(cms, '/2026/09/by/'), 'fediverse:creator') ?? '';
+    const resource = `acct:${handle.replace(/^@/, '')}`;
+
+    const response = await cms.app.request(
+      `/.well-known/webfinger?resource=${encodeURIComponent(resource)}`,
+    );
+    assert.equal(response.status, 200, `WebFinger did not answer for ${resource}`);
+    const document = (await response.json()) as {
+      subject: string;
+      links: { rel: string; href?: string }[];
+    };
+    assert.equal(document.subject, resource);
+    assert.equal(
+      document.links.find((link) => link.rel === 'self')?.href,
+      new URL('/author/ada/', cms.config.baseUrl).href,
+    );
+  });
+
+  it('names the site author on the homepage of a solo-author site', async () => {
+    const cms = await siteWithPostBy('ada', { author: 'ada' });
+    const host = new URL(cms.config.baseUrl).host;
+
+    assert.deepEqual(metaContents(await body(cms, '/'), 'fediverse:creator'), [`@ada@${host}`]);
+  });
+
+  it('names nobody on a page about nobody in particular (AC #1)', async () => {
+    const solo = await siteWithPostBy('ada', { author: 'ada' });
+    assert.deepEqual(metaContents(await body(solo, '/tag/notes/'), 'fediverse:creator'), []);
+
+    const several = await siteWithPostBy('ada');
+    assert.deepEqual(metaContents(await body(several, '/'), 'fediverse:creator'), []);
+    assert.deepEqual(metaContents(await body(several, '/about/'), 'fediverse:creator'), []);
+  });
+
+  it('names nobody for a post by a name no user answers to', async () => {
+    const cms = await siteWithPostBy('Joe Blog');
+
+    assert.deepEqual(metaContents(await body(cms, '/2026/09/by/'), 'fediverse:creator'), []);
+  });
+});
+
 describe('the share image’s alt text and card (TASK-146 AC #3, AC #4)', () => {
   it('describes the avatar with the media library’s alt text', async () => {
     const cms = await siteWearingAnAvatar({ url: 'https://example.com' });

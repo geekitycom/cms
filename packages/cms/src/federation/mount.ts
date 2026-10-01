@@ -14,7 +14,7 @@ import { requestPath } from '../web/routes.ts';
 import { actorAliases, actorId, userActor } from './actor.ts';
 import { isFederatedDocument, postObject } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
-import { federationOrigin, handleHref } from './paths.ts';
+import { accountOf, handleHref } from './paths.ts';
 import {
   recordWordPressRequest,
   userByWordPressActorId,
@@ -351,7 +351,7 @@ export const WEBFINGER_PATH = '/.well-known/webfinger';
 
 /** `acct:{username}@{host}`, the handle a person types into a search box. */
 export function acctOf(username: string, baseUrl: string): string {
-  return `acct:${username}@${federationOrigin(baseUrl === '' ? 'http://localhost' : baseUrl).handleHost}`;
+  return `acct:${accountOf(username, baseUrl)}`;
 }
 
 /**

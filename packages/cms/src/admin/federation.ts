@@ -10,7 +10,7 @@ import type { User } from './accounts.ts';
 import { avatarUrl } from '../federation/actor.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
 import type { WebmentionReport } from '../webmention/service.ts';
-import { ACTOR_PATH, federationOrigin } from '../federation/paths.ts';
+import { accountOf, ACTOR_PATH, federationOrigin } from '../federation/paths.ts';
 import { authorHref, profileContext, userForAuthor } from '../web/authors.ts';
 import { postObjectId, publicDocumentAt } from '../web/documents.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
@@ -416,7 +416,7 @@ export function actorSummary(
 
   return {
     username: user.username,
-    handle: `@${user.username}@${origin.handleHost}`,
+    handle: `@${accountOf(user.username, baseUrl)}`,
     avatarUrl: profile.avatar === undefined ? null : (avatarUrl(profile.avatar, baseUrl) ?? null),
     name: profile.name,
     summary: profile.bio ?? '',

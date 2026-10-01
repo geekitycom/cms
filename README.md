@@ -956,6 +956,23 @@ title stands in for a name in the footer and the feeds, and the structured
 data has the site published by an Organization named for it. The bio always
 links `/author/{username}/`, which stays the author's canonical page.
 
+A link preview on Mastodon can credit the author, with a button to follow
+them. Every post and page by a user carries
+`<meta name="fediverse:creator" content="@username@host">`, which names that
+user's own account on this site: the handle WebFinger answers for. The
+homepage of a site with one author names that author. A page by nobody in
+particular, such as a tag archive or the homepage of a site with several
+authors, names nobody.
+
+Mastodon shows the credit only when the account the tag names lists the
+site's domain as one it may be credited from. A Mastodon account sets that
+list under **Preferences > Public profile > Verification > Author
+attribution**, by adding a domain such as `example.com`. Mastodon reads the
+same list from a remote account's `attributionDomains`. The account this tag
+names is the user's actor on this site, not a Mastodon account, so there is no
+Mastodon setting to change for it. Its actor does not publish
+`attributionDomains` yet, so Mastodon does not show the credit until it does.
+
 `site.json` stores the chosen username as `author`, and has no `author` on a
 site with several authors. **Breaking:** the free-text Author field and the
 Solo author blog checkbox are gone, and `soloAuthor` is no longer read. An

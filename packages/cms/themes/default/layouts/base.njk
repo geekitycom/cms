@@ -211,6 +211,16 @@
     <meta property="article:tag" content="{{ tag }}">
     {% endfor %}
     {% endif %}
+    {#
+      Who a Mastodon link preview credits, with a follow button (TASK-202):
+      the user's own account here, on an entry by them and on the homepage of
+      a site one person writes. Mastodon shows it only when that account lists
+      this site's domain under author attribution.
+    #}
+    {% set creator = siteAuthor if isEntry else (soloAuthor if atRoot) %}
+    {% if creator.username %}
+    <meta name="fediverse:creator" content="{{ creator.username | fediverseHandle }}">
+    {% endif %}
     <meta name="twitter:card" content="{{ shareImage.card if shareImage else "summary" }}">
     <meta name="twitter:title" content="{{ metaTitle }}">
     {% if metaDescription %}
