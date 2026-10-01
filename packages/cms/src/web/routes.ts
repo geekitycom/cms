@@ -82,7 +82,16 @@ import { sitemapResponse, SITEMAP_CHILD_ROUTE, SITEMAP_PATH } from './sitemap.ts
 import type { SitemapUrl } from './sitemap.ts';
 import { FAVICON_PATH, manifestResponse, MANIFEST_PATH, webManifest } from './manifest.ts';
 import { openSearchDescription, openSearchResponse, OPENSEARCH_PATH } from './opensearch.ts';
-import { OEMBED_PATH, oEmbedFor, oEmbedRequest, oEmbedResponse } from './oembed.ts';
+import {
+  EMBED_PATH,
+  embedPage,
+  embedResponse,
+  OEMBED_PATH,
+  oEmbedFor,
+  oEmbedRequest,
+  oEmbedResponse,
+} from './oembed.ts';
+import type { EmbedSubject } from './oembed.ts';
 import {
   generatedLlmsTxt,
   LLMS_TXT_LINK,
@@ -238,6 +247,10 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // comment endpoint, so no permalink can take it.
   app.get(OEMBED_PATH, oEmbed);
 
+  // The embed view the oEmbed html frames (TASK-208), beside it under the
+  // same prefix: the one response another site may put in a frame.
+  app.get(EMBED_PATH, embedView);
+
   // The index for language models (TASK-149), a fixed path at the root for
   // the same reason. Off is a 404; a file of the site's own wins over the
   // generated one.
@@ -290,17 +303,36 @@ function oEmbed(c: Context<GeekityEnv>): Response {
   if (found === undefined) return notFound(c);
   if (request.format === undefined) return c.text('Not Implemented', 501);
 
+  const embed = oEmbedFor({ ...embedSubject(c, found), config: c.var.config, request });
+  return oEmbedResponse(embed, request.format, conditionalHeaders(c));
+}
+
+/**
+ * The card of the post or page a URL names as a page another site may frame,
+ * and a 404, framed by nobody else, when it names none.
+ */
+function embedView(c: Context<GeekityEnv>): Response {
+  const found = embeddableAt(c, c.req.query('url') ?? '');
+  if (found === undefined) return notFound(c);
+
+  c.set('frameable', true);
+  return embedResponse(embedPage(embedSubject(c, found)), conditionalHeaders(c));
+}
+
+/** What an embed of `found` is drawn from, with the byline it names. */
+function embedSubject(
+  c: Context<GeekityEnv>,
+  found: { document: Document; href: string },
+): EmbedSubject {
   const site = c.var.renderer.site();
   const users = listUsers(c.var.config.dataDir);
-  const embed = oEmbedFor({
+  return {
     ...found,
     // Who the byline names: the document's author, else the site's.
     author: authorContext(users, found.document.author) ?? siteAuthorContext(users, site.author),
     config: c.var.config,
     site,
-    request,
-  });
-  return oEmbedResponse(embed, request.format, conditionalHeaders(c));
+  };
 }
 
 /**

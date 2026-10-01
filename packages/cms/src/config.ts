@@ -296,6 +296,10 @@ export interface GeekityConfig {
    *
    * The admin keeps its own `Content-Security-Policy`, `Referrer-Policy` and
    * `X-Frame-Options` whatever this says, so nothing here can loosen them.
+   * The embed view at `/_geekity/embed` (TASK-208) keeps its own
+   * `Content-Security-Policy`, whose `frame-ancestors *` lets any site frame
+   * it, and never carries `X-Frame-Options`, even one configured here, so
+   * nothing here can tighten it either.
    */
   securityHeaders?: Record<string, string | false>;
   /**

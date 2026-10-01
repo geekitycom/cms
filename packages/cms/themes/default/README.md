@@ -748,7 +748,12 @@ copies that line to keep the offer.
 provider: for the URL of a published post or page it answers a `rich` embed
 with the title, the author and their archive, the site as provider, a
 thumbnail when the post's own `image` has a recorded size, and an `html`
-card that is a blockquote of escaped text and links with no script. `maxwidth`
+card that is a blockquote of escaped text and links with no script, followed
+by a hidden, sandboxed `<iframe>` of `/_geekity/embed?url=…`. That route is
+the same card as a page of its own, and it is the one response another site may
+frame. WordPress keeps a card from a provider it does not know only when the
+card has an iframe, and it shows the frame once the page inside reports its
+height. A consumer that strips iframes still has the blockquote. `maxwidth`
 and `maxheight` are honoured, `format=xml` gives the same fields as XML, and
 any other URL is a 404. The head of each post and page links it with
 `<link rel="alternate" type="application/json+oembed">` and its `text/xml+oembed`

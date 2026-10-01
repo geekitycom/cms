@@ -144,6 +144,13 @@ export interface GeekityEnv {
      */
     cspFormAction: string | undefined;
     /**
+     * Whether another site may frame this response. Only the embed view
+     * (TASK-208) says so, having sent a `frame-ancestors` of its own; the
+     * baseline then leaves `X-Frame-Options` off it, whatever the site's
+     * `securityHeaders` say, because that header cannot name every origin.
+     */
+    frameable: boolean | undefined;
+    /**
      * The authorization server's codes and the consent screens waiting on an
      * answer (TASK-158), shared by the consent screen that issues a code and
      * the endpoints that redeem one.

@@ -35,7 +35,9 @@ let environment: Environment | undefined;
  * Markdown, the feeds, ActivityPub, is left exactly as it was.
  *
  * Not inside `/admin`, which has a bar of its own and a CSP that would refuse
- * this one's inline stylesheet.
+ * this one's inline stylesheet. Not on a response marked `frameable` either:
+ * the embed view (TASK-208) is put in other sites' pages, so it must look the
+ * same whoever's browser fetched it, and carry no session's CSRF token.
  */
 export const publicAdminBar: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   const pathname = requestPath(c);
@@ -47,6 +49,7 @@ export const publicAdminBar: MiddlewareHandler<GeekityEnv> = async (c, next) => 
   c.set('signedIn', account);
   await next();
 
+  if (c.var.frameable === true) return;
   if (!(c.res.headers.get('content-type') ?? '').startsWith('text/html')) return;
 
   const headers = new Headers(c.res.headers);

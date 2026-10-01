@@ -2,18 +2,21 @@
  * The oEmbed provider (TASK-205): `/_geekity/oembed?url=…`, which WordPress,
  * Discourse and the rest ask to turn a pasted post URL into a card, and the
  * `<link rel="alternate" type="application/json+oembed">` on every post and
- * page that tells them where it is. Asserted over HTTP against the packaged
- * theme, the way a consumer meets it.
+ * page that tells them where it is, and the embed view (TASK-208) its html
+ * frames. Asserted over HTTP against the packaged theme, the way a consumer
+ * meets it.
  */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+import vm from 'node:vm';
 
 import sharp from 'sharp';
 
 import { createUser, setUserProfile } from '../admin/accounts.ts';
-import { sandbox } from '../admin/__testing__/harness.ts';
+import { sandbox, signIn } from '../admin/__testing__/harness.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { child, parseXml } from './__testing__/xml.ts';
@@ -84,7 +87,7 @@ async function site(
   });
 }
 
-/** Write an image of one size to an upload path, and derive its variants. */
+/** Write an image of one size to an upload path, and derive its variants so its size is recorded. */
 async function upload(cms: Cms, at: string, width: number, height: number): Promise<void> {
   const file = path.join(cms.config.contentDir, ...at.slice(1).split('/'));
   await mkdir(path.dirname(file), { recursive: true });
@@ -253,7 +256,7 @@ describe('the card (TASK-205 AC #3)', () => {
     const cms = await site();
     const html = String((await embed(cms, 'https://blog.example/2026/09/hello/'))['html']);
 
-    assert.match(html, /^<blockquote[^>]*>[\s\S]*<\/blockquote>$/);
+    assert.match(html, /^<blockquote[^>]*>[\s\S]*<\/blockquote><iframe [^>]*><\/iframe>$/);
     assert.doesNotMatch(html, /<script/i);
     assert.doesNotMatch(html, /<b>/, 'the title went out as markup');
     assert.doesNotMatch(html, /\son\w+=/i, 'an event handler');
@@ -312,5 +315,262 @@ describe('what may be embedded (TASK-205 AC #4)', () => {
     assert.ok(String(home['html']).includes('href="https://blog.example/"'));
 
     assert.equal((await cms.app.request(endpoint('https://blog.example/blog/'))).status, 404);
+  });
+});
+
+/** The embed view's path for `url`. */
+function embedView(url: string): string {
+  return `/_geekity/embed?${new URLSearchParams({ url }).toString()}`;
+}
+
+/** The embed view of `url`, after checking it is served as a page. */
+async function embedViewOf(cms: Cms, url: string): Promise<{ response: Response; html: string }> {
+  const response = await cms.app.request(embedView(url));
+  assert.equal(response.status, 200, url);
+  assert.equal(response.headers.get('content-type'), 'text/html; charset=utf-8');
+  return { response, html: await response.text() };
+}
+
+/** The contents of the one inline element `tag` in `html`. */
+function inline(html: string, tag: string): string {
+  const found = [...html.matchAll(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'g'))];
+  assert.equal(found.length, 1, `the page has ${String(found.length)} <${tag}> elements`);
+  return found[0]?.[1] ?? '';
+}
+
+function sha256(contents: string): string {
+  return `'sha256-${createHash('sha256').update(contents, 'utf8').digest('base64')}'`;
+}
+
+/** The response's policy as a map of directive to its sources. */
+function directives(response: Response): Map<string, string> {
+  const policy = response.headers.get('content-security-policy') ?? '';
+  return new Map(
+    policy.split(';').map((part) => {
+      const [name = '', ...sources] = part.trim().split(/\s+/);
+      return [name, sources.join(' ')];
+    }),
+  );
+}
+
+function assertNotFramable(response: Response, what: string): void {
+  assert.equal(response.headers.get('x-frame-options'), 'SAMEORIGIN', what);
+  assert.equal(directives(response).get('frame-ancestors'), "'self'", what);
+}
+
+describe('the embed view (TASK-208)', () => {
+  it('is a page of the oEmbed card alone, for a post, a page and a note', async () => {
+    const cms = await site();
+    for (const url of [
+      'https://blog.example/2026/09/hello/',
+      'https://blog.example/about/',
+      'https://blog.example/2026/09/note/',
+    ]) {
+      const { html } = await embedViewOf(cms, url);
+      const card = String((await embed(cms, url))['html']).replace(/<iframe[\s\S]*$/, '');
+
+      assert.match(html, /^<!doctype html>\n<html lang="en">/, url);
+      assert.ok(html.includes('<meta charset="utf-8">'), `${url}: no charset`);
+      assert.ok(html.includes('<meta name="viewport"'), `${url}: no viewport`);
+      assert.match(html, /<title>[^<]+<\/title>/, url);
+      assert.ok(html.includes(card), `${url}: not the oEmbed card`);
+      assert.doesNotMatch(html, /<link|<img|src=/, `${url}: loads something`);
+    }
+  });
+
+  it('answers 404, framed by nobody else, for anything oEmbed would not embed', async () => {
+    const cms = await site();
+    for (const url of [
+      'https://blog.example/2026/09/secret/',
+      'https://blog.example/2026/12/later/',
+      'https://elsewhere.example/2026/09/hello/',
+      'https://blog.example/tag/words/',
+      'https://blog.example/page/2/',
+      '',
+    ]) {
+      const response = await cms.app.request(embedView(url));
+      assert.equal(response.status, 404, url);
+      const body = await response.text();
+      assert.ok(!body.includes('Secret') && !body.includes('Tomorrow'), url);
+      assertNotFramable(response, url);
+    }
+  });
+
+  it('may be framed by any site, loading only its own inline style and script', async () => {
+    const cms = await site({}, { securityHeaders: { 'X-Frame-Options': 'DENY' } });
+    const { response, html } = await embedViewOf(cms, 'https://blog.example/2026/09/hello/');
+    const policy = directives(response);
+
+    assert.equal(response.headers.get('x-frame-options'), null, 'framing is still refused');
+    assert.equal(policy.get('frame-ancestors'), '*');
+    assert.equal(policy.get('default-src'), "'none'");
+    assert.equal(policy.get('style-src'), sha256(inline(html, 'style')));
+    assert.equal(policy.get('script-src'), sha256(inline(html, 'script')));
+    assert.equal(policy.get('img-src'), undefined, 'the card has no image to allow');
+    assert.equal(policy.get('base-uri'), "'none'");
+    assert.equal(policy.get('form-action'), "'none'");
+  });
+
+  it('leaves every other response framable by the site alone', async () => {
+    const cms = await site({}, { securityHeaders: { 'X-Frame-Options': 'DENY' } });
+    const plain = await site();
+    const post = 'https://blog.example/2026/09/hello/';
+
+    assertNotFramable(await plain.app.request('/2026/09/hello/'), 'a post');
+    assertNotFramable(await plain.app.request(endpoint(post)), 'the oEmbed endpoint');
+    assertNotFramable(await plain.app.request('/no-such-page/'), 'a 404');
+    assertNotFramable(await plain.app.request('/admin/login'), 'an admin page');
+    assert.equal(
+      (await cms.app.request('/2026/09/hello/')).headers.get('x-frame-options'),
+      'DENY',
+      "a site's own X-Frame-Options is kept everywhere else",
+    );
+  });
+
+  it('is the same page for a signed-in admin as for anyone', async () => {
+    const cms = await site();
+    const admin = await signIn(cms, { username: 'ada', password: 'a password of hers' });
+    const url = 'https://blog.example/2026/09/hello/';
+    const signedInPost = await (await admin.get('/2026/09/hello/')).text();
+    assert.ok(signedInPost.includes('geekity-admin-bar'), 'the admin is not signed in');
+
+    const anonymous = await cms.app.request(embedView(url));
+    const signedIn = await admin.get(embedView(url));
+
+    assert.equal(await signedIn.text(), await anonymous.text());
+    assert.equal(signedIn.headers.get('etag'), anonymous.headers.get('etag'));
+    assert.equal(signedIn.headers.get('set-cookie'), null);
+  });
+
+  it('is what the oEmbed html frames, after the card, hidden and sandboxed', async () => {
+    const cms = await site({}, { baseUrl: 'https://example.com/blog' });
+    const url = 'https://example.com/blog/2026/09/hello/';
+    const html = String((await embed(cms, url))['html']);
+    const frame = /<iframe ([^>]*)><\/iframe>$/.exec(html)?.[1] ?? '';
+    const attribute = (name: string): string | undefined =>
+      new RegExp(`(?:^| )${name}="([^"]*)"`).exec(frame)?.[1];
+
+    assert.ok(html.startsWith('<blockquote'), 'the card no longer comes first');
+    assert.equal(attribute('sandbox'), 'allow-scripts');
+    assert.equal(attribute('security'), 'restricted');
+    assert.equal(attribute('width'), '600');
+    assert.equal(attribute('height'), '338');
+    assert.equal(attribute('title'), 'Fish &amp; &lt;b&gt;chips&lt;/b&gt; &quot;to go&quot;');
+    assert.equal(attribute('frameborder'), '0');
+    assert.equal(attribute('scrolling'), 'no');
+    assert.equal(attribute('style'), 'position: absolute; visibility: hidden;');
+
+    const src = new URL((attribute('src') ?? '').replaceAll('&amp;', '&'));
+    assert.equal(src.origin, 'https://example.com');
+    assert.equal(src.pathname, '/blog/_geekity/embed');
+    assert.equal(src.searchParams.get('url'), url);
+    const framed = await embedViewOf(cms, url);
+    assert.ok(framed.html.includes(html.replace(/<iframe[\s\S]*$/, '')), 'a different card');
+  });
+
+  it('answers a repeat request with 304', async () => {
+    const cms = await site();
+    const at = embedView('https://blog.example/2026/09/hello/');
+    const etag = (await cms.app.request(at)).headers.get('etag');
+    assert.ok(etag !== null, 'the page carries no validator');
+    const again = await cms.app.request(at, { headers: { 'if-none-match': etag } });
+    assert.equal(again.status, 304);
+    assert.equal(again.headers.get('x-frame-options'), null);
+  });
+});
+
+/** A message the embed script posted to the framing page, and to which origin. */
+interface Posted {
+  data: unknown;
+  origin: string;
+}
+
+/**
+ * The embed page's script run against a stand-in for the frame it lives in,
+ * at `hash`, with what it posts to its parent and the events it listens for.
+ */
+function framedScript(script: string, hash: string) {
+  const posted: Posted[] = [];
+  const listeners = new Map<string, ((event: unknown) => void)[]>();
+  const listen = (type: string, listener: (event: unknown) => void): void => {
+    listeners.set(type, [...(listeners.get(type) ?? []), listener]);
+  };
+  class Element {
+    constructor(readonly href?: string) {}
+    closest(): Element | null {
+      return this.href === undefined ? null : this;
+    }
+  }
+  const parent = {
+    // Through JSON, as a structured clone would, so it compares across realms.
+    postMessage: (data: unknown, origin: string) =>
+      posted.push({ data: JSON.parse(JSON.stringify(data)) as unknown, origin }),
+  };
+  vm.runInNewContext(script, {
+    window: { parent },
+    location: { hash },
+    addEventListener: listen,
+    Element,
+    document: {
+      documentElement: { getBoundingClientRect: () => ({ height: 211.4 }) },
+      addEventListener: listen,
+    },
+  });
+
+  function fire(type: string, event: unknown): void {
+    for (const listener of listeners.get(type) ?? []) listener(event);
+  }
+  function click(href?: string): boolean {
+    let prevented = false;
+    fire('click', {
+      target: new Element(href),
+      preventDefault: () => (prevented = true),
+    });
+    return prevented;
+  }
+  return { posted, fire, click };
+}
+
+describe("the embed view's side of WordPress's embed protocol (TASK-208)", () => {
+  async function script(): Promise<string> {
+    const { html } = await embedViewOf(await site(), 'https://blog.example/2026/09/hello/');
+    return inline(html, 'script');
+  }
+
+  it('tells the host its height on load, on resize and when the host is ready', async () => {
+    const frame = framedScript(await script(), '#?secret=Ab12Cd34Ef');
+    const height = { data: { message: 'height', value: 212, secret: 'Ab12Cd34Ef' }, origin: '*' };
+
+    frame.fire('load', {});
+    frame.fire('resize', {});
+    frame.fire('message', { data: { message: 'ready', secret: 'Ab12Cd34Ef' } });
+    frame.fire('message', { data: { message: 'ready', secret: 'someone-else' } });
+
+    assert.deepEqual(frame.posted, [height, height, height]);
+  });
+
+  it('hands a link to the host instead of following it', async () => {
+    const frame = framedScript(await script(), '#?secret=Ab12Cd34Ef');
+
+    assert.equal(frame.click('https://blog.example/2026/09/hello/'), true, 'the link was followed');
+    assert.equal(frame.click(), false, 'a click off any link was stopped');
+    assert.deepEqual(frame.posted, [
+      {
+        data: {
+          message: 'link',
+          value: 'https://blog.example/2026/09/hello/',
+          secret: 'Ab12Cd34Ef',
+        },
+        origin: '*',
+      },
+    ]);
+  });
+
+  it('does nothing opened directly, so its links are ordinary links', async () => {
+    const frame = framedScript(await script(), '');
+
+    frame.fire('load', {});
+    assert.equal(frame.click('https://blog.example/2026/09/hello/'), false);
+    assert.deepEqual(frame.posted, []);
   });
 });

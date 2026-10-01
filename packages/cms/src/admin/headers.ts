@@ -36,11 +36,14 @@ export const NONCE_BYTES = 16;
  * `frame-ancestors`, is about who may frame the page, not what is in it.
  *
  * A configured header goes on only when the response has none by that name,
- * so the admin's stricter values, set further in, are never replaced.
+ * so the admin's stricter values, set further in, are never replaced. A
+ * response its handler marked `frameable` gets no `X-Frame-Options`: the
+ * embed view sends its own `frame-ancestors *`, and the older header would
+ * still keep every other site from framing it.
  */
 export const baselineSecurityHeaders: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   await next();
-  applyBaseline(c.res.headers, c.var.config);
+  applyBaseline(c.res.headers, c.var.config, c.var.frameable === true);
 };
 
 /**
@@ -57,7 +60,7 @@ export const adminSecurityHeaders: MiddlewareHandler<GeekityEnv> = async (c, nex
   await next();
 
   const headers = c.res.headers;
-  applyBaseline(headers, c.var.config);
+  applyBaseline(headers, c.var.config, false);
   headers.set('Content-Security-Policy', adminContentSecurityPolicy(nonce, c.var.cspFormAction));
   headers.set('Referrer-Policy', 'same-origin');
   // Not DENY: the editor puts its preview in a sandboxed iframe of its own, and
@@ -121,12 +124,13 @@ export function adminContentSecurityPolicy(nonce: string, formAction?: string): 
   ].join('; ');
 }
 
-function applyBaseline(headers: Headers, config: ResolvedConfig): void {
+function applyBaseline(headers: Headers, config: ResolvedConfig, frameable: boolean): void {
   headers.set('X-Content-Type-Options', 'nosniff');
   // The same test the session cookie's `Secure` uses, so the two can never
   // disagree about whether the site is served over https.
   if (usesSecureCookies(config)) headers.set('Strict-Transport-Security', HSTS_VALUE);
   for (const [name, value] of Object.entries(config.securityHeaders)) {
+    if (frameable && name === 'x-frame-options') continue;
     if (!headers.has(name)) headers.set(name, value);
   }
 }

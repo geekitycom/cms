@@ -667,7 +667,7 @@ function metaContents(html: string, key: string): string[] {
   return [...html.matchAll(tag)].map((match) => match[1] ?? '');
 }
 
-/** Write an image of one size to an upload path, and derive its variants. */
+/** Write an image of one size to an upload path, and derive its variants so its size is recorded. */
 async function upload(cms: Cms, at: string, width: number, height: number): Promise<void> {
   const file = path.join(cms.config.contentDir, ...at.slice(1).split('/'));
   await mkdir(path.dirname(file), { recursive: true });

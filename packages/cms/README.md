@@ -2223,6 +2223,15 @@ name another host. A theme that signs readers in or takes payment through a
 popup on another origin needs `same-origin-allow-popups` for COOP. The CMS
 itself does neither.
 
+One response is framed elsewhere on purpose: the embed view at
+`/_geekity/embed?url=…`, the card that the oEmbed `html` frames so that
+WordPress keeps it. It sends a complete policy of its own instead of the
+default: `frame-ancestors *`, `default-src 'none'`, and its one inline style and
+one inline script by hash. It never sends `X-Frame-Options`, even one set in
+`securityHeaders`. It shows nothing from a session, so a signed-in user who is
+framed sees the same card as anyone else. Every other response keeps the
+framing headers above.
+
 A site changes them with `securityHeaders` in its config. Names are matched
 without regard to case. A string replaces a default or adds a header of the
 site's own, and `false` removes a default:
@@ -2365,6 +2374,7 @@ Booting mounts the public site on the app. The routes are:
 | `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                                     |
 | `/opensearch.xml`                       | The OpenSearch description, so a browser can offer the site's search from its address bar.                             |
 | `/_geekity/oembed?url=…`                | The oEmbed card of the post or page at `url`, as JSON or with `format=xml`; a 404 for anything else.                   |
+| `/_geekity/embed?url=…`                 | The same card as a page any site may frame, which the oEmbed `html` puts in an iframe; a 404 for anything else.        |
 | `/llms.txt`                             | The site's pages and recent posts for a language model, each linked to its Markdown. See [below](#llmstxt).            |
 | `/{key}.txt`                            | The IndexNow key, while the site has IndexNow on. See [below](#indexnow).                                              |
 | `/.well-known/security.txt`             | Where to report a vulnerability; a 404 until a security contact is set. See [above](#securitytxt-and-change-password). |
