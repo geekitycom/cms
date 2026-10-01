@@ -1,0 +1,34 @@
+{#
+  The kicker: what an entry is, said once, small, above it (doc-9). The kind
+  word first, then the date, then the categories, each after a middle dot the
+  screen reader skips.
+
+  Import it with the context, because the category links read the archive
+  base off `site`:
+
+    {% import "partials/kicker.njk" as kicker with context %}
+    {{ kicker.line("Note", post.date, post.url) }}
+
+  `kind` is the word printed: Article, Note or Reply for a post (its
+  `postType`, capitalised), Page for a page, and whatever names an archive or
+  an error page. `date` is the entry's `dt-published`, printed long. With
+  `href` the date is the entry's `u-url`, which is how a feed links an entry
+  that has no title to link; an entry with no date links `label` instead.
+  `categories` are printed as `p-category` links.
+#}
+{% macro line(kind, date=false, href=false, categories=[], label="") %}
+<p class="kicker">
+  <span class="kicker-kind">{{ kind }}</span>
+  {%- if href %}
+  <span class="kicker-dot" aria-hidden="true">·</span>
+  <a href="{{ href | url }}" class="u-url">{% if date %}<time class="feed-date dt-published" datetime="{{ date | date("iso") }}">{{ date | date }}</time>{% else %}{{ label }}{% endif %}</a>
+  {%- elif date %}
+  <span class="kicker-dot" aria-hidden="true">·</span>
+  <time class="feed-date dt-published" datetime="{{ date | date("iso") }}">{{ date | date }}</time>
+  {%- endif %}
+  {%- for category in categories %}
+  <span class="kicker-dot" aria-hidden="true">·</span>
+  <a href="{{ ("/" + (site.categoryBase or "category") + "/" + (category | urlencode) + "/") | url }}" class="p-category" rel="category">{{ category }}</a>
+  {%- endfor %}
+</p>
+{% endmacro %}

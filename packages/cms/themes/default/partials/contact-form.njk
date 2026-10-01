@@ -65,6 +65,8 @@
       <input id="contact-website" name="{{ contactForm.fields.trap }}" type="text" tabindex="-1" autocomplete="off" value="" />
     </div>
 
+    {#- Name and email side by side on a wide screen. -#}
+    <div class="field-row">
     <p class="contact-field">
       <label for="contact-name">Name</label>
       <input id="contact-name" name="{{ contactForm.fields.name }}" type="text" value="{{ contactForm.values.name }}" maxlength="{{ contactForm.nameLength }}" autocomplete="name" required{% if problems.name %} aria-invalid="true" aria-describedby="contact-name-error"{% endif %} />
@@ -81,6 +83,7 @@
       {% endif %}
       <span class="contact-hint">So there is somewhere to reply to. It is never shown on the site.</span>
     </p>
+    </div>
 
     <p class="contact-field">
       <label for="contact-subject">Subject <span class="contact-optional">(optional)</span></label>

@@ -13,6 +13,7 @@
   whoever the site is by, not by the person a front matter line names.
 #}
 {% extends "layouts/base.njk" %}
+{% import "partials/kicker.njk" as kicker with context %}
 
 {#- Who the bio credits, and what tells `layouts/base.njk` the site menu is in
     the bio rather than in the page footer. -#}
@@ -21,7 +22,8 @@
 {% block content %}
 {% set entryUrl = page.url or url %}
 <article class="blog-post h-entry">
-  <header>
+  <header class="post-header">
+    {{ kicker.line("Page") }}
     <h1 class="p-name">{{ title }}</h1>
   </header>
 
@@ -36,7 +38,7 @@
       <a href="{{ entryUrl | url }}" class="u-url"><time class="small dt-published" datetime="{{ date | date("iso") }}">Published {{ date | date }}</time></a>
       {%- endif %}
       {%- if updated and (not date or (updated | date("html")) != (date | date("html"))) %}
-      {% if date %}<br>{% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date }}</time>
+      {% if date %}<span aria-hidden="true">·</span> {% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date }}</time>
       {%- endif -%}
     </p>
   </section>

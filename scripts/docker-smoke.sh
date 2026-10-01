@@ -22,7 +22,11 @@
 # fills the empty content volume with the starter site. The container publishes
 # port 3000 on a free loopback port. It must answer GET /healthz with 200, and
 # GET / with the starter site in the packaged default theme, whose stylesheet
-# must be the bytes of packages/cms/themes/default/static/style.css. Any other
+# must be the bytes of the image's own themes/default/static/style.css. That
+# file is compiled by `pnpm build` inside the image and is not in the checkout
+# (decision-22), so it is read out of the image rather than off the disk; it
+# must also hold the theme's colour tokens, so an empty or stray file fails
+# too. Any other
 # outcome fails the run and prints the container's log. The container and the
 # volumes are removed however the run ends.
 #
@@ -35,7 +39,7 @@ readonly ROOT
 readonly PLATFORM="${GEEKITY_SMOKE_PLATFORM:-linux/amd64}"
 readonly PREFIX="${GEEKITY_SMOKE_PREFIX:-geekity-smoke}"
 readonly NAME="${PREFIX}-$$-${RANDOM}"
-readonly STYLE="${ROOT}/packages/cms/themes/default/static/style.css"
+readonly STYLE="/app/themes/default/static/style.css"
 
 # How long to wait for /healthz: 90 tries, a second apart. The image boots in a
 # couple of seconds; the rest is headroom for a slow runner.
@@ -162,8 +166,12 @@ for expected in 'Hello, world' 'href="/theme/style.css?v=' 'data-is-root-path'; 
 done
 echo "ok  GET /"
 
+docker run --rm --entrypoint cat "${image}" "${STYLE}" >"${scratch}/packaged.css" \
+  || fail "the image has no ${STYLE}"
+grep -qF -- '--color-body:' "${scratch}/packaged.css" \
+  || fail "${STYLE} in the image is not the default theme's compiled stylesheet"
 curl -fsS -o "${scratch}/style.css" "${base}/theme/style.css"
-if ! cmp -s "${STYLE}" "${scratch}/style.css"; then
-  fail "GET /theme/style.css is not packages/cms/themes/default/static/style.css"
+if ! cmp -s "${scratch}/packaged.css" "${scratch}/style.css"; then
+  fail "GET /theme/style.css is not ${STYLE} from the image"
 fi
 echo "ok  GET /theme/style.css is the default theme's stylesheet"

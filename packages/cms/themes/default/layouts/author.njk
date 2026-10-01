@@ -26,8 +26,10 @@
 {{ feeds.feedLinks(author.url, site.title + ": " + author.name) }}
 {% endblock %}
 
+{% import "partials/kicker.njk" as kicker with context %}
 {% block content %}
-<header class="author-header">
+<header class="author-header archive-header">
+  {{ kicker.line("Author") }}
   <h1 class="page-title">{{ author.name }}</h1>
 </header>
 {% include "partials/bio.njk" %}

@@ -3,7 +3,10 @@ packages:
   - 'apps/*'
 
 # esbuild ships a prebuilt binary that its postinstall script unpacks; tsx needs it.
+# @parcel/watcher is the Tailwind CLI's file watcher, used only by `--watch`,
+# which no script here passes; its prebuilt binaries need no install script.
 allowBuilds:
+  '@parcel/watcher': false
   esbuild: true
 
 # nunjucks names chokidar an optional peer, and only reaches for it when a

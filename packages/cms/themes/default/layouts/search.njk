@@ -20,6 +20,7 @@
     <meta name="robots" content="noindex">
 {% endblock %}
 
+{% import "partials/kicker.njk" as kicker with context %}
 {% block content %}
 <h1 class="page-title">Search</h1>
 {% include "partials/search-form.njk" %}
@@ -37,6 +38,7 @@
 <div class="search-results">
   {% for post in posts %}
   <article class="search-result h-entry">
+    {{ kicker.line(("Page" if post.type == "page" else post.postType) | capitalize, post.date) }}
     {#- A post with no name of its own has none to claim, so its first words
         link it without being marked up as one. -#}
     <h2 class="feed-title{% if post.named %} p-name{% endif %}">
@@ -44,11 +46,6 @@
     </h2>
     {% if post.snippet %}
     <p class="search-snippet">{{ post.snippet | safe }}</p>
-    {% endif %}
-    {% if post.date %}
-    <p class="feed-meta">
-      <time class="feed-date dt-published" datetime="{{ post.date | date("iso") }}">{{ post.date | date }}</time>
-    </p>
     {% endif %}
   </article>
   {% endfor %}

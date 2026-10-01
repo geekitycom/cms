@@ -9,6 +9,7 @@
 {{ feeds.feedLinks(categoryRoot, site.title + ": " + category) }}
 {% endblock %}
 
+{% import "partials/kicker.njk" as kicker with context %}
 {% block content %}
 {#
   The archive's header. `categoryDescription` is what the design prints under
@@ -16,8 +17,9 @@
   alone until something does — a site whose own context carries one gets it
   printed without overriding this layout.
 #}
-<header class="category-header">
-  <h1 class="page-title">Filed under &ldquo;{{ category }}&rdquo;</h1>
+<header class="category-header archive-header">
+  {{ kicker.line("Category") }}
+  <h1 class="page-title">{{ category }}</h1>
   {% if categoryDescription %}
   <div class="category-description">{{ categoryDescription }}</div>
   {% endif %}

@@ -114,7 +114,7 @@ describe('the front page a homepage is given (AC #1)', () => {
     const html = await body(cms, '/');
 
     assert.match(html, /The words of the about page\./, 'the page’s own body is the front page');
-    assert.match(html, /<h2>Recent Posts<\/h2>/, 'nothing heads the posts');
+    assert.match(html, /<h2 class="section-title">Recent Posts<\/h2>/, 'nothing heads the posts');
     assert.match(html, /<div class="feed h-feed">/, 'the posts are not an h-feed');
     assert.deepEqual(
       feedTitles(html),

@@ -1,16 +1,22 @@
 {#
-  One post, as the source design's `content-essay.php` draws it (decision-16,
-  TASK-83): `article.blog-post.h-entry`, the title as its `p-name`, the body
-  and the Published line together in one `section.e-content`, then a rule and a
-  footer holding the bio. The neighbouring posts, the conversation and the
-  comment form follow the entry.
+  One post, in the Paper design (doc-9): `article.blog-post.h-entry` opening on
+  a kicker that names its kind (Article, Note, Reply) and the categories it is
+  filed under.
+
+  An article, and a reply with a title, has the only headline: the title as its
+  `p-name` and the author's `description` under it as the deck, a
+  `p-summary`. A post with no title opens on its words, set larger. A reply
+  cites what it answers above its words, or above its header when it has one.
+  Then the Published line, the tags, a rule and the bio. The neighbouring posts,
+  the conversation and the comment form follow the entry.
 
   The Published line is inside the `e-content` on purpose. It is what the
-  source theme does, and it is what makes a reader who copies the words out
+  source design does, and it is what makes a reader who copies the words out
   take the date and the permalink with them.
 #}
 {% extends "layouts/base.njk" %}
 {% import "partials/tags.njk" as taxonomy with context %}
+{% import "partials/kicker.njk" as kicker with context %}
 
 {#- Who the bio credits: the person the file names, and otherwise whoever the
     site is by, which is what the source theme's bio reads. A post naming
@@ -29,8 +35,15 @@
       hidden from sight. It is no `p-name`: a parser would take that as a
       title and read the note as an article. -#}
   {% if named %}
-  <header>
+  {#- A reply cites the post it answers, whose URL is also the link its
+      webmention points a receiver at. -#}
+  {% include "partials/reply-context.njk" %}
+  <header class="post-header">
+    {{ kicker.line(postType | capitalize, false, false, categories) }}
     <h1 class="p-name">{{ title }}</h1>
+    {% if description %}
+    <p class="post-deck p-summary">{{ description }}</p>
+    {% endif %}
   </header>
   {% else %}
   <h1 class="screen-reader-text">
@@ -38,11 +51,9 @@
     {%- if bioAuthor.name %} by {{ bioAuthor.name }}{% endif %}
     {%- if date %}, {{ date | date }}{% endif -%}
   </h1>
-  {% endif %}
-
-  {#- A reply cites the post it answers, whose URL is also the link its
-      webmention points a receiver at. -#}
+  {{ kicker.line(postType | capitalize, false, false, categories) }}
   {% include "partials/reply-context.njk" %}
+  {% endif %}
 
   <section class="e-content">
     {{ content | safe }}
@@ -58,16 +69,14 @@
       {#- Updated only when it is a different day in the site's own timezone:
           a typo fixed an hour after publishing is not news. -#}
       {%- if updated and (not date or (updated | date("html")) != (date | date("html"))) %}
-      {% if date %}<br>{% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date }}</time>
+      {% if date %}<span aria-hidden="true">·</span> {% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date }}</time>
       {%- endif -%}
     </p>
   </section>
 
-  {# What it is filed under, inside the entry so that each link is a
-     `p-category` of it: the categories first, then the tags. #}
-  {{ taxonomy.categories(categories) }}
+  {# The tags, inside the entry so that each link is a `p-category` of it. The
+     categories are in the kicker. #}
   {{ taxonomy.list(tags) }}
-
   {#- The rule and the footer are the bio's own: a post nobody is credited with
       ends at its words rather than at an empty box. -#}
   {% if bioAuthor %}
@@ -78,17 +87,17 @@
   {% endif %}
 </article>
 
-{# The post either side of this one. Each is on the context only when there is
-   one, so the ends of the archive draw one arrow and a site of a single post
-   draws none. #}
+{# The post either side of this one, as two cards. Each is on the context only
+   when there is one, so the ends of the archive draw one card and a site of a
+   single post draws none. #}
 {% if previous or next %}
-<nav class="blog-post-nav">
+<nav class="blog-post-nav" aria-label="Neighbouring posts">
   <ul>
     {% if previous %}
-    <li><a rel="prev" href="{{ previous.url | url }}">&larr; {{ previous.title }}</a></li>
+    <li><a rel="prev" href="{{ previous.url | url }}"><span class="blog-post-nav-label">Previous</span> {{ previous.title }}</a></li>
     {% endif %}
     {% if next %}
-    <li><a rel="next" href="{{ next.url | url }}">{{ next.title }} &rarr;</a></li>
+    <li><a rel="next" href="{{ next.url | url }}"><span class="blog-post-nav-label">Next</span> {{ next.title }}</a></li>
     {% endif %}
   </ul>
 </nav>

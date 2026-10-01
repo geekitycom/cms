@@ -30,6 +30,8 @@ packages/cms/          published as @geekity/cms
     layouts/           the chrome a page extends: base, shell, settings-page
     components/        what a page imports or includes: field macros, the flash
   themes/default/      default theme, shipped inside the package
+    src/style.css      its stylesheet's Tailwind source; static/style.css is
+                       the compiled output, gitignored
   templates/site/      files `geekity init` copies into a new site
   dist/                tsc output (JS + .d.ts), gitignored
 apps/demo/             private site that consumes the package via workspace:*
@@ -70,7 +72,7 @@ Run from the repository root.
 | `pnpm install`           | Installs both workspace packages and links `apps/demo` to `packages/cms`.   |
 | `pnpm dev`               | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`).           |
 | `pnpm start`             | Starts the demo site once, without watching.                                |
-| `pnpm build`             | Compiles `packages/cms` to `dist/` and bundles the admin editor.            |
+| `pnpm build`             | Compiles `packages/cms`, bundles the editor and the default theme's CSS.    |
 | `pnpm test`              | Runs the `node:test` suites in every package through `tsx`.                 |
 | `pnpm test:coverage`     | The same suites with `--experimental-test-coverage`.                        |
 | `pnpm test:11ty`         | Builds the fixtures and the demo content with Eleventy, comparing URLs.     |
@@ -1220,11 +1222,16 @@ Templates are Nunjucks (decision-4). The default theme lives in
 `packages/cms/themes/default` and ships inside the package: `layouts/` for the
 base layout, home, post, page, tag archive and 404; `partials/` for the post
 list, the pager, the bio and the tag macros; `static/style.css`, served at
-`/theme/style.css`. It is plain CSS with no build step.
+`/theme/style.css`. That stylesheet is compiled from `src/style.css` with
+Tailwind v4 by `pnpm build` (decision-22): a build product, gitignored and
+shipped in the package, and one plain CSS file to a reader, with no script,
+web font or CDN behind it. `pnpm --filter @geekity/cms build:theme` recompiles
+it alone, and the package's `pretest` does so before its suites read it.
 
-It is the andrewshell.org design (decision-16): a serif body and sans headings
-at an 18px root, warm paper, a rust primary and a blue secondary, one column at
-42rem, links that invert on hover. `layouts/base.njk` is the shell — the skip
+It is the Paper design (doc-9) on the andrewshell.org shell (decision-16): one
+warm column at 42rem, serif throughout with sans for small labels, and a
+kicker above every entry naming its kind, so an article is the only thing with
+a headline and a note or a reply is its words. `layouts/base.njk` is the shell — the skip
 link, a `.global-wrapper` that says when it is at `/`, a header that is the
 site title and tagline on the front page and a small link home everywhere else,
 and a footer with the copyright, the colophon and `menus.footer`. The header
@@ -1234,11 +1241,12 @@ place whatever they are reading. The bio under an entry carries the person it
 is by and nothing else, and the footer links what a site typed into its footer
 menu rather than anything read off an account.
 Webrings, badges and anything else particular to one site are not in the
-package: they go in a site theme's `footer` block. The source design is light only; the theme adds a dark
-scheme under `prefers-color-scheme: dark`, and
-`packages/cms/src/web/theme-colors.test.ts` reads the custom properties out of
-the stylesheet and proves every text and background pair in both schemes meets
-WCAG 2.2 AA, so a colour change that breaks one fails the build.
+package: they go in a site theme's `footer` block. Dark mode follows the
+system under `prefers-color-scheme: dark`, and
+`packages/cms/src/web/theme-colors.test.ts` reads the `--color-*` custom
+properties out of the compiled stylesheet and proves every run of text in both
+schemes meets 7:1 and every border a reader relies on meets 3:1, so a colour
+change that breaks one fails the build.
 
 A site keeps its own themes under `themes/` — `themesDir` in the config,
 `GEEKITY_THEMES_DIR` at boot — one directory per theme with a `theme.json` in

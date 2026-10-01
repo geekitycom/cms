@@ -462,7 +462,7 @@ describe('an approved quote on the quoted post’s page (TASK-171)', () => {
     const group = mentions(await page(instance));
 
     assert.ok(group !== undefined, 'the page has a Mentions group');
-    assert.match(group, /Mentions \(1\)/);
+    assert.match(group, /Mentions <span class="reaction-count">1<\/span>/);
     assert.ok(group.includes(`href="${REMOTE_ORIGIN}/@bea/42"`), 'linking to the quote');
     assert.ok(group.includes('@bea@mastodon.example'), 'under its author');
   });

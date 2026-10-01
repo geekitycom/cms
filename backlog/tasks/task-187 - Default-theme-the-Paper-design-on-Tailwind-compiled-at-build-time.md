@@ -1,10 +1,11 @@
 ---
 id: TASK-187
 title: 'Default theme: the Paper design, on Tailwind compiled at build time'
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@claude'
 created_date: '2026-09-30 21:01'
-updated_date: '2026-09-30 21:26'
+updated_date: '2026-09-30 23:44'
 labels:
   - theme
   - design
@@ -65,15 +66,51 @@ Related but separate: TASK-186 (the comments heading quoting an empty title on a
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every page the default theme renders (home and posts listings, front page, article, untitled note, untitled and titled reply, page, search, tag/category/author archives, archive page, 404/500/503, pagination, conversation, comment and contact forms) is drawn in the Paper design as doc-9 specifies, and the six mocked pages match `shots/paper-*.png` at 1280 and 390 wide in light and dark
-- [ ] #2 A feed item and a post page say their kind: an article has the only headline, a note or reply opens on its words under a kicker naming the kind and date, a reply cites its target in the citation block with `u-in-reply-to h-cite`, and an untitled post keeps its screen-reader-only h1 and carries no `p-name`
-- [ ] #3 Every mf2 property the theme emits today (h-feed, h-entry, p-name, p-summary, e-content, dt-published, dt-updated, u-url, p-category, p-author h-card, rel=me, h-cite) is still emitted on the same elements, proven by the existing markup tests passing or being changed deliberately
-- [ ] #4 `static/style.css` is compiled from a Tailwind v4 source in the theme by `pnpm build`, is gitignored, ships in the package, and no page loads a script, a web font or a CDN resource it did not load before
-- [ ] #5 The .hljs-* rules and Tomorrow palettes are carried over and highlight.js still loads only on a page with a code block
-- [ ] #6 The demo site on its own theme (`apps/demo/themes/demo`) still renders coherently, including any class the packaged templates gained, and its tests and the Eleventy build test pass
-- [ ] #7 The theme README, the package README, the root README and the theme file tree describe the source stylesheet, the build step and the token contract; a decision is recorded superseding the plain-CSS part of decision-16
-- [ ] #8 `pnpm build`, `pnpm test`, `pnpm typecheck`, `pnpm lint` and `pnpm format:check` pass
-- [ ] #9 `theme-colors.test.ts` passes with the `--color-*` token names kept, Paper values, and the new tokens and pairs added, at the checklist thresholds: every text pair at 7:1 (AAA) in both schemes, every relied-on border (fields, cards, code blocks, focus outline, citation and blockquote rules) at 3:1, no text or meaningful border drawn at reduced opacity
-- [ ] #10 `theme-stylesheet.test.ts` passes on the compiled stylesheet: logical properties only, scrollbar-gutter, text-wrap, 24px targets, a forced-colors block, no focus outline removed
-- [ ] #11 An automated accessibility checker (axe or Lighthouse) over the demo pages on the default theme reports no failures in the Accessibility section of https://specification.website/checklist.md that the theme controls: contrast, alt text, form labels, focus indicators, skip link, landmarks, link text, document language, reduced motion, touch targets
+- [x] #1 Every page the default theme renders (home and posts listings, front page, article, untitled note, untitled and titled reply, page, search, tag/category/author archives, archive page, 404/500/503, pagination, conversation, comment and contact forms) is drawn in the Paper design as doc-9 specifies, and the six mocked pages match `shots/paper-*.png` at 1280 and 390 wide in light and dark
+- [x] #2 A feed item and a post page say their kind: an article has the only headline, a note or reply opens on its words under a kicker naming the kind and date, a reply cites its target in the citation block with `u-in-reply-to h-cite`, and an untitled post keeps its screen-reader-only h1 and carries no `p-name`
+- [x] #3 Every mf2 property the theme emits today (h-feed, h-entry, p-name, p-summary, e-content, dt-published, dt-updated, u-url, p-category, p-author h-card, rel=me, h-cite) is still emitted on the same elements, proven by the existing markup tests passing or being changed deliberately
+- [x] #4 `static/style.css` is compiled from a Tailwind v4 source in the theme by `pnpm build`, is gitignored, ships in the package, and no page loads a script, a web font or a CDN resource it did not load before
+- [x] #5 The .hljs-* rules and Tomorrow palettes are carried over and highlight.js still loads only on a page with a code block
+- [x] #6 The demo site on its own theme (`apps/demo/themes/demo`) still renders coherently, including any class the packaged templates gained, and its tests and the Eleventy build test pass
+- [x] #7 The theme README, the package README, the root README and the theme file tree describe the source stylesheet, the build step and the token contract; a decision is recorded superseding the plain-CSS part of decision-16
+- [x] #8 `pnpm build`, `pnpm test`, `pnpm typecheck`, `pnpm lint` and `pnpm format:check` pass
+- [x] #9 `theme-colors.test.ts` passes with the `--color-*` token names kept, Paper values, and the new tokens and pairs added, at the checklist thresholds: every text pair at 7:1 (AAA) in both schemes, every relied-on border (fields, cards, code blocks, focus outline, citation and blockquote rules) at 3:1, no text or meaningful border drawn at reduced opacity
+- [x] #10 `theme-stylesheet.test.ts` passes on the compiled stylesheet: logical properties only, scrollbar-gutter, text-wrap, 24px targets, a forced-colors block, no focus outline removed
+- [x] #11 An automated accessibility checker (axe or Lighthouse) over the demo pages on the default theme reports no failures in the Accessibility section of https://specification.website/checklist.md that the theme controls: contrast, alt text, form labels, focus indicators, skip link, landmarks, link text, document language, reduced motion, touch targets
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Add tailwindcss + @tailwindcss/cli as devDependencies of @geekity/cms; add build:theme (tailwindcss --optimize, unminified so tests can read it) to pnpm build and as pretest; gitignore and prettierignore themes/default/static/style.css.
+2. Write themes/default/src/style.css: --color-* tokens on :root and the dark query with doc-9 values plus muted/rule/edge; @theme inline mapping paper/ink/muted/accent/accent-2/rule/edge/surface; target and quiet-link utilities (target in literal 24px logical sizes); base, components on the existing class names plus kicker/cite/post-deck; hljs rules and Tomorrow palettes carried over; forced-colors block.
+3. Templates: kicker on feed items and entries, citation block in reply-context.njk, post-deck, previous/next cards, conversation and forms restyled with classes added not renamed; listing entries gain replyContext so a feed reply cites its target.
+4. Tests: theme-colors reads the token :root, AAA/3:1 pairs table; theme-stylesheet parser walks @layer/@supports; markup tests changed deliberately where the design changes them.
+5. Demo stylesheet styles new classes; docs (theme README, package README, root README) and a decision superseding decision-16's plain-CSS part.
+6. Prove: Playwright screenshots 1280/390 light/dark vs shots/paper-*.png, axe over demo pages; pnpm build/test/typecheck/lint/format:check.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Decisions and deviations from doc-9:
+- Tailwind theme is `@theme inline reference` with the default palette cleared: plain `inline` emitted `--color-muted: var(--color-muted)` in the theme layer, a self-reference that only worked because the unlayered token won.
+- Compiled with `--optimize`, not `--minify`: markup tests read declarations textually. `build:theme` also runs as `pretest`/`pretest:coverage`.
+- Highlighter tokens raised to 7:1 (doc-9 said 4.5): axe's AAA rule flagged them, and the task's bar is every run of text at 7:1. Light palette darkened along each hue, four dark colours lightened toward white.
+- `--color-error` darkened to #9c1f18 / lifted to #ff8f9f to reach 7:1.
+- Feed categories are printed in the kicker for articles only, as doc-9 says; a note's categories stay on its page.
+- Short dates (24 Sep 2026) not added: the date filter has no such format and adding one widens the filter contract and the Eleventy plugin. Citations and comments use the long form.
+- Listing entries now carry `replyContext` (render.ts entryContext) so a feed reply cites its target; tested in reply-context.test.ts, mutation-checked.
+- Published line stays inside e-content (decision-16 rationale); the Updated line follows a middle dot instead of <br>.
+- Thread title is "N replies" with no quoted title, which fixes TASK-186 in passing.
+- TASK-111 page-shell link tests rewritten to Paper's contract (underlined at rest, 24px, hover changes thickness, secondary focus ring).
+- Demo theme: its stylesheet targeted .site-header/.skip-link, which the packaged shell no longer prints, and never hid the honeypot; retargeted at the packaged class names and added conversation/form rules.
+- Scanning layouts/partials emits a few stray utilities from words in template comments (.block, .hidden, .static, .fixed...). Harmless; kept because the task asked for @source on the theme.
+Verification: Playwright screenshots of 14 pages at 1280/390 light/dark, compared by eye with shots/paper-*.png; axe (wcag2a/aa/21/22aa/2aaa/best-practice) reports 0 violations; target sweep at 390 leaves only in-sentence links; typecheck, lint, test:11ty pass; tarball ships src/ and static/style.css.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Restyled the default theme as Paper (doc-9) on a Tailwind v4 stylesheet compiled at build time (decision-22). src/style.css compiles to the gitignored static/style.css in pnpm build and pretest; templates gain kicker, citation, deck, card and form-row markup with every block, partial, context key and mf2 property kept; listing entries carry replyContext so a feed reply cites its target. Colour tokens keep their names with Paper values plus muted/rule/edge, every text pair at 7:1 (highlighter included) and relied-on borders at 3:1. Verified: pnpm test 2671+31 pass, test:11ty, typecheck, lint, format:check (only the git-ignored _local mockups warn); Playwright screenshots of 14 pages at 1280/390 light/dark compared with shots/paper-*.png; axe 0 violations; tarball ships both stylesheets; demo theme screenshots coherent.
+<!-- SECTION:FINAL_SUMMARY:END -->

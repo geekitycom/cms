@@ -787,8 +787,14 @@ describe('the conversation under a post', () => {
 
     const html = await (await cms.app.request('/2026/09/hello/')).text();
 
-    assert.ok(html.includes('Likes (2)'), 'the likes are counted');
-    assert.ok(html.includes('Boosts (1)'), 'the boosts are counted');
+    assert.ok(
+      html.includes('Likes <span class="reaction-count">2</span>'),
+      'the likes are counted',
+    );
+    assert.ok(
+      html.includes('Boosts <span class="reaction-count">1</span>'),
+      'the boosts are counted',
+    );
     assert.ok(html.includes('<div class="facepile">'), 'the actors are a facepile');
     assert.ok(html.includes('@ada@remote.example'), 'the first liker is listed');
     assert.ok(html.includes('@cal@remote.example'), 'the booster is listed');

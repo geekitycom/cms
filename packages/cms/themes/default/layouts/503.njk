@@ -1,7 +1,9 @@
 {% extends "layouts/base.njk" %}
+{% import "partials/kicker.njk" as kicker with context %}
 
 {% block content %}
 <article class="maintenance">
+  {{ kicker.line("Maintenance") }}
   <h1 class="page-title">Down for maintenance.</h1>
   <p>This site is down for maintenance and will be back shortly.{% if until %} It should be back by <time datetime="{{ until }}">{{ untilText }}</time>.{% endif %} Please try again then.</p>
 </article>

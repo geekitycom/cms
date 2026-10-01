@@ -8,6 +8,10 @@ _site/
 # The admin editor's bundle, written by `pnpm build` from packages/cms/editor/
 packages/cms/admin/static/editor.js
 
+# The default theme's stylesheet, compiled by `pnpm build` from
+# packages/cms/themes/default/src/style.css with Tailwind
+packages/cms/themes/default/static/style.css
+
 # SQLite index and other derived state, including data/images/ — the image
 # variants sharp derives from the originals under content/uploads/.
 # data/users.json and data/keys/ are the exceptions: the password hashes and

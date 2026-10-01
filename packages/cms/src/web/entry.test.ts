@@ -157,7 +157,11 @@ describe('the entry (AC #1)', () => {
     const html = await body(await site(), '/2026/09/hello/');
 
     assert.match(html, /<article class="blog-post h-entry">/, 'not the source design’s article');
-    assert.match(entry(html), /<header>\s*<h1 class="p-name">Hello<\/h1>\s*<\/header>/);
+    assert.match(
+      entry(html),
+      /<header class="post-header">[\s\S]*?<p class="kicker">\s*<span class="kicker-kind">Article<\/span>[\s\S]*?<\/p>\s*<h1 class="p-name">Hello<\/h1>/,
+      'the title is not a p-name under a kicker naming the kind',
+    );
   });
 
   it('puts the body and the Published line in one section.e-content', async () => {
@@ -411,18 +415,21 @@ describe('the IndieNews link (AC #3)', () => {
 });
 
 describe('the neighbouring posts (AC #4)', () => {
-  it('links the post either side of this one, with arrows', async () => {
+  it('links the post either side of this one, each card labelled', async () => {
     const html = await body(await site(), '/2026/09/hello/');
-    const nav = /<nav class="blog-post-nav">([\s\S]*?)<\/nav>/.exec(html)?.[1] ?? '';
+    const nav =
+      /<nav class="blog-post-nav" aria-label="Neighbouring posts">([\s\S]*?)<\/nav>/.exec(
+        html,
+      )?.[1] ?? '';
 
     assert.match(
       nav,
-      /<a rel="prev" href="\/2026\/09\/older\/">&larr; The older one<\/a>/,
+      /<a rel="prev" href="\/2026\/09\/older\/"><span class="blog-post-nav-label">Previous<\/span> The older one<\/a>/,
       'no previous link',
     );
     assert.match(
       nav,
-      /<a rel="next" href="\/2026\/09\/newer\/">The newer one &rarr;<\/a>/,
+      /<a rel="next" href="\/2026\/09\/newer\/"><span class="blog-post-nav-label">Next<\/span> The newer one<\/a>/,
       'no next link',
     );
   });
@@ -441,20 +448,21 @@ describe('the neighbouring posts (AC #4)', () => {
 });
 
 describe('categories and tags under the entry (AC #5)', () => {
-  it('prints both as post-categories of p-category links, categories first', async () => {
+  it('prints the categories in the kicker and the tags under the words, all p-category', async () => {
     const inside = entry(await body(await site(), '/2026/09/hello/'));
+    const kicker = /<p class="kicker">([\s\S]*?)<\/p>/.exec(inside)?.[1] ?? '';
     const printed = [...inside.matchAll(/<p class="post-categories">([\s\S]*?)<\/p>/g)].map(
       (match) => match[1] ?? '',
     );
 
-    assert.equal(printed.length, 2, 'not one paragraph of categories and one of tags');
+    assert.match(
+      kicker,
+      /<a href="\/category\/notes\/" class="p-category" rel="category">notes<\/a>/,
+      'the categories are not in the kicker',
+    );
+    assert.equal(printed.length, 1, 'not one paragraph of tags');
     assert.match(
       printed[0] ?? '',
-      /<a href="\/category\/notes\/" class="p-category" rel="category">notes<\/a>/,
-      'the categories are not first',
-    );
-    assert.match(
-      printed[1] ?? '',
       /<a href="\/tag\/indienews\/" class="p-category" rel="tag">indienews<\/a>/,
       'the tags are not p-category links',
     );

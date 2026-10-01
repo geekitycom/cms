@@ -1,0 +1,1095 @@
+/*
+ * The default theme's stylesheet: Paper (doc-9, decision-22).
+ *
+ * The source. `pnpm build` compiles it with Tailwind v4 to `static/style.css`,
+ * which is what a page loads and what the package ships; that file is a build
+ * product and gitignored. Nothing about Tailwind reaches a reader: no script,
+ * no CDN, no web font, one stylesheet.
+ *
+ * One warm column at 42rem, serif throughout, sans reserved for small labels.
+ * Only an article has a headline; every other kind of post is its words under
+ * a small-caps kicker that names the kind. Dark mode follows the system.
+ *
+ * The look lives here, on the theme's semantic class names, through `@apply`:
+ * the templates carry no utility classes, so a site theme that has CSS for the
+ * class names keeps working, and one that wants to restyle a single thing
+ * overrides a custom property or a class.
+ *
+ * The `--color-*` custom properties below are the override contract (see the
+ * theme README, "Colours"). `src/web/theme-colors.test.ts` reads them out of
+ * the compiled file and computes the WCAG 2.2 ratio of every pair the design
+ * puts on screen: every run of text at 7:1, every border a reader relies on at
+ * 3:1, in both schemes. `--color-rule` is the one exception, a decorative
+ * hairline nothing a reader needs is drawn with.
+ */
+@import 'tailwindcss' source(none);
+@source '../layouts';
+@source '../partials';
+
+:root {
+  /* Light and dark are both drawn below, so a browser may paint its own form
+     controls, scrollbars and spellcheck marks to match. */
+  color-scheme: light dark;
+
+  /* `body` is the paper and `text` the ink. `muted` is every small line of
+     sans and every quote; `primary` is links, the kind a kicker names and the
+     citation rule; `secondary` is tags and the focus outline. `rule` is a
+     decorative hairline and `edge` is a border somebody relies on to find a
+     field or a card. `base` is the sunk surface of a field or a code block;
+     `base-2` and `base-3` are the cooler and the raised ones. */
+  --color-body: #faf7f2;
+  --color-text: #1c1917;
+  --color-muted: #534c46;
+  --color-primary: #8c2f1f;
+  --color-secondary: #2b5580;
+  --color-rule: #e4dccf;
+  --color-edge: #8a867e;
+  --color-base: #f3eee5;
+  --color-base-2: #f5f6f7;
+  --color-base-3: #ffffff;
+  --color-code-background: #f3eee5;
+  --color-code-text: #1c1917;
+  --color-error: #9c1f18;
+
+  /* Syntax highlighting: the Tomorrow palette, light member (TASK-86). The
+     names are what each colour marks up, and the base16 slot they come from is
+     in the comment; the highlighter is highlight.js, whose base16 Tomorrow
+     theme is the mapping these follow.
+
+     None of them is the stock colour. Tomorrow was drawn for an editor, where
+     a faint comment is a feature; here code is text like any other and meets
+     7:1 on the block, so each colour was darkened along its own hue until it
+     did and no further. */
+  --color-code-comment: #4e4f4d; /* base03, stock #8e908c */
+  --color-code-tag: #4e4f4e; /* base04, stock #969896 */
+  --color-code-name: #991f1f; /* base08, stock #c82829 */
+  --color-code-literal: #77420f; /* base09, stock #f5871f */
+  --color-code-class: #624c00; /* base0A, stock #eab700 */
+  --color-code-string: #455500; /* base0B, stock #718c00 */
+  --color-code-support: #23565a; /* base0C, stock #3e999f */
+  --color-code-function: #2f507c; /* base0D, stock #4271ae */
+  --color-code-keyword: #63417a; /* base0E, stock #8959a8 */
+  --color-code-meta: #6d453c; /* base0F, stock #a3685a */
+  --color-code-added-background: #dcedd3;
+  --color-code-removed-background: #f5d8d6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-body: #171412;
+    --color-text: #ece6de;
+    --color-muted: #b2aaa0;
+    --color-primary: #ee9370;
+    --color-secondary: #86b8e2;
+    --color-rule: #3a332e;
+    --color-edge: #706a67;
+    --color-base: #221d1a;
+    --color-base-2: #222124;
+    --color-base-3: #2d2421;
+    --color-code-background: #221d1a;
+    --color-code-text: #ece6de;
+    --color-error: #ff8f9f;
+
+    /* The other member of the family, Tomorrow Night, the palette highlight.js
+       ships under that name. Four of its colours were lightened toward white,
+       each until it met 7:1 on the block. */
+    --color-code-comment: #a9a9a9; /* base03, stock #999999 */
+    --color-code-tag: #b4b7b4; /* base04 */
+    --color-code-name: #f48b8d; /* base08, stock #f2777a */
+    --color-code-literal: #f99157; /* base09 */
+    --color-code-class: #ffcc66; /* base0A */
+    --color-code-string: #99cc99; /* base0B */
+    --color-code-support: #66cccc; /* base0C */
+    --color-code-function: #83add6; /* base0D, stock #6699cc */
+    --color-code-keyword: #cc99cc; /* base0E */
+    --color-code-meta: #c6a198; /* base0F, stock #a3685a */
+    --color-code-added-background: #203622;
+    --color-code-removed-background: #401e1e;
+  }
+}
+
+/* Tailwind's utilities, drawn from the tokens above rather than its own
+   palette, which is cleared so a utility can only name a colour of this
+   design. `inline` puts the `var()` in the utility, so the scheme the custom
+   properties flip under flips every utility with them. */
+@theme inline reference {
+  --color-*: initial;
+  --color-paper: var(--color-body);
+  --color-ink: var(--color-text);
+  --color-muted: var(--color-muted);
+  --color-accent: var(--color-primary);
+  --color-accent-2: var(--color-secondary);
+  --color-rule: var(--color-rule);
+  --color-edge: var(--color-edge);
+  --color-surface: var(--color-base);
+  --color-code: var(--color-code-background);
+  --color-error: var(--color-error);
+  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+}
+
+/* A link or control that stands on its own, rather than inside a sentence, is
+   at least 24 by 24 CSS pixels (WCAG 2.5.8, TASK-145). `inline-flex` grows the
+   box without moving the words off the baseline they share with their line.
+   Pixels rather than a spacing step, because 24px is the rule's number and the
+   root here is 18px. */
+@utility target {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  min-inline-size: 24px;
+}
+
+/* A link outside prose still says it is a link at rest, with a thin underline
+   in its own colour; hover and focus thicken it and turn it accent, so the
+   change is never colour alone (WCAG 1.4.1). */
+@utility quiet-link {
+  @apply underline decoration-current/50 decoration-1 underline-offset-4 hover:text-accent hover:decoration-accent hover:decoration-2 focus-visible:decoration-2;
+}
+
+@layer base {
+  /* `scrollbar-gutter` keeps the scrollbar's room whether or not the page is
+     long enough to scroll, so moving between a short page and a long one does
+     not shift the column sideways. */
+  html {
+    font-size: 18px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    @apply bg-paper font-serif leading-relaxed text-ink antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-bold tracking-tight;
+    text-wrap: balance;
+  }
+
+  /* Prose wraps `pretty`, which keeps a paragraph from ending on one short
+     word; headings wrap `balance`, which evens their lines out. */
+  p,
+  li,
+  dd,
+  blockquote,
+  figcaption {
+    text-wrap: pretty;
+  }
+
+  a {
+    @apply text-accent underline decoration-accent/40 underline-offset-[3px] motion-safe:transition-colors;
+  }
+
+  a:hover {
+    @apply decoration-accent;
+  }
+
+  /* One focus ring for everything that takes focus: a link, a control, a code
+     block that scrolls. Nothing here removes it, and a forced palette redraws
+     an outline in its own colour. */
+  :focus-visible {
+    @apply rounded-xs outline-2 outline-offset-2 outline-accent-2;
+  }
+
+  hr {
+    @apply my-10 border-0 border-t border-rule;
+  }
+
+  ::selection {
+    @apply bg-accent/20;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    @apply font-mono;
+  }
+
+  strong,
+  b {
+    @apply font-bold;
+  }
+}
+
+@layer components {
+  /* Screen reader text. The skip link is this until it is focused, and then it
+     is a box at the top of the page. */
+  .screen-reader-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .screen-reader-text:focus {
+    @apply z-50 m-0 block h-auto w-auto bg-(--color-base-3) p-4 font-sans font-bold text-ink no-underline;
+    inset-block-start: 0.5rem;
+    inset-inline-start: 0.5rem;
+    clip-path: none;
+  }
+
+  /* The page shell. One wrapper at the measure; nothing is full-bleed. */
+  .global-wrapper {
+    @apply mx-auto max-w-2xl px-5 pt-8 pb-16 sm:px-6;
+  }
+
+  /* The header is two shapes. At the root: the site title, the tagline and
+     the site menu as a line of its own under a hairline. Everywhere else: the
+     small link home with the menu beside it on one line. */
+  .global-header {
+    @apply mb-12;
+  }
+
+  .global-wrapper:not([data-is-root-path='true']) .global-header {
+    display: flex;
+    @apply flex-wrap items-baseline gap-x-6 gap-y-2;
+  }
+
+  .global-wrapper[data-is-root-path='true'] .global-header {
+    @apply mb-14;
+  }
+
+  .main-heading {
+    @apply text-4xl leading-none sm:text-5xl;
+  }
+
+  .main-heading a,
+  .header-link-home {
+    @apply text-ink no-underline hover:text-accent hover:underline hover:decoration-2 hover:underline-offset-[6px] focus-visible:underline focus-visible:decoration-2;
+  }
+
+  .header-link-home {
+    @apply target text-lg font-bold;
+  }
+
+  .site-tagline {
+    @apply mt-3 text-lg text-muted italic;
+  }
+
+  .hlist {
+    @apply flex list-none flex-wrap p-0;
+  }
+
+  .site-nav ul {
+    @apply gap-x-5 gap-y-1 font-sans text-[0.78rem] tracking-[0.12em] uppercase;
+  }
+
+  .site-nav a {
+    @apply target quiet-link text-muted;
+  }
+
+  .site-nav a[aria-current='page'] {
+    @apply font-semibold text-ink;
+  }
+
+  .global-wrapper[data-is-root-path='true'] .global-header .site-nav {
+    @apply mt-6 border-t border-rule pt-4;
+  }
+
+  /* The footer: the copyright and the colophon on one side, the footer menu
+     on the other, wrapping on a narrow screen. */
+  .global-wrapper > footer {
+    @apply mt-20 flex flex-wrap items-center justify-between gap-4 border-t border-rule pt-6 font-sans text-sm text-muted;
+  }
+
+  .global-wrapper > footer .site-nav ul {
+    @apply gap-x-4 text-sm tracking-normal normal-case;
+  }
+
+  /* The kicker: what a thing is, said once, small, above it. The kind word is
+     the accent; the date and the categories after it are quiet links. */
+  .kicker {
+    @apply mb-2 flex flex-wrap items-center gap-x-2 font-sans text-[0.72rem] tracking-[0.14em] text-muted uppercase;
+  }
+
+  .kicker a {
+    @apply target quiet-link text-muted;
+  }
+
+  .kicker-kind {
+    @apply font-semibold text-accent;
+  }
+
+  /* Titles: what heads a listing, an archive, search and an error page. */
+  .page-title {
+    @apply mt-1 mb-8 text-4xl leading-[1.08] sm:text-[2.75rem];
+  }
+
+  .section-title {
+    @apply mt-14 mb-6 font-sans text-[0.72rem] font-semibold tracking-[0.14em] text-muted uppercase;
+  }
+
+  .empty {
+    @apply text-muted italic;
+  }
+
+  /* Prose: whatever a document's words render into. The entry's `e-content`,
+     a posts page's and a front page's `page-body`, a note in a feed, a
+     comment. Each context sets its own size; these are the shapes. */
+  .e-content > * + *,
+  .page-body > * + * {
+    @apply mt-5;
+  }
+
+  :is(.e-content, .page-body) :is(h2, h3, h4, h5, h6) {
+    @apply mb-3;
+  }
+
+  :is(.e-content, .page-body) h2 {
+    @apply mt-10 text-2xl;
+  }
+
+  :is(.e-content, .page-body) h3 {
+    @apply mt-8 text-xl;
+  }
+
+  :is(.e-content, .page-body) :is(h4, h5, h6) {
+    @apply mt-6 text-lg;
+  }
+
+  :is(.e-content, .page-body) ul {
+    @apply list-disc ps-6;
+  }
+
+  :is(.e-content, .page-body) ol {
+    @apply list-decimal ps-6;
+  }
+
+  :is(.e-content, .page-body) li + li,
+  :is(.e-content, .page-body) li > :is(ul, ol) {
+    @apply mt-2;
+  }
+
+  :is(.e-content, .page-body) li > p + p {
+    @apply mt-2;
+  }
+
+  :is(.e-content, .page-body) blockquote {
+    @apply my-8 border-s-2 border-accent ps-5 text-xl leading-snug text-muted italic;
+  }
+
+  :is(.e-content, .page-body) blockquote > * + * {
+    @apply mt-3;
+  }
+
+  :is(.e-content, .page-body) img,
+  :is(.e-content, .page-body) video {
+    @apply h-auto max-w-full rounded-md;
+  }
+
+  :is(.e-content, .page-body) figcaption {
+    @apply mt-2 font-sans text-sm text-muted;
+  }
+
+  :is(.e-content, .page-body) hr {
+    @apply my-10;
+  }
+
+  :is(.e-content, .page-body) table {
+    @apply w-full border-collapse font-sans text-sm;
+  }
+
+  :is(.e-content, .page-body) :is(th, td) {
+    @apply border-b border-rule px-2 py-1.5 text-start align-top;
+  }
+
+  :is(.e-content, .page-body) th {
+    @apply border-edge font-semibold;
+  }
+
+  :is(.e-content, .page-body) dt {
+    @apply font-bold;
+  }
+
+  :is(.e-content, .page-body) dd {
+    @apply ps-6;
+  }
+
+  :is(.e-content, .page-body) details summary {
+    @apply cursor-pointer;
+  }
+
+  :is(.e-content, .page-body) kbd {
+    @apply rounded-sm border border-edge px-1 text-[0.85em];
+  }
+
+  /* Code. A file path or an identifier is one long word, and a narrow screen
+     would otherwise carry it off the side of the page; a block of code
+     scrolls instead, and is focusable (the CMS renders it `tabindex="0"`) so
+     a keyboard can scroll it too. */
+  code {
+    @apply rounded-sm bg-code px-1.5 py-0.5 text-[0.85em] text-(--color-code-text);
+    overflow-wrap: break-word;
+  }
+
+  pre {
+    @apply overflow-x-auto rounded-md border border-edge bg-code p-4 text-[0.85rem] leading-relaxed text-(--color-code-text);
+  }
+
+  pre code {
+    @apply rounded-none bg-transparent p-0 text-[length:inherit];
+    overflow-wrap: normal;
+  }
+
+  .footnotes {
+    @apply mt-10 border-t border-rule pt-6 font-sans text-sm;
+  }
+
+  .footnotes-sep {
+    @apply hidden;
+  }
+
+  .footnote-item > p {
+    @apply mt-0;
+  }
+
+  /* Syntax highlighting (TASK-86).
+   *
+   * The CMS renders a fenced block as `pre > code.language-x` and highlights
+   * nothing; `static/highlight.js` marks the tokens up on the client, and
+   * these are its colours. The scopes and the slots they map to are
+   * highlight.js's own base16 Tomorrow theme, so a token it invents later
+   * lands somewhere sensible rather than nowhere.
+   *
+   * Every colour is a custom property, so a site that wants another palette
+   * redefines a dozen tokens instead of writing a syntax theme. Delimiters,
+   * operators and substitutions are deliberately the block's own ink: they
+   * are most of the characters on screen and a colour there is noise.
+   */
+  .hljs-comment {
+    color: var(--color-code-comment);
+  }
+
+  .hljs-tag {
+    color: var(--color-code-tag);
+  }
+
+  .hljs-subst,
+  .hljs-punctuation,
+  .hljs-operator {
+    color: var(--color-code-text);
+  }
+
+  .hljs-bullet,
+  .hljs-variable,
+  .hljs-template-variable,
+  .hljs-selector-tag,
+  .hljs-name {
+    color: var(--color-code-name);
+  }
+
+  .hljs-symbol,
+  .hljs-number,
+  .hljs-link,
+  .hljs-attr,
+  .hljs-variable.constant_,
+  .hljs-literal {
+    color: var(--color-code-literal);
+  }
+
+  .hljs-title,
+  .hljs-class .hljs-title,
+  .hljs-title.class_ {
+    color: var(--color-code-class);
+  }
+
+  .hljs-strong {
+    color: var(--color-code-class);
+    font-weight: 700;
+  }
+
+  .hljs-code,
+  .hljs-string,
+  .hljs-title.class_.inherited__ {
+    color: var(--color-code-string);
+  }
+
+  .hljs-built_in,
+  .hljs-doctag,
+  .hljs-quote,
+  .hljs-regexp,
+  .hljs-keyword.hljs-atrule {
+    color: var(--color-code-support);
+  }
+
+  .hljs-attribute,
+  .hljs-function .hljs-title,
+  .hljs-section,
+  .hljs-title.function_ {
+    color: var(--color-code-function);
+  }
+
+  .hljs-keyword,
+  .hljs-template-tag,
+  .hljs-type {
+    color: var(--color-code-keyword);
+  }
+
+  .hljs-emphasis {
+    color: var(--color-code-keyword);
+    font-style: italic;
+  }
+
+  .hljs-meta,
+  .hljs-meta .hljs-keyword,
+  .hljs-meta .hljs-string {
+    color: var(--color-code-meta);
+  }
+
+  /* A diff reads by the line, not by the token: the whole line takes a tint
+     out to the edges of the block (the negative margin cancels the `pre`
+     padding and the padding puts it back) and keeps the block's own ink,
+     which is the pair the contrast test checks. The `+` and the `-` stay in
+     the text, so the meaning does not rest on the colour alone. */
+  .hljs-addition,
+  .hljs-deletion {
+    display: block;
+    margin-inline: -1rem;
+    padding-inline: 1rem;
+    color: var(--color-code-text);
+    text-decoration: none;
+  }
+
+  .hljs-addition {
+    background-color: var(--color-code-added-background);
+  }
+
+  .hljs-deletion {
+    background-color: var(--color-code-removed-background);
+  }
+
+  /* A listing: `h-feed` of `h-entry`, hairlines between. An article is the
+     only entry with a headline; a note or a reply is its words. */
+  .feed {
+    @apply mt-2;
+  }
+
+  .feed-separator {
+    @apply my-9;
+  }
+
+  .feed-title {
+    @apply mt-1 mb-3 text-3xl leading-tight;
+  }
+
+  .feed-title a {
+    @apply text-ink no-underline hover:text-accent hover:underline hover:decoration-2 hover:underline-offset-[6px] focus-visible:underline focus-visible:decoration-2;
+  }
+
+  .feed-excerpt.p-summary {
+    @apply text-[1.05rem];
+  }
+
+  .feed-item > .e-content {
+    @apply text-[1.12rem] leading-[1.6];
+  }
+
+  .feed-more,
+  .front-links {
+    @apply mt-3 font-sans text-sm;
+  }
+
+  .feed-more a,
+  .front-links a {
+    @apply target gap-1 hover:decoration-2;
+  }
+
+  .front-links {
+    @apply mt-10 flex flex-wrap gap-x-6;
+  }
+
+  /* A citation: what a reply answers. A rule on the start side, a sans line
+     naming it, and its words as an italic quote. */
+  .cite {
+    @apply my-3 border-s-2 border-accent ps-4;
+  }
+
+  .cite-line {
+    @apply font-sans text-sm text-muted;
+  }
+
+  .cite-line a {
+    @apply target quiet-link font-medium text-ink;
+  }
+
+  .cite-quote {
+    @apply mt-1 text-[0.98rem] leading-snug text-muted italic;
+  }
+
+  /* One post or page: `article.blog-post.h-entry`. */
+  .post-header {
+    @apply mb-8;
+  }
+
+  .post-header h1 {
+    @apply mt-1 text-4xl leading-[1.08] sm:text-[2.75rem];
+  }
+
+  .post-deck {
+    @apply mt-4 text-xl leading-snug text-muted italic;
+  }
+
+  .blog-post > .e-content {
+    @apply text-[1.08rem] leading-[1.65];
+  }
+
+  /* An untitled post is its words, set larger. It is the one entry whose
+     heading is the hidden one TASK-144 gave it. */
+  .blog-post > .screen-reader-text ~ .e-content {
+    @apply text-[1.3rem] leading-[1.55];
+  }
+
+  .entry-meta,
+  .page-meta {
+    @apply mt-8 flex flex-wrap items-center gap-x-2 font-sans text-sm text-muted;
+  }
+
+  /* A page usually carries no date, and then this line has nothing in it. */
+  .page-meta:empty {
+    @apply hidden;
+  }
+
+  .entry-meta a,
+  .page-meta a {
+    @apply target quiet-link text-muted;
+  }
+
+  /* The tags under an entry. The `#` is drawn rather than printed, so the
+     `p-category` a parser reads is the tag and not the hash. */
+  .post-categories {
+    @apply mt-2 flex flex-wrap gap-x-3 font-sans text-sm;
+  }
+
+  .post-categories a {
+    @apply target quiet-link text-accent-2;
+  }
+
+  .post-categories a[rel='tag']::before {
+    content: '#';
+  }
+
+  .blog-post > hr {
+    @apply mt-10 mb-8;
+  }
+
+  /* The posts either side of this one, as two cards. */
+  .blog-post-nav {
+    @apply my-12 font-sans text-sm;
+  }
+
+  .blog-post-nav ul {
+    @apply grid list-none gap-4 p-0 sm:grid-cols-2;
+  }
+
+  .blog-post-nav li:has(> a[rel='next']) {
+    @apply sm:col-start-2;
+  }
+
+  .blog-post-nav a {
+    @apply target h-full w-full flex-col items-start rounded-md border border-edge p-4 text-ink no-underline hover:border-2 hover:border-accent hover:p-[calc(1rem-1px)] hover:text-accent;
+  }
+
+  .blog-post-nav a[rel='next'] {
+    @apply sm:items-end sm:text-end;
+  }
+
+  .blog-post-nav-label {
+    @apply mb-1 block text-[0.7rem] tracking-[0.14em] text-muted uppercase;
+  }
+
+  /* The bio: a round photo and the person beside it. */
+  .bio {
+    @apply flex items-start gap-4;
+  }
+
+  .bio-avatar {
+    @apply shrink-0;
+  }
+
+  .bio-avatar img {
+    @apply size-14 rounded-full object-cover;
+  }
+
+  .bio .p-name {
+    @apply font-bold text-ink;
+  }
+
+  .bio-note {
+    @apply mt-1 text-[0.95rem] text-muted;
+  }
+
+  .bio-links {
+    @apply mt-1 gap-x-4 font-sans text-sm;
+  }
+
+  .bio-links a {
+    @apply target;
+  }
+
+  .global-wrapper[data-is-root-path='true'] .bio {
+    @apply mt-2;
+  }
+
+  /* An archive's header: the kicker naming what it is, then its name. */
+  .archive-header .page-title {
+    @apply mb-4;
+  }
+
+  .archive-header {
+    @apply mb-10;
+  }
+
+  .category-description {
+    @apply text-lg text-muted italic;
+  }
+
+  .author-header + .bio {
+    @apply mb-12;
+  }
+
+  /* The archive page: every post there has been, month by month. */
+  .archive h2 {
+    @apply mt-10 mb-3 text-2xl;
+  }
+
+  .archive ol {
+    @apply list-none space-y-1 p-0;
+  }
+
+  .archive a {
+    @apply target;
+  }
+
+  /* Pagination: two words, the newer at the start and the older at the end. */
+  .pagination {
+    @apply mt-12 flex flex-wrap gap-4 font-sans text-sm;
+  }
+
+  .pagination a {
+    @apply target quiet-link gap-1;
+  }
+
+  .pagination-next {
+    @apply ms-auto;
+  }
+
+  /* Search: the box, what it found, and each result as a feed entry. */
+  .search-form {
+    @apply mb-8 flex gap-2;
+  }
+
+  .search-form label {
+    @apply flex-1;
+  }
+
+  .search-summary {
+    @apply mb-8 font-sans text-sm text-muted;
+  }
+
+  .search-result + .search-result {
+    @apply mt-9 border-t border-rule pt-9;
+  }
+
+  .search-result .feed-title {
+    @apply text-2xl;
+  }
+
+  .search-snippet mark {
+    @apply rounded-xs bg-accent/20 px-0.5 text-ink;
+  }
+
+  /* The error pages. */
+  :is(.not-found, .server-error, .maintenance) > p {
+    @apply text-[1.08rem];
+  }
+
+  /* Reactions: the likes, the boosts and the pages that mentioned a post, as
+     rows of faces under a small label. */
+  .reactions-section {
+    @apply mt-14 mb-10 flex flex-wrap gap-x-10 gap-y-4;
+  }
+
+  .reaction-group {
+    @apply min-w-0;
+  }
+
+  .reaction-title {
+    @apply mb-2 font-sans text-[0.72rem] font-normal tracking-[0.14em] text-muted uppercase;
+  }
+
+  .reaction-count {
+    @apply ms-1 font-semibold text-ink;
+  }
+
+  .facepile {
+    @apply flex flex-wrap items-center;
+  }
+
+  .facepile > a,
+  .facepile > span {
+    @apply relative -ms-2 rounded-full ring-2 ring-paper first:ms-0 hover:z-10 motion-safe:transition-transform motion-safe:hover:scale-110;
+  }
+
+  .facepile img {
+    @apply size-8 rounded-full;
+  }
+
+  /* A reaction with no avatar has nothing to recognise anybody by, so the
+     emoji of its kind and the name stand in, as a pill. */
+  .facepile > :has(.reaction-name) {
+    @apply target ms-1 gap-1 bg-surface px-2 font-sans text-sm text-ink no-underline ring-0 first:ms-0;
+  }
+
+  .reaction-icon {
+    @apply text-xs;
+  }
+
+  /* The thread: every reply from every door, each one an h-entry. */
+  .comments-area {
+    @apply mt-14;
+  }
+
+  .comments-title {
+    @apply mb-5 text-xl;
+  }
+
+  .comment-list {
+    @apply m-0 list-none space-y-8 p-0;
+  }
+
+  .comment-list .children {
+    @apply mt-6 list-none space-y-6 border-s border-rule ps-6 sm:ps-12;
+  }
+
+  .comment-body {
+    @apply flex flex-col gap-2;
+  }
+
+  .comment-meta {
+    @apply flex flex-wrap items-center gap-x-3 gap-y-1 font-sans text-sm;
+  }
+
+  .comment-author {
+    @apply flex items-center gap-2;
+  }
+
+  .comment-author .avatar,
+  .comment-avatar-empty {
+    @apply size-8 shrink-0 rounded-full;
+  }
+
+  .comment-avatar-empty {
+    @apply inline-flex items-center justify-center bg-surface font-semibold text-muted;
+  }
+
+  .comment-author a {
+    @apply target quiet-link text-ink;
+  }
+
+  .comment-metadata a {
+    @apply target quiet-link text-muted;
+  }
+
+  .comment-metadata {
+    @apply text-muted;
+  }
+
+  .comment-source {
+    @apply text-muted italic;
+  }
+
+  .comment-content {
+    @apply text-[1.02rem];
+  }
+
+  .reply {
+    @apply font-sans text-sm;
+  }
+
+  .reply a {
+    @apply target;
+  }
+
+  .no-comments {
+    @apply mt-8 font-sans text-sm text-muted italic;
+  }
+
+  /* The comment form under an open post and the contact form on a page that
+     asked for one, which wears the same class. */
+  .comment-respond {
+    @apply mt-12 border-t border-rule pt-10;
+  }
+
+  .comment-reply-title,
+  .contact-form-title {
+    @apply mb-5 text-xl;
+  }
+
+  .comment-help {
+    @apply -mt-3 mb-5 text-[0.95rem] text-muted;
+  }
+
+  .comment-respond form {
+    @apply flex flex-col gap-4;
+  }
+
+  .field-row {
+    @apply grid gap-x-4 gap-y-4 sm:grid-cols-2;
+  }
+
+  .comment-respond label {
+    @apply mb-1 block font-sans text-sm;
+  }
+
+  .comment-optional,
+  .contact-optional,
+  .comment-hint,
+  .contact-hint {
+    @apply text-muted;
+  }
+
+  .comment-hint,
+  .contact-hint,
+  .comment-field-error,
+  .contact-field-error {
+    @apply mt-1 block font-sans text-sm;
+  }
+
+  .comment-field-error,
+  .contact-field-error {
+    @apply text-error;
+  }
+
+  :is(.comment-respond, .search-form) :is(input:not([type='checkbox'], [type='hidden']), textarea) {
+    @apply block w-full rounded-md border border-edge bg-surface px-3 py-2 font-serif text-base text-ink;
+  }
+
+  /* A field the reader has left invalid, or one a refused submission marked,
+     says so with a heavier border in the error colour, without JavaScript. */
+  :is(.comment-respond, .search-form)
+    :is(input, textarea):is(:user-invalid, [aria-invalid='true']) {
+    @apply border-2 border-error px-[calc(0.75rem-1px)] py-[calc(0.5rem-1px)];
+  }
+
+  .comment-check {
+    @apply flex items-center gap-2;
+  }
+
+  .comment-check label {
+    @apply mb-0;
+  }
+
+  .comment-respond input[type='checkbox'] {
+    inline-size: 24px;
+    block-size: 24px;
+    margin: 0;
+    accent-color: var(--color-primary);
+  }
+
+  .search-form button,
+  .comment-respond .form-submit button,
+  .comment-respond .form-submit input[type='submit'] {
+    @apply cursor-pointer rounded-md bg-accent px-5 py-2.5 font-sans text-sm font-semibold text-paper hover:bg-ink;
+    min-block-size: 24px;
+    min-inline-size: 24px;
+  }
+
+  .comment-signed-in,
+  .comment-replying-to {
+    @apply font-sans text-sm text-muted;
+  }
+
+  .comment-signed-in a,
+  .comment-replying-to a {
+    @apply text-accent;
+  }
+
+  .comment-notice,
+  .contact-notice {
+    @apply rounded-md border border-edge bg-surface p-4 font-sans text-sm text-ink;
+  }
+
+  /* A refused form's summary: what went wrong as its heading, then a link to
+     each field to put right. */
+  .comment-error,
+  .contact-error {
+    @apply my-6 border-s-2 border-error ps-4 font-sans text-sm;
+  }
+
+  .comment-error h3,
+  .contact-error h3 {
+    @apply font-sans text-base font-semibold text-error;
+  }
+
+  .comment-error ul,
+  .contact-error ul {
+    @apply mt-2 list-disc ps-5;
+  }
+
+  .comment-error a,
+  .contact-error a {
+    @apply target;
+  }
+
+  /* The honeypot. Taken out of the flow rather than `display: none`, because
+     some form fillers skip fields a browser would not paint at all and this
+     one is meant to be filled in. */
+  .comment-trap,
+  .contact-trap {
+    position: absolute;
+    inset-inline-start: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+}
+
+/* Forced colours: Windows High Contrast and the like, where the reader's own
+   palette replaces every colour here. Borders and outlines survive that and
+   backgrounds do not, so anything drawn by a background alone takes a border
+   in a system colour: the buttons, a hairline, code, a matched word and the
+   face that is a pill. Focus needs nothing: every ring here is an outline,
+   which the forced palette redraws in its own colour. */
+@media (forced-colors: active) {
+  .search-form button,
+  .comment-respond .form-submit button,
+  .comment-respond .form-submit input[type='submit'] {
+    border: 1px solid ButtonText;
+  }
+
+  hr {
+    border-block-start: 1px solid CanvasText;
+  }
+
+  pre {
+    border: 1px solid CanvasText;
+  }
+
+  code,
+  .search-snippet mark,
+  .comment-avatar-empty {
+    border: 1px solid CanvasText;
+  }
+
+  pre code {
+    border: 0;
+  }
+
+  .facepile > a,
+  .facepile > span {
+    outline: 1px solid CanvasText;
+  }
+}

@@ -23,6 +23,8 @@ themes/default/
     post-list.njk     the h-feed a listing is made of
     pagination.njk    previous/next pager
     tags.njk          macros for tag and category links
+    kicker.njk        the line above an entry naming its kind and date
+    reply-context.njk the citation of what a reply answers
     bio.njk           who an entry is by, as an h-card
     menu.njk          one named menu, as a nav of links
     feeds.njk         macros for the feed links in <head>
@@ -39,12 +41,39 @@ themes/default/
     comment-digest.*.njk    the hourly or daily digest of what is waiting
     comment-reply.*.njk     the notice a commenter gets about a reply
     contact-message.*.njk   a message from a page's contact form
+  src/
+    style.css    the stylesheet's source, compiled with Tailwind
   static/
-    style.css    served at /theme/style.css
+    style.css    the compiled stylesheet, served at /theme/style.css
+    highlight.js the code highlighter
 ```
 
-Plain Nunjucks and plain CSS. There is no build step and no dependency: a site
-that wants Tailwind or anything else brings its own.
+Plain Nunjucks templates and one stylesheet. The stylesheet is written in
+Tailwind v4 (`src/style.css`) and compiled when the package is built, so
+`static/style.css` is a build product: gitignored in this repository, written
+by `pnpm build` (which the root `prepare` runs after an install and before a
+publish), and shipped in the package like every other file here. The compile
+happens once, on the machine that builds the package. A reader gets one plain
+CSS file and no script, web font or CDN request because of it.
+
+The design is Paper (doc-9, decision-22): one warm column, serif throughout,
+sans for small labels, and a kicker above every entry naming its kind.
+
+**Rebuilding the stylesheet.** After editing `src/style.css`:
+
+```
+pnpm --filter @geekity/cms build:theme
+```
+
+Tailwind scans only this theme's `layouts/` and `partials/`, so a utility class
+written in a template here is compiled in and nothing outside the theme is
+read. The templates themselves use the semantic class names below and the look
+lives in `src/style.css`, through `@apply`.
+
+**A site theme owes Tailwind nothing.** Its own `static/style.css` replaces this
+one wholesale, and any CSS that knows the class names in this README will do.
+The demo theme's is plain CSS. A site that only wants different colours
+overrides the `--color-*` custom properties instead; see [Colours](#colours).
 
 ## The manifest
 
@@ -145,9 +174,10 @@ words above the posts; `layouts/home.njk` already does.
 
 ## The page shell
 
-`layouts/base.njk` is the andrewshell.org design's shell (decision-16): the
-skip link, one `.global-wrapper` at the 42rem measure, `.global-header`,
-`<main id="main">` and the footer, in that order.
+`layouts/base.njk` is the page shell: the skip link, one `.global-wrapper` at the
+42rem measure, `.global-header`, `<main id="main">` and the footer, in that
+order. The shape is the andrewshell.org design's (decision-16) and the look is
+Paper's (doc-9).
 
 **One home for each kind of link.** The header carries the site menu, on every
 page. [The bio](#the-bio) carries the person whose page or post it is. The
@@ -156,7 +186,7 @@ nowhere else.
 
 **The header has one rule, and the menu under it.** On the front page it is the
 site title as `h1.main-heading`, linked home, with `site.tagline` in a
-paragraph under it; on every other page it is `a.header-link-home`, the site
+`p.site-tagline` under it; on every other page it is `a.header-link-home`, the site
 title small and linked home, and no tagline. The wrapper carries
 `data-is-root-path="true"` at `/` and nothing anywhere else, which is how the
 stylesheet tells the two apart. `menus.primary` is printed inside the
@@ -260,13 +290,19 @@ html.geekity-admin-bar {
 
 ### An entry
 
-`layouts/post.njk` and `layouts/page.njk` draw the same thing, the source
-design's entry, and it is a microformats2 `h-entry`:
+`layouts/post.njk` and `layouts/page.njk` draw the same thing, the entry, and it
+is a microformats2 `h-entry`. An article, and a page:
 
 ```html
 <article class="blog-post h-entry">
-  <header>
+  <header class="post-header">
+    <p class="kicker">
+      <span class="kicker-kind">Article</span>
+      <span class="kicker-dot" aria-hidden="true">·</span>
+      <a href="/category/notes/" class="p-category" rel="category">notes</a>
+    </p>
     <h1 class="p-name">Hello</h1>
+    <p class="post-deck p-summary">The description the author wrote.</p>
   </header>
   <section class="e-content">
     <p>The rendered body.</p>
@@ -279,38 +315,47 @@ design's entry, and it is a microformats2 `h-entry`:
           >Published 2 September 2026</time
         ></a
       >
-      <br /><time class="small dt-updated" datetime="2026-09-05T09:00:00.000Z"
+      <span aria-hidden="true">·</span>
+      <time class="small dt-updated" datetime="2026-09-05T09:00:00.000Z"
         >Updated 5 September 2026</time
       >
     </p>
   </section>
-  <p class="post-categories">…categories…</p>
   <p class="post-categories">…tags…</p>
   <hr />
   <footer>…the bio…</footer>
 </article>
-<nav class="blog-post-nav">…the posts either side…</nav>
+<nav class="blog-post-nav" aria-label="Neighbouring posts">…</nav>
 ```
+
+**The kicker names the kind.** `p.kicker`, from `partials/kicker.njk`, opens
+every entry: the kind word in `span.kicker-kind` (Article, Note or Reply for a
+post, from its `postType`; Page for a page), then the categories it is filed
+under as `p-category` links. It is the only place the kind is said, small and
+once, and an article is additionally the only kind with a visible headline.
+The deck is the front matter's `description` as a `p.post-deck.p-summary`,
+printed only when the author wrote one.
 
 **The Published line is inside the `e-content`**, which is the one thing about
 this shape worth knowing. It is what the source theme does: the date and the
-permalink are part of the words, so a reader — or a fediverse peer reading the
-`e-content` — takes them with the post. The permalink wraps the `dt-published`
-time as a `u-url`, and a `dt-updated` line follows it only when the update
-happened on a different day in the site's own timezone; a typo fixed an hour
-later is not news. A post tagged `indienews` opens the line with a
+permalink are part of the words, so a reader, or a fediverse peer reading the
+`e-content`, takes them with the post. The permalink wraps the `dt-published`
+time as a `u-url`, and a `dt-updated` follows it after a middle dot only when
+the update happened on a different day in the site's own timezone; a typo fixed
+an hour later is not news. A post tagged `indienews` opens the line with a
 `u-category` link to <https://news.indieweb.org/en>, which is how IndieNews is
 told the post is for it; a page never prints one, and its line is a
 `p.page-meta` rather than a `p.entry-meta`.
 
 **Every post's page has one `h1`.** A post with a name of its own is headed by
 it, as above. A note, or a reply without a title, opens on its words instead,
-so it has no `header`; in its place is an `h1` a screen reader and a crawler
-navigate by and a sighted reader never sees, saying what the post is, who wrote
-it and when:
+set larger, so it has no `header`; in its place is an `h1` a screen reader and
+a crawler navigate by and a sighted reader never sees, saying what the post is,
+who wrote it and when, and then the kicker:
 
 ```html
 <h1 class="screen-reader-text">Note by Ada Lovelace, 11 September 2026</h1>
+<p class="kicker"><span class="kicker-kind">Note</span></p>
 ```
 
 It says `Reply` for a reply and leaves out the name or the date the post does
@@ -319,16 +364,24 @@ for an article. The headings under it step down one level at a time: the
 conversation and the comment form are `h2`, and a refused form's error summary
 is an `h3` inside the form's section.
 
-What it is filed under is printed under the words and inside the article, so
-that each link is a `p-category` of this entry: the categories first, then the
-tags, each as one `p.post-categories` from `partials/tags.njk`.
+**A reply cites what it answers** with `partials/reply-context.njk`, a
+`div.reply-context.cite.u-in-reply-to.h-cite`: a rule on the start side, a
+`p.cite-line` saying "In reply to" and the target's name, author and date as
+far as they are known, and its excerpt as a `blockquote.cite-quote.p-content`.
+An untitled reply prints it under the kicker; a titled reply prints it above
+its header. The same partial cites a reply in a feed.
 
-After the entry a post prints `nav.blog-post-nav`, `rel="prev"` and
-`rel="next"` links to `previous` and `next` with an arrow either side, and
-nothing at all at the ends of the archive; then the conversation and the
-comment form. A page prints the contact form when its front matter asked for
-one. A page has no neighbours, no taxonomy and no IndieNews link, because none
-of those are things a page has.
+The tags are printed under the words and inside the article, so that each link
+is a `p-category` of this entry, as one `p.post-categories` from
+`partials/tags.njk`. The stylesheet draws the `#` in front of each, so the
+category a parser reads is the tag and not the hash.
+
+After the entry a post prints `nav.blog-post-nav`: the `previous` and `next`
+posts as two cards, `rel="prev"` and `rel="next"`, each opening on a
+`span.blog-post-nav-label`, and nothing at all at the ends of the archive; then
+the conversation and the comment form. A page prints the contact form when its
+front matter asked for one. A page has no neighbours, no tags and no IndieNews
+link, because none of those are things a page has.
 
 ### The bio
 
@@ -387,48 +440,65 @@ byline under the title rather than a bio in the footer, so it writes one.
 
 ### A listing
 
-`partials/post-list.njk` is the feed every listing is made of — the home page,
-the posts page, a tag, category or author archive — and it is a microformats2
-`h-feed`:
+`partials/post-list.njk` is the feed every listing is made of (the home page,
+the posts page, a tag, category or author archive, and the front page's recent
+posts) and it is a microformats2 `h-feed` of `h-entry` items, each opening on
+its kicker:
 
 ```html
 <div class="feed h-feed">
   <article class="feed-item h-entry">
-    <div class="feed-content">
-      <h2 class="feed-title p-name">
-        <a href="/2026/09/hello/" class="u-url">Hello</a>
-      </h2>
-      <div class="feed-excerpt p-summary">
-        <p>What the post is about, in about 280 characters...</p>
-      </div>
-      <p class="feed-more">
-        <a href="/hello/" aria-label="Continue reading: Hello">
-          Continue reading<span aria-hidden="true"> &rarr;</span>
-        </a>
-      </p>
-      <div class="feed-meta">
-        <p>
-          <time class="feed-date dt-published" datetime="…"
-            >2 September 2026</time
-          >
-        </p>
-        <p class="post-categories">
-          <a href="/category/notes/" class="p-category" rel="category">notes</a>
-        </p>
-      </div>
+    <p class="kicker">
+      <span class="kicker-kind">Article</span>
+      <span class="kicker-dot" aria-hidden="true">·</span>
+      <time class="feed-date dt-published" datetime="…">2 September 2026</time>
+      <span class="kicker-dot" aria-hidden="true">·</span>
+      <a href="/category/notes/" class="p-category" rel="category">notes</a>
+    </p>
+    <h2 class="feed-title p-name">
+      <a href="/2026/09/hello/" class="u-url">Hello</a>
+    </h2>
+    <div class="feed-excerpt p-summary">
+      <p>What the post is about, in about 280 characters...</p>
     </div>
+    <p class="feed-more">
+      <a href="/2026/09/hello/" aria-label="Continue reading: Hello">
+        Continue reading<span aria-hidden="true"> &rarr;</span>
+      </a>
+    </p>
   </article>
   <hr class="feed-separator" />
-  <article class="feed-item h-entry">…</article>
+  <article class="feed-item h-entry">
+    <p class="kicker">
+      <span class="kicker-kind">Note</span>
+      <span class="kicker-dot" aria-hidden="true">·</span>
+      <a href="/2026/09/coffee/" class="u-url"
+        ><time class="feed-date dt-published" datetime="…"
+          >3 September 2026</time
+        ></a
+      >
+    </p>
+    <div class="feed-excerpt e-content"><p>The whole note.</p></div>
+  </article>
 </div>
 ```
 
-The excerpt is the entry's `summary` — the very line the feeds publish, so a
-reader and a feed cannot be told two different things — through Nunjucks'
+**Only an article has a headline.** A note, which has no title, is printed
+whole as its `e-content`, and the date in its kicker is its `u-url`. A reply is
+a note that first cites what it answers with `partials/reply-context.njk`, and
+a reply with a title is an article that does. An article's categories are in
+its kicker; a note's are on its own page.
+
+The excerpt is the entry's `summary`, the very line the feeds publish, so a
+reader and a feed cannot be told two different things, through Nunjucks'
 `truncate(280)`, which cuts at the last space before 280 characters and adds an
 ellipsis. A `description` shorter than that is printed whole. It is plain text
 rather than markup, deliberately: an excerpt with half a code block in it is
 not an excerpt.
+
+Each entry of a listing carries `replyContext` beside `inReplyTo` when it is a
+reply whose target has been fetched, the same object a reply's own page gets,
+so the feed can cite it in full.
 
 An entry's tags are not in a feed item. They belong under the entry, where
 there is one post's worth of them rather than twenty.
@@ -445,21 +515,24 @@ before including it, so the outline never skips a level:
 
 A listing with nothing on it says `No posts found.` in `p.empty`.
 
-`partials/pagination.njk` prints two arrows in `nav.pagination` — `← Previous`
+`partials/pagination.njk` prints two links in `nav.pagination`, `← Previous`
 to the page before this one and `Next →` to the page after it, with `rel="prev"`
-and `rel="next"` — and nothing at all on a listing of one page. The arrows
+and `rel="next"`, and nothing at all on a listing of one page. The arrows
 themselves are `aria-hidden`, because a screen reader that announced them would
 read the decoration and then the word.
 
 Each listing layout heads its own page: `layouts/home.njk` with the listing's
-title, `layouts/tag.njk` and `layouts/category.njk` with the term, and
-`layouts/author.njk` with the person as an `h-card`. The category archive puts
-its heading in a `header.category-header` and prints a `div.category-description`
-under it when the context carries a `categoryDescription`; the CMS has no store
-of term descriptions, so nothing writes one today and the header is the heading
-alone.
+title, and the three archives with a `header.archive-header` whose kicker says
+what kind of archive it is (Tag, Category, Author) over an `h1.page-title`
+naming whose: the term, or the person, followed by their `h-card`. The
+category archive's header is also a `header.category-header` and prints a
+`div.category-description` under the name when the context carries a
+`categoryDescription`; the CMS has no store of term descriptions, so nothing
+writes one today and the header is the heading alone.
 
-`layouts/404.njk` says `Content not found.` and links home and to the search.
+`layouts/404.njk` says `Content not found.` under a `Not found` kicker and
+links home and to the search. The 500 and 503 pages below open on a kicker the
+same way.
 
 `layouts/500.njk` is the page a request gets when the server fails while
 answering it (TASK-129). It says `Something went wrong.` in an
@@ -682,38 +755,48 @@ to its own stylesheet.
 
 ### Colours
 
-`static/style.css` is the source design: a serif body and sans headings at an
-18px root on a 1.2 minor-third scale, warm paper with near-black text, a rust
-primary and a blue secondary, one column, links that invert to the primary
-colour on hover, and a rule in the primary colour. Everything is a custom
-property on `:root`, so a site that only wants different colours overrides the
-half-dozen `--color-*` tokens rather than the stylesheet.
+Every colour is a custom property on `:root`, and these tokens are the
+override contract: a site that only wants different colours redefines them in
+its own stylesheet rather than replacing this one. Tailwind's own palette is
+cleared in `src/style.css`, and its utilities (`text-ink`, `bg-paper`,
+`border-edge` and the rest) are mapped onto these properties with
+`@theme inline`, so redefining a token recolours every rule that uses it.
 
-The source is light only. The theme adds a second scheme under
-`@media (prefers-color-scheme: dark)` that redefines the same colour tokens on
-dark paper, with the rust and the blue lifted until they read on it, and
-`color-scheme: light dark` so a browser paints its own form controls and
-scrollbars to match. There is no toggle: the reader's system setting is the
-setting.
+A second scheme under `@media (prefers-color-scheme: dark)` redefines the same
+tokens on dark paper, and `color-scheme: light dark` lets a browser paint its
+own form controls and scrollbars to match. There is no toggle: the reader's
+system setting is the setting.
 
-Both schemes meet WCAG 2.2 AA — 4.5:1 for body text, 3:1 for large text, rules
-and focus outlines — and that is a test rather than a claim.
-`src/web/theme-colors.test.ts` reads the custom properties out of this
-stylesheet and computes the ratios for every pair the design puts on screen, so
-a colour changed here that breaks one fails the build.
+Both schemes meet the Colour contrast rule of the
+[specification.website checklist](https://specification.website/checklist.md):
+every run of text, the small kickers, dates and meta lines included, at 7:1
+(WCAG 1.4.6, AAA) on whatever it sits on, and every border a reader relies on
+(a field, a card, a code block, the focus outline, the citation and blockquote
+rules) at 3:1 (1.4.11). Nothing a reader needs is drawn at reduced opacity.
+That is a test rather than a claim: `src/web/theme-colors.test.ts` reads the
+tokens out of the compiled stylesheet and computes the ratio of every pair the
+design puts on screen, so a colour changed in `src/style.css` that breaks one
+fails the build.
 
-| Token                     | What it colours                                    |
-| ------------------------- | -------------------------------------------------- |
-| `--color-body`            | The paper, and the text of an inverted link.       |
-| `--color-text`            | The ink.                                           |
-| `--color-primary`         | Links, the rule, the focus outline, table headers. |
-| `--color-secondary`       | Blockquote text and its border.                    |
-| `--color-base`            | A warm sunk surface: rules between entries.        |
-| `--color-base-2`          | A cooler sunk surface.                             |
-| `--color-base-3`          | The raised surface: the focused skip link, inputs. |
-| `--color-code-background` | Behind `code` and a fenced block.                  |
-| `--color-code-text`       | Code with no highlighting on it.                   |
-| `--color-error`           | A form field that will not do.                     |
+| Token                     | Utility    | What it colours                                                        |
+| ------------------------- | ---------- | ---------------------------------------------------------------------- |
+| `--color-body`            | `paper`    | The paper, and the words on a submit button.                           |
+| `--color-text`            | `ink`      | Body text and headlines.                                               |
+| `--color-muted`           | `muted`    | Kickers, dates, meta lines, decks, quotes, the bio note, the footer.   |
+| `--color-primary`         | `accent`   | Links, a kicker's kind word, the citation rule, the submit button.     |
+| `--color-secondary`       | `accent-2` | Tag links and the focus outline.                                       |
+| `--color-rule`            | `rule`     | Decorative hairlines only: between entries, above the footer.          |
+| `--color-edge`            | `edge`     | Borders a reader relies on: fields, the previous and next cards, code. |
+| `--color-base`            | `surface`  | A sunk surface: fields, notices, a face with no avatar.                |
+| `--color-base-2`          | —          | A cooler sunk surface.                                                 |
+| `--color-base-3`          | —          | The raised surface: the focused skip link.                             |
+| `--color-code-background` | `code`     | Behind `code` and a fenced block.                                      |
+| `--color-code-text`       | —          | Code with no highlighting on it.                                       |
+| `--color-error`           | `error`    | A field that will not do, and what the form says about it.             |
+
+`--color-rule` is the one token in no contrast pair, because it is decoration:
+a site that recolours it may make it as faint as it likes. Anything drawn with
+`--color-edge` has to stay at 3:1 against the paper and the surface.
 
 ### Code highlighting
 
@@ -750,11 +833,12 @@ a different version of highlight.js than the one installed.
 **The palette is Tomorrow**, the one both of the sites this design comes from
 used: Chris Kempson's Tomorrow on light paper and Tomorrow Night on dark, from
 highlight.js's own base16 themes, which is also what decides which `hljs-`
-scope takes which slot. Five of the light colours are not the stock ones — a
-syntax theme is drawn for an editor, where a faint comment is a feature, and on
-this paper the stock greys, orange, yellow, green and teal read between 1.7:1
-and 3.5:1. Each was darkened along its own hue until it made 4.5:1 and no
-further; on the dark scheme only the `base0F` brown needed lifting. Every one
+scope takes which slot. None of the light colours is the stock one: a syntax
+theme is drawn for an editor, where a faint comment is a feature, and here code
+is text like any other and meets 7:1 on its block, the bar every run of text
+on the page meets. Each light colour was darkened along its own hue until it
+did and no further, and four of the dark ones (the comment grey, the red, the
+blue and the `base0F` brown) were lightened toward white the same way. Every one
 of them is in the contrast test beside the rest of the palette.
 
 | Token                             | base16   | What it colours                            |
@@ -1275,8 +1359,11 @@ The packaged partial draws each entry as the source design does: an
 `li.comment.h-entry` carrying `id="comment-{{ reply.id }}"` and a
 `comment-{{ reply.source }}` class, holding an `article.comment-body` whose
 `footer.comment-meta` is the author as a `.comment-author.vcard.p-author.h-card`
-and the permalink as a `.comment-metadata` link around a `time.dt-published`,
-then the words in `div.comment-content.e-content`. Answers nest in an
+(their avatar, or the first letter of their name in a `span.comment-avatar-empty`
+when there is none) and the permalink as a `.comment-metadata` link around a
+`time.dt-published`, with a `span.comment-source` saying "via webmention" or
+"via the fediverse" when it came that way, then the words in
+`div.comment-content.e-content`. Answers nest in an
 `ol.children` inside what they answer. A Reply link in a `div.reply` goes on the
 ones written here — `source == "comment"` — when the post is still open; it
 carries the comment's id to the form as `?reply_to=`, so threading needs no
@@ -1285,7 +1372,8 @@ webmention on the page that sent it, so neither gets one.
 
 Above the thread, `group()` draws one `div.reaction-group` per kind that has
 anything — `p-like`, `p-repost` and `p-mention`, the source theme's classes — as
-an `h2.reaction-title` of the label and the count beside a `div.facepile` of
+an `h2.reaction-title` of the label and the count, in a `span.reaction-count`,
+beside a `div.facepile` of
 `a.u-url` faces. A face is a round `u-photo` avatar; a reaction whose author the
 site knows no picture of is the emoji badge of its kind and a `.reaction-name`
 instead. Likes and boosts link to the person, and a mention to the page it came
@@ -1352,7 +1440,10 @@ The packaged partial is a `section#respond.comment-respond` with an
 `h2.comment-reply-title`, one paragraph per field and the button in a
 `p.form-submit` — the source design's names, so the stylesheet styles every
 label, field and button of both forms through `.comment-respond` and a site
-that has CSS for the WordPress theme can bring it.
+that has CSS for the WordPress theme can bring it. The name and email fields sit
+in a `div.field-row`, side by side on a wide screen, in both forms. On a site
+that takes webmentions a `p.comment-help` under the heading says a reader can
+reply from their own site instead.
 
 | Key                        | What it holds                                                                                                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

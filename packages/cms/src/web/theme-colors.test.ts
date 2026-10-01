@@ -1,18 +1,23 @@
 /**
- * The default theme's colours, checked against WCAG 2.2 AA.
+ * The default theme's colours, checked against WCAG 2.2.
  *
- * The source design (decision-16) is light only and was drawn by eye; the dark
- * scheme was drawn to match it and neither is anything a reader can override.
- * So the ratios are arithmetic here rather than a promise in a README: the test
- * reads the custom properties out of `static/style.css` — the `:root` block for
- * the light scheme and the one inside `@media (prefers-color-scheme: dark)` for
- * the dark — and computes the contrast of every pair the design puts on screen.
- * A colour changed in the stylesheet that breaks one of them fails here rather
- * than in front of somebody trying to read a post.
+ * The ratios are arithmetic here rather than a promise in a README: the test
+ * reads the custom properties out of the compiled `static/style.css` (the
+ * `:root` block that declares the `--color-*` tokens for the light scheme and
+ * the one inside `@media (prefers-color-scheme: dark)` for the dark) and
+ * computes the contrast of every pair the design puts on screen. A colour
+ * changed in the theme's source that breaks one of them fails here rather than
+ * in front of somebody trying to read a post.
  *
- * {@link PAIRS} is the table to extend: TASK-86 adds the code token colours and
- * checks them against `--color-code-background`, which is why that token is
- * named rather than folded into `--color-base`.
+ * The bar is the Colour contrast rule of the specification.website checklist
+ * (TASK-187, doc-9): every run of text, the small sans kickers, dates and meta
+ * lines and the highlighter's token colours included, at 7:1 (WCAG 1.4.6, AAA)
+ * on whatever it sits on; every border a reader relies on to find a control or
+ * a boundary at 3:1 (1.4.11).
+ * `--color-rule` is in no pair: it is a decorative hairline, and nothing a
+ * reader needs is drawn with it.
+ *
+ * {@link PAIRS} is the table to extend.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -23,7 +28,7 @@ import { PACKAGED_THEME_DIR } from './themes.ts';
 
 const STYLESHEET = path.join(PACKAGED_THEME_DIR, 'static', 'style.css');
 
-/** What the theme puts on what, and how much contrast WCAG 2.2 AA asks for. */
+/** What the theme puts on what, and how much contrast it has to have. */
 interface Pair {
   /** What a reader is looking at, for the assertion message. */
   readonly what: string;
@@ -32,10 +37,10 @@ interface Pair {
   /** The custom property the background comes from. */
   readonly background: string;
   /**
-   * 4.5 for body text, 3 for large text and for anything that is not text at
-   * all — a rule, a border, a focus outline.
+   * 7 for every run of text, code included, and 3 for anything that is not
+   * text at all: a border, a rule a reader relies on, a focus outline.
    */
-  readonly minimum: 4.5 | 3;
+  readonly minimum: 7 | 3;
 }
 
 /**
@@ -47,56 +52,88 @@ interface Pair {
  * them says so.
  */
 const PAIRS: readonly Pair[] = [
-  { what: 'body text', foreground: 'color-text', background: 'color-body', minimum: 4.5 },
-  { what: 'footer text', foreground: 'color-text', background: 'color-body', minimum: 4.5 },
-  { what: 'the small print', foreground: 'color-text', background: 'color-body', minimum: 4.5 },
+  { what: 'body text', foreground: 'color-text', background: 'color-body', minimum: 7 },
+  { what: 'a heading', foreground: 'color-text', background: 'color-body', minimum: 7 },
+  {
+    what: 'a kicker, a date or a meta line',
+    foreground: 'color-muted',
+    background: 'color-body',
+    minimum: 7,
+  },
+  { what: 'footer text', foreground: 'color-muted', background: 'color-body', minimum: 7 },
+  {
+    what: 'a deck, a quote or a bio note',
+    foreground: 'color-muted',
+    background: 'color-body',
+    minimum: 7,
+  },
+  {
+    what: 'muted text on a sunk surface',
+    foreground: 'color-muted',
+    background: 'color-base',
+    minimum: 7,
+  },
   {
     what: 'a link on the paper',
     foreground: 'color-primary',
     background: 'color-body',
-    minimum: 4.5,
+    minimum: 7,
   },
   {
-    what: 'a link inverted on hover',
+    what: 'the kind word in a kicker',
+    foreground: 'color-primary',
+    background: 'color-body',
+    minimum: 7,
+  },
+  {
+    what: 'a link on a sunk surface',
+    foreground: 'color-primary',
+    background: 'color-base',
+    minimum: 7,
+  },
+  {
+    what: 'the words on a submit button',
     foreground: 'color-body',
     background: 'color-primary',
-    minimum: 4.5,
+    minimum: 7,
   },
   {
-    what: 'blockquote text',
-    foreground: 'color-secondary',
-    background: 'color-body',
-    minimum: 4.5,
+    what: 'the words on a submit button under the pointer',
+    foreground: 'color-body',
+    background: 'color-text',
+    minimum: 7,
   },
+  { what: 'a tag link', foreground: 'color-secondary', background: 'color-body', minimum: 7 },
   {
     what: 'the skip link when it is focused',
     foreground: 'color-text',
     background: 'color-base-3',
-    minimum: 4.5,
+    minimum: 7,
   },
   {
-    what: 'text on a sunk surface',
+    what: 'text in a field or a notice',
     foreground: 'color-text',
     background: 'color-base',
-    minimum: 4.5,
+    minimum: 7,
   },
   {
     what: 'text on the cooler sunk surface',
     foreground: 'color-text',
     background: 'color-base-2',
-    minimum: 4.5,
+    minimum: 7,
   },
   {
     what: 'code in a block',
     foreground: 'color-code-text',
     background: 'color-code-background',
-    minimum: 4.5,
+    minimum: 7,
   },
+  { what: 'an error message', foreground: 'color-error', background: 'color-body', minimum: 7 },
   // The highlighter's token colours (TASK-86): Tomorrow on light paper and
   // Tomorrow Night on dark, every one of them on the block background. A
   // syntax theme is drawn for a reader looking at code for an hour, and some of
   // its colours — the comment grey above all — are far too faint for that here;
-  // where a stock colour missed, it was darkened or lifted until it made 4.5:1,
+  // where a stock colour missed, it was darkened or lifted until it made 7:1,
   // and this is where that is kept honest.
   ...(
     [
@@ -115,7 +152,7 @@ const PAIRS: readonly Pair[] = [
     what: `${what} in a code block`,
     foreground,
     background: 'color-code-background',
-    minimum: 4.5 as const,
+    minimum: 7 as const,
   })),
   // A diff's added and removed lines keep the block's own ink on a tinted
   // line, the way prism-diff.css did, so the tint is the pair to check.
@@ -123,22 +160,67 @@ const PAIRS: readonly Pair[] = [
     what: 'an added line in a diff',
     foreground: 'color-code-text',
     background: 'color-code-added-background',
-    minimum: 4.5,
+    minimum: 7,
   },
   {
     what: 'a removed line in a diff',
     foreground: 'color-code-text',
     background: 'color-code-removed-background',
-    minimum: 4.5,
+    minimum: 7,
   },
-  { what: 'an error message', foreground: 'color-error', background: 'color-body', minimum: 4.5 },
-  { what: 'a heading', foreground: 'color-text', background: 'color-body', minimum: 3 },
-  { what: 'the primary rule', foreground: 'color-primary', background: 'color-body', minimum: 3 },
-  { what: 'the focus outline', foreground: 'color-primary', background: 'color-body', minimum: 3 },
+  // Borders a reader relies on to find a control or a boundary.
   {
-    what: 'the blockquote border',
+    what: 'the focus outline on the paper',
     foreground: 'color-secondary',
     background: 'color-body',
+    minimum: 3,
+  },
+  {
+    what: 'the focus outline on a field',
+    foreground: 'color-secondary',
+    background: 'color-base',
+    minimum: 3,
+  },
+  {
+    what: 'a field’s border on the field',
+    foreground: 'color-edge',
+    background: 'color-base',
+    minimum: 3,
+  },
+  {
+    what: 'a field’s border on the paper',
+    foreground: 'color-edge',
+    background: 'color-body',
+    minimum: 3,
+  },
+  {
+    what: 'a previous or next card’s border',
+    foreground: 'color-edge',
+    background: 'color-body',
+    minimum: 3,
+  },
+  {
+    what: 'a code block’s border',
+    foreground: 'color-edge',
+    background: 'color-code-background',
+    minimum: 3,
+  },
+  {
+    what: 'the citation rule',
+    foreground: 'color-primary',
+    background: 'color-body',
+    minimum: 3,
+  },
+  {
+    what: 'the blockquote rule',
+    foreground: 'color-primary',
+    background: 'color-body',
+    minimum: 3,
+  },
+  {
+    what: 'an invalid field’s border',
+    foreground: 'color-error',
+    background: 'color-base',
     minimum: 3,
   },
 ];
@@ -162,11 +244,17 @@ function customProperties(css: string, scheme: 'light' | 'dark'): Map<string, st
   return properties;
 }
 
-/** The first top-level `:root { ... }` block. */
+/**
+ * The first `:root { ... }` block that declares `--color-body`. Tailwind puts
+ * a `:root` of its own in the theme layer ahead of it, holding its spacing and
+ * type scale, and that one names no colour.
+ */
 function lightRoot(css: string): string {
-  const start = css.indexOf(':root');
-  assert.notEqual(start, -1, 'the stylesheet has no :root block');
-  return braced(css, start);
+  for (let start = css.indexOf(':root'); start !== -1; start = css.indexOf(':root', start + 1)) {
+    const block = braced(css, start);
+    if (block.includes('--color-body:')) return block;
+  }
+  assert.fail('the stylesheet has no :root block declaring the colour tokens');
 }
 
 /** The `:root { ... }` inside `@media (prefers-color-scheme: dark)`. */
