@@ -5,10 +5,11 @@
   "type": "module",
   "description": "A private site that consumes @geekity/cms through the workspace. Doubles as the integration bed and the reference for `geekity init`.",
   "scripts": {
-    "predev": "pnpm --filter @geekity/cms build",
+    "predev": "pnpm --filter @geekity/cms build && tsx playground.ts",
     "dev": "tsx watch server.ts",
-    "prestart": "pnpm --filter @geekity/cms build",
+    "prestart": "pnpm --filter @geekity/cms build && tsx playground.ts",
     "start": "tsx server.ts",
+    "reset": "tsx playground.ts --reset",
     "build:11ty": "eleventy",
     "pretest": "pnpm --filter @geekity/cms build",
     "test": "tsx --test \"test/site.test.ts\"",
