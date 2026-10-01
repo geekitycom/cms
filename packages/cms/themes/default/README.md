@@ -437,7 +437,12 @@ link.
 setting names a user, which `soloAuthor` on the context says. Then both
 `layouts/home.njk` at `/` and `layouts/front-page.njk` end with that person's
 card, with its `rel="me"` claims, and their author archive's link home carries
-`rel="me"` back, so the homepage and the archive name each other. On a site
+`rel="me"` back, so the homepage and the archive name each other. Those two
+layouts also set `bioHome` to the homepage's absolute URL, which puts a
+`data.u-url.u-uid` holding it first in the card, so a parser running the
+[representative h-card algorithm](https://microformats.org/wiki/representative-h-card-parsing)
+on the homepage finds this card as the site's (TASK-193). The archive stays a
+second `u-url`. No other page sets `bioHome`. On a site
 with several authors neither homepage prints a card. Each of
 those is printed only when the profile says it, so a profile holding a name
 alone prints a name alone. A name this site has no account for is printed

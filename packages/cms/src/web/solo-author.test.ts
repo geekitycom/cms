@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { mf2 } from 'microformats-parser';
+
 import { createUser, setUserProfile } from '../admin/accounts.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
@@ -63,6 +65,7 @@ async function site(settings: Record<string, unknown>): Promise<Cms> {
     profile: {
       displayName: 'Ada Lovelace',
       bio: 'Wrote the first program.',
+      avatar: '/uploads/ada.jpg',
       links: [{ label: 'Mastodon', href: MASTODON }],
     },
   });
@@ -257,5 +260,121 @@ describe('the structured data (AC #9)', () => {
     const posting = nodes.find((entry) => entry['@type'] === 'BlogPosting');
 
     assert.deepEqual(posting?.['author'], ADA_PERSON);
+  });
+});
+
+const HOME = 'http://localhost:3000/';
+
+type Mf2Item = ReturnType<typeof mf2>['items'][number];
+
+/** Every h-card on a parsed page: top level, children, and property values. */
+function hCards(items: readonly Mf2Item[]): Mf2Item[] {
+  const found: Mf2Item[] = [];
+  for (const item of items) {
+    if (item.type?.includes('h-card')) found.push(item);
+    const nested = [
+      ...(item.children ?? []),
+      ...Object.values(item.properties).flatMap((values) =>
+        values.filter((value): value is Mf2Item => typeof value === 'object' && 'type' in value),
+      ),
+    ];
+    found.push(...hCards(nested));
+  }
+  return found;
+}
+
+function sameUrl(a: unknown, b: string): boolean {
+  if (typeof a !== 'string') return false;
+  try {
+    return new URL(a).href === new URL(b).href;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * https://microformats.org/wiki/representative-h-card-parsing: the first
+ * h-card whose uid and url both match the page URL, else the first whose url
+ * is a rel=me link, else the page's only h-card when its url is the page URL.
+ */
+function representativeHCard(html: string, pageUrl: string): Mf2Item | undefined {
+  const parsed = mf2(html, { baseUrl: pageUrl });
+  const cards = hCards(parsed.items);
+  const urls = (card: Mf2Item) => card.properties['url'] ?? [];
+  const me = parsed.rels['me'] ?? [];
+  return (
+    cards.find(
+      (card) =>
+        (card.properties['uid'] ?? []).some((uid) => sameUrl(uid, pageUrl)) &&
+        urls(card).some((url) => sameUrl(url, pageUrl)),
+    ) ??
+    cards.find((card) => urls(card).some((url) => me.some((rel) => sameUrl(url, rel)))) ??
+    (cards.length === 1 && urls(cards[0]!).some((url) => sameUrl(url, pageUrl))
+      ? cards[0]
+      : undefined)
+  );
+}
+
+/** The bio card's h-card on a page, parsed. */
+function bioCard(html: string, pageUrl: string): Mf2Item {
+  const card = hCards(mf2(html, { baseUrl: pageUrl }).items).find((item) =>
+    (item.properties['name'] ?? []).includes('Ada Lovelace'),
+  );
+  assert.ok(card !== undefined, 'the page has Ada’s h-card');
+  return card;
+}
+
+describe('the homepage h-card is the site’s representative h-card (TASK-193)', () => {
+  for (const [shape, settings] of [
+    ['a post-listing homepage', LISTING],
+    ['a static front page', FRONT_PAGE],
+  ] as const) {
+    it(`gives the bio card u-url and u-uid equal to the homepage on ${shape} (AC #1)`, async () => {
+      const card = bioCard(await body(await site({ ...settings, ...SOLO }), '/'), HOME);
+
+      assert.deepEqual(card.properties['uid'], [HOME]);
+      assert.equal(card.properties['url']?.[0], HOME, 'the homepage is the card’s first url');
+    });
+
+    it(`is what the representative h-card algorithm finds on ${shape} (AC #2)`, async () => {
+      const html = await body(await site({ ...settings, ...SOLO }), '/');
+      const card = representativeHCard(html, HOME);
+
+      assert.ok(card !== undefined, 'the homepage has a representative h-card');
+      assert.deepEqual(card.properties['name'], ['Ada Lovelace']);
+      assert.deepEqual(card.properties['uid'], [HOME]);
+      assert.equal(card.properties['url']?.[0], HOME);
+      const photo = card.properties['photo']?.[0];
+      const photoUrl = typeof photo === 'object' && 'value' in photo ? photo.value : photo;
+      assert.equal(photoUrl, `${HOME}uploads/ada.jpg`);
+    });
+
+    it(`keeps the archive link and the rel="me" links on ${shape} (AC #3)`, async () => {
+      const html = await body(await site({ ...settings, ...SOLO }), '/');
+      const card = bioCard(html, HOME);
+
+      assert.ok(claimsMe(html, '/author/ada/'), 'the name still links the archive');
+      assert.ok(relsTo(html, '/author/ada/').some((rel) => rel.split(/\s+/).includes('author')));
+      assert.ok(claimsMe(html, MASTODON), 'the profile links keep rel="me"');
+      assert.ok(card.properties['url']?.includes(`${HOME}author/ada/`), 'the archive is a url too');
+    });
+  }
+
+  for (const [page, pathname] of [
+    ['the author archive', '/author/ada/'],
+    ['a post', '/2026/09/hello/'],
+  ] as const) {
+    it(`leaves the card on ${page} as it was (AC #3)`, async () => {
+      const card = bioCard(await body(await site(SOLO), pathname), `${HOME}${pathname.slice(1)}`);
+
+      assert.equal(card.properties['uid'], undefined, 'no uid');
+      assert.equal(card.properties['url']?.[0], `${HOME}author/ada/`, 'the archive comes first');
+    });
+  }
+
+  it('gives a site with several authors no homepage uid', async () => {
+    const html = await body(await site({ ...FRONT_PAGE, ...SEVERAL }), '/');
+
+    assert.doesNotMatch(html, /u-uid/);
   });
 });
