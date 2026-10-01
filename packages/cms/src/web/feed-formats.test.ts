@@ -55,6 +55,9 @@ const BARE: FeedItem = {
 /** A post that answers another, by its `in-reply-to`. */
 const REPLY: FeedItem = { ...BARE, inReplyTo: 'https://remote.example/notes/1?a=1&b=2' };
 
+/** A post in a language other than the feed's (TASK-154). */
+const FRENCH: FeedItem = { ...BARE, language: 'fr-CA' };
+
 describe('an RSS item', () => {
   it('renders the whole item, keyed by its object id', () => {
     assert.deepEqual(rssItem(ITEM), [
@@ -88,6 +91,13 @@ describe('an RSS item', () => {
       '      <source:markdown><![CDATA[Nothing much.]]></source:markdown>',
       '    </item>',
     ]);
+  });
+
+  it('names a post’s own language with dc:language', () => {
+    assert.deepEqual(
+      rssItem(FRENCH).filter((line) => line.includes('language')),
+      ['      <dc:language>fr-CA</dc:language>'],
+    );
   });
 
   it('says nothing about a reply’s target, which RSS 2.0 has no element for', () => {
@@ -141,6 +151,10 @@ describe('an Atom entry', () => {
       '    <content type="html">&lt;p&gt;Nothing much.&lt;/p&gt;\n</content>',
       '  </entry>',
     ]);
+  });
+
+  it('names a post’s own language with xml:lang on the entry', () => {
+    assert.equal(atomEntry(FRENCH)[0], '  <entry xml:lang="fr-CA">');
   });
 
   it('carries no thr:in-reply-to for an item that answers nothing', () => {
@@ -215,6 +229,11 @@ describe('a JSON Feed item', () => {
       _geekity: { in_reply_to: 'https://remote.example/notes/1?a=1&b=2' },
     });
     assert.equal(Object.keys(item).at(-1), '_geekity');
+  });
+
+  it('names a post’s own language', () => {
+    assert.equal(jsonFeedItem(FRENCH).language, 'fr-CA');
+    assert.equal('language' in jsonFeedItem(BARE), false);
   });
 
   it('carries no extension object for an item that answers nothing', () => {

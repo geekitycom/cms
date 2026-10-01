@@ -7,6 +7,7 @@
   {{ field.problem('settings-base-url', problems.baseUrl) }}
   {{ field.problem('settings-timezone', problems.timezone) }}
   {{ field.problem('settings-language', problems.language) }}
+  {{ field.problem('settings-locale', problems.locale) }}
 {% endblock %}
 
 {% block settingsFields %}
@@ -31,6 +32,10 @@
   {% set languageHint %}A BCP 47 tag, such as <code>en</code> or <code>en-GB</code>. It is the page's <code>lang</code> and the feeds' language.{% endset %}
   {{ field.text('settings-language', fields.language, 'Language', form.language,
        error=problems.language, hint=languageHint, required=true) }}
+
+  {% set localeHint %}How the public site writes dates and counts, such as <code>en-US</code> for <code>September 2, 2026</code>. Leave it empty to follow the language.{% endset %}
+  {{ field.text('settings-locale', fields.locale, 'Locale', form.locale,
+       error=problems.locale, hint=localeHint) }}
 {% endblock %}
 
 {% block settingsPanels %}{% endblock %}

@@ -2,6 +2,9 @@ import { Environment, FileSystemLoader } from 'nunjucks';
 
 import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
 import { themeAssetUrl } from './assets.ts';
+import { siteLocale, siteTimezone } from './context.ts';
+import type { SiteData } from './context.ts';
+import { canonicalLocale, DEFAULT_LOCALE, pluralForm } from './locale.ts';
 import { themeSearchPath } from './themes.ts';
 
 /** Where a {@link createTemplateEnvironment} looks, and how it caches. */
@@ -91,21 +94,22 @@ export function useThemeDirs(environment: Environment, dirs: readonly string[]):
 }
 
 /** How `date` renders a value. */
-export type DateFormat = 'readable' | 'iso' | 'html' | 'year' | 'month';
+export type DateFormat =
+  'readable' | 'full' | 'long' | 'medium' | 'short' | 'iso' | 'html' | 'year' | 'month';
 
 /**
  * The filter set, which is part of the semver contract because site templates
  * are written against it.
  *
  * Per decision-11 a date in a file is a UTC instant and the site's `timezone`
- * setting is the lens it is read through, so `readable`, `html`, `year` and
- * `month` are rendered in the site's zone and `iso` stays the instant. The
- * zone comes from
- * the `site` global of the render in hand — Nunjucks calls a filter with the
- * template context as `this`, so nothing has to be threaded through every
- * template — which is what lets the setting change what every page shows
- * without a file changing. An Eleventy build of the same content applies the
- * same lens with Luxon and `zone` read from `site.json`.
+ * setting is the lens it is read through, so every format but `iso` is
+ * rendered in the site's zone and `iso` stays the instant; the words are the
+ * site's locale (TASK-153). Both come from the `site` global of the render in
+ * hand — Nunjucks calls a filter with the template context as `this`, so
+ * nothing has to be threaded through every template — which is what lets a
+ * setting change what every page shows without a file changing. An Eleventy
+ * build of the same content applies the same lens and locale with Intl, both
+ * read from `site.json` (`docs/eleventy.config.example.js`).
  */
 function addFilters(
   environment: Environment,
@@ -118,11 +122,28 @@ function addFilters(
   environment.addFilter(
     'date',
     function (this: unknown, value: unknown, format: unknown = 'readable', timezone?: unknown) {
+      const site = renderSite(this);
       return formatDate(
         value,
         typeof format === 'string' ? format : 'readable',
-        typeof timezone === 'string' && timezone !== '' ? timezone : siteTimezone(this),
+        typeof timezone === 'string' && timezone !== '' ? timezone : siteTimezone(site),
+        siteLocale(site),
       );
+    },
+  );
+
+  // `{{ count | plural({ one: "# reply", other: "# replies" }) }}`: the form
+  // for the count's plural category in the site's locale (TASK-153). A theme
+  // whose strings are in one language names it, so their grammar is that
+  // language's whatever the site's locale.
+  environment.addFilter(
+    'plural',
+    function (this: unknown, count: unknown, forms: unknown, locale?: unknown) {
+      if (typeof forms !== 'object' || forms === null) return '';
+      const tag =
+        (typeof locale === 'string' ? canonicalLocale(locale) : undefined) ??
+        siteLocale(renderSite(this));
+      return pluralForm(Number(count), forms as Record<string, unknown>, tag);
     },
   );
 
@@ -159,81 +180,94 @@ function addFilters(
   return environment;
 }
 
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-] as const;
+/**
+ * What Intl is asked for, by format. `full`, `long`, `medium` and `short` are
+ * Intl's own date styles, so a theme picks how much it wants said and the
+ * locale decides how to say it; `readable` is `long` under the name it had
+ * before there were styles.
+ */
+const INTL_FORMATS: Readonly<Record<string, Intl.DateTimeFormatOptions>> = {
+  full: { dateStyle: 'full' },
+  long: { dateStyle: 'long' },
+  medium: { dateStyle: 'medium' },
+  short: { dateStyle: 'short' },
+  readable: { dateStyle: 'long' },
+  month: { year: 'numeric', month: 'long' },
+  year: { year: 'numeric' },
+};
+
+/** One formatter per locale, zone and format, since a page prints dozens. */
+const formatters = new Map<string, Intl.DateTimeFormat>();
 
 /**
- * `date` filter. An unparseable value renders as the empty string.
+ * `date` filter. An unparseable value renders as the empty string, and so
+ * does a zone Intl does not know.
  *
  * `iso` is the instant, always in UTC, because that is what a `<time
- * datetime>` and a feed want and it must not move when a setting does. The
- * other four are the calendar the reader in `timezone` is on, which is what
- * makes a post published at half past midnight in Berlin say 1 October rather
- * than the 30 September UTC was still on.
+ * datetime>` and a feed want and it must not move when a setting does. `html`
+ * is the ISO calendar day in `timezone`, for the same attribute. The rest are
+ * that calendar day written in `locale` by Intl, which is what makes a post
+ * published at half past midnight in Berlin say 1 October rather than the 30
+ * September UTC was still on, and a French site say `1 octobre`.
  *
  * `month` is the month that calendar day falls in, "September 2026", which is
  * what heads a group of an archive page (TASK-85). It is a format rather than
- * something the archive works out for itself so that the month names are in
- * one table and a theme can head a group of its own the same way.
+ * something the archive works out for itself so that a theme can head a group
+ * of its own the same way.
+ *
+ * Bare `en` is written the way `en-GB` writes it, day before month, because
+ * that is what the CMS printed before it had locales and `en` names a language
+ * rather than a convention. A site that wants `September 2, 2026` says
+ * `en-US`.
  */
 export function formatDate(
   value: unknown,
   format: string,
   timezone: string = DEFAULT_TIMEZONE,
+  locale: string = DEFAULT_LOCALE,
 ): string {
   const date = toDate(value);
   if (date === undefined) return '';
   if (format === 'iso') return date.toISOString();
+  if (format === 'html') return calendarDayIn(date, timezone) ?? '';
 
-  const day = calendarDayIn(date, timezone);
-  if (day === undefined) return '';
+  const options = INTL_FORMATS[format] ?? INTL_FORMATS['long'];
+  const tag = canonicalLocale(locale) ?? DEFAULT_LOCALE;
+  const key = `${tag}|${timezone}|${format}`;
 
-  const [year = '', month = '', dayOfMonth = ''] = day.split('-');
-
-  switch (format) {
-    case 'html':
-      return day;
-    case 'year':
-      return year;
-    case 'month':
-      return `${MONTHS[Number(month) - 1] ?? ''} ${year}`;
-    case 'readable':
-    default:
-      return `${String(Number(dayOfMonth))} ${MONTHS[Number(month) - 1] ?? ''} ${year}`;
+  let formatter = formatters.get(key);
+  if (formatter === undefined) {
+    try {
+      formatter = new Intl.DateTimeFormat(tag === 'en' ? 'en-GB' : tag, {
+        ...options,
+        timeZone: timezone,
+      });
+    } catch {
+      return '';
+    }
+    formatters.set(key, formatter);
   }
+
+  return formatter.format(date);
 }
 
 /**
- * The zone the render in hand is in: the `timezone` of its `site` global.
+ * The `site` global of the render in hand.
  *
  * Nunjucks calls a filter with the template context as `this`, so the filter
  * can read a per-render value without the environment holding any state of its
  * own — which matters, because one environment serves every request and a zone
- * stored on it would be a race between two of them.
+ * or a locale stored on it would be a race between two of them.
  */
-function siteTimezone(context: unknown): string {
-  if (typeof context !== 'object' || context === null) return DEFAULT_TIMEZONE;
+function renderSite(context: unknown): SiteData {
+  const none = {} as SiteData;
+  if (typeof context !== 'object' || context === null) return none;
 
   const lookup = (context as { lookup?: unknown }).lookup;
-  if (typeof lookup !== 'function') return DEFAULT_TIMEZONE;
+  if (typeof lookup !== 'function') return none;
 
   const site: unknown = lookup.call(context, 'site');
-  if (typeof site !== 'object' || site === null) return DEFAULT_TIMEZONE;
-
-  const timezone = (site as Record<string, unknown>)['timezone'];
-  return typeof timezone === 'string' && timezone !== '' ? timezone : DEFAULT_TIMEZONE;
+  return typeof site === 'object' && site !== null ? (site as SiteData) : none;
 }
 
 /**

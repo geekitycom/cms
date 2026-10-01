@@ -535,6 +535,12 @@ arrives as its title, its excerpt and a link, so it sends `name` and a
 would show a `summary` as a content warning, so a note sends neither and puts a
 title its text does not open with at the top of its content.
 
+Both carry their text twice: `content` as it always was, and `contentMap` keyed
+by the post's language, with `summaryMap` beside an `Article`'s `summary`. The
+language is the post's `lang` front matter when it names one, and the site's
+`language` otherwise, so a client can filter and translate by it. Mastodon
+reads a status's language from that key.
+
 An author can choose the type for one post in its front matter:
 
 ```yaml
@@ -1686,7 +1692,7 @@ shadow the login form.
 | `/admin/appearance/themes`                       | Appearance > Themes: the themes on disk. `POST` activates the one named.            |
 | `/admin/tools`                                   | Tools > Content index: what the index holds, and the button that rebuilds it.       |
 | `/admin/tools/rebuild-index`                     | `POST` only. Offers the rebuild, then reads every file again on the live site.      |
-| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language.          |
+| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language, locale.  |
 | `/admin/settings/reading`                        | What the homepage displays, posts per page, the notify server.                      |
 | `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.             |
 | `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                  |
@@ -1838,7 +1844,7 @@ at once cannot each keep half of what the other kept.
 
 The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `homepage`, `postsPage`,
-`timezone`, `language`, `tagBase`,
+`timezone`, `language`, `locale` (when it is set), `tagBase`,
 `categoryBase`, `notifyServer`, `feedUpdatePeriod`, `feedUpdateFrequency`,
 `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
@@ -2818,6 +2824,13 @@ The key is `_geekity` because an extension is named after its publisher, and
 post that is not a reply, or whose `in-reply-to` is not such a URL, carries
 neither. RSS 2.0 has no equivalent element, so an RSS item for a reply is
 written the same as any other.
+
+**Languages.** Every feed declares the site's `language` once: RSS as the
+channel's `language`, Atom as the feed's `xml:lang` and JSON Feed as its
+`language`. A post whose `lang` front matter names another language says so on
+its own item: RSS as `dc:language`, Atom as `xml:lang` on the `entry` and JSON
+Feed as the item's `language`. A post in the site's language, or whose `lang`
+is not a language tag, adds nothing.
 
 ### RSS 2.0
 

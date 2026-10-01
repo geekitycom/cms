@@ -1,6 +1,7 @@
 import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
+import { DEFAULT_LOCALE } from './locale.ts';
 import { formatDate } from './templates.ts';
 
 /**
@@ -59,6 +60,7 @@ export interface ArchiveMonth {
 export function archiveMonths(
   posts: readonly Document[],
   timezone: string = DEFAULT_TIMEZONE,
+  locale: string = DEFAULT_LOCALE,
 ): ArchiveMonth[] {
   const months: ArchiveMonth[] = [];
   let current: string | undefined;
@@ -77,7 +79,7 @@ export function archiveMonths(
     const key = day.slice(0, 7);
     if (key !== current) {
       current = key;
-      months.push({ month: formatDate(date, 'month', timezone), posts: [] });
+      months.push({ month: formatDate(date, 'month', timezone, locale), posts: [] });
     }
 
     months.at(-1)?.posts.push({ title: postLabel(document), url: document.permalink, date });

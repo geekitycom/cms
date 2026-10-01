@@ -88,6 +88,7 @@ async function submit(
     categories: field(html, 'categories') ?? '',
     description: field(html, 'description') ?? '',
     'in-reply-to': field(html, 'in-reply-to') ?? '',
+    lang: field(html, 'lang') ?? '',
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
     action: 'update',
     ...changes,
@@ -465,6 +466,68 @@ describe('the reply target in the editor', () => {
 
     assert.equal(response.status, 400);
     assert.match(await response.text(), /In reply to has to be a web address/);
+    assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+  });
+});
+
+describe('the post language in the editor (TASK-154 AC #1)', () => {
+  const FILE = ['posts', '2026-01-02-published.md'];
+
+  async function published(extra: string[] = []): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+        extra,
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  it('is offered, empty, on a new post, naming the site’s language as the default', async () => {
+    const { agent } = await published();
+
+    const html = await (await agent.get('/admin/posts/new')).text();
+
+    assert.equal(field(html, 'lang'), '');
+    assert.match(html, /<label for="editor-lang">Language<\/label>/);
+    assert.match(html, /Leave it empty for the site’s language, en\./);
+  });
+
+  it('sets lang, shows it on reload, and clears it again', async () => {
+    const { contentDir, agent } = await published();
+
+    assert.equal((await submit(agent, '/admin/posts/published', { lang: ' fr-CA ' })).status, 303);
+    let written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.match(written, /^lang: fr-CA$/m);
+    const reloaded = await (await agent.get('/admin/posts/published')).text();
+    assert.equal(field(reloaded, 'lang'), 'fr-CA');
+
+    assert.equal((await submit(agent, '/admin/posts/published', { lang: '' })).status, 303);
+    written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.doesNotMatch(written, /^lang:/m, 'the key is gone, not left empty');
+  });
+
+  it('keeps a lang the file already has through a save that does not touch it', async () => {
+    const { contentDir, agent } = await published(['lang: de']);
+
+    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
+
+    const written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.match(written, /^lang: de$/m);
+  });
+
+  it('refuses a value that is not a language tag, and writes nothing', async () => {
+    const { contentDir, agent } = await published();
+    const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+    const response = await submit(agent, '/admin/posts/published', { lang: 'French' });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /That is not a language tag, such as en, fr or pt-BR\./);
     assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
   });
 });

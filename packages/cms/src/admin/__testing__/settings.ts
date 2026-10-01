@@ -24,6 +24,7 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     base_url: 'http://localhost:3000',
     timezone: 'UTC',
     language: 'en',
+    locale: '',
   },
   reading: {
     homepage: '',

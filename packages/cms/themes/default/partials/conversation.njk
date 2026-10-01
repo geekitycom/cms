@@ -120,6 +120,9 @@
   And the thread. The title counts the whole of it rather than the top level,
   which is what `counts.replies` is. It does not quote the post's title: the
   post is the page it sits under, and a note has no title to quote (TASK-186).
+  The count goes through `plural` with "en" because the words are English: a
+  theme that translates them drops the "en" and gives the forms its language
+  has, so the site's locale picks between them.
 
   "Comments are closed." is printed under a post that has been answered and is
   no longer taking comments. That a post is closed is what the absence of
@@ -130,7 +133,7 @@
 {% if conversation.replies.length %}
 <div id="comments" class="comments-area">
   <h2 class="comments-title">
-    {%- if conversation.counts.replies == 1 %}One reply{% else %}{{ conversation.counts.replies }} replies{% endif -%}
+    {{- conversation.counts.replies | plural({ one: "One reply", other: "# replies" }, "en") -}}
   </h2>
 
   <ol class="comment-list">

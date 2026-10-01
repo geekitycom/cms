@@ -15,7 +15,8 @@
  * 5. `content/_trash/` is not built.
  * 6. `categories`, the CMS's second taxonomy, becomes `collections.categories`.
  * 7. The site's named menus become `collections.menus`.
- * 8. A `date` filter that reads a UTC instant through `site.timezone`.
+ * 8. A `date` filter that reads a UTC instant through `site.timezone` and
+ *    writes it in the site's locale, and a `plural` filter for counts.
  * 9. `content/_data/federation/` — each user's followers and the inbox log — is data.
  * 10. The Reading choice: `homepage` puts a page at `/` and `postsPage` puts
  *     the listing on a page of its own.
@@ -56,20 +57,37 @@ function siteTimezone() {
   }
 }
 
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+/**
+ * The locale the CMS writes dates and counts in: the `locale` setting, else
+ * the `language`, else `en`, read from `site.json` like the zone.
+ */
+function siteLocale() {
+  try {
+    const site = JSON.parse(readFileSync('content/_data/site.json', 'utf8'));
+    for (const tag of [site.locale, site.language]) {
+      if (typeof tag !== 'string' || tag.trim() === '') continue;
+      try {
+        return Intl.getCanonicalLocales(tag.trim())[0];
+      } catch {
+        // A tag Intl will not take: try the next one.
+      }
+    }
+  } catch {
+    // No site.json: the default.
+  }
+  return 'en';
+}
+
+/** What Intl is asked for by each of the `date` filter's word formats. */
+const DATE_FORMATS = {
+  full: { dateStyle: 'full' },
+  long: { dateStyle: 'long' },
+  medium: { dateStyle: 'medium' },
+  short: { dateStyle: 'short' },
+  readable: { dateStyle: 'long' },
+  month: { year: 'numeric', month: 'long' },
+  year: { year: 'numeric' },
+};
 
 /** The calendar day a zone was on at an instant, `YYYY-MM-DD`. */
 function calendarDayIn(date, zone) {
@@ -668,34 +686,42 @@ function escapeComment(value) {
 }
 
 export default function (eleventyConfig) {
-  // The CMS's `date` filter, in Eleventy's terms: `readable` (the default),
-  // `html`, `year` and `month` are the calendar the site's own zone is on, and
-  // `iso` is the instant, because a <time datetime> and a feed want UTC and
-  // must not move when a setting does. Pass a zone as the second argument to
-  // override.
-  //
-  // With Luxon — which Eleventy already ships — the same filter reads:
-  //
-  //     const at = DateTime.fromJSDate(new Date(value)).setZone(zone ?? siteTimezone());
-  //     return { iso: at.toUTC().toISO(), html: at.toFormat('yyyy-MM-dd'),
-  //              year: at.toFormat('yyyy') }[format] ?? at.toFormat('d LLLL yyyy');
-  //
-  // This version uses Intl so the file keeps its promise of no dependencies.
-  const defaultZone = siteTimezone();
+  // The CMS's `date` filter, in Eleventy's terms: `iso` is the instant,
+  // because a <time datetime> and a feed want UTC and must not move when a
+  // setting does; `html` is the calendar day the site's own zone is on; and
+  // the word formats (`readable`, the default, and Intl's `full`, `long`,
+  // `medium` and `short` styles, `month` and `year`) are that day written in
+  // the site's locale. Bare `en` is written as `en-GB` writes it, day first,
+  // which is what the CMS printed before it had locales. Pass a zone as the
+  // second argument to override.
   //
   // `'now'` is the one word the filter reads rather than parses: the default
   // theme's footer writes `{{ "now" | date("year") }}` for its copyright line,
   // because that is the one date a page has that no file carries.
+  const defaultZone = siteTimezone();
+  const locale = siteLocale();
   eleventyConfig.addFilter('date', (value, format = 'readable', zone = defaultZone) => {
     const at = value === 'now' ? new Date() : value instanceof Date ? value : new Date(value);
     if (Number.isNaN(at.getTime())) return '';
     if (format === 'iso') return at.toISOString();
+    if (format === 'html') return calendarDayIn(at, zone);
 
-    const [year, month, day] = calendarDayIn(at, zone).split('-');
-    if (format === 'html') return `${year}-${month}-${day}`;
-    if (format === 'year') return year;
-    if (format === 'month') return `${MONTHS[Number(month) - 1]} ${year}`;
-    return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
+    return new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : locale, {
+      ...(DATE_FORMATS[format] ?? DATE_FORMATS.long),
+      timeZone: zone,
+    }).format(at);
+  });
+
+  // The CMS's `plural` filter: the form for the count's plural category in
+  // the site's locale, or in the one the template names, `other` when the
+  // forms have none for it, with `#` replaced by the count.
+  //
+  //     {{ n | plural({ one: "# reply", other: "# replies" }) }}
+  eleventyConfig.addFilter('plural', (count, forms, tag = locale) => {
+    const n = Number(count);
+    const form = forms?.[new Intl.PluralRules(tag).select(n)] ?? forms?.other;
+    if (typeof form !== 'string') return '';
+    return form.replaceAll('#', new Intl.NumberFormat(tag, { useGrouping: false }).format(n));
   });
 
   // The CMS publishes each user's ActivityPub followers and the log of what

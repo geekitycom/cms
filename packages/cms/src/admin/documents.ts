@@ -25,6 +25,7 @@ import type { GeekityEnv } from '../env.ts';
 import { readAltTexts, undescribedImages } from '../images/alt-text.ts';
 import type { UndescribedImage } from '../images/alt-text.ts';
 import { isPublicDocument } from '../web/documents.ts';
+import { LANG_FRONT_MATTER_KEY } from '../web/locale.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
 import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
@@ -33,7 +34,7 @@ import { findUserById, listUsers } from './accounts.ts';
 import type { User } from './accounts.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
-import { readSiteSettings } from './settings.ts';
+import { LANGUAGE_TAG_PATTERN, readSiteSettings } from './settings.ts';
 import { PREVIEW_PATH } from './preview.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -326,6 +327,7 @@ async function saveFromForm(
     description: text(body['description']).trim(),
     author: text(body['author']).trim(),
     inReplyTo: text(body['in-reply-to']).trim(),
+    lang: text(body['lang']).trim(),
     draft: body['draft'] !== undefined,
     exclude: body['exclude'] !== undefined,
     contact: body['contact'] !== undefined,
@@ -359,6 +361,10 @@ async function saveFromForm(
   // anything else would be saved as a reply that is not one.
   if (kind.type === 'post' && form.inReplyTo !== '' && replyTarget(form) === undefined) {
     return refuse('In reply to has to be a web address, like https://example.com/a-post/.');
+  }
+
+  if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
+    return refuse('That is not a language tag, such as en, fr or pt-BR.');
   }
 
   // TASK-141: an image nobody described is a problem to fix before readers
@@ -724,9 +730,13 @@ function normalizePermalink(value: string): string | undefined {
 function resolveExtra(
   kind: DocumentKind,
   document: Document | undefined,
-  form: Pick<EditorForm, 'exclude' | 'comments' | 'contact'>,
+  form: Pick<EditorForm, 'exclude' | 'comments' | 'contact' | 'lang'>,
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
+
+  // Empty is the site's language, which is the key's absence (TASK-154).
+  if (form.lang === '') delete extra[LANG_FRONT_MATTER_KEY];
+  else extra[LANG_FRONT_MATTER_KEY] = form.lang;
 
   // The post's own answer about comments, or none at all: "site default" is
   // the absence of the key rather than a value, because that is what every
@@ -1081,6 +1091,8 @@ export interface EditorForm {
   author: string;
   /** The post this one replies to, the mf2 `in-reply-to`. Posts only. */
   inReplyTo: string;
+  /** The language it is written in, the `lang` key; empty for the site's. */
+  lang: string;
   draft: boolean;
   /** Whether `eleventyExcludeFromCollections` is set. Pages only. */
   exclude: boolean;
@@ -1125,6 +1137,7 @@ export function blankForm(
     // {@link authorChoices} is where the default is applied.
     author: '',
     inReplyTo: '',
+    lang: '',
     draft: false,
     exclude: false,
     contact: false,
@@ -1153,6 +1166,10 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     description: document.description ?? '',
     author: document.author ?? '',
     inReplyTo: document.inReplyTo ?? '',
+    lang:
+      typeof document.extra[LANG_FRONT_MATTER_KEY] === 'string'
+        ? document.extra[LANG_FRONT_MATTER_KEY]
+        : '',
     draft: document.draft,
     exclude: document.extra[EXCLUDE_KEY] === true,
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
@@ -1223,6 +1240,8 @@ function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Res
     commentSettings: COMMENT_SETTINGS,
     // Who this can be attributed to, and who it is attributed to now.
     authors: authorChoices(c, form.author),
+    // What an empty Language field means.
+    siteLanguage: readSiteSettings(c.var.config.contentDir).language,
     heading:
       document === undefined
         ? `Add ${kind.singular}`

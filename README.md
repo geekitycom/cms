@@ -932,7 +932,8 @@ offered.
 
 `/admin/settings` holds the values that are a site's own rather than a post's,
 on six pages under the Settings menu: **General** (title, tagline, author, base
-URL, time zone and language), **Reading** (what the homepage displays, posts per
+URL, time zone, language, and the locale dates and counts are written in when
+it is not the language), **Reading** (what the homepage displays, posts per
 page, the notify server the feeds advertise), **Permalinks** (the tag and category
 archive bases), **Discussion** (comments and when they close, webmentions sent
 and received, and how long commenter emails, address hashes and contact

@@ -159,6 +159,43 @@ describe('a General form the validator refuses', () => {
     assert.equal(field(html, 'language'), 'en-GB', 'the refused saves changed nothing');
   });
 
+  it('writes the public site’s dates in the locale, the language when it is empty', async () => {
+    const contentDir = await box.dir('geekity-settings-locale-');
+    await mkdir(path.join(contentDir, 'posts'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, 'posts', '2026-09-02-hello.md'),
+      "---\ntitle: Hello\ndate: '2026-09-02T09:00:00Z'\n---\n\nBody.\n",
+      'utf8',
+    );
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+    const file = path.join(contentDir, '_data', 'site.json');
+    const stored = async () => JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+
+    assert.equal((await saveSettings(agent, 'general', { language: 'fr' })).status, 303);
+    assert.match(await (await cms.app.request('/')).text(), />2 septembre 2026</);
+    assert.equal('locale' in (await stored()), false, 'an empty locale writes no key');
+
+    const saved = await saveSettings(agent, 'general', { language: 'en', locale: 'en-US' });
+    assert.equal(saved.status, 303);
+    const home = await (await cms.app.request('/')).text();
+    assert.match(home, />September 2, 2026</);
+    assert.match(home, /<html lang="en">/, 'the locale leaves the page language alone');
+    assert.equal((await stored())['locale'], 'en-US');
+    assert.equal(field(await (await agent.get('/admin/settings')).text(), 'locale'), 'en-US');
+  });
+
+  it('refuses a locale Intl does not know', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+
+    for (const bad of ['english', 'en_US', 'en-']) {
+      const response = await saveSettings(agent, 'general', { locale: bad });
+      assert.equal(response.status, 400, JSON.stringify(bad));
+      assert.match(await response.text(), /not a locale/, JSON.stringify(bad));
+    }
+  });
+
   it('refuses an empty title', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);

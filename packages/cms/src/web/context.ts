@@ -11,6 +11,7 @@ import type { ImageLoading } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import type { AuthorContext } from './authors.ts';
 import { feedExcerpt } from './feed-item.ts';
+import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from './locale.ts';
 import { DEFAULT_TAXONOMY_BASES, taxonomyBasesOrDefault, taxonomyRedirectsOf } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 
@@ -42,6 +43,12 @@ export interface SiteData {
    * feed's `xml:lang`.
    */
   language?: string | undefined;
+  /**
+   * The locale dates and counts are written in, as a BCP 47 tag, when it is
+   * not the language: `en-US` on an `en` site, say. Absent or empty means the
+   * language. {@link siteLocale} is the one reading of it.
+   */
+  locale?: string | undefined;
   /**
    * The site's avatar, as the public path it is served at. Empty until one has
    * been uploaded on the settings screen; the ActivityPub actor's `icon`.
@@ -141,6 +148,13 @@ export interface DocumentContext {
   /** The URL a reply answers, present only on a reply. */
   inReplyTo?: string | undefined;
   /**
+   * The language the document is written in, as a canonical BCP 47 tag, when
+   * its front matter names one (TASK-154). A theme marks the article with it
+   * where it is not the site's `language`. A value that is no tag is
+   * `undefined` here, so a typo in one file never reaches an attribute.
+   */
+  lang?: string | undefined;
+  /**
    * The words a link to the document says: its title, or an untitled post's
    * first words.
    */
@@ -237,6 +251,8 @@ export function documentContext(
     postType: postTypeOf(document),
     named: isNamed(document),
     ...optional('inReplyTo', replyTarget(document)),
+    // Over the raw front-matter value the spread above put here.
+    lang: documentLanguage(document),
     label: postLabel(document),
     ...optional('date', date),
     tags: document.tags,
@@ -365,6 +381,20 @@ export function themeName(site: SiteData): string {
 export function siteTimezone(site: SiteData): string {
   const timezone = site['timezone'];
   return typeof timezone === 'string' && timezone !== '' ? timezone : DEFAULT_TIMEZONE;
+}
+
+/**
+ * The locale this site's dates and counts are written in: the `locale`
+ * setting, else the `language`, else `en`. A tag Intl will not take is passed
+ * over, so a hand-edited `site.json` costs the locale and not the page.
+ */
+export function siteLocale(site: SiteData): string {
+  for (const tag of [site['locale'], site['language']]) {
+    if (typeof tag !== 'string' || tag.trim() === '') continue;
+    const locale = canonicalLocale(tag);
+    if (locale !== undefined) return locale;
+  }
+  return DEFAULT_LOCALE;
 }
 
 /** WordPress's Reading choice, as `site.json` spells it. */

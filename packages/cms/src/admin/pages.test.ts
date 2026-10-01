@@ -84,6 +84,7 @@ async function submit(
     slug: field(html, 'slug') ?? '',
     permalink: field(html, 'permalink') ?? '',
     description: field(html, 'description') ?? '',
+    lang: field(html, 'lang') ?? '',
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
     ...(checked(html, 'exclude') ? { exclude: '1' } : {}),
     ...(checked(html, 'contact') ? { contact: '1' } : {}),
@@ -253,6 +254,26 @@ describe('writing a page', () => {
     const live = await cms.app.request('/about-this-site/');
     assert.equal(live.status, 200, 'the public site is serving it without a restart');
     assert.match(await live.text(), /Written in a textarea\./);
+  });
+
+  it('writes the language a page is in, and serves it marked (TASK-154 AC #1)', async () => {
+    const contentDir = await seeded([]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await submit(agent, '/admin/pages/new', {
+      title: 'À propos',
+      slug: 'a-propos',
+      lang: 'fr',
+      body: 'Nous.',
+      action: 'publish',
+    });
+
+    assert.equal(response.status, 303);
+    const written = await readFile(path.join(contentDir, 'pages', 'a-propos.md'), 'utf8');
+    assert.match(written, /^lang: fr$/m);
+    assert.equal(field(await (await agent.get('/admin/pages/a-propos')).text(), 'lang'), 'fr');
+    assert.match(await (await cms.app.request('/a-propos/')).text(), /<article [^>]*lang="fr">/);
   });
 
   it('refuses a page with no title and writes nothing', async () => {

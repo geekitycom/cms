@@ -7,6 +7,7 @@ import {
   Image,
   InteractionPolicy,
   InteractionRule,
+  LanguageString,
   Note,
   PUBLIC_COLLECTION,
   Source,
@@ -30,6 +31,7 @@ import { htmlToText } from '../content/search.ts';
 import { userForAuthor } from '../web/authors.ts';
 import { isPublicDocument, permalinkOfObjectId, postObjectId } from '../web/documents.ts';
 import { feedExcerpt } from '../web/feed-item.ts';
+import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../web/locale.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { categoryHref, tagHref } from '../web/taxonomy.ts';
 import { actorId } from './actor.ts';
@@ -191,7 +193,12 @@ export function postObject(
   const { actor, followers } = attribution(context, document);
   // The archives an activity points at are wherever the site currently serves
   // them, which is a setting rather than a constant (TASK-36).
-  const bases = taxonomyBasesFromSettings(readSiteSettings(context.data.config.contentDir));
+  const settings = readSiteSettings(context.data.config.contentDir);
+  const bases = taxonomyBasesFromSettings(settings);
+  // The language a client filters and translates the post by: its own, else
+  // the site's (TASK-154).
+  const language =
+    documentLanguage(document) ?? canonicalLocale(settings.language) ?? DEFAULT_LOCALE;
 
   const inReplyTo = replyTarget(document);
   const common = {
@@ -224,16 +231,25 @@ export function postObject(
   };
 
   if (postObjectType(document) === 'Note') {
-    return new Note({ ...common, content: noteContent(document) });
+    return new Note({ ...common, contents: inLanguage(noteContent(document), language) });
   }
 
   const summary = feedExcerpt(document);
   return new Article({
     ...common,
     name: document.title === '' ? null : document.title,
-    summary: summary === '' ? null : summary,
-    content: document.html,
+    summaries: summary === '' ? [] : inLanguage(summary, language),
+    contents: inLanguage(document.html, language),
   });
+}
+
+/**
+ * A text as a plain value and again under its language: `content` beside a
+ * `contentMap` keyed by the tag. Mastodon reads the language off the map and
+ * the text off whichever it finds, so both go.
+ */
+function inLanguage(text: string, language: string): (string | LanguageString)[] {
+  return [text, new LanguageString(text, language)];
 }
 
 /**

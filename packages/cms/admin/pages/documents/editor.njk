@@ -103,6 +103,13 @@
       <label for="editor-description">Description</label>
       <input id="editor-description" name="description" type="text" value="{{ form.description }}" />
 
+      {#- The `lang` front matter (TASK-154): a post or page written in another
+          language than the site's says so, for screen readers, translation
+          and fediverse language filters. -#}
+      <label for="editor-lang">Language</label>
+      <input id="editor-lang" name="lang" type="text" value="{{ form.lang }}" autocomplete="off" spellcheck="false" aria-describedby="editor-lang-hint" />
+      <p class="admin-hint" id="editor-lang-hint">A language tag, such as fr or pt-BR. Leave it empty for the site’s language, {{ siteLanguage }}.</p>
+
       {# Who the front matter says wrote this (TASK-67). A select of the site's
          users rather than a free box, because after decision-14 the value is a
          person rather than a string: it decides whose archive the post is on

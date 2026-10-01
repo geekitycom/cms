@@ -14,6 +14,7 @@
 #}
 {% extends "layouts/base.njk" %}
 {% import "partials/kicker.njk" as kicker with context %}
+{% import "partials/lang.njk" as language with context %}
 
 {#- Who the bio credits, and what tells `layouts/base.njk` the site menu is in
     the bio rather than in the page footer. -#}
@@ -21,7 +22,7 @@
 
 {% block content %}
 {% set entryUrl = page.url or url %}
-<article class="blog-post h-entry">
+<article class="blog-post h-entry"{{ language.attr(lang) }}>
   <header class="post-header">
     {{ kicker.line("Page") }}
     <h1 class="p-name">{{ title }}</h1>
