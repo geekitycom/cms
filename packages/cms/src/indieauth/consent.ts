@@ -22,8 +22,8 @@ import type { Scope } from './request.ts';
  */
 export const CONSENT_PATH = `${ADMIN_PREFIX}/indieauth/consent`;
 
-/** What each scope lets a client learn or do, as the consent screen says it. */
-const SCOPE_LABELS: Readonly<Record<Scope, string>> = {
+/** What each scope lets a client learn or do, as the consent and connected apps screens say it. */
+export const SCOPE_LABELS: Readonly<Record<Scope, string>> = {
   profile: 'Your name, URL and photo',
   email: 'Your email address',
   create: 'Create posts as you',
@@ -113,7 +113,12 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
       users: listUsers(config.dataDir),
       settings,
     });
-    const pending = c.var.indieauth.consents.put({ request, userId: user.id, me });
+    const pending = c.var.indieauth.consents.put({
+      request,
+      userId: user.id,
+      me,
+      ...(client.name === undefined ? {} : { clientName: client.name }),
+    });
     const redirect = new URL(redirectUri);
 
     c.set('cspFormAction', formActionSource(redirect));
@@ -155,6 +160,7 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
     const ticked = new Set([body['scope']].flat().map(text));
     const code = c.var.indieauth.codes.put({
       clientId: request.clientId,
+      ...(pending.clientName === undefined ? {} : { clientName: pending.clientName }),
       redirectUri: request.redirectUri,
       codeChallenge: request.codeChallenge,
       userId: user.id,

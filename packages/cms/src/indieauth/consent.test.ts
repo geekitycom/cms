@@ -272,6 +272,7 @@ describe('approving and denying', () => {
 
     assert.deepEqual(await grant(cms, code), {
       clientId: APP,
+      clientName: 'Quill',
       redirectUri: `${APP}callback`,
       codeChallenge: CHALLENGE,
       userId: 1,

@@ -33,6 +33,14 @@ export const ACCESS_TOKEN_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 /** How long a refresh token works for, counted from its own issue: each refresh starts it again. */
 export const REFRESH_TOKEN_LIFETIME_MS = 60 * 24 * 60 * 60 * 1000;
 
+/**
+ * How stale a connection's last use may be. A token's use is written only
+ * when the stored one is older than this, so a client calling the API all
+ * day rewrites the file once an hour rather than once a request (TASK-162,
+ * decision-24).
+ */
+export const LAST_USE_RESOLUTION_MS = 60 * 60 * 1000;
+
 /** One connection as the file keeps it. */
 export interface StoredToken {
   /** Stable for the life of the connection, so a screen can name it. */
@@ -41,11 +49,15 @@ export interface StoredToken {
   /** The canonical me URL the client was handed. */
   readonly me: string;
   readonly clientId: string;
+  /** What the client called itself on the consent screen, when it said. */
+  readonly clientName?: string;
   readonly scopes: readonly Scope[];
   /** The RFC 8707 resource the token is good at, or absent when the client named none. */
   readonly resource?: string;
   /** When the person approved the connection, as an ISO 8601 instant. */
   readonly issuedAt: string;
+  /** When a resource server last accepted its token, to {@link LAST_USE_RESOLUTION_MS}. */
+  readonly lastUsedAt?: string;
   readonly accessTokenHash: string;
   /** When the current access token stops working. */
   readonly expiresAt: string;
@@ -110,6 +122,7 @@ export async function issueTokens(
     userId: grant.userId,
     me: grant.me,
     clientId: grant.clientId,
+    ...(grant.clientName === undefined ? {} : { clientName: grant.clientName }),
     scopes: grant.scopes,
     ...(grant.resource === undefined ? {} : { resource: grant.resource }),
     issuedAt: now.toISOString(),
@@ -221,6 +234,38 @@ export async function revokeToken(dataDir: string, presented: string, now: Date)
   if (!listTokens(dataDir).some(matches)) return false;
   await update(dataDir, now, (tokens) => tokens.filter((token) => !matches(token)));
   return true;
+}
+
+/**
+ * End connection `id` of `userId`, as the connected apps screen does, and
+ * answer what it was. Somebody else's connection, or one already gone, answers
+ * `undefined` and writes nothing.
+ */
+export async function revokeConnection(
+  dataDir: string,
+  userId: number,
+  id: string,
+  now: Date,
+): Promise<StoredToken | undefined> {
+  const matches = (token: StoredToken) => token.id === id && token.userId === userId;
+  const revoked = listTokens(dataDir).find(matches);
+  if (revoked === undefined) return undefined;
+  await update(dataDir, now, (tokens) => tokens.filter((token) => !matches(token)));
+  return revoked;
+}
+
+/**
+ * Note that `token` was just accepted, unless its last use is already within
+ * {@link LAST_USE_RESOLUTION_MS}: the record says when it was last written,
+ * so no state outside the file is needed to keep the writes rare.
+ */
+export async function recordUse(dataDir: string, token: StoredToken, now: Date): Promise<void> {
+  const last = token.lastUsedAt === undefined ? undefined : Date.parse(token.lastUsedAt);
+  if (last !== undefined && now.getTime() - last <= LAST_USE_RESOLUTION_MS) return;
+  const lastUsedAt = now.toISOString();
+  await update(dataDir, now, (tokens) =>
+    tokens.map((stored) => (stored.id === token.id ? { ...stored, lastUsedAt } : stored)),
+  );
 }
 
 /** Revoke every token `userId` holds. */

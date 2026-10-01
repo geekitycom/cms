@@ -4,6 +4,7 @@ import type { Environment } from 'nunjucks';
 import type { ResolvedConfig } from '../config.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { GeekityEnv } from '../env.ts';
+import { mountConnectedApps } from '../indieauth/connected-apps.ts';
 import { CONSENT_PATH, mountConsentScreen } from '../indieauth/consent.ts';
 import {
   countUsers,
@@ -374,6 +375,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // The site's own settings, which are content/_data/site.json itself: the
   // screen reads that file and writes it back (decision-9).
   mountSettings(app, { render });
+
+  // The apps that hold a token for whoever is signed in (TASK-162). Before the
+  // users screens, whose `/admin/users/:id` answers anything else with a 404.
+  mountConnectedApps(app, { render });
 
   // Who may sign in: the list, the add form, and the change-password form for
   // whoever is looking at it.

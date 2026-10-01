@@ -211,6 +211,18 @@
      whoever is signed in and means nothing on somebody else's screen.
      Resetting a colleague's password from under them is deliberately not
      offered — a fresh account is what that is for. #}
+  {# Only on your own page, as the screen it links to only ever lists your
+     own connections (TASK-162). #}
+  {% if account.you %}
+    <section class="admin-settings">
+      <h2>Connected apps</h2>
+      <p class="admin-hint">
+        Apps you signed in to with your site's address can act as you.
+        <a href="{{ connectedAppsUrl }}">Review or revoke them</a>.
+      </p>
+    </section>
+  {% endif %}
+
   {% if account.you %}
     <form class="admin-settings" id="change-password" method="post" action="{{ changePasswordUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />

@@ -5,7 +5,7 @@ import type { User } from '../admin/accounts.ts';
 import type { GeekityEnv } from '../env.ts';
 import { PROTECTED_RESOURCE_METADATA_PATH, siteBaseUrl } from './discovery.ts';
 import type { Scope } from './request.ts';
-import { findAccessToken, verifyAccessToken } from './tokens.ts';
+import { findAccessToken, recordUse, verifyAccessToken } from './tokens.ts';
 import type { Audience, StoredToken } from './tokens.ts';
 
 /**
@@ -68,6 +68,7 @@ export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
       });
     }
 
+    await recordUse(config.dataDir, token, now);
     c.set('bearer', { token, user });
     await next();
   };

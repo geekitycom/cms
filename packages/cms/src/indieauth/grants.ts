@@ -10,6 +10,8 @@ import type { AuthorizationRequest, Scope } from './request.ts';
  */
 export interface AuthorizationCode {
   readonly clientId: string;
+  /** What the client called itself, for the connected apps screen. */
+  readonly clientName?: string;
   readonly redirectUri: string;
   readonly codeChallenge: string;
   readonly userId: number;
@@ -28,6 +30,8 @@ export interface PendingConsent {
   readonly userId: number;
   /** The me URL the screen named. */
   readonly me: string;
+  /** What the client called itself on the screen, when it said. */
+  readonly clientName?: string;
 }
 
 /** Values kept for a while under an unguessable key, each taken at most once. */

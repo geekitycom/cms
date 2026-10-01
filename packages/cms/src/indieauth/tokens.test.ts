@@ -13,11 +13,14 @@ import { createUser, deleteUser } from '../admin/accounts.ts';
 import type { AuthorizationCode } from './grants.ts';
 import {
   ACCESS_TOKEN_LIFETIME_MS,
+  LAST_USE_RESOLUTION_MS,
   REFRESH_TOKEN_LIFETIME_MS,
   TOKENS_FILE,
   issueTokens,
   listTokens,
+  recordUse,
   refreshTokens,
+  revokeConnection,
   revokeToken,
   verifyAccessToken,
 } from './tokens.ts';
@@ -242,6 +245,82 @@ describe('revoking a token', () => {
     const dir = await dataDir();
     assert.equal(await revokeToken(dir, 'made-up', T0), false);
     await assert.rejects(stat(path.join(dir, TOKENS_FILE)), { code: 'ENOENT' });
+  });
+});
+
+describe('revoking a connection from the connected apps screen', () => {
+  it('ends the connection by its id, and both of its tokens stop working', async () => {
+    const dir = await dataDir();
+    const issued = await issueTokens(dir, GRANT, T0);
+    const other = await issueTokens(dir, GRANT, T0);
+
+    assert.equal(
+      (await revokeConnection(dir, GRANT.userId, issued.token.id, T0))?.id,
+      issued.token.id,
+    );
+
+    assert.equal(verifyAccessToken(dir, issued.accessToken, MICROPUB, T0), undefined);
+    assert.equal((await refreshTokens(dir, refreshForm(issued.refreshToken), T0)).ok, false);
+    assert.deepEqual(
+      listTokens(dir).map((token) => token.id),
+      [other.token.id],
+    );
+  });
+
+  it('leaves another user’s connection alone, and writes nothing', async () => {
+    const dir = await dataDir();
+    const issued = await issueTokens(dir, GRANT, T0);
+    const before = await readFile(path.join(dir, TOKENS_FILE), 'utf8');
+
+    assert.equal(await revokeConnection(dir, GRANT.userId + 1, issued.token.id, T0), undefined);
+    assert.equal(await revokeConnection(dir, GRANT.userId, 'made-up', T0), undefined);
+
+    assert.equal(await readFile(path.join(dir, TOKENS_FILE), 'utf8'), before);
+    assert.ok(verifyAccessToken(dir, issued.accessToken, MICROPUB, T0));
+  });
+});
+
+describe('recording when a connection was last used', () => {
+  it('has no last use until the token is used', async () => {
+    const dir = await dataDir();
+    const issued = await issueTokens(dir, GRANT, T0);
+    assert.equal(issued.token.lastUsedAt, undefined);
+    assert.equal(listTokens(dir)[0]?.lastUsedAt, undefined);
+  });
+
+  it('writes the first use, then nothing more until the resolution has passed', async () => {
+    const dir = await dataDir();
+    const issued = await issueTokens(dir, GRANT, T0);
+    const file = path.join(dir, TOKENS_FILE);
+
+    await recordUse(dir, listTokens(dir)[0] ?? issued.token, later(1000));
+    assert.equal(listTokens(dir)[0]?.lastUsedAt, later(1000).toISOString());
+    const written = await readFile(file, 'utf8');
+
+    for (const at of [2000, LAST_USE_RESOLUTION_MS]) {
+      await recordUse(dir, listTokens(dir)[0] ?? issued.token, later(at));
+    }
+    assert.equal(await readFile(file, 'utf8'), written, 'no rewrite within the resolution');
+
+    const next = later(1000 + LAST_USE_RESOLUTION_MS + 1);
+    await recordUse(dir, listTokens(dir)[0] ?? issued.token, next);
+    assert.equal(listTokens(dir)[0]?.lastUsedAt, next.toISOString());
+  });
+
+  it('does not bring back a connection revoked while the request was in flight', async () => {
+    const dir = await dataDir();
+    const issued = await issueTokens(dir, GRANT, T0);
+    await revokeToken(dir, issued.accessToken, T0);
+    await recordUse(dir, issued.token, later(1000));
+    assert.deepEqual(listTokens(dir), []);
+  });
+
+  it('survives a refresh', async () => {
+    const dir = await dataDir();
+    const issued = await issueTokens(dir, GRANT, T0);
+    await recordUse(dir, issued.token, later(1000));
+    const refreshed = await refreshTokens(dir, refreshForm(issued.refreshToken), later(2000));
+    assert.equal(refreshed.ok && refreshed.issued.token.lastUsedAt, later(1000).toISOString());
   });
 });
 

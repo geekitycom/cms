@@ -1319,6 +1319,32 @@ out where to sign in. The metadata document also lists three more endpoints:
 
 All three, and the resource metadata, answer 503 in maintenance mode.
 
+### Connected apps
+
+Users > Connected apps, at `/admin/users/apps`, lists every app that holds a
+token for you. Your own user screen links to it. You see only your own
+connections, never another user's. Each row shows:
+
+- The app's name, linked to its `client_id` URL. An app that published no name
+  is shown by that URL.
+- What it can do, in the words the consent screen used.
+- When you connected it.
+- When it last used its token. "Not yet" means it has not called the site
+  since you approved it.
+- When the connection expires if the app stops using it. An app that refreshes
+  its token stays connected.
+
+The site records last use when it accepts a token, but writes it to
+`data/indieauth-tokens.json` at most once an hour per connection. So the time
+shown can be up to an hour early, and an app that calls the API many times a
+minute does not rewrite the file each time.
+
+Each row has a Revoke button that names the app. Revoking deletes the
+connection: its access token and its refresh token stop working at once, the
+app's next request gets 401 `invalid_token`, and the screen confirms with a
+message. The app has to ask you again through the consent screen to reconnect.
+With no apps connected, the screen says what kinds of app connect here.
+
 ## The theme
 
 Templates are Nunjucks (decision-4). The default theme lives in

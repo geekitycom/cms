@@ -58,6 +58,7 @@ export const ADMIN_TEMPLATES = {
   usersList: 'pages/users/list.njk',
   usersNew: 'pages/users/new.njk',
   usersEdit: 'pages/users/edit.njk',
+  connectedApps: 'pages/users/apps.njk',
   federation: 'pages/federation/followers.njk',
   federationSettings: 'pages/federation/settings.njk',
   indieauthConsent: 'pages/indieauth/consent.njk',

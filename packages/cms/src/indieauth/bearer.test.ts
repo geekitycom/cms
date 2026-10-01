@@ -4,6 +4,8 @@
  * one, including where to go to find out how to get a good one.
  */
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { Hono } from 'hono';
@@ -15,7 +17,14 @@ import type { Cms } from '../index.ts';
 import { requireBearer } from './bearer.ts';
 import type { Guard } from './bearer.ts';
 import type { AuthorizationCode } from './grants.ts';
-import { ACCESS_TOKEN_LIFETIME_MS, issueTokens, revokeToken } from './tokens.ts';
+import {
+  ACCESS_TOKEN_LIFETIME_MS,
+  issueTokens,
+  LAST_USE_RESOLUTION_MS,
+  listTokens,
+  revokeToken,
+  TOKENS_FILE,
+} from './tokens.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -48,10 +57,10 @@ async function site(): Promise<Site> {
 }
 
 /** An app with one route behind `guard` that answers who it was handed. */
-function guarded(cms: Cms, guard: Guard): Hono<GeekityEnv> {
+function guarded(cms: Cms, guard: Guard, now?: () => Date): Hono<GeekityEnv> {
   const app = new Hono<GeekityEnv>();
   app.use('*', async (c, next) => {
-    c.set('config', cms.config);
+    c.set('config', now === undefined ? cms.config : { ...cms.config, now });
     await next();
   });
   app.post('/thing', requireBearer(guard), (c) =>
@@ -180,5 +189,30 @@ describe('a route behind the bearer guard', () => {
       `Bearer error="insufficient_scope", scope="delete", resource_metadata="${RESOURCE_METADATA}"`,
     );
     assert.deepEqual(((await response.json()) as { error: string }).error, 'insufficient_scope');
+  });
+});
+
+describe('when a connection was last used', () => {
+  it('is recorded when the guard accepts its token, at most once per resolution', async () => {
+    const { cms, grant } = await site();
+    const t0 = new Date('2026-10-01T12:00:00Z');
+    let clock = t0;
+    const app = guarded(cms, { audience: MICROPUB }, () => clock);
+    const { accessToken } = await issueTokens(cms.config.dataDir, grant, t0);
+    const file = path.join(cms.config.dataDir, TOKENS_FILE);
+
+    assert.equal((await app.request('/thing', withHeader(accessToken))).status, 200);
+    assert.equal(listTokens(cms.config.dataDir)[0]?.lastUsedAt, t0.toISOString());
+    const written = await readFile(file, 'utf8');
+
+    for (let request = 1; request <= 20; request += 1) {
+      clock = new Date(t0.getTime() + request * 1000);
+      assert.equal((await app.request('/thing', withHeader(accessToken))).status, 200);
+    }
+    assert.equal(await readFile(file, 'utf8'), written, 'twenty requests rewrote nothing');
+
+    clock = new Date(t0.getTime() + LAST_USE_RESOLUTION_MS + 1);
+    await app.request('/thing', withHeader(accessToken));
+    assert.equal(listTokens(cms.config.dataDir)[0]?.lastUsedAt, clock.toISOString());
   });
 });
