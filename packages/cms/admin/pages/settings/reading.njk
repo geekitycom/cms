@@ -9,6 +9,8 @@
   {{ field.problem('settings-posts-page', problems.postsPage) }}
   {{ field.problem('settings-posts-per-page', problems.postsPerPage) }}
   {{ field.problem('settings-notify-server', problems.notifyServer) }}
+  {{ field.problem('settings-feed-update-period', problems.feedUpdatePeriod) }}
+  {{ field.problem('settings-feed-update-frequency', problems.feedUpdateFrequency) }}
   {{ field.problem('settings-ai-crawlers', problems.aiCrawlers) }}
   {{ field.problem('settings-content-signal-search', problems.contentSignalSearch) }}
   {{ field.problem('settings-content-signal-ai-input', problems.contentSignalAiInput) }}
@@ -73,6 +75,28 @@
   {% endset %}
   {{ field.text('settings-notify-server', fields.notifyServer, 'Notify server', form.notifyServer,
        error=problems.notifyServer, hint=notifyHint, inputmode='url') }}
+
+  {# TASK-152. The Syndication module's polling hint, which only RSS has an
+     element for. #}
+  {% set periodHint %}
+    How often RSS readers should check the feeds. Readers that see no new post
+    for much longer than this may check less often, so pick a pace the site keeps.
+  {% endset %}
+  {% call field.select('settings-feed-update-period', fields.feedUpdatePeriod, 'Feed update period',
+       error=problems.feedUpdatePeriod, hint=periodHint) %}
+    {% for option in [
+         ['hourly', 'Hourly'],
+         ['daily', 'Daily'],
+         ['weekly', 'Weekly'],
+         ['monthly', 'Monthly'],
+         ['yearly', 'Yearly']] %}
+      <option value="{{ option[0] }}"{% if option[0] == form.feedUpdatePeriod %} selected{% endif %}>{{ option[1] }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {{ field.text('settings-feed-update-frequency', fields.feedUpdateFrequency, 'Checks per period',
+       form.feedUpdateFrequency, error=problems.feedUpdateFrequency, inputmode='numeric', required=true,
+       hint='How many times in each period. Daily and 2 means twice a day.') }}
 
   {# TASK-148. What /robots.txt tells crawlers beyond keeping them out of the
      admin, which it does whatever is set here. #}

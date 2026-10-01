@@ -68,6 +68,8 @@ describe('content/_data/site.json', () => {
       webmentionsSend: true,
       webmentionsReceive: true,
       notifyServer: 'https://rpc.rsscloud.io',
+      feedUpdatePeriod: 'hourly',
+      feedUpdateFrequency: 1,
       // What robots.txt says beyond the admin rule and the sitemap (TASK-148).
       aiCrawlers: 'allow',
       contentSignalSearch: '',

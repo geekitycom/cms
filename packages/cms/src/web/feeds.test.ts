@@ -1857,3 +1857,115 @@ describe('the notify server a feed advertises', () => {
     assert.notEqual(before, after);
   });
 });
+
+describe('the update cadence an RSS feed declares', () => {
+  const files = {
+    '_data/site.json': JSON.stringify({ title: 'Geekity Demo' }),
+    'posts/2026-09-02-hello.md': post('Hello, World!', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/2026/09/hello/',
+      tags: ['web'],
+    }),
+  };
+
+  const rssFeeds = ['/feed/', '/tag/web/feed/', '/comments/feed/', '/2026/09/hello/feed/'];
+
+  /** The channel's sy:updatePeriod and sy:updateFrequency, and the namespace. */
+  async function cadence(
+    cms: Cms,
+    url: string,
+  ): Promise<{ namespace: string | undefined; period: string; frequency: string }> {
+    const { rss: document, channel } = await rss(cms, url);
+    assert.equal(childrenNamed(channel, 'sy:updatePeriod').length, 1, `${url} has one period`);
+    assert.equal(childrenNamed(channel, 'sy:updateFrequency').length, 1, `${url} has one count`);
+    return {
+      namespace: document.attributes['xmlns:sy'],
+      period: child(channel, 'sy:updatePeriod').text,
+      frequency: child(channel, 'sy:updateFrequency').text,
+    };
+  }
+
+  /** Change the cadence the settings hold. */
+  async function setCadence(cms: Cms, period: string, frequency: number): Promise<void> {
+    const contentDir = cms.config.contentDir;
+    await writeSiteJson({
+      contentDir,
+      settings: {
+        ...readSiteSettings(contentDir),
+        feedUpdatePeriod: period as 'daily',
+        feedUpdateFrequency: frequency,
+      },
+    });
+  }
+
+  it('is hourly, once, in every RSS feed when the site has not said', async () => {
+    const { cms } = await site(files);
+
+    for (const url of rssFeeds) {
+      assert.deepEqual(
+        await cadence(cms, url),
+        {
+          namespace: 'http://purl.org/rss/1.0/modules/syndication/',
+          period: 'hourly',
+          frequency: '1',
+        },
+        url,
+      );
+    }
+  });
+
+  it('is what the settings say, in every RSS feed', async () => {
+    const { cms } = await site(files);
+    await setCadence(cms, 'daily', 2);
+
+    for (const url of rssFeeds) {
+      const found = await cadence(cms, url);
+      assert.equal(found.period, 'daily', url);
+      assert.equal(found.frequency, '2', url);
+    }
+  });
+
+  it('is the default for a hand-written value the module does not allow', async () => {
+    const { cms } = await site({
+      ...files,
+      '_data/site.json': JSON.stringify({
+        title: 'Geekity Demo',
+        feedUpdatePeriod: 'fortnightly',
+        feedUpdateFrequency: 0,
+      }),
+    });
+
+    const found = await cadence(cms, '/feed/');
+    assert.equal(found.period, 'hourly');
+    assert.equal(found.frequency, '1');
+  });
+
+  it('is said by RSS alone: Atom and JSON Feed have no element for it', async () => {
+    const { cms } = await site(files);
+
+    const atomBody = await (await cms.app.request('/feed/atom/')).text();
+    assert.ok(!atomBody.includes('updatePeriod'), 'Atom carries no cadence');
+    const jsonBody = await (await cms.app.request('/feed/json/')).text();
+    assert.ok(!jsonBody.includes('updatePeriod'), 'JSON Feed carries no cadence');
+  });
+
+  it('changes the post and the comments feeds’ validators when it changes', async () => {
+    const { cms } = await site(files);
+    const before = await Promise.all(
+      ['/feed/', '/comments/feed/'].map(async (url) =>
+        (await cms.app.request(url)).headers.get('etag'),
+      ),
+    );
+
+    await setCadence(cms, 'weekly', 1);
+    const after = await Promise.all(
+      ['/feed/', '/comments/feed/'].map(async (url) =>
+        (await cms.app.request(url)).headers.get('etag'),
+      ),
+    );
+
+    assert.ok(before.every((etag) => etag !== null));
+    assert.notEqual(before[0], after[0]);
+    assert.notEqual(before[1], after[1]);
+  });
+});

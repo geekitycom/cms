@@ -197,6 +197,8 @@ const READING: Record<string, string> = {
   posts_per_page: '10',
   navigation: '',
   notify_server: '',
+  feed_update_period: 'hourly',
+  feed_update_frequency: '1',
   ai_crawlers: 'allow',
   content_signal_search: '',
   content_signal_ai_input: '',

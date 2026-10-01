@@ -1,8 +1,9 @@
+import type { SiteData } from './context.ts';
 import { atomFeed } from './feed-atom.ts';
 import { FEED_ITEM_REVISION } from './feed-item.ts';
 import { jsonFeed } from './feed-json.ts';
 import { rssFeed, commentsRssFeed } from './feed-rss.ts';
-import { FEED_CONTENT_TYPES, feedLanguage, notifyServerOf } from './feed-source.ts';
+import { FEED_CONTENT_TYPES, feedCadence, feedLanguage, notifyServerOf } from './feed-source.ts';
 import type { CommentFeedSource, FeedFormat, FeedIdentity, FeedSource } from './feed-source.ts';
 import { absoluteUrl, contentEtag, isNotModified, latestModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
@@ -183,6 +184,12 @@ export function feedLinkHeader(source: FeedIdentity): string | undefined {
   return `<${notify.hub}>; rel="hub", <${self}>; rel="self"`;
 }
 
+/** The cadence an RSS channel declares, as one fingerprint line. */
+function cadenceFingerprint(site: SiteData): string {
+  const { period, frequency } = feedCadence(site);
+  return `${period} ${String(frequency)}`;
+}
+
 /** What a comments feed is made of, as one string to hash. */
 function commentsFingerprint(source: CommentFeedSource): string {
   return [
@@ -191,6 +198,7 @@ function commentsFingerprint(source: CommentFeedSource): string {
     source.site.tagline ?? '',
     feedLanguage(source.site),
     notifyServerOf(source.site)?.base ?? '',
+    cadenceFingerprint(source.site),
     source.baseUrl,
     ...source.comments.map((comment) =>
       [comment.id, comment.author, comment.published.toISOString(), comment.html].join('\0'),
@@ -208,6 +216,7 @@ function feedFingerprint(source: FeedSource): string {
     source.site.avatar ?? '',
     feedLanguage(source.site),
     notifyServerOf(source.site)?.base ?? '',
+    cadenceFingerprint(source.site),
     source.baseUrl,
     ...source.documents.map(
       (document) =>

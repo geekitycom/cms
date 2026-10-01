@@ -56,6 +56,8 @@ export const READING_SETTINGS: SettingsPage = {
     'postsPage',
     'postsPerPage',
     'notifyServer',
+    'feedUpdatePeriod',
+    'feedUpdateFrequency',
     'aiCrawlers',
     'contentSignalSearch',
     'contentSignalAiInput',

@@ -394,6 +394,64 @@ describe('what crawlers are told (TASK-148)', () => {
   });
 });
 
+describe('how often the RSS feeds say to poll (TASK-152)', () => {
+  it('offers every Syndication period, hourly and once by default', async () => {
+    const cms = await box.site({ contentDir: await withPages() });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(html, /<option value="hourly" selected>/, 'a new site declares hourly');
+    for (const period of ['daily', 'weekly', 'monthly', 'yearly']) {
+      assert.match(html, new RegExp(`<option value="${period}"`), `${period} is on offer`);
+    }
+    assert.match(html, /name="feed_update_frequency"[^>]*value="1"/);
+  });
+
+  it('writes the cadence to site.json and the RSS feed declares it', async () => {
+    const contentDir = await withPages();
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await saveSettings(agent, 'reading', {
+      feed_update_period: 'daily',
+      feed_update_frequency: ' 2 ',
+    });
+    assert.equal(response.status, 303);
+
+    const written = await siteJson(contentDir);
+    assert.equal(written['feedUpdatePeriod'], 'daily');
+    assert.equal(written['feedUpdateFrequency'], 2);
+
+    const feed = await (await cms.app.request('/feed/')).text();
+    assert.match(feed, /<sy:updatePeriod>daily<\/sy:updatePeriod>/);
+    assert.match(feed, /<sy:updateFrequency>2<\/sy:updateFrequency>/);
+
+    const back = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(back, /<option value="daily" selected>/, 'the period comes back chosen');
+    assert.match(back, /name="feed_update_frequency"[^>]*value="2"/);
+  });
+
+  it('refuses a period the module has no name for, or a count that is not a whole one', async () => {
+    const contentDir = await withPages();
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    for (const fields of [
+      { feed_update_period: 'fortnightly' },
+      { feed_update_frequency: '0' },
+      { feed_update_frequency: '1.5' },
+      { feed_update_frequency: '' },
+    ]) {
+      const response = await saveSettings(agent, 'reading', fields);
+      assert.equal(response.status, 400, JSON.stringify(fields));
+    }
+
+    const settings = readSiteSettings(contentDir);
+    assert.equal(settings.feedUpdatePeriod, 'hourly', 'nothing was written');
+    assert.equal(settings.feedUpdateFrequency, 1, 'nothing was written');
+  });
+});
+
 describe('whether the site serves /llms.txt (TASK-149)', () => {
   it('is on by default, and clearing it takes the file away (AC #4)', async () => {
     const contentDir = await withPages();

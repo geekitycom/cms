@@ -25,6 +25,9 @@ export const DC_NAMESPACE = 'http://purl.org/dc/elements/1.1/';
  */
 export const WFW_NAMESPACE = 'http://wellformedweb.org/CommentAPI/';
 
+/** The RSS Syndication module, whose `updatePeriod` and `updateFrequency` say how often to poll. */
+export const SY_NAMESPACE = 'http://purl.org/rss/1.0/modules/syndication/';
+
 /** RFC 4685's Atom Threading Extensions, whose `in-reply-to` names what a reply answers. */
 export const THR_NAMESPACE = 'http://purl.org/syndication/thread/1.0';
 

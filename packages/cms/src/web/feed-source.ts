@@ -266,6 +266,52 @@ export function feedSize(site: SiteData): number {
   return DEFAULT_FEED_SIZE;
 }
 
+/**
+ * The periods the RSS Syndication module lets a feed name, from
+ * https://web.resource.org/rss/1.0/modules/syndication/.
+ */
+export const UPDATE_PERIODS = ['hourly', 'daily', 'weekly', 'monthly', 'yearly'] as const;
+
+/** One of {@link UPDATE_PERIODS}. */
+export type UpdatePeriod = (typeof UPDATE_PERIODS)[number];
+
+/** Whether a value is an {@link UpdatePeriod}. */
+export function isUpdatePeriod(value: unknown): value is UpdatePeriod {
+  return (UPDATE_PERIODS as readonly unknown[]).includes(value);
+}
+
+/** How often an RSS feed tells a reader to poll it: `frequency` times a `period`. */
+export interface FeedCadence {
+  period: UpdatePeriod;
+  /** A whole number of polls per period, at least one. */
+  frequency: number;
+}
+
+/**
+ * The cadence a feed declares when the site has not said: once an hour, which
+ * is what WordPress declares, so the subscribers of a migrated site keep
+ * polling the way they always have.
+ */
+export const DEFAULT_FEED_CADENCE: FeedCadence = { period: 'hourly', frequency: 1 };
+
+/**
+ * The cadence the RSS feeds declare, from `feedUpdatePeriod` and
+ * `feedUpdateFrequency` in `content/_data/site.json`. Each falls back to the
+ * default on its own, so a hand edit the module would refuse is never
+ * published.
+ */
+export function feedCadence(site: SiteData): FeedCadence {
+  const period = site['feedUpdatePeriod'];
+  const frequency = site['feedUpdateFrequency'];
+  return {
+    period: isUpdatePeriod(period) ? period : DEFAULT_FEED_CADENCE.period,
+    frequency:
+      typeof frequency === 'number' && Number.isInteger(frequency) && frequency > 0
+        ? frequency
+        : DEFAULT_FEED_CADENCE.frequency,
+  };
+}
+
 /** The language a feed declares when the site does not name one. */
 export const DEFAULT_FEED_LANGUAGE = 'en';
 

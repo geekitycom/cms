@@ -4,6 +4,7 @@ import type { FeedItem } from './feed-item.ts';
 import {
   contentTypeOf,
   EMPTY_FEED_UPDATED,
+  feedCadence,
   FEED_GENERATOR,
   feedLanguage,
   notifyServerOf,
@@ -17,6 +18,7 @@ import {
   optionalElement,
   rfc822,
   SOURCE_NAMESPACE,
+  SY_NAMESPACE,
   WFW_NAMESPACE,
 } from './feed-xml.ts';
 import { absoluteUrl, latestModified } from './negotiate.ts';
@@ -44,6 +46,7 @@ export function rssFeed(source: FeedSource): string {
     '     xmlns:content="http://purl.org/rss/1.0/modules/content/"',
     `     xmlns:dc="${DC_NAMESPACE}"`,
     `     xmlns:source="${SOURCE_NAMESPACE}"`,
+    `     xmlns:sy="${SY_NAMESPACE}"`,
     `     xmlns:wfw="${WFW_NAMESPACE}">`,
     '  <channel>',
     element('title', source.title, 2),
@@ -54,6 +57,7 @@ export function rssFeed(source: FeedSource): string {
     element('language', feedLanguage(site), 2),
     element('lastBuildDate', rfc822(built), 2),
     element('generator', FEED_GENERATOR, 2),
+    ...cadenceElements(site),
     `    <atom:link rel="self" type="${escapeXml(
       contentTypeOf('rss'),
     )}" href="${escapeXml(absoluteUrl(source.feedHref, baseUrl))}"/>`,
@@ -90,6 +94,15 @@ function cloudElements(site: SiteData): string[] {
       ` protocol="${escapeXml(cloud.protocol)}"/>`,
     element('source:cloud', notify.pleaseNotify, 2),
     `    <atom:link rel="hub" href="${escapeXml(notify.hub)}"/>`,
+  ];
+}
+
+/** How often a reader should poll, in the Syndication module's two elements. */
+function cadenceElements(site: SiteData): string[] {
+  const { period, frequency } = feedCadence(site);
+  return [
+    element('sy:updatePeriod', period, 2),
+    element('sy:updateFrequency', String(frequency), 2),
   ];
 }
 
@@ -184,7 +197,8 @@ export function commentsRssFeed(source: CommentFeedSource): string {
     '     xmlns:atom="http://www.w3.org/2005/Atom"',
     '     xmlns:content="http://purl.org/rss/1.0/modules/content/"',
     `     xmlns:dc="${DC_NAMESPACE}"`,
-    `     xmlns:source="${SOURCE_NAMESPACE}">`,
+    `     xmlns:source="${SOURCE_NAMESPACE}"`,
+    `     xmlns:sy="${SY_NAMESPACE}">`,
     '  <channel>',
     element('title', source.title, 2),
     element('link', link, 2),
@@ -192,6 +206,7 @@ export function commentsRssFeed(source: CommentFeedSource): string {
     element('language', feedLanguage(site), 2),
     element('lastBuildDate', rfc822(built), 2),
     element('generator', FEED_GENERATOR, 2),
+    ...cadenceElements(site),
     `    <atom:link rel="self" type="${escapeXml(
       contentTypeOf('rss'),
     )}" href="${escapeXml(absoluteUrl(source.feedHref, baseUrl))}"/>`,

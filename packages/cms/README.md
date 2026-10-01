@@ -1839,7 +1839,8 @@ at once cannot each keep half of what the other kept.
 The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `homepage`, `postsPage`,
 `timezone`, `language`, `tagBase`,
-`categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
+`categoryBase`, `notifyServer`, `feedUpdatePeriod`, `feedUpdateFrequency`,
+`webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
 `contactEmail`, `securityContacts`, `securityPolicy`, `securityLanguages`,
 `relays`, `menus` and `taxonomyRedirects`,
@@ -2753,6 +2754,16 @@ post on a site that publishes several.
 ```json
 { "title": "My Site", "tagline": "Notes", "author": "Me", "feedSize": 20 }
 ```
+
+Every RSS feed, the comments feeds included, tells a reader how often to poll
+it with the Syndication module's `sy:updatePeriod` and `sy:updateFrequency`.
+Settings → Reading sets both, as `feedUpdatePeriod` (`hourly`, `daily`,
+`weekly`, `monthly` or `yearly`) and `feedUpdateFrequency` (a whole number, 1 or
+more) in `site.json`. The default is `hourly` and `1`, which is what WordPress
+declares, so the subscribers of a migrated site keep polling as they did. A
+reader may back off from a feed that stays quiet much longer than it says, so
+a site that posts weekly does better to say `weekly`. Atom and JSON Feed have no
+element for it.
 
 ### What every format says about a post
 

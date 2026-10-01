@@ -12,6 +12,8 @@ import {
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
+import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from '../web/feed-source.ts';
+import type { UpdatePeriod } from '../web/feed-source.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
 import { generateIndexNowKey, isIndexNowKey } from '../web/indexnow.ts';
 import { DEFAULT_MENU_NAME, menuItemsFromText, menusOf } from '../web/navigation.ts';
@@ -192,6 +194,14 @@ export interface SiteSettings {
    */
   notifyServer: string;
   /**
+   * How often the RSS feeds tell a reader to poll them: `feedUpdateFrequency`
+   * times a `feedUpdatePeriod`, in the Syndication module's two elements
+   * (TASK-152). Once an hour by default, which is what WordPress declares.
+   */
+  feedUpdatePeriod: UpdatePeriod;
+  /** How many polls per {@link SiteSettings.feedUpdatePeriod}: a whole number, at least one. */
+  feedUpdateFrequency: number;
+  /**
    * How the site treats the crawlers that feed AI products, as the robots file
    * spells it in per-agent groups (TASK-148). `allow` by default.
    */
@@ -332,6 +342,11 @@ function isContentSignalChoice(value: unknown): value is ContentSignalChoice {
   return value === '' || value === 'yes' || value === 'no';
 }
 
+/** Whether a value is a count of polls the Syndication module allows: a whole number from 1. */
+function isPollCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
 /** Whether a string is an {@link AiCrawlerPolicy}. */
 function isAiCrawlerPolicy(value: unknown): value is AiCrawlerPolicy {
   return (AI_CRAWLER_POLICIES as readonly unknown[]).includes(value);
@@ -403,6 +418,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   webmentionsSend: true,
   webmentionsReceive: true,
   notifyServer: DEFAULT_NOTIFY_SERVER,
+  feedUpdatePeriod: DEFAULT_FEED_CADENCE.period,
+  feedUpdateFrequency: DEFAULT_FEED_CADENCE.frequency,
   aiCrawlers: 'allow',
   contentSignalSearch: '',
   contentSignalAiInput: '',
@@ -447,6 +464,8 @@ export const SETTINGS_FIELDS = {
   webmentionsSend: 'webmentions_send',
   webmentionsReceive: 'webmentions_receive',
   notifyServer: 'notify_server',
+  feedUpdatePeriod: 'feed_update_period',
+  feedUpdateFrequency: 'feed_update_frequency',
   aiCrawlers: 'ai_crawlers',
   contentSignalSearch: 'content_signal_search',
   contentSignalAiInput: 'content_signal_ai_input',
@@ -542,6 +561,12 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
       ? { webmentionsReceive: file['webmentionsReceive'] }
       : {}),
     ...(typeof file['notifyServer'] === 'string' ? { notifyServer: file['notifyServer'] } : {}),
+    ...(isUpdatePeriod(file['feedUpdatePeriod'])
+      ? { feedUpdatePeriod: file['feedUpdatePeriod'] }
+      : {}),
+    ...(isPollCount(file['feedUpdateFrequency'])
+      ? { feedUpdateFrequency: file['feedUpdateFrequency'] }
+      : {}),
     // Read the way the form checks them, so a hand edit naming a policy or a
     // signal this version does not know is the default rather than a line of
     // robots.txt nobody chose, and a rule the form would refuse is left out.
@@ -667,6 +692,8 @@ export function siteJsonFor(
     webmentionsSend: settings.webmentionsSend,
     webmentionsReceive: settings.webmentionsReceive,
     notifyServer: settings.notifyServer,
+    feedUpdatePeriod: settings.feedUpdatePeriod,
+    feedUpdateFrequency: settings.feedUpdateFrequency,
     aiCrawlers: settings.aiCrawlers,
     contentSignalSearch: settings.contentSignalSearch,
     contentSignalAiInput: settings.contentSignalAiInput,
@@ -995,6 +1022,16 @@ const FIELD_CHECKS: Record<
       ? 'A notify server is an absolute http:// or https:// URL, or empty for none.'
       : undefined,
 
+  feedUpdatePeriod: (form) =>
+    isUpdatePeriod(form.feedUpdatePeriod)
+      ? undefined
+      : `An update period is one of ${UPDATE_PERIODS.join(', ')}.`,
+
+  feedUpdateFrequency: (form) =>
+    form.feedUpdateFrequency.trim() !== '' && isPollCount(Number(form.feedUpdateFrequency))
+      ? undefined
+      : 'Polls per period is a whole number, 1 or more.',
+
   aiCrawlers: (form) =>
     isAiCrawlerPolicy(form.aiCrawlers)
       ? undefined
@@ -1158,6 +1195,10 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     webmentionsSend: form.webmentionsSend !== '',
     webmentionsReceive: form.webmentionsReceive !== '',
     notifyServer: normalizeBaseUrl(form.notifyServer) ?? '',
+    feedUpdatePeriod: isUpdatePeriod(form.feedUpdatePeriod)
+      ? form.feedUpdatePeriod
+      : DEFAULT_FEED_CADENCE.period,
+    feedUpdateFrequency: Number(form.feedUpdateFrequency),
     aiCrawlers: isAiCrawlerPolicy(form.aiCrawlers) ? form.aiCrawlers : 'allow',
     contentSignalSearch: isContentSignalChoice(form.contentSignalSearch)
       ? form.contentSignalSearch
@@ -1217,6 +1258,8 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     webmentionsSend: settings.webmentionsSend ? '1' : '',
     webmentionsReceive: settings.webmentionsReceive ? '1' : '',
     notifyServer: settings.notifyServer,
+    feedUpdatePeriod: settings.feedUpdatePeriod,
+    feedUpdateFrequency: String(settings.feedUpdateFrequency),
     aiCrawlers: settings.aiCrawlers,
     contentSignalSearch: settings.contentSignalSearch,
     contentSignalAiInput: settings.contentSignalAiInput,
