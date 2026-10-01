@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.13.0](https://github.com/geekitycom/cms/compare/v0.12.0...v0.13.0) (2026-10-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** the setting is off by default, and when off a static front page's bio card no longer carries rel="me", so a Mastodon profile field that points at the homepage stops verifying until the owner turns it on.
+* **cms:** the date filter now formats dates with the conventions of the site's language, so a site whose language is not bare en sees different date text without a config change.
+
+### Features
+
+* **cms:** add a connected apps screen to review and revoke indieauth tokens ([563f27e](https://github.com/geekitycom/cms/commit/563f27ed660fd0f7f65a9e876cbbdc30cfda2e72))
+* **cms:** add a solo author setting so the homepage speaks for the author ([ce3e447](https://github.com/geekitycom/cms/commit/ce3e447abfcc4015b76b03c1a95ffefada60f0ef))
+* **cms:** add breadcrumbs and breadcrumblist json-ld to the default theme ([cebdf93](https://github.com/geekitycom/cms/commit/cebdf9315dd6691e51fb8dd6a76f0582a44fa5d1))
+* **cms:** add the indieauth authorization endpoint and consent screen ([03dec3f](https://github.com/geekitycom/cms/commit/03dec3f87c5d932b87d96fa5f96f5fc346ccd95d))
+* **cms:** authenticate api routes with indieauth bearer tokens ([8cc6e2b](https://github.com/geekitycom/cms/commit/8cc6e2b900831e4b704363fe39c7691054269917))
+* **cms:** close the m24 and m25 follow-up gaps ([8209b1c](https://github.com/geekitycom/cms/commit/8209b1cadc7168bd41f14f9f4b7df36e23a20401))
+* **cms:** configure robots.txt with ai-crawler rules and content signals ([f88cdf6](https://github.com/geekitycom/cms/commit/f88cdf63151468700917ad0147abef941e5f7cbc))
+* **cms:** declare an update cadence in rss feeds ([9de255a](https://github.com/geekitycom/cms/commit/9de255ab7d93669e57967603f99368b991451af3))
+* **cms:** declare theme colours and richer open graph in the head ([5e4c20d](https://github.com/geekitycom/cms/commit/5e4c20d38a0b0d8f617eeef46e9af6cbe88fff0a))
+* **cms:** issue indieauth access tokens at the token endpoint ([763e934](https://github.com/geekitycom/cms/commit/763e934d1f2b783c25f6abb0b4ea723339c51703))
+* **cms:** let a post or page name its own language ([bd33580](https://github.com/geekitycom/cms/commit/bd33580036429fc2950b4061f7fdd70aa12ba1f9))
+* **cms:** milestone M23 discovery and machine-readable surface ([b932497](https://github.com/geekitycom/cms/commit/b9324977cfff68ab8927bfe365f73e52666000ae))
+* **cms:** publish indieauth server metadata and advertise it from identity urls ([3da41e2](https://github.com/geekitycom/cms/commit/3da41e2000e420da0758ba0ec637cd4a59b4645a))
+* **cms:** redeem indieauth codes for the profile at the authorization endpoint ([510736d](https://github.com/geekitycom/cms/commit/510736deffbad43fd4f86e0471886fa2b877da70))
+* **cms:** serve a favicon, a maskable icon and a web app manifest ([44bb016](https://github.com/geekitycom/cms/commit/44bb016932c9d00fc6c4d670dab79dc9dc230c61))
+* **cms:** serve a generated /llms.txt advertised from the home page ([f75ff9c](https://github.com/geekitycom/cms/commit/f75ff9c2e629ef171fc52eb4f892fde8451061a7))
+* **cms:** show an indieauth client's logo on the consent screen ([7b9aef8](https://github.com/geekitycom/cms/commit/7b9aef8cb7c83182cabf8c1d80a5a3f719329ff0))
+* **cms:** submit changed urls to indexnow from a reading setting ([794d75a](https://github.com/geekitycom/cms/commit/794d75afe68614736c110721f7e6958547c0b30c))
+* **cms:** write dates and plurals in the site's locale ([bef1d76](https://github.com/geekitycom/cms/commit/bef1d7609740c5b91df54dfe8fd108e8f02fe307))
+* **cms:** write dates inside an article in the post's language ([3329c0d](https://github.com/geekitycom/cms/commit/3329c0d62e20cf0132ce6d12b4565a2842764635))
+
+
+### Bug Fixes
+
+* **cms:** block meta's ai search and user-fetch crawlers under block-all ([a85dd45](https://github.com/geekitycom/cms/commit/a85dd45f5c85648908a16ea9aa3445800e6d5e68))
+* **cms:** read an indieauth client's redirect uris from its link header ([bc80255](https://github.com/geekitycom/cms/commit/bc802554d6260bc616b933db072fedddbeffa805))
+
 ## [0.12.0](https://github.com/geekitycom/cms/compare/v0.11.0...v0.12.0) (2026-10-01)
 
 
