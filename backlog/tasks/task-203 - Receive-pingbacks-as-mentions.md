@@ -4,7 +4,7 @@ title: Receive pingbacks as mentions
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:13'
-updated_date: '2026-10-01 17:18'
+updated_date: '2026-10-01 17:20'
 labels:
   - webmention
   - wordpress
@@ -33,3 +33,9 @@ WordPress sites send pingbacks, not webmentions, unless they run the Webmention 
 - [ ] #3 Invalid calls get the spec's XML-RPC fault codes; malformed or oversized XML is refused without parsing external entities
 - [ ] #4 A pingback from a real WordPress site is received end to end, or the notes record what was checked
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Order: if TASK-196 (comments on pages) has landed, advertise the pingback endpoint on pages that accept comments too, not just posts. Not a hard dependency.
+<!-- SECTION:NOTES:END -->

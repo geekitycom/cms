@@ -4,11 +4,13 @@ title: Content license setting
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:13'
+updated_date: '2026-10-01 17:20'
 labels:
   - settings
   - theme
   - schema-org
-dependencies: []
+dependencies:
+  - TASK-192
 references:
   - packages/cms/admin/pages/settings/general.njk
   - packages/cms/themes/default/partials/jsonld.njk
@@ -32,3 +34,9 @@ A site cannot say what readers may do with its posts. Add a License setting on S
 - [ ] #4 A post's license front matter overrides the site's on that post, its JSON-LD and its feed item
 - [ ] #5 With no license chosen nothing is printed
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Order: after TASK-192 (and TASK-201 if it has landed). It adds a control to Settings > General, which TASK-192 restructures, and license members to jsonld.njk, which TASK-192 and TASK-201 also edit.
+<!-- SECTION:NOTES:END -->

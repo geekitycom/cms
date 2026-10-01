@@ -4,7 +4,7 @@ title: 'Rich reply context from h-entry, ActivityPub, oEmbed, JSON-LD and Open G
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:02'
-updated_date: '2026-10-01 17:17'
+updated_date: '2026-10-01 17:20'
 labels:
   - indieweb
   - webmention
@@ -48,3 +48,9 @@ ReplyContext gains photo (the author's), image (the post's lead image) and siteN
 - [ ] #6 A target that offers nothing past <title>, or cannot be fetched, renders exactly as today, and saving the reply never fails
 - [ ] #7 Each source has a test with a captured real-world page or object (an h-entry blog, a Mastodon status, a YouTube or news page with oEmbed/JSON-LD, an Open Graph-only page)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Shared code: TASK-175 (M27, MCP remote lookup) also fetches fediverse objects as the site, with signed fetch. Whichever lands second reuses the first's fetcher rather than writing another.
+<!-- SECTION:NOTES:END -->

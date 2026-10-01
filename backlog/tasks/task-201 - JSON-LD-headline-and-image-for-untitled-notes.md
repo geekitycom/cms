@@ -4,13 +4,14 @@ title: JSON-LD headline and image for untitled notes
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:07'
-updated_date: '2026-10-01 17:18'
+updated_date: '2026-10-01 17:20'
 labels:
   - theme
   - seo
   - schema-org
 milestone: m-27
-dependencies: []
+dependencies:
+  - TASK-192
 references:
   - packages/cms/themes/default/partials/jsonld.njk
   - backlog/decisions
@@ -32,3 +33,9 @@ The default theme's JSON-LD BlogPosting takes headline from the post's title (pa
 - [ ] #3 Titled posts and pages print the same headline and image as before
 - [ ] #4 A note's page passes Google's Rich Results Test for Article with no missing recommended headline or image
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Order: after TASK-192. Both edit themes/default/partials/jsonld.njk, and the image fallback to the author's photo reads the site author that TASK-192 reworks; building this first means redoing it.
+<!-- SECTION:NOTES:END -->

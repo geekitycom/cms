@@ -4,13 +4,14 @@ title: 'Mastodon author attribution: fediverse:creator meta tag'
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:13'
-updated_date: '2026-10-01 17:18'
+updated_date: '2026-10-01 17:20'
 labels:
   - federation
   - theme
   - seo
 milestone: m-27
-dependencies: []
+dependencies:
+  - TASK-192
 references:
   - packages/cms/themes/default/layouts/base.njk
   - packages/cms/src/federation/actor.ts
@@ -33,3 +34,9 @@ When a post is shared on Mastodon, the link preview can name the author's fedive
 - [ ] #3 The README explains the Mastodon-side author attribution setting
 - [ ] #4 Sharing a post on a Mastodon instance whose account lists the domain shows the author attribution in the preview card, or the notes record what was checked
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Order: after TASK-192. The tag on a solo-author homepage names the site author, which TASK-192 changes from a free-text name to a username; build on the new shape.
+<!-- SECTION:NOTES:END -->

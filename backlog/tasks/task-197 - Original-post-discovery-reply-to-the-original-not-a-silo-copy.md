@@ -4,13 +4,14 @@ title: 'Original-post-discovery: reply to the original, not a silo copy'
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:01'
-updated_date: '2026-10-01 17:04'
+updated_date: '2026-10-01 17:20'
 labels:
   - indieweb
   - webmention
 milestone: m-28
 dependencies:
   - TASK-155
+  - TASK-199
 references:
   - packages/cms/src/webmention/reply-context.ts
   - 'https://indieweb.org/original-post-discovery'
@@ -31,3 +32,9 @@ IndieMark level 4 asks for original-post-discovery: when someone replies to a PO
 - [ ] #2 The silo URL stays in the post's in-reply-to so syndication to that silo can thread the reply
 - [ ] #3 A response that targets one of this site's syndicated copies is shown on the original post
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Order: after TASK-155 (u-syndication records) and TASK-199. Both change src/webmention/reply-context.ts; original-post-discovery decides which URL the context is fetched for, so it builds on the source chain rather than racing it.
+<!-- SECTION:NOTES:END -->

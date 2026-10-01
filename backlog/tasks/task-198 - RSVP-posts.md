@@ -4,13 +4,14 @@ title: RSVP posts
 status: To Do
 assignee: []
 created_date: '2026-10-01 17:01'
-updated_date: '2026-10-01 17:04'
+updated_date: '2026-10-01 17:20'
 labels:
   - indieweb
   - post-types
   - webmention
 milestone: m-28
-dependencies: []
+dependencies:
+  - TASK-169
 references:
   - packages/cms/src/content/post-type.ts
   - 'https://indieweb.org/rsvp'
@@ -32,3 +33,9 @@ IndieMark level 4 asks to publish RSVP posts and send webmentions to events. Pos
 - [ ] #3 Post type discovery reports rsvp for it, and the admin editor can create one
 - [ ] #4 Incoming RSVP webmentions on posts are shown as RSVPs rather than generic replies
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Order: after TASK-169 (M26). Like, repost and bookmark posts extend PostType and post type discovery first; RSVP is one more type in the same structure, and Micropub create (TASK-164, before TASK-169) is how most clients will send one.
+<!-- SECTION:NOTES:END -->
