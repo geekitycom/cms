@@ -24,12 +24,12 @@ An IndieAuth client takes the URL a person types, fetches it, and follows its `i
 
 **The root is advertised on every site.** On a multi-author site, a person who types the root still reaches this server and signs in as whoever they log in as. The client is handed that user's author URL, which shares the host and advertises the same server, so the client accepts it under the IndieAuth spec's rule for a differing profile URL.
 
-**One metadata document, two URLs.** The document is at `/_geekity/indieauth/metadata`, which identity URLs advertise, and at RFC 8414's `/.well-known/oauth-authorization-server`, which generic OAuth and MCP clients probe. Its issuer is the base URL with no trailing slash, the one issuer whose RFC 8414 well-known URL is exactly that path. The `Link` header and the `<link>` in the head are added to the response by the CMS rather than printed by a layout, so every theme carries them.
+**One metadata document, two URLs.** The document is at `/_geekity/indieauth/metadata`, which identity URLs advertise, and at RFC 8414's `/.well-known/oauth-authorization-server`, which generic OAuth and MCP clients probe. Its issuer is the base URL with no trailing slash, the one issuer whose RFC 8414 well-known URL is exactly that path. The `Link` header and the `<link>` in the head are added to the response by the CMS rather than printed by a layout, so every theme carries them. Besides the authorization and token endpoints, the document names the introspection, revocation and userinfo endpoints and sets `client_id_metadata_document_supported`, so an MCP client can identify itself by a client metadata URL without dynamic registration. Resource servers point refused clients at a second document, `/.well-known/oauth-protected-resource`, which names the whole site as the resource and this server as its authorization server.
 
 ## Consequences
 
 - A person types their site URL on a solo author site, and their author URL anywhere.
 - Turning Solo author off takes the root's identity away. A client that stored the root as somebody's me is handed their author URL at the next sign-in, which it may treat as a different account. Turning it on does the reverse.
 - Changing the base URL changes every identity, as it changes every actor id.
-- The metadata names the authorization and token endpoints before TASK-158 and TASK-160 mount them. M25 ships them together.
-- In maintenance mode the identity URLs answer 503 and advertise nothing. Whether the endpoints stay up is TASK-158's call.
+- In maintenance mode the identity URLs, the metadata and every IndieAuth endpoint answer 503, so no client can start or finish a sign-in. The consent screen stays reachable because `/admin` is exempt, but nothing can reach it from a client.
+- A resource server with its own identifier, such as an MCP endpoint at `/mcp`, needs its own protected resource document under `/.well-known/oauth-protected-resource/`.

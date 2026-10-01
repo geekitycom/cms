@@ -4,6 +4,7 @@ title: 'MCP endpoint: Streamable HTTP server behind IndieAuth tokens, with disco
 status: To Do
 assignee: []
 created_date: '2026-09-29 02:13'
+updated_date: '2026-10-01 15:43'
 labels:
   - mcp
   - agents
@@ -35,3 +36,9 @@ The site owner wants to add their blog to Claude Code (and other MCP clients) so
 - [ ] #5 /.well-known/mcp/server-card.json describes the server and a Link rel=mcp header on the site root points at it
 - [ ] #6 The endpoint answers 503 in maintenance mode only if TASK-158's decision says the authorization flow does; the choice is consistent and tested
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+From the M25 merge (decision-23): /.well-known/oauth-protected-resource names the whole site as the resource. If the MCP endpoint's resource identifier is its own URL (for example {base}/mcp), RFC 9728 expects a document at /.well-known/oauth-protected-resource/mcp naming that resource, and requireBearer's WWW-Authenticate resource_metadata must point at it for MCP routes. Settle this with criterion #2.
+<!-- SECTION:NOTES:END -->
