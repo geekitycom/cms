@@ -111,7 +111,10 @@ describe('advertising the metadata', () => {
     for (const solo of [true, false]) {
       for (const pathname of ['/', '/author/ada/']) {
         it(`${pathname} carries the header and the head link under the ${theme} theme, solo ${String(solo)}`, async () => {
-          const cms = await site({ soloAuthor: solo, ...(theme === 'default' ? {} : { theme }) });
+          const cms = await site({
+            author: solo ? 'ada' : '',
+            ...(theme === 'default' ? {} : { theme }),
+          });
           const response = await cms.app.request(pathname);
           assert.equal(response.status, 200);
 

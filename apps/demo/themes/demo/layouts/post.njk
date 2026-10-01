@@ -17,8 +17,8 @@
   instead, so it writes the `h-card` itself and reads the same object the
   packaged bio would. `author` is the post's author as a profile rather than as
   a string (TASK-67): `name` to print, and `url` to link to their archive when
-  the name is one of the site's users. A post that names nobody falls back to
-  the site's own author, which is a name and nothing else.
+  the name is one of the site's users. A post that names nobody is credited to
+  the site's author, and on a site with several authors to the site title.
 
   This layout renders no bio and loses nothing by it: the site menu is in the
   header on every page (TASK-105), so an override is free to draw the words
@@ -27,7 +27,7 @@
 {% extends "layouts/base.njk" %}
 {% import "partials/tags.njk" as taxonomy with context %}
 
-{% set writer = author or { name: site.author } %}
+{% set writer = author or { name: site.title } %}
 {% set minutes = ((content | striptags | wordcount) / 220) | round(0, "ceil") %}
 
 {% block content %}

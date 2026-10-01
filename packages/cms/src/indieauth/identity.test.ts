@@ -1,8 +1,8 @@
 /**
  * Which user a typed me URL names (TASK-157, decision-23).
  *
- * An author URL names that user; the site root names the site author only on
- * a solo author site; every other URL, and the root of a multi-author site,
+ * An author URL names that user; the site root names the site author, whom
+ * `author` in site.json names on a solo author site; every other URL, and the root of a multi-author site,
  * names nobody. A variant that differs only in http or https, a `www.`
  * prefix, the case of the host or a missing trailing slash is the same URL.
  */
@@ -16,12 +16,12 @@ const ADA: User = { id: 1, username: 'ada', createdAt: '2026-09-01T00:00:00.000Z
 const BOB: User = { id: 2, username: 'bob', createdAt: '2026-09-01T00:00:00.000Z' };
 const USERS = [ADA, BOB];
 
-const SOLO = { author: 'ada', soloAuthor: true };
-const SHARED = { author: 'ada', soloAuthor: false };
+const SOLO = { author: 'ada' };
+const SHARED = { author: '' };
 
 function who(
   me: string,
-  settings: { author: string; soloAuthor: boolean } = SOLO,
+  settings: { author: string } = SOLO,
   baseUrl = 'https://blog.example',
 ): string | undefined {
   return userForMe(me, { baseUrl, users: USERS, settings })?.username;
@@ -46,8 +46,7 @@ describe('userForMe', () => {
   });
 
   it('reads the root as nobody when the author setting names no user', () => {
-    assert.equal(who('https://blog.example/', { author: 'carol', soloAuthor: true }), undefined);
-    assert.equal(who('https://blog.example/', { author: '', soloAuthor: true }), undefined);
+    assert.equal(who('https://blog.example/', { author: 'carol' }), undefined);
   });
 
   it('reads an author URL as that user, solo or not', () => {

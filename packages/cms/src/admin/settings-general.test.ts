@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { saveSettings, SETTINGS_PAGE_FORMS } from './__testing__/settings.ts';
+import { createUser, setUserProfile } from './accounts.ts';
 import { readSiteSettings } from './settings.ts';
 
 /**
@@ -35,7 +36,6 @@ describe('the General settings page', () => {
         title: 'Seeded Site',
         tagline: 'from the file',
         url: 'https://seeded.example',
-        author: 'Ada',
         language: 'fr',
       }),
       'utf8',
@@ -49,7 +49,6 @@ describe('the General settings page', () => {
     assert.equal(field(html, 'title'), 'Seeded Site');
     assert.equal(field(html, 'tagline'), 'from the file');
     assert.equal(field(html, 'base_url'), 'https://seeded.example');
-    assert.equal(field(html, 'author'), 'Ada');
     assert.equal(field(html, 'language'), 'fr');
     assert.ok(csrfField(html) !== undefined, 'the form carries a CSRF token');
   });
@@ -253,27 +252,114 @@ describe('the base URL', () => {
   });
 });
 
-describe('the Solo author blog switch (TASK-180)', () => {
-  it('is off for a new site, and saving it on writes soloAuthor to site.json (AC #1)', async () => {
-    const contentDir = await box.dir('geekity-settings-content-');
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
+/** The Site author select: each option's value and label, and which is selected. */
+function authorOptions(html: string): { value: string; label: string; selected: boolean }[] {
+  const select = /<select id="settings-author" name="author"[^>]*>([\s\S]*?)<\/select>/.exec(html);
+  assert.ok(select !== null, 'General has a Site author select');
+  return [
+    ...(select[1] ?? '').matchAll(/<option value="([^"]*)"( selected)?>([^<]*)<\/option>/g),
+  ].map((option) => ({
+    value: option[1] ?? '',
+    label: option[3] ?? '',
+    selected: option[2] !== undefined,
+  }));
+}
 
+/** What `site.json` holds now. */
+async function siteJson(contentDir: string): Promise<Record<string, unknown>> {
+  return JSON.parse(await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8')) as Record<
+    string,
+    unknown
+  >;
+}
+
+/** A site with ada signed in and a second user, Grace, who has a display name. */
+async function twoUsers(siteJsonFields: Record<string, unknown> = {}) {
+  const contentDir = await box.dir('geekity-settings-content-');
+  await mkdir(path.join(contentDir, '_data'), { recursive: true });
+  await writeFile(
+    path.join(contentDir, '_data', 'site.json'),
+    JSON.stringify({ title: 'A Site', ...siteJsonFields }),
+    'utf8',
+  );
+  const cms = await box.site({ contentDir });
+  const agent = await signedIn(cms);
+  const grace = await createUser({
+    dataDir: cms.config.dataDir,
+    username: 'grace',
+    password: 'correct horse battery',
+  });
+  await setUserProfile({
+    dataDir: cms.config.dataDir,
+    userId: grace.id,
+    profile: { displayName: 'Grace Hopper' },
+  });
+  return { contentDir, agent };
+}
+
+describe('the Site author select (TASK-192)', () => {
+  it('lists each user by display name and Several authors, and nothing else (AC #1)', async () => {
+    const { agent } = await twoUsers();
     const html = await (await agent.get('/admin/settings')).text();
-    assert.match(html, /name="solo_author" type="checkbox" value="1"/, 'General has the switch');
-    assert.doesNotMatch(html, /name="solo_author" type="checkbox" value="1" checked/);
-    assert.equal(readSiteSettings(contentDir).soloAuthor, false, 'off by default');
 
-    assert.equal((await saveSettings(agent, 'general', { solo_author: '1' })).status, 303);
-    const file = JSON.parse(
-      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
-    ) as Record<string, unknown>;
-    assert.equal(file['soloAuthor'], true, 'stored with the other general settings');
+    assert.deepEqual(authorOptions(html), [
+      { value: '', label: 'Several authors', selected: true },
+      { value: 'ada', label: 'ada', selected: false },
+      { value: 'grace', label: 'Grace Hopper', selected: false },
+    ]);
+    assert.doesNotMatch(html, /name="solo_author"/, 'no Solo author checkbox');
+    assert.doesNotMatch(html, /<input[^>]*name="author"/, 'no free-text author field');
+  });
 
-    const back = await (await agent.get('/admin/settings')).text();
-    assert.match(back, /name="solo_author" type="checkbox" value="1" checked/);
+  it('stores the username and no soloAuthor key (AC #3)', async () => {
+    const { contentDir, agent } = await twoUsers({ soloAuthor: true });
 
-    assert.equal((await saveSettings(agent, 'general', {})).status, 303);
-    assert.equal(readSiteSettings(contentDir).soloAuthor, false, 'clearing it turns it off');
+    assert.equal((await saveSettings(agent, 'general', { author: 'grace' })).status, 303);
+    const file = await siteJson(contentDir);
+    assert.equal(file['author'], 'grace');
+    assert.equal('soloAuthor' in file, false, 'the old switch is dropped');
+
+    const back = authorOptions(await (await agent.get('/admin/settings')).text());
+    assert.deepEqual(
+      back.filter((option) => option.selected).map((option) => option.value),
+      ['grace'],
+    );
+  });
+
+  it('stores no author for Several authors (AC #3)', async () => {
+    const { contentDir, agent } = await twoUsers({ author: 'grace' });
+
+    assert.equal((await saveSettings(agent, 'general', { author: '' })).status, 303);
+    assert.equal('author' in (await siteJson(contentDir)), false);
+  });
+
+  it('stores no author for a username that is nobody', async () => {
+    const { contentDir, agent } = await twoUsers();
+
+    assert.equal((await saveSettings(agent, 'general', { author: 'mallory' })).status, 303);
+    assert.equal('author' in (await siteJson(contentDir)), false);
+  });
+
+  it('shows a stored display name as that user, and the first save writes the username (AC #5)', async () => {
+    const { contentDir, agent } = await twoUsers({ author: 'Grace Hopper', soloAuthor: false });
+
+    const shown = authorOptions(await (await agent.get('/admin/settings')).text());
+    assert.deepEqual(
+      shown.filter((option) => option.selected).map((option) => option.value),
+      ['grace'],
+    );
+
+    assert.equal((await saveSettings(agent, 'general', { author: 'grace' })).status, 303);
+    assert.equal((await siteJson(contentDir))['author'], 'grace');
+  });
+
+  it('shows a stored name that matches nobody as Several authors (AC #5)', async () => {
+    const { agent } = await twoUsers({ author: 'Joe Blog' });
+
+    const shown = authorOptions(await (await agent.get('/admin/settings')).text());
+    assert.deepEqual(
+      shown.filter((option) => option.selected).map((option) => option.value),
+      [''],
+    );
   });
 });

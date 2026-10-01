@@ -204,8 +204,8 @@
     {% endif %}
     {% if siteAuthor.url %}
     <meta property="article:author" content="{{ siteAuthor.url | absoluteUrl }}">
-    {% elif siteAuthor.name or author.name or author or site.author %}
-    <meta property="article:author" content="{{ siteAuthor.name or author.name or author or site.author }}">
+    {% elif siteAuthor.name or author.name or author %}
+    <meta property="article:author" content="{{ siteAuthor.name or author.name or author }}">
     {% endif %}
     {% for tag in tags %}
     <meta property="article:tag" content="{{ tag }}">
@@ -271,7 +271,7 @@
 
       {% block footer %}
       <footer>
-        <p>&copy; {{ "now" | date("year") }}{% if site.author %}, {{ site.author }}{% endif %} &middot; Published with Geekity</p>
+        <p>&copy; {{ "now" | date("year") }}, {{ soloAuthor.name or site.title }} &middot; Published with Geekity</p>
         {#
           The footer menu: the `footer` area this theme declares in its
           `theme.json`, which a site fills in on the Navigation screen, and the

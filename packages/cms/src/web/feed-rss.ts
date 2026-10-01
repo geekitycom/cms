@@ -144,7 +144,7 @@ export function rssItem(item: FeedItem): string[] {
     `      <guid isPermaLink="${item.id === item.link ? 'true' : 'false'}">` +
       `${escapeXml(item.id)}</guid>`,
     ...(item.published === undefined ? [] : [element('pubDate', rfc822(item.published), 3)]),
-    ...(item.creator === undefined ? [] : [element('dc:creator', item.creator, 3)]),
+    element('dc:creator', item.creator, 3),
     ...(item.language === undefined ? [] : [element('dc:language', item.language, 3)]),
     // Every term becomes a category. RSS has one `<category>` and no way to say
     // which vocabulary a term came from, which is exactly how WordPress

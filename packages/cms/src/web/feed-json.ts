@@ -1,3 +1,4 @@
+import { siteAuthorName } from './authors.ts';
 import { feedItems } from './feed-item.ts';
 import type { FeedItem } from './feed-item.ts';
 import { feedLanguage, notifyServerOf } from './feed-source.ts';
@@ -31,8 +32,8 @@ export interface JsonFeed {
   feed_url: string;
   /** The site's tagline, when it has one. */
   description?: string;
-  /** Site-level authors, when the site names one. */
-  authors?: JsonFeedAuthor[];
+  /** Who the site credits: its author, else the site itself. */
+  authors: JsonFeedAuthor[];
   /** The site's language, which an item in another one overrides. */
   language: string;
   /**
@@ -110,7 +111,7 @@ export function jsonFeed(source: FeedSource): JsonFeed {
     home_page_url: absoluteUrl(source.href, baseUrl),
     feed_url: absoluteUrl(source.feedHref, baseUrl),
     ...(site.tagline === undefined ? {} : { description: site.tagline }),
-    ...(site.author === undefined ? {} : { authors: [{ name: site.author }] }),
+    authors: [{ name: siteAuthorName(source.users, site) }],
     language: feedLanguage(site),
     ...(notify === undefined ? {} : { hubs: [{ type: JSON_FEED_HUB_TYPE, url: notify.hub }] }),
     items: feedItems(source.documents, source).map(jsonFeedItem),

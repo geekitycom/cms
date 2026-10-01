@@ -123,15 +123,18 @@ export interface SiteSettings {
    * settings screen refuses one without it, exactly as WordPress does.
    */
   postsPage: string;
-  /** Site author, used as the feed author. May be empty. */
-  author: string;
   /**
-   * Whether the site is one person's blog (TASK-180). On, the homepage speaks
-   * for the {@link SiteSettings.author}: it carries their bio card and their
-   * `rel="me"` links, and it and their archive claim each other. Off, the
-   * default, the homepage speaks for nobody.
+   * Who the site is: one user's username, or empty for a site with several
+   * authors (TASK-192). A username makes it that user's blog: the homepage
+   * carries their bio card and their `rel="me"` links, it and their archive
+   * claim each other, and the root is their IndieAuth identity (decision-23).
+   *
+   * A file written before the Site author select may hold a display name or a
+   * name nobody has. It is read as stored and resolved where it is used, by
+   * `userForAuthor`, so a display name still names its user and anything else
+   * names nobody; the General page writes the username at its next save.
    */
-  soloAuthor: boolean;
+  author: string;
   /**
    * The theme the site renders through: the name of one directory under the
    * configured themes directory, or empty for the theme the package ships
@@ -420,7 +423,6 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   homepage: '',
   postsPage: '',
   author: '',
-  soloAuthor: false,
   theme: '',
   tagBase: DEFAULT_TAXONOMY_BASES.tag,
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
@@ -470,7 +472,6 @@ export const SETTINGS_FIELDS = {
   homepage: 'homepage',
   postsPage: 'posts_page',
   author: 'author',
-  soloAuthor: 'solo_author',
   theme: 'theme',
   tagBase: 'tag_base',
   categoryBase: 'category_base',
@@ -606,7 +607,6 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
           ),
         }
       : {}),
-    ...(typeof file['soloAuthor'] === 'boolean' ? { soloAuthor: file['soloAuthor'] } : {}),
     ...(typeof file['llmsTxt'] === 'boolean' ? { llmsTxt: file['llmsTxt'] } : {}),
     ...(typeof file['indexNow'] === 'boolean' ? { indexNow: file['indexNow'] } : {}),
     // A key IndexNow would refuse is no key: the site then has none to serve
@@ -680,7 +680,7 @@ export function taxonomyBasesFromSettings(settings: SiteSettings): TaxonomyBases
  *
  * Every key the settings model is written whether or not it has a value, so
  * the file's shape is stable and an Eleventy template may reference
- * `site.author` without guarding it. Every other key the file already had is
+ * `site.tagline` without guarding it. Every other key the file already had is
  * kept: a site may put anything in there and reach it from its templates, and
  * the settings form is not going to be the thing that throws it away.
  *
@@ -698,8 +698,6 @@ export function siteJsonFor(
     title: settings.title,
     tagline: settings.tagline,
     url: settings.baseUrl,
-    author: settings.author,
-    soloAuthor: settings.soloAuthor,
     postsPerPage: settings.postsPerPage,
     timezone: settings.timezone,
     language: settings.language,
@@ -749,13 +747,17 @@ export function siteJsonFor(
   // nothing reads it from is the kind of thing somebody edits for an hour
   // before noticing.
   delete file['navigation'];
+  // The Solo author switch, which the author setting now says on its own
+  // (TASK-192): a username is a solo author site and no author is not.
+  delete file['soloAuthor'];
 
   // `theme` is absent for a site on the packaged theme, on the same rule and
   // for the same reason as the two above: running what the package ships is
   // not a choice a site should have to write down, and a `theme` of `""` would
   // be a name no directory has. `locale` too: a site whose dates follow its
   // language has made no choice to write down.
-  for (const key of ['homepage', 'postsPage', 'theme', 'locale'] as const) {
+  // `author` too: a site with several authors names nobody (TASK-192).
+  for (const key of ['homepage', 'postsPage', 'theme', 'locale', 'author'] as const) {
     if (settings[key] === '') delete file[key];
     else file[key] = settings[key];
   }
@@ -1076,8 +1078,6 @@ const FIELD_CHECKS: Record<
 
   robotsRules: (form) => robotsRuleProblem([form.robotsRules]),
 
-  soloAuthor: () => undefined,
-
   llmsTxt: () => undefined,
 
   indexNow: () => undefined,
@@ -1216,7 +1216,6 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     // the listing's own page with it rather than leave it stranded.
     postsPage: form.homepage.trim() === '' ? '' : form.postsPage.trim(),
     author: form.author.trim(),
-    soloAuthor: form.soloAuthor !== '',
     theme: form.theme.trim(),
     tagBase: form.tagBase.trim(),
     categoryBase: form.categoryBase.trim(),
@@ -1283,7 +1282,6 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     homepage: settings.homepage,
     postsPage: settings.postsPage,
     author: settings.author,
-    soloAuthor: settings.soloAuthor ? '1' : '',
     theme: settings.theme,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,

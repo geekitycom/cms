@@ -1,3 +1,4 @@
+import { siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { feedItems } from './feed-item.ts';
 import type { FeedItem } from './feed-item.ts';
@@ -52,7 +53,7 @@ export function atomFeed(source: FeedSource): string {
     link({ rel: 'alternate', type: 'text/html', href: absoluteUrl(source.href, baseUrl) }),
     ...atomCloud(site),
     `  <generator uri="${escapeXml(FEED_GENERATOR_URI)}">${escapeXml(FEED_GENERATOR)}</generator>`,
-    ...author(site.author, 1),
+    ...author(siteAuthorName(source.users, site), 1),
   ];
 
   for (const item of feedItems(documents, source)) {

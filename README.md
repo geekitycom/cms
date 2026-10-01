@@ -941,17 +941,29 @@ messages are kept), **Email** (how the site sends mail and where a message writt
 it goes) and **Federation** (the relays the site subscribes to). They live in
 `content/_data/site.json`, which is published with the site and in git.
 
-**Solo author blog** on the General page says the site is one person's, the
-person the author setting names. It is off for a new site. Turned on, the
-homepage speaks for that author, whether it lists posts or shows a static front
-page. It shows their bio card, carries their `rel="me"` profile links, and
-links their author archive with `rel="me"`. The archive links back to the
-homepage with `rel="me"`, so the two URLs are provably the same person. A
-Mastodon profile that links the homepage then verifies, and the homepage's
-structured data names the author as what the site is about. Turned off, the
-homepage speaks for nobody. A post-listing homepage shows no bio, and a static
-front page keeps its bio card but makes no `rel="me"` claims. The bio always
+**Site author** on the General page says who the site is. It lists every
+user by display name, and Several authors. A new site has several authors.
+Choosing a user makes the site that person's, and the homepage speaks for them,
+whether it lists posts or shows a static front page. It shows their bio card,
+carries their `rel="me"` profile links, and links their author archive with
+`rel="me"`. The archive links back to the homepage with `rel="me"`, so the two
+URLs are provably the same person. A Mastodon profile that links the homepage
+then verifies, the homepage is their IndieAuth identity, and the structured
+data names them as the site's publisher and what it is about. The footer and
+the feeds credit them by display name. With Several authors, the homepage
+speaks for nobody: it shows no bio and makes no `rel="me"` claims, the site
+title stands in for a name in the footer and the feeds, and the structured
+data has the site published by an Organization named for it. The bio always
 links `/author/{username}/`, which stays the author's canonical page.
+
+`site.json` stores the chosen username as `author`, and has no `author` on a
+site with several authors. **Breaking:** the free-text Author field and the
+Solo author blog checkbox are gone, and `soloAuthor` is no longer read. An
+`author` that names a user by username or display name keeps naming that user,
+and the General page writes the username at its next save. An `author` that
+names nobody, such as a free-text name, now makes a site with several authors:
+its footer and feeds print the site title instead of the old name. decision-25
+records the shape.
 
 Nothing on those pages is an ActivityPub profile. Every user is an actor with a
 name, a summary, a picture and links of their own, edited on that user's own
@@ -984,12 +996,13 @@ is picked up on the next request exactly as a save is. A site whose database
 was written by an older version has its settings rows written into the file
 once, on the first boot of this one, and the table is dropped.
 
-The file always carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
+The file always carries `title`, `tagline`, `url`, `postsPerPage`,
 `timezone`, `language`, `tagBase`, `categoryBase`, `notifyServer`, `mailProvider`, `mailFromName`,
 `mailFromAddress`, `mailReplyTo`, `contactEmail`, `relays`, `menus` and
 `taxonomyRedirects`,
-and every other key it already had is kept — a site may put anything in there,
-`feedSize` included, and reach it from its templates. A key it does not carry
+and `author` when the site names one, and every other key it already had is
+kept — a site may put anything in there, `feedSize` included, and reach it from
+its templates. A key it does not carry
 is the default: an absent `notifyServer` is `https://rpc.rsscloud.io`, an empty
 one is real-time notification turned off.
 
@@ -1242,9 +1255,9 @@ sends you back to your own site to sign in. No GitHub account or other
 Which URL you type depends on the site:
 
 - **Every user** can type their author URL, `https://example.com/author/{username}/`.
-- **On a solo author site** (Solo author blog on Settings > General), the
-  author the site names can type the site URL, `https://example.com/`.
-- **On a multi-author site** the site URL also works. You sign in as whoever
+- **On a site whose author is a user** (Site author on Settings > General),
+  that user can type the site URL, `https://example.com/`.
+- **On a site with several authors** the site URL also works. You sign in as whoever
   you log in as, and the client is told your author URL.
 
 `http://`, a `www.` prefix and a missing trailing slash are all read as the

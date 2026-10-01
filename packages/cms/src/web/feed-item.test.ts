@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import type { User } from '../admin/accounts.ts';
 import type { Document } from '../content/document.ts';
 import type { SiteData } from './context.ts';
 import { FEED_ITEM_REVISION, feedItem, feedItems } from './feed-item.ts';
@@ -33,9 +34,21 @@ function post(overrides: Partial<Document> = {}): Document {
   };
 }
 
-const SITE: SiteData = { title: 'Geekity Demo', url: 'https://example.com', author: 'The Site' };
+const ANDREW: User = {
+  id: 1,
+  username: 'andrew',
+  createdAt: '2026-09-01T00:00:00.000Z',
+  profile: { displayName: 'Andrew Shell' },
+};
+const ADA: User = { id: 2, username: 'ada', createdAt: '2026-09-01T00:00:00.000Z' };
 
-const CONTEXT: FeedItemContext = { site: SITE, baseUrl: 'https://example.com' };
+const SITE: SiteData = { title: 'Geekity Demo', url: 'https://example.com', author: 'andrew' };
+
+const CONTEXT: FeedItemContext = {
+  site: SITE,
+  baseUrl: 'https://example.com',
+  users: [ANDREW, ADA],
+};
 
 describe('a feed item', () => {
   it('names the post by its ActivityStreams object id and links to its permalink', () => {
@@ -97,13 +110,33 @@ describe('a feed item', () => {
   });
 
   it('credits the post’s own author, and falls back to the site’s for the creator', () => {
-    const own = feedItem(post({ author: 'Andrew Shell' }), CONTEXT);
-    assert.equal(own.author, 'Andrew Shell');
-    assert.equal(own.creator, 'Andrew Shell');
+    const own = feedItem(post({ author: 'ada' }), CONTEXT);
+    assert.equal(own.author, 'ada', 'a user with no display name goes by their username');
+    assert.equal(own.creator, 'ada');
 
     const anonymous = feedItem(post(), CONTEXT);
     assert.equal(anonymous.author, undefined);
-    assert.equal(anonymous.creator, 'The Site');
+    assert.equal(anonymous.creator, 'Andrew Shell');
+  });
+
+  it('prints a username a post stores as that user’s display name (TASK-192 AC #8)', () => {
+    const item = feedItem(post({ author: 'andrew' }), CONTEXT);
+
+    assert.equal(item.author, 'Andrew Shell');
+    assert.equal(item.creator, 'Andrew Shell');
+  });
+
+  it('prints an author that is nobody here as it is stored', () => {
+    const item = feedItem(post({ author: 'A Guest' }), CONTEXT);
+
+    assert.equal(item.author, 'A Guest');
+    assert.equal(item.creator, 'A Guest');
+  });
+
+  it('credits the site title on a site with several authors (TASK-192 AC #4)', () => {
+    const item = feedItem(post(), { ...CONTEXT, site: { ...SITE, author: undefined } });
+
+    assert.equal(item.creator, 'Geekity Demo');
   });
 
   it('carries the rendered body and the Markdown it was written from', () => {
@@ -127,8 +160,8 @@ describe('a feed item', () => {
     }
   });
 
-  it('is at revision 5, so feeds cached before items named their language are refetched', () => {
-    assert.equal(FEED_ITEM_REVISION, 5);
+  it('is at revision 6, so feeds cached before authors printed as display names are refetched', () => {
+    assert.equal(FEED_ITEM_REVISION, 6);
   });
 
   it('names the post’s language when it differs from the feed’s (TASK-154 AC #3)', () => {
@@ -160,7 +193,7 @@ describe('a feed item', () => {
 
   it('resolves every URL against a site that lives in a subdirectory', () => {
     const item = feedItem(post(), {
-      site: SITE,
+      ...CONTEXT,
       baseUrl: 'https://example.com/blog/',
       commentCounts: new Map(),
     });

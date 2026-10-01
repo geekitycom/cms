@@ -1397,6 +1397,7 @@ function feed(c: Context<GeekityEnv>, format: FeedFormat, subject: ListingSubjec
 
   const source: FeedSource = {
     site,
+    users: listUsers(config.dataDir),
     documents,
     title: about === undefined ? site.title : `${site.title}: ${about}`,
     href,

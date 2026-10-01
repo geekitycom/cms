@@ -24,6 +24,9 @@
  *     mentions out of that log — and the approved comments and webmentions
  *     from `content/_data/comments/` alongside them — sanitised and nested, as the
  *     CMS's own theme gets them.
+ * 12. `soloAuthor`: the user `author` in `site.json` names, read out of
+ *     `data/users.json`, so a footer prints their display name as the CMS
+ *     does rather than their username.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
  * says `"layout": "post"`, `pages.json` says `"layout": "page"` — so
@@ -157,6 +160,50 @@ function yearAndMonth(date) {
   return {
     year: String(parsed.getUTCFullYear()).padStart(4, '0'),
     month: String(parsed.getUTCMonth() + 1).padStart(2, '0'),
+  };
+}
+
+/**
+ * Who the site is, as the CMS puts it on every page as `soloAuthor`
+ * (TASK-192): the user `author` in `site.json` names, or `undefined` on a site
+ * with several authors.
+ *
+ * `author` holds a username. A file written before the CMS's Site author
+ * select may hold a display name, which reads as the one user who has it, so
+ * this is the CMS's own rule (`userForAuthor`). The users live in the CMS's
+ * data directory, `data/` unless `GEEKITY_DATA_DIR` says otherwise; a build
+ * with no users file has nobody to name. Only the name and the archive URL
+ * are copied out: the file also holds password hashes, which a template has
+ * no business seeing.
+ *
+ * A footer prints the site title where there is nobody:
+ *
+ *     &copy; {{ soloAuthor.name or site.title }}
+ */
+function soloAuthorOf(site) {
+  const wanted = typeof site?.author === 'string' ? site.author.trim() : '';
+  if (wanted === '') return undefined;
+
+  let users;
+  try {
+    const file = JSON.parse(
+      readFileSync(`${process.env.GEEKITY_DATA_DIR ?? 'data'}/users.json`, 'utf8'),
+    );
+    users = Array.isArray(file.users) ? file.users : [];
+  } catch {
+    return undefined;
+  }
+
+  const named = users.filter((user) => user.profile?.displayName === wanted);
+  const user =
+    users.find((candidate) => candidate.username === wanted) ??
+    (named.length === 1 ? named[0] : undefined);
+  if (user === undefined) return undefined;
+
+  return {
+    username: user.username,
+    name: user.profile?.displayName ?? user.username,
+    url: `/author/${encodeURIComponent(user.username)}/`,
   };
 }
 
@@ -709,6 +756,15 @@ export default function (eleventyConfig) {
   // because that is the one date a page has that no file carries.
   const defaultZone = siteTimezone();
   const locale = siteLocale();
+  // Who the site is, read once per build like the zone (TASK-192).
+  eleventyConfig.addGlobalData('soloAuthor', () => {
+    try {
+      return soloAuthorOf(JSON.parse(readFileSync('content/_data/site.json', 'utf8')));
+    } catch {
+      return undefined;
+    }
+  });
+
   eleventyConfig.addFilter('date', (value, format = 'readable', zone, tag) => {
     const at = value === 'now' ? new Date() : value instanceof Date ? value : new Date(value);
     if (Number.isNaN(at.getTime())) return '';

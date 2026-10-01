@@ -17,12 +17,13 @@
   {{ field.text('settings-tagline', fields.tagline, 'Tagline', form.tagline,
        hint='One line, shown under the title and used as the feed subtitle.') }}
 
-  {{ field.text('settings-author', fields.author, 'Author', form.author,
-       hint='The name on the feeds.') }}
-
-  {% set soloAuthorHint %}The homepage speaks for the author: it shows their bio and links, and claims their author archive and profiles with <code>rel="me"</code>. Leave it off for a site with more than one author.{% endset %}
-  {{ field.checkbox('settings-solo-author', fields.soloAuthor, 'Solo author blog',
-       checked=form.soloAuthor, hint=soloAuthorHint) }}
+  {% set authorHint %}A user makes this their blog: the homepage shows their bio and links, claims their author archive and profiles with <code>rel="me"</code>, and is their IndieAuth sign-in URL. The feeds and the footer credit them by name. Several authors credits the site title instead.{% endset %}
+  {% call field.select('settings-author', fields.author, 'Site author', hint=authorHint) %}
+    <option value=""{% if not form.author %} selected{% endif %}>Several authors</option>
+    {% for choice in authorChoices %}
+      <option value="{{ choice.username }}"{% if choice.username == form.author %} selected{% endif %}>{{ choice.name }}</option>
+    {% endfor %}
+  {% endcall %}
 
   {% set baseUrlHint %}In effect: <code>{{ baseUrlInEffect }}</code>. {{ baseUrlNote }}{% endset %}
   {{ field.text('settings-base-url', fields.baseUrl, 'Base URL', form.baseUrl,

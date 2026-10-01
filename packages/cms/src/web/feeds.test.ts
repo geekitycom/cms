@@ -5,6 +5,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { resolveNothing } from '../admin/__testing__/harness.ts';
+import { createUser, listUsers, setUserProfile } from '../admin/accounts.ts';
 import { readSiteSettings, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -194,7 +195,7 @@ describe('the RSS feed', () => {
 
   it('carries one item per published post, newest first, with the whole post', async () => {
     const { cms } = await site({
-      '_data/site.json': JSON.stringify({ title: 'Geekity Demo', author: 'The Site' }),
+      '_data/site.json': JSON.stringify({ title: 'Geekity Demo' }),
       'posts/2026-09-02-newer.md': post('Newer', {
         date: '2026-09-02T09:00:00Z',
         permalink: '/2026/09/newer/',
@@ -243,8 +244,9 @@ describe('the RSS feed', () => {
     );
     assert.equal(child(newer, 'source:markdown').text, 'A *file-first* CMS & proud of it.');
 
-    // A post that names no author falls back to the site's.
-    assert.equal(child(older, 'dc:creator').text, 'The Site');
+    // A post that names no author falls back to the site's, and a site with
+    // several authors is credited by its title.
+    assert.equal(child(older, 'dc:creator').text, 'Geekity Demo');
   });
 
   it('summarises a post that carries no description with its first paragraph', async () => {
@@ -373,7 +375,6 @@ describe('the Atom feed', () => {
       '_data/site.json': JSON.stringify({
         title: 'Geekity Demo',
         tagline: 'A file-first site',
-        author: 'Andrew Shell',
       }),
       'posts/2026-09-02-hello.md': post('Hello, World!', {
         date: '2026-09-02T09:00:00Z',
@@ -392,7 +393,7 @@ describe('the Atom feed', () => {
     assert.equal(child(feed, 'title').text, 'Geekity Demo');
     assert.equal(child(feed, 'subtitle').text, 'A file-first site');
     assert.equal(child(feed, 'updated').text, '2026-09-02T09:00:00.000Z');
-    assert.equal(child(child(feed, 'author'), 'name').text, 'Andrew Shell');
+    assert.equal(child(child(feed, 'author'), 'name').text, 'Geekity Demo');
     assert.equal(linkWithRel(feed, 'self').attributes['href'], 'https://example.com/feed/atom/');
     assert.equal(linkWithRel(feed, 'self').attributes['type'], 'application/atom+xml');
     assert.equal(linkWithRel(feed, 'alternate').attributes['href'], 'https://example.com/');
@@ -563,7 +564,6 @@ describe('the JSON feed', () => {
       '_data/site.json': JSON.stringify({
         title: 'Geekity Demo',
         tagline: 'A file-first site',
-        author: 'Andrew Shell',
       }),
       'posts/2026-09-02-hello.md': post('Hello, World!', {
         date: '2026-09-02T09:00:00Z',
@@ -580,7 +580,7 @@ describe('the JSON feed', () => {
     assert.equal(feed['home_page_url'], 'https://example.com/');
     assert.equal(feed['feed_url'], 'https://example.com/feed/json/');
     assert.equal(feed['description'], 'A file-first site');
-    assert.deepEqual(feed['authors'], [{ name: 'Andrew Shell' }]);
+    assert.deepEqual(feed['authors'], [{ name: 'Geekity Demo' }]);
   });
 
   it('carries the same entries as the Atom feed, newest first', async () => {
@@ -2003,5 +2003,92 @@ describe('the update cadence an RSS feed declares', () => {
     assert.ok(before.every((etag) => etag !== null));
     assert.notEqual(before[0], after[0]);
     assert.notEqual(before[1], after[1]);
+  });
+});
+
+describe('who a feed credits (TASK-192)', () => {
+  /** A site whose posts and settings name `andrew`, who calls himself Andrew Shell. */
+  async function withAndrew(siteJson: Record<string, unknown>): Promise<Cms> {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({ title: 'Geekity Demo', ...siteJson }),
+      'posts/2026-09-02-mine.md': post('Mine', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/mine/',
+        author: 'andrew',
+      }),
+      'posts/2026-08-15-nobodys.md': post('Nobody’s', {
+        date: '2026-08-15T09:00:00Z',
+        permalink: '/2026/08/nobodys/',
+      }),
+    });
+    const andrew = await createUser({
+      dataDir: cms.config.dataDir,
+      username: 'andrew',
+      password: 'correct horse battery',
+    });
+    await setUserProfile({
+      dataDir: cms.config.dataDir,
+      userId: andrew.id,
+      profile: { displayName: 'Andrew Shell' },
+    });
+    return cms;
+  }
+
+  it('prints the site author’s display name, never the username (AC #4, AC #8)', async () => {
+    const cms = await withAndrew({ author: 'andrew' });
+
+    const { channel } = await rss(cms, '/feed/');
+    assert.deepEqual(
+      childrenNamed(channel, 'item').map((item) => child(item, 'dc:creator').text),
+      ['Andrew Shell', 'Andrew Shell'],
+      'the post’s author, and the site’s for the post that names nobody',
+    );
+
+    const { feed } = await atom(cms, '/feed/atom/');
+    assert.equal(child(child(feed, 'author'), 'name').text, 'Andrew Shell');
+    const [mine] = childrenNamed(feed, 'entry') as [XmlElement];
+    assert.equal(child(child(mine, 'author'), 'name').text, 'Andrew Shell');
+
+    const { feed: json, items } = await jsonFeedAt(cms, '/feed/json/');
+    assert.deepEqual(json['authors'], [{ name: 'Andrew Shell' }]);
+    assert.deepEqual(items[0]?.['authors'], [{ name: 'Andrew Shell' }]);
+  });
+
+  it('prints the site title on a site with several authors (AC #4)', async () => {
+    const cms = await withAndrew({});
+
+    const { channel } = await rss(cms, '/feed/');
+    const [, nobodys] = childrenNamed(channel, 'item') as [XmlElement, XmlElement];
+    assert.equal(child(nobodys, 'dc:creator').text, 'Geekity Demo');
+
+    const { feed } = await atom(cms, '/feed/atom/');
+    assert.equal(child(child(feed, 'author'), 'name').text, 'Geekity Demo');
+
+    const { feed: json, items } = await jsonFeedAt(cms, '/feed/json/');
+    assert.deepEqual(json['authors'], [{ name: 'Geekity Demo' }]);
+    assert.deepEqual(
+      items[0]?.['authors'],
+      [{ name: 'Andrew Shell' }],
+      'a post still credits its own author',
+    );
+  });
+
+  it('changes its validator when the author’s display name changes', async () => {
+    const cms = await withAndrew({ author: 'andrew' });
+    const before = (await cms.app.request('/feed/json/')).headers.get('etag');
+
+    const [andrew] = listUsers(cms.config.dataDir);
+    assert.ok(andrew !== undefined);
+    await setUserProfile({
+      dataDir: cms.config.dataDir,
+      userId: andrew.id,
+      profile: { displayName: 'A. Shell' },
+    });
+
+    const response = await cms.app.request('/feed/json/');
+    assert.notEqual(response.headers.get('etag'), before);
+    assert.deepEqual(((await response.json()) as Record<string, unknown>)['authors'], [
+      { name: 'A. Shell' },
+    ]);
   });
 });

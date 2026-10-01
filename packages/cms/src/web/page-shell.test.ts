@@ -477,7 +477,9 @@ describe('the menus a theme renders by name (TASK-107)', () => {
 
 describe('the footer (AC #2, TASK-105)', () => {
   it('prints the year, the site author and the colophon', async () => {
-    const printed = footer(await body(await site({ author: 'Ada Lovelace' }), '/'));
+    const cms = await site({ author: 'ada' });
+    await addUser(cms, 'ada', { displayName: 'Ada Lovelace' });
+    const printed = footer(await body(cms, '/'));
 
     assert.match(printed, new RegExp(`&copy; ${YEAR}, Ada Lovelace`), 'no copyright line');
     assert.match(printed, /Published with[\s\S]*Geekity/, 'no colophon');
@@ -528,21 +530,22 @@ describe('the footer (AC #2, TASK-105)', () => {
       assert.doesNotMatch(printed, /<nav|<ul/, `${JSON.stringify(menus)} left an empty list`);
       assert.match(
         printed,
-        new RegExp(`&copy; ${YEAR}, Joe Blog`),
+        new RegExp(`&copy; ${YEAR}, A Site`),
         'the copyright line went with it',
       );
     }
   });
 
-  it('still has a footer when the site author is nobody this site has', async () => {
-    // What the demo does: `site.json` names an author no user answers to, so
-    // `siteAuthor` is absent. Nothing in the footer reads it either way.
+  it('credits the site title when the site author is nobody this site has', async () => {
+    // A `site.json` written before the Site author select can name an author
+    // no user answers to (TASK-192): the site then has several authors, and
+    // the site title stands in for the name it used to print.
     const printed = footer(await body(await site({ author: 'Joe Blog' }), '/'));
 
     assert.match(
       printed,
-      new RegExp(`&copy; ${YEAR}, Joe Blog`),
-      'the name in the setting is still printed',
+      new RegExp(`&copy; ${YEAR}, A Site`),
+      'the site title stands in for the author',
     );
     assert.doesNotMatch(printed, /rel="me"/, 'a name with no profile behind it has no links');
   });
@@ -753,9 +756,22 @@ describe('a post as an Open Graph article (TASK-146 AC #2)', () => {
   });
 
   it('names an author who has no profile here by name', async () => {
+    const { cms } = await siteWithContent(
+      {},
+      {},
+      {
+        'posts/guest.md':
+          "---\ntitle: A guest post\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/guest/\nauthor: Joe Blog\n---\n\nHi.\n",
+      },
+    );
+
+    assert.equal(metaContent(await body(cms, '/2026/09/guest/'), 'article:author'), 'Joe Blog');
+  });
+
+  it('names no author for a post that names nobody on a site with several authors', async () => {
     const html = await body(await site({ author: 'Joe Blog' }), '/2026/09/hello/');
 
-    assert.equal(metaContent(html, 'article:author'), 'Joe Blog');
+    assert.equal(metaContent(html, 'article:author'), undefined);
   });
 
   it('leaves the article tags off a listing', async () => {
@@ -784,7 +800,11 @@ describe('the share image’s alt text and card (TASK-146 AC #3, AC #4)', () => 
   it('describes an avatar nobody has described by whose it is', async () => {
     const cms = await siteWearingAnAvatar({ author: 'Joe Blog' });
 
-    assert.equal(metaContent(await body(cms, '/'), 'og:image:alt'), 'Joe Blog');
+    assert.equal(
+      metaContent(await body(cms, '/'), 'og:image:alt'),
+      'A Site',
+      'a site with several authors is the site’s own',
+    );
   });
 
   it('prefers the alt text the front matter gives the entry’s own picture', async () => {
@@ -1020,14 +1040,16 @@ describe('the JSON-LD graph (TASK-81 AC #3)', () => {
 
     assert.equal(node(nodes, 'Person'), undefined, 'a Person was invented');
 
+    // A site with several authors is published by the site itself (TASK-192).
+    const organization = { '@id': 'http://localhost:3000/#organization' };
     const website = node(nodes, 'WebSite');
     assert.ok(website !== undefined);
-    assert.equal(website['publisher'], undefined, 'the WebSite is published by nobody');
+    assert.deepEqual(website['publisher'], organization, 'the WebSite is published by the site');
 
     const posting = node(nodes, 'BlogPosting');
     assert.ok(posting !== undefined, 'the post lost its BlogPosting with its author');
     assert.equal(posting['author'], undefined);
-    assert.equal(posting['publisher'], undefined);
+    assert.deepEqual(posting['publisher'], organization);
   });
 
   it('keeps printing JSON when the words in it could close the script', async () => {

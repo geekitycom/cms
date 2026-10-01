@@ -42,3 +42,9 @@
   <li>{{ activity.type }} from {{ activity.actor }} in {{ month }}</li>
   {% endfor %}{% endfor %}
 </ul>
+{#
+  Who the site is: the CMS hands every page `soloAuthor`, the user `author` in
+  `site.json` names, and the example config reads the same user out of
+  `data/users.json` (TASK-192).
+#}
+<footer class="site-footer">&copy; {{ soloAuthor.name or site.title }}</footer>

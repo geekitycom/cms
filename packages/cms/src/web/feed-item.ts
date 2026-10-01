@@ -1,5 +1,7 @@
+import type { User } from '../admin/accounts.ts';
 import type { Document } from '../content/document.ts';
 import { isNamed, replyTarget } from '../content/post-type.ts';
+import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { activityStreamsId } from './documents.ts';
 import { feedLanguage, feedPathUnder } from './feed-source.ts';
@@ -51,13 +53,17 @@ export interface FeedItem {
   published?: Date | undefined;
   /** When it last changed: its `updated`, else its date. */
   updated?: Date | undefined;
-  /** The post's own author, when it names one. Atom and JSON Feed print this. */
+  /**
+   * The post's own author as a name to print, when it names one. Atom and
+   * JSON Feed print this.
+   */
   author?: string | undefined;
   /**
-   * Who a feed credits: the post's own author, else the site's. RSS's
-   * `dc:creator` prints it, because an RSS item has nowhere else to say it.
+   * Who a feed credits: the post's own author, else the site's, else the site
+   * title. RSS's `dc:creator` prints it, because an RSS item has nowhere else
+   * to say it.
    */
-  creator?: string | undefined;
+  creator: string;
   /**
    * What the post is filed under and tagged with, categories first and each in
    * file order, as one list.
@@ -113,7 +119,9 @@ export interface FeedItem {
  * every RSS `guid`, the other formats' ids, their terms and their summaries,
  * revision 3 dropped the title of a post whose title only repeats its opening
  * words, and revision 4 named a reply's target in Atom and JSON Feed, and
- * revision 5 named a post's own language in all three — would
+ * revision 5 named a post's own language in all three, and revision 6 printed
+ * a stored username as the user's display name and credited the site title
+ * where nobody was named — would
  * leave the validator where it was, and a reader polling with `If-None-Match`
  * would be handed a 304 that hides the new bytes.
  *
@@ -121,7 +129,7 @@ export interface FeedItem {
  * never again until the next such change. The comments feeds do not carry it:
  * a comment is not a {@link FeedItem} and its bytes are untouched.
  */
-export const FEED_ITEM_REVISION = 5;
+export const FEED_ITEM_REVISION = 6;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -137,6 +145,8 @@ export interface FeedItemComments {
 export interface FeedItemContext {
   /** Site-wide data, for the author a post does not name. */
   site: SiteData;
+  /** Everyone with an account, so a stored username prints as a display name. */
+  users: readonly User[];
   /** The site's public origin, for absolute ids and links. */
   baseUrl: string;
   /** How many replies each document has, by permalink. See {@link FeedItem.comments}. */
@@ -154,6 +164,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   const { baseUrl } = context;
   const link = absoluteUrl(document.permalink, baseUrl);
   const published = document.date === undefined ? undefined : new Date(document.date);
+  const author = authorName(context.users, document.author);
 
   const item: FeedItem = {
     // A page or a draft has no ActivityStreams id to advertise, and falls back
@@ -165,6 +176,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     summary: feedExcerpt(document),
     html: document.html,
     markdown: document.body,
+    creator: author ?? siteAuthorName(context.users, context.site),
   };
 
   if (isNamed(document)) item.title = document.title;
@@ -173,7 +185,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   const updated = lastModifiedOf(document);
   if (updated !== undefined) item.updated = updated;
 
-  if (document.author !== undefined) item.author = document.author;
+  if (author !== undefined) item.author = author;
 
   const inReplyTo = replyTarget(document);
   if (inReplyTo !== undefined) item.inReplyTo = inReplyTo;
@@ -182,9 +194,6 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   if (language !== undefined && language !== canonicalLocale(feedLanguage(context.site))) {
     item.language = language;
   }
-
-  const creator = document.author ?? context.site.author;
-  if (creator !== undefined && creator !== '') item.creator = creator;
 
   const counts = context.commentCounts;
   if (counts !== undefined) {

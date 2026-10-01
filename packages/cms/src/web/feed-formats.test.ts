@@ -38,8 +38,8 @@ const ITEM: FeedItem = {
 };
 
 /**
- * A post born on the CMS with nothing optional: no dates, no author, no terms,
- * and a summary that had to be excerpted. Its id is its permalink, so RSS
+ * A post born on the CMS with nothing optional: no dates, no author of its own
+ * (the site is credited), no terms, and a summary that had to be excerpted. Its id is its permalink, so RSS
  * marks the guid `isPermaLink="true"`.
  */
 const BARE: FeedItem = {
@@ -50,6 +50,7 @@ const BARE: FeedItem = {
   summary: 'Nothing much.',
   html: '<p>Nothing much.</p>\n',
   markdown: 'Nothing much.',
+  creator: 'Example Site',
 };
 
 /** A post that answers another, by its `in-reply-to`. */
@@ -80,12 +81,13 @@ describe('an RSS item', () => {
     ]);
   });
 
-  it('marks the guid a permalink when the id is one, and leaves out the rest', () => {
+  it('marks the guid a permalink when the id is one, credits the site, and leaves out the rest', () => {
     assert.deepEqual(rssItem(BARE), [
       '    <item>',
       '      <title>Bare</title>',
       '      <link>https://example.com/2026/09/bare/</link>',
       '      <guid isPermaLink="true">https://example.com/2026/09/bare/</guid>',
+      '      <dc:creator>Example Site</dc:creator>',
       '      <description>Nothing much.</description>',
       '      <content:encoded><![CDATA[<p>Nothing much.</p>\n]]></content:encoded>',
       '      <source:markdown><![CDATA[Nothing much.]]></source:markdown>',
