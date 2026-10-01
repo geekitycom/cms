@@ -1062,6 +1062,100 @@ describe('the JSON-LD graph (TASK-81 AC #3)', () => {
   });
 });
 
+describe('the JSON-LD headline and image of an untitled post (TASK-201)', () => {
+  const NOTES: Record<string, string> = {
+    'posts/short-note.md':
+      "---\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/short-note/\n---\n\nThis post should be able to stand on its own.\n",
+    // Ten words of 34 letters each: a label well past Google's 110 characters.
+    'posts/long-note.md': `---\ndate: '2026-09-04T10:00:00Z'\npermalink: /2026/09/long-note/\n---\n\n${Array.from(
+      { length: 10 },
+      (_, index) => `${String(index)}upercalifragilisticexpialidociou`.padEnd(34, 's'),
+    ).join(' ')}\n`,
+  };
+
+  /** A site with no avatar of its own, whose author is a user with this profile. */
+  async function siteOfAda(
+    profile: Record<string, unknown>,
+    settings: Record<string, unknown> = {},
+  ): Promise<Cms> {
+    const { cms } = await siteWithContent(
+      { url: 'https://example.com', author: 'ada', ...settings },
+      {},
+      NOTES,
+    );
+    await addUser(cms, 'ada', { displayName: 'Ada Lovelace', ...profile });
+    return cms;
+  }
+
+  /** The words in a page's <title> before the site's name. */
+  function titleWords(html: string): string {
+    const title = /<title>([\s\S]*?)<\/title>/.exec(html)?.[1] ?? '';
+    return title.replace(/ &middot; A Site$/, '');
+  }
+
+  function posting(html: string): Record<string, unknown> {
+    const found = node(graph(html), 'BlogPosting');
+    assert.ok(found !== undefined, 'the post has no BlogPosting');
+    return found;
+  }
+
+  it('heads a note with the words its <title> names it by (AC #1)', async () => {
+    const html = await body(await siteOfAda({}), '/2026/09/short-note/');
+
+    assert.equal(titleWords(html), 'This post should be able to stand on its own.');
+    assert.equal(posting(html)['headline'], 'This post should be able to stand on its own.');
+  });
+
+  it('cuts a long note’s headline to 110 characters on a word boundary (AC #1)', async () => {
+    const html = await body(await siteOfAda({}), '/2026/09/long-note/');
+    const words = titleWords(html).split(' ');
+
+    assert.equal(posting(html)['headline'], `${words.slice(0, 3).join(' ')}…`);
+    assert.ok(String(posting(html)['headline']).length <= 110);
+  });
+
+  it('pictures a post with no image of its own by its author’s photo (AC #2)', async () => {
+    const cms = await siteOfAda({ avatar: '/uploads/2026/09/ada.png' }, { icon: '/uploads/i.png' });
+
+    for (const pathname of ['/2026/09/short-note/', '/2026/09/hello/']) {
+      assert.equal(
+        posting(await body(cms, pathname))['image'],
+        'https://example.com/uploads/2026/09/ada.png',
+        pathname,
+      );
+    }
+  });
+
+  it('pictures it by the site icon when its author has no photo (AC #2)', async () => {
+    const cms = await siteOfAda({}, { icon: '/uploads/2026/09/icon.png' });
+
+    assert.equal(
+      posting(await body(cms, '/2026/09/short-note/'))['image'],
+      'https://example.com/uploads/2026/09/icon.png',
+    );
+  });
+
+  it('keeps a post’s own image (AC #2)', async () => {
+    const cms = await siteOfAda({ avatar: '/uploads/2026/09/ada.png' }, { icon: '/uploads/i.png' });
+
+    assert.equal(
+      posting(await body(cms, '/2026/09/photo/'))['image'],
+      'https://example.com/uploads/2026/09/hero.png',
+    );
+  });
+
+  it('leaves a titled post’s headline and a page’s image as they were (AC #3)', async () => {
+    const cms = await siteOfAda({ avatar: '/uploads/2026/09/ada.png' }, { icon: '/uploads/i.png' });
+
+    assert.equal(posting(await body(cms, '/2026/09/hello/'))['headline'], 'Hello');
+
+    const article = node(graph(await body(cms, '/about/')), 'Article');
+    assert.ok(article !== undefined);
+    assert.equal(article['headline'], 'About');
+    assert.equal(article['image'], undefined, 'a page was given a picture it did not have');
+  });
+});
+
 describe('structured data is JSON-LD and nothing else (TASK-81 AC #4)', () => {
   it('has no Microdata in any packaged template', async () => {
     const root = fileURLToPath(new URL('../..', import.meta.url));

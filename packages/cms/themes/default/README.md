@@ -793,7 +793,10 @@ IndieWeb. The graph holds:
 - `BlogPosting` on a post and `Article` on a page, with the headline, URL,
   `mainEntityOfPage`, `datePublished`, `dateModified`, description, image,
   `author`, and the site's `publisher`: the site author's Person, or the
-  Organization.
+  Organization. A post with no title is headed by the words its `<title>`
+  names it by, its `label`, cut on a word boundary to at most 110 characters.
+  A post with no picture of its own, on a site with no avatar, takes its
+  author's photo, else the site's `icon` upload.
 - `BreadcrumbList` wherever the page prints a breadcrumb (see
   [The page shell](#the-page-shell)): one `ListItem` per crumb with its
   `position`, `name` and absolute URL as `item`.
