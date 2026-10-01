@@ -5,7 +5,8 @@ import { ADMIN_PREFIX } from '../admin/session.ts';
 import { THEME_ASSET_PREFIX, UPLOAD_ASSET_PREFIX } from './assets.ts';
 import { AUTHOR_BASE, INBOX_BASE } from './authors.ts';
 import { COMMENTS_ROOT } from './feeds.ts';
-import { ROBOTS_PATH, SITEMAP_PATH } from './sitemap.ts';
+import { ROBOTS_PATH } from './robots.ts';
+import { SITEMAP_PATH } from './sitemap.ts';
 import {
   DEFAULT_TAXONOMY_BASES,
   forgetTerm,

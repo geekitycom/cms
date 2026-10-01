@@ -9,7 +9,8 @@ import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
-import { siteIcons } from '../images/icons.ts';
+import { iconSetting, siteIcons } from '../images/icons.ts';
+import { LLMS_TXT_PATH } from './llms.ts';
 import { archiveMonths, archiveOpen } from './archive.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
@@ -30,12 +31,13 @@ import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, FrontPageSlugs, NeighbourContext, SiteData } from './context.ts';
 import { navigationMenus } from './navigation.ts';
+import { shareImage } from './share-image.ts';
 import type { Pagination } from './pagination.ts';
 import { snippetHtml } from './search.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 import { createTemplateEnvironment, useThemeDirs } from './templates.ts';
 import { createThemeSource, findThemeFile } from './themes.ts';
-import type { ThemeSource } from './themes.ts';
+import type { ThemeColors, ThemeSource } from './themes.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 
@@ -207,6 +209,11 @@ export interface Renderer {
    * the page that links to it can never come from two different themes.
    */
   themeDirs(): readonly string[];
+  /**
+   * The colours of the theme a render wears right now, gap-filled from the
+   * packaged theme: what the head declares and the web manifest repeats.
+   */
+  themeColors(): ThemeColors;
   /** The Nunjucks environment, for a site that wants to add its own filters. */
   readonly environment: Environment;
 }
@@ -383,7 +390,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // written into `site.json` by hand, decides this very render rather than
     // the next boot. It costs a comparison of two short arrays when nothing
     // has changed, which is every render of a site that is not being rethemed.
-    useThemeDirs(environment, themes.current().dirs);
+    const chosen = themes.current();
+    useThemeDirs(environment, chosen.dirs);
     // The menus are built here rather than by each caller because every page
     // of the site carries them: a listing, a document, the 404 and the
     // editor's preview all go through here, and a menu that appeared on some
@@ -403,18 +411,37 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // the site's own author only when the page is about nobody in particular:
     // a document's byline and an author archive's person are put on the
     // context by the callers below, and win by going on last.
-    const owner =
-      context['siteAuthor'] === undefined ? siteAuthorContext(users(), site.author) : undefined;
-    // The site's icons, as the three links a head carries (TASK-81). They are
-    // computed here rather than in the layout because only this side knows
+    const siteOwner = siteAuthorContext(users(), site.author);
+    const owner = context['siteAuthor'] === undefined ? siteOwner : undefined;
+    // The site's icons, as the links a head carries (TASK-81, TASK-147). They
+    // are computed here rather than in the layout because only this side knows
     // where a derived file is served and whether the site can derive one at
-    // all: a theme that was handed the avatar path would have to build the URL
-    // itself and would link three 404s on a site with image optimization off.
-    const icons = siteIcons(config, site.avatar);
+    // all: a theme that was handed the icon's path would have to build the URL
+    // itself and would link 404s on a site with image optimization off.
+    const icons = siteIcons(config, iconSetting(site));
+    // The picture a shared link shows (TASK-146), here for the reason the
+    // icons are: its alt text and its size are in files only this side reads.
+    const title = [context['title'], context['label']].find(
+      (value): value is string => typeof value === 'string' && value !== '',
+    );
+    const image = shareImage({
+      config,
+      image: context['image'],
+      imageAlt: context['imageAlt'],
+      title: title ?? site.title,
+      avatar: site.avatar,
+      owner: siteOwner?.name ?? site.author ?? site.title,
+    });
     return environment.render(template, {
       site,
       menus,
       icons,
+      // The colours the head declares before the stylesheet loads (TASK-146).
+      theme: chosen.colors,
+      // Where the index for language models is (TASK-149), while the site
+      // serves one, so a theme asks `{% if llmsTxt %}`.
+      ...(site['llmsTxt'] === false ? {} : { llmsTxt: LLMS_TXT_PATH }),
+      ...(image === undefined ? {} : { shareImage: image }),
       ...(owner === undefined ? {} : { siteAuthor: owner }),
       ...context,
     });
@@ -674,6 +701,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     themeDirs() {
       return themes.current().dirs;
+    },
+
+    themeColors() {
+      return themes.current().colors;
     },
 
     pageSize() {

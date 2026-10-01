@@ -228,10 +228,21 @@ export {
 } from './search.ts';
 export type { SearchJson, SearchJsonOptions, SearchResultJson } from './search.ts';
 export {
+  AI_CRAWLER_POLICIES,
+  AI_RETRIEVAL_CRAWLERS,
+  AI_TRAINING_CRAWLERS,
+  CONTENT_SIGNALS,
+  contentSignalValue,
+  DEFAULT_ROBOTS_POLICY,
   robotsResponse,
+  robotsRuleLines,
+  robotsRuleProblem,
   robotsTxt,
   ROBOTS_CONTENT_TYPE,
   ROBOTS_PATH,
+} from './robots.ts';
+export type { AiCrawlerPolicy, ContentSignal, ContentSignalName, RobotsPolicy } from './robots.ts';
+export {
   sitemapChildPath,
   sitemapDate,
   sitemapIndexXml,

@@ -323,6 +323,20 @@
     @apply font-semibold text-accent;
   }
 
+  /* The breadcrumb: where the page sits, on one quiet line above it. The
+     crumbs are links like the kicker's; the last is the page itself. */
+  .breadcrumbs ol {
+    @apply mb-6 gap-x-2 font-sans text-sm text-muted;
+  }
+
+  .breadcrumbs a {
+    @apply target quiet-link text-muted;
+  }
+
+  .breadcrumbs-sep {
+    @apply me-2;
+  }
+
   /* Titles: what heads a listing, an archive, search and an error page. */
   .page-title {
     @apply mt-1 mb-8 text-4xl leading-[1.08] sm:text-[2.75rem];

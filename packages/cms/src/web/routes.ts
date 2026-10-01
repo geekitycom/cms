@@ -2,13 +2,14 @@ import type { Context, Hono, MiddlewareHandler } from 'hono';
 
 import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
-import { readSiteSettings } from '../admin/settings.ts';
+import { readSiteSettings, robotsPolicyOf } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { mountAvatars } from '../avatars/routes.ts';
+import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
 import {
@@ -73,14 +74,19 @@ import type { ConditionalHeaders, Representation } from './negotiate.ts';
 import { offsetForPage, paginate } from './pagination.ts';
 import type { Pagination } from './pagination.ts';
 import { TEMPLATES } from './render.ts';
-import {
-  robotsResponse,
-  sitemapResponse,
-  ROBOTS_PATH,
-  SITEMAP_CHILD_ROUTE,
-  SITEMAP_PATH,
-} from './sitemap.ts';
+import { robotsResponse, ROBOTS_PATH } from './robots.ts';
+import { sitemapResponse, SITEMAP_CHILD_ROUTE, SITEMAP_PATH } from './sitemap.ts';
 import type { SitemapUrl } from './sitemap.ts';
+import { FAVICON_PATH, manifestResponse, MANIFEST_PATH, webManifest } from './manifest.ts';
+import {
+  generatedLlmsTxt,
+  LLMS_TXT_LINK,
+  LLMS_TXT_PATH,
+  llmsTxtResponse,
+  ownLlmsTxt,
+} from './llms.ts';
+import type { LlmsEntry, LlmsIndex } from './llms.ts';
+import { indexNowKeyPath, indexNowKeyResponse } from './indexnow.ts';
 import {
   searchHref,
   searchJson,
@@ -142,8 +148,16 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
     // `site.json` so a save on the settings screen moves the front page on the
     // very next one.
     const home = frontPages(c).home;
-    if (home === undefined) return listing(c, { term: undefined, pageNumber: 0 });
-    return negotiateDocument(c, home, selectFromAccept(c, DOCUMENT_REPRESENTATIONS), '/');
+    const response =
+      home === undefined
+        ? listing(c, { term: undefined, pageNumber: 0 })
+        : negotiateDocument(c, home, selectFromAccept(c, DOCUMENT_REPRESENTATIONS), '/');
+    // The home page is where a tool that found the site looks for its index
+    // (TASK-149): a header, so it is found without parsing the page.
+    if (readSiteSettings(c.var.config.contentDir).llmsTxt) {
+      response.headers.append('link', LLMS_TXT_LINK);
+    }
+    return response;
   });
 
   app.get(`/${PAGE_SEGMENT}/:page{[0-9]+}/`, (c) => {
@@ -181,7 +195,51 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // search engine polls.
   app.get(SITEMAP_PATH, (c) => sitemap(c, undefined));
   app.get(SITEMAP_CHILD_ROUTE, (c) => sitemap(c, Number(c.req.param('page'))));
-  app.get(ROBOTS_PATH, (c) => robotsResponse(c.var.config.baseUrl, conditionalHeaders(c)));
+  app.get(ROBOTS_PATH, (c) =>
+    robotsResponse(
+      c.var.config.baseUrl,
+      conditionalHeaders(c),
+      robotsPolicyOf(readSiteSettings(c.var.config.contentDir)),
+    ),
+  );
+
+  // The web app manifest and the root favicon (TASK-147), fixed paths at the
+  // root for the same reason: a browser asks for `/favicon.ico` whatever the
+  // head links, and no permalink may take either URL.
+  app.get(MANIFEST_PATH, (c) => {
+    const site = c.var.renderer.site();
+    const manifest = webManifest({
+      config: c.var.config,
+      title: site.title,
+      iconSetting: iconSetting(site),
+      colors: c.var.renderer.themeColors(),
+    });
+    return manifestResponse(manifest, conditionalHeaders(c));
+  });
+  app.get(FAVICON_PATH, favicon);
+
+  // The index for language models (TASK-149), a fixed path at the root for
+  // the same reason. Off is a 404; a file of the site's own wins over the
+  // generated one.
+  app.get(LLMS_TXT_PATH, (c) => {
+    const { contentDir, baseUrl } = c.var.config;
+    if (!readSiteSettings(contentDir).llmsTxt) return notFound(c);
+    const file = ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl);
+    return llmsTxtResponse(file, conditionalHeaders(c));
+  });
+
+  // The IndexNow key file (TASK-151), at the root because that is where an
+  // engine checks for it. Any other `.txt` path is not this route's: it falls
+  // through to whatever document or 404 would have answered it.
+  app.get('/:file{[A-Za-z0-9-]{8,128}\\.txt}', async (c, next) => {
+    const settings = readSiteSettings(c.var.config.contentDir);
+    const key = settings.indexNowKey;
+    if (!settings.indexNow || key === '' || c.req.path !== indexNowKeyPath(key)) {
+      await next();
+      return;
+    }
+    return indexNowKeyResponse(key);
+  });
 
   // The site's search (TASK-22): a route at a fixed path for the reason the
   // feeds are, so the form in every theme's footer submits somewhere no
@@ -1381,6 +1439,45 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
 }
 
 /**
+ * What a generated `/llms.txt` lists: every public page by title, then the
+ * posts the feeds carry, newest first, each linked to its Markdown.
+ *
+ * The homepage is listed at `/`, which is where it is published; its own
+ * permalink redirects there.
+ */
+function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
+  const { store, renderer } = c.var;
+  const site = renderer.site();
+  const now = store.now();
+  const home = frontPages(c).home;
+
+  const entry = (document: Document): LlmsEntry => ({
+    title: postLabel(document),
+    href: representationHref(
+      document.path === home?.path ? '/' : encodePath(document.permalink),
+      'markdown',
+    ),
+    description: document.description,
+    lastModified: lastModifiedOf(document),
+  });
+
+  const pages = store
+    .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
+    .filter((document) => isPublicDocument(document, now))
+    .sort((a, b) => postLabel(a).localeCompare(postLabel(b)));
+  const posts = store
+    .listPosts({ limit: feedSize(site) })
+    .filter((document) => isPublicDocument(document, now));
+
+  return {
+    title: site.title,
+    description: site.tagline ?? '',
+    pages: pages.map(entry),
+    posts: posts.map(entry),
+  };
+}
+
+/**
  * A file from the theme's `static/` directory, the site's copy first.
  *
  * Assets are cacheable and validated, so a browser that already has one pays a
@@ -1426,6 +1523,25 @@ async function imageVariant(c: Context<GeekityEnv>): Promise<Response> {
   const version = sourceVersion(c.var.config, source);
   const fingerprinted = version !== undefined && c.req.query(ASSET_VERSION_PARAM) === version;
   const options = fingerprinted ? IMMUTABLE_ASSET : { maxAge: UPLOAD_ASSET_MAX_AGE };
+  return matchesEtag(c.req.header('if-none-match'), asset.etag)
+    ? assetNotModified(asset, options)
+    : assetResponse(asset, options);
+}
+
+/**
+ * `/favicon.ico`, derived from the site's icon beside its other icons.
+ *
+ * Its URL carries no version, so it is cached like an upload rather than for
+ * a year: a site that changes its icon is seen with the new one within a day.
+ */
+async function favicon(c: Context<GeekityEnv>): Promise<Response> {
+  const source = siteIconSource(c.var.config, iconSetting(c.var.renderer.site()));
+  if (source === undefined) return notFound(c);
+
+  const asset = await findImageVariant(c.var.config, `${source}/${FAVICON_FILE}`);
+  if (asset === undefined) return notFound(c);
+
+  const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
   return matchesEtag(c.req.header('if-none-match'), asset.etag)
     ? assetNotModified(asset, options)
     : assetResponse(asset, options);

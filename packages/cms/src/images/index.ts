@@ -1,7 +1,7 @@
 export { IMAGE_SIZES, responsiveImages, siteImageMarkup } from './markup.ts';
 export type { DescribeImage, ImageLoading } from './markup.ts';
-export { siteIcons } from './icons.ts';
-export type { SiteIcon } from './icons.ts';
+export { iconSetting, manifestIcons, siteIcons } from './icons.ts';
+export type { ManifestIcon, SiteIcon } from './icons.ts';
 export {
   describeImage,
   findImageVariant,

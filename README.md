@@ -525,7 +525,7 @@ use](#a-database-this-version-cannot-use).
 | `/feed/`               | The recent posts as RSS 2.0; `/feed/atom/` and `/feed/json/` are its siblings. |
 | an archive's `feed/`   | The same three over one tag or category, e.g. `/tag/{tag}/feed/atom/`.         |
 | `/sitemap.xml`         | Every public URL with its `lastmod`, split into an index past 50,000 of them.  |
-| `/robots.txt`          | Everything but `/admin/`, and the sitemap's absolute URL.                      |
+| `/robots.txt`          | Everything but `/admin/`, the sitemap, and the site's AI-crawler rules.        |
 | `/healthz`             | 200 when the site can serve, 503 when it cannot; see below.                    |
 | `/theme/…`             | The theme's own files, from its `static/` directory, cacheable and validated.  |
 | `/uploads/…`           | Files under `content/uploads/`, at the URLs an Eleventy build copies them to.  |

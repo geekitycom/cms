@@ -56,6 +56,8 @@ import type {
 } from './federation/index.ts';
 import { createFeedNotifier } from './notify.ts';
 import type { FeedNotifier, NotifyReport } from './notify.ts';
+import { createIndexNowNotifier } from './indexnow.ts';
+import type { IndexNowNotifier } from './indexnow.ts';
 import {
   commentFormFor,
   createAkismetChecker,
@@ -83,6 +85,8 @@ import { createReplyContextService, createWebmentionService } from './webmention
 import type { ReplyContextService, WebmentionService } from './webmention/index.ts';
 
 export { createFeedNotifier, NOTIFY_TIMEOUT_MS } from './notify.ts';
+export { createIndexNowNotifier, defaultIndexNowBackoffMs, INDEXNOW_ENDPOINT } from './indexnow.ts';
+export type { CreateIndexNowNotifierOptions, IndexNowNotifier } from './indexnow.ts';
 export type {
   CreateFeedNotifierOptions,
   FeedNotifier,
@@ -426,6 +430,7 @@ export type {
   DocumentChangeHook,
   FederationOverrides,
   GeekityConfig,
+  IndexNowOverrides,
   MailOverrides,
   ResolvedConfig,
   ResolveConfigContext,
@@ -625,6 +630,8 @@ export {
   IMAGE_SIZES,
   removeImageVariants,
   responsiveImages,
+  iconSetting,
+  manifestIcons,
   siteIcons,
   siteImageMarkup,
   variantUrl,
@@ -637,6 +644,7 @@ export type {
   ImageLoading,
   ImageRecord,
   ImageVariant,
+  ManifestIcon,
   SiteIcon,
 } from './images/index.ts';
 
@@ -1200,6 +1208,7 @@ export type {
   Representation,
   RepresentationExtension,
   RepresentationResponseOptions,
+  RobotsPolicy,
   SearchJson,
   SearchJsonOptions,
   SearchPage,
@@ -1379,6 +1388,13 @@ export interface Cms {
    * flight.
    */
   readonly notifier: FeedNotifier;
+  /**
+   * What tells the IndexNow search engines which URLs a publish, an edit or a
+   * deletion moved (TASK-151), while the site has IndexNow on. Already
+   * subscribed to the index; a site or a test reaches for it to send what it
+   * has gathered now and wait for it.
+   */
+  readonly indexNow: IndexNowNotifier;
   /**
    * The site's outgoing email (TASK-53): what the settings screen's Send test
    * email button uses, and what the password resets, moderation notices and
@@ -1787,6 +1803,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const notifier = createFeedNotifier({ config: resolved });
   content.events.on('change', (change) => notifier.handle(change));
 
+  // IndexNow listens for the same reason, and wants the pages as well as the
+  // posts: a search engine indexes both (TASK-151).
+  const indexNow = createIndexNowNotifier({ config: resolved });
+  content.events.on('change', (change) => {
+    indexNow.handle(change);
+  });
+
   // A post whose date is in the future is held back (TASK-44), and nothing
   // watches a clock: this is what notices that one has come due and reports it
   // as the publish it is, so delivery, the notifier and a site's `onPublish`
@@ -1945,6 +1968,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     actorProfiles,
     retention,
     notifier,
+    indexNow,
     mail,
     notifications,
     digests,
@@ -2031,6 +2055,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
       await actorProfiles.settled();
       await retention.settled();
       await notifier.settled();
+      // What was gathered and not yet sent is dropped rather than sent on the
+      // way down; a batch already going out finishes.
+      indexNow.close();
+      await indexNow.settled();
       await mail.settled();
 
       if (running !== undefined) {

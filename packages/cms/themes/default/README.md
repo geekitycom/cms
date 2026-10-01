@@ -83,7 +83,9 @@ overrides the `--color-*` custom properties instead; see [Colours](#colours).
 {
   "name": "Default",
   "kind": "site",
-  "description": "One line about the theme."
+  "description": "One line about the theme.",
+  "colorScheme": "light dark",
+  "themeColor": { "light": "#faf7f2", "dark": "#171412" }
 }
 ```
 
@@ -92,6 +94,14 @@ the field exists so another can be added later without the format changing —
 and `description` is optional. The directory name is the theme's id. A
 directory without a readable manifest, or one naming a kind this CMS does not
 have, is not a theme.
+
+`colorScheme` and `themeColor` are the colours the head declares before the
+stylesheet loads (see [The head](#the-head)). `colorScheme` is one of `normal`,
+`light`, `dark`, `light dark`, `dark light` or `only light`, preferred scheme
+first. `themeColor` is the colour of the browser around the page, one per
+scheme, as a three- or six-digit hex colour with no alpha. Make it the page's
+own background. A value outside those is ignored, and so is one a theme leaves
+out: each falls back to this theme's, just as a template does.
 
 ## Overriding a template
 
@@ -151,8 +161,8 @@ packaged ones by name:
 ```
 
 `layouts/base.njk` defines the blocks `title`, `speculationRules`,
-`viewTransitions`, `head`, `alternates`, `header`, `content`, `footer` and
-`scripts`, so most sites never have to copy it.
+`viewTransitions`, `head`, `alternates`, `header`, `breadcrumbs`, `content`,
+`footer` and `scripts`, so most sites never have to copy it.
 
 Two layouts are named for the pages the Reading settings pick:
 
@@ -205,6 +215,18 @@ and the copyright line stands on its own. The year is
 `{{ "now" | date("year") }}` — `now` is the one word the `date` filter reads
 rather than parses — so it is the year at the moment the page is rendered, in
 the site's own timezone.
+
+**The breadcrumb** opens `<main>` on a page with a place in the site's
+hierarchy (TASK-150): a post filed under a category, and a category, tag or
+author archive. It is `nav.breadcrumbs` labelled `Breadcrumb`, holding an `ol`
+whose items run Home, then the post's first category and the post, or the
+archive's term or person, then `Page N` past page one. Every crumb but the last
+is a link; the last is the page itself, a `span` with `aria-current="page"`.
+The trail is `breadcrumbs`, a list of `{ name, url }` that `layouts/base.njk`
+sets before anything is printed, and the JSON-LD prints the same list, so the
+two cannot disagree. Every other page has an empty trail and prints nothing. A
+site that wants no visible breadcrumb empties the `breadcrumbs` block, and the
+`BreadcrumbList` stays in the graph.
 
 Webrings, badges, a licence notice and anything else that is markup rather than
 a link are deliberately not in the package. They go in a site theme's `footer`
@@ -656,25 +678,52 @@ the entry's `summary` — the line the feeds publish — else `site.tagline`. It
 printed once, as `<meta name="description">`, and the Open Graph and Twitter
 descriptions say the same thing.
 
+**The colours** come from the theme's `theme.json` (see
+[The manifest](#the-manifest)), on the context as `theme`.
+`<meta name="color-scheme">` comes before the stylesheet, so a reader in dark
+mode gets a dark canvas rather than a white flash while the stylesheet loads.
+`<meta name="theme-color">` is printed twice, once with
+`media="(prefers-color-scheme: light)"` and once for dark.
+
 **The card.** `og:title` is the page's title, or the site's on the front page;
 `og:site_name` is always the site's. `og:type` is `article` on a rendered post
 or page and `website` everywhere else, a listing carrying a page's front matter
-included. `og:url` is the canonical URL. `twitter:card` is `summary`, the small
-square picture beside the words, because the picture is usually a face rather
-than a wide photograph.
+included. `og:url` is the canonical URL. An article also carries
+`article:published_time`, `article:modified_time` (the `updated` date, else the
+publish date), `article:author` (the author's profile URL here, else their
+name) and one `article:tag` per tag.
 
-**The picture** is the `image` in the entry's front matter, else `site.avatar`.
-A site with neither prints no `og:image` and no `twitter:image` rather than an
-empty one.
+**The picture** is the `image` in the entry's front matter, else `site.avatar`,
+on the context as `shareImage`. A site with neither prints no `og:image` and no
+`twitter:image` rather than an empty one. The picture always carries
+`og:image:alt` and `twitter:image:alt`. For the entry's own picture, the alt
+text is its `imageAlt` front matter, else what the media library says about the
+upload, else the entry's title. For the avatar, it is the media library's text,
+else the site's author. `og:image:width` and `og:image:height` are printed when
+the image's variants have been derived, because the size is read from their
+sidecar rather than from the file. `twitter:card` is `summary_large_image` for a
+picture at least 1200 pixels wide and wider than it is tall. Everything else,
+the avatar included, is `summary`, the small picture beside the words.
 
-**The icons** come from the site's avatar through the derived images
-(decision-10): `icon` at 32 and 16 pixels and `apple-touch-icon` at 180, each a
-square PNG cropped from the middle of the avatar and encoded the first time a
-browser asks for it. They are on the context as `icons`, a list of
-`{ rel, sizes, href }`, which is empty — and the links are not printed at all —
-when the site has no avatar, when its avatar is a file no icon can be made of,
-or when image optimization is off. There is no web manifest; a site that wants
-one adds it in its own `head` block.
+**The icons** come from the site's `icon` setting in `site.json`, else
+`site.avatar`, through the derived images (decision-10). `icon` exists for a
+site whose avatar is a face and whose mark is a logo. The head links `icon` at
+32 and 16 pixels and `apple-touch-icon` at 180, each a square PNG cropped from
+the middle of the picture and encoded the first time a browser asks for it. An
+SVG icon is linked first as itself, with `type="image/svg+xml"` and no
+`sizes`, and the PNGs are rasterised from it. They are on the context as
+`icons`, a list of `{ rel, sizes, type, href }`, which is empty, and the links
+are not printed at all, when the site has neither setting, when it names a
+file no icon can be made of, or when image optimization is off.
+
+**The favicon and the manifest** are routes, not templates. `/favicon.ico`
+holds 16, 32 and 48 pixel frames drawn from the same picture, because browsers
+and crawlers ask the root for it whatever the head links; it answers 404 on a
+site with no icon. `/manifest.webmanifest` gives the site's title as `name` and
+`short_name`, `start_url` `/`, `display` `minimal-ui`, the theme's light
+`themeColor` as `theme_color` and `background_color`, and icons at 192 and 512
+pixels plus a maskable 512 whose picture sits inside the middle 80%, padded
+with its own dominant colour. The head links it on every page.
 
 **The structured data** is `partials/jsonld.njk`, one `<script
 type="application/ld+json">` holding one `@graph` per page, and it is the only
@@ -695,6 +744,9 @@ IndieWeb. The graph holds:
 - `BlogPosting` on a post and `Article` on a page, with the headline, URL,
   `mainEntityOfPage`, `datePublished`, `dateModified`, description, image,
   `author` and `publisher`.
+- `BreadcrumbList` wherever the page prints a breadcrumb (see
+  [The page shell](#the-page-shell)): one `ListItem` per crumb with its
+  `position`, `name` and absolute URL as `item`.
 
 A site that wants a different graph — more types, an `Organization` publisher,
 nothing at all — writes its own `partials/jsonld.njk` and that file replaces
@@ -955,7 +1007,10 @@ Every template gets:
 | `site`       | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
 | `menus`      | Every menu the site stores, by name, marked for this page: `menus.primary`, `menus.footer`, and any other name. See [Navigation](#navigation).                                                          |
 | `siteAuthor` | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
-| `icons`      | The site's icons, as `{ rel, sizes, href }`. Empty until the site has an avatar to derive them from. See [The head](#the-head).                                                                         |
+| `icons`      | The site's icons, as `{ rel, sizes, type, href }`. Empty until the site has an icon or an avatar to derive them from. See [The head](#the-head).                                                        |
+| `theme`      | The colours the theme declares, as `{ colorScheme, themeColor: { light, dark } }`, each absent when no theme declares it. See [The manifest](#the-manifest).                                            |
+| `shareImage` | The picture a shared link shows, as `{ url, alt, size: { width, height }, card }`. `size` is absent when it is not known. **Absent** when there is no picture. See [The head](#the-head).               |
+| `llmsTxt`    | The path of `/llms.txt`, while the site serves it. **Absent** when the site has turned it off. The default theme links it from the front page only.                                                     |
 
 A document — one post, one page, or one entry of a listing — adds:
 
@@ -1252,6 +1307,15 @@ when the site is taking webmentions, so a theme asks `{% if webmention %}` and a
 site that has turned them off advertises nothing. The CMS also sends the same
 endpoint as a `Link` header on every representation of a document, so a sender
 that does not parse HTML still finds it.
+
+On the front page it also writes the site's index for language models:
+
+```html
+<link rel="describedby" type="text/markdown" href="/llms.txt" />
+```
+
+It comes from `llmsTxt` on the context, which is absent once the site turns the
+file off. The CMS sends the same link as a `Link` header on the front page.
 
 `layouts/tag.njk` and `layouts/category.njk` override that block, call `super()`
 and add the archive's own three feeds:

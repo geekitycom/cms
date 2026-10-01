@@ -12,8 +12,18 @@ import {
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
+import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from '../web/feed-source.ts';
+import type { UpdatePeriod } from '../web/feed-source.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
+import { generateIndexNowKey, isIndexNowKey } from '../web/indexnow.ts';
 import { DEFAULT_MENU_NAME, menuItemsFromText, menusOf } from '../web/navigation.ts';
+import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from '../web/robots.ts';
+import type {
+  AiCrawlerPolicy,
+  ContentSignal,
+  ContentSignalName,
+  RobotsPolicy,
+} from '../web/robots.ts';
 import type { NavigationMenus } from '../web/navigation.ts';
 import {
   DEFAULT_TAXONOMY_BASES,
@@ -184,6 +194,53 @@ export interface SiteSettings {
    */
   notifyServer: string;
   /**
+   * How often the RSS feeds tell a reader to poll them: `feedUpdateFrequency`
+   * times a `feedUpdatePeriod`, in the Syndication module's two elements
+   * (TASK-152). Once an hour by default, which is what WordPress declares.
+   */
+  feedUpdatePeriod: UpdatePeriod;
+  /** How many polls per {@link SiteSettings.feedUpdatePeriod}: a whole number, at least one. */
+  feedUpdateFrequency: number;
+  /**
+   * How the site treats the crawlers that feed AI products, as the robots file
+   * spells it in per-agent groups (TASK-148). `allow` by default.
+   */
+  aiCrawlers: AiCrawlerPolicy;
+  /**
+   * The three Content-Signal preferences the robots file declares: `yes`,
+   * `no`, or empty for a signal the site says nothing about.
+   */
+  contentSignalSearch: ContentSignalChoice;
+  /** Whether the site's pages may be fed to an AI answer live. */
+  contentSignalAiInput: ContentSignalChoice;
+  /** Whether the site's pages may be used to train a model. */
+  contentSignalAiTrain: ContentSignalChoice;
+  /**
+   * Lines the robots file carries beyond the CMS's own: groups of
+   * `User-agent` lines and their rules, one line per entry, blank lines
+   * between groups. Every group still keeps crawlers out of the admin.
+   */
+  robotsRules: readonly string[];
+  /**
+   * Whether the site serves `/llms.txt` and advertises it from the home page
+   * (TASK-149). On by default. A site that wants to write the file itself
+   * leaves this on and puts it at `content/llms.txt`.
+   */
+  llmsTxt: boolean;
+  /**
+   * Whether the site tells the IndexNow search engines about every URL a
+   * publish, an edit or a deletion moved (TASK-151). Off by default: it sends
+   * the site's URLs to a third party, which is the site's call to make.
+   */
+  indexNow: boolean;
+  /**
+   * The key IndexNow verifies the site by, served at `/{key}.txt`. Generated
+   * the first time IndexNow is turned on and kept when it is turned off, so
+   * turning it back on keeps the key the search engines already checked. It
+   * is no secret: the whole point of it is that anybody can fetch it.
+   */
+  indexNowKey: string;
+  /**
    * How the site sends email, or `none` for a site that does not (TASK-53).
    *
    * The name of the provider only. The key or the SMTP password that makes it
@@ -277,6 +334,37 @@ export interface SiteSettings {
   taxonomyRedirects: readonly TaxonomyRedirect[];
 }
 
+/** What a site says about one Content-Signal: yes, no, or nothing. */
+export type ContentSignalChoice = '' | 'yes' | 'no';
+
+/** Whether a string is a {@link ContentSignalChoice}. */
+function isContentSignalChoice(value: unknown): value is ContentSignalChoice {
+  return value === '' || value === 'yes' || value === 'no';
+}
+
+/** Whether a value is a count of polls the Syndication module allows: a whole number from 1. */
+function isPollCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+/** Whether a string is an {@link AiCrawlerPolicy}. */
+function isAiCrawlerPolicy(value: unknown): value is AiCrawlerPolicy {
+  return (AI_CRAWLER_POLICIES as readonly unknown[]).includes(value);
+}
+
+/** What the settings say the robots file should carry. */
+export function robotsPolicyOf(settings: SiteSettings): RobotsPolicy {
+  const choices: [ContentSignalName, ContentSignalChoice][] = [
+    ['search', settings.contentSignalSearch],
+    ['ai-input', settings.contentSignalAiInput],
+    ['ai-train', settings.contentSignalAiTrain],
+  ];
+  const contentSignal: ContentSignal = {};
+  for (const [name, choice] of choices) if (choice !== '') contentSignal[name] = choice;
+
+  return { aiCrawlers: settings.aiCrawlers, contentSignal, rules: settings.robotsRules };
+}
+
 /**
  * The settings the form on the settings screen carries.
  *
@@ -284,7 +372,10 @@ export interface SiteSettings {
  * archive renames, which the taxonomy screens write, and the menus, which the
  * Navigation screen writes. See {@link CarriedSettings}.
  */
-export type SettingsField = Exclude<keyof SiteSettings, 'taxonomyRedirects' | 'menus'>;
+export type SettingsField = Exclude<
+  keyof SiteSettings,
+  'taxonomyRedirects' | 'menus' | 'indexNowKey'
+>;
 
 /**
  * The settings no settings form carries, as a save takes them from the file.
@@ -294,7 +385,9 @@ export type SettingsField = Exclude<keyof SiteSettings, 'taxonomyRedirects' | 'm
  * inside the write rather than off the form — which is what makes a menu
  * edited while the settings page was open survive the save.
  */
-export type CarriedSettings = Partial<Pick<SiteSettings, 'taxonomyRedirects' | 'menus'>>;
+export type CarriedSettings = Partial<
+  Pick<SiteSettings, 'taxonomyRedirects' | 'menus' | 'indexNowKey'>
+>;
 
 /**
  * What a site is worth before anybody has said otherwise.
@@ -325,6 +418,16 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   webmentionsSend: true,
   webmentionsReceive: true,
   notifyServer: DEFAULT_NOTIFY_SERVER,
+  feedUpdatePeriod: DEFAULT_FEED_CADENCE.period,
+  feedUpdateFrequency: DEFAULT_FEED_CADENCE.frequency,
+  aiCrawlers: 'allow',
+  contentSignalSearch: '',
+  contentSignalAiInput: '',
+  contentSignalAiTrain: '',
+  robotsRules: [],
+  llmsTxt: true,
+  indexNow: false,
+  indexNowKey: '',
   mailProvider: 'none',
   mailFromName: '',
   mailFromAddress: '',
@@ -361,6 +464,15 @@ export const SETTINGS_FIELDS = {
   webmentionsSend: 'webmentions_send',
   webmentionsReceive: 'webmentions_receive',
   notifyServer: 'notify_server',
+  feedUpdatePeriod: 'feed_update_period',
+  feedUpdateFrequency: 'feed_update_frequency',
+  aiCrawlers: 'ai_crawlers',
+  contentSignalSearch: 'content_signal_search',
+  contentSignalAiInput: 'content_signal_ai_input',
+  contentSignalAiTrain: 'content_signal_ai_train',
+  robotsRules: 'robots_rules',
+  llmsTxt: 'llms_txt',
+  indexNow: 'index_now',
   mailProvider: 'mail_provider',
   mailFromName: 'mail_from_name',
   mailFromAddress: 'mail_from_address',
@@ -449,6 +561,39 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
       ? { webmentionsReceive: file['webmentionsReceive'] }
       : {}),
     ...(typeof file['notifyServer'] === 'string' ? { notifyServer: file['notifyServer'] } : {}),
+    ...(isUpdatePeriod(file['feedUpdatePeriod'])
+      ? { feedUpdatePeriod: file['feedUpdatePeriod'] }
+      : {}),
+    ...(isPollCount(file['feedUpdateFrequency'])
+      ? { feedUpdateFrequency: file['feedUpdateFrequency'] }
+      : {}),
+    // Read the way the form checks them, so a hand edit naming a policy or a
+    // signal this version does not know is the default rather than a line of
+    // robots.txt nobody chose, and a rule the form would refuse is left out.
+    ...(isAiCrawlerPolicy(file['aiCrawlers']) ? { aiCrawlers: file['aiCrawlers'] } : {}),
+    ...(isContentSignalChoice(file['contentSignalSearch'])
+      ? { contentSignalSearch: file['contentSignalSearch'] }
+      : {}),
+    ...(isContentSignalChoice(file['contentSignalAiInput'])
+      ? { contentSignalAiInput: file['contentSignalAiInput'] }
+      : {}),
+    ...(isContentSignalChoice(file['contentSignalAiTrain'])
+      ? { contentSignalAiTrain: file['contentSignalAiTrain'] }
+      : {}),
+    ...(Array.isArray(file['robotsRules'])
+      ? {
+          robotsRules: robotsRuleLines(
+            file['robotsRules'].filter((entry) => typeof entry === 'string'),
+          ),
+        }
+      : {}),
+    ...(typeof file['llmsTxt'] === 'boolean' ? { llmsTxt: file['llmsTxt'] } : {}),
+    ...(typeof file['indexNow'] === 'boolean' ? { indexNow: file['indexNow'] } : {}),
+    // A key IndexNow would refuse is no key: the site then has none to serve
+    // or send, which is IndexNow off rather than a stream of 403s.
+    ...(typeof file['indexNowKey'] === 'string' && isIndexNowKey(file['indexNowKey'])
+      ? { indexNowKey: file['indexNowKey'] }
+      : {}),
     // Only a provider this version ships, for the reason the actor type is
     // read that way: a file naming one it has never heard of is a site that
     // sends no mail rather than a boot that fails.
@@ -547,6 +692,15 @@ export function siteJsonFor(
     webmentionsSend: settings.webmentionsSend,
     webmentionsReceive: settings.webmentionsReceive,
     notifyServer: settings.notifyServer,
+    feedUpdatePeriod: settings.feedUpdatePeriod,
+    feedUpdateFrequency: settings.feedUpdateFrequency,
+    aiCrawlers: settings.aiCrawlers,
+    contentSignalSearch: settings.contentSignalSearch,
+    contentSignalAiInput: settings.contentSignalAiInput,
+    contentSignalAiTrain: settings.contentSignalAiTrain,
+    robotsRules: [...settings.robotsRules],
+    llmsTxt: settings.llmsTxt,
+    indexNow: settings.indexNow,
     mailProvider: settings.mailProvider,
     mailFromName: settings.mailFromName,
     mailFromAddress: settings.mailFromAddress,
@@ -590,6 +744,10 @@ export function siteJsonFor(
   // that has turned it off again should go back to saying nothing.
   if (settings.wordpressActivityPub) file['wordpressActivityPub'] = true;
   else delete file['wordpressActivityPub'];
+
+  // A site that has never turned IndexNow on has no key to write down.
+  if (settings.indexNowKey !== '') file['indexNowKey'] = settings.indexNowKey;
+  else delete file['indexNowKey'];
 
   return file;
 }
@@ -864,6 +1022,33 @@ const FIELD_CHECKS: Record<
       ? 'A notify server is an absolute http:// or https:// URL, or empty for none.'
       : undefined,
 
+  feedUpdatePeriod: (form) =>
+    isUpdatePeriod(form.feedUpdatePeriod)
+      ? undefined
+      : `An update period is one of ${UPDATE_PERIODS.join(', ')}.`,
+
+  feedUpdateFrequency: (form) =>
+    form.feedUpdateFrequency.trim() !== '' && isPollCount(Number(form.feedUpdateFrequency))
+      ? undefined
+      : 'Polls per period is a whole number, 1 or more.',
+
+  aiCrawlers: (form) =>
+    isAiCrawlerPolicy(form.aiCrawlers)
+      ? undefined
+      : `An AI-crawler policy is one of ${AI_CRAWLER_POLICIES.join(', ')}.`,
+
+  contentSignalSearch: (form) => contentSignalProblem(form.contentSignalSearch),
+
+  contentSignalAiInput: (form) => contentSignalProblem(form.contentSignalAiInput),
+
+  contentSignalAiTrain: (form) => contentSignalProblem(form.contentSignalAiTrain),
+
+  robotsRules: (form) => robotsRuleProblem([form.robotsRules]),
+
+  llmsTxt: () => undefined,
+
+  indexNow: () => undefined,
+
   mailProvider: (form) =>
     (MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)
       ? undefined
@@ -938,6 +1123,11 @@ const FIELD_CHECKS: Record<
     taxonomyBaseProblems({ tag: form.tagBase, category: form.categoryBase }).category,
 };
 
+/** What is wrong with a submitted Content-Signal choice. */
+function contentSignalProblem(value: string): string | undefined {
+  return isContentSignalChoice(value) ? undefined : 'A content signal is yes, no, or not said.';
+}
+
 /** Every field of the settings, in the order the form fields name them. */
 export const SETTINGS_FIELD_NAMES: readonly SettingsField[] = Object.keys(
   SETTINGS_FIELDS,
@@ -1005,6 +1195,31 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     webmentionsSend: form.webmentionsSend !== '',
     webmentionsReceive: form.webmentionsReceive !== '',
     notifyServer: normalizeBaseUrl(form.notifyServer) ?? '',
+    feedUpdatePeriod: isUpdatePeriod(form.feedUpdatePeriod)
+      ? form.feedUpdatePeriod
+      : DEFAULT_FEED_CADENCE.period,
+    feedUpdateFrequency: Number(form.feedUpdateFrequency),
+    aiCrawlers: isAiCrawlerPolicy(form.aiCrawlers) ? form.aiCrawlers : 'allow',
+    contentSignalSearch: isContentSignalChoice(form.contentSignalSearch)
+      ? form.contentSignalSearch
+      : '',
+    contentSignalAiInput: isContentSignalChoice(form.contentSignalAiInput)
+      ? form.contentSignalAiInput
+      : '',
+    contentSignalAiTrain: isContentSignalChoice(form.contentSignalAiTrain)
+      ? form.contentSignalAiTrain
+      : '',
+    robotsRules: robotsRuleLines([form.robotsRules]),
+    llmsTxt: form.llmsTxt !== '',
+    indexNow: form.indexNow !== '',
+    // Minted the first time IndexNow is turned on and never again, so the key
+    // the search engines verified outlives turning it off and on.
+    indexNowKey:
+      carried.indexNowKey !== undefined && carried.indexNowKey !== ''
+        ? carried.indexNowKey
+        : form.indexNow !== ''
+          ? generateIndexNowKey()
+          : '',
     mailProvider: (MAIL_PROVIDERS as readonly string[]).includes(form.mailProvider)
       ? (form.mailProvider as MailProviderName)
       : 'none',
@@ -1043,6 +1258,15 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     webmentionsSend: settings.webmentionsSend ? '1' : '',
     webmentionsReceive: settings.webmentionsReceive ? '1' : '',
     notifyServer: settings.notifyServer,
+    feedUpdatePeriod: settings.feedUpdatePeriod,
+    feedUpdateFrequency: String(settings.feedUpdateFrequency),
+    aiCrawlers: settings.aiCrawlers,
+    contentSignalSearch: settings.contentSignalSearch,
+    contentSignalAiInput: settings.contentSignalAiInput,
+    contentSignalAiTrain: settings.contentSignalAiTrain,
+    robotsRules: settings.robotsRules.join('\n'),
+    llmsTxt: settings.llmsTxt ? '1' : '',
+    indexNow: settings.indexNow ? '1' : '',
     mailProvider: settings.mailProvider,
     mailFromName: settings.mailFromName,
     mailFromAddress: settings.mailFromAddress,

@@ -8,7 +8,7 @@ import type { Sharp } from 'sharp';
 import { writeFileAtomically } from '../files/atomic.ts';
 import { findAsset } from '../web/assets.ts';
 import type { StaticAsset } from '../web/assets.ts';
-import { deriveSiteIcon, iconSize } from './icons.ts';
+import { deriveSiteIcon, isDerivedIcon } from './icons.ts';
 import {
   derivedDir,
   sourceFile,
@@ -416,9 +416,8 @@ export async function findImageVariant(
 
   // The site's icons live beside the widths and are derived one at a time,
   // because they are asked for one at a time and belong in no `srcset`.
-  const icon = iconSize(name);
-  if (icon !== undefined) {
-    return (await deriveSiteIcon(config, source, icon)) ? findAsset(relative, [root]) : undefined;
+  if (isDerivedIcon(name)) {
+    return (await deriveSiteIcon(config, source, name)) ? findAsset(relative, [root]) : undefined;
   }
 
   const known = describeImage(config, source);

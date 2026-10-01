@@ -59,6 +59,42 @@ export interface ThemeArea {
   readonly label: string;
 }
 
+/**
+ * What the `color-scheme` meta may say (TASK-146): the schemes a theme draws,
+ * the one it prefers first. `only dark` is not among them because the HTML
+ * standard does not allow it.
+ */
+export const COLOR_SCHEMES = [
+  'normal',
+  'light',
+  'dark',
+  'light dark',
+  'dark light',
+  'only light',
+] as const;
+
+/** One of {@link COLOR_SCHEMES}. */
+export type ColorScheme = (typeof COLOR_SCHEMES)[number];
+
+/**
+ * The colours a theme declares for the browser to use before its stylesheet
+ * has loaded, as its `theme.json` writes them:
+ *
+ *     "colorScheme": "light dark",
+ *     "themeColor": { "light": "#faf7f2", "dark": "#171412" }
+ *
+ * `colorScheme` is the `<meta name="color-scheme">`, which keeps a dark-mode
+ * reader from a white flash while the stylesheet is on its way. `themeColor`
+ * is the browser chrome around the page, one colour per scheme, and should be
+ * the page's own background so the two meet without a seam. A theme colour is
+ * a six- or three-digit hex colour, without an alpha channel, which a browser
+ * would ignore.
+ */
+export interface ThemeColors {
+  readonly colorScheme?: ColorScheme | undefined;
+  readonly themeColor: { readonly light?: string | undefined; readonly dark?: string | undefined };
+}
+
 /** One theme directory, read and validated. */
 export interface Theme {
   /** The directory name, which is the theme's id and what a site.json names. */
@@ -77,6 +113,8 @@ export interface Theme {
    * areas existed and every theme that renders no menu at all.
    */
   readonly areas: readonly ThemeArea[];
+  /** The colours the manifest declares, each one absent when it declares none. */
+  readonly colors: ThemeColors;
 }
 
 /** A theme, or the reason the directory is not one. */
@@ -146,7 +184,53 @@ export function readTheme(dir: string): ThemeRead {
         ? { description: description.trim() }
         : {}),
       areas: themeAreasOf(manifest['areas']),
+      colors: themeColorsOf(manifest['colorScheme'], manifest['themeColor']),
     },
+  };
+}
+
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/**
+ * The colours a manifest declares, leaving out any it got wrong.
+ *
+ * Tolerant for the reason {@link themeAreasOf} is: a colour a browser would
+ * not take costs the site a tinted address bar, not its pages.
+ */
+function themeColorsOf(scheme: unknown, color: unknown): ThemeColors {
+  const declared =
+    typeof color === 'object' && color !== null ? (color as Record<string, unknown>) : {};
+  const hex = (value: unknown): string | undefined =>
+    typeof value === 'string' && HEX_COLOR.test(value) ? value : undefined;
+  const light = hex(declared['light']);
+  const dark = hex(declared['dark']);
+
+  return {
+    ...(COLOR_SCHEMES.includes(scheme as ColorScheme)
+      ? { colorScheme: scheme as ColorScheme }
+      : {}),
+    themeColor: {
+      ...(light === undefined ? {} : { light }),
+      ...(dark === undefined ? {} : { dark }),
+    },
+  };
+}
+
+/**
+ * A chosen theme's colours, each one it leaves out taken from the packaged
+ * theme: a site theme is laid over the packaged one a file at a time, and it
+ * keeps the packaged stylesheet until it ships its own, so it keeps the
+ * packaged colours until it declares its own.
+ */
+function resolvedColors(theme: Theme | undefined): ThemeColors {
+  const packaged = readTheme(PACKAGED_THEME_DIR);
+  const base: ThemeColors = packaged.ok ? packaged.theme.colors : { themeColor: {} };
+  if (theme === undefined) return base;
+
+  const scheme = theme.colors.colorScheme ?? base.colorScheme;
+  return {
+    ...(scheme === undefined ? {} : { colorScheme: scheme }),
+    themeColor: { ...base.themeColor, ...theme.colors.themeColor },
   };
 }
 
@@ -296,6 +380,8 @@ export interface ChosenTheme {
    * packaged theme on purpose and for one whose choice is working.
    */
   readonly problem: string | undefined;
+  /** The colours the page declares: {@link ThemeColors}, the packaged theme's where this one is silent. */
+  readonly colors: ThemeColors;
 }
 
 /**
@@ -307,6 +393,14 @@ export interface ChosenTheme {
  * a site that 500s on every page because of a directory rename.
  */
 export function chooseTheme(options: { themesDir: string; name: string }): ChosenTheme {
+  const chosen = chooseThemeDirs(options);
+  return { ...chosen, colors: resolvedColors(chosen.theme) };
+}
+
+function chooseThemeDirs(options: {
+  themesDir: string;
+  name: string;
+}): Omit<ChosenTheme, 'colors'> {
   const name = options.name.trim();
   if (name === '') return { theme: undefined, dirs: themeSearchPath(), problem: undefined };
 

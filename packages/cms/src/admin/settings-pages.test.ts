@@ -197,6 +197,15 @@ const READING: Record<string, string> = {
   posts_per_page: '10',
   navigation: '',
   notify_server: '',
+  feed_update_period: 'hourly',
+  feed_update_frequency: '1',
+  ai_crawlers: 'allow',
+  content_signal_search: '',
+  content_signal_ai_input: '',
+  content_signal_ai_train: '',
+  robots_rules: '',
+  llms_txt: '1',
+  index_now: '',
 };
 
 /** The CSRF token on one settings page, as a browser would carry it. */

@@ -1,4 +1,3 @@
-import { ADMIN_PREFIX } from '../admin/session.ts';
 import { escapeXml } from './feeds.ts';
 import { absoluteUrl, contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
@@ -20,9 +19,6 @@ import type { ConditionalHeaders } from './negotiate.ts';
 
 /** The sitemap's URL. Fixed: it is the one a `robots.txt` names. */
 export const SITEMAP_PATH = '/sitemap.xml';
-
-/** The robots file's URL. Fixed by the standard; nothing else is looked at. */
-export const ROBOTS_PATH = '/robots.txt';
 
 /** The namespace both a `<urlset>` and a `<sitemapindex>` are written in. */
 export const SITEMAP_NAMESPACE = 'http://www.sitemaps.org/schemas/sitemap/0.9';
@@ -112,9 +108,6 @@ function document(
 
 /** What a sitemap is served as. */
 export const SITEMAP_CONTENT_TYPE = 'application/xml; charset=utf-8';
-
-/** What a robots file is served as. */
-export const ROBOTS_CONTENT_TYPE = 'text/plain; charset=utf-8';
 
 /** Everything one sitemap response needs. */
 export interface SitemapResponseOptions {
@@ -217,47 +210,4 @@ function fingerprint(
     page === undefined ? 'index' : String(page),
     ...entries.map((entry) => `${entry.loc} ${entry.lastmod?.toISOString() ?? ''}`),
   ].join('\n');
-}
-
-/**
- * The robots file: everything public is crawlable, the admin is not, and the
- * sitemap is named absolutely because that is the only spelling the standard
- * allows for a `Sitemap:` line.
- *
- * Nothing else is disallowed. The ActivityPub routes under `/ap/` are left
- * open deliberately: an actor and an object are documents meant to be
- * fetched, they carry the same content as the pages that link to them, and a
- * crawler that follows one gets JSON it will ignore. Hiding them would only
- * make the fediverse's own view of the site depend on a file written for
- * search engines.
- */
-export function robotsTxt(baseUrl: string): string {
-  return [
-    'User-agent: *',
-    `Disallow: ${ADMIN_PREFIX}/`,
-    '',
-    `Sitemap: ${absoluteUrl(SITEMAP_PATH, baseUrl)}`,
-    '',
-  ].join('\n');
-}
-
-/**
- * The robots file as an HTTP response.
- *
- * It has a validator but no `Last-Modified`: nothing dates it. Its body is a
- * function of the site's origin alone, so the ETag moves when that does and
- * never otherwise, which is exactly what a crawler's `If-None-Match` should
- * be told.
- */
-export function robotsResponse(baseUrl: string, conditional?: ConditionalHeaders): Response {
-  const body = robotsTxt(baseUrl);
-  const etag = contentEtag('robots', body);
-  const headers = new Headers({ etag, 'cache-control': 'no-cache' });
-
-  if (isNotModified(conditional, etag, undefined)) {
-    return new Response(null, { status: 304, headers });
-  }
-
-  headers.set('content-type', ROBOTS_CONTENT_TYPE);
-  return new Response(body, { headers });
 }

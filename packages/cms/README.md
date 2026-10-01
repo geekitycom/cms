@@ -1839,7 +1839,8 @@ at once cannot each keep half of what the other kept.
 The file carries `title`, `tagline`, `url`, `author`, `postsPerPage`,
 `homepage`, `postsPage`,
 `timezone`, `language`, `tagBase`,
-`categoryBase`, `notifyServer`, `webmentionsSend`, `webmentionsReceive`,
+`categoryBase`, `notifyServer`, `feedUpdatePeriod`, `feedUpdateFrequency`,
+`webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
 `contactEmail`, `securityContacts`, `securityPolicy`, `securityLanguages`,
 `relays`, `menus` and `taxonomyRedirects`,
@@ -2354,6 +2355,8 @@ Booting mounts the public site on the app. The routes are:
 | `/sitemap.xml`                          | Every public URL, for a search engine.                                                                                 |
 | `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                                      |
 | `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                                     |
+| `/llms.txt`                             | The site's pages and recent posts for a language model, each linked to its Markdown. See [below](#llmstxt).            |
+| `/{key}.txt`                            | The IndexNow key, while the site has IndexNow on. See [below](#indexnow).                                              |
 | `/.well-known/security.txt`             | Where to report a vulnerability; a 404 until a security contact is set. See [above](#securitytxt-and-change-password). |
 | `/.well-known/change-password`          | A redirect to the signed-in user's change-password form, or to the login form.                                         |
 | `/_geekity/comments`                    | `POST` only. Where the comment form under a post submits.                                                              |
@@ -2705,6 +2708,10 @@ without changing the document, so a development server would otherwise answer
 `304` with a page that had already moved on. The `.md` and `.json`
 representations are validated either way.
 
+Every representation but the HTML carries `X-Robots-Tag: noindex`, whether it
+was asked for by extension or by `Accept`. They say what the page says, and a
+search engine that indexed them would list one page two or three times.
+
 Adding a representation — an ActivityStreams object, say — means adding it to
 `Representation` in `src/web/negotiate.ts` with its media type and, if it wants
 one, its extension. The selection, the `Link` alternates, the `ETag` and the
@@ -2747,6 +2754,16 @@ post on a site that publishes several.
 ```json
 { "title": "My Site", "tagline": "Notes", "author": "Me", "feedSize": 20 }
 ```
+
+Every RSS feed, the comments feeds included, tells a reader how often to poll
+it with the Syndication module's `sy:updatePeriod` and `sy:updateFrequency`.
+Settings → Reading sets both, as `feedUpdatePeriod` (`hourly`, `daily`,
+`weekly`, `monthly` or `yearly`) and `feedUpdateFrequency` (a whole number, 1 or
+more) in `site.json`. The default is `hourly` and `1`, which is what WordPress
+declares, so the subscribers of a migrated site keep polling as they did. A
+reader may back off from a feed that stays quiet much longer than it says, so
+a site that posts weekly does better to say `weekly`. Atom and JSON Feed have no
+element for it.
 
 ### What every format says about a post
 
@@ -3096,7 +3113,7 @@ holding its own slice and dated by the newest URL in it. The address a search
 engine holds does not change, which is the point of the index living there.
 While the whole sitemap fits in one file the children name nothing and 404.
 
-`/robots.txt` is short:
+`/robots.txt` starts short:
 
 ```
 User-agent: *
@@ -3111,6 +3128,44 @@ fetched, they carry the same
 content as the pages that link to them, and a crawler that follows one gets
 JSON it will ignore.
 
+The Crawlers section of Settings → Reading adds to it, and writes what it sets
+to `site.json`:
+
+| Setting               | `site.json` key                                                       | What the file gains                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AI crawlers           | `aiCrawlers`                                                          | `allow` (the default) adds nothing. `block-training` adds a `Disallow: /` group for each training crawler: GPTBot, ClaudeBot, anthropic-ai, Google-Extended, Applebot-Extended, Bytespider, CCBot and meta-externalagent. `block-all` also blocks the retrieval crawlers: OAI-SearchBot, ChatGPT-User, PerplexityBot, Perplexity-User, Claude-SearchBot, Claude-User, meta-webindexer and meta-externalfetcher. |
+| Content signals       | `contentSignalSearch`, `contentSignalAiInput`, `contentSignalAiTrain` | Each `yes`, `no` or empty. The ones set become one line, such as `Content-Signal: search=yes, ai-input=yes, ai-train=no`.                                                                                                                                                                                                                                                                                       |
+| More robots.txt rules | `robotsRules`                                                         | Groups of the site's own, one line per array entry: `User-agent`, then `Allow`, `Disallow`, `Crawl-delay`, `Content-Signal` or `Sitemap` lines.                                                                                                                                                                                                                                                                 |
+
+A crawler obeys only the one group that names it (RFC 9309), so the CMS puts
+`Disallow: /admin/` and the content signal into every group, its own and the
+site's, unless the group already disallows everything or carries a signal of
+its own. The form refuses a line that is not a robots.txt field, a rule with no
+`User-agent` above it, and an `Allow` under `/admin/`; a hand edit of
+`site.json` that does any of these loses that line. The site's own `Sitemap:`
+line is always there.
+
+For example, `block-training`, `ai-train` set to `no` and a rule of
+`User-agent: SlowBot` / `Crawl-delay: 10` serve:
+
+```
+User-agent: *
+Disallow: /admin/
+Content-Signal: ai-train=no
+
+User-agent: GPTBot
+Disallow: /
+
+…one group per training crawler…
+
+User-agent: SlowBot
+Disallow: /admin/
+Crawl-delay: 10
+Content-Signal: ai-train=no
+
+Sitemap: https://example.com/sitemap.xml
+```
+
 Both are registered routes rather than anything resolved from the content
 index, so a document permalinked at `/sitemap.xml` cannot take the URL a
 search engine polls, and both carry an `ETag` and answer a conditional request
@@ -3119,6 +3174,102 @@ robots without one, because nothing dates it.
 
 Nothing links the sitemap from a page: `robots.txt` names it, which is where a
 crawler looks.
+
+## llms.txt
+
+`/llms.txt` describes the site for a language model, in the
+[llms.txt](https://llmstxt.org/) format. It holds the site's title as a heading
+and its tagline as a quote. Then it lists every public page by title and the
+posts the feeds carry, newest first. Each entry links to the document's
+Markdown, which is what a model reads best:
+
+```markdown
+# Field Notes
+
+> Notes from the field.
+
+## Pages
+
+- [About](https://example.com/about/index.md): Who writes this.
+
+## Recent posts
+
+- [Third post](https://example.com/third/index.md)
+```
+
+A document's `description` follows its link. A static homepage is listed at
+`/index.md`, because `/` is where it is published. The file is served as
+`text/markdown` and carries an `ETag` and a `Last-Modified`, the newest date
+among its entries. It answers a conditional request with 304, as the sitemap
+does.
+
+The home page advertises the file twice. The response carries
+`Link: </llms.txt>; rel="describedby"; type="text/markdown"`, for a tool that
+reads no HTML. The default theme's head carries
+`<link rel="describedby" type="text/markdown" href="/llms.txt">`. A theme
+gets the path as `llmsTxt` while the site serves the file.
+
+To write the file yourself, put it at `content/llms.txt`. The CMS serves it
+exactly as written in place of the generated one, dated by the file. To serve
+no file at all, clear **Serve /llms.txt** under Settings → Reading. This
+writes `"llmsTxt": false` to `site.json`. `/llms.txt` then answers 404, even
+when `content/llms.txt` exists, and the home page stops advertising it.
+
+## IndexNow
+
+[IndexNow](https://www.indexnow.org/) gets a changed URL recrawled by Bing,
+Yandex, Naver, Seznam and the other engines that share it within minutes,
+instead of on their next visit. It is off by default, because it sends the
+site's URLs to a third party. To turn it on, select **Submit changes to
+IndexNow** under Settings → Reading.
+
+The first time you turn it on, the CMS generates a key of 32 hex digits and
+writes it to `site.json` as `indexNowKey`, beside `"indexNow": true`. The site
+then serves the key at `/{key}.txt` as plain text, which is how an engine
+checks that the submissions are yours. Turning IndexNow off takes the file away
+and keeps the key, so turning it back on reuses the key the engines already
+checked. To change the key, write a new one of 8 to 128 letters, digits or
+dashes to `indexNowKey`. A key that does not fit that pattern counts as none,
+and the site sends nothing.
+
+When a post or a page is published, changed, moved or deleted, the CMS submits
+its URL. A move submits the old URL and the new one. Unpublishing, trashing and
+deleting submit the URL that went away. The changes of the next ten seconds go
+out together as one `POST` to `https://api.indexnow.org/indexnow`:
+
+```json
+{
+  "host": "example.com",
+  "key": "0123456789abcdef0123456789abcdef",
+  "keyLocation": "https://example.com/0123456789abcdef0123456789abcdef.txt",
+  "urlList": ["https://example.com/hello/"]
+}
+```
+
+A network failure, a 429 or a 5xx answer is tried again after ten seconds, then
+after forty. Any other refusal, such as a 403 for a key the engine could not
+fetch, is not. A batch that still fails is logged as a warning, and the post
+stays published.
+
+Nothing is sent for a draft or a scheduled post, for the boot scan, or while
+the base URL's host is local: `localhost`, a `.local` name, or a private IP
+address.
+
+A site can change how the CMS sends with `indexNow` in its config. Every field
+is optional:
+
+```ts
+export default defineConfig({
+  indexNow: {
+    fetch, // what submits the URLs; a test names one
+    endpoint: 'https://www.bing.com/indexnow',
+    batchMs: 10_000,
+    attempts: 3,
+    backoffMs: (attempt) => attempt * attempt * 10_000,
+    logger: console,
+  },
+});
+```
 
 ## Theme overrides
 
