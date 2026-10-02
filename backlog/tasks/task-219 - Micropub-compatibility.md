@@ -4,14 +4,15 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 19:05'
+updated_date: '2026-10-02 19:07'
 labels:
   - micropub
   - indieauth
   - interop
 dependencies: []
 references:
-  - 'https://github.com/inklings-io/inkstone'
+  - 'https://getindiekit.com/introduction'
+  - 'https://indieauth.spec.indieweb.org/'
 priority: medium
 type: chore
 ordinal: 235800
@@ -118,4 +119,16 @@ Clients that predate the IndieAuth metadata endpoint and PKCE are not supported.
 - The legacy rel="authorization_endpoint" and rel="token_endpoint" links are dropped from the proposals too: without relaxing PKCE they help no client tried so far.
 - Inkstone: closed as unsupported.
 - micropub.rocks: its sign-in is unsupported. Its Manual tab (endpoint plus pasted token) still works with a token from a modern client, so the Create token proposal stays open as a testing and scripting aid, not as legacy support.
+
+## iA Writer (2026-10-02, shll.me on 0.16.0)
+
+Result: cannot sign in. 'IndieAuth Not Found: Make sure that IndieAuth meta tags of link headers are present.'
+
+Cause (inferred from the message; iA Writer is closed source): it discovers the authorization endpoint through rel="authorization_endpoint" (and likely rel="token_endpoint") links and does not read rel="indieauth-metadata". The site publishes only the metadata link.
+
+Unknown: whether iA Writer sends a PKCE code_challenge. Nothing public says. If it does, adding the two rel links is the whole fix and PKCE stays required. If it does not, it falls under the no-legacy decision.
+
+This revisits one part of the no-legacy decision. iA Writer is maintained, unlike micropub.rocks and Inkstone. The current IndieAuth spec says a client should look for rel=authorization_endpoint and rel=token_endpoint for compatibility with earlier revisions, and Indiekit (getindiekit.com/introduction) publishes both beside indieauth-metadata 'for compatibility with older Micropub applications'. Publishing the links costs nothing and relaxes nothing: an authorization request without PKCE is still refused, with 'code_challenge must be an S256 PKCE challenge' on the redirect.
+
+Proposed: publish rel="authorization_endpoint" and rel="token_endpoint" in the Link header and head beside rel="indieauth-metadata" (advertiseIdentityEndpoints in packages/cms/src/indieauth/discovery.ts), then try iA Writer again. Its next error settles the PKCE question.
 <!-- SECTION:NOTES:END -->
