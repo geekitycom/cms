@@ -3,11 +3,11 @@ id: TASK-155
 title: >-
   Syndication targets: webmention-driven POSSE (IndieNews, Bridgy Publish)
   chosen per post or by tag
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-29 01:32'
-updated_date: '2026-10-02 15:00'
+updated_date: '2026-10-02 18:16'
 labels:
   - webmention
   - indieweb
@@ -43,7 +43,7 @@ Services such as IndieNews (https://news.indieweb.org/how-to-submit-a-post) and 
 - [x] #8 Deselecting a target (removing the tag or the entry) removes its link and the sender notifies the target, as it does for any unlinked page
 - [x] #9 The federation screen shows each target's outcome per post, and Resend re-sends to targets
 - [x] #10 README documents targets with IndieNews and Bridgy Publish as worked examples
-- [ ] #11 Verified by submitting a real post to IndieNews from a public site, or the notes say why it could not be
+- [x] #11 Verified by submitting a real post to IndieNews from a public site, or the notes say why it could not be
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -87,10 +87,12 @@ Evidence per AC:
 Gate: pnpm build && pnpm test (3234 + 30 pass) && pnpm typecheck && pnpm lint && pnpm format:check all exit 0; pnpm --filter demo test:11ty passes. Demo curl run used the gitignored playground and was restored after.
 
 Breaking for theme output: a site tagging posts indienews without a declared target loses the IndieNews link; the README and decision-26 say how to declare it.
+
+2026-10-02: AC#11 closed on its 'notes say why' clause. The only public deploy is shll.me, a testing scratchpad, and posting to IndieNews from it is not appropriate. A real IndieNews submission waits until andrewshell.org moves to the new CMS: declare IndieNews (Posts > Syndication, url https://news.indieweb.org/{lang}, tag indienews), publish a tagged post, and confirm the copy URL in content/_data/syndication.json and as u-syndication on the page.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Syndication targets: a site declares { id, name, url, tag? } entries in content/_data/syndicationTargets.json (bad entries logged at serve and ignored, none built in). A post selects targets with syndicate-to (editor checkboxes) or by tag. The default theme links each selected target as u-syndication inside the h-entry, replacing the hard-coded IndieNews link. The webmention sender notifies selected targets for both versions of a change, so deselecting notifies too, and stores a 201/202 Location in content/_data/syndication.json keyed by permalink (decision-26), rendered as u-syndication with hand-written front matter syndication URLs. The federation screen shows per-target outcome and copy; Resend includes targets. Verified by new unit, sender, editor, render and federation-screen tests, the full pnpm gate, and a curl of the demo post. AC11 (real IndieNews submission) waits on a deployed public site.
+Syndication targets: a site declares { id, name, url, tag? } entries in content/_data/syndicationTargets.json (bad entries logged at serve and ignored, none built in). A post selects targets with syndicate-to (editor checkboxes) or by tag. The default theme links each selected target as u-syndication inside the h-entry, replacing the hard-coded IndieNews link. The webmention sender notifies selected targets for both versions of a change, so deselecting notifies too, and stores a 201/202 Location in content/_data/syndication.json keyed by permalink (decision-26), rendered as u-syndication with hand-written front matter syndication URLs. The federation screen shows per-target outcome and copy; Resend includes targets. Verified by new unit, sender, editor, render and federation-screen tests, the full pnpm gate, and a curl of the demo post. A real IndieNews submission is deferred until andrewshell.org runs the new CMS, since shll.me is a scratchpad; the notes give the steps.
 <!-- SECTION:FINAL_SUMMARY:END -->
