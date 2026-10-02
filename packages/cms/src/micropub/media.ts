@@ -14,6 +14,7 @@ import {
 } from '../admin/uploads.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
+import { logMediaRequest } from '../indieauth/activity-log.ts';
 import type { BearerEnv } from '../indieauth/bearer.ts';
 import { MICROPUB_MEDIA_PATH, siteBaseUrl } from '../indieauth/discovery.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
@@ -87,6 +88,7 @@ const refuseOversizedMedia: MiddlewareHandler<GeekityEnv> = async (c, next) => {
 export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
   app.post(
     MICROPUB_MEDIA_PATH,
+    logMediaRequest,
     refuseOversizedMedia,
     requireSiteToken('media'),
     async (c: Context<BearerEnv>) => {
@@ -107,7 +109,7 @@ export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
     },
   );
 
-  app.get(MICROPUB_MEDIA_PATH, requireSiteToken(), (c) => {
+  app.get(MICROPUB_MEDIA_PATH, logMediaRequest, requireSiteToken(), (c) => {
     const q = c.req.query('q');
     if (q !== 'last') {
       return invalidRequest(

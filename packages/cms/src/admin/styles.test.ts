@@ -30,6 +30,9 @@ const SCREENS = [
   'pages/appearance/themes.njk',
   // Posts > Syndication borrows the Navigation screen's panels (TASK-218).
   'pages/documents/syndication.njk',
+  // Users > App activity and one request in full (TASK-221).
+  'pages/users/activity.njk',
+  'pages/users/activity-entry.njk',
 ];
 
 /** Marks where a `{{ … }}` stood, so an interpolated name is not mistaken

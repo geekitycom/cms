@@ -1,0 +1,58 @@
+{# /admin/users/activity/:id: one request an app made, in full (TASK-221). #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ entry.endpoint }} {{ entry.action }}{% endblock %}
+
+{% block content %}
+  <h1>{{ entry.endpoint }} {{ entry.action }}</h1>
+
+  <p><a href="{{ listUrl }}">All app activity</a></p>
+
+  <table class="admin-list">
+    <caption class="admin-visually-hidden">The request</caption>
+    <tbody>
+      <tr><th scope="row">When</th><td><time datetime="{{ entry.when.iso }}">{{ entry.when.text }}</time></td></tr>
+      <tr><th scope="row">App</th><td>{{ entry.app or "Unknown" }}</td></tr>
+      <tr><th scope="row">User</th><td>{{ entry.user or "Unknown" }}</td></tr>
+      {% for line in details %}
+        <tr><th scope="row">{{ line.label }}</th><td>{{ line.value }}</td></tr>
+      {% endfor %}
+      <tr>
+        <th scope="row">Result</th>
+        <td>
+          {% if entry.failed %}<span class="admin-status admin-status-failed">Refused</span>{% endif %}
+          {{ entry.status }}
+        </td>
+      </tr>
+      {% if entry.error %}
+        <tr><th scope="row">Error</th><td>{{ entry.error }}</td></tr>
+      {% endif %}
+      {% if entry.errorDescription %}
+        <tr><th scope="row">Why</th><td>{{ entry.errorDescription }}</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <h2>What it sent</h2>
+  {% if carried | length %}
+    <table class="admin-list">
+      <caption class="admin-visually-hidden">The fields the request carried</caption>
+      <thead>
+        <tr>
+          <th scope="col">Field</th>
+          <th scope="col">Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for field in carried %}
+          <tr>
+            <td>{{ field.name }}</td>
+            <td>{% if field.note %}<span class="admin-status">{{ field.value }}</span>{% else %}{{ field.value }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="admin-empty">No fields were read from this request.</p>
+  {% endif %}
+{% endblock %}

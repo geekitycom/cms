@@ -12,6 +12,7 @@ import type { Document } from '../content/document.ts';
 import type { PostType } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
+import { logMicropubRequest } from '../indieauth/activity-log.ts';
 import { insufficientScope, requireBearer } from '../indieauth/bearer.ts';
 import type { BearerEnv } from '../indieauth/bearer.ts';
 import { MICROPUB_MEDIA_PATH, MICROPUB_PATH, siteBaseUrl } from '../indieauth/discovery.ts';
@@ -394,7 +395,7 @@ async function moved(
  * IndieAuth endpoints beside it.
  */
 export function mountMicropub(app: Hono<GeekityEnv>): void {
-  app.post(MICROPUB_PATH, requireSiteToken(), async (c) => {
+  app.post(MICROPUB_PATH, logMicropubRequest, requireSiteToken(), async (c) => {
     const post = await micropubPost(c);
     if (post instanceof Refusal) return post.answer(c);
     const scope = ACTION_SCOPES[post.action];
@@ -406,7 +407,7 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
     return await handle(c, post);
   });
 
-  app.get(MICROPUB_PATH, requireSiteToken(), (c) => {
+  app.get(MICROPUB_PATH, logMicropubRequest, requireSiteToken(), (c) => {
     const q = c.req.query('q');
     if (!isQuery(q)) {
       const description =

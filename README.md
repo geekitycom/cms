@@ -1365,6 +1365,14 @@ metadata document itself is served at `/_geekity/indieauth/metadata` and at
 `/.well-known/oauth-authorization-server` (RFC 8414), where generic OAuth and
 MCP clients look for it.
 
+The same pages also carry `rel="authorization_endpoint"` and
+`rel="token_endpoint"`, in the `Link` header and in the head, naming the same
+two URLs as the metadata document. Some Micropub apps, such as iA Writer, look
+only for these older links and do not read the metadata, and the IndieAuth spec
+asks clients to check them for compatibility with earlier versions. The links
+relax nothing: the site still refuses a sign-in request that has no S256 PKCE
+`code_challenge`, so an app that sends none still cannot sign in.
+
 When a client sends you to the site, you sign in to the admin if you are not
 signed in already, and then see a consent screen. It names the app (or its
 URL when the app publishes no name), the host it will send you back to, the
@@ -1454,6 +1462,38 @@ app's next request gets 401 `invalid_token`, and the screen confirms with a
 message. The app has to ask you again through the consent screen to reconnect.
 With no apps connected, the screen says what kinds of app connect here.
 
+### App activity
+
+Users > App activity, at `/admin/users/activity`, shows the last requests apps
+made to sign in with your site and to post to it. Look here when an app will
+not connect or post: the reason it was refused is on the screen, so you do not
+have to guess from the app's own message. Any signed-in admin can open it.
+
+The site records one entry for each request to these endpoints:
+
+- The authorization endpoint. The sign-in request is recorded when it reaches
+  the consent screen, before you approve it, with whether it carried an S256
+  PKCE `code_challenge` and the scopes it asked for. An app's redemption of
+  its code for your profile is recorded too.
+- The token endpoint, with the `grant_type` and, on success, the scopes the
+  token was issued with.
+- The Micropub endpoint, with the action or query and the properties the
+  request carried.
+- The media endpoint, with the file part's name, type and size.
+
+The list shows the newest request first, with the endpoint, the action, the
+app's `client_id`, the user and the result. A refused request is marked
+Refused with its status and error code. Failures shows only those. Choose a
+request's time to see it in full: the error description, and every field it
+sent with its value cut to 100 characters.
+
+The log never keeps an access token, refresh token, authorization code,
+`code_verifier`, client secret, password or cookie. A field with one of those
+names is listed as sent but not recorded, and no request header is read. The
+client's address is not kept. The log holds the last 100 requests from the past
+14 days, in `data/indieauth-activity.json`, mode `0600`. Writing it never
+changes or delays the answer the app gets.
+
 ## Micropub
 
 The site has a [Micropub](https://www.w3.org/TR/micropub/) endpoint, so you
@@ -1496,6 +1536,10 @@ answer 503 in maintenance mode.
 
 A query works with a token of any scope. A request without the scope its
 action needs gets 403 `insufficient_scope`.
+
+When an app cannot sign in or its post is refused, open Users > App activity.
+It lists the request, the properties it sent and the reason the site gave.
+[App activity](#app-activity) describes the screen.
 
 ### Disconnecting an app
 

@@ -29,7 +29,14 @@ import { SYNDICATION_TARGETS_CHILD, SYNDICATION_TARGETS_PATH } from './syndicati
 import { CATEGORY_KIND, TAG_KIND } from './taxonomy.ts';
 import { PERSONAL_DATA_CHILD, PERSONAL_DATA_PATH } from './personal-data.ts';
 import { TOOLS_PATH } from './tools.ts';
-import { ADD_USER_PATH, CONNECTED_APPS_CHILD, CONNECTED_APPS_PATH, USERS_PATH } from './users.ts';
+import {
+  ADD_USER_PATH,
+  APP_ACTIVITY_CHILD,
+  APP_ACTIVITY_PATH,
+  CONNECTED_APPS_CHILD,
+  CONNECTED_APPS_PATH,
+  USERS_PATH,
+} from './users.ts';
 
 /** One screen under a section, as the menu lists it. */
 export interface AdminMenuChild {
@@ -120,6 +127,9 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     { child: 'all', label: 'All users', url: USERS_PATH },
     { child: 'new', label: 'Add new', url: ADD_USER_PATH },
     { child: CONNECTED_APPS_CHILD, label: 'Connected apps', url: CONNECTED_APPS_PATH },
+    // Beside the apps, because it is where to look when one will not connect
+    // or post (TASK-221).
+    { child: APP_ACTIVITY_CHILD, label: 'App activity', url: APP_ACTIVITY_PATH },
   ]),
   // Where WordPress keeps Tools: after Users, before Settings. A setting is
   // something you type and save; this is a job you run, so it is not a

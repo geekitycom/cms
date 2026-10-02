@@ -19,7 +19,8 @@ const box = sandbox();
 after(() => box.cleanup());
 
 const BASE = 'https://blog.example';
-const METADATA = `${BASE}/_geekity/indieauth/metadata`;
+const METADATA_PATH = '/_geekity/indieauth/metadata';
+const METADATA = `${BASE}${METADATA_PATH}`;
 const MICROPUB = `${BASE}/_geekity/micropub`;
 
 async function writeTree(root: string, files: Record<string, string>): Promise<void> {
@@ -134,6 +135,22 @@ describe('advertising the metadata', () => {
             'one micropub link, inside <head>',
           );
           if (theme === 'bare') assert.match(html, /^<!doctype html><html><head><title>/);
+
+          // For clients that predate the metadata document, such as iA Writer (TASK-220).
+          const metadata = (await (await cms.app.request(METADATA_PATH)).json()) as Record<
+            string,
+            unknown
+          >;
+          for (const rel of ['authorization_endpoint', 'token_endpoint']) {
+            const href = metadata[rel];
+            assert.equal(typeof href, 'string', rel);
+            assert.ok(links.includes(`<${String(href)}>; rel="${rel}"`), `Link header: ${links}`);
+            assert.equal(
+              head.split(`<link rel="${rel}" href="${String(href)}">`).length - 1,
+              1,
+              `one ${rel} link, inside <head>`,
+            );
+          }
         });
       }
     }
@@ -165,9 +182,11 @@ describe('advertising the metadata', () => {
       const links = response.headers.get('link') ?? '';
       assert.ok(!links.includes('indieauth-metadata'), `${pathname} carries no advertisement`);
       assert.ok(!links.includes('rel="micropub"'), `${pathname} carries no micropub link`);
+      assert.doesNotMatch(links, /rel="(authorization|token)_endpoint"/, pathname);
       const html = await response.text();
       assert.doesNotMatch(html, /indieauth-metadata/, pathname);
       assert.doesNotMatch(html, /rel="micropub"/, pathname);
+      assert.doesNotMatch(html, /rel="(authorization|token)_endpoint"/, pathname);
     }
   });
 });

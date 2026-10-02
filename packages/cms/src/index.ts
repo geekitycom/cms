@@ -82,6 +82,7 @@ import {
   serverError,
   themeName,
 } from './web/index.ts';
+import { activityLogSettled } from './indieauth/activity-log.ts';
 import { mountAuthorizationEndpoint } from './indieauth/consent.ts';
 import { mountIndieAuthDiscovery } from './indieauth/discovery.ts';
 import { createIndieAuthState } from './indieauth/grants.ts';
@@ -2147,6 +2148,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // A page render derives an upload's variants in the background; the
       // encode finishes before the directories it writes into can be removed.
       await settleImageVariants(resolved);
+      await activityLogSettled(resolved.dataDir);
 
       if (running !== undefined) {
         await new Promise<void>((resolve, reject) => {

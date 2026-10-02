@@ -4,6 +4,7 @@ import type { Environment } from 'nunjucks';
 import type { ResolvedConfig } from '../config.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { GeekityEnv } from '../env.ts';
+import { mountAppActivity } from '../indieauth/app-activity.ts';
 import { mountConnectedApps } from '../indieauth/connected-apps.ts';
 import { CONSENT_PATH, mountConsentScreen } from '../indieauth/consent.ts';
 import {
@@ -384,6 +385,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // The apps that hold a token for whoever is signed in (TASK-162). Before the
   // users screens, whose `/admin/users/:id` answers anything else with a 404.
   mountConnectedApps(app, { render });
+  // What apps sent to the IndieAuth and Micropub endpoints (TASK-221), before
+  // the users screens for the same reason.
+  mountAppActivity(app, { render });
 
   // Who may sign in: the list, the add form, and the change-password form for
   // whoever is looking at it.

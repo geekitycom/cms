@@ -80,6 +80,16 @@ export const CONNECTED_APPS_PATH = `${USERS_PATH}/apps`;
 /** The child of Users the connected apps screen is. */
 export const CONNECTED_APPS_CHILD = 'apps';
 
+/**
+ * Users > App activity: what apps sent to the IndieAuth and Micropub
+ * endpoints, and what they were answered (TASK-221). Mounted by
+ * `indieauth/app-activity.ts`; named here for the same reason as Connected apps.
+ */
+export const APP_ACTIVITY_PATH = `${USERS_PATH}/activity`;
+
+/** The child of Users the app activity screen is. */
+export const APP_ACTIVITY_CHILD = 'activity';
+
 /** Where the signed-in admin's change-password form posts. */
 export const CHANGE_PASSWORD_PATH = `${USERS_PATH}/password`;
 
