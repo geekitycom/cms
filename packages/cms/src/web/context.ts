@@ -16,6 +16,7 @@ import { feedExcerpt } from './feed-item.ts';
 import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from './locale.ts';
 import { DEFAULT_TAXONOMY_BASES, taxonomyBasesOrDefault, taxonomyRedirectsOf } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
+import { handSyndicationOf } from '../webmention/syndication.ts';
 
 /** Where the site-wide data file lives, relative to the content directory. */
 export const SITE_DATA_FILE = '_data/site.json';
@@ -202,8 +203,29 @@ export interface DocumentContext {
    * asks `{% if enclosure %}`.
    */
   enclosure?: EnclosureContext | undefined;
+  /**
+   * The post's copies elsewhere, each printed as `u-syndication` (TASK-155):
+   * the URLs its `syndication` front matter lists by hand, and on a post's own
+   * page the copies its syndication targets answered with. Over the raw front
+   * matter value, so a theme always reads this shape. Empty when there are none.
+   */
+  syndication: SyndicationLink[];
   /** Everything else from the front matter, including unmodelled keys. */
   [key: string]: unknown;
+}
+
+/** One copy of a post elsewhere: its URL, and the host a link to it says. */
+export interface SyndicationLink {
+  url: string;
+  label: string;
+}
+
+/** Copies as a theme links them, each URL once. */
+export function syndicationLinks(urls: readonly string[]): SyndicationLink[] {
+  return [...new Set(urls)].map((url) => ({
+    url,
+    label: new URL(url).hostname.replace(/^www\./, ''),
+  }));
 }
 
 /** A post's recording as a theme plays it. See {@link DocumentContext.enclosure}. */
@@ -280,6 +302,7 @@ export function documentContext(
     // Over the raw front-matter value the spread above put here.
     lang: documentLanguage(document),
     enclosure: enclosureContext(document),
+    syndication: syndicationLinks(handSyndicationOf(document.extra)),
     label: postLabel(document),
     ...optional('date', date),
     tags: document.tags,

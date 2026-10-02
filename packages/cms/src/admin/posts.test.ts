@@ -624,6 +624,66 @@ describe('pinning a post in the editor (TASK-207 AC #1)', () => {
   });
 });
 
+describe('syndication targets in the post editor (TASK-155 AC #2)', () => {
+  const TARGETS = JSON.stringify([
+    { id: 'indienews', name: 'IndieNews', url: 'https://news.indieweb.org/en', tag: 'indienews' },
+    { id: 'mastodon', name: 'Mastodon', url: 'https://brid.gy/publish/mastodon' },
+  ]);
+
+  async function post(extra: string[] = []): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-01-post.md',
+        title: 'Post',
+        date: '2026-01-01',
+        permalink: '/2026/01/post/',
+        extra,
+      },
+    ]);
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(path.join(contentDir, '_data', 'syndicationTargets.json'), TARGETS, 'utf8');
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  async function syndicateTo(contentDir: string): Promise<unknown> {
+    const text = await readFile(path.join(contentDir, 'posts', '2026-01-01-post.md'), 'utf8');
+    return matter(text).data['syndicate-to'];
+  }
+
+  it('offers a checkbox for each declared target, ticked when the post lists it', async () => {
+    const { agent } = await post(['syndicate-to: [mastodon]']);
+
+    const html = await (await agent.get('/admin/posts/post')).text();
+
+    assert.match(
+      html,
+      /<input id="editor-syndicate-to-indienews" name="syndicate-to-indienews" type="checkbox" value="1" \/>/,
+    );
+    assert.match(html, /<label for="editor-syndicate-to-indienews">IndieNews<\/label>/);
+    assert.match(html, /name="syndicate-to-mastodon" type="checkbox" value="1" checked/);
+  });
+
+  it('writes the ticked targets and keeps an id no target declares', async () => {
+    const { contentDir, agent } = await post(['syndicate-to: [elsewhere]']);
+
+    const response = await submit(agent, '/admin/posts/post', {
+      'syndicate-to-indienews': '1',
+      'syndicate-to-mastodon': '1',
+    });
+
+    assert.equal(response.status, 303);
+    assert.deepEqual(await syndicateTo(contentDir), ['indienews', 'mastodon', 'elsewhere']);
+  });
+
+  it('removes the key when nothing is ticked', async () => {
+    const { contentDir, agent } = await post(['syndicate-to: [indienews]']);
+
+    assert.equal((await submit(agent, '/admin/posts/post', {})).status, 303);
+    assert.equal(await syndicateTo(contentDir), undefined);
+  });
+});
+
 describe('the recording in the post editor (TASK-213 AC #1, #2)', () => {
   const FILE = ['posts', '2026-01-02-episode.md'];
   const MONTH = ['uploads', '2026', '10'];

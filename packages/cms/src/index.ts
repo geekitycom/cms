@@ -87,6 +87,12 @@ import { mountIndieAuthDiscovery } from './indieauth/discovery.ts';
 import { createIndieAuthState } from './indieauth/grants.ts';
 import { mountTokenEndpoint, mountTokenInfoEndpoints } from './indieauth/token.ts';
 import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
+import {
+  selectedTargets,
+  syndicationCopies,
+  syndicationTargetProblems,
+  syndicationTargetsReader,
+} from './webmention/syndication.ts';
 import type { ReplyContextService, WebmentionService } from './webmention/index.ts';
 
 export { createFeedNotifier, NOTIFY_TIMEOUT_MS } from './notify.ts';
@@ -1282,8 +1288,18 @@ export {
   readReplyContext,
   REPLY_CONTEXTS_FILE,
   systemHostLookup,
+  parseSyndicationTargets,
+  selectedTargets,
+  SYNDICATE_TO_FRONT_MATTER_KEY,
+  SYNDICATION_FILE,
+  SYNDICATION_FRONT_MATTER_KEY,
+  SYNDICATION_TARGETS_FILE,
+  syndicationTargetsReader,
 } from './webmention/index.ts';
 export type {
+  ParsedSyndicationTargets,
+  SyndicationTarget,
+  SyndicationTargetsReader,
   CreateReplyContextServiceOptions,
   HostLookup,
   ReplyContext,
@@ -1672,6 +1688,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // What a reply shows of the post it answers. Built before the renderer,
   // which reads the stored contexts, and subscribed to the index below with
   // the other services that reach out to the web.
+  // The syndication targets the site declares and the copies they answered
+  // with, both files in the content directory (TASK-155, decision-26).
+  const syndicationTargets = syndicationTargetsReader(resolved.contentDir);
+  const copies = syndicationCopies(resolved.contentDir);
+
   const replyContexts = createReplyContextService({
     store,
     contentDir: resolved.contentDir,
@@ -1692,6 +1713,12 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // The stored context of a reply's target: a file read, never a fetch, so
     // a page is drawn without waiting on anybody's server (TASK-123).
     replyContext: (target) => replyContexts.read(target),
+    // The targets a post links to and the copies they made of it (TASK-155),
+    // read from the site's files like the reply contexts.
+    syndication: (document) => ({
+      targets: selectedTargets(document, syndicationTargets()),
+      copies: Object.values(copies.read(document.permalink)),
+    }),
     // The pages that put themselves in the site menu are found by asking for
     // every public page and reading their front matter, rather than by an
     // index of their own: a site has a handful of pages, the query is the
@@ -2046,6 +2073,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // And a reply whose target the contexts file holds nothing for is
       // fetched now, in the background, for the same reason (TASK-123).
       replyContexts.catchUp();
+
+      // A syndication target the site declares badly is ignored everywhere,
+      // and said so once here rather than on every page (TASK-155).
+      for (const problem of syndicationTargetProblems(resolved.contentDir)) console.warn(problem);
 
       // And the avatars the conversations show are fetched or refreshed in the
       // background now and on a timer from here on, so a reader almost never

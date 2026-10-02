@@ -43,7 +43,7 @@ async function writeTree(root: string, files: Record<string, string>): Promise<v
  * Three posts, a page and a page on the menu.
  *
  * `hello` is the middle one, so it has a post either side of it; it is tagged
- * `indienews` and filed under a category, and it was updated three days after
+ * `indienews`, the tag of the IndieNews target the site declares, and filed under a category, and it was updated three days after
  * it was published. `same-day` was updated within the day it went out, which
  * is the one case the Updated line is not printed.
  */
@@ -74,6 +74,9 @@ const CONTENT: Record<string, string> = {
   'posts/nobody.md':
     "---\ntitle: By nobody\ndate: '2026-09-06T09:00:00Z'\npermalink: /2026/09/nobody/\n---\n\nAnonymous.\n",
   'pages/about.md': '---\ntitle: About\npermalink: /about/\n---\n\nAbout us.\n',
+  '_data/syndicationTargets.json': JSON.stringify([
+    { id: 'indienews', name: 'IndieNews', url: 'https://news.indieweb.org/en', tag: 'indienews' },
+  ]),
 };
 
 /** The menus these tests read, in `site.json` order. */
@@ -392,14 +395,14 @@ describe('the site menu (AC #2, TASK-105)', () => {
   });
 });
 
-describe('the IndieNews link (AC #3)', () => {
+describe('the IndieNews link (AC #3, as a TASK-155 syndication target)', () => {
   it('opens the Published line of a post tagged indienews and of no other', async () => {
     const cms = await site();
 
     assert.match(
       eContent(await body(cms, '/2026/09/hello/')),
-      /<a class="u-category small" href="https:\/\/news\.indieweb\.org\/en">#indienews<\/a>\s*<a href="\/2026\/09\/hello\/" class="u-url">/,
-      'the u-category does not open the Published paragraph',
+      /<a class="u-syndication small" href="https:\/\/news\.indieweb\.org\/en">IndieNews<\/a>\s*<a href="\/2026\/09\/hello\/" class="u-url">/,
+      'the target link does not open the Published paragraph',
     );
     assert.doesNotMatch(
       await body(cms, '/2026/09/newer/'),

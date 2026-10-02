@@ -1185,6 +1185,77 @@ answers 404 or 410 — takes it away. Closing rules do not apply: a post that
 stopped taking comments still hears about a page that links to it, exactly as it
 still hears a fediverse reply.
 
+### Syndication targets
+
+Some services copy a post when it links to them and sends them a webmention,
+and answer with the address of the copy. IndieNews lists posts about the
+IndieWeb; Bridgy Publish posts to Mastodon, Bluesky, GitHub and Flickr. The
+CMS knows none of them by name. A site lists the ones it uses in
+`content/_data/syndicationTargets.json`:
+
+```json
+[
+  {
+    "id": "indienews",
+    "name": "IndieNews",
+    "url": "https://news.indieweb.org/en",
+    "tag": "indienews"
+  },
+  {
+    "id": "mastodon",
+    "name": "Mastodon",
+    "url": "https://brid.gy/publish/mastodon"
+  }
+]
+```
+
+| Key    | What it is                                                                   |
+| ------ | ---------------------------------------------------------------------------- |
+| `id`   | What a post's `syndicate-to` lists. Letters, digits, `.`, `-` and `_`.       |
+| `name` | What the editor's checkbox and the post's link say.                          |
+| `url`  | The page the post links to and sends its webmention to.                      |
+| `tag`  | Optional. A post carrying this tag is sent to the target without listing it. |
+
+An entry missing any of the first three, or repeating an id, is reported in the
+log when the site starts and ignored. No file means no targets.
+
+A post selects targets in one of two ways:
+
+- **By listing them.** The post editor has a **Syndicate to** checkbox for each
+  target, and saving writes the ticked ids into the front matter as
+  `syndicate-to: [indienews, mastodon]`. An id no target declares is kept as
+  written.
+- **By its tags.** A post tagged `indienews` is sent to the target whose `tag`
+  is `indienews`, as the WordPress IndieNews plugin did.
+
+The default theme links to each selected target at the start of the Published
+line, inside the post's `h-entry`, as `<a class="u-syndication"
+href="https://news.indieweb.org/en">IndieNews</a>`. That link is what IndieNews
+and Bridgy Publish check for when they fetch the post. When the post is
+published or updated, the sender adds each selected target to the pages it
+notifies, the same way it adds the post a reply answers. Nothing is sent while a
+page is served.
+
+A target that answers `201` or `202` with a `Location` header has made a copy.
+The address is kept in `content/_data/syndication.json`, keyed by the post's
+permalink (decision-26), and the theme prints it after the dates as **Also on**
+with a `u-syndication` link. A copy made by hand goes in the post's own front
+matter, and is printed the same way:
+
+```yaml
+syndication:
+  - https://mastodon.social/@me/113000000000000000
+```
+
+Removing a target from `syndicate-to`, or removing its tag, removes the link.
+The sender then tells the target, as it tells any page a post stops linking to,
+and the copy is dropped from `syndication.json`. IndieNews takes the post down
+when it finds the link gone. Drafting or trashing the post does the same.
+
+The posts table on `/admin/federation` lists each selected target with how its
+last webmention went and a link to its copy, and **Resend** sends to the targets
+again.
+
 ## Email
 
 The CMS sends its mail through one service and one seam. Everything that will

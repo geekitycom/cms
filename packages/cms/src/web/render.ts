@@ -42,6 +42,9 @@ import { createTemplateEnvironment, useThemeDirs } from './templates.ts';
 import { createThemeSource, findThemeFile } from './themes.ts';
 import type { ThemeColors, ThemeSource } from './themes.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
+import { handSyndicationOf } from '../webmention/syndication.ts';
+import type { SyndicationTarget } from '../webmention/syndication.ts';
+import { syndicationLinks } from './context.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 
 /** Templates the default theme ships and the public routes ask for by name. */
@@ -221,6 +224,14 @@ export interface Renderer {
   readonly environment: Environment;
 }
 
+/** What {@link CreateRendererOptions.syndication} answers for one post. */
+export interface PostSyndication {
+  /** The declared targets the post selects, in declaration order. */
+  readonly targets: readonly SyndicationTarget[];
+  /** The URLs of the copies those targets answered with. */
+  readonly copies: readonly string[];
+}
+
 /** How to build a {@link Renderer}. */
 export interface CreateRendererOptions {
   /** Config after defaults, for the themes directory, base URL and content directory. */
@@ -263,6 +274,13 @@ export interface CreateRendererOptions {
    * without it draws every reply with a bare link.
    */
   replyContext?: ((target: string) => ReplyContext | undefined) | undefined;
+  /**
+   * The syndication targets a post selects and the copies they answered with
+   * (TASK-155), read from the site's files and never fetched. A renderer built
+   * without it links a post to no target and prints only the copies its front
+   * matter lists by hand.
+   */
+  syndication?: ((document: Document) => PostSyndication) | undefined;
   /**
    * The comment form for a post that is taking comments, and `undefined` for
    * one that is not (TASK-50).
@@ -621,6 +639,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // What the post a reply answers says about itself (TASK-123), on the
     // context only when there is some.
     const cited = citedBy(document);
+    // The targets this post links to and the copies they made of it
+    // (TASK-155): the links a target verifies sit inside the h-entry, so they
+    // are on the post's own page, which is the page a target fetches.
+    const syndicated = options.syndication?.(document);
 
     const drawn = render(template, {
       ...context,
@@ -647,6 +669,11 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(contact === undefined ? {} : { contactForm: contact }),
       ...(webmention === undefined ? {} : { webmention }),
       ...(cited === undefined ? {} : { replyContext: cited }),
+      syndicateTo: syndicated?.targets ?? [],
+      syndication: syndicationLinks([
+        ...handSyndicationOf(document.extra),
+        ...(syndicated?.copies ?? []),
+      ]),
       ...extra,
     });
 

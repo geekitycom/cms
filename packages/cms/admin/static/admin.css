@@ -496,6 +496,12 @@ button[type='submit']:hover,
   border: 1px solid var(--admin-border);
 }
 
+.admin-editor-syndication {
+  margin: 1.25rem 0 0;
+  padding: 0.75rem 1rem 1rem;
+  border: 1px solid var(--admin-border);
+}
+
 .admin-editor-enclosure-heading {
   margin: 1.25rem 0 0;
   font-size: 1em;
@@ -878,6 +884,11 @@ button[type='submit']:hover,
 
 .admin-inbox-actor {
   font-weight: 600;
+}
+
+.admin-syndication {
+  margin: 0.25rem 0 0;
+  padding-left: 1rem;
 }
 
 .admin-inbox-when {

@@ -11,6 +11,8 @@ import { absoluteUrl } from '../web/negotiate.ts';
 import { discoverEndpoint, WEBMENTION_USER_AGENT } from './discovery.ts';
 import { externalLinks, externalTarget } from './links.ts';
 import { verifyWebmention } from './receive.ts';
+import { selectedTargets, syndicationCopies, syndicationTargetsReader } from './syndication.ts';
+import type { SyndicationTarget } from './syndication.ts';
 import type { IncomingWebmention, WebmentionOutcome } from './receive.ts';
 
 /**
@@ -138,13 +140,19 @@ export function createWebmentionService(
     return readSiteSettings(config.contentDir).webmentionsSend;
   }
 
-  /** Tell one page about one post, and answer with what happened. */
-  async function tell(slug: string, source: string, target: string): Promise<SentWebmention> {
+  const targets = syndicationTargetsReader(config.contentDir);
+  const copies = syndicationCopies(config.contentDir);
+
+  /**
+   * Tell one page about one post, and answer with what happened and, when the
+   * page made a copy of the post, where the copy is.
+   */
+  async function tell(slug: string, source: string, target: string): Promise<Told> {
     const endpoint = await discoverEndpoint(target);
     if (endpoint === undefined) {
       // Not a failure: most of the web takes no webmentions, and recording it
       // is what tells a person why nothing went.
-      return record(slug, source, target, null, 'none', null);
+      return { sent: record(slug, source, target, null, 'none', null) };
     }
 
     try {
@@ -162,14 +170,17 @@ export function createWebmentionService(
       if (!response.ok) {
         const error = `${endpoint} answered ${String(response.status)}`;
         logger.warn(`Could not send a webmention for ${source}: ${error}`);
-        return record(slug, source, target, endpoint, 'failed', error);
+        return { sent: record(slug, source, target, endpoint, 'failed', error) };
       }
 
-      return record(slug, source, target, endpoint, 'sent', null);
+      return {
+        sent: record(slug, source, target, endpoint, 'sent', null),
+        copy: copyOf(response, endpoint),
+      };
     } catch (thrown) {
       const error = messageOf(thrown);
       logger.warn(`Could not send a webmention for ${source}: ${error}`);
-      return record(slug, source, target, endpoint, 'failed', error);
+      return { sent: record(slug, source, target, endpoint, 'failed', error) };
     }
   }
 
@@ -186,14 +197,31 @@ export function createWebmentionService(
   }
 
   /** Tell every one of a post's targets, one after another. */
-  async function tellAll(
-    slug: string,
-    source: string,
-    targets: readonly string[],
-  ): Promise<SentWebmention[]> {
-    const outcomes: SentWebmention[] = [];
-    for (const target of targets) outcomes.push(await tell(slug, source, target));
+  async function tellAll(slug: string, source: string, links: readonly string[]): Promise<Told[]> {
+    const outcomes: Told[] = [];
+    for (const target of links) outcomes.push(await tell(slug, source, target));
     return outcomes;
+  }
+
+  /**
+   * Bring the post's recorded copies in line with what was just sent
+   * (decision-26): a target the post selects keeps the copy it answered with,
+   * and one it no longer selects, or a post nobody can read, claims none.
+   */
+  async function keepCopies(
+    permalink: string,
+    current: Document | undefined,
+    outcomes: readonly Told[],
+  ): Promise<void> {
+    const declared = new Set(targets().map((target) => target.url));
+    const selected = new Set(
+      current === undefined ? [] : selectedTargets(current, targets()).map((target) => target.url),
+    );
+    for (const { sent, copy } of outcomes) {
+      if (!declared.has(sent.target)) continue;
+      if (!selected.has(sent.target)) await copies.write(permalink, sent.target, undefined);
+      else if (copy !== undefined) await copies.write(permalink, sent.target, copy);
+    }
   }
 
   return {
@@ -217,10 +245,23 @@ export function createWebmentionService(
       // it was showing. That is how a webmention is withdrawn — there is no
       // other way to say it.
       const source = absoluteUrl(document.permalink, config.baseUrl);
-      const targets = targetsOf([change.previous, change.next], config.baseUrl);
-      if (targets.length === 0) return;
+      const links = targetsOf([change.previous, change.next], targets(), config.baseUrl);
+      if (links.length === 0) return;
 
-      enqueue(() => tellAll(document.slug, source, targets)).catch((thrown: unknown) => {
+      // A post that moved is a new source to its targets, which answer with
+      // their copies of it under its new permalink.
+      const moved =
+        change.previous !== undefined &&
+        change.next !== undefined &&
+        change.previous.permalink !== change.next.permalink
+          ? change.previous.permalink
+          : undefined;
+      const current = isNowPublic ? change.next : undefined;
+
+      enqueue(async () => {
+        if (moved !== undefined) await copies.forget(moved);
+        await keepCopies(document.permalink, current, await tellAll(document.slug, source, links));
+      }).catch((thrown: unknown) => {
         logger.warn(`A webmention failed: ${messageOf(thrown)}`);
       });
     },
@@ -232,13 +273,14 @@ export function createWebmentionService(
       const source = absoluteUrl(document.permalink, config.baseUrl);
       if (!sending()) return { slug, source, sent: [] };
 
-      const targets = targetsOf([document], config.baseUrl);
+      const links = targetsOf([document], targets(), config.baseUrl);
 
-      return await enqueue(async () => ({
-        slug,
-        source,
-        sent: await tellAll(slug, source, targets),
-      }));
+      return await enqueue(async () => {
+        const outcomes = await tellAll(slug, source, links);
+        const current = isPublic(document, config.now()) ? document : undefined;
+        await keepCopies(document.permalink, current, outcomes);
+        return { slug, source, sent: outcomes.map((one) => one.sent) };
+      });
     },
 
     receive(incoming) {
@@ -279,11 +321,22 @@ export function createWebmentionService(
   };
 }
 
+/** One page told, and the copy of the post it made, when it said where. */
+interface Told {
+  readonly sent: SentWebmention;
+  readonly copy?: string | undefined;
+}
+
 /**
  * Every external page any of these versions of a post links to, in order: the
- * post it replies to first, then the links in its body.
+ * post it replies to first, then the links in its body, then the syndication
+ * targets it selects, which the theme links to inside its h-entry.
  */
-function targetsOf(documents: readonly (Document | undefined)[], baseUrl: string): string[] {
+function targetsOf(
+  documents: readonly (Document | undefined)[],
+  declared: readonly SyndicationTarget[],
+  baseUrl: string,
+): string[] {
   const targets = new Set<string>();
 
   for (const document of documents) {
@@ -291,9 +344,26 @@ function targetsOf(documents: readonly (Document | undefined)[], baseUrl: string
     const reply = externalTarget(replyTarget(document), baseUrl);
     if (reply !== undefined) targets.add(reply);
     for (const target of externalLinks(document.html, baseUrl)) targets.add(target);
+    for (const target of selectedTargets(document, declared)) targets.add(target.url);
   }
 
   return [...targets];
+}
+
+/**
+ * Where a target says its copy of the post is: the `Location` of a 201 or 202,
+ * as IndieNews and Bridgy Publish answer, resolved against the endpoint.
+ */
+function copyOf(response: Response, endpoint: string): string | undefined {
+  if (response.status !== 201 && response.status !== 202) return undefined;
+  const location = response.headers.get('location');
+  if (location === null || location === '') return undefined;
+  try {
+    const url = new URL(location, endpoint);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Whether a version of a document was one a stranger could read. */

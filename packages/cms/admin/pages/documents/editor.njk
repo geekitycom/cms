@@ -210,6 +210,25 @@
         </p>
       {% endif %}
 
+      {% if kind.type == "post" and syndicationTargets.length %}
+        {# TASK-155: the targets content/_data/syndicationTargets.json declares.
+           A target whose tag the post carries is selected without a tick. #}
+        <fieldset class="admin-editor-syndication">
+          <legend>Syndicate to</legend>
+          {% for target in syndicationTargets %}
+            <p class="admin-check">
+              <input id="editor-{{ target.field }}" name="{{ target.field }}" type="checkbox" value="1"{% if target.checked %} checked{% endif %} />
+              <label for="editor-{{ target.field }}">{{ target.name }}</label>
+            </p>
+          {% endfor %}
+          <p class="admin-hint">
+            Writes <code>syndicate-to:</code> into the front matter. The post links to each target and
+            sends it a webmention when it is published or updated. A post tagged with a target’s tag is
+            sent there without a tick.
+          </p>
+        </fieldset>
+      {% endif %}
+
       {# What this document says about comments, if anything. Three answers
          rather than two: the site's own rules, always open, always closed. #}
       <label for="editor-comments">Comments</label>

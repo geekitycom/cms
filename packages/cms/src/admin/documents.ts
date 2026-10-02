@@ -53,6 +53,12 @@ import {
   resolveEnclosure,
 } from './enclosure-field.ts';
 import type { EnclosureForm } from './enclosure-field.ts';
+import {
+  SYNDICATE_TO_FRONT_MATTER_KEY,
+  syndicateToOf,
+  syndicationTargetsReader,
+} from '../webmention/syndication.ts';
+import type { SyndicationTarget } from '../webmention/syndication.ts';
 
 /**
  * Everything that differs between the posts screens and the pages screens.
@@ -348,6 +354,12 @@ async function saveFromForm(
     pinned: kind.type === 'post' && body['pinned'] !== undefined,
     comments: commentSetting(text(body['comments'])),
     enclosure: kind.type === 'post' ? readEnclosureForm(body) : BLANK_ENCLOSURE_FORM,
+    syndicateTo:
+      kind.type === 'post'
+        ? syndicationTargetsReader(contentDir)()
+            .filter((target) => body[syndicateToField(target)] !== undefined)
+            .map((target) => target.id)
+        : [],
     body: normalizeBody(text(body['body'])),
     hash: text(body['hash']),
   };
@@ -500,7 +512,14 @@ async function saveFromForm(
     ...optional('author', chosenAuthor(c, form.author, document)),
     ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', keptIdentity(document, promised, permalink, c.var.config.baseUrl)),
-    extra: resolveExtra(kind, document, form, store.now(), recording),
+    extra: resolveExtra(
+      kind,
+      document,
+      form,
+      store.now(),
+      recording,
+      syndicationTargetsReader(contentDir)(),
+    ),
     body: form.body,
   };
 
@@ -775,15 +794,27 @@ function normalizePermalink(value: string): string | undefined {
 function resolveExtra(
   kind: DocumentKind,
   document: Document | undefined,
-  form: Pick<EditorForm, 'exclude' | 'comments' | 'contact' | 'lang' | 'pinned'>,
+  form: Pick<EditorForm, 'exclude' | 'comments' | 'contact' | 'lang' | 'pinned' | 'syndicateTo'>,
   now: Date,
   recording: Enclosure | undefined,
+  declared: readonly SyndicationTarget[],
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
 
   if (kind.type === 'post') {
     if (recording === undefined) delete extra[ENCLOSURE_FRONT_MATTER_KEY];
     else extra[ENCLOSURE_FRONT_MATTER_KEY] = enclosureFrontMatter(recording);
+  }
+
+  // The checkboxes speak for the targets the site declares (TASK-155). An id
+  // the file lists that names no declared target has no checkbox, so it is
+  // kept as written rather than lost to a save.
+  if (kind.type === 'post') {
+    const offered = new Set(declared.map((target) => target.id));
+    const kept = syndicateToOf(extra).filter((id) => !offered.has(id));
+    const listed = [...form.syndicateTo, ...kept];
+    if (listed.length === 0) delete extra[SYNDICATE_TO_FRONT_MATTER_KEY];
+    else extra[SYNDICATE_TO_FRONT_MATTER_KEY] = listed;
   }
 
   // The moment a post was pinned is what orders the featured collection, so a
@@ -820,6 +851,11 @@ function resolveExtra(
   }
 
   return extra;
+}
+
+/** The editor checkbox that selects one syndication target. */
+function syndicateToField(target: SyndicationTarget): string {
+  return `${SYNDICATE_TO_FRONT_MATTER_KEY}-${target.id}`;
 }
 
 /**
@@ -991,7 +1027,14 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     ...optional('author', document.author),
     ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', document.activitypub),
-    extra: resolveExtra(kind, document, form, c.var.store.now(), options.recording),
+    extra: resolveExtra(
+      kind,
+      document,
+      form,
+      c.var.store.now(),
+      options.recording,
+      syndicationTargetsReader(c.var.config.contentDir)(),
+    ),
     body: form.body,
   });
 
@@ -1174,6 +1217,8 @@ export interface EditorForm {
   comments: string;
   /** The post's recording (TASK-213). Posts only; blank on a page. */
   enclosure: EnclosureForm;
+  /** The ids of the declared syndication targets it selects (TASK-155). Posts only. */
+  syndicateTo: string[];
   body: string;
   /** The hash of the file the form was filled in from; empty for a new one. */
   hash: string;
@@ -1211,6 +1256,7 @@ export function blankForm(
     pinned: false,
     comments: COMMENT_SETTINGS.site,
     enclosure: BLANK_ENCLOSURE_FORM,
+    syndicateTo: [],
     body: '',
     hash: '',
   };
@@ -1245,6 +1291,7 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     pinned: pinnedAt(document) !== undefined,
     comments: commentSettingOf(document),
     enclosure: document.type === 'post' ? enclosureForm(document) : BLANK_ENCLOSURE_FORM,
+    syndicateTo: document.type === 'post' ? syndicateToOf(document.extra) : [],
     body: document.body,
     hash: document.hash,
   };
@@ -1318,6 +1365,12 @@ async function renderEditor(
           enclosureChoices: await enclosureChoices(c.var.config.contentDir, form.enclosure.url),
           transcriptTypes: TRANSCRIPT_TYPES,
           alternateRows: [...form.enclosure.alternates, BLANK_ALTERNATE_ROW],
+          // TASK-155: one checkbox per target the site declares.
+          syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
+            ...target,
+            field: syndicateToField(target),
+            checked: form.syndicateTo.includes(target.id),
+          })),
         }
       : {}),
     // Who this can be attributed to, and who it is attributed to now.
