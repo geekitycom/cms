@@ -403,6 +403,41 @@ is a `p-category` of this entry, as one `p.post-categories` from
 `partials/tags.njk`. The stylesheet draws the `#` in front of each, so the
 category a parser reads is the tag and not the hash.
 
+**A post with a recording plays it** (TASK-213), from
+`partials/recording.njk`, between the header and the `e-content`. The main file
+is the browser's own player, `<audio controls>` or `<video controls>` as
+`enclosure.player` says, with `preload="metadata"` so a reader who never presses
+play downloads nothing, and a download link inside it for a browser that plays
+neither. The `<source>` carries `u-audio` or `u-video`, so a microformats parser
+finds the file on the entry. A video whose transcript is WebVTT also gets it as
+a `<track kind="captions">`. Under the player a `figcaption` links the
+transcript, as Captions for VTT or SRT and Transcript otherwise, and lists the
+other versions by their title, else their media type. A post without a
+recording, or whose front matter is missing what a player needs, prints none of
+it.
+
+```html
+<figure class="post-recording">
+  <audio controls preload="metadata" aria-label="Recording of Episode twelve">
+    <source
+      class="u-audio"
+      src="/uploads/2026/10/episode-12.mp3"
+      type="audio/mpeg"
+    />
+    <a href="/uploads/2026/10/episode-12.mp3">Download the recording</a>
+  </audio>
+  <figcaption class="post-recording-links">
+    <p><a href="/uploads/2026/10/episode-12.vtt">Captions</a></p>
+    <p id="post-recording-versions">Other versions</p>
+    <ul aria-labelledby="post-recording-versions">
+      <li>
+        <a href="/uploads/2026/10/episode-12.mp4" type="video/mp4">Video</a>
+      </li>
+    </ul>
+  </figcaption>
+</figure>
+```
+
 After the entry a post prints `nav.blog-post-nav`: the `previous` and `next`
 posts as two cards, `rel="prev"` and `rel="next"`, each opening on a
 `span.blog-post-nav-label`, and nothing at all at the ends of the archive; then
@@ -1102,6 +1137,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `type`                                      | `post` or `page`.                                                                                                 |
 | `permalink`, `slug`, `draft`, `description` | Straight from the front matter.                                                                                   |
 | `lang`                                      | The `lang` front matter as a canonical tag, such as `fr-CA`. Absent when it names none or no tag.                 |
+| `enclosure`                                 | The post's recording, parsed, with `player` (`audio` or `video`) and `transcript.captions`. Absent with none.     |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
 | `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |

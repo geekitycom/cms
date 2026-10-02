@@ -165,29 +165,47 @@ directory; absolute ones are used as given.
 | `maintenance`      | `false`                                   | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode until a restart without it. `geekity maintenance on` and `off` are the everyday switch; see [Maintenance mode](#maintenance-mode).                                                                                                                                                                                                                       |
 | `compression`      | `true`                                    | `GEEKITY_COMPRESSION`        | Compress text responses (HTML, CSS, JavaScript, feeds, JSON, Markdown, SVG, sitemaps) with brotli, or gzip for a client without it. Turn it off when a proxy in front already compresses; see [Compression](packages/cms/README.md#compression).                                                                                                                                           |
 
-The admin adds eight more:
+The admin adds nine more:
 
-| Field               | Default                     | Environment override         | Meaning                                                                    |
-| ------------------- | --------------------------- | ---------------------------- | -------------------------------------------------------------------------- |
-| `uploadMaxBytes`    | `10485760` (10 MiB)         | `GEEKITY_UPLOAD_MAX_BYTES`   | Largest file the editor's upload endpoint accepts.                         |
-| `uploadTypes`       | every type below            | `GEEKITY_UPLOAD_TYPES`       | Extensions it accepts, as a list (comma-separated in the env).             |
-| `imageOptimization` | `true`                      | `GEEKITY_IMAGE_OPTIMIZATION` | Derive smaller copies of uploaded images and offer them in the pages.      |
-| `imageWidths`       | `320, 640, 960, 1280, 1920` | `GEEKITY_IMAGE_WIDTHS`       | The widths those copies are made at, in pixels.                            |
-| `imageFormats`      | `['webp']`                  | `GEEKITY_IMAGE_FORMATS`      | The formats besides the original's own. `avif` is opt-in.                  |
-| `requireAltText`    | `false`                     | `GEEKITY_REQUIRE_ALT_TEXT`   | Refuse to publish an image with no alt text, rather than warn about it.    |
-| `loginAttempts`     | `5`                         | `GEEKITY_LOGIN_ATTEMPTS`     | Failed sign-ins a username or an address may make before it is locked out. |
-| `loginLockout`      | `900` (15 minutes)          | `GEEKITY_LOGIN_LOCKOUT`      | How long the first lockout lasts, in seconds.                              |
-| `trustProxy`        | `false`                     | `GEEKITY_TRUST_PROXY`        | Believe `X-Forwarded-For` when deciding which address a sign-in came from. |
+| Field                 | Default                     | Environment override             | Meaning                                                                    |
+| --------------------- | --------------------------- | -------------------------------- | -------------------------------------------------------------------------- |
+| `uploadMaxBytes`      | `10485760` (10 MiB)         | `GEEKITY_UPLOAD_MAX_BYTES`       | Largest file the editor's upload endpoint accepts.                         |
+| `uploadMediaMaxBytes` | `209715200` (200 MiB)       | `GEEKITY_UPLOAD_MEDIA_MAX_BYTES` | Largest audio or video file it accepts, in place of `uploadMaxBytes`.      |
+| `uploadTypes`         | every type below            | `GEEKITY_UPLOAD_TYPES`           | Extensions it accepts, as a list (comma-separated in the env).             |
+| `imageOptimization`   | `true`                      | `GEEKITY_IMAGE_OPTIMIZATION`     | Derive smaller copies of uploaded images and offer them in the pages.      |
+| `imageWidths`         | `320, 640, 960, 1280, 1920` | `GEEKITY_IMAGE_WIDTHS`           | The widths those copies are made at, in pixels.                            |
+| `imageFormats`        | `['webp']`                  | `GEEKITY_IMAGE_FORMATS`          | The formats besides the original's own. `avif` is opt-in.                  |
+| `requireAltText`      | `false`                     | `GEEKITY_REQUIRE_ALT_TEXT`       | Refuse to publish an image with no alt text, rather than warn about it.    |
+| `loginAttempts`       | `5`                         | `GEEKITY_LOGIN_ATTEMPTS`         | Failed sign-ins a username or an address may make before it is locked out. |
+| `loginLockout`        | `900` (15 minutes)          | `GEEKITY_LOGIN_LOCKOUT`          | How long the first lockout lasts, in seconds.                              |
+| `trustProxy`          | `false`                     | `GEEKITY_TRUST_PROXY`            | Believe `X-Forwarded-For` when deciding which address a sign-in came from. |
 
 `uploadTypes` defaults to `.avif`, `.gif`, `.jpeg`, `.jpg`, `.md`, `.pdf`,
-`.png`, `.txt` and `.webp` — every type the CMS knows a media type for. The
+`.png`, `.txt` and `.webp`, the captions formats `.vtt` and `.srt`, and the
+audio and video formats `.mp3`, `.m4a`, `.aac`, `.ogg`, `.oga`, `.opus`,
+`.mp4`, `.m4v` and `.webm` — every type the CMS knows a media type for. Each
+binary format is checked by its first bytes: an ID3 tag or an MPEG frame for
+MP3, `ftyp` at offset 4 for M4A, MP4 and M4V, an ADTS header for AAC, `OggS`
+for Ogg and Opus, the EBML header for WebM, and `WEBVTT` (after an optional
+byte order mark) for WebVTT. SubRip has no header and is taken as text. The
 dot and the case are optional: `PNG` and `.png` are the same entry. A name the
 CMS has no media type for is refused at boot rather than ignored, so a typo in
 an allowlist is heard about immediately.
 
 SVG is not in that list and cannot be added: an SVG is markup that may carry
 script, and an upload is served from the site's own origin, so accepting one
-would be a stored cross-site scripting hole in the site's own pages.
+would be a stored cross-site scripting hole in the site's own pages. HTML is
+out for the same reason, so a transcript in HTML is linked from another host
+rather than uploaded.
+
+Audio and video are held to `uploadMediaMaxBytes` and everything else to
+`uploadMaxBytes`, because an episode is a hundred times the size of a photo and
+raising one limit far enough for it would let every upload be that big. A proxy
+in front of the site has its own limit on a request body; see
+[Start it and point the proxy at it](#3-start-it-and-point-the-proxy-at-it).
+Uploads are served with their media type and answer a single `Range` request
+with `206 Partial Content`, which Safari needs before it plays a file and every
+player uses to seek.
 
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site.
@@ -724,7 +742,10 @@ things have to agree before anything is written — the extension is on the
 site's allowlist, the media type the browser declared is one that extension may
 have, and the file's first bytes are that format's — and a file that is too
 big gets a 413 and one of the wrong type a 415, both as JSON. See
-[`uploadMaxBytes` and `uploadTypes`](#configuration). The same rules run behind
+[`uploadMaxBytes`, `uploadMediaMaxBytes` and `uploadTypes`](#configuration). The
+check on `Content-Length` that runs before the body is read lets through
+anything the larger of the two limits would, and the file is then held to its
+own kind's limit. The same rules run behind
 [the media library](#the-media-library), which is a form rather than a `fetch`,
 so a body over the limit posted from a browser gets that 413 as plain text
 instead.
@@ -1641,9 +1662,17 @@ location / {
     proxy_pass http://127.0.0.1:3000;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-For $remote_addr;
-    client_max_body_size 10m;  # at least GEEKITY_UPLOAD_MAX_BYTES
+    client_max_body_size 200m;  # at least GEEKITY_UPLOAD_MEDIA_MAX_BYTES
 }
 ```
+
+The proxy's body limit has to be at least the larger of
+`GEEKITY_UPLOAD_MAX_BYTES` and `GEEKITY_UPLOAD_MEDIA_MAX_BYTES`, 200 MiB by
+default, or an episode is refused by the proxy with a 413 before Geekity sees
+it. nginx's own default is 1 MiB. Caddy sets no limit unless the site block has
+a `request_body { max_size 200MB }`, and Cloudflare's free plan stops at 100 MB
+whatever the origin allows, so a larger episode has to be uploaded to the
+server directly.
 
 Geekity compresses its own text responses, brotli or gzip, so the proxy does
 not need to. If the proxy compresses anyway (nginx with `gzip on`, Caddy with
