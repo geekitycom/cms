@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.15.0](https://github.com/geekitycom/cms/compare/v0.14.0...v0.15.0) (2026-10-02)
+
+
+### Features
+
+* **cms:** accept audio, video and caption uploads ([e6946fa](https://github.com/geekitycom/cms/commit/e6946fab2e5a16474ca5601c1542206a7aeda900))
+* **cms:** add a content license setting ([52ba2e1](https://github.com/geekitycom/cms/commit/52ba2e19f839ca8580788d6a5007a0651370e643))
+* **cms:** add a site icon setting to settings &gt; general ([fd02378](https://github.com/geekitycom/cms/commit/fd02378554a238b07b301161522679a654dad1f8))
+* **cms:** attach a recording to a post in the editor ([321ea08](https://github.com/geekitycom/cms/commit/321ea08381ed116676816688fd17a5f77f8b29b6))
+* **cms:** attach an audio or video recording to any post ([b028d46](https://github.com/geekitycom/cms/commit/b028d46861bb860cf9a2c235b5880259ee161ce2))
+* **cms:** carry a post's recording in rss, atom and json feed ([a6e59ab](https://github.com/geekitycom/cms/commit/a6e59ab2e253e60b96d344966b8fa20338a2660c))
+* **cms:** federate a post's recording as an audio or video attachment ([0813ab5](https://github.com/geekitycom/cms/commit/0813ab57892cb8b5134baf09fdd98b2ae84d8ff7))
+* **cms:** play a post's recording in the default theme ([be6636c](https://github.com/geekitycom/cms/commit/be6636cfd7ebeddd4d50192720e12158741c283e))
+
+
+### Bug Fixes
+
+* **cms:** fall back to the author's photo, then the site icon, for the share image ([f58fba9](https://github.com/geekitycom/cms/commit/f58fba9480592f2fd080865d83724589331fab95))
+* **cms:** keep a hand-written recording the editor cannot use ([b66ca22](https://github.com/geekitycom/cms/commit/b66ca226b99110ca556f1d87bbf561dd36a394ee))
+
 ## [0.14.0](https://github.com/geekitycom/cms/compare/v0.13.0...v0.14.0) (2026-10-02)
 
 
