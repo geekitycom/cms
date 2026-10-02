@@ -25,6 +25,7 @@ import { MESSAGES_PATH } from './messages.ts';
 import { NAVIGATION_PATH } from './navigation.ts';
 import { settingsPagePath } from './settings-page.ts';
 import { ADMIN_PREFIX } from './session.ts';
+import { SYNDICATION_TARGETS_CHILD, SYNDICATION_TARGETS_PATH } from './syndication-targets.ts';
 import { CATEGORY_KIND, TAG_KIND } from './taxonomy.ts';
 import { PERSONAL_DATA_CHILD, PERSONAL_DATA_PATH } from './personal-data.ts';
 import { TOOLS_PATH } from './tools.ts';
@@ -97,6 +98,8 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     // they are about: a tag with no post on it is nothing.
     { child: 'categories', label: 'Categories', url: CATEGORY_KIND.basePath },
     { child: 'tags', label: 'Tags', url: TAG_KIND.basePath },
+    // Where a post can be sent, for the same reason: only a post is (TASK-218).
+    { child: SYNDICATION_TARGETS_CHILD, label: 'Syndication', url: SYNDICATION_TARGETS_PATH },
   ]),
   section('pages', 'Pages', [
     { child: 'all', label: 'All pages', url: PAGE_KIND.basePath },

@@ -5,9 +5,13 @@ import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf, isCaptions, playsAsVideo } from '../content/enclosure.ts';
 import type { Enclosure, Transcript } from '../content/enclosure.ts';
+import { photoAlt, photosOf } from '../content/photo.ts';
+import { citationsOf } from '../content/citation.ts';
+import type { Citation } from '../content/citation.ts';
 import { isNamed, postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { DEFAULT_TIMEZONE } from '../content/time.ts';
+import { readAltTexts } from '../images/alt-text.ts';
 import { siteImageMarkup } from '../images/markup.ts';
 import type { ImageLoading } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
@@ -16,6 +20,7 @@ import { feedExcerpt } from './feed-item.ts';
 import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from './locale.ts';
 import { DEFAULT_TAXONOMY_BASES, taxonomyBasesOrDefault, taxonomyRedirectsOf } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
+import { handSyndicationOf } from '../webmention/syndication.ts';
 
 /** Where the site-wide data file lives, relative to the content directory. */
 export const SITE_DATA_FILE = '_data/site.json';
@@ -145,9 +150,9 @@ export interface DocumentContext {
   /** Display title. Empty for an untitled post. */
   title: string;
   /**
-   * `reply`, `note` or `article`, discovered from the front matter, the title
-   * and the body (Post Type Discovery) on every render rather than read from
-   * the file.
+   * `repost`, `like`, `reply`, `photo`, `bookmark`, `note` or `article`,
+   * discovered from the front matter, the title and the body (Post Type
+   * Discovery) on every render rather than read from the file.
    */
   postType: PostType;
   /**
@@ -158,6 +163,12 @@ export interface DocumentContext {
   named: boolean;
   /** The URL a reply answers, present only on a reply. */
   inReplyTo?: string | undefined;
+  /**
+   * What the post reposts, likes or bookmarks (TASK-169): each valid
+   * `repost-of`, `like-of` and `bookmark-of`, as its property and its URL, in
+   * that order. Empty for a post that cites nothing.
+   */
+  citations: Citation[];
   /**
    * The language the document is written in, as a canonical BCP 47 tag, when
    * its front matter names one (TASK-154). A theme marks the article with it
@@ -202,8 +213,34 @@ export interface DocumentContext {
    * asks `{% if enclosure %}`.
    */
   enclosure?: EnclosureContext | undefined;
+  /**
+   * The post's photos (TASK-166), in the order its `photo` front matter lists
+   * them, over the raw value. Empty when it has none.
+   */
+  photos: PhotoContext[];
+  /**
+   * The post's copies elsewhere, each printed as `u-syndication` (TASK-155):
+   * the URLs its `syndication` front matter lists by hand, and on a post's own
+   * page the copies its syndication targets answered with. Over the raw front
+   * matter value, so a theme always reads this shape. Empty when there are none.
+   */
+  syndication: SyndicationLink[];
   /** Everything else from the front matter, including unmodelled keys. */
   [key: string]: unknown;
+}
+
+/** One copy of a post elsewhere: its URL, and the host a link to it says. */
+export interface SyndicationLink {
+  url: string;
+  label: string;
+}
+
+/** Copies as a theme links them, each URL once. */
+export function syndicationLinks(urls: readonly string[]): SyndicationLink[] {
+  return [...new Set(urls)].map((url) => ({
+    url,
+    label: new URL(url).hostname.replace(/^www\./, ''),
+  }));
 }
 
 /** A post's recording as a theme plays it. See {@link DocumentContext.enclosure}. */
@@ -211,6 +248,20 @@ export interface EnclosureContext extends Omit<Enclosure, 'transcript'> {
   /** The element that plays it, the same answer the fediverse's attachment type gives. */
   player: 'audio' | 'video';
   transcript?: (Transcript & { captions: boolean }) | undefined;
+}
+
+/** One of a post's photos as a theme prints it. See {@link DocumentContext.photos}. */
+export interface PhotoContext {
+  /** As the front matter wrote it: an upload's site-relative URL, or a web address. */
+  url: string;
+  /** Its alt text: the post's own, else the media library's (TASK-141). Empty when nobody said. */
+  alt: string;
+  /**
+   * `<img class="u-photo" src alt>`, the microformats2 photo of the h-entry,
+   * as a responsive `<picture>` when the upload's variants exist, the same
+   * rewrite `content` gets (decision-10).
+   */
+  html: string;
 }
 
 /**
@@ -262,6 +313,7 @@ export function documentContext(
   loading?: ImageLoading,
 ): DocumentContext {
   const date = toDate(document.date);
+  const photos = photoContexts(document, images, loading);
 
   return {
     ...document.extra,
@@ -277,14 +329,22 @@ export function documentContext(
     postType: postTypeOf(document),
     named: isNamed(document),
     ...optional('inReplyTo', replyTarget(document)),
+    citations: citationsOf(document.extra),
     // Over the raw front-matter value the spread above put here.
     lang: documentLanguage(document),
     enclosure: enclosureContext(document),
+    syndication: syndicationLinks(handSyndicationOf(document.extra)),
     label: postLabel(document),
     ...optional('date', date),
     tags: document.tags,
     categories: document.categories,
-    content: images === undefined ? document.html : siteImageMarkup(images, document.html, loading),
+    photos,
+    // The first photo opens a page that leads with this document, so the
+    // body's images are only first when there are no photos.
+    content:
+      images === undefined
+        ? document.html
+        : siteImageMarkup(images, document.html, photos.length > 0 ? {} : loading),
     // The plain-text summary, taken off the document rather than off the
     // markup above: an excerpt is text, and the `<picture>` a site's image
     // config puts in the HTML is not something to cut words out of.
@@ -483,6 +543,33 @@ function toDate(value: string | undefined): Date | undefined {
 
 function optional<K extends string, V>(key: K, value: V | undefined): Record<K, V> | object {
   return value === undefined ? {} : ({ [key]: value } as Record<K, V>);
+}
+
+function photoContexts(
+  document: Document,
+  images: ImageConfig | undefined,
+  loading: ImageLoading | undefined,
+): PhotoContext[] {
+  const photos = photosOf(document.extra);
+  if (photos.length === 0) return [];
+  const library = images === undefined ? new Map() : readAltTexts(images.contentDir);
+  return photos.map((photo, index) => {
+    const alt = photoAlt(photo, library) ?? '';
+    const tag = `<img class="u-photo" src="${escapeAttribute(photo.url)}" alt="${escapeAttribute(alt)}">`;
+    const html =
+      images === undefined
+        ? tag
+        : siteImageMarkup(images, tag, { lead: index === 0 && loading?.lead === true });
+    return { url: photo.url, alt, html };
+  });
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
 }
 
 function enclosureContext(document: Document): EnclosureContext | undefined {

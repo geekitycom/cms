@@ -39,6 +39,7 @@
   {#- A reply cites the post it answers, whose URL is also the link its
       webmention points a receiver at. -#}
   {% include "partials/reply-context.njk" %}
+  {% include "partials/citations.njk" %}
   <header class="post-header">
     {{ kicker.line(postType | capitalize, false, false, categories) }}
     <h1 class="p-name">{{ title }}</h1>
@@ -48,26 +49,33 @@
   </header>
   {% else %}
   <h1 class="screen-reader-text">
-    {{- "Reply" if postType == "reply" else "Note" }}
+    {{- postType | capitalize if postType in ["reply", "like", "repost", "bookmark"] else "Note" }}
     {%- if bioAuthor.name %} by {{ bioAuthor.name }}{% endif %}
     {%- if date %}, {{ date | date("readable", none, lang) }}{% endif -%}
   </h1>
   {{ kicker.line(postType | capitalize, false, false, categories) }}
   {% include "partials/reply-context.njk" %}
+  {% include "partials/citations.njk" %}
   {% endif %}
 
   {% if enclosure %}
   {% include "partials/recording.njk" %}
   {% endif %}
 
+  {% if photos.length %}
+  {% include "partials/photos.njk" %}
+  {% endif %}
+
   <section class="e-content">
     {{ content | safe }}
     <p class="entry-meta">
-      {#- A post tagged `indienews` opens the line with the link that submits
-          it there, which is how IndieNews is told the post is for it. -#}
-      {%- if "indienews" in tags %}
-      <a class="u-category small" href="https://news.indieweb.org/en">#indienews</a>
-      {%- endif %}
+      {#- The line opens with a link to each syndication target the post
+          selects (TASK-155). It is inside the h-entry and marked
+          `u-syndication`, the markup IndieNews documents, and a target that
+          is sent a webmention checks the page for it. -#}
+      {%- for target in syndicateTo %}
+      <a class="u-syndication small" href="{{ target.url }}">{{ target.name }}</a>
+      {%- endfor %}
       {%- if date %}
       <a href="{{ entryUrl | url }}" class="u-url"><time class="small dt-published" datetime="{{ date | date("iso") }}">Published {{ date | date("readable", none, lang) }}</time></a>
       {%- endif %}
@@ -75,6 +83,11 @@
           a typo fixed an hour after publishing is not news. -#}
       {%- if updated and (not date or (updated | date("html")) != (date | date("html"))) %}
       {% if date %}<span aria-hidden="true">·</span> {% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date("readable", none, lang) }}</time>
+      {%- endif %}
+      {#- The post's copies elsewhere: those its targets answered with and
+          those its front matter lists by hand. -#}
+      {%- if syndication.length %}
+      {% if date or updated %} <span aria-hidden="true">·</span> {% endif %}<span class="small">Also on {% for copy in syndication %}<a class="u-syndication" href="{{ copy.url }}">{{ copy.label }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
       {%- endif -%}
     </p>
   </section>

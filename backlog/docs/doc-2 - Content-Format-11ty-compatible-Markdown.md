@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-23 19:29'
+updated_date: '2026-10-02 16:54'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -63,6 +63,8 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | `updated` | last modified date, a UTC instant, written on every admin save |
 | `author` | the username of a user; see below |
 | `in-reply-to` | the URL of the post this one answers, under its microformats2 name. An http or https URL makes the post a reply (Post Type Discovery, TASK-121): the theme cites it as an embedded `u-in-reply-to h-cite` filled in from `_data/replyContexts.json` (TASK-123, decision-19), the ActivityStreams object carries it as `inReplyTo`, and publishing sends it a webmention. Any other value is kept in the file, logged as a warning when the file is indexed, and ignored; the admin editor refuses to save one |
+| `photo` | the post's photos (TASK-166), a list in Micropub's name. Each entry is `url`, an upload's `/uploads/…` path or an http or https URL, and an optional `alt`; a bare URL string reads as an entry without `alt`. An entry with no `alt` takes the media library's alt text for that upload (TASK-141), so a library image is described once. The theme prints each as an `img.u-photo` in the h-entry, the ActivityStreams object attaches each as an `Image` named by its alt text, and the JSON-LD lists each as an `ImageObject`. A post with a photo is a photo post under Post Type Discovery unless it is a reply, which comes first. An entry whose `url` is neither is dropped when read; the admin editor refuses to save one, and refuses an upload that is not an image in the library |
+| `like-of`, `repost-of`, `bookmark-of` | the URL a post likes, reposts or bookmarks (TASK-169), each under its microformats2 name, one URL each; a list of one reads as that URL. An http or https URL makes the post a like, a repost or a bookmark under Post Type Discovery, in the order repost, like, reply, photo, bookmark: the spec's order, with bookmark, which the spec leaves to note and article, just ahead of them. The theme cites each as an embedded `u-like-of`, `u-repost-of` or `u-bookmark-of` `h-cite`, and publishing sends the URL a webmention. A like or repost of a fediverse object federates as a `Like` or `Announce` of it; anything else federates as the note it is, with a line linking the page (decision-28). Any other value is ignored; the admin editor refuses to save one |
 | `activitypub.published` | timestamp of first delivery, a UTC instant. The only key the CMS writes here: it records that the post has been announced and when, which is what decides `Create` against `Update` |
 | `activitypub.id` | never written by the CMS. A post's ActivityStreams object id is its permalink (decision-13); this key is read, not minted, so a post migrated from elsewhere keeps the id its followers already hold — `https://example.com/?p=813` — and every `Update` and `Delete` names it |
 | `activitypub.type` | never written by the CMS. `Note` or `Article`, overriding the ActivityStreams type Post Type Discovery derives for the post (decision-17). Any other value is kept in the file, logged as a warning, and ignored. The `activitypub` block is everything about how a post federates, whether the author set it or the CMS wrote it back, and a save never rewrites what the author set |
@@ -117,6 +119,28 @@ Feeds, the sitemap and the ActivityStreams objects emit instants and are not aff
 ## Drafts and status
 
 `draft: true` is the only status flag. There is no scheduled publishing in phase one; a future date with `draft: false` is simply published with that date, which matches 11ty. Trashing a post moves the file to `content/_trash/` (an underscore directory that Eleventy ignores) so it can be restored.
+
+## Micropub
+
+A post created over Micropub (TASK-164) is written by the editor's own write path, so its file is the one the editor would write for the same fields. decision-27 records why. Each property fills one editor field:
+
+| Micropub property | Front matter |
+| --- | --- |
+| `name` | `title` |
+| `content`, plain text | the body, as the Markdown it is |
+| `content`, `{ "html": "…" }` | the body, as the HTML it is |
+| `summary` | `description` |
+| `category`, each value | `tags` |
+| `in-reply-to` | `in-reply-to` |
+| `like-of`, `repost-of`, `bookmark-of` | the key of the same name |
+| `published` | `date`, as a UTC instant; now when it is missing |
+| `post-status: draft` | `draft: true`; `published`, or none, is `draft: false` |
+| `mp-slug` | the slug, in the file name and the permalink |
+| `photo`, each value | an entry in `photo`: a URL, or `{ "value": "…", "alt": "…" }` with its `alt`. A URL into the site's own uploads is written as its `/uploads/…` path. A file part of a multipart create is stored in the media library as the media endpoint stores one, and its path written; it is taken back out if the post is refused |
+
+The token's user is `author`. Only `h-entry` is created. Any other type or property, a second value where one is expected, or a value that is not text is refused by name and nothing is written.
+
+An update (TASK-167) reads the same table backwards: `q=source` answers a post's front matter as those properties, with an upload's path as its absolute URL, and `action=update` applies `replace`, `add` and `delete` to them, fills only the editor fields the named properties own, and leaves every other key as it was. `mp-slug` and any property outside the table are refused, so an update moves a URL only where an editor save with the same date would, which is a draft nobody has been shown. `action=delete` moves the file into `content/_trash/` as the editor's Move to trash does, and `action=undelete` moves it back. A post whose `author` is another user is refused.
 
 ## Markdown dialect
 

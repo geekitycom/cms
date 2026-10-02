@@ -35,6 +35,7 @@ import { mountNavigationScreen } from './navigation.ts';
 import { mountPreview } from './preview.ts';
 import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
 import { mountSettings } from './settings-pages.ts';
+import { mountSyndicationTargetsScreen } from './syndication-targets.ts';
 import {
   ADMIN_PREFIX,
   clearSessionCookie,
@@ -339,6 +340,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // The terms themselves: what is in use, and the three things — rename,
   // merge, delete — that rewrite every file carrying one.
   for (const kind of TAXONOMY_KINDS) mountTaxonomyScreens(app, { kind, render });
+
+  // Where a post can be sent: content/_data/syndicationTargets.json itself,
+  // read and written the way the settings are (TASK-218).
+  mountSyndicationTargetsScreen(app, { render });
 
   // The two endpoints the editor talks to rather than navigates to. Both are
   // inside the guard, so both need the session's CSRF token like every other

@@ -1,0 +1,17 @@
+{#
+  What a post reposts, likes or bookmarks (TASK-169), cited the way a reply
+  cites what it answers: each one an embedded `h-cite` under its own mf2
+  property, `u-repost-of`, `u-like-of` or `u-bookmark-of`, that always carries
+  the target's URL, so a parser reads what the post cites and the page its
+  webmention names links to it.
+
+  Drawn as the same citation block as `reply-context.njk` (doc-9). An entry
+  includes it with `citations` on the context, a list of `{ property, url }`;
+  a feed sets it from the entry it is printing.
+#}
+{% set citationVerbs = { "repost-of": "Reposted", "like-of": "Liked", "bookmark-of": "Bookmarked" } %}
+{% for citation in citations %}
+<div class="reply-context cite u-{{ citation.property }} h-cite">
+  <p class="cite-line small">{{ citationVerbs[citation.property] }} <a class="u-url" href="{{ citation.url }}">{{ citation.url }}</a></p>
+</div>
+{% endfor %}

@@ -64,6 +64,28 @@
       </div>
 
       {% if kind.type == "post" %}
+        <fieldset class="admin-editor-enclosure admin-editor-photos">
+          <legend>Photos</legend>
+          <p class="admin-hint">
+            Each is an image in the media library or an address starting https://. Leave the alt text
+            empty to use the media library’s. Empty an address to remove that photo.
+          </p>
+          {% for row in photoRows %}
+            {% set n = loop.index0 %}
+            <fieldset class="admin-editor-alternate">
+              <legend>{% if row.url %}Photo {{ loop.index }}{% else %}Add a photo{% endif %}</legend>
+              <label for="editor-photo-url-{{ n }}">Address</label>
+              <input id="editor-photo-url-{{ n }}" name="{{ photoFields.url }}{{ n }}" type="text" value="{{ row.url }}" list="editor-photo-uploads" autocomplete="off" />
+              <label for="editor-photo-alt-{{ n }}">Alt text</label>
+              <input id="editor-photo-alt-{{ n }}" name="{{ photoFields.alt }}{{ n }}" type="text" value="{{ row.alt }}"{% if row.libraryAlt %} placeholder="{{ row.libraryAlt }}"{% endif %} />
+            </fieldset>
+          {% endfor %}
+          <datalist id="editor-photo-uploads">
+            {% for url in photoChoices %}
+              <option value="{{ url }}"></option>
+            {% endfor %}
+          </datalist>
+        </fieldset>
         <fieldset class="admin-editor-enclosure">
           <legend>Recording</legend>
 
@@ -167,6 +189,16 @@
         <label for="editor-in-reply-to">In reply to</label>
         <input id="editor-in-reply-to" name="in-reply-to" type="url" value="{{ form.inReplyTo }}" />
         <p class="admin-hint">The address of the post this one answers. Leave it empty for a post that answers nobody.</p>
+
+        {#- The mf2 `like-of`, `repost-of` and `bookmark-of` (TASK-169): each
+            cites a page the way a reply does, and sends it a webmention. -#}
+        <label for="editor-like-of">Like of</label>
+        <input id="editor-like-of" name="like-of" type="url" value="{{ form.likeOf }}" />
+        <label for="editor-repost-of">Repost of</label>
+        <input id="editor-repost-of" name="repost-of" type="url" value="{{ form.repostOf }}" />
+        <label for="editor-bookmark-of">Bookmark of</label>
+        <input id="editor-bookmark-of" name="bookmark-of" type="url" value="{{ form.bookmarkOf }}" />
+        <p class="admin-hint">The address of a post this one likes, reposts or bookmarks. Leave them empty for a post that cites nothing.</p>
       {% endif %}
 
       <label for="editor-description">Description</label>
@@ -208,6 +240,25 @@
           Writes <code>pinned:</code> and the moment you pinned it into the front matter. Pinned posts
           show first on your fediverse profile, newest pin first, up to five.
         </p>
+      {% endif %}
+
+      {% if kind.type == "post" and syndicationTargets.length %}
+        {# TASK-155: the targets content/_data/syndicationTargets.json declares.
+           A target whose tag the post carries is selected without a tick. #}
+        <fieldset class="admin-editor-syndication">
+          <legend>Syndicate to</legend>
+          {% for target in syndicationTargets %}
+            <p class="admin-check">
+              <input id="editor-{{ target.field }}" name="{{ target.field }}" type="checkbox" value="1"{% if target.checked %} checked{% endif %} />
+              <label for="editor-{{ target.field }}">{{ target.name }}</label>
+            </p>
+          {% endfor %}
+          <p class="admin-hint">
+            Writes <code>syndicate-to:</code> into the front matter. The post links to each target and
+            sends it a webmention when it is published or updated. A post tagged with a target’s tag is
+            sent there without a tick.
+          </p>
+        </fieldset>
       {% endif %}
 
       {# What this document says about comments, if anything. Three answers

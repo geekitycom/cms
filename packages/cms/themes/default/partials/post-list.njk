@@ -39,6 +39,13 @@
     {% set lang = post.lang %}
     {% include "partials/reply-context.njk" %}
     {% endif %}
+    {#- What it reposts, likes or bookmarks, from the partial an entry uses. -#}
+    {% set citations = post.citations %}
+    {% include "partials/citations.njk" %}
+    {% if post.photos.length %}
+    {% set photos = post.photos %}
+    {% include "partials/photos.njk" %}
+    {% endif %}
     {% if not post.named %}
     <div class="feed-excerpt e-content">{{ post.content | safe }}</div>
     {% else %}

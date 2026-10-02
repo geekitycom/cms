@@ -1,0 +1,10 @@
+{#
+  A post's photos (TASK-166), each `photo.html`: an `img.u-photo` with its alt
+  text, so a microformats parser finds every photo on the h-entry, served as a
+  responsive picture when the upload has variants.
+#}
+<div class="post-photos">
+  {% for photo in photos %}
+  <figure class="post-photo">{{ photo.html | safe }}</figure>
+  {% endfor %}
+</div>

@@ -56,6 +56,17 @@
     within the 110 characters Google reads, cut where a word ends (TASK-201).
     A page keeps its title. -#}
 {% set headline = title or (label | truncate(109, false, "…") if type == "post" else "") %}
+{#- A photo post's image is its photos, each an ImageObject captioned with
+    its alt text, in order (TASK-166); anything else's is the share image. -#}
+{% set entryImage = metaImage | absoluteUrl if metaImage else "" %}
+{% if photos and photos.length %}
+{% set entryImage = [] %}
+{% for photo in photos %}
+{% set imageObject = { "@type": "ImageObject", "url": photo.url | absoluteUrl } %}
+{% if photo.alt %}{% set imageObject = { "@type": "ImageObject", "url": photo.url | absoluteUrl, "caption": photo.alt } %}{% endif %}
+{% set _ = entryImage.push(imageObject) %}
+{% endfor %}
+{% endif %}
 {% set nodes = [] %}
 {% set website %}
     {
@@ -126,7 +137,7 @@
       {{- member("datePublished", date | date("iso") if date else "") }}
       {{- member("dateModified", (updated or date) | date("iso") if (updated or date) else "") }}
       {{- member("description", metaDescription) }}
-      {{- member("image", metaImage | absoluteUrl if metaImage else "") }}
+      {{- member("image", entryImage) }}
       {{- member("author", person) }}
       {{- member("publisher", publisher) }}
       {{- member("license", license.url if license else "") }}

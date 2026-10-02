@@ -1,4 +1,7 @@
+import { citationsOf } from './citation.ts';
+import type { CitationProperty } from './citation.ts';
 import type { Document } from './document.ts';
+import { photosOf } from './photo.ts';
 import { htmlToText } from './search.ts';
 
 /**
@@ -6,14 +9,21 @@ import { htmlToText } from './search.ts';
  * ptd.spec.indieweb.org): what kind of post a post is, inferred from its own
  * properties rather than declared by its author.
  *
- * Reply and the note/article tail of the algorithm are here. The spec's full
- * order is event, rsvp, repost, like, reply, video, photo, then the tail, and
- * the order matters because the first branch that matches wins: a reply with
- * a photo is a reply. Each new type is a check in {@link discoverPostType} in
- * that order. granary's `mf2util` diverges from the spec, putting reply ahead
- * of repost and like and having no video branch; this follows the spec.
+ * Repost, like, reply, photo and the note/article tail of the algorithm are
+ * here. The spec's full order is event, rsvp, repost, like, reply, video,
+ * photo, then the tail, and the order matters because the first branch that
+ * matches wins: a reply with a photo is a reply. Each new type is a check in
+ * {@link discoverPostType} in that order. granary's `mf2util` diverges from
+ * the spec, putting reply ahead of repost and like and having no video
+ * branch; this follows the spec.
+ *
+ * Bookmark is an IndieWeb extension the spec lists only as under
+ * consideration, so the spec types a bookmark as a note or an article. It
+ * sits after photo, just ahead of the tail (TASK-169): every post the spec
+ * types as something else keeps that type, and a bookmark claims only what
+ * the spec would have called a note or an article.
  */
-export type PostType = 'reply' | 'note' | 'article';
+export type PostType = 'repost' | 'like' | 'reply' | 'photo' | 'bookmark' | 'note' | 'article';
 
 /** The mf2 properties the algorithm reads, each as its plain-text value. */
 export interface PostProperties {
@@ -21,11 +31,20 @@ export interface PostProperties {
   content?: string | undefined;
   summary?: string | undefined;
   'in-reply-to'?: string | undefined;
+  /** Each photo's address. */
+  photo?: readonly string[] | undefined;
+  'repost-of'?: string | undefined;
+  'like-of'?: string | undefined;
+  'bookmark-of'?: string | undefined;
 }
 
 /** The type of a post with these properties. */
 export function discoverPostType(properties: PostProperties): PostType {
+  if (validUrl(properties['repost-of']) !== undefined) return 'repost';
+  if (validUrl(properties['like-of']) !== undefined) return 'like';
   if (validUrl(properties['in-reply-to']) !== undefined) return 'reply';
+  if ((properties.photo ?? []).length > 0) return 'photo';
+  if (validUrl(properties['bookmark-of']) !== undefined) return 'bookmark';
   return isNamedPost(properties) ? 'article' : 'note';
 }
 
@@ -55,7 +74,7 @@ export function replyTarget(document: Pick<Document, 'inReplyTo'>): string | und
 }
 
 /** The parts of a document Post Type Discovery reads. */
-type PostDocument = Pick<Document, 'title' | 'html' | 'description' | 'inReplyTo'>;
+type PostDocument = Pick<Document, 'title' | 'html' | 'description' | 'inReplyTo' | 'extra'>;
 
 function propertiesOf(document: PostDocument): PostProperties {
   return {
@@ -63,6 +82,15 @@ function propertiesOf(document: PostDocument): PostProperties {
     content: htmlToText(document.html),
     summary: document.description,
     'in-reply-to': document.inReplyTo,
+    // Only addresses {@link photosOf} accepts, the spec's "valid URL" for a
+    // file whose uploads are site-relative.
+    photo: photosOf(document.extra).map((photo) => photo.url),
+    ...Object.fromEntries(
+      citationsOf(document.extra).map(({ property, url }): [CitationProperty, string] => [
+        property,
+        url,
+      ]),
+    ),
   };
 }
 

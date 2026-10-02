@@ -3,13 +3,22 @@ import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
 
+import { CITATION_PROPERTIES, citationText } from '../content/citation.ts';
+import type { CitationProperty } from '../content/citation.ts';
 import type { Document, DocumentContent, DocumentType } from '../content/document.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
 import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
-import { ENCLOSURE_FRONT_MATTER_KEY, enclosureOf, TRANSCRIPT_TYPES } from '../content/enclosure.ts';
+import {
+  ENCLOSURE_FRONT_MATTER_KEY,
+  enclosureOf,
+  isWebUrl,
+  TRANSCRIPT_TYPES,
+} from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
+import { PHOTO_FRONT_MATTER_KEY, photoFrontMatter } from '../content/photo.ts';
+import type { Photo } from '../content/photo.ts';
 import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
 import { scheduledFor } from '../content/schedule.ts';
 import { htmlToText } from '../content/search.ts';
@@ -24,8 +33,10 @@ import {
   zoneLabel,
 } from '../content/time.ts';
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
+import type { ResolvedConfig } from '../config.ts';
+import type { DocumentChange } from '../content/sync.ts';
 import type { GeekityEnv } from '../env.ts';
-import { readAltTexts, undescribedImages } from '../images/alt-text.ts';
+import { readAltTexts, undescribedImages, undescribedPhotos } from '../images/alt-text.ts';
 import type { UndescribedImage } from '../images/alt-text.ts';
 import { isPublicDocument } from '../web/documents.ts';
 import { LANG_FRONT_MATTER_KEY } from '../web/locale.ts';
@@ -53,6 +64,21 @@ import {
   resolveEnclosure,
 } from './enclosure-field.ts';
 import type { EnclosureForm } from './enclosure-field.ts';
+import {
+  PHOTO_FIELDS,
+  photoChoices,
+  photoRows,
+  photoRowViews,
+  readPhotoForm,
+  resolvePhotos,
+} from './photo-field.ts';
+import type { PhotoRow } from './photo-field.ts';
+import {
+  SYNDICATE_TO_FRONT_MATTER_KEY,
+  syndicateToOf,
+  syndicationTargetsReader,
+} from '../webmention/syndication.ts';
+import type { SyndicationTarget } from '../webmention/syndication.ts';
 
 /**
  * Everything that differs between the posts screens and the pages screens.
@@ -314,14 +340,9 @@ interface SaveFromFormOptions {
 }
 
 /**
- * Write what the editor submitted.
- *
- * The order matters: the form is read and checked before anything is touched,
- * the on-disk file is re-hashed and compared with the hash the form loaded with
- * (doc-1's conflict rule), and only then is a file written. A save that is
- * refused — a page with no title, an unreadable date, a stale hash, a URL
- * another document already holds — leaves the content directory exactly as it
- * was.
+ * Write what the editor submitted through {@link writeDocument}, and answer
+ * with the editor again: the refusal on the form, the conflict side by side,
+ * or the saved document under a flash.
  */
 async function saveFromForm(
   c: Context<GeekityEnv>,
@@ -341,6 +362,7 @@ async function saveFromForm(
     description: text(body['description']).trim(),
     author: text(body['author']).trim(),
     inReplyTo: text(body['in-reply-to']).trim(),
+    ...citationFields((property) => (kind.type === 'post' ? text(body[property]).trim() : '')),
     lang: text(body['lang']).trim(),
     draft: body['draft'] !== undefined,
     exclude: body['exclude'] !== undefined,
@@ -348,6 +370,13 @@ async function saveFromForm(
     pinned: kind.type === 'post' && body['pinned'] !== undefined,
     comments: commentSetting(text(body['comments'])),
     enclosure: kind.type === 'post' ? readEnclosureForm(body) : BLANK_ENCLOSURE_FORM,
+    photos: kind.type === 'post' ? readPhotoForm(body) : [],
+    syndicateTo:
+      kind.type === 'post'
+        ? syndicationTargetsReader(contentDir)()
+            .filter((target) => body[syndicateToField(target)] !== undefined)
+            .map((target) => target.id)
+        : [],
     body: normalizeBody(text(body['body'])),
     hash: text(body['hash']),
   };
@@ -368,63 +397,175 @@ async function saveFromForm(
     });
   }
 
+  const written = await writeDocument(
+    {
+      store,
+      config: c.var.config,
+      announce: c.var.announce,
+      writer: currentUsername(c),
+    },
+    { kind, document, form, draft },
+  );
+  if (written.outcome === 'refused') return refuse(written.message);
+  if (written.outcome === 'conflict') {
+    return renderConflict(c, {
+      kind,
+      render,
+      document: written.document,
+      form: { ...form, draft },
+      media: written.media,
+      conflict: written.conflict,
+    });
+  }
+  const { saved, undescribed } = written;
+
+  flash(c, 'notice', savedMessage(kind, document, saved, store.now()));
+  if (undescribed.length > 0) flash(c, 'warning', missingAltText(undescribed));
+  return c.redirect(editorPath(kind, saved.slug), 303);
+}
+
+/** What a write needs from the site, as plain values rather than a request. */
+export interface DocumentSite {
+  readonly store: ContentStore;
+  readonly config: ResolvedConfig;
+  readonly announce: (change: DocumentChange) => Promise<void>;
+  /** The username of whoever is writing: the author a new document starts on. */
+  readonly writer: string | undefined;
+}
+
+/** What {@link writeDocument} is asked to write. */
+export interface DocumentWrite {
+  readonly kind: DocumentKind;
+  /** The document being replaced, or `undefined` when one is being made. */
+  readonly document: Document | undefined;
+  readonly form: EditorForm;
+  /** Whether it is saved as a draft, which the editor's buttons decide. */
+  readonly draft: boolean;
+}
+
+/** What came of a {@link writeDocument}. */
+export type WriteOutcome =
+  | {
+      readonly outcome: 'saved';
+      readonly saved: Document;
+      /** Images published without alt text, which the editor warns about. */
+      readonly undescribed: readonly UndescribedImage[];
+    }
+  | { readonly outcome: 'refused'; readonly message: string }
+  | {
+      readonly outcome: 'conflict';
+      /** The document as the form loaded it, which only an edit has. */
+      readonly document: Document;
+      /** The recording and the photos the form resolved to. */
+      readonly media: ResolvedMedia;
+      readonly conflict: Conflict;
+    };
+
+/** The post's recording and photos, as a form resolved them against the media library. */
+interface ResolvedMedia {
+  readonly recording: Enclosure | undefined;
+  readonly photos: readonly Photo[];
+}
+
+/**
+ * The write path behind the editor and Micropub (TASK-164): one form in, one
+ * file out, announced to every subscriber.
+ *
+ * The order matters: the form is checked before anything is touched, the
+ * on-disk file is re-hashed and compared with the hash the form loaded with
+ * (doc-1's conflict rule), and only then is a file written. A write that is
+ * refused leaves the content directory exactly as it was.
+ */
+export async function writeDocument(
+  site: DocumentSite,
+  write: DocumentWrite,
+): Promise<WriteOutcome> {
+  const { store, config, writer } = site;
+  const { kind, document, form, draft } = write;
+  const contentDir = config.contentDir;
+
+  function refused(message: string): WriteOutcome {
+    return { outcome: 'refused', message };
+  }
+
   // A post with no title is a note; a page is always named.
   if (form.title === '' && kind.type === 'page') {
-    return refuse(`A ${kind.singular} needs a title.`);
+    return refused(`A ${kind.singular} needs a title.`);
   }
 
   // A post is a reply only when the target is a URL (Post Type Discovery), so
   // anything else would be saved as a reply that is not one.
   if (kind.type === 'post' && form.inReplyTo !== '' && replyTarget(form) === undefined) {
-    return refuse('In reply to has to be a web address, like https://example.com/a-post/.');
+    return refused('In reply to has to be a web address, like https://example.com/a-post/.');
+  }
+
+  if (kind.type === 'post') {
+    for (const property of CITATION_PROPERTIES) {
+      const cited = form[CITATION_FIELDS[property]];
+      if (cited !== '' && !isWebUrl(cited)) {
+        return refused(
+          `${CITATION_LABELS[property]} has to be a web address, like https://example.com/a-post/.`,
+        );
+      }
+    }
   }
 
   if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
-    return refuse('That is not a language tag, such as en, fr or pt-BR.');
+    return refused('That is not a language tag, such as en, fr or pt-BR.');
   }
 
-  let recording: Enclosure | undefined;
+  let media: ResolvedMedia = { recording: undefined, photos: [] };
   if (kind.type === 'post') {
     const resolved = resolveEnclosure(
       form.enclosure,
       document === undefined ? undefined : enclosureOf(document.extra),
       contentDir,
     );
-    if ('error' in resolved) return refuse(resolved.error);
-    recording = resolved.enclosure;
+    if ('error' in resolved) return refused(resolved.error);
+    const photos = resolvePhotos(form.photos, contentDir);
+    if ('error' in photos) return refused(photos.error);
+    media = { recording: resolved.enclosure, photos: photos.photos };
   }
 
   // TASK-207: a pin is new when the file does not carry one yet, and only a
   // new one can take an author past Mastodon's limit.
   if (form.pinned && (document === undefined || pinnedAt(document) === undefined)) {
-    const users = listUsers(c.var.config.dataDir);
-    const author = userForAuthor(users, chosenAuthor(c, form.author, document) ?? '');
+    const users = listUsers(config.dataDir);
+    const author = userForAuthor(
+      users,
+      chosenAuthor(config.dataDir, form.author, document, writer) ?? '',
+    );
     const names = author === undefined ? [] : authorNames(users, author);
     if (store.listPinnedByAuthor(names).length >= PINNED_POST_LIMIT) {
-      return refuse(`You can pin up to ${String(PINNED_POST_LIMIT)} posts. Unpin one first.`);
+      return refused(`You can pin up to ${String(PINNED_POST_LIMIT)} posts. Unpin one first.`);
     }
   }
 
   // TASK-141: an image nobody described is a problem to fix before readers
   // meet it. A draft is not checked, since nobody meets a draft.
+  // A photo counts too, unless the media library describes it (TASK-166).
+  const library = readAltTexts(contentDir);
   const undescribed = draft
     ? []
-    : undescribedImages(renderMarkdown(form.body), readAltTexts(contentDir));
-  if (undescribed.length > 0 && c.var.config.requireAltText) {
-    return refuse(`This site publishes no image without alt text. ${missingAltText(undescribed)}`);
+    : [
+        ...undescribedPhotos(media.photos, library),
+        ...undescribedImages(renderMarkdown(form.body), library),
+      ];
+  if (undescribed.length > 0 && config.requireAltText) {
+    return refused(`This site publishes no image without alt text. ${missingAltText(undescribed)}`);
   }
 
-  const timezone = siteTimezone(c);
+  const timezone = readSiteSettings(contentDir).timezone;
 
   // decision-11: what the file gets is a UTC instant, and an offset-less field
   // is the site's own wall clock rather than the server's.
   const typed = kind.dated ? (form.date === '' ? store.now().toISOString() : form.date) : undefined;
   if (typed !== undefined && !/^\d{4}-\d{2}-\d{2}/.test(typed)) {
-    return refuse('A date has to start with a year, a month and a day, like 2026-03-04.');
+    return refused('A date has to start with a year, a month and a day, like 2026-03-04.');
   }
   const date = typed === undefined ? undefined : toUtcInstant(typed, timezone);
   if (typed !== undefined && date === undefined) {
-    return refuse('That date is not one anybody can read. Try 2026-03-04 09:00.');
+    return refused('That date is not one anybody can read. Try 2026-03-04 09:00.');
   }
 
   const slug =
@@ -472,19 +613,12 @@ async function saveFromForm(
   if (document !== undefined) {
     const conflict = await conflictWith(contentDir, document, form.hash);
     if (conflict !== undefined) {
-      return renderConflict(c, {
-        kind,
-        render,
-        document,
-        form: { ...form, draft },
-        recording,
-        conflict,
-      });
+      return { outcome: 'conflict', document, media, conflict };
     }
   }
 
   if (target !== document?.path && store.getByPath(target) !== undefined) {
-    return refuse(`Another ${kind.singular} already lives in ${target}.`);
+    return refused(`Another ${kind.singular} already lives in ${target}.`);
   }
 
   const content: DocumentContent = {
@@ -497,10 +631,17 @@ async function saveFromForm(
     categories: kind.categorised ? splitTags(form.categories) : [],
     draft,
     ...(form.description === '' ? {} : { description: form.description }),
-    ...optional('author', chosenAuthor(c, form.author, document)),
+    ...optional('author', chosenAuthor(config.dataDir, form.author, document, writer)),
     ...optional('inReplyTo', replyTo(kind, form, document)),
-    ...optional('activitypub', keptIdentity(document, promised, permalink, c.var.config.baseUrl)),
-    extra: resolveExtra(kind, document, form, store.now(), recording),
+    ...optional('activitypub', keptIdentity(document, promised, permalink, config.baseUrl)),
+    extra: resolveExtra(
+      kind,
+      document,
+      form,
+      store.now(),
+      media,
+      syndicationTargetsReader(contentDir)(),
+    ),
     body: form.body,
   };
 
@@ -515,7 +656,7 @@ async function saveFromForm(
   } catch (error) {
     // Nothing was written, so the row that was taken out of the way goes back.
     if (renamedFrom !== undefined) store.upsert(renamedFrom);
-    if (error instanceof DuplicatePermalinkError) return refuse(error.message);
+    if (error instanceof DuplicatePermalinkError) return refused(error.message);
     throw error;
   }
 
@@ -529,7 +670,7 @@ async function saveFromForm(
   // back to the file — the federation stamping `activitypub` into a post it
   // has just announced — has finished before the editor is reloaded with a
   // hash that would otherwise be one save behind.
-  await c.var.announce({
+  await site.announce({
     type: document === undefined ? 'created' : 'updated',
     path: saved.path,
     previous: document,
@@ -537,13 +678,11 @@ async function saveFromForm(
     origin: 'admin',
   });
 
-  flash(c, 'notice', savedMessage(kind, document, saved, store.now()));
-  if (undescribed.length > 0) flash(c, 'warning', missingAltText(undescribed));
-  return c.redirect(editorPath(kind, saved.slug), 303);
+  return { outcome: 'saved', saved, undescribed };
 }
 
 /** What a save says about the images it found with no alt text, naming each. */
-function missingAltText(images: UndescribedImage[]): string {
+function missingAltText(images: readonly UndescribedImage[]): string {
   const names = images.map((image) => image.name).join(', ');
   const count = images.length === 1 ? '1 image has' : `${String(images.length)} images have`;
   return (
@@ -775,15 +914,44 @@ function normalizePermalink(value: string): string | undefined {
 function resolveExtra(
   kind: DocumentKind,
   document: Document | undefined,
-  form: Pick<EditorForm, 'exclude' | 'comments' | 'contact' | 'lang' | 'pinned'>,
+  form: Pick<
+    EditorForm,
+    | 'exclude'
+    | 'comments'
+    | 'contact'
+    | 'lang'
+    | 'pinned'
+    | 'syndicateTo'
+    | (typeof CITATION_FIELDS)[CitationProperty]
+  >,
   now: Date,
-  recording: Enclosure | undefined,
+  media: ResolvedMedia,
+  declared: readonly SyndicationTarget[],
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
 
   if (kind.type === 'post') {
-    if (recording === undefined) delete extra[ENCLOSURE_FRONT_MATTER_KEY];
-    else extra[ENCLOSURE_FRONT_MATTER_KEY] = enclosureFrontMatter(recording);
+    if (media.recording === undefined) delete extra[ENCLOSURE_FRONT_MATTER_KEY];
+    else extra[ENCLOSURE_FRONT_MATTER_KEY] = enclosureFrontMatter(media.recording);
+    if (media.photos.length === 0) delete extra[PHOTO_FRONT_MATTER_KEY];
+    else extra[PHOTO_FRONT_MATTER_KEY] = photoFrontMatter(media.photos);
+    for (const property of CITATION_PROPERTIES) {
+      const cited = form[CITATION_FIELDS[property]];
+      if (cited === '') delete extra[property];
+      else extra[property] = cited;
+    }
+  }
+
+  // The checkboxes speak for the targets the site declares (TASK-155). An id
+  // the file lists that names no declared target has no checkbox, so it is
+  // kept as written rather than lost to a save.
+  if (kind.type === 'post') {
+    const offered = new Set(declared.map((target) => target.id));
+    const kept = syndicateToOf(extra).filter((id) => !offered.has(id));
+    // A form loaded from the file (a Micropub update) already holds those ids.
+    const listed = [...new Set([...form.syndicateTo, ...kept])];
+    if (listed.length === 0) delete extra[SYNDICATE_TO_FRONT_MATTER_KEY];
+    else extra[SYNDICATE_TO_FRONT_MATTER_KEY] = listed;
   }
 
   // The moment a post was pinned is what orders the featured collection, so a
@@ -822,6 +990,11 @@ function resolveExtra(
   return extra;
 }
 
+/** The editor checkbox that selects one syndication target. */
+function syndicateToField(target: SyndicationTarget): string {
+  return `${SYNDICATE_TO_FRONT_MATTER_KEY}-${target.id}`;
+}
+
 /**
  * A comma-separated taxonomy field as a list, without the blanks and the
  * repeats. Tags and categories are both entered this way.
@@ -858,13 +1031,14 @@ function currentUsername(c: Context<GeekityEnv>): string | undefined {
  * save, and neither is a reason to reattribute somebody's post.
  */
 function chosenAuthor(
-  c: Context<GeekityEnv>,
+  dataDir: string,
   submitted: string,
   document: Document | undefined,
+  writer: string | undefined,
 ): string | undefined {
-  const named = userForAuthor(listUsers(c.var.config.dataDir), submitted);
+  const named = userForAuthor(listUsers(dataDir), submitted);
   if (named !== undefined) return named.username;
-  return document?.author ?? currentUsername(c);
+  return document?.author ?? writer;
 }
 
 /** One entry of the editor's Author select. */
@@ -965,8 +1139,8 @@ interface RenderConflictOptions {
   render: AdminRender;
   document: Document;
   form: EditorForm;
-  /** The recording the submitted form resolved to. */
-  recording: Enclosure | undefined;
+  /** The recording and the photos the submitted form resolved to. */
+  media: ResolvedMedia;
   conflict: Conflict;
 }
 
@@ -991,7 +1165,14 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     ...optional('author', document.author),
     ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', document.activitypub),
-    extra: resolveExtra(kind, document, form, c.var.store.now(), options.recording),
+    extra: resolveExtra(
+      kind,
+      document,
+      form,
+      c.var.store.now(),
+      options.media,
+      syndicationTargetsReader(c.var.config.contentDir)(),
+    ),
     body: form.body,
   });
 
@@ -1023,7 +1204,53 @@ interface MoveDocumentOptions {
 }
 
 /**
- * Move a document into `content/_trash/` or back out of it.
+ * Move a document into the trash or back out of it from the editor, and go
+ * back where the form came from.
+ */
+async function moveDocument(
+  c: Context<GeekityEnv>,
+  options: MoveDocumentOptions,
+): Promise<Response> {
+  const { kind, document, action } = options;
+
+  const trashed = isTrashedPath(document.path);
+  if (action === 'trash' && trashed) return backTo(c, options, `It is already in the trash.`);
+  if (action === 'restore' && !trashed) return backTo(c, options, `It is not in the trash.`);
+
+  const moved = await moveDocumentFile(
+    { store: c.var.store, contentDir: c.var.config.contentDir, announce: c.var.announce },
+    document,
+    action,
+  );
+  if (moved === undefined) {
+    return backTo(c, options, `Could not move ${document.path}. Is the file still there?`);
+  }
+
+  const message =
+    action === 'trash'
+      ? `Moved to the trash: ${postLabel(document)}`
+      : `Restored: ${postLabel(document)}`;
+  flash(c, 'notice', message);
+
+  return c.redirect(
+    returnPath(options.returnTo) ??
+      (action === 'trash' ? kind.basePath : editorPath(kind, document.slug)),
+    303,
+  );
+}
+
+/** What moving a document's file needs from the site. */
+export interface MoveSite {
+  readonly store: ContentStore;
+  readonly contentDir: string;
+  readonly announce: (change: DocumentChange) => Promise<void>;
+}
+
+/**
+ * Move a document into `content/_trash/` or back out of it, the move behind
+ * the editor's trash and restore and Micropub's delete and undelete
+ * (TASK-167). The document is the moved one, or `undefined` when its file
+ * could not be moved.
  *
  * The trash mirrors the content tree — `posts/2026-03-04-x.md` becomes
  * `_trash/posts/2026-03-04-x.md` — so restoring is the same move backwards and
@@ -1031,18 +1258,12 @@ interface MoveDocumentOptions {
  * landed rather than waiting for the watcher, so the public site stops or
  * starts serving the document with this request (doc-1).
  */
-async function moveDocument(
-  c: Context<GeekityEnv>,
-  options: MoveDocumentOptions,
-): Promise<Response> {
-  const { kind, document, action } = options;
-  const store = c.var.store;
-  const contentDir = c.var.config.contentDir;
-
-  const trashed = isTrashedPath(document.path);
-  if (action === 'trash' && trashed) return backTo(c, options, `It is already in the trash.`);
-  if (action === 'restore' && !trashed) return backTo(c, options, `It is not in the trash.`);
-
+export async function moveDocumentFile(
+  site: MoveSite,
+  document: Document,
+  action: 'trash' | 'restore',
+): Promise<Document | undefined> {
+  const { store, contentDir } = site;
   const target =
     action === 'trash'
       ? `${TRASH_DIRECTORY}/${document.path}`
@@ -1060,7 +1281,7 @@ async function moveDocument(
     await mkdir(path.dirname(to), { recursive: true });
     await rename(from, to);
   } catch {
-    return backTo(c, options, `Could not move ${document.path}. Is the file still there?`);
+    return undefined;
   }
 
   const moved = parseDocument(source, { path: target, type: document.type });
@@ -1069,25 +1290,14 @@ async function moveDocument(
 
   // Trashing takes a post off the public site and restoring puts it back, so
   // both are visibility changes a subscriber has to hear about.
-  await c.var.announce({
+  await site.announce({
     type: 'updated',
     path: target,
     previous: document,
     next: moved,
     origin: 'admin',
   });
-
-  const message =
-    action === 'trash'
-      ? `Moved to the trash: ${postLabel(document)}`
-      : `Restored: ${postLabel(document)}`;
-  flash(c, 'notice', message);
-
-  return c.redirect(
-    returnPath(options.returnTo) ??
-      (action === 'trash' ? kind.basePath : editorPath(kind, document.slug)),
-    303,
-  );
+  return moved;
 }
 
 /** Report a move that did not happen and go back where the form came from. */
@@ -1134,6 +1344,34 @@ function replyTo(
   return form.inReplyTo === '' ? undefined : form.inReplyTo;
 }
 
+/**
+ * The editor field each citing property fills (TASK-169). The form submits it
+ * under the property's own name, as `in-reply-to` is.
+ */
+export const CITATION_FIELDS = {
+  'repost-of': 'repostOf',
+  'like-of': 'likeOf',
+  'bookmark-of': 'bookmarkOf',
+} as const satisfies Record<CitationProperty, keyof EditorForm>;
+
+/** What the editor calls each citing field, which a refusal names. */
+const CITATION_LABELS: Readonly<Record<CitationProperty, string>> = {
+  'repost-of': 'Repost of',
+  'like-of': 'Like of',
+  'bookmark-of': 'Bookmark of',
+};
+
+/** The three citing fields, each filled from its property. */
+function citationFields(
+  value: (property: CitationProperty) => string,
+): Pick<EditorForm, (typeof CITATION_FIELDS)[CitationProperty]> {
+  return {
+    repostOf: value('repost-of'),
+    likeOf: value('like-of'),
+    bookmarkOf: value('bookmark-of'),
+  };
+}
+
 /** The editor's fields, as strings, which is what a form has. */
 export interface EditorForm {
   title: string;
@@ -1154,6 +1392,12 @@ export interface EditorForm {
   author: string;
   /** The post this one replies to, the mf2 `in-reply-to`. Posts only. */
   inReplyTo: string;
+  /** The post this one reposts, the mf2 `repost-of` (TASK-169). Posts only. */
+  repostOf: string;
+  /** The post this one likes, the mf2 `like-of` (TASK-169). Posts only. */
+  likeOf: string;
+  /** The page this one bookmarks, the mf2 `bookmark-of` (TASK-169). Posts only. */
+  bookmarkOf: string;
   /** The language it is written in, the `lang` key; empty for the site's. */
   lang: string;
   draft: boolean;
@@ -1174,6 +1418,10 @@ export interface EditorForm {
   comments: string;
   /** The post's recording (TASK-213). Posts only; blank on a page. */
   enclosure: EnclosureForm;
+  /** The post's photos (TASK-166), without the blank row the editor adds. Posts only. */
+  photos: PhotoRow[];
+  /** The ids of the declared syndication targets it selects (TASK-155). Posts only. */
+  syndicateTo: string[];
   body: string;
   /** The hash of the file the form was filled in from; empty for a new one. */
   hash: string;
@@ -1204,6 +1452,7 @@ export function blankForm(
     // {@link authorChoices} is where the default is applied.
     author: '',
     inReplyTo: '',
+    ...citationFields(() => ''),
     lang: '',
     draft: false,
     exclude: false,
@@ -1211,6 +1460,8 @@ export function blankForm(
     pinned: false,
     comments: COMMENT_SETTINGS.site,
     enclosure: BLANK_ENCLOSURE_FORM,
+    photos: [],
+    syndicateTo: [],
     body: '',
     hash: '',
   };
@@ -1235,6 +1486,10 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     description: document.description ?? '',
     author: document.author ?? '',
     inReplyTo: document.inReplyTo ?? '',
+    // As the file spells it, so a save writes back what it read.
+    ...citationFields((property) =>
+      document.type === 'post' ? citationText(document.extra[property]) : '',
+    ),
     lang:
       typeof document.extra[LANG_FRONT_MATTER_KEY] === 'string'
         ? document.extra[LANG_FRONT_MATTER_KEY]
@@ -1245,6 +1500,8 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     pinned: pinnedAt(document) !== undefined,
     comments: commentSettingOf(document),
     enclosure: document.type === 'post' ? enclosureForm(document) : BLANK_ENCLOSURE_FORM,
+    photos: document.type === 'post' ? photoRows(document) : [],
+    syndicateTo: document.type === 'post' ? syndicateToOf(document.extra) : [],
     body: document.body,
     hash: document.hash,
   };
@@ -1318,6 +1575,15 @@ async function renderEditor(
           enclosureChoices: await enclosureChoices(c.var.config.contentDir, form.enclosure.url),
           transcriptTypes: TRANSCRIPT_TYPES,
           alternateRows: [...form.enclosure.alternates, BLANK_ALTERNATE_ROW],
+          photoFields: PHOTO_FIELDS,
+          photoRows: photoRowViews(form.photos, readAltTexts(c.var.config.contentDir)),
+          photoChoices: await photoChoices(c.var.config.contentDir),
+          // TASK-155: one checkbox per target the site declares.
+          syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
+            ...target,
+            field: syndicateToField(target),
+            checked: form.syndicateTo.includes(target.id),
+          })),
         }
       : {}),
     // Who this can be attributed to, and who it is attributed to now.

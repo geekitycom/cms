@@ -3,7 +3,7 @@ id: doc-7
 title: Webmentions
 type: specification
 created_date: '2026-09-04 23:08'
-updated_date: '2026-09-23 19:35'
+updated_date: '2026-10-02 17:01'
 ---
 # Webmentions
 
@@ -26,7 +26,15 @@ service with this site's name on it.
 
 1. **The links.** The post's `in-reply-to` when it is a reply, then every
    external `<a href>` in its rendered body, each named once, fragment dropped. A link back into the site is not one: the
-   conversation under a post is no place for a loop.
+   conversation under a post is no place for a loop. Then the URL of every
+   syndication target the post selects (TASK-155): the targets
+   `content/_data/syndicationTargets.json` declares that its `syndicate-to`
+   lists or whose tag it carries. The theme links to each inside the post's
+   `h-entry`, which is what the target checks for. A target's URL may hold
+   `{lang}`, filled with the post's `lang` or else the site's language, and a
+   target may list the `languages` it takes, so a post in another language
+   neither links to it nor tells it (TASK-156). The filled URL is the one the
+   theme links, the webmention names and the copy is kept under.
 2. **The endpoint.** Per the W3C discovery order: the HTTP `Link` header first,
    then the first `<link>` **or** `<a>` carrying `rel="webmention"` in document
    order — one search over both, not one each — resolved against the URL the
@@ -37,6 +45,16 @@ service with this site's name on it.
 Both versions of a changed post are read, before and after, so a page that has
 just been *unlinked* is told as well: it goes and looks, finds the link gone,
 and drops what it was showing. That is the only way a webmention is withdrawn.
+
+### Syndication copies
+
+A syndication target that answers `201` or `202` with a `Location` header has
+made a copy of the post. The address goes into `content/_data/syndication.json`,
+keyed by the post's permalink and then by the target's URL (decision-26), and
+the theme prints it as `u-syndication`. A target the post no longer selects, or
+any target of a post that is no longer public, has its copy removed after it is
+told. The post's own `syndication` front matter lists copies made by hand, and
+the CMS never writes it.
 
 ### What is recorded
 

@@ -214,6 +214,13 @@
                 {% else %}
                   <span class="admin-empty">—</span>
                 {% endif %}
+                {% if row.syndication.length %}
+                  <ul class="admin-syndication">
+                    {% for target in row.syndication %}
+                      <li>{{ target.name }}: {% if target.status == "failed" %}<span class="admin-status admin-status-failed">failed</span>{% if target.error %} ({{ target.error }}){% endif %}{% elif target.status == "none" %}takes none{% elif target.status %}sent{% else %}not sent yet{% endif %}{% if target.copy %}, <a href="{{ target.copy }}">copy</a>{% endif %}</li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
               </td>
               <td class="admin-actions">
                 <form method="post" action="{{ resendUrl }}">

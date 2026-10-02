@@ -68,7 +68,7 @@ function field(html: string, name: string): string | undefined {
 function recordingFields(html: string): Record<string, string> {
   const fields: Record<string, string> = {};
   for (const [, name = '', value = ''] of html.matchAll(
-    /<input[^>]*name="((?:enclosure|alternate)-[^"]+)"[^>]*value="([^"]*)"/g,
+    /<input[^>]*name="((?:enclosure|alternate|photo)-[^"]+)"[^>]*value="([^"]*)"/g,
   )) {
     fields[name] = value;
   }
@@ -105,6 +105,9 @@ async function submit(
     categories: field(html, 'categories') ?? '',
     description: field(html, 'description') ?? '',
     'in-reply-to': field(html, 'in-reply-to') ?? '',
+    'like-of': field(html, 'like-of') ?? '',
+    'repost-of': field(html, 'repost-of') ?? '',
+    'bookmark-of': field(html, 'bookmark-of') ?? '',
     lang: field(html, 'lang') ?? '',
     ...recordingFields(html),
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
@@ -488,6 +491,64 @@ describe('the reply target in the editor', () => {
   });
 });
 
+describe('likes, reposts and bookmarks in the editor (TASK-169 AC #4)', () => {
+  const TARGET = 'https://them.example/2026/09/their-post/';
+  const FILE = ['posts', '2026-01-02-published.md'];
+
+  async function published(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  for (const property of ['like-of', 'repost-of', 'bookmark-of']) {
+    it(`sets ${property}, shows it on reload, and clears it again`, async () => {
+      const { contentDir, agent } = await published();
+
+      const blank = await (await agent.get('/admin/posts/new')).text();
+      assert.equal(field(blank, property), '', `a new post offers ${property} empty`);
+
+      assert.equal(
+        (await submit(agent, '/admin/posts/published', { [property]: TARGET })).status,
+        303,
+      );
+      let written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+      assert.match(written, new RegExp(`^${property}: ${TARGET}$`, 'm'));
+      const reloaded = await (await agent.get('/admin/posts/published')).text();
+      assert.equal(field(reloaded, property), TARGET);
+
+      assert.equal(
+        (await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status,
+        303,
+      );
+      written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+      assert.match(written, new RegExp(`^${property}: ${TARGET}$`, 'm'), 'another save keeps it');
+
+      assert.equal((await submit(agent, '/admin/posts/published', { [property]: '' })).status, 303);
+      written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+      assert.doesNotMatch(written, new RegExp(property), 'the key is gone, not left empty');
+    });
+  }
+
+  it('refuses a like target that is not a web address, and writes nothing', async () => {
+    const { contentDir, agent } = await published();
+    const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+    const response = await submit(agent, '/admin/posts/published', { 'like-of': 'their post' });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /Like of has to be a web address/);
+    assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+  });
+});
+
 describe('the post language in the editor (TASK-154 AC #1)', () => {
   const FILE = ['posts', '2026-01-02-published.md'];
 
@@ -624,6 +685,215 @@ describe('pinning a post in the editor (TASK-207 AC #1)', () => {
   });
 });
 
+describe('syndication targets in the post editor (TASK-155 AC #2)', () => {
+  const TARGETS = JSON.stringify([
+    { id: 'indienews', name: 'IndieNews', url: 'https://news.indieweb.org/en', tag: 'indienews' },
+    { id: 'mastodon', name: 'Mastodon', url: 'https://brid.gy/publish/mastodon' },
+  ]);
+
+  async function post(extra: string[] = []): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-01-post.md',
+        title: 'Post',
+        date: '2026-01-01',
+        permalink: '/2026/01/post/',
+        extra,
+      },
+    ]);
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(path.join(contentDir, '_data', 'syndicationTargets.json'), TARGETS, 'utf8');
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  async function syndicateTo(contentDir: string): Promise<unknown> {
+    const text = await readFile(path.join(contentDir, 'posts', '2026-01-01-post.md'), 'utf8');
+    return matter(text).data['syndicate-to'];
+  }
+
+  it('offers a checkbox for each declared target, ticked when the post lists it', async () => {
+    const { agent } = await post(['syndicate-to: [mastodon]']);
+
+    const html = await (await agent.get('/admin/posts/post')).text();
+
+    assert.match(
+      html,
+      /<input id="editor-syndicate-to-indienews" name="syndicate-to-indienews" type="checkbox" value="1" \/>/,
+    );
+    assert.match(html, /<label for="editor-syndicate-to-indienews">IndieNews<\/label>/);
+    assert.match(html, /name="syndicate-to-mastodon" type="checkbox" value="1" checked/);
+  });
+
+  it('writes the ticked targets and keeps an id no target declares', async () => {
+    const { contentDir, agent } = await post(['syndicate-to: [elsewhere]']);
+
+    const response = await submit(agent, '/admin/posts/post', {
+      'syndicate-to-indienews': '1',
+      'syndicate-to-mastodon': '1',
+    });
+
+    assert.equal(response.status, 303);
+    assert.deepEqual(await syndicateTo(contentDir), ['indienews', 'mastodon', 'elsewhere']);
+  });
+
+  it('removes the key when nothing is ticked', async () => {
+    const { contentDir, agent } = await post(['syndicate-to: [indienews]']);
+
+    assert.equal((await submit(agent, '/admin/posts/post', {})).status, 303);
+    assert.equal(await syndicateTo(contentDir), undefined);
+  });
+});
+
+describe('photos in the post editor (TASK-166 AC #5, #7)', () => {
+  const FILE = ['posts', '2026-01-02-beach.md'];
+  const MONTH = ['uploads', '2026', '10'];
+
+  async function beach(
+    extra: string[] = [],
+    config: { requireAltText?: boolean } = {},
+  ): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-beach.md',
+        title: 'At the beach',
+        date: '2026-01-02',
+        permalink: '/2026/01/beach/',
+        extra,
+      },
+    ]);
+    const uploads = path.join(contentDir, ...MONTH);
+    await mkdir(uploads, { recursive: true });
+    for (const name of ['beach.jpg', 'dog.jpg', 'gull.png']) {
+      await writeFile(path.join(uploads, name), new Uint8Array(8));
+    }
+    await writeFile(path.join(uploads, 'episode.mp3'), new Uint8Array(8));
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'media.json'),
+      JSON.stringify({ '2026/10/dog.jpg': { alt: 'A dog asleep on a rug' } }),
+    );
+    const cms = await box.site({ contentDir, ...config });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  async function frontMatter(contentDir: string): Promise<Record<string, unknown>> {
+    return matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data;
+  }
+
+  const TWO_PHOTOS = [
+    'photo:',
+    '  - url: /uploads/2026/10/beach.jpg',
+    '    alt: Waves breaking at dusk',
+    '  - url: /uploads/2026/10/dog.jpg',
+  ];
+
+  it('lists each photo with its alt text, the library’s as the placeholder, and a blank row to add one', async () => {
+    const { agent } = await beach(TWO_PHOTOS);
+
+    const html = await (await agent.get('/admin/posts/beach')).text();
+
+    assert.match(html, /<legend>Photos<\/legend>/);
+    assert.equal(field(html, 'photo-url-0'), '/uploads/2026/10/beach.jpg');
+    assert.equal(field(html, 'photo-alt-0'), 'Waves breaking at dusk');
+    assert.equal(field(html, 'photo-url-1'), '/uploads/2026/10/dog.jpg');
+    assert.equal(field(html, 'photo-alt-1'), '');
+    assert.match(html, /name="photo-alt-1"[^>]*placeholder="A dog asleep on a rug"/);
+    assert.equal(field(html, 'photo-url-2'), '');
+    assert.match(html, /<legend>Add a photo<\/legend>/);
+    const offered = /<datalist id="editor-photo-uploads">([\s\S]*?)<\/datalist>/.exec(html)?.[1];
+    assert.match(offered ?? '', /<option value="\/uploads\/2026\/10\/gull\.png">/);
+    assert.doesNotMatch(offered ?? '', /episode\.mp3/, 'only images are offered');
+  });
+
+  it('offers no photos on a page', async () => {
+    const { agent } = await beach();
+
+    assert.doesNotMatch(await (await agent.get('/admin/pages/new')).text(), /photo-url/);
+  });
+
+  it('adds a photo through the blank row, edits an alt text and removes a photo', async () => {
+    const { contentDir, agent } = await beach(TWO_PHOTOS);
+
+    const response = await submit(agent, '/admin/posts/beach', {
+      'photo-url-0': '',
+      'photo-alt-1': 'Our dog, asleep',
+      'photo-url-2': '/uploads/2026/10/gull.png',
+      'photo-alt-2': 'A gull on a post',
+    });
+
+    assert.equal(response.status, 303);
+    assert.deepEqual((await frontMatter(contentDir))['photo'], [
+      { url: '/uploads/2026/10/dog.jpg', alt: 'Our dog, asleep' },
+      { url: '/uploads/2026/10/gull.png', alt: 'A gull on a post' },
+    ]);
+  });
+
+  it('keeps an upload’s alt text in the library when the post gives none', async () => {
+    const { contentDir, agent } = await beach();
+
+    await submit(agent, '/admin/posts/beach', { 'photo-url-0': '/uploads/2026/10/dog.jpg' });
+
+    assert.deepEqual((await frontMatter(contentDir))['photo'], [
+      { url: '/uploads/2026/10/dog.jpg' },
+    ]);
+  });
+
+  it('takes the key out when the last photo goes', async () => {
+    const { contentDir, agent } = await beach(TWO_PHOTOS);
+
+    await submit(agent, '/admin/posts/beach', { 'photo-url-0': '', 'photo-url-1': '' });
+
+    assert.equal('photo' in (await frontMatter(contentDir)), false);
+  });
+
+  it('refuses a photo that is not an image in the media library or a web address', async () => {
+    const { contentDir, agent } = await beach();
+
+    for (const url of [
+      '/uploads/2026/10/episode.mp3',
+      '/uploads/2026/10/missing.jpg',
+      'beach.jpg',
+    ]) {
+      const response = await submit(agent, '/admin/posts/beach', { 'photo-url-0': url });
+      assert.equal(response.status, 400, url);
+      assert.match(await response.text(), /photo/i, url);
+    }
+    assert.equal('photo' in (await frontMatter(contentDir)), false);
+  });
+
+  it('accepts a photo at a web address', async () => {
+    const { contentDir, agent } = await beach();
+
+    await submit(agent, '/admin/posts/beach', {
+      'photo-url-0': 'https://cdn.example/cat.webp',
+      'photo-alt-0': 'A cat on a wall',
+    });
+
+    assert.deepEqual((await frontMatter(contentDir))['photo'], [
+      { url: 'https://cdn.example/cat.webp', alt: 'A cat on a wall' },
+    ]);
+  });
+
+  it('refuses to publish a photo nobody described on a site that requires alt text', async () => {
+    const { contentDir, agent } = await beach([], { requireAltText: true });
+
+    const refused = await submit(agent, '/admin/posts/beach', {
+      'photo-url-0': '/uploads/2026/10/beach.jpg',
+    });
+    assert.equal(refused.status, 400);
+    assert.match(await refused.text(), /beach\.jpg/);
+
+    const described = await submit(agent, '/admin/posts/beach', {
+      'photo-url-0': '/uploads/2026/10/dog.jpg',
+    });
+    assert.equal(described.status, 303, 'the library describes dog.jpg');
+    assert.deepEqual((await frontMatter(contentDir))['photo'], [
+      { url: '/uploads/2026/10/dog.jpg' },
+    ]);
+  });
+});
+
 describe('the recording in the post editor (TASK-213 AC #1, #2)', () => {
   const FILE = ['posts', '2026-01-02-episode.md'];
   const MONTH = ['uploads', '2026', '10'];
@@ -662,7 +932,8 @@ describe('the recording in the post editor (TASK-213 AC #1, #2)', () => {
     assert.match(html, /<option value="" selected>None<\/option>/);
     assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp3">2026\/10\/episode\.mp3</);
     assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp4">2026\/10\/episode\.mp4</);
-    assert.doesNotMatch(html, /<option value="\/uploads\/2026\/10\/cover\.png"/);
+    const recording = /<select id="editor-enclosure-url"[\s\S]*?<\/select>/.exec(html)?.[0] ?? '';
+    assert.doesNotMatch(recording, /cover\.png/);
   });
 
   it('offers no recording on a page', async () => {

@@ -130,6 +130,89 @@ describe('a reply', () => {
   });
 });
 
+describe('a photo post (AC #3)', () => {
+  const target = 'https://example.com/post';
+
+  it('is a post with a photo and no name, ahead of the note/article tail', () => {
+    assert.equal(discoverPostType({ photo: ['/uploads/a.jpg'] }), 'photo');
+    assert.equal(
+      discoverPostType({ photo: ['/uploads/a.jpg'], content: 'At the beach.' }),
+      'photo',
+    );
+  });
+
+  it('is not made by an empty photo list', () => {
+    assert.equal(discoverPostType({ photo: [], content: 'At the beach.' }), 'note');
+  });
+
+  it('gives way to a reply, which comes first in the spec’s order', () => {
+    assert.equal(
+      discoverPostType({ 'in-reply-to': target, photo: ['/uploads/a.jpg'], content: 'Same.' }),
+      'reply',
+    );
+    assert.equal(
+      postTypeOf(post(`in-reply-to: ${target}\nphoto:\n  - url: /uploads/a.jpg\n`, 'Same.')),
+      'reply',
+    );
+  });
+
+  it('reads the photo key of a document', () => {
+    assert.equal(postTypeOf(post('photo:\n  - url: /uploads/a.jpg\n    alt: A\n', '')), 'photo');
+    assert.equal(postTypeOf(post('photo:\n  - url: not-a-url\n', 'Words.')), 'note');
+  });
+});
+
+describe('a repost, a like and a bookmark (TASK-169 AC #2)', () => {
+  const target = 'https://example.com/post';
+  const other = 'https://example.org/elsewhere';
+
+  it('types a post by each citation of a valid URL', () => {
+    assert.equal(discoverPostType({ 'repost-of': target }), 'repost');
+    assert.equal(discoverPostType({ 'like-of': target }), 'like');
+    assert.equal(discoverPostType({ 'bookmark-of': target, content: 'Read later.' }), 'bookmark');
+  });
+
+  it('is not made by a citation that is not an http or https URL', () => {
+    assert.equal(discoverPostType({ 'like-of': 'not a url', content: 'Hm.' }), 'note');
+    assert.equal(discoverPostType({ 'repost-of': 'mailto:a@example.com', content: 'Hm.' }), 'note');
+    assert.equal(discoverPostType({ 'bookmark-of': 'ftp://x.example/', content: 'Hm.' }), 'note');
+  });
+
+  it('follows the spec’s order: repost, then like, then reply, then photo', () => {
+    const everything = {
+      'repost-of': target,
+      'like-of': other,
+      'in-reply-to': target,
+      photo: ['/uploads/a.jpg'],
+      'bookmark-of': other,
+      name: 'A title',
+      content: 'Some words.',
+    };
+    assert.equal(discoverPostType(everything), 'repost');
+    assert.equal(discoverPostType({ ...everything, 'repost-of': undefined }), 'like');
+    assert.equal(
+      discoverPostType({ ...everything, 'repost-of': undefined, 'like-of': undefined }),
+      'reply',
+    );
+  });
+
+  it('puts bookmark, which the spec does not type, after photo and ahead of the tail', () => {
+    assert.equal(discoverPostType({ 'bookmark-of': target, photo: ['/uploads/a.jpg'] }), 'photo');
+    assert.equal(discoverPostType({ 'bookmark-of': target, 'in-reply-to': other }), 'reply');
+    assert.equal(
+      discoverPostType({ 'bookmark-of': target, name: 'On gardens', content: 'Tomatoes.' }),
+      'bookmark',
+    );
+  });
+
+  it('reads the citation keys of a document', () => {
+    assert.equal(postTypeOf(post(`like-of: ${target}\n`, '')), 'like');
+    assert.equal(postTypeOf(post(`repost-of: ${target}\n`, '')), 'repost');
+    assert.equal(postTypeOf(post(`bookmark-of: ${target}\n`, 'Worth a read.')), 'bookmark');
+    assert.equal(postTypeOf(post('like-of: somewhere\n', 'Words.')), 'note');
+  });
+});
+
 describe('postTypeOf', () => {
   it('reads an untitled post as a note', () => {
     assert.equal(postTypeOf(post('', 'Coffee first.')), 'note');

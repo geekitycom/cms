@@ -194,7 +194,7 @@ export function uploadLimit(
  * check made before reading it can only hold it to the larger limit, and
  * {@link storeUpload} holds each file to its own once it knows.
  */
-function largestUploadLimit(
+export function largestUploadLimit(
   config: Pick<ResolvedConfig, 'uploadMaxBytes' | 'uploadMediaMaxBytes'>,
 ): number {
   return Math.max(config.uploadMaxBytes, config.uploadMediaMaxBytes);

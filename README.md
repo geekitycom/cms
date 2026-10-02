@@ -1404,8 +1404,8 @@ resource, such as an MCP endpoint, works only there. decision-24 records the
 rules.
 
 An app sends its token in an `Authorization: Bearer` header, or in an
-`access_token` form field as Micropub allows. A request with no token, or with
-one that is unknown, expired or revoked, gets 401. A token without the scope a
+`access_token` form field as Micropub allows, but not both. A request that sends it both ways gets 400 `invalid_request` (RFC 6750). A request with no token, or
+with one that is unknown, expired or revoked, gets 401. A token without the scope a
 route needs gets 403 `insufficient_scope`. Each refusal carries a
 `WWW-Authenticate: Bearer` header whose `resource_metadata` points at
 `/.well-known/oauth-protected-resource`. That RFC 9728 document names the site
@@ -1450,6 +1450,199 @@ connection: its access token and its refresh token stop working at once, the
 app's next request gets 401 `invalid_token`, and the screen confirms with a
 message. The app has to ask you again through the consent screen to reconnect.
 With no apps connected, the screen says what kinds of app connect here.
+
+## Micropub
+
+The site has a [Micropub](https://www.w3.org/TR/micropub/) endpoint, so you
+can write, edit and delete posts from any Micropub app instead of the admin
+editor. A post made this way is written exactly as the editor writes it, by the
+user who connected the app. Publishing it sends webmentions, federates and
+updates the feeds as an editor publish does.
+
+The endpoint is `/_geekity/micropub` and its media endpoint is
+`/_geekity/micropub/media`. The site root and every author archive advertise
+the endpoint with a `Link: <…>; rel="micropub"` header and a
+`<link rel="micropub">` in the head, beside the IndieAuth metadata. The CMS adds
+both to the response, so every theme carries them and an app finds the
+endpoint from the URL you sign in with. The endpoint and the media endpoint
+answer 503 in maintenance mode.
+
+### Connecting an app
+
+1. In the app, sign in with your author URL, `https://example.com/author/{username}/`,
+   or with the site URL. [Signing in with your own site](#signing-in-with-your-own-site)
+   says which URL works for whom.
+2. The app sends you to the site. Sign in to the admin if you are not signed in.
+3. The consent screen names the app and lists what it asks for. A Micropub app
+   asks for some of these scopes:
+
+   | Scope     | The consent screen says   | What it allows                                       |
+   | --------- | ------------------------- | ---------------------------------------------------- |
+   | `create`  | Create posts as you       | A `POST` that creates a post.                        |
+   | `update`  | Edit your posts           | `action=update`.                                     |
+   | `delete`  | Delete your posts         | `action=delete` and `action=undelete`.               |
+   | `media`   | Upload media to your site | An upload to the media endpoint.                     |
+   | `profile` | Your name, URL and photo  | Nothing on the endpoint. The app learns who you are. |
+
+   Untick any scope you do not want the app to have. A scope the site does not
+   offer, such as `draft`, is left off the screen and is not granted.
+
+4. Choose Approve. The app gets an access token for the scopes you left
+   ticked. The token works for seven days, and the app renews it with its
+   refresh token, so it stays connected while you use it.
+
+A query works with a token of any scope. A request without the scope its
+action needs gets 403 `insufficient_scope`.
+
+### Disconnecting an app
+
+Open Users > Connected apps, at `/admin/users/apps`, and choose Revoke on the
+app's row. Its access token and its refresh token stop working at once, and its
+next request gets 401 `invalid_token`. To connect it again, sign in from the app
+again. [Connected apps](#connected-apps) describes the screen.
+
+Deleting a user also disconnects every app that user connected.
+
+### Sending the token
+
+An app sends its token in an `Authorization: Bearer` header, or in an
+`access_token` field of a form-encoded or multipart body. A request that sends
+it both ways gets 400 `invalid_request`, as RFC 6750 requires. A request with no
+token gets 401 `unauthorized`. An unknown, expired or revoked token, or one
+issued for another resource such as an MCP endpoint, gets 401 `invalid_token`.
+
+### Creating a post
+
+A `POST` without an `action` creates a post and needs the create scope. The
+body is form-encoded (`h=entry&content=…`), multipart (the same fields, with
+files as parts), or JSON (`{"type": ["h-entry"], "properties": {…}}`). In a
+form, a property with several values is sent once per value, as `category` or
+`category[]`. The site answers 201 with a `Location` header naming the new
+post's URL, draft or not.
+
+The endpoint maps these properties onto the editor's fields, and decision-27
+records the mapping. Each property takes one value unless the table says
+otherwise.
+
+| Property          | Becomes                                                                                                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `h=entry`         | The only type accepted. In JSON, `"type": ["h-entry"]`.                                                                                                                                      |
+| `content`         | The body. Plain text is kept as Markdown. `{"html": "…"}` is kept as HTML.                                                                                                                   |
+| `name`            | The title. A post without one is a note.                                                                                                                                                     |
+| `summary`         | The description.                                                                                                                                                                             |
+| `category`        | The tags, one tag per value. Several values.                                                                                                                                                 |
+| `published`       | The date. A date without an offset is in the site's time zone. Without it, the post is dated now.                                                                                            |
+| `post-status`     | `published` or `draft`. A draft is not published, federated or sent webmentions.                                                                                                             |
+| `mp-slug`         | The slug in the file name and the URL.                                                                                                                                                       |
+| `in-reply-to`     | Makes the post a reply to that URL.                                                                                                                                                          |
+| `like-of`         | Makes the post a like of that URL. Needs no content. A like of a fediverse status federates as a `Like` of it (decision-28).                                                                 |
+| `repost-of`       | Makes the post a repost of that URL. Needs no content. A repost of a fediverse status federates as an `Announce` of it (decision-28).                                                        |
+| `bookmark-of`     | Makes the post a bookmark of that URL. Needs no content.                                                                                                                                     |
+| `photo`           | A photo on the post. Several values. A value is a URL, `{"value": "…", "alt": "…"}` in JSON, or a file part in a multipart request. A post with a photo and no reply target is a photo post. |
+| `mp-syndicate-to` | Selects a syndication target by its `uid`, as the editor's Syndicate to checkboxes do. Several values. The post is sent to the targets when it is published.                                 |
+| `access_token`    | The token, when it is not in the header. It is never stored on the post.                                                                                                                     |
+
+A like, repost or bookmark cites its URL on the post's page and sends that URL
+a webmention when the post is published, as a reply does.
+
+A photo file part is stored in the media library the way the media endpoint
+stores a file, and must be an image. A photo URL that points at this site's own
+uploads is written as the upload's path, so the theme serves its resized
+versions. A photo URL on another site is shown from that site. A photo without
+alt text of its own takes the alt text from the media library.
+
+Anything else gets 400 `invalid_request` with a description that names it, and
+nothing is written. That covers another type such as `h=event`, a property not
+in the table such as `rsvp`, `location` or `checkin`, a second value for a
+property that takes one, a `uid` the site does not declare, and anything the
+editor itself refuses, such as an `in-reply-to` that is not a URL.
+
+### Changing and deleting a post
+
+A `POST` with an `action` changes a post that already exists. Its `url` is the
+post's URL on this site. A URL that is not a post here gets 400
+`invalid_request`, and a post another user wrote gets 403 `forbidden`.
+
+- `action=update` needs the update scope and a JSON body, such as
+  `{"action": "update", "url": "…", "replace": {"content": ["…"]}}`.
+  - `replace` sets a property's values.
+  - `add` adds values to a property, which need not exist yet.
+  - `delete` takes away the values it lists, or, given a list of property
+    names, the whole properties.
+
+  Only the properties it names change. It accepts the properties a create
+  accepts, except `mp-slug`. Adding or deleting an `mp-syndicate-to` value
+  selects or deselects that target, and a deselected target is told the post no
+  longer links to it. An update is saved exactly as an editor save. The post
+  is stamped updated, federates an `Update` and sends webmentions. If the post
+  is open in the editor, the editor reports a conflict on its next save instead
+  of overwriting the update. The site answers 204, or 201 with a `Location` header
+  when the post's URL changed, which only a re-dated draft can do.
+
+- `action=delete` needs the delete scope. It moves the post to the trash, as
+  the editor's Move to trash does. The post leaves the site, its feeds and
+  search, and federates a `Delete`. The body is form-encoded or JSON. The site
+  answers 204.
+- `action=undelete` needs the delete scope. It restores the post from the
+  trash and answers 204.
+
+### Queries
+
+A `GET` with `q` asks the endpoint a question and answers JSON. A query with
+no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
+
+- `?q=config` lists the media endpoint, the syndication targets under
+  `syndicate-to`, the post types the site accepts (note, article, reply, photo,
+  like, repost and bookmark) and the queries it answers.
+- `?q=syndicate-to` lists the syndication targets on their own. Each is the
+  `uid` and `name` of a target in `content/_data/syndicationTargets.json`, with
+  its `id` as the `uid`. A site that declares none lists `[]`. The file is read
+  on each query, so a target added by hand is offered at once.
+- `?q=category` lists every tag and category on a published post, once each,
+  in alphabetical order. Add `&filter=…` to keep only the terms that contain
+  that text, ignoring case.
+- `?q=source&url=…` answers a post's properties in the same mapping a create
+  takes, so an app can edit them and send them back. The selected syndication
+  targets are under `mp-syndicate-to`; an id in the post's `syndicate-to` that
+  names no declared target is left out and kept in the file. A photo in the
+  media library is given as its absolute URL. Add `&properties[]=content`, once
+  per property, to get only those properties, without the type. The same
+  ownership rules as an update apply.
+- `?q=last` on the media endpoint answers `{"url": "…"}`, the most recent file
+  the token's user uploaded through it, or `{}` when there is none or the file
+  has since been deleted. Each user's last upload is kept in
+  `micropub-media.json` in the data directory.
+
+### Uploading media
+
+The media endpoint takes a file before an app names it in a post. It needs the
+media scope. The body is `multipart/form-data` with the file in a part named
+`file`. The file goes into the media library exactly as an admin upload does.
+It is stored under `content/uploads/{yyyy}/{mm}/`, its image variants are
+derived, and it is listed on the media screen. The site answers 201 with a `Location` header
+naming the file's URL. A file over the upload limit, of a type the library does
+not accept, or whose bytes do not match its extension gets 400
+`invalid_request` with the library's reason, and nothing is stored.
+
+### Clients and conformance
+
+Each [micropub.rocks](https://micropub.rocks/) server test request has been
+replayed with curl against a local site. Every test passes except these:
+
+- 204 sends a `checkin`, which the site refuses rather than drop (decision-27).
+- 804 expects 401 for a token without the create scope. The site answers 403
+  `insufficient_scope`, as the Micropub spec says
+  ([micropub.rocks#101](https://github.com/aaronpk/micropub.rocks/issues/101)).
+- 805 sends the token in the header and the body. The site answers 400
+  `invalid_request` as RFC 6750 says, but micropub.rocks expects the error to
+  read `bad request`
+  ([micropub.rocks#104](https://github.com/aaronpk/micropub.rocks/issues/104)).
+- 802 passes as written, but micropub.rocks sends its token in the header as
+  well as the body, so the site refuses it there as it refuses 805
+  ([micropub.rocks#103](https://github.com/aaronpk/micropub.rocks/issues/103)).
+
+No app has been tried against a deployed site yet. TASK-170 lists the runs to
+make with Quill and a mobile app.
 
 ## The theme
 

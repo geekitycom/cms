@@ -61,3 +61,17 @@ export type {
   WebmentionReport,
   WebmentionService,
 } from './service.ts';
+export {
+  parseSyndicationTargets,
+  selectedTargets,
+  SYNDICATE_TO_FRONT_MATTER_KEY,
+  SYNDICATION_FILE,
+  SYNDICATION_FRONT_MATTER_KEY,
+  SYNDICATION_TARGETS_FILE,
+  syndicationTargetsReader,
+} from './syndication.ts';
+export type {
+  ParsedSyndicationTargets,
+  SyndicationTarget,
+  SyndicationTargetsReader,
+} from './syndication.ts';

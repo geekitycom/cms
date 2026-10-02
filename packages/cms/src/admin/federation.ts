@@ -10,6 +10,11 @@ import type { User } from './accounts.ts';
 import { avatarUrl } from '../federation/actor.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
 import type { WebmentionReport } from '../webmention/service.ts';
+import {
+  selectedTargets,
+  syndicationCopies,
+  syndicationTargetsReader,
+} from '../webmention/syndication.ts';
 import { accountOf, ACTOR_PATH, federationOrigin } from '../federation/paths.ts';
 import { authorHref, profileContext, userForAuthor } from '../web/authors.ts';
 import { postObjectId, publicDocumentAt } from '../web/documents.ts';
@@ -17,6 +22,7 @@ import { absoluteUrl } from '../web/negotiate.ts';
 import { editorPath, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
+import { readSiteSettings } from './settings.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import type {
   Delivery,
@@ -101,6 +107,9 @@ export function mountFederationScreen(
     const baseUrl = c.var.config.baseUrl;
     const post = localPosts(c.var.store, baseUrl);
     const users = listUsers(c.var.config.dataDir);
+    const targets = syndicationTargetsReader(c.var.config.contentDir);
+    const copies = syndicationCopies(c.var.config.contentDir);
+    const siteLanguage = readSiteSettings(c.var.config.contentDir).language;
 
     return render(c, ADMIN_TEMPLATES.federation, {
       section: 'federation',
@@ -132,6 +141,19 @@ export function mountFederationScreen(
         lastDelivery: (objectId) => admin.lastDeliveryToObject(objectId),
         counts: (activityId) => admin.countDeliveriesByStatus(activityId),
         webmentions: (slug) => admin.countSentWebmentionsByStatus(slug),
+        syndication: (document) => {
+          const outcomes = admin.listSentWebmentions(document.slug);
+          const made = copies.read(document.permalink);
+          return selectedTargets(document, targets(), siteLanguage).map((target) => {
+            const outcome = outcomes.find((one) => one.target === target.url);
+            return {
+              name: target.name,
+              status: outcome?.status ?? null,
+              error: outcome?.error ?? null,
+              copy: made[target.url] ?? null,
+            };
+          });
+        },
       }),
     });
   });
@@ -303,6 +325,20 @@ export interface DeliveryRow {
    * deleted database looks like rather than a fact about the post.
    */
   readonly webmentions: Record<WebmentionSendStatus, number>;
+  /** How each syndication target the post selects stands (TASK-155), in declaration order. */
+  readonly syndication: readonly SyndicationRow[];
+}
+
+/** One syndication target a post selects, as its row shows it. */
+export interface SyndicationRow {
+  /** The target's name. */
+  readonly name: string;
+  /** How the last webmention to it went, or `null` when none is recorded. */
+  readonly status: WebmentionSendStatus | null;
+  /** Why it failed, or `null`. */
+  readonly error: string | null;
+  /** The copy it answered with, or `null` when it named none. */
+  readonly copy: string | null;
 }
 
 /** What {@link deliveryRows} needs to fill a row in. */
@@ -317,6 +353,8 @@ export interface DeliveryRowsContext {
   readonly counts: (activityId: string) => Record<DeliveryStatus, number>;
   /** How one post's outgoing webmentions ended, by status. */
   readonly webmentions: (slug: string) => Record<WebmentionSendStatus, number>;
+  /** How each syndication target one post selects stands. */
+  readonly syndication?: ((document: Document) => readonly SyndicationRow[]) | undefined;
 }
 
 /**
@@ -359,6 +397,7 @@ export function deliveryRows(
               counts: context.counts(last.activityId),
             },
       webmentions: context.webmentions(document.slug),
+      syndication: context.syndication?.(document) ?? [],
     };
   });
 }

@@ -20,6 +20,7 @@ after(() => box.cleanup());
 
 const BASE = 'https://blog.example';
 const METADATA = `${BASE}/_geekity/indieauth/metadata`;
+const MICROPUB = `${BASE}/_geekity/micropub`;
 
 async function writeTree(root: string, files: Record<string, string>): Promise<void> {
   for (const [relative, contents] of Object.entries(files)) {
@@ -106,6 +107,8 @@ describe('the authorization server metadata', () => {
 describe('advertising the metadata', () => {
   const advertised = `<${METADATA}>; rel="indieauth-metadata"`;
   const headLink = `<link rel="indieauth-metadata" href="${METADATA}">`;
+  const micropubAdvertised = `<${MICROPUB}>; rel="micropub"`;
+  const micropubHeadLink = `<link rel="micropub" href="${MICROPUB}">`;
 
   for (const theme of ['default', 'bare']) {
     for (const solo of [true, false]) {
@@ -120,10 +123,16 @@ describe('advertising the metadata', () => {
 
           const links = response.headers.get('link') ?? '';
           assert.ok(links.includes(advertised), `Link header: ${links}`);
+          assert.ok(links.includes(micropubAdvertised), `Link header: ${links}`);
 
           const html = await response.text();
           const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? '';
           assert.equal(head.split(headLink).length - 1, 1, 'one head link, inside <head>');
+          assert.equal(
+            head.split(micropubHeadLink).length - 1,
+            1,
+            'one micropub link, inside <head>',
+          );
           if (theme === 'bare') assert.match(html, /^<!doctype html><html><head><title>/);
         });
       }
@@ -141,6 +150,7 @@ describe('advertising the metadata', () => {
     const cms = await site();
     const response = await cms.app.request('/author/ada/', { method: 'HEAD' });
     assert.ok((response.headers.get('link') ?? '').includes(advertised));
+    assert.ok((response.headers.get('link') ?? '').includes(micropubAdvertised));
   });
 
   it('is not on any other page, nor on a user who does not exist', async () => {
@@ -152,11 +162,12 @@ describe('advertising the metadata', () => {
       '/feed/',
     ]) {
       const response = await cms.app.request(pathname);
-      assert.ok(
-        !(response.headers.get('link') ?? '').includes('indieauth-metadata'),
-        `${pathname} carries no advertisement`,
-      );
-      assert.doesNotMatch(await response.text(), /indieauth-metadata/, pathname);
+      const links = response.headers.get('link') ?? '';
+      assert.ok(!links.includes('indieauth-metadata'), `${pathname} carries no advertisement`);
+      assert.ok(!links.includes('rel="micropub"'), `${pathname} carries no micropub link`);
+      const html = await response.text();
+      assert.doesNotMatch(html, /indieauth-metadata/, pathname);
+      assert.doesNotMatch(html, /rel="micropub"/, pathname);
     }
   });
 });

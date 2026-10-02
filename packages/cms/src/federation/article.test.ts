@@ -425,6 +425,58 @@ describe('a recording as an attachment (TASK-213 AC #13)', () => {
   });
 });
 
+describe('photos as attachments (TASK-166 AC #4)', () => {
+  async function objectAt(
+    files: Record<string, string>,
+    permalink: string,
+  ): Promise<Record<string, unknown>> {
+    const instance = await site(files);
+    return (await (await get(instance, permalink, ACTIVITY_STREAMS)).json()) as Record<
+      string,
+      unknown
+    >;
+  }
+
+  it('attaches each photo as an Image named by its alt text, the library’s when the post gives none', async () => {
+    const object = await objectAt(
+      {
+        '_data/media.json': JSON.stringify({ '2026/09/dog.png': { alt: 'A dog asleep on a rug' } }),
+        'posts/2026-09-02-beach.md': rawPost(
+          [
+            "date: '2026-09-02T09:00:00Z'",
+            'permalink: /2026/09/beach/',
+            'photo:',
+            '  - url: /uploads/2026/09/beach.jpg',
+            '    alt: Waves breaking at dusk',
+            '  - url: /uploads/2026/09/dog.png',
+            '  - url: https://cdn.example/cat.webp',
+            '    alt: A cat on a wall',
+          ],
+          'At the beach. ![Waves breaking at dusk](/uploads/2026/09/beach.jpg)',
+        ),
+      },
+      '/2026/09/beach/',
+    );
+
+    assert.equal(object['type'], 'Note', 'a photo post federates as a Note');
+    assert.deepEqual(object['attachment'], [
+      {
+        type: 'Image',
+        mediaType: 'image/jpeg',
+        url: `${BASE_URL}/uploads/2026/09/beach.jpg`,
+        name: 'Waves breaking at dusk',
+      },
+      {
+        type: 'Image',
+        mediaType: 'image/png',
+        url: `${BASE_URL}/uploads/2026/09/dog.png`,
+        name: 'A dog asleep on a rug',
+      },
+      { type: 'Image', url: 'https://cdn.example/cat.webp', name: 'A cat on a wall' },
+    ]);
+  });
+});
+
 describe('the quote policy (TASK-125 AC #1)', () => {
   const QUOTABLE = { canQuote: { automaticApproval: 'as:Public' } };
 

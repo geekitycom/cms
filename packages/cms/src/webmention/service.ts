@@ -3,6 +3,7 @@ import type { AdminStore, SentWebmention, WebmentionSendStatus } from '../admin/
 import type { CommentNotices, CommentRecords } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { citationsOf } from '../content/citation.ts';
 import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
@@ -11,6 +12,8 @@ import { absoluteUrl } from '../web/negotiate.ts';
 import { discoverEndpoint, WEBMENTION_USER_AGENT } from './discovery.ts';
 import { externalLinks, externalTarget } from './links.ts';
 import { verifyWebmention } from './receive.ts';
+import { selectedTargets, syndicationCopies, syndicationTargetsReader } from './syndication.ts';
+import type { SyndicationTarget } from './syndication.ts';
 import type { IncomingWebmention, WebmentionOutcome } from './receive.ts';
 
 /**
@@ -138,13 +141,24 @@ export function createWebmentionService(
     return readSiteSettings(config.contentDir).webmentionsSend;
   }
 
-  /** Tell one page about one post, and answer with what happened. */
-  async function tell(slug: string, source: string, target: string): Promise<SentWebmention> {
+  const targets = syndicationTargetsReader(config.contentDir);
+  const copies = syndicationCopies(config.contentDir);
+
+  /** The language a post that names none is in, as the file says now. */
+  function siteLanguage(): string {
+    return readSiteSettings(config.contentDir).language;
+  }
+
+  /**
+   * Tell one page about one post, and answer with what happened and, when the
+   * page made a copy of the post, where the copy is.
+   */
+  async function tell(slug: string, source: string, target: string): Promise<Told> {
     const endpoint = await discoverEndpoint(target);
     if (endpoint === undefined) {
       // Not a failure: most of the web takes no webmentions, and recording it
       // is what tells a person why nothing went.
-      return record(slug, source, target, null, 'none', null);
+      return { sent: record(slug, source, target, null, 'none', null) };
     }
 
     try {
@@ -162,14 +176,17 @@ export function createWebmentionService(
       if (!response.ok) {
         const error = `${endpoint} answered ${String(response.status)}`;
         logger.warn(`Could not send a webmention for ${source}: ${error}`);
-        return record(slug, source, target, endpoint, 'failed', error);
+        return { sent: record(slug, source, target, endpoint, 'failed', error) };
       }
 
-      return record(slug, source, target, endpoint, 'sent', null);
+      return {
+        sent: record(slug, source, target, endpoint, 'sent', null),
+        copy: copyOf(response, endpoint),
+      };
     } catch (thrown) {
       const error = messageOf(thrown);
       logger.warn(`Could not send a webmention for ${source}: ${error}`);
-      return record(slug, source, target, endpoint, 'failed', error);
+      return { sent: record(slug, source, target, endpoint, 'failed', error) };
     }
   }
 
@@ -185,15 +202,39 @@ export function createWebmentionService(
     return admin.recordSentWebmention({ slug, source, target, endpoint, status, error });
   }
 
+  /** The URLs of the targets a version of a post selects. */
+  function selectedUrls(document: Document | undefined): string[] {
+    if (document === undefined) return [];
+    return selectedTargets(document, targets(), siteLanguage()).map((target) => target.url);
+  }
+
   /** Tell every one of a post's targets, one after another. */
-  async function tellAll(
-    slug: string,
-    source: string,
-    targets: readonly string[],
-  ): Promise<SentWebmention[]> {
-    const outcomes: SentWebmention[] = [];
-    for (const target of targets) outcomes.push(await tell(slug, source, target));
+  async function tellAll(slug: string, source: string, links: readonly string[]): Promise<Told[]> {
+    const outcomes: Told[] = [];
+    for (const target of links) outcomes.push(await tell(slug, source, target));
     return outcomes;
+  }
+
+  /**
+   * Bring the post's recorded copies in line with what was just sent
+   * (decision-26): a target the post selects keeps the copy it answered with,
+   * and one only an earlier version selected, or any of a post nobody can
+   * read, claims none. A target's URL is the one it had for the version that
+   * selected it, since it can follow the post's language (TASK-156).
+   */
+  async function keepCopies(
+    permalink: string,
+    versions: readonly (Document | undefined)[],
+    current: Document | undefined,
+    outcomes: readonly Told[],
+  ): Promise<void> {
+    const targeted = new Set(versions.flatMap((version) => selectedUrls(version)));
+    const selected = new Set(selectedUrls(current));
+    for (const { sent, copy } of outcomes) {
+      if (!targeted.has(sent.target)) continue;
+      if (!selected.has(sent.target)) await copies.write(permalink, sent.target, undefined);
+      else if (copy !== undefined) await copies.write(permalink, sent.target, copy);
+    }
   }
 
   return {
@@ -217,10 +258,33 @@ export function createWebmentionService(
       // it was showing. That is how a webmention is withdrawn — there is no
       // other way to say it.
       const source = absoluteUrl(document.permalink, config.baseUrl);
-      const targets = targetsOf([change.previous, change.next], config.baseUrl);
-      if (targets.length === 0) return;
+      const links = targetsOf(
+        [change.previous, change.next],
+        targets(),
+        config.baseUrl,
+        siteLanguage(),
+      );
+      if (links.length === 0) return;
 
-      enqueue(() => tellAll(document.slug, source, targets)).catch((thrown: unknown) => {
+      // A post that moved is a new source to its targets, which answer with
+      // their copies of it under its new permalink.
+      const moved =
+        change.previous !== undefined &&
+        change.next !== undefined &&
+        change.previous.permalink !== change.next.permalink
+          ? change.previous.permalink
+          : undefined;
+      const current = isNowPublic ? change.next : undefined;
+
+      enqueue(async () => {
+        if (moved !== undefined) await copies.forget(moved);
+        await keepCopies(
+          document.permalink,
+          [change.previous, change.next],
+          current,
+          await tellAll(document.slug, source, links),
+        );
+      }).catch((thrown: unknown) => {
         logger.warn(`A webmention failed: ${messageOf(thrown)}`);
       });
     },
@@ -232,13 +296,14 @@ export function createWebmentionService(
       const source = absoluteUrl(document.permalink, config.baseUrl);
       if (!sending()) return { slug, source, sent: [] };
 
-      const targets = targetsOf([document], config.baseUrl);
+      const links = targetsOf([document], targets(), config.baseUrl, siteLanguage());
 
-      return await enqueue(async () => ({
-        slug,
-        source,
-        sent: await tellAll(slug, source, targets),
-      }));
+      return await enqueue(async () => {
+        const outcomes = await tellAll(slug, source, links);
+        const current = isPublic(document, config.now()) ? document : undefined;
+        await keepCopies(document.permalink, [document], current, outcomes);
+        return { slug, source, sent: outcomes.map((one) => one.sent) };
+      });
     },
 
     receive(incoming) {
@@ -279,21 +344,54 @@ export function createWebmentionService(
   };
 }
 
+/** One page told, and the copy of the post it made, when it said where. */
+interface Told {
+  readonly sent: SentWebmention;
+  readonly copy?: string | undefined;
+}
+
 /**
  * Every external page any of these versions of a post links to, in order: the
- * post it replies to first, then the links in its body.
+ * post it replies to first, then what it reposts, likes or bookmarks, then the links in its body, then the syndication
+ * targets it selects, which the theme links to inside its h-entry.
  */
-function targetsOf(documents: readonly (Document | undefined)[], baseUrl: string): string[] {
+function targetsOf(
+  documents: readonly (Document | undefined)[],
+  declared: readonly SyndicationTarget[],
+  baseUrl: string,
+  siteLanguage: string,
+): string[] {
   const targets = new Set<string>();
 
   for (const document of documents) {
     if (document === undefined) continue;
     const reply = externalTarget(replyTarget(document), baseUrl);
     if (reply !== undefined) targets.add(reply);
+    for (const { url } of citationsOf(document.extra)) {
+      const cited = externalTarget(url, baseUrl);
+      if (cited !== undefined) targets.add(cited);
+    }
     for (const target of externalLinks(document.html, baseUrl)) targets.add(target);
+    for (const target of selectedTargets(document, declared, siteLanguage)) targets.add(target.url);
   }
 
   return [...targets];
+}
+
+/**
+ * Where a target says its copy of the post is: the `Location` of a 201 or 202,
+ * as IndieNews and Bridgy Publish answer, resolved against the endpoint.
+ */
+function copyOf(response: Response, endpoint: string): string | undefined {
+  if (response.status !== 201 && response.status !== 202) return undefined;
+  const location = response.headers.get('location');
+  if (location === null || location === '') return undefined;
+  try {
+    const url = new URL(location, endpoint);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Whether a version of a document was one a stranger could read. */

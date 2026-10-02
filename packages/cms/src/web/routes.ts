@@ -33,7 +33,7 @@ import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
 import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
 import { mountNotificationLinks } from '../notifications/routes.ts';
-import { advertiseIndieAuthMetadata } from '../indieauth/discovery.ts';
+import { advertiseIdentityEndpoints } from '../indieauth/discovery.ts';
 import { publicAdminBar } from './admin-bar.ts';
 import {
   authorFeedHref,
@@ -127,7 +127,7 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // First, so every page below it, the 404 and the 500 included, is drawn
   // knowing whether a signed-in user is reading it (TASK-183).
   app.use('*', publicAdminBar);
-  app.use('*', advertiseIndieAuthMetadata);
+  app.use('*', advertiseIdentityEndpoints);
   app.use('*', declaredQueryRedirect);
 
   app.get(`${THEME_ASSET_PREFIX}*`, themeAsset);

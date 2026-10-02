@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
 
+import { CITATION_PROPERTIES } from '../content/citation.ts';
 import type { Document, DocumentType } from '../content/document.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { defaultPermalink, slugify } from '../content/slug.ts';
@@ -92,7 +93,13 @@ function previewDocument(
     ...(text(body['in-reply-to']).trim() === ''
       ? {}
       : { inReplyTo: text(body['in-reply-to']).trim() }),
-    extra: {},
+    // What the post likes, reposts or bookmarks, as the editor would write it.
+    extra: Object.fromEntries(
+      CITATION_PROPERTIES.flatMap((property) => {
+        const cited = text(body[property]).trim();
+        return cited === '' ? [] : [[property, cited]];
+      }),
+    ),
     body: markdown,
     html: renderMarkdown(markdown),
     // A preview is not a version of anything, so it has no hash to be

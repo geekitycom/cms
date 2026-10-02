@@ -25,6 +25,7 @@ themes/default/
     tags.njk          macros for tag and category links
     kicker.njk        the line above an entry naming its kind and date
     reply-context.njk the citation of what a reply answers
+    citations.njk     the citation of what a like, repost or bookmark cites
     bio.njk           who an entry is by, as an h-card
     menu.njk          one named menu, as a nav of links
     feeds.njk         macros for the feed links in <head>
@@ -334,8 +335,8 @@ is a microformats2 `h-entry`. An article, and a page:
   <section class="e-content">
     <p>The rendered body.</p>
     <p class="entry-meta">
-      <a class="u-category small" href="https://news.indieweb.org/en"
-        >#indienews</a
+      <a class="u-syndication small" href="https://news.indieweb.org/en"
+        >IndieNews</a
       >
       <a href="/2026/09/hello/" class="u-url"
         ><time class="small dt-published" datetime="2026-09-02T09:00:00.000Z"
@@ -345,6 +346,13 @@ is a microformats2 `h-entry`. An article, and a page:
       <span aria-hidden="true">·</span>
       <time class="small dt-updated" datetime="2026-09-05T09:00:00.000Z"
         >Updated 5 September 2026</time
+      >
+      <span aria-hidden="true">·</span>
+      <span class="small"
+        >Also on
+        <a class="u-syndication" href="https://news.indieweb.org/en/…"
+          >news.indieweb.org</a
+        ></span
       >
     </p>
   </section>
@@ -369,10 +377,11 @@ permalink are part of the words, so a reader, or a fediverse peer reading the
 `e-content`, takes them with the post. The permalink wraps the `dt-published`
 time as a `u-url`, and a `dt-updated` follows it after a middle dot only when
 the update happened on a different day in the site's own timezone; a typo fixed
-an hour later is not news. A post tagged `indienews` opens the line with a
-`u-category` link to <https://news.indieweb.org/en>, which is how IndieNews is
-told the post is for it; a page never prints one, and its line is a
-`p.page-meta` rather than a `p.entry-meta`.
+an hour later is not news. The line opens with a `u-syndication` link to each
+syndication target the post selects (`syndicateTo`, TASK-155), which is what
+IndieNews and Bridgy Publish look for on the page, and ends with the post's
+copies elsewhere (`syndication`) after **Also on**. A page never prints either,
+and its line is a `p.page-meta` rather than a `p.entry-meta`.
 
 **Every post's page has one `h1`.** A post with a name of its own is headed by
 it, as above. A note, or a reply without a title, opens on its words instead,
@@ -385,7 +394,7 @@ who wrote it and when, and then the kicker:
 <p class="kicker"><span class="kicker-kind">Note</span></p>
 ```
 
-It says `Reply` for a reply and leaves out the name or the date the post does
+It says `Reply`, `Like`, `Repost` or `Bookmark` for those and leaves out the name or the date the post does
 not have. It is not a `p-name`: a parser that found one would take the post
 for an article. The headings under it step down one level at a time: the
 conversation and the comment form are `h2`, and a refused form's error summary
@@ -397,6 +406,14 @@ is an `h3` inside the form's section.
 far as they are known, and its excerpt as a `blockquote.cite-quote.p-content`.
 An untitled reply prints it under the kicker; a titled reply prints it above
 its header. The same partial cites a reply in a feed.
+
+**A like, a repost or a bookmark cites what it cites** (TASK-169) with
+`partials/citations.njk`, beside the reply context and drawn the same way: one
+`div.reply-context.cite.h-cite` per entry of `citations`, classed
+`u-repost-of`, `u-like-of` or `u-bookmark-of`, whose `p.cite-line` says
+Reposted, Liked or Bookmarked and links the target as its `u-url`. Its kicker
+and its hidden `h1` say Repost, Like or Bookmark. A listing cites each entry's
+from the same partial.
 
 The tags are printed under the words and inside the article, so that each link
 is a `p-category` of this entry, as one `p.post-categories` from
@@ -415,6 +432,16 @@ transcript, as Captions for VTT or SRT and Transcript otherwise, and lists the
 other versions by their title, else their media type. A post without a
 recording, or whose front matter is missing what a player needs, prints none of
 it.
+
+**A post with photos shows them** (TASK-166), from `partials/photos.njk`, after
+the recording and before the `e-content`, each in a `figure.post-photo`. Each is
+the context's `photo.html`: an `<img class="u-photo">` with its alt text, so a
+microformats parser finds every photo on the entry, and a `<picture>` with the
+upload's resizes when it has them. The alt text is the post's own, else the
+media library's. A listing prints them the same way above each entry, and the
+JSON-LD `BlogPosting` lists each as an `ImageObject` with its absolute `url`
+and its alt text as `caption`. The first photo is the post's share image when
+its front matter names no `image`.
 
 ```html
 <figure class="post-recording">
@@ -442,8 +469,8 @@ After the entry a post prints `nav.blog-post-nav`: the `previous` and `next`
 posts as two cards, `rel="prev"` and `rel="next"`, each opening on a
 `span.blog-post-nav-label`, and nothing at all at the ends of the archive; then
 the conversation and the comment form. A page prints the contact form when its
-front matter asked for one. A page has no neighbours, no tags and no IndieNews
-link, because none of those are things a page has.
+front matter asked for one. A page has no neighbours, no tags and no
+syndication links, because none of those are things a page has.
 
 ### The bio
 
@@ -1138,6 +1165,10 @@ A document — one post, one page, or one entry of a listing — adds:
 | `permalink`, `slug`, `draft`, `description` | Straight from the front matter.                                                                                   |
 | `lang`                                      | The `lang` front matter as a canonical tag, such as `fr-CA`. Absent when it names none or no tag.                 |
 | `enclosure`                                 | The post's recording, parsed, with `player` (`audio` or `video`) and `transcript.captions`. Absent with none.     |
+| `photos`                                    | The post's photos, each `{ url, alt, html }`; `html` is the `img.u-photo`, responsive. Empty with none.           |
+| `citations`                                 | What it reposts, likes or bookmarks, each `{ property, url }` with `property` the mf2 name. Empty with none.      |
+| `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                  |
+| `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made. |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
 | `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |
