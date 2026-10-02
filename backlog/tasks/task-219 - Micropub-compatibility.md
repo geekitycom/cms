@@ -4,7 +4,7 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 19:38'
+updated_date: '2026-10-02 19:43'
 labels:
   - micropub
   - indieauth
@@ -140,4 +140,21 @@ Decision: support Quill fully, as a maintained client that does modern IndieAuth
 - p3k-content-type: refused today as an unknown property. Quill adds it to a note when its content-type selector is shown (views/new-post.php:849; shown by switchToMarkdown at :552 or the ctrl+shift+c easter egg), with text/plain or text/markdown. Proposed: accept it. text/markdown and text/plain both map to the Markdown body the site stores. Anything else (text/html) is refused with a message naming the type.
 - Token in header and body: fixed in PR #95.
 - A full inventory of every Quill editor's request against the create mapping follows.
+
+## Quill inventory (2026-10-02, aaronpk/Quill 691cee2, read from source)
+
+How Quill talks to the site: form posts carry the token in the header and as access_token (fixed by PR #95); JSON posts and media uploads carry it in the header only; media uploads use field 'file' (accepted). From q=config Quill reads syndicate-to {uid,name} (works), media-endpoint (so the note editor uploads first and posts only URLs), post-types (it hides its event, weight, itinerary and review editors when not listed), and visibility (the exact key; we send none, so its Visibility select never shows today).
+
+Accepted today (once #95 lands): note content, name, in-reply-to, category, mp-syndicate-to, mp-slug, photo (URL or [{value, alt}]), published (Quill's 'YYYY-MM-DD hh:mm:ss +zz:zz' parses); article name, content (HTML string or [{html}], stored as HTML in the Markdown body), category, post-status=draft, published; bookmark-of with name and content; like-of; repost-of; editing likes and reposts through q=source (bare properties=like-of works) and JSON replace.
+
+Gaps, most common first:
+1. Token in header and body: PR #95.
+2. Legacy field names: Quill accounts created before its migrations 0002/0004 send 'slug' and 'syndicate-to' instead of mp-slug and mp-syndicate-to, and get 'does not understand slug'. Fix: accept both as aliases.
+3. Media q=source&limit=1: Quill's 'last photo' asks the media endpoint for {items: [{url, published}]} (controllers.php:87) and gets 400 'does not answer q=source', so it silently attaches nothing. media.ts answers q=last, which Quill does not use (its docstring is wrong). Fix: answer q=source with the stored last upload, with published, since Quill only applies its 15-minute freshness check when published is present (controllers.php:93); micropub-media.json needs the upload time.
+4. p3k-content-type: sent when Quill's content-type selector is shown, automatically for a github.com reply containing a backtick, and on every Code post. Fix: accept text/plain and text/markdown (both land in the Markdown body); keep refusing code/* until a Code post type exists. Amends decision-27, since the property is accepted and not stored.
+5. visibility: not sent until q=config advertises it; once advertised, Quill always sends the select's first value. Accept visibility=public in create and update before advertising visibility in q=config.
+6. Photo without alt text on a requireAltText site: refused by policy. Typing alt text in Quill's photo modal makes it send JSON {value, alt}, which works. Docs only.
+7. Legacy 'post' scope: Quill offers it as a radio at sign-in; request.ts drops it silently, so every create then fails insufficient_scope. Rare.
+
+Need a data-model decision first (not filed): location (geo: URI from the note editor, opt-in in Quill), rsvp (replies to h-events; Post Type Discovery treats rsvp as its own type), code posts (p3k-content-type code/<lang>), and the editors Quill already hides for this site: event (h-event, sends some properties not in lists), review (h-review), itinerary, exercise, weight.
 <!-- SECTION:NOTES:END -->
