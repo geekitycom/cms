@@ -4,14 +4,14 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 18:55'
+updated_date: '2026-10-02 18:59'
 labels:
   - micropub
   - indieauth
   - interop
 dependencies: []
 references:
-  - 'https://github.com/barryf/micropublish'
+  - 'https://github.com/gRegorLove/indiebookclub'
 priority: medium
 type: chore
 ordinal: 235800
@@ -74,4 +74,29 @@ Support public and unlisted. Skip private.
 - unlisted: build it properly. Split isPublicDocument (packages/cms/src/web/documents.ts:20), which today decides both served and listed, and the SQL predicate the content index answers with, into two rules: served and listed. An unlisted post keeps its page (with noindex) and drops out of the home page, archives, tag and category pages, feeds, sitemap, search, llms.txt and IndexNow. It federates with to: followers and cc: Public (the swap of today's to: Public, cc: followers in packages/cms/src/federation/article.ts:230), so Mastodon shows it as unlisted. Webmentions still go out, since the page is public. Micropub accepts visibility=unlisted, the admin editor gets the same choice, and q=source and update round-trip it.
 - private: refused with a message saying the site has no private posts, not the generic 'does not understand'. Not built because: the website cannot tell a visitor who follows from one who does not, so a followers-only post could have no public page and every public path would have to skip it; the content is Markdown files that may sit in a public git repo, so a private post would not be private; and Micropub's 'private' (only the author) and Mastodon's 'private' (followers-only) mean different things. Revisit only after deciding the content directory can hold non-public posts.
 - Advertise the accepted values in q=config as visibility: ["public", "unlisted"], the micropub-extensions convention, alongside the per-type property lists proposed above.
+
+## indiebookclub (indiebookclub.biz, 2026-10-02, shll.me on 0.16.0)
+
+Result: sign-in works. Posting fails with 400: {"error":"invalid_request","error_description":"This endpoint does not understand read-status, read-of, visibility."}
+
+What it sends, from its source (build_micropub_request, app/Controller/IbcController.php:664, and its documentation page), always as JSON:
+- summary: a human sentence, e.g. 'Want to read: Title by Author, ISBN: 123'
+- read-status: to-read, reading or finished
+- read-of: an embedded h-cite object, not a URL: {type: [h-cite], properties: {name, author?, uid?}}, where uid is 'isbn:...' or 'doi:...'
+- post-status: published or draft
+- visibility: always sent, whatever the user picked, so it fails even when only public is offered
+- published and category when given
+No content and no name.
+
+Causes:
+1. visibility: covered by the visibility decision above. Accepting visibility=public fixes this part. indiebookclub reads 'visibility' from q=config (AuthController.php:215) at sign-in to decide which values to offer, so advertising ["public", "unlisted"] there shapes its form too.
+2. read-of and read-status: the read post type (IndieWeb 'read' posts) is not modelled. PostType has no read, createForm has no mapping, and TASK-169's citations (like-of, repost-of, bookmark-of) take a URL, while read-of is an h-cite object with a name, an author and an ISBN or DOI uid, usually with no URL.
+3. Body: with no content, the only text is summary, which createForm maps to the description. Once read-of is accepted, the page would print an empty body unless the theme renders the read itself.
+
+Proposed fix: a read post type.
+- Front matter: read-of as {name, author?, uid?, url?} and read-status as one of to-read, reading, finished, set from Micropub and from the admin editor.
+- Post Type Discovery gains read (read-of present), checked where the other citing types are.
+- The default theme prints the IndieWeb markup indiebookclub itself uses: <data class="p-read-status" value="to-read">Want to read</data> and a p-read-of h-cite with p-name, p-author and p-uid (an ISBN linked if the site wants). q=source and update round-trip both.
+- Federation: a Note whose content is the same sentence the page prints. A read has no fediverse object to Like or Announce.
+- Advertise read in q=config post-types, with its property list, so clients that read the list know it is accepted.
 <!-- SECTION:NOTES:END -->
