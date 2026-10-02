@@ -1498,6 +1498,23 @@ Any other type or property, such as `h=event`, `like-of` or `photo`, gets 400
 `invalid_request` with a description that names it, and nothing is written.
 decision-27 records the mapping.
 
+The media endpoint at `/_geekity/micropub/media` takes the file a client
+uploads before it names it in a post. The token needs the media scope, and a
+token without it gets 403 `insufficient_scope`. The body is
+`multipart/form-data` with the file in a part named `file`. The file goes into
+the media library exactly as an admin upload does: under
+`content/uploads/{yyyy}/{mm}/`, with its image variants derived, and listed on
+the media screen. The site answers 201 with a `Location` header naming the
+file's URL. A file over the upload limit, of a type the library does not
+accept, or whose bytes do not match its extension gets 400 `invalid_request`
+with the library's reason, and nothing is stored.
+
+A `GET` with `?q=last` answers `{"url": "…"}`, the URL of the most recent file
+uploaded through the media endpoint by the token's user, or `{}` when that
+user has uploaded nothing or the file has since been deleted. Any scope will
+do for the query. Each user's last upload is kept in
+`micropub-media.json` in the data directory.
+
 ## The theme
 
 Templates are Nunjucks (decision-4). The default theme lives in

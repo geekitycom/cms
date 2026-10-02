@@ -77,7 +77,7 @@ function isQuery(q: string | undefined): q is Query {
  * (decision-24), and granted `scope` when one is named. Built per request
  * because the base URL is a setting.
  */
-function requireSiteToken(scope?: Scope): MiddlewareHandler<BearerEnv> {
+export function requireSiteToken(scope?: Scope): MiddlewareHandler<BearerEnv> {
   return async (c, next) =>
     await requireBearer({
       audience: { resource: siteBaseUrl(c), acceptsUnbound: true },
