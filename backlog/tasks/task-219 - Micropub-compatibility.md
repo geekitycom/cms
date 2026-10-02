@@ -4,7 +4,7 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 23:44'
+updated_date: '2026-10-02 23:52'
 labels:
   - micropub
   - indieauth
@@ -177,4 +177,10 @@ Need a data-model decision first (not filed): location (geo: URI from the note e
 ## Quill location (2026-10-02, shll.me after PR #95)
 
 Quill now posts. With its location checkbox on, a note is refused: 'This endpoint does not understand location.' Quill sends a geo: URI, 'geo:LAT,LNG;u=ACC', rounded to five decimals (views/new-post.php:591). Filed as TASK-223, which starts with a privacy decision on how much of a location the site publishes.
+
+## iA Writer after TASK-220 (2026-10-02, shll.me, App activity entry 18:49 CDT)
+
+The rel=authorization_endpoint link worked: iA Writer now finds the endpoint and reaches the authorization screen. It is then refused: 302 invalid_request 'code_challenge must be an S256 PKCE challenge'. App activity shows what it sent: response_type=code, me=https://shll.me/, client_id=https://ia.net/writer, redirect_uri=https://ia.net/writer/indieauth/redirect, state (a UUID), scope='create media', and no code_challenge or code_challenge_method.
+
+So iA Writer, a maintained client, does not do PKCE. Under the no-legacy decision it is unsupported. Its redirect_uri is https on the same host as its client_id, which matters if a narrow exception is ever made.
 <!-- SECTION:NOTES:END -->
