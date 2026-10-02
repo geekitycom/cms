@@ -4,7 +4,7 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 19:03'
+updated_date: '2026-10-02 19:05'
 labels:
   - micropub
   - indieauth
@@ -109,4 +109,13 @@ Cause, from its source (last commit 2017-12-28, indieauth/client ^0.1.16): the s
 2. PKCE. The authorization URL it builds (src/micropub.js:42) carries me, redirect_uri, state, client_id, scope and response_type=code, and no code_challenge, so parseAuthorizationRequest would refuse it even once discovery worked.
 
 Pattern so far: two of four clients (micropub.rocks, Inkstone) predate PKCE and the metadata endpoint. Adding the legacy rels alone fixes neither; both also need an authorization request without PKCE to be accepted. That is a security trade-off to decide on its own: the current IndieAuth spec requires PKCE, and these are public clients, so accepting requests without it removes the protection against an intercepted code. If it is ever allowed, it should be narrow (for example, opt-in per site, and only for a client_id whose redirect_uri is on the same host) and documented as a legacy mode. The Create token proposal from the micropub.rocks entry does not help Inkstone, which has no manual token entry.
+
+## Decision: no legacy IndieAuth (2026-10-02)
+
+Clients that predate the IndieAuth metadata endpoint and PKCE are not supported. Inkstone's repository has issues open since 2016 and no commit since 2017; micropub.rocks pins an IndieAuth client from 2017. Supporting them would mean accepting authorization requests without PKCE, which the current spec requires.
+
+- PKCE stays required.
+- The legacy rel="authorization_endpoint" and rel="token_endpoint" links are dropped from the proposals too: without relaxing PKCE they help no client tried so far.
+- Inkstone: closed as unsupported.
+- micropub.rocks: its sign-in is unsupported. Its Manual tab (endpoint plus pasted token) still works with a token from a modern client, so the Create token proposal stays open as a testing and scripting aid, not as legacy support.
 <!-- SECTION:NOTES:END -->

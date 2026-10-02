@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-29 01:55'
-updated_date: '2026-10-02 17:14'
+updated_date: '2026-10-02 19:05'
 labels:
   - micropub
   - indieweb
@@ -82,6 +82,8 @@ Runbook after deploy (AC#1, AC#2):
 AC#1 and AC#2 stay unchecked: both need a public deployed site and real clients.
 
 AC#3: README.md ## Micropub rewritten as one section (it was ### Micropub under Signing in, extended seven times). Covers what the endpoint does, connecting an app with a scope table matching consent.ts SCOPE_LABELS, disconnecting on Users > Connected apps (/admin/users/apps), sending the token, a property table for create, update/delete/undelete, queries, the media endpoint, and the micropub.rocks results. The IndieAuth paragraph on sending a token also notes the new 400. Gates: pnpm build, pnpm test (3404 + 30 pass), pnpm typecheck, pnpm lint, pnpm format:check all pass.
+
+2026-10-02: micropub.rocks cannot sign in to the site (2017 IndieAuth client, no PKCE, no metadata discovery), and legacy IndieAuth will not be supported (TASK-219). Running its server tests needs its Manual tab: endpoint https://shll.me/_geekity/micropub plus an access token obtained some other way. See TASK-219 for the Create token proposal.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
