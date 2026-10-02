@@ -772,6 +772,32 @@ describe('the recording in the post editor (TASK-213 AC #1, #2)', () => {
     assert.equal(data['mood'], 'calm');
   });
 
+  it('will not quietly drop a hand-written recording it cannot use', async () => {
+    const { contentDir, agent } = await episode([
+      'enclosure:',
+      '  url: https://cdn.example.com/episode.mp3',
+      '  type: audio/mpeg',
+      '  length: 1234',
+    ]);
+    const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+    const html = await (await agent.get('/admin/posts/episode')).text();
+    assert.match(
+      html,
+      /<option value="https:\/\/cdn\.example\.com\/episode\.mp3" selected>https:\/\/cdn\.example\.com\/episode\.mp3 \(not in the media library\)<\/option>/,
+    );
+
+    const response = await submit(agent, '/admin/posts/episode', { title: 'Renamed' });
+    assert.equal(response.status, 400);
+    assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+
+    assert.equal(
+      (await submit(agent, '/admin/posts/episode', { 'enclosure-url': '' })).status,
+      303,
+    );
+    assert.equal('enclosure' in (await frontMatter(contentDir)), false, 'None removes it');
+  });
+
   const refusals: { name: string; changes: Record<string, string>; message: RegExp }[] = [
     {
       name: 'a main file that is not audio or video',

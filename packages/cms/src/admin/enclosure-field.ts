@@ -14,6 +14,7 @@ import path from 'node:path';
 
 import {
   ALTERNATE_TITLE_MAX_LENGTH,
+  ENCLOSURE_FRONT_MATTER_KEY,
   enclosureOf,
   isMediaType,
   isUploadUrl,
@@ -75,10 +76,22 @@ export const BLANK_ENCLOSURE_FORM: EnclosureForm = {
   alternates: [],
 };
 
-/** What a post's front matter says about its recording, as the editor shows it. */
+/**
+ * What a post's front matter says about its recording, as the editor shows it.
+ *
+ * A hand-written recording the CMS cannot use still shows its address, so
+ * saving the post says what is wrong with it rather than quietly deleting it.
+ */
 export function enclosureForm(document: Document): EnclosureForm {
   const enclosure = enclosureOf(document.extra);
-  if (enclosure === undefined) return BLANK_ENCLOSURE_FORM;
+  if (enclosure === undefined) {
+    const raw: unknown = document.extra[ENCLOSURE_FRONT_MATTER_KEY];
+    const url =
+      typeof raw === 'object' && raw !== null && 'url' in raw && typeof raw.url === 'string'
+        ? raw.url
+        : '';
+    return { ...BLANK_ENCLOSURE_FORM, url };
+  }
   return {
     url: enclosure.url,
     duration: enclosure.duration === undefined ? '' : clockTime(enclosure.duration),
