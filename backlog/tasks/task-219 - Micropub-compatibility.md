@@ -4,7 +4,7 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 23:53'
+updated_date: '2026-10-02 23:55'
 labels:
   - micropub
   - indieauth
@@ -187,4 +187,6 @@ So iA Writer, a maintained client, does not do PKCE. Under the no-legacy decisio
 ## Decision: per-app PKCE allowlist (2026-10-02)
 
 Amends the no-legacy decision. PKCE stays required by default. The owner can list apps allowed to sign in without it, and only with an https redirect_uri on the app's own host. Built for iA Writer. Filed as TASK-225. micropub.rocks and Inkstone stay unsupported: they also lack metadata discovery, and they are unmaintained.
+
+Correction to the per-app PKCE allowlist decision: micropub.rocks and Inkstone are not excluded. TASK-220's rel=authorization_endpoint and rel=token_endpoint links fix their discovery, so PKCE is their only remaining blocker, and both pass the same-host rule: micropub.rocks uses its base URL as client_id with redirect_uri {base}endpoints/callback (app/Controller.php:13, :207); Inkstone uses https://inklings.io/inkstone/ for both (src/config.js:10-11). The owner can list either once TASK-225 lands. Unverified: whether their 2017 IndieAuth clients accept the site's token response.
 <!-- SECTION:NOTES:END -->
