@@ -4,7 +4,7 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 18:50'
+updated_date: '2026-10-02 18:55'
 labels:
   - micropub
   - indieauth
@@ -65,4 +65,13 @@ Proposed fixes:
 - Advertise each post type's accepted properties in q=config post-types, built from the same table createForm maps from, so a client that reads it never offers a field the site would refuse. This covers visibility and any other unmapped field (location, checkin, rsvp) in one place, for Micropublish and any other client that reads the list.
 - Accept visibility=public as a no-op, since every published post here is public. Refuse unlisted and private with a message that says the site has no unlisted or private posts, not the generic 'does not understand'. Optionally advertise visibility: ["public"] in q=config, the micropub-extensions way to say which values a server supports.
 - Not proposed: mapping private to draft. A draft is unpublished, not private, and a client that sends private expects the post to exist.
+
+## Decision: visibility (2026-10-02)
+
+Support public and unlisted. Skip private.
+
+- public: what the site does today. Accept visibility=public as a no-op.
+- unlisted: build it properly. Split isPublicDocument (packages/cms/src/web/documents.ts:20), which today decides both served and listed, and the SQL predicate the content index answers with, into two rules: served and listed. An unlisted post keeps its page (with noindex) and drops out of the home page, archives, tag and category pages, feeds, sitemap, search, llms.txt and IndexNow. It federates with to: followers and cc: Public (the swap of today's to: Public, cc: followers in packages/cms/src/federation/article.ts:230), so Mastodon shows it as unlisted. Webmentions still go out, since the page is public. Micropub accepts visibility=unlisted, the admin editor gets the same choice, and q=source and update round-trip it.
+- private: refused with a message saying the site has no private posts, not the generic 'does not understand'. Not built because: the website cannot tell a visitor who follows from one who does not, so a followers-only post could have no public page and every public path would have to skip it; the content is Markdown files that may sit in a public git repo, so a private post would not be private; and Micropub's 'private' (only the author) and Mastodon's 'private' (followers-only) mean different things. Revisit only after deciding the content directory can hold non-public posts.
+- Advertise the accepted values in q=config as visibility: ["public", "unlisted"], the micropub-extensions convention, alongside the per-type property lists proposed above.
 <!-- SECTION:NOTES:END -->
