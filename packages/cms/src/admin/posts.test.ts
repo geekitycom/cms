@@ -3,6 +3,8 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import matter from 'gray-matter';
+
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import { readSiteSettings, writeSiteJson } from './settings.ts';
 import type { Browser } from './__testing__/harness.ts';
@@ -64,6 +66,25 @@ function field(html: string, name: string): string | undefined {
 }
 
 /**
+ * The recording fields a browser would send back from a rendered editor: every
+ * text field as it was filled in, and each select's chosen option.
+ */
+function recordingFields(html: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const [, name = '', value = ''] of html.matchAll(
+    /<input[^>]*name="((?:enclosure|alternate)-[^"]+)"[^>]*value="([^"]*)"/g,
+  )) {
+    fields[name] = value;
+  }
+  for (const [, name = '', options = ''] of html.matchAll(
+    /<select[^>]*name="(enclosure-[^"]+)"[^>]*>([\s\S]*?)<\/select>/g,
+  )) {
+    fields[name] = /<option value="([^"]*)" selected>/.exec(options)?.[1] ?? '';
+  }
+  return fields;
+}
+
+/**
  * Fill in the editor at `url` and submit it, the way a browser would: load the
  * form, keep every value it came with, change the ones the test cares about,
  * and post the whole thing back with the CSRF token and the hash it carried.
@@ -89,6 +110,7 @@ async function submit(
     description: field(html, 'description') ?? '',
     'in-reply-to': field(html, 'in-reply-to') ?? '',
     lang: field(html, 'lang') ?? '',
+    ...recordingFields(html),
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
     action: 'update',
     ...changes,
@@ -604,6 +626,213 @@ describe('pinning a post in the editor (TASK-207 AC #1)', () => {
       'a save keeps the moment the post was first pinned',
     );
   });
+});
+
+describe('the recording in the post editor (TASK-213 AC #1, #2)', () => {
+  const FILE = ['posts', '2026-01-02-episode.md'];
+  const MONTH = ['uploads', '2026', '10'];
+  const MP3 = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09]);
+
+  async function episode(extra: string[] = []): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-episode.md',
+        title: 'Episode twelve',
+        date: '2026-01-02',
+        permalink: '/2026/01/episode/',
+        extra,
+      },
+    ]);
+    const uploads = path.join(contentDir, ...MONTH);
+    await mkdir(uploads, { recursive: true });
+    await writeFile(path.join(uploads, 'episode.mp3'), MP3);
+    await writeFile(path.join(uploads, 'episode.mp4'), new Uint8Array(32));
+    await writeFile(path.join(uploads, 'episode.vtt'), 'WEBVTT\n');
+    await writeFile(path.join(uploads, 'cover.png'), new Uint8Array(8));
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  async function frontMatter(contentDir: string): Promise<Record<string, unknown>> {
+    return matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data;
+  }
+
+  it('offers the audio and video in the media library, and nothing else', async () => {
+    const { agent } = await episode();
+
+    const html = await (await agent.get('/admin/posts/episode')).text();
+
+    assert.match(html, /<legend>Recording<\/legend>/);
+    assert.match(html, /<option value="" selected>None<\/option>/);
+    assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp3">2026\/10\/episode\.mp3</);
+    assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp4">2026\/10\/episode\.mp4</);
+    assert.doesNotMatch(html, /<option value="\/uploads\/2026\/10\/cover\.png"/);
+  });
+
+  it('offers no recording on a page', async () => {
+    const { agent } = await episode();
+
+    const html = await (await agent.get('/admin/pages/new')).text();
+
+    assert.doesNotMatch(html, /Recording|enclosure-url/);
+  });
+
+  it('attaches an upload with the type and size of the file on disk, and shows it on reload', async () => {
+    const { contentDir, agent } = await episode();
+
+    const response = await submit(agent, '/admin/posts/episode', {
+      'enclosure-url': '/uploads/2026/10/episode.mp3',
+      'enclosure-duration': '30:34',
+      'enclosure-transcript-url': '/uploads/2026/10/episode.vtt',
+    });
+
+    assert.equal(response.status, 303);
+    assert.deepEqual((await frontMatter(contentDir))['enclosure'], {
+      url: '/uploads/2026/10/episode.mp3',
+      type: 'audio/mpeg',
+      length: MP3.byteLength,
+      duration: 1834,
+      transcript: { url: '/uploads/2026/10/episode.vtt', type: 'text/vtt' },
+    });
+    const reloaded = await (await agent.get('/admin/posts/episode')).text();
+    assert.match(reloaded, /<option value="\/uploads\/2026\/10\/episode\.mp3" selected>/);
+    assert.equal(field(reloaded, 'enclosure-duration'), '30:34');
+  });
+
+  it('adds, edits and removes alternate versions through the blank row', async () => {
+    const { contentDir, agent } = await episode();
+
+    await submit(agent, '/admin/posts/episode', {
+      'enclosure-url': '/uploads/2026/10/episode.mp3',
+      'alternate-url-0': '/uploads/2026/10/episode.mp4',
+      'alternate-title-0': 'Video',
+      'alternate-height-0': '720',
+    });
+    let reloaded = await (await agent.get('/admin/posts/episode')).text();
+    assert.equal(field(reloaded, 'alternate-url-0'), '/uploads/2026/10/episode.mp4');
+    assert.equal(field(reloaded, 'alternate-url-1'), '', 'a blank row to add another');
+
+    await submit(agent, '/admin/posts/episode', {
+      'alternate-url-1': 'https://cdn.example.com/episode-low.mp3',
+      'alternate-type-1': 'audio/mpeg',
+      'alternate-title-1': 'Low bandwidth',
+      'alternate-lang-1': 'en',
+    });
+    assert.deepEqual(
+      ((await frontMatter(contentDir))['enclosure'] as Record<string, unknown>)['alternates'],
+      [
+        {
+          url: '/uploads/2026/10/episode.mp4',
+          type: 'video/mp4',
+          length: 32,
+          title: 'Video',
+          height: 720,
+        },
+        {
+          url: 'https://cdn.example.com/episode-low.mp3',
+          type: 'audio/mpeg',
+          title: 'Low bandwidth',
+          lang: 'en',
+        },
+      ],
+    );
+
+    reloaded = await (await agent.get('/admin/posts/episode')).text();
+    assert.equal(field(reloaded, 'alternate-url-2'), '');
+    await submit(agent, '/admin/posts/episode', { 'alternate-url-0': '' });
+    assert.deepEqual(
+      ((await frontMatter(contentDir))['enclosure'] as Record<string, unknown>)['alternates'],
+      [
+        {
+          url: 'https://cdn.example.com/episode-low.mp3',
+          type: 'audio/mpeg',
+          title: 'Low bandwidth',
+          lang: 'en',
+        },
+      ],
+    );
+  });
+
+  it('removes the whole recording with the main file, and keeps the keys around it', async () => {
+    const { contentDir, agent } = await episode(['license: cc-by', 'mood: calm']);
+    await submit(agent, '/admin/posts/episode', {
+      'enclosure-url': '/uploads/2026/10/episode.mp3',
+      'alternate-url-0': 'https://cdn.example.com/episode.mp4',
+      'alternate-type-0': 'video/mp4',
+    });
+
+    assert.equal(
+      (await submit(agent, '/admin/posts/episode', { 'enclosure-url': '' })).status,
+      303,
+    );
+
+    const data = await frontMatter(contentDir);
+    assert.equal('enclosure' in data, false);
+    assert.equal(data['license'], 'cc-by');
+    assert.equal(data['mood'], 'calm');
+  });
+
+  const refusals: { name: string; changes: Record<string, string>; message: RegExp }[] = [
+    {
+      name: 'a main file that is not audio or video',
+      changes: { 'enclosure-url': '/uploads/2026/10/cover.png' },
+      message: /The recording has to be an audio or video file in the media library\./,
+    },
+    {
+      name: 'a main file that is not there',
+      changes: { 'enclosure-url': '/uploads/2026/10/gone.mp3' },
+      message: /The recording has to be an audio or video file in the media library\./,
+    },
+    {
+      name: 'a linked version without an http(s) address',
+      changes: {
+        'alternate-url-0': 'cdn.example.com/episode.mp4',
+        'alternate-type-0': 'video/mp4',
+      },
+      message:
+        /An alternate version is a file in the media library or an address starting https:\/\//,
+    },
+    {
+      name: 'a linked version without a media type',
+      changes: { 'alternate-url-0': 'https://cdn.example.com/episode.mp4' },
+      message: /Say what type of file https:\/\/cdn\.example\.com\/episode\.mp4 is/,
+    },
+    {
+      name: 'a version title over 32 characters',
+      changes: {
+        'alternate-url-0': '/uploads/2026/10/episode.mp4',
+        'alternate-title-0': 'A title far longer than any player would show',
+      },
+      message: /title is at most 32 characters/,
+    },
+    {
+      name: 'a linked transcript without its type',
+      changes: { 'enclosure-transcript-url': 'https://example.com/transcript' },
+      message: /Say what kind of file a linked transcript is\./,
+    },
+    {
+      name: 'a duration nobody can read',
+      changes: { 'enclosure-duration': 'half an hour' },
+      message: /A duration is seconds/,
+    },
+  ];
+
+  for (const refusal of refusals) {
+    it(`refuses ${refusal.name}, and writes nothing`, async () => {
+      const { contentDir, agent } = await episode();
+      const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+      const response = await submit(agent, '/admin/posts/episode', {
+        'enclosure-url': '/uploads/2026/10/episode.mp3',
+        ...refusal.changes,
+      });
+
+      assert.equal(response.status, 400);
+      const html = await response.text();
+      assert.match(html, refusal.message);
+      assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+    });
+  }
 });
 
 describe('writing a post', () => {

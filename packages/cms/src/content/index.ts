@@ -1,5 +1,13 @@
 export { KNOWN_FRONT_MATTER_KEYS } from './document.ts';
 export type { ActivityPubMetadata, Document, DocumentContent, DocumentType } from './document.ts';
+export {
+  ENCLOSURE_FRONT_MATTER_KEY,
+  enclosureOf,
+  isCaptions,
+  playsAsVideo,
+  TRANSCRIPT_TYPES,
+} from './enclosure.ts';
+export type { AlternateEnclosure, Enclosure, Transcript, TranscriptType } from './enclosure.ts';
 export { renderMarkdown } from './markdown.ts';
 export {
   KNOWN_UPLOAD_TYPES,
