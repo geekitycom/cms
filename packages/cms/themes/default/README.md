@@ -709,17 +709,28 @@ included. `og:url` is the canonical URL. An article also carries
 publish date), `article:author` (the author's profile URL here, else their
 name) and one `article:tag` per tag.
 
-**The picture** is the `image` in the entry's front matter, else `site.avatar`,
-on the context as `shareImage`. A site with neither prints no `og:image` and no
-`twitter:image` rather than an empty one. The picture always carries
-`og:image:alt` and `twitter:image:alt`. For the entry's own picture, the alt
-text is its `imageAlt` front matter, else what the media library says about the
-upload, else the entry's title. For the avatar, it is the media library's text,
-else the site's author. `og:image:width` and `og:image:height` are printed when
-the image's variants have been derived, because the size is read from their
-sidecar rather than from the file. `twitter:card` is `summary_large_image` for a
-picture at least 1200 pixels wide and wider than it is tall. Everything else,
-the avatar included, is `summary`, the small picture beside the words.
+**The picture** is the first of these that the page has, on the context as
+`shareImage`:
+
+1. The `image` in the entry's front matter.
+2. `site.avatar`, which only a hand edit of `site.json` sets.
+3. The profile photo of the person the page is by: the writer of a post or page
+   that names an author, the user of an author archive, and the site's author
+   on a solo-author site's homepage and other pages about nobody in particular.
+4. The site icon, from `icon` in `site.json`.
+
+A page with none of these prints no `og:image` and no `twitter:image` rather
+than an empty one. The picture always carries `og:image:alt` and
+`twitter:image:alt`. The alt text is what the media library says about the
+upload, else words for what it shows. For the entry's own picture, its
+`imageAlt` front matter comes first, and the entry's title last. For the
+avatar, the last resort is the site's author; for a photo, that person's
+display name; for the icon, the site's title. `og:image:width` and
+`og:image:height` are printed when the image's variants have been derived,
+because the size is read from their sidecar rather than from the file.
+`twitter:card` is `summary_large_image` for a picture at least 1200 pixels wide
+and wider than it is tall. Everything else, a square photo included, is
+`summary`, the small picture beside the words.
 
 **The icons** come from the site's `icon` setting in `site.json`, else
 `site.avatar`, through the derived images (decision-10). `icon` exists for a
@@ -795,8 +806,8 @@ IndieWeb. The graph holds:
   `author`, and the site's `publisher`: the site author's Person, or the
   Organization. A post with no title is headed by the words its `<title>`
   names it by, its `label`, cut on a word boundary to at most 110 characters.
-  A post with no picture of its own, on a site with no avatar, takes its
-  author's photo, else the site's `icon` upload.
+  Its `image` is the picture the Open Graph tags print, so the two always
+  agree (see [The head](#the-head)).
 - `BreadcrumbList` wherever the page prints a breadcrumb (see
   [The page shell](#the-page-shell)): one `ListItem` per crumb with its
   `position`, `name` and absolute URL as `item`.

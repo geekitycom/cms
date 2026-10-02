@@ -946,6 +946,141 @@ describe('the share image’s alt text and card (TASK-146 AC #3, AC #4)', () => 
   });
 });
 
+describe('the share image falls back to a photo, then the icon (TASK-211)', () => {
+  const PHOTO = '/uploads/2026/09/ada.png';
+  const ICON = '/uploads/2026/09/icon.png';
+  const BY_GRACE: Record<string, string> = {
+    'posts/by-grace.md':
+      "---\ntitle: By Grace\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/by-grace/\nauthor: grace\n---\n\nHers.\n",
+  };
+
+  /** A site with no avatar, a user `ada` with this profile, and whatever settings. */
+  async function siteWith(
+    profile: Record<string, unknown>,
+    settings: Record<string, unknown> = {},
+  ): Promise<Cms> {
+    const { cms } = await siteWithContent(
+      { url: 'https://example.com', ...settings },
+      {},
+      BY_GRACE,
+    );
+    await addUser(cms, 'ada', { displayName: 'Ada Lovelace', ...profile });
+    return cms;
+  }
+
+  const image = (html: string): string | undefined => metaContent(html, 'og:image');
+
+  it('pictures a post or page with no image by its author’s photo (AC #1)', async () => {
+    const cms = await siteWith({ avatar: PHOTO }, { author: 'ada', icon: ICON });
+
+    for (const pathname of ['/2026/09/hello/', '/about/']) {
+      const html = await body(cms, pathname);
+      assert.equal(image(html), `https://example.com${PHOTO}`, pathname);
+      assert.equal(metaContent(html, 'twitter:image'), `https://example.com${PHOTO}`, pathname);
+    }
+  });
+
+  it('pictures a post by the writer’s photo on a site with several authors (AC #1)', async () => {
+    const cms = await siteWith({}, { icon: ICON });
+    await addUser(cms, 'grace', { displayName: 'Grace Hopper', avatar: PHOTO });
+
+    const html = await body(cms, '/2026/09/by-grace/');
+    assert.equal(image(html), `https://example.com${PHOTO}`);
+    assert.equal(metaContent(html, 'og:image:alt'), 'Grace Hopper');
+  });
+
+  it('pictures it by the site icon when the author has no photo (AC #1)', async () => {
+    const cms = await siteWith({}, { author: 'ada', icon: ICON });
+
+    for (const pathname of ['/2026/09/hello/', '/about/']) {
+      assert.equal(image(await body(cms, pathname)), `https://example.com${ICON}`, pathname);
+    }
+  });
+
+  it('prints no image with neither a photo nor an icon (AC #1)', async () => {
+    const html = await body(await siteWith({}, { author: 'ada' }), '/2026/09/hello/');
+
+    assert.equal(image(html), undefined);
+    assert.equal(metaContent(html, 'twitter:image'), undefined);
+  });
+
+  it('pictures the homepage by the solo author’s photo, else the icon (AC #2)', async () => {
+    const solo = await siteWith({ avatar: PHOTO }, { author: 'ada', icon: ICON });
+    for (const pathname of ['/', '/tag/notes/']) {
+      assert.equal(image(await body(solo, pathname)), `https://example.com${PHOTO}`, pathname);
+    }
+
+    const several = await siteWith({ avatar: PHOTO }, { icon: ICON });
+    for (const pathname of ['/', '/tag/notes/']) {
+      assert.equal(image(await body(several, pathname)), `https://example.com${ICON}`, pathname);
+    }
+  });
+
+  it('keeps an entry’s own image and a hand-set avatar ahead of the fallbacks (AC #3)', async () => {
+    const cms = await siteWith(
+      { avatar: PHOTO },
+      { author: 'ada', icon: ICON, avatar: '/uploads/2026/09/avatar.png' },
+    );
+
+    assert.equal(
+      image(await body(cms, '/2026/09/photo/')),
+      'https://example.com/uploads/2026/09/hero.png',
+    );
+    for (const pathname of ['/', '/2026/09/hello/', '/about/']) {
+      assert.equal(
+        image(await body(cms, pathname)),
+        'https://example.com/uploads/2026/09/avatar.png',
+        pathname,
+      );
+    }
+  });
+
+  it('describes the photo and the icon, and sizes them from the sidecar (AC #4)', async () => {
+    const photo = await siteWith({ avatar: PHOTO }, { author: 'ada' });
+    await upload(photo, PHOTO, 400, 400);
+    const byPhoto = await body(photo, '/2026/09/hello/');
+    assert.equal(metaContent(byPhoto, 'og:image:alt'), 'Ada Lovelace');
+    assert.equal(metaContent(byPhoto, 'og:image:width'), '400');
+    assert.equal(metaContent(byPhoto, 'og:image:height'), '400');
+
+    await writeFile(
+      path.join(photo.config.contentDir, '_data', 'media.json'),
+      JSON.stringify({ '2026/09/ada.png': { alt: 'Ada at her desk' } }),
+    );
+    assert.equal(
+      metaContent(await body(photo, '/2026/09/hello/'), 'og:image:alt'),
+      'Ada at her desk',
+    );
+
+    const icon = await siteWith({}, { author: 'ada', icon: ICON });
+    await upload(icon, ICON, 512, 512);
+    const byIcon = await body(icon, '/2026/09/hello/');
+    assert.equal(metaContent(byIcon, 'og:image:alt'), 'A Site');
+    assert.equal(metaContent(byIcon, 'og:image:width'), '512');
+    assert.equal(metaContent(byIcon, 'og:image:height'), '512');
+  });
+
+  it('gives the JSON-LD image the og:image URL on a post and a page (AC #5)', async () => {
+    const cases: [Cms, string, string][] = [
+      [
+        await siteWith({ avatar: PHOTO }, { author: 'ada', icon: ICON }),
+        '/2026/09/hello/',
+        'BlogPosting',
+      ],
+      [await siteWith({ avatar: PHOTO }, { author: 'ada', icon: ICON }), '/about/', 'Article'],
+      [await siteWith({}, { author: 'ada', icon: ICON }), '/about/', 'Article'],
+      [await siteWith({ avatar: PHOTO }, { author: 'ada' }), '/2026/09/photo/', 'BlogPosting'],
+    ];
+
+    for (const [cms, pathname, type] of cases) {
+      const html = await body(cms, pathname);
+      const entry = node(graph(html), type);
+      assert.ok(entry !== undefined && image(html) !== undefined, pathname);
+      assert.equal(entry['image'], image(html), pathname);
+    }
+  });
+});
+
 describe('the icons (TASK-81 AC #2)', () => {
   it('links three square icons derived from the site avatar', async () => {
     const cms = await siteWearingAnAvatar();
@@ -1213,7 +1348,7 @@ describe('the JSON-LD headline and image of an untitled post (TASK-201)', () => 
     );
   });
 
-  it('leaves a titled post’s headline and a page’s image as they were (AC #3)', async () => {
+  it('leaves a titled post’s and a page’s headline as they were (AC #3)', async () => {
     const cms = await siteOfAda({ avatar: '/uploads/2026/09/ada.png' }, { icon: '/uploads/i.png' });
 
     assert.equal(posting(await body(cms, '/2026/09/hello/'))['headline'], 'Hello');
@@ -1221,7 +1356,6 @@ describe('the JSON-LD headline and image of an untitled post (TASK-201)', () => 
     const article = node(graph(await body(cms, '/about/')), 'Article');
     assert.ok(article !== undefined);
     assert.equal(article['headline'], 'About');
-    assert.equal(article['image'], undefined, 'a page was given a picture it did not have');
   });
 });
 

@@ -126,8 +126,7 @@ export function oEmbedFor(
     image: document.extra['image'],
     imageAlt: document.extra['imageAlt'],
     title,
-    avatar: undefined,
-    owner: site.title,
+    fallbacks: [],
   });
   const thumbnail =
     image?.size !== undefined &&

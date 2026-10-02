@@ -41,7 +41,9 @@
     `metaDescription` is the page's own description, else the entry's summary
     — the very line the feeds publish — else the site's tagline. `metaImage` is
     `shareImage.url`: the picture the front matter names, else the site's
-    avatar; with neither, nothing is printed rather than an empty tag. The CMS
+    avatar, else the photo of the person the page is by, else the site icon;
+    with none, nothing is printed rather than an empty tag. The JSON-LD prints
+    the same picture. The CMS
     works out `shareImage` because its alt text and its size live in files a
     template cannot read. `isEntry` is a rendered post
     or page, which is what Open Graph calls an article: a listing has

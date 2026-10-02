@@ -54,12 +54,9 @@
 {% set entryType = "BlogPosting" if type == "post" else "Article" %}
 {#- A post with no title is headed by the words its <title> names it by,
     within the 110 characters Google reads, cut where a word ends (TASK-201).
-    Its picture is its own, else the site's avatar, else its author's photo,
-    else the site icon: the original upload rather than a derived icon, which
-    at 180 pixels is too small for an article image. A page keeps its title
-    and its own picture. -#}
+    A page keeps its title. The picture is the share image the Open Graph
+    tags print (TASK-211), so the two cannot disagree. -#}
 {% set headline = title or (label | truncate(109, false, "…") if type == "post" else "") %}
-{% set entryImage = metaImage or (siteAuthor.avatar or site.icon if type == "post" else "") %}
 {% set nodes = [] %}
 {% set website %}
     {
@@ -129,7 +126,7 @@
       {{- member("datePublished", date | date("iso") if date else "") }}
       {{- member("dateModified", (updated or date) | date("iso") if (updated or date) else "") }}
       {{- member("description", metaDescription) }}
-      {{- member("image", entryImage | absoluteUrl if entryImage else "") }}
+      {{- member("image", metaImage | absoluteUrl if metaImage else "") }}
       {{- member("author", person) }}
       {{- member("publisher", publisher) }}
     }{% endset %}

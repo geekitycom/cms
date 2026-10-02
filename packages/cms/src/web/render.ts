@@ -422,16 +422,22 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     const icons = siteIcons(config, iconSetting(site));
     // The picture a shared link shows (TASK-146), here for the reason the
     // icons are: its alt text and its size are in files only this side reads.
+    // With none of its own, a page shows the photo of the person it is by, so
+    // a link to it never goes out blank while somebody has a face (TASK-211).
     const title = [context['title'], context['label']].find(
       (value): value is string => typeof value === 'string' && value !== '',
     );
+    const by = (context['siteAuthor'] ?? siteOwner) as AuthorContext | undefined;
     const image = shareImage({
       config,
       image: context['image'],
       imageAlt: context['imageAlt'],
       title: title ?? site.title,
-      avatar: site.avatar,
-      owner: siteOwner?.name ?? site.title,
+      fallbacks: [
+        { url: site.avatar, describedAs: siteOwner?.name ?? site.title },
+        { url: by?.avatar, describedAs: by?.name ?? site.title },
+        { url: iconSetting(site), describedAs: site.title },
+      ],
     });
     return environment.render(template, {
       site,
