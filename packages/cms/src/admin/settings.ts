@@ -18,7 +18,7 @@ import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from '../web/fee
 import type { UpdatePeriod } from '../web/feed-source.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
 import { generateIndexNowKey, isIndexNowKey } from '../web/indexnow.ts';
-import { isCreativeCommonsKey, isLicenseUrl, NO_LICENSE } from '../web/license.ts';
+import { classifyLicense, isCreativeCommonsKey, isLicenseUrl, NO_LICENSE } from '../web/license.ts';
 import type { CreativeCommonsKey } from '../web/license.ts';
 import { canonicalLocale } from '../web/locale.ts';
 import { DEFAULT_MENU_NAME, menuItemsFromText, menusOf } from '../web/navigation.ts';
@@ -153,13 +153,12 @@ export interface SiteSettings {
   theme: string;
   /**
    * The upload the site's icons are derived from, as a path such as
-   * `/uploads/2026/10/icon.png`, or empty for none (TASK-212). Only the
-   * `icon` key: a hand-set `avatar` the icons fall back to is not this
-   * setting, so a save of it never writes one into the other.
+   * `/uploads/2026/10/icon.png`, or empty for none. Read from and written
+   * to the `icon` key of `site.json` only.
    */
   icon: string;
   /**
-   * What readers may do with the site's posts (TASK-206): empty for no
+   * What readers may do with the site's posts: empty for no
    * license, which is all rights reserved, a Creative Commons key, or
    * `custom` for the URL and name beside it. `site.json` writes a key, or a
    * custom license's URL, under `license`, so the file says it the way a
@@ -377,7 +376,6 @@ export interface SiteSettings {
 /** What a site says about one Content-Signal: yes, no, or nothing. */
 export type ContentSignalChoice = '' | 'yes' | 'no';
 
-/** The License select's choices: none, a Creative Commons key, or a custom URL. */
 export type LicenseChoice = '' | CreativeCommonsKey | 'custom';
 
 /** Whether a string is a {@link ContentSignalChoice}. */
@@ -561,10 +559,6 @@ export function readSiteSettings(contentDir: string): SiteSettings {
   return settingsFromSiteJson(readSiteJson(contentDir));
 }
 
-/**
- * `content/_data/site.json` as it is, keys the settings do not model and all,
- * or empty when it is missing or will not parse.
- */
 export function readSiteJson(contentDir: string): Record<string, unknown> {
   return readSiteJsonSync(siteDataPath(contentDir));
 }
@@ -800,8 +794,7 @@ export function siteJsonFor(
   // not a choice a site should have to write down, and a `theme` of `""` would
   // be a name no directory has. `locale` too: a site whose dates follow its
   // language has made no choice to write down.
-  // `author` too: a site with several authors names nobody (TASK-192). And
-  // `icon`, so a cleared icon lets a hand-set `avatar` show through again.
+  // `author` too: a site with several authors names nobody (TASK-192).
   for (const key of ['homepage', 'postsPage', 'theme', 'locale', 'author', 'icon'] as const) {
     if (settings[key] === '') delete file[key];
     else file[key] = settings[key];
@@ -814,8 +807,6 @@ export function siteJsonFor(
   if (settings.wordpressActivityPub) file['wordpressActivityPub'] = true;
   else delete file['wordpressActivityPub'];
 
-  // No license is no key, the way a post with none says nothing; a custom
-  // license is written as its URL, which is what front matter takes too.
   delete file['licenseName'];
   if (settings.license === '') delete file['license'];
   else if (settings.license !== 'custom') file['license'] = settings.license;
@@ -992,7 +983,6 @@ export function effectiveBaseUrl(
 export interface SettingsContext {
   /** Where the site's themes are: {@link ResolvedConfig.themesDir}. */
   themesDir?: string | undefined;
-  /** Where the site's content is, uploads and all: {@link ResolvedConfig.contentDir}. */
   contentDir?: string | undefined;
 }
 
@@ -1086,9 +1076,6 @@ const FIELD_CHECKS: Record<
   license: (form) =>
     isLicenseChoice(form.license.trim()) ? undefined : 'Choose a license from the list.',
 
-  // The URL and the name are only read for a custom license, so they are only
-  // checked for one: a box left filled in under a Creative Commons choice is
-  // dropped on save rather than refused.
   licenseUrl: (form) =>
     form.license.trim() === 'custom' && !isLicenseUrl(form.licenseUrl.trim())
       ? 'A custom license needs the URL of its terms, starting http:// or https://.'
@@ -1231,32 +1218,21 @@ const FIELD_CHECKS: Record<
     taxonomyBaseProblems({ tag: form.tagBase, category: form.categoryBase }).category,
 };
 
-/** Whether a submitted License choice is one the select offers. */
 function isLicenseChoice(value: string): value is LicenseChoice {
   return value === '' || value === 'custom' || isCreativeCommonsKey(value);
 }
 
-/**
- * The license `site.json` says, as the three settings the form edits. A value
- * the public site would not read as a license reads as none here too.
- */
 function licenseFromSiteJson(
   file: Record<string, unknown>,
 ): Pick<SiteSettings, 'license' | 'licenseUrl' | 'licenseName'> | Record<string, never> {
-  const value = typeof file['license'] === 'string' ? file['license'].trim() : '';
-  const key = value.toLowerCase();
-  if (isCreativeCommonsKey(key)) return { license: key, licenseUrl: '', licenseName: '' };
-  if (key === NO_LICENSE || !isLicenseUrl(value)) return {};
+  const said = classifyLicense(file['license']);
+  if (said === undefined || said === NO_LICENSE) return {};
+  if ('key' in said) return { license: said.key, licenseUrl: '', licenseName: '' };
 
   const name = typeof file['licenseName'] === 'string' ? file['licenseName'].trim() : '';
-  return { license: 'custom', licenseUrl: value, licenseName: name };
+  return { license: 'custom', licenseUrl: said.url, licenseName: name };
 }
 
-/**
- * What stops a typed icon being one the site can derive icons from, or
- * `undefined` for none. Empty is no icon. The upload has to be there, because
- * a path to nothing links three icons that 404.
- */
 function iconProblem(icon: string, context: SettingsContext): string | undefined {
   if (icon === '') return undefined;
 
@@ -1397,7 +1373,6 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
   };
 }
 
-/** A validated License choice, with the custom URL and name kept only for a custom one. */
 function licenseFromForm(
   form: SettingsForm,
 ): Pick<SiteSettings, 'license' | 'licenseUrl' | 'licenseName'> {

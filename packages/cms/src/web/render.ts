@@ -424,8 +424,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     const icons = siteIcons(config, iconSetting(site));
     // The picture a shared link shows (TASK-146), here for the reason the
     // icons are: its alt text and its size are in files only this side reads.
-    // With none of its own, a page shows the photo of the person it is by, so
-    // a link to it never goes out blank while somebody has a face (TASK-211).
     const title = [context['title'], context['label']].find(
       (value): value is string => typeof value === 'string' && value !== '',
     );
@@ -458,10 +456,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // where the claim back is printed. A site with several authors has none.
       ...(siteOwner === undefined ? {} : { soloAuthor: siteOwner }),
       ...context,
-      // What readers may do with this page and with the site (TASK-206), as
-      // `{ name, url }` or nothing, resolved once so the footer and the
-      // structured data print one answer. After the context, because the
-      // front matter's own `license` is the raw value this reads.
       ...licenseContext(site, context),
     });
   }
@@ -911,11 +905,6 @@ function replyContextFor(context: ReplyContext): Record<string, unknown> {
     : { ...rest, published };
 }
 
-/**
- * `license`, the page's license, and `siteLicense`, the site's, or undefined
- * for none, so a theme asks `{% if license %}`. `license` is always set,
- * because the front matter's raw value would otherwise show through it.
- */
 function licenseContext(
   site: SiteData,
   context: Record<string, unknown>,

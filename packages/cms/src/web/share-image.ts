@@ -25,21 +25,17 @@ export interface ShareImage {
  */
 export const LARGE_CARD_MIN_WIDTH = 1200;
 
-/** A picture to fall back on when the entry has none, and the words for what it shows. */
 export interface ShareImageFallback {
   readonly url: string | undefined;
-  /** Its alt text when the media library has none. */
   readonly describedAs: string;
 }
 
 /**
- * The page's share image, or `undefined` when it has none: the entry's own
- * `image`, else the first of the fallbacks that names a picture.
+ * The page's share image, or `undefined` when it has none.
  *
  * The alt text is the front matter's `imageAlt` for the entry's own picture,
  * because one picture can need describing differently in two posts; else what
- * the media library says about the upload; else the entry's title for its own
- * picture and the fallback's own words for a fallback.
+ * the media library says about the upload.
  *
  * The size is read off the variant sidecar, never off the file, so a render
  * never opens an image (decision-10). A picture with no sidecar has no size
@@ -53,7 +49,6 @@ export function shareImage(input: {
   imageAlt: unknown;
   /** What the page is called, for an undescribed picture of its own. */
   title: string;
-  /** What to show instead when the entry has no picture, in order. */
   fallbacks: readonly ShareImageFallback[];
 }): ShareImage | undefined {
   const own = nonEmpty(input.image);

@@ -231,10 +231,6 @@ function feedFingerprint(source: FeedSource): string {
   ].join('\n');
 }
 
-/**
- * The site's license as the feeds print it: Atom names it as well as linking
- * it. Nothing at all for none, so a site without one keeps the ETags it had.
- */
 function licenseFingerprint(site: SiteData): string[] {
   const license = resolveLicense(site);
   return license === undefined ? [] : [`${license.url} ${license.name}`];

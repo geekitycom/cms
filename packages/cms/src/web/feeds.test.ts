@@ -2107,14 +2107,12 @@ describe('the license a feed declares (TASK-206)', () => {
     }),
   };
 
-  /** The `<link rel="license">` hrefs directly inside an Atom element. */
   function licenseHrefs(element: XmlElement): string[] {
     return childrenNamed(element, 'link')
       .filter((link) => link.attributes['rel'] === 'license')
       .map((link) => link.attributes['href'] ?? '');
   }
 
-  /** The `<creativeCommons:license>` URLs directly inside an RSS element. */
   function ccLicenses(element: XmlElement): string[] {
     return childrenNamed(element, 'creativeCommons:license').map((license) => license.text);
   }

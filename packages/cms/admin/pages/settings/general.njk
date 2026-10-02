@@ -46,9 +46,6 @@
   {{ field.text('settings-locale', fields.locale, 'Locale', form.locale,
        error=problems.locale, hint=localeHint) }}
 
-  {# The favicon, the touch icon, /favicon.ico and the manifest's icons are
-     all cropped to the middle of this one picture, so the hint asks for the
-     shape and size that survive the crop and the 512 pixel manifest icon. #}
   {% set iconHint %}A square image at least 512 pixels wide, uploaded on <a href="{{ adminUrl }}/media">Media</a>: a path such as <code>/uploads/2026/10/icon.png</code>. It is the favicon, the home screen icon, <code>/favicon.ico</code> and the web app manifest's icon. Anything not square is cropped to its middle.{% endset %}
   {{ field.text('settings-icon', fields.icon, 'Site icon', form.icon,
        error=problems.icon, hint=iconHint) }}

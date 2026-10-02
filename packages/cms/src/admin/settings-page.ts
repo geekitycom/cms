@@ -144,8 +144,6 @@ export function mountSettingsPage(
     const stored = readSiteSettings(c.var.config.contentDir);
     const submitted = pageForm(c, page, body, stored);
 
-    // The directories go in because two checks need the file system: whether
-    // a theme name is a theme that is there, and an icon an upload that is.
     const problems = settingsProblems(submitted, page.fields, {
       themesDir: c.var.config.themesDir,
       contentDir: c.var.config.contentDir,

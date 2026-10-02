@@ -792,9 +792,6 @@ button[type='submit']:hover,
   border: 1px solid var(--admin-border);
 }
 
-/* The site icon is a square on every surface that draws it, so it is
-   previewed as one rather than in the avatars' circle. */
-
 .admin-icon-preview {
   flex: none;
   width: 6rem;

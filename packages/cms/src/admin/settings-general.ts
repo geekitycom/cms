@@ -4,8 +4,7 @@
  * WordPress's own first settings page, and the one the Settings heading lands
  * on. There is no avatar here any more: decision-14 made every user an actor
  * with a picture of their own, so the picture a site shows the fediverse is a
- * user's, edited on the users screen beside the rest of their profile. The
- * site icon is here, because a browser tab shows the site, not a person.
+ * user's, edited on the users screen beside the rest of their profile.
  */
 
 import type { ResolvedConfig } from '../config.ts';
@@ -47,10 +46,6 @@ export const GENERAL_SETTINGS: SettingsPage = {
   // before the select, holding a display name, selects that user and the
   // first save writes their username (TASK-192). A name nobody answers to
   // selects Several authors.
-  //
-  // The icon is shown as the one in effect too: a site.json with only a
-  // hand-set `avatar` has that as its icon, and the first save of this page
-  // writes it to `icon`, where it stays when the avatar changes.
   shown: (config, settings) => ({
     ...settings,
     baseUrl: effectiveBaseUrl(config, settings),
@@ -92,7 +87,6 @@ function siteAuthorUsername(config: Pick<ResolvedConfig, 'dataDir'>, author: str
   return userForAuthor(listUsers(config.dataDir), author)?.username ?? '';
 }
 
-/** The icon a site has: its `icon` setting, else the `avatar` in its site.json. */
 function iconInEffect(
   config: Pick<ResolvedConfig, 'contentDir'>,
   settings: SiteSettings,
@@ -100,10 +94,6 @@ function iconInEffect(
   return iconSetting({ icon: settings.icon, avatar: readSiteJson(config.contentDir)['avatar'] });
 }
 
-/**
- * The preview of the site's icon: the 180 pixel touch icon, which is the
- * largest the head links and so the one a crop to a square shows best on.
- */
 function iconPanel(config: ResolvedConfig, settings: SiteSettings): Record<string, unknown> {
   const inEffect = iconInEffect(config, settings);
   const preview = siteIcons(config, inEffect).find((icon) => icon.rel === 'apple-touch-icon');

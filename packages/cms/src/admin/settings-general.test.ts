@@ -368,7 +368,6 @@ describe('the Site author select (TASK-192)', () => {
 
 const ICON = '/uploads/2026/10/icon.png';
 
-/** A site whose `site.json` says `fields`, with a 600 pixel PNG at {@link ICON}. */
 async function siteWithIconUpload(fields: Record<string, unknown> = {}) {
   const contentDir = await box.dir('geekity-settings-icon-');
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
@@ -509,7 +508,6 @@ describe('the Site icon field (TASK-212)', () => {
   });
 });
 
-/** The License select: each option's value and label, and which is selected. */
 function licenseOptions(html: string): { value: string; label: string; selected: boolean }[] {
   const select = /<select id="settings-license" name="license"[^>]*>([\s\S]*?)<\/select>/.exec(
     html,
@@ -524,7 +522,6 @@ function licenseOptions(html: string): { value: string; label: string; selected:
   }));
 }
 
-/** A signed-in site whose `site.json` says `fields`. */
 async function siteWith(fields: Record<string, unknown> = {}) {
   const contentDir = await box.dir('geekity-settings-license-');
   await mkdir(path.join(contentDir, '_data'), { recursive: true });

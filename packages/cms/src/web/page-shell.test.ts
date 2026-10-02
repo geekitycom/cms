@@ -954,7 +954,6 @@ describe('the share image falls back to a photo, then the icon (TASK-211)', () =
       "---\ntitle: By Grace\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/by-grace/\nauthor: grace\n---\n\nHers.\n",
   };
 
-  /** A site with no avatar, a user `ada` with this profile, and whatever settings. */
   async function siteWith(
     profile: Record<string, unknown>,
     settings: Record<string, unknown> = {},
@@ -2029,7 +2028,6 @@ describe('the content license (TASK-206)', () => {
       "---\ntitle: By\ndate: '2026-09-04T11:00:00Z'\npermalink: /2026/09/by/\nlicense: CC-BY\n---\n\nCredit me.\n",
   };
 
-  /** The `rel="license"` links in the page footer, as `{ href, text }`. */
   function licenseLinks(html: string): { href: string; text: string }[] {
     return [...footer(html).matchAll(/<a rel="license" href="([^"]*)">([^<]*)<\/a>/g)].map(
       (match) => ({ href: match[1] ?? '', text: match[2] ?? '' }),

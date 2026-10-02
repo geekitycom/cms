@@ -19,10 +19,6 @@
   them, on every page. A site with several authors is published by an
   Organization named for the site and is about nobody.
 
-  What readers may do with it (TASK-206): the WebSite carries the site's
-  license, `siteLicense`, and the entry its own, `license`, which a post's
-  front matter can make different. Neither is printed when there is none.
-
   How it is printed: every value goes through `dump`, which is JSON.stringify,
   with every `<` escaped to its `\u003C` form so nothing in a title or a
   summary can close the script element. Each node opens with `@type`, which is
@@ -58,8 +54,7 @@
 {% set entryType = "BlogPosting" if type == "post" else "Article" %}
 {#- A post with no title is headed by the words its <title> names it by,
     within the 110 characters Google reads, cut where a word ends (TASK-201).
-    A page keeps its title. The picture is the share image the Open Graph
-    tags print (TASK-211), so the two cannot disagree. -#}
+    A page keeps its title. -#}
 {% set headline = title or (label | truncate(109, false, "…") if type == "post" else "") %}
 {% set nodes = [] %}
 {% set website %}

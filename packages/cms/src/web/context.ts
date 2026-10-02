@@ -61,7 +61,7 @@ export interface SiteData {
    */
   icon?: string | undefined;
   /**
-   * What readers may do with the site's posts (TASK-206): a Creative Commons
+   * What readers may do with the site's posts: a Creative Commons
    * key such as `cc-by-sa`, or a custom license's URL. Absent, or `none`, is
    * all rights reserved. A post's own `license` front matter overrides it;
    * `resolveLicense` in `license.ts` is the one reading of both.

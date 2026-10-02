@@ -1,5 +1,5 @@
 /**
- * What readers may do with a site's posts (TASK-206): the license a page is
+ * What readers may do with a site's posts: the license a page is
  * under, read once from `site.json` and the page's front matter, and printed
  * by the footer, the JSON-LD and the feeds from that one answer.
  *
@@ -108,21 +108,31 @@ export function resolveLicense(
   return sites === 'unsaid' ? undefined : sites;
 }
 
-/** What one source says: a license, `undefined` for none, or nothing usable. */
-function parseLicense(source: LicenseSource): ContentLicense | undefined | 'unsaid' {
-  if (typeof source.license !== 'string') return 'unsaid';
-  const value = source.license.trim();
-  if (value === '') return 'unsaid';
+/**
+ * What one license value says: a Creative Commons key, a URL, `none`, or
+ * `undefined` when it says nothing usable.
+ */
+export function classifyLicense(
+  value: unknown,
+): { key: CreativeCommonsKey } | { url: string } | typeof NO_LICENSE | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  const key = trimmed.toLowerCase();
+  if (key === NO_LICENSE) return NO_LICENSE;
+  if (isCreativeCommonsKey(key)) return { key };
+  return isLicenseUrl(trimmed) ? { url: trimmed } : undefined;
+}
 
-  const key = value.toLowerCase();
-  if (key === NO_LICENSE) return undefined;
-  if (isCreativeCommonsKey(key)) {
-    const { name, url } = CREATIVE_COMMONS_LICENSES[key];
+function parseLicense(source: LicenseSource): ContentLicense | undefined | 'unsaid' {
+  const said = classifyLicense(source.license);
+  if (said === undefined) return 'unsaid';
+  if (said === NO_LICENSE) return undefined;
+  if ('key' in said) {
+    const { name, url } = CREATIVE_COMMONS_LICENSES[said.key];
     return { name, url };
   }
-  if (!isLicenseUrl(value)) return 'unsaid';
 
   const name = typeof source.licenseName === 'string' ? source.licenseName.trim() : '';
-  const deed = Object.values(CREATIVE_COMMONS_LICENSES).find((known) => known.url === value);
-  return { name: name || deed?.name || value, url: value };
+  const deed = Object.values(CREATIVE_COMMONS_LICENSES).find((known) => known.url === said.url);
+  return { name: name || deed?.name || said.url, url: said.url };
 }

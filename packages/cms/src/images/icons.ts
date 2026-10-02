@@ -331,12 +331,6 @@ function isSvg(source: string): boolean {
   return path.extname(source).toLowerCase() === '.svg';
 }
 
-/**
- * What an icon setting names: the upload, or what stops it naming one.
- *
- * The settings screen refuses what the head would silently drop, so both read
- * this one rule.
- */
 export function parseIconSetting(
   setting: string,
 ): { source: string } | { problem: 'not-an-upload' | 'not-an-image' } {
@@ -355,7 +349,6 @@ export function parseIconSetting(
   }
 }
 
-/** The upload an icon setting names, or `undefined` when it names none. */
 function iconSource(setting: string | undefined): string | undefined {
   if (setting === undefined) return undefined;
   const parsed = parseIconSetting(setting);

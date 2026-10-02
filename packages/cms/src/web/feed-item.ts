@@ -111,7 +111,7 @@ export interface FeedItem {
    */
   language?: string | undefined;
   /**
-   * What readers may do with the post (TASK-206): its front matter's
+   * What readers may do with the post: its front matter's
    * `license`, else the site's, or absent for none. Atom writes it as an
    * entry's `rel="license"` link and RSS as `creativeCommons:license`; JSON
    * Feed has no field for it and leaves it out.

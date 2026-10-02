@@ -41,11 +41,6 @@ export function rssFeed(source: FeedSource): string {
   const link = absoluteUrl(source.href, baseUrl);
   const built = latestModified(documents) ?? EMPTY_FEED_UPDATED;
   const items = feedItems(documents, source);
-  // The license as the Creative Commons module says it, on the channel for
-  // the site and on each item for the post (TASK-206). The module names any
-  // license by URL, Creative Commons or not, where `dc:rights` would be free
-  // text no reader can act on. Its namespace is declared only when something
-  // uses it, so a site with no license prints nothing about one.
   const license = resolveLicense(site);
   const licensed = license !== undefined || items.some((item) => item.license !== undefined);
 
