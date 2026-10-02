@@ -44,7 +44,12 @@ export interface BearerEnv {
 export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
   return async (c, next) => {
     const { config } = c.var;
-    const presented = await presentedToken(c);
+    const tokens = await presentedTokens(c);
+    if (tokens.length > 1) {
+      const description = 'Send the access token in the header or the body, not both.';
+      return refuse(c, 400, 'invalid_request', description, { error: 'invalid_request' });
+    }
+    const presented = tokens[0];
     if (presented === undefined) {
       return refuse(c, 401, 'unauthorized', 'An access token is required.', {});
     }
@@ -82,20 +87,34 @@ export function insufficientScope(c: Context<BearerEnv>, scope: Scope): Response
   });
 }
 
-async function presentedToken(c: Context): Promise<string | undefined> {
+/**
+ * Every access token the request carries. More than one is refused, as RFC
+ * 6750 section 3.1 says, even when they are the same token.
+ */
+async function presentedTokens(c: Context): Promise<string[]> {
+  const tokens: string[] = [];
   const header = /^Bearer +(\S+)$/i.exec(c.req.header('authorization') ?? '');
-  if (header !== null) return header[1];
+  if (header?.[1] !== undefined) tokens.push(header[1]);
   const type = c.req.header('content-type') ?? '';
-  if (!/^(application\/x-www-form-urlencoded|multipart\/form-data)\b/i.test(type)) {
+  if (/^(application\/x-www-form-urlencoded|multipart\/form-data)\b/i.test(type)) {
+    const field = (await readBody(c))?.['access_token'];
+    if (typeof field === 'string' && field !== '') tokens.push(field);
+  }
+  return tokens;
+}
+
+/** The parsed form body, or undefined when it cannot be read, which is the route's to refuse. */
+async function readBody(c: Context): Promise<Record<string, unknown> | undefined> {
+  try {
+    return await c.req.parseBody();
+  } catch {
     return undefined;
   }
-  const field = (await c.req.parseBody())['access_token'];
-  return typeof field === 'string' && field !== '' ? field : undefined;
 }
 
 function refuse(
   c: Context<BearerEnv>,
-  status: 401 | 403,
+  status: 400 | 401 | 403,
   error: string,
   description: string,
   params: Readonly<Record<string, string>>,

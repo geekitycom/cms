@@ -104,6 +104,24 @@ describe('a route behind the bearer guard', () => {
     assert.deepEqual(await response.json(), { username: 'ada', scopes: ['create', 'media'] });
   });
 
+  it('answers 400 invalid_request when the token came in both the header and the body', async () => {
+    const { cms, grant } = await site();
+    const { accessToken } = await issueTokens(cms.config.dataDir, grant, new Date());
+    const response = await guarded(cms, { audience: MICROPUB }).request(
+      '/thing',
+      withHeader(
+        accessToken,
+        new URLSearchParams({ h: 'entry', access_token: accessToken }).toString(),
+      ),
+    );
+    assert.equal(response.status, 400);
+    assert.equal(
+      response.headers.get('www-authenticate'),
+      `Bearer error="invalid_request", resource_metadata="${RESOURCE_METADATA}"`,
+    );
+    assert.equal(((await response.json()) as { error: string }).error, 'invalid_request');
+  });
+
   it('lets the route require a scope the token holds', async () => {
     const { cms, grant } = await site();
     const { accessToken } = await issueTokens(cms.config.dataDir, grant, new Date());
