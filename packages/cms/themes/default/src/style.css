@@ -660,6 +660,24 @@
     @apply text-[1.08rem] leading-[1.65];
   }
 
+  /* A post's recording (TASK-213): the player as wide as the words, its other
+     versions and its transcript under it in the meta line's small type. */
+  .post-recording {
+    @apply my-8;
+  }
+
+  .post-recording :is(audio, video) {
+    @apply block w-full;
+  }
+
+  .post-recording-links {
+    @apply mt-3 font-sans text-sm text-muted;
+  }
+
+  .post-recording-links ul {
+    @apply mt-1 flex flex-wrap gap-x-4 gap-y-1;
+  }
+
   /* An untitled post is its words, set larger. It is the one entry whose
      heading is the hidden one TASK-144 gave it. */
   .blog-post > .screen-reader-text ~ .e-content {

@@ -1,0 +1,46 @@
+{#
+  A post's recording (TASK-213): the main file in the browser's own player,
+  then its other versions and its transcript as links.
+
+  `enclosure` is on the context only when the front matter describes one a
+  player can use, and `player` says which element plays it, the same answer
+  that decides the post's attachment type in the fediverse. Timed captions in
+  WebVTT go on a video as a track as well as in the links, since that is the
+  one format a browser shows over the picture. The source carries `u-audio`
+  or `u-video`, so a microformats parser finds the file on the entry.
+
+  The `preload="metadata"` asks for the length and the first frame and no
+  more: a reader who never presses play does not download the episode.
+#}
+{% set recordingLabel = ("Recording of " ~ title) if named else "Recording" %}
+<figure class="post-recording">
+  {% if enclosure.player == "video" %}
+  <video controls preload="metadata" aria-label="{{ recordingLabel }}">
+    <source class="u-video" src="{{ enclosure.url | url }}" type="{{ enclosure.type }}">
+    {% if enclosure.transcript and enclosure.transcript.type == "text/vtt" %}
+    <track kind="captions" src="{{ enclosure.transcript.url | url }}" srclang="{{ lang or (site.language | default("en")) }}" label="Captions" default>
+    {% endif %}
+    <a href="{{ enclosure.url | url }}">Download the video</a>
+  </video>
+  {% else %}
+  <audio controls preload="metadata" aria-label="{{ recordingLabel }}">
+    <source class="u-audio" src="{{ enclosure.url | url }}" type="{{ enclosure.type }}">
+    <a href="{{ enclosure.url | url }}">Download the recording</a>
+  </audio>
+  {% endif %}
+  {% if enclosure.alternates.length or enclosure.transcript %}
+  <figcaption class="post-recording-links">
+    {% if enclosure.transcript %}
+    <p><a href="{{ enclosure.transcript.url | url }}">{{ "Captions" if enclosure.transcript.captions else "Transcript" }}</a></p>
+    {% endif %}
+    {% if enclosure.alternates.length %}
+    <p id="post-recording-versions">Other versions</p>
+    <ul aria-labelledby="post-recording-versions">
+      {% for alternate in enclosure.alternates %}
+      <li><a href="{{ alternate.url | url }}" type="{{ alternate.type }}"{% if alternate.lang %} hreflang="{{ alternate.lang }}"{% endif %}>{{ alternate.title or alternate.type }}</a></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </figcaption>
+  {% endif %}
+</figure>
