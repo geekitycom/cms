@@ -275,7 +275,7 @@ function imageAttachments(
     if (library.get(image.source)?.kind === 'decorative') continue;
     const extension = path.extname(image.source).toLowerCase();
     const media = UPLOAD_MEDIA_TYPES.get(extension);
-    if (media?.image !== true) continue;
+    if (media?.kind !== 'image') continue;
     const alt = image.alt?.trim() ?? '';
     attachments.push(
       new Image({

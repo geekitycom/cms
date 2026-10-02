@@ -426,6 +426,7 @@ export {
   DEFAULT_IMAGE_WIDTHS,
   DEFAULT_SECURITY_HEADERS,
   DEFAULT_UPLOAD_MAX_BYTES,
+  DEFAULT_UPLOAD_MEDIA_MAX_BYTES,
   DEFAULT_UPLOAD_TYPES,
   defineConfig,
   KNOWN_IMAGE_FORMATS,
@@ -735,6 +736,7 @@ export type {
   SyncLogger,
   SyncResult,
   TagCount,
+  UploadKind,
   UploadMediaType,
   UploadSignature,
 } from './content/index.ts';

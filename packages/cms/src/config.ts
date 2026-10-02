@@ -154,9 +154,19 @@ export interface GeekityConfig {
    */
   uploadMaxBytes?: number;
   /**
+   * Largest audio or video file the upload endpoint accepts, in bytes. Default
+   * 200 MiB. Overridden by `GEEKITY_UPLOAD_MEDIA_MAX_BYTES`.
+   *
+   * It is a limit of its own because an episode is a hundred times the size
+   * of a photo: raising {@link GeekityConfig.uploadMaxBytes} far enough for
+   * one would let every other upload be that big too.
+   */
+  uploadMediaMaxBytes?: number;
+  /**
    * File extensions the upload endpoint accepts, with or without the leading
-   * dot and in any case. Default: PNG, JPEG, GIF, WebP, AVIF, PDF, plain text
-   * and Markdown. Overridden by `GEEKITY_UPLOAD_TYPES`, a comma-separated
+   * dot and in any case. Default: PNG, JPEG, GIF, WebP, AVIF, PDF, plain text,
+   * Markdown, WebVTT and SubRip captions, and MP3, M4A, AAC, Ogg, Opus, MP4,
+   * M4V and WebM audio and video. Overridden by `GEEKITY_UPLOAD_TYPES`, a comma-separated
    * list. Every entry has to be one the CMS knows a media type for; see
    * `KNOWN_UPLOAD_TYPES`.
    */
@@ -390,6 +400,7 @@ export interface ResolvedConfig {
   watch: boolean;
   sessionLifetime: number;
   uploadMaxBytes: number;
+  uploadMediaMaxBytes: number;
   /** Normalised: lower case, each with its leading dot. */
   uploadTypes: string[];
   imageOptimization: boolean;
@@ -449,9 +460,12 @@ export const DEFAULT_THEMES_DIR = 'themes';
 export const DEFAULT_SESSION_LIFETIME = 14 * 24 * 60 * 60;
 /** Largest upload a site accepts by default: ten mebibytes. */
 export const DEFAULT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+/** Largest audio or video upload a site accepts by default: two hundred mebibytes. */
+export const DEFAULT_UPLOAD_MEDIA_MAX_BYTES = 200 * 1024 * 1024;
 /**
  * What the editor may upload by default: the raster image formats a browser
- * displays, PDFs, and the two text formats. Everything the CMS knows about
+ * displays, PDFs, the text formats, captions, and the audio and video formats
+ * a browser plays. Everything the CMS knows about
  * except SVG, which is script-bearing markup served from the site's own origin
  * and so is opt-in.
  */
@@ -546,7 +560,20 @@ export function resolveConfig(
       env['GEEKITY_SESSION_LIFETIME'],
       config.sessionLifetime,
     ),
-    uploadMaxBytes: resolveUploadMaxBytes(env['GEEKITY_UPLOAD_MAX_BYTES'], config.uploadMaxBytes),
+    uploadMaxBytes: resolveByteLimit(
+      'GEEKITY_UPLOAD_MAX_BYTES',
+      'uploadMaxBytes',
+      env['GEEKITY_UPLOAD_MAX_BYTES'],
+      config.uploadMaxBytes,
+      DEFAULT_UPLOAD_MAX_BYTES,
+    ),
+    uploadMediaMaxBytes: resolveByteLimit(
+      'GEEKITY_UPLOAD_MEDIA_MAX_BYTES',
+      'uploadMediaMaxBytes',
+      env['GEEKITY_UPLOAD_MEDIA_MAX_BYTES'],
+      config.uploadMediaMaxBytes,
+      DEFAULT_UPLOAD_MEDIA_MAX_BYTES,
+    ),
     uploadTypes: resolveUploadTypes(env['GEEKITY_UPLOAD_TYPES'], config.uploadTypes),
     imageOptimization: resolveBoolean(
       'GEEKITY_IMAGE_OPTIMIZATION',
@@ -658,25 +685,28 @@ function resolveSecurityHeaders(
   return headers;
 }
 
-/** Bytes, a positive whole number of them. */
-function resolveUploadMaxBytes(
+/** Bytes, a positive whole number of them, from the environment, else the option, else the default. */
+function resolveByteLimit(
+  variable: string,
+  option: string,
   fromEnv: string | undefined,
   configured: number | undefined,
+  fallback: number,
 ): number {
   if (fromEnv !== undefined && fromEnv !== '') {
     const parsed = Number(fromEnv);
     if (!isValidByteCount(parsed)) {
       throw new TypeError(
-        `GEEKITY_UPLOAD_MAX_BYTES must be a positive whole number of bytes, received ${JSON.stringify(fromEnv)}`,
+        `${variable} must be a positive whole number of bytes, received ${JSON.stringify(fromEnv)}`,
       );
     }
     return parsed;
   }
 
-  if (configured === undefined) return DEFAULT_UPLOAD_MAX_BYTES;
+  if (configured === undefined) return fallback;
   if (!isValidByteCount(configured)) {
     throw new TypeError(
-      `config.uploadMaxBytes must be a positive whole number of bytes, received ${JSON.stringify(configured)}`,
+      `config.${option} must be a positive whole number of bytes, received ${JSON.stringify(configured)}`,
     );
   }
   return configured;

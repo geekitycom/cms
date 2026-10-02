@@ -20,6 +20,14 @@ export interface UploadSignature {
   bytes: readonly number[];
 }
 
+/**
+ * What an upload is for, which decides what the CMS offers to do with it.
+ *
+ * An image is embedded and gets variants, audio and video can be a post's
+ * enclosure and are held to their own size limit, and a document is linked.
+ */
+export type UploadKind = 'image' | 'audio' | 'video' | 'document';
+
 /** One kind of file the upload endpoint knows about. */
 export interface UploadMediaType {
   /**
@@ -28,8 +36,8 @@ export interface UploadMediaType {
    * sends no type at all, and there is then nothing to disagree with.
    */
   declared: readonly string[];
-  /** Whether the Markdown for it is an image embed rather than a link. */
-  image: boolean;
+  /** What the file is for. */
+  kind: UploadKind;
   /**
    * Byte patterns that identify the format, as alternatives: a file matches
    * when every part of any one of them matches. Absent for the text formats,
@@ -42,6 +50,15 @@ export interface UploadMediaType {
 function ascii(value: string): number[] {
   return [...value].map((character) => character.charCodeAt(0));
 }
+
+/**
+ * An ISO base media file — MP4, M4A, M4V — whatever its brand: a box length,
+ * then `ftyp`.
+ */
+const ISO_BASE_MEDIA: readonly UploadSignature[] = [{ offset: 4, bytes: ascii('ftyp') }];
+
+/** An Ogg page, whatever codec is inside it. */
+const OGG: readonly UploadSignature[] = [{ offset: 0, bytes: ascii('OggS') }];
 
 /**
  * Every extension the upload endpoint can accept, and what it takes to be one.
@@ -60,7 +77,7 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
     '.png',
     {
       declared: ['image/png'],
-      image: true,
+      kind: 'image',
       signatures: [[{ offset: 0, bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] }]],
     },
   ],
@@ -68,7 +85,7 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
     '.jpg',
     {
       declared: ['image/jpeg', 'image/jpg'],
-      image: true,
+      kind: 'image',
       signatures: [[{ offset: 0, bytes: [0xff, 0xd8, 0xff] }]],
     },
   ],
@@ -76,7 +93,7 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
     '.jpeg',
     {
       declared: ['image/jpeg', 'image/jpg'],
-      image: true,
+      kind: 'image',
       signatures: [[{ offset: 0, bytes: [0xff, 0xd8, 0xff] }]],
     },
   ],
@@ -84,7 +101,7 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
     '.gif',
     {
       declared: ['image/gif'],
-      image: true,
+      kind: 'image',
       signatures: [
         [{ offset: 0, bytes: ascii('GIF87a') }],
         [{ offset: 0, bytes: ascii('GIF89a') }],
@@ -95,7 +112,7 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
     '.webp',
     {
       declared: ['image/webp'],
-      image: true,
+      kind: 'image',
       // A WebP is a RIFF container whose form type is WEBP, so both halves of
       // the header have to be there.
       signatures: [
@@ -110,7 +127,7 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
     '.avif',
     {
       declared: ['image/avif'],
-      image: true,
+      kind: 'image',
       // An ISO base media file: a length, then `ftyp`, then the brand.
       signatures: [
         [
@@ -128,19 +145,89 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
     '.pdf',
     {
       declared: ['application/pdf'],
-      image: false,
+      kind: 'document',
       signatures: [[{ offset: 0, bytes: ascii('%PDF-') }]],
     },
   ],
   // The two text formats have no header. Nothing is sniffed, and nothing needs
   // to be: they are served as text, and `application/octet-stream` is allowed
   // because that is what a browser sends for a file type it does not know.
-  ['.txt', { declared: ['text/plain', 'application/octet-stream'], image: false }],
+  ['.txt', { declared: ['text/plain', 'application/octet-stream'], kind: 'document' }],
   [
     '.md',
     {
       declared: ['text/markdown', 'text/x-markdown', 'text/plain', 'application/octet-stream'],
-      image: false,
+      kind: 'document',
+    },
+  ],
+  // Transcripts and captions for a post's enclosure. WebVTT opens with its
+  // name, after a byte order mark when the editor that wrote it added one.
+  // SubRip has no header, so it is taken as text like the two formats above.
+  [
+    '.vtt',
+    {
+      declared: ['text/vtt', 'text/plain', 'application/octet-stream'],
+      kind: 'document',
+      signatures: [
+        [{ offset: 0, bytes: ascii('WEBVTT') }],
+        [{ offset: 0, bytes: [0xef, 0xbb, 0xbf, ...ascii('WEBVTT')] }],
+      ],
+    },
+  ],
+  [
+    '.srt',
+    {
+      declared: ['application/x-subrip', 'text/srt', 'text/plain', 'application/octet-stream'],
+      kind: 'document',
+    },
+  ],
+  // Audio and video, for a post's enclosure. The first declared type of each
+  // is the one a feed announces, so it is the most widely understood one.
+  [
+    '.mp3',
+    {
+      declared: ['audio/mpeg', 'audio/mp3'],
+      kind: 'audio',
+      // An ID3 tag, or straight into an MPEG audio frame: eleven sync bits,
+      // then MPEG-1 or MPEG-2 layer III, with or without a CRC.
+      signatures: [
+        [{ offset: 0, bytes: ascii('ID3') }],
+        [{ offset: 0, bytes: [0xff, 0xfb] }],
+        [{ offset: 0, bytes: [0xff, 0xfa] }],
+        [{ offset: 0, bytes: [0xff, 0xf3] }],
+        [{ offset: 0, bytes: [0xff, 0xf2] }],
+      ],
+    },
+  ],
+  [
+    '.m4a',
+    {
+      declared: ['audio/mp4', 'audio/x-m4a', 'audio/m4a'],
+      kind: 'audio',
+      signatures: [ISO_BASE_MEDIA],
+    },
+  ],
+  [
+    '.aac',
+    {
+      declared: ['audio/aac', 'audio/x-aac', 'audio/aacp'],
+      kind: 'audio',
+      // A raw ADTS stream: twelve sync bits, MPEG-4 or MPEG-2, no CRC.
+      signatures: [[{ offset: 0, bytes: [0xff, 0xf1] }], [{ offset: 0, bytes: [0xff, 0xf9] }]],
+    },
+  ],
+  ['.ogg', { declared: ['audio/ogg', 'application/ogg'], kind: 'audio', signatures: [OGG] }],
+  ['.oga', { declared: ['audio/ogg', 'application/ogg'], kind: 'audio', signatures: [OGG] }],
+  ['.opus', { declared: ['audio/ogg', 'audio/opus'], kind: 'audio', signatures: [OGG] }],
+  ['.mp4', { declared: ['video/mp4'], kind: 'video', signatures: [ISO_BASE_MEDIA] }],
+  ['.m4v', { declared: ['video/mp4', 'video/x-m4v'], kind: 'video', signatures: [ISO_BASE_MEDIA] }],
+  [
+    '.webm',
+    {
+      declared: ['video/webm', 'audio/webm'],
+      kind: 'video',
+      // The EBML header every Matroska file, WebM included, opens with.
+      signatures: [[{ offset: 0, bytes: [0x1a, 0x45, 0xdf, 0xa3] }]],
     },
   ],
 ]);

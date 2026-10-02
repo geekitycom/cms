@@ -7,7 +7,7 @@ export {
   normalizeUploadType,
   UPLOAD_MEDIA_TYPES,
 } from './media.ts';
-export type { UploadMediaType, UploadSignature } from './media.ts';
+export type { UploadKind, UploadMediaType, UploadSignature } from './media.ts';
 export { hashDocument, parseDocument, typeForPath } from './parser.ts';
 export type { ParseDocumentOptions } from './parser.ts';
 export { discoverPostType, postLabel, postTypeOf } from './post-type.ts';

@@ -317,6 +317,149 @@ describe('the upload endpoint', () => {
   });
 });
 
+describe('uploading audio, video and captions (TASK-213)', () => {
+  const formats: { name: string; type: string; bytes: number[] }[] = [
+    { name: 'episode.mp3', type: 'audio/mpeg', bytes: [...ascii('ID3'), 0x04, 0x00] },
+    { name: 'frames.mp3', type: 'audio/mpeg', bytes: [0xff, 0xfb, 0x90, 0x64] },
+    { name: 'mpeg2.mp3', type: 'audio/mpeg', bytes: [0xff, 0xf3, 0x90, 0x64] },
+    { name: 'episode.m4a', type: 'audio/mp4', bytes: isoBaseMedia('M4A ') },
+    { name: 'episode.aac', type: 'audio/aac', bytes: [0xff, 0xf1, 0x50, 0x80] },
+    { name: 'episode.ogg', type: 'audio/ogg', bytes: [...ascii('OggS'), 0x00] },
+    { name: 'episode.oga', type: 'audio/ogg', bytes: [...ascii('OggS'), 0x00] },
+    { name: 'episode.opus', type: 'audio/ogg', bytes: [...ascii('OggS'), 0x00] },
+    { name: 'episode.mp4', type: 'video/mp4', bytes: isoBaseMedia('isom') },
+    { name: 'episode.m4v', type: 'video/x-m4v', bytes: isoBaseMedia('M4V ') },
+    { name: 'episode.webm', type: 'video/webm', bytes: [0x1a, 0x45, 0xdf, 0xa3, 0x9f] },
+    { name: 'captions.vtt', type: 'text/vtt', bytes: ascii('WEBVTT\n\n') },
+    { name: 'bom.vtt', type: 'text/vtt', bytes: [0xef, 0xbb, 0xbf, ...ascii('WEBVTT\n')] },
+    { name: 'captions.srt', type: 'application/x-subrip', bytes: ascii('1\n00:00:00,000') },
+  ];
+
+  for (const format of formats) {
+    it(`accepts ${format.name} as ${format.type}, and links it`, async () => {
+      const { agent, token } = await admin();
+
+      const response = await agent.upload('/admin/uploads', token, {
+        name: format.name,
+        type: format.type,
+        bytes: new Uint8Array(format.bytes),
+      });
+
+      assert.equal(response.status, 201);
+      const body = (await response.json()) as { url: string; markdown: string };
+      assert.match(body.markdown, /^\[/, 'linked rather than embedded');
+    });
+  }
+
+  for (const format of formats.filter((candidate) => !candidate.name.endsWith('.srt'))) {
+    it(`refuses ${format.name} whose bytes are something else`, async () => {
+      const { agent, token } = await admin();
+
+      const response = await agent.upload('/admin/uploads', token, {
+        name: format.name,
+        type: format.type,
+        bytes: png(),
+      });
+
+      assert.equal(response.status, 415);
+    });
+  }
+
+  it('refuses audio that says it is a different format from its name', async () => {
+    const { agent, token } = await admin();
+
+    const response = await agent.upload('/admin/uploads', token, {
+      name: 'episode.mp3',
+      type: 'video/mp4',
+      bytes: new Uint8Array([...ascii('ID3'), 0x04]),
+    });
+
+    assert.equal(response.status, 415);
+  });
+
+  it('refuses an HTML transcript, which would be script served from the site', async () => {
+    const { agent, token } = await admin();
+
+    const response = await agent.upload('/admin/uploads', token, {
+      name: 'transcript.html',
+      type: 'text/html',
+      bytes: new Uint8Array(ascii('<p>hi</p>')),
+    });
+
+    assert.equal(response.status, 415);
+  });
+
+  it('holds audio and video to their own limit, and everything else to the other', async () => {
+    const { cms, agent, token } = await admin({ uploadMaxBytes: 64, uploadMediaMaxBytes: 1024 });
+    const padded = (head: number[], size: number): Uint8Array => {
+      const bytes = new Uint8Array(size);
+      bytes.set(head);
+      return bytes;
+    };
+    const send = (name: string, type: string, bytes: Uint8Array) =>
+      agent.upload('/admin/uploads', token, { name, type, bytes });
+
+    assert.equal((await send('big.mp3', 'audio/mpeg', padded(ascii('ID3'), 512))).status, 201);
+    assert.equal((await send('big.png', 'image/png', padded([...png()], 512))).status, 413);
+    const huge = await send('huge.mp3', 'audio/mpeg', padded(ascii('ID3'), 2048));
+    assert.equal(huge.status, 413);
+    assert.match(((await huge.json()) as { error: string }).error, /1024 bytes/);
+    const stored = await readdir(path.join(cms.config.contentDir, 'uploads'), { recursive: true });
+    assert.deepEqual(
+      stored
+        .filter((name) => name.endsWith('.mp3') || name.endsWith('.png'))
+        .map((name) => path.basename(name)),
+      ['big.mp3'],
+    );
+  });
+
+  it('lets a media upload through the header check that turns other big bodies away', async () => {
+    const { agent, token } = await admin({ uploadMaxBytes: 64, uploadMediaMaxBytes: 64 * 1024 });
+    const bytes = new Uint8Array(16 * 1024);
+    bytes.set(ascii('ID3'));
+
+    const response = await agent.upload('/admin/uploads', token, {
+      name: 'episode.mp3',
+      type: 'audio/mpeg',
+      bytes,
+    });
+
+    assert.equal(response.status, 201);
+  });
+
+  it('serves an uploaded episode with its media type and answers a byte range', async () => {
+    const { cms, agent, token } = await admin();
+    const bytes = new Uint8Array(100).map((_, index) => index);
+    bytes.set(ascii('ID3'));
+    const { url } = (await (
+      await agent.upload('/admin/uploads', token, { name: 'ep.mp3', type: 'audio/mpeg', bytes })
+    ).json()) as { url: string };
+
+    const whole = await cms.app.request(url);
+    assert.equal(whole.headers.get('content-type'), 'audio/mpeg');
+    assert.equal(whole.headers.get('accept-ranges'), 'bytes');
+
+    const part = await cms.app.request(url, { headers: { range: 'bytes=10-19' } });
+    assert.equal(part.status, 206);
+    assert.equal(part.headers.get('content-range'), 'bytes 10-19/100');
+    assert.deepEqual([...new Uint8Array(await part.arrayBuffer())], [...bytes.slice(10, 20)]);
+
+    const tail = await cms.app.request(url, { headers: { range: 'bytes=-5' } });
+    assert.equal(tail.headers.get('content-range'), 'bytes 95-99/100');
+    assert.deepEqual([...new Uint8Array(await tail.arrayBuffer())], [95, 96, 97, 98, 99]);
+
+    const beyond = await cms.app.request(url, { headers: { range: 'bytes=500-' } });
+    assert.equal(beyond.status, 416);
+    assert.equal(beyond.headers.get('content-range'), 'bytes */100');
+
+    const stale = await cms.app.request(url, {
+      headers: { range: 'bytes=10-19', 'if-range': '"not-this-file"' },
+    });
+    assert.equal(stale.status, 200);
+    assert.equal((await stale.arrayBuffer()).byteLength, 100);
+  });
+});
+
 describe('the editor page', () => {
   it('still carries a plain textarea, so it works with no JavaScript', async () => {
     const { agent } = await admin();
@@ -438,6 +581,16 @@ describe('who a post says wrote it (TASK-67 AC #2)', () => {
     assert.match(html, /<option value="ada"\s+selected>/);
   });
 });
+
+/** The bytes of an ASCII string. */
+function ascii(value: string): number[] {
+  return [...value].map((character) => character.charCodeAt(0));
+}
+
+/** The head of an ISO base media file of some brand: a box length, `ftyp`, the brand. */
+function isoBaseMedia(brand: string): number[] {
+  return [0x00, 0x00, 0x00, 0x20, ...ascii('ftyp'), ...ascii(brand)];
+}
 
 /** The eight bytes every PNG starts with, and nothing else. Enough to sniff. */
 function png(): Uint8Array {
