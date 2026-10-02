@@ -9,6 +9,8 @@ import {
   updateFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
+import { parseIconSetting } from '../images/icons.ts';
+import { sourceFile } from '../images/paths.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
@@ -16,6 +18,8 @@ import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from '../web/fee
 import type { UpdatePeriod } from '../web/feed-source.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
 import { generateIndexNowKey, isIndexNowKey } from '../web/indexnow.ts';
+import { classifyLicense, isCreativeCommonsKey, isLicenseUrl, NO_LICENSE } from '../web/license.ts';
+import type { CreativeCommonsKey } from '../web/license.ts';
 import { canonicalLocale } from '../web/locale.ts';
 import { DEFAULT_MENU_NAME, menuItemsFromText, menusOf } from '../web/navigation.ts';
 import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from '../web/robots.ts';
@@ -147,6 +151,24 @@ export interface SiteSettings {
    * site, so a hand-edited file is a warning in the log rather than a 500.
    */
   theme: string;
+  /**
+   * The upload the site's icons are derived from, as a path such as
+   * `/uploads/2026/10/icon.png`, or empty for none. Read from and written
+   * to the `icon` key of `site.json` only.
+   */
+  icon: string;
+  /**
+   * What readers may do with the site's posts: empty for no
+   * license, which is all rights reserved, a Creative Commons key, or
+   * `custom` for the URL and name beside it. `site.json` writes a key, or a
+   * custom license's URL, under `license`, so the file says it the way a
+   * post's front matter does.
+   */
+  license: LicenseChoice;
+  /** A custom license's terms, as an absolute URL. Empty unless `license` is `custom`. */
+  licenseUrl: string;
+  /** A custom license's name. Empty unless `license` is `custom`. */
+  licenseName: string;
   /**
    * The first URL segment the tag archives live under, `tag` by default: one
    * URL-safe path segment, no slashes. WordPress's own base, so a site
@@ -354,6 +376,8 @@ export interface SiteSettings {
 /** What a site says about one Content-Signal: yes, no, or nothing. */
 export type ContentSignalChoice = '' | 'yes' | 'no';
 
+export type LicenseChoice = '' | CreativeCommonsKey | 'custom';
+
 /** Whether a string is a {@link ContentSignalChoice}. */
 function isContentSignalChoice(value: unknown): value is ContentSignalChoice {
   return value === '' || value === 'yes' || value === 'no';
@@ -424,6 +448,10 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   postsPage: '',
   author: '',
   theme: '',
+  icon: '',
+  license: '',
+  licenseUrl: '',
+  licenseName: '',
   tagBase: DEFAULT_TAXONOMY_BASES.tag,
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
   comments: true,
@@ -473,6 +501,10 @@ export const SETTINGS_FIELDS = {
   postsPage: 'posts_page',
   author: 'author',
   theme: 'theme',
+  icon: 'icon',
+  license: 'license',
+  licenseUrl: 'license_url',
+  licenseName: 'license_name',
   tagBase: 'tag_base',
   categoryBase: 'category_base',
   comments: 'comments',
@@ -524,7 +556,11 @@ export type SettingsProblems = Partial<Record<SettingsField, string>>;
  * with the settings screen there to put it right.
  */
 export function readSiteSettings(contentDir: string): SiteSettings {
-  return settingsFromSiteJson(readSiteJsonSync(siteDataPath(contentDir)));
+  return settingsFromSiteJson(readSiteJson(contentDir));
+}
+
+export function readSiteJson(contentDir: string): Record<string, unknown> {
+  return readSiteJsonSync(siteDataPath(contentDir));
 }
 
 /**
@@ -557,6 +593,8 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     // Absent is the ordinary state of this one: a site on the packaged theme
     // has never written the key, so anything but a string is that site.
     ...(typeof file['theme'] === 'string' ? { theme: file['theme'] } : {}),
+    ...(typeof file['icon'] === 'string' ? { icon: file['icon'].trim() } : {}),
+    ...licenseFromSiteJson(file),
     // Absent is the ordinary state of these two: a site showing its latest
     // posts writes neither key, so anything but a string is read as none.
     ...(typeof file['homepage'] === 'string' ? { homepage: file['homepage'] } : {}),
@@ -757,7 +795,7 @@ export function siteJsonFor(
   // be a name no directory has. `locale` too: a site whose dates follow its
   // language has made no choice to write down.
   // `author` too: a site with several authors names nobody (TASK-192).
-  for (const key of ['homepage', 'postsPage', 'theme', 'locale', 'author'] as const) {
+  for (const key of ['homepage', 'postsPage', 'theme', 'locale', 'author', 'icon'] as const) {
     if (settings[key] === '') delete file[key];
     else file[key] = settings[key];
   }
@@ -768,6 +806,14 @@ export function siteJsonFor(
   // that has turned it off again should go back to saying nothing.
   if (settings.wordpressActivityPub) file['wordpressActivityPub'] = true;
   else delete file['wordpressActivityPub'];
+
+  delete file['licenseName'];
+  if (settings.license === '') delete file['license'];
+  else if (settings.license !== 'custom') file['license'] = settings.license;
+  else {
+    file['license'] = settings.licenseUrl;
+    file['licenseName'] = settings.licenseName;
+  }
 
   // A site that has never turned IndexNow on has no key to write down.
   if (settings.indexNowKey !== '') file['indexNowKey'] = settings.indexNowKey;
@@ -937,6 +983,7 @@ export function effectiveBaseUrl(
 export interface SettingsContext {
   /** Where the site's themes are: {@link ResolvedConfig.themesDir}. */
   themesDir?: string | undefined;
+  contentDir?: string | undefined;
 }
 
 /**
@@ -1023,6 +1070,21 @@ const FIELD_CHECKS: Record<
     const read = readTheme(path.join(context.themesDir, name));
     return read.ok ? undefined : `There is no theme called "${name}": ${read.reason}`;
   },
+
+  icon: (form, context) => iconProblem(form.icon.trim(), context),
+
+  license: (form) =>
+    isLicenseChoice(form.license.trim()) ? undefined : 'Choose a license from the list.',
+
+  licenseUrl: (form) =>
+    form.license.trim() === 'custom' && !isLicenseUrl(form.licenseUrl.trim())
+      ? 'A custom license needs the URL of its terms, starting http:// or https://.'
+      : undefined,
+
+  licenseName: (form) =>
+    form.license.trim() === 'custom' && form.licenseName.trim() === ''
+      ? 'A custom license needs a name for the footer to show.'
+      : undefined,
 
   comments: () => undefined,
 
@@ -1156,6 +1218,46 @@ const FIELD_CHECKS: Record<
     taxonomyBaseProblems({ tag: form.tagBase, category: form.categoryBase }).category,
 };
 
+function isLicenseChoice(value: string): value is LicenseChoice {
+  return value === '' || value === 'custom' || isCreativeCommonsKey(value);
+}
+
+function licenseFromSiteJson(
+  file: Record<string, unknown>,
+): Pick<SiteSettings, 'license' | 'licenseUrl' | 'licenseName'> | Record<string, never> {
+  const said = classifyLicense(file['license']);
+  if (said === undefined || said === NO_LICENSE) return {};
+  if ('key' in said) return { license: said.key, licenseUrl: '', licenseName: '' };
+
+  const name = typeof file['licenseName'] === 'string' ? file['licenseName'].trim() : '';
+  return { license: 'custom', licenseUrl: said.url, licenseName: name };
+}
+
+function iconProblem(icon: string, context: SettingsContext): string | undefined {
+  if (icon === '') return undefined;
+
+  const parsed = parseIconSetting(icon);
+  if ('problem' in parsed) {
+    return parsed.problem === 'not-an-upload'
+      ? 'The site icon has to be a file in the media library, a path such as /uploads/2026/10/icon.png.'
+      : 'The site icon has to be an image: PNG, JPEG, GIF, WebP, AVIF, TIFF or SVG.';
+  }
+  if (context.contentDir === undefined) return undefined;
+
+  const file = sourceFile({ contentDir: context.contentDir }, parsed.source);
+  return file !== undefined && isFile(file)
+    ? undefined
+    : `There is no upload at ${icon}. Upload the picture on the Media screen first.`;
+}
+
+function isFile(file: string): boolean {
+  try {
+    return statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /** What is wrong with a submitted Content-Signal choice. */
 function contentSignalProblem(value: string): string | undefined {
   return isContentSignalChoice(value) ? undefined : 'A content signal is yes, no, or not said.';
@@ -1217,6 +1319,8 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     postsPage: form.homepage.trim() === '' ? '' : form.postsPage.trim(),
     author: form.author.trim(),
     theme: form.theme.trim(),
+    icon: form.icon.trim(),
+    ...licenseFromForm(form),
     tagBase: form.tagBase.trim(),
     categoryBase: form.categoryBase.trim(),
     // A checkbox submits nothing at all when it is clear, which is what the
@@ -1269,6 +1373,20 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
   };
 }
 
+function licenseFromForm(
+  form: SettingsForm,
+): Pick<SiteSettings, 'license' | 'licenseUrl' | 'licenseName'> {
+  const license = form.license.trim();
+  if (license === 'custom') {
+    return { license, licenseUrl: form.licenseUrl.trim(), licenseName: form.licenseName.trim() };
+  }
+  return {
+    license: isLicenseChoice(license) ? license : '',
+    licenseUrl: '',
+    licenseName: '',
+  };
+}
+
 /** The settings as the form shows them. */
 export function formFromSettings(settings: SiteSettings): SettingsForm {
   return {
@@ -1283,6 +1401,10 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     postsPage: settings.postsPage,
     author: settings.author,
     theme: settings.theme,
+    icon: settings.icon,
+    license: settings.license,
+    licenseUrl: settings.licenseUrl,
+    licenseName: settings.licenseName,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
     comments: settings.comments ? '1' : '',

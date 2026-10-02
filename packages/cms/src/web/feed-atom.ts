@@ -20,6 +20,8 @@ import {
   SOURCE_NAMESPACE,
   THR_NAMESPACE,
 } from './feed-xml.ts';
+import { resolveLicense } from './license.ts';
+import type { ContentLicense } from './license.ts';
 import { absoluteUrl, latestModified } from './negotiate.ts';
 
 /**
@@ -51,6 +53,7 @@ export function atomFeed(source: FeedSource): string {
       href: absoluteUrl(source.feedHref, baseUrl),
     }),
     link({ rel: 'alternate', type: 'text/html', href: absoluteUrl(source.href, baseUrl) }),
+    ...licenseLink(resolveLicense(site), 1),
     ...atomCloud(site),
     `  <generator uri="${escapeXml(FEED_GENERATOR_URI)}">${escapeXml(FEED_GENERATOR)}</generator>`,
     ...author(siteAuthorName(source.users, site), 1),
@@ -99,6 +102,7 @@ export function atomEntry(item: FeedItem): string[] {
       : [element('published', item.published.toISOString(), 2)]),
     link({ rel: 'alternate', type: 'text/html', href: item.link }, 2),
     ...inReplyTo(item.inReplyTo),
+    ...licenseLink(item.license, 2),
     ...author(item.author, 2),
     ...item.terms.map((term) => `    <category term="${escapeXml(term)}"/>`),
     ...(item.summary === ''
@@ -109,6 +113,16 @@ export function atomEntry(item: FeedItem): string[] {
     `    <content type="html">${escapeXml(item.html)}</content>`,
     '  </entry>',
   ];
+}
+
+/**
+ * RFC 4946's `rel="license"` link, or nothing for no license. An entry carries
+ * its own, because RFC 4946 does not let an entry inherit the feed's.
+ */
+function licenseLink(license: ContentLicense | undefined, depth: number): string[] {
+  return license === undefined
+    ? []
+    : [link({ rel: 'license', href: license.url, title: license.name }, depth)];
 }
 
 /**

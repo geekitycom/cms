@@ -8,6 +8,7 @@ import { FEED_CONTENT_TYPES, feedCadence, feedLanguage, notifyServerOf } from '.
 import type { CommentFeedSource, FeedFormat, FeedIdentity, FeedSource } from './feed-source.ts';
 import { absoluteUrl, contentEtag, isNotModified, latestModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
+import { resolveLicense } from './license.ts';
 
 /**
  * How a feed is served: its validator, its headers, and which serialiser
@@ -218,6 +219,7 @@ function feedFingerprint(source: FeedSource): string {
     feedLanguage(source.site),
     notifyServerOf(source.site)?.base ?? '',
     cadenceFingerprint(source.site),
+    ...licenseFingerprint(source.site),
     source.baseUrl,
     ...source.documents.map((document) =>
       [
@@ -227,4 +229,9 @@ function feedFingerprint(source: FeedSource): string {
       ].join(' '),
     ),
   ].join('\n');
+}
+
+function licenseFingerprint(site: SiteData): string[] {
+  const license = resolveLicense(site);
+  return license === undefined ? [] : [`${license.url} ${license.name}`];
 }

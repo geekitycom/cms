@@ -1,10 +1,11 @@
 ---
 id: TASK-211
 title: 'Share image falls back to the author''s photo, then the site icon'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-10-02 07:01'
-updated_date: '2026-10-02 07:03'
+updated_date: '2026-10-02 07:25'
 labels:
   - theme
   - seo
@@ -29,30 +30,42 @@ The picture a shared link shows (og:image, twitter:image, TASK-146) is the entry
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A post or page with no image of its own prints og:image and twitter:image set to its author's profile photo; with no photo, the site icon; with neither, no image tags, as today
-- [ ] #2 The homepage and other pages about nobody in particular use the site author's photo on a solo-author site and the site icon on a several-authors site
-- [ ] #3 An entry's own image, and a hand-set site.avatar, still win over the fallbacks, so every page that printed an image before prints the same one
-- [ ] #4 The fallback image's og:image:alt is the media library's description, else the author's display name for their photo or the site title for the icon; its width and height come from the variant sidecar when one exists
-- [ ] #5 The default theme's JSON-LD image on a post or page is the same URL as its og:image
-- [ ] #6 The default theme README describes the new fallback order
+- [x] #1 A post or page with no image of its own prints og:image and twitter:image set to its author's profile photo; with no photo, the site icon; with neither, no image tags, as today
+- [x] #2 The homepage and other pages about nobody in particular use the site author's photo on a solo-author site and the site icon on a several-authors site
+- [x] #3 An entry's own image, and a hand-set site.avatar, still win over the fallbacks, so every page that printed an image before prints the same one
+- [x] #4 The fallback image's og:image:alt is the media library's description, else the author's display name for their photo or the site title for the icon; its width and height come from the variant sidecar when one exists
+- [x] #5 The default theme's JSON-LD image on a post or page is the same URL as its og:image
+- [x] #6 The default theme README describes the new fallback order
 - [ ] #7 Sharing https://shll.me/ on Mastodon after deploy shows the author's photo in the preview card, or the notes record what was checked
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Tests first (share-image.test.ts and page-shell.test.ts): a post with no image by a user with a photo; the same user with no photo but a site icon; neither; a solo-author homepage; a several-authors homepage; an entry with its own image and a hand-set site.avatar (unchanged); alt text and sidecar size for the photo and the icon; JSON-LD image equals og:image on a post and a page.
-2. share-image.ts: replace the single `avatar`/`owner` inputs with an ordered list of fallbacks, each a picture plus the words that describe it: `site.avatar` (the site author's name), the page author's photo (their display name), then the site icon (the site title). The first non-empty one wins. Alt text and size keep today's rules (library description, then those words; size from the sidecar).
-3. render.ts: pass the page author as the person the page is by (`context.siteAuthor` from the caller, else the solo site author), plus `site.icon` as the last fallback.
-4. jsonld.njk: drop the TASK-201 `entryImage` chain and print `metaImage`, so the JSON-LD and Open Graph cannot disagree.
-5. Leave oEmbed alone: it passes no fallbacks.
-6. Theme README: update the "picture" paragraph (around line 712) and the JSON-LD bullet.
+1. Tests first in page-shell.test.ts (HTTP against the packaged theme): a post with no image by a user with a photo; the same user with no photo but a site icon; neither; a solo-author homepage; a several-authors homepage; an entry with its own image and a hand-set site.avatar (unchanged); alt text and sidecar size for the photo and the icon; JSON-LD image equals og:image on a post and a page. The TASK-201 test that a page has no JSON-LD image changes: a page now takes its author's photo like a post.
+2. share-image.ts: replace the single avatar/owner inputs with an ordered list of fallbacks, each a picture plus the words that describe it. The first non-empty one wins. Alt text and size keep today's rules (library description, then those words; size from the sidecar).
+3. render.ts: fallbacks are site.avatar (the site author's name, else the site title), the photo of the person the page is by (context.siteAuthor from the caller, else the solo site author; their display name), then iconSetting(site) (the site title), so the icon rule stays in icons.ts.
+4. jsonld.njk: drop the TASK-201 entryImage chain and print metaImage, so the JSON-LD and Open Graph cannot disagree. base.njk: update the metaImage comment.
+5. oEmbed passes no fallbacks (TASK-205).
+6. Theme README: the picture paragraph and the JSON-LD bullet.
 7. Gates: build, test, typecheck, lint, format:check. Curl a scratch site: solo homepage, a post by a user with a photo, a several-authors homepage, a site with an icon only.
-8. Ship as fix(cms). After deploy, share https://shll.me/ on me.dm and read the card through the API.
+8. Ship as fix(cms). AC#7 needs a deploy to shll.me and a real Mastodon share; left open.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 The site icon fallback has no admin field yet. TASK-212 adds Site icon to Settings > General. TASK-211 does not depend on it: once TASK-212 sets an icon, the fallback uses it with no further change.
+
+Built as planned. shareImage() in share-image.ts now takes an ordered `fallbacks` list of { url, describedAs } in place of avatar/owner; the first that names a picture wins, and the alt and size rules are unchanged (library description, else describedAs; size from the sidecar). render.ts passes site.avatar (site author's name, else site title), the photo of the person the page is by (context.siteAuthor, else the solo site author; their display name), then iconSetting(site) (site title). oEmbed passes [] so its thumbnail is still only the post's own picture (TASK-205). jsonld.njk drops the TASK-201 entryImage chain and prints metaImage, so a page (not only a post) now carries the fallback image in its Article node; the TASK-201 test asserting a page had no JSON-LD image was changed to match.
+
+Evidence: new describe block 'the share image falls back to a photo, then the icon (TASK-211)' in page-shell.test.ts failed before the change (og:image undefined, expected the photo or icon URL) and passes after. Gates: pnpm build && pnpm test (3119 + 30 pass) && pnpm typecheck && pnpm lint && pnpm format:check all exit 0. Scratch sites curled over HTTP: solo author with photo prints the photo on / and a post with alt 'Ada Lovelace' and width/height 400; several-authors site prints the icon on / (alt 'Scratch', 512x512) and Grace's photo on her post (alt 'Grace Hopper'); solo author with no photo prints the icon. JSON-LD image equalled og:image on every entry checked.
+
+AC#7 is open: it needs a deploy to shll.me and a real Mastodon share, which this run does not have. The task stays In Progress until that check is done.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The share image (og:image, twitter:image) now falls back from the entry's own image and a hand-set site.avatar to the photo of the person the page is by, then the site icon, and the default theme's JSON-LD prints that same image. Verified by new page-shell tests (failing before, passing after), the full gate suite, and curl against scratch sites. AC#7 (Mastodon card on shll.me after deploy) is not yet checked.
+<!-- SECTION:FINAL_SUMMARY:END -->

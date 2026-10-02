@@ -50,7 +50,10 @@ export function derivedDir(config: ImageConfig, source: string): string {
  * resolution rather than by inspecting the string — the rule `findAsset`
  * applies to every other request for a file.
  */
-export function sourceFile(config: ImageConfig, source: string): string | undefined {
+export function sourceFile(
+  config: Pick<ImageConfig, 'contentDir'>,
+  source: string,
+): string | undefined {
   if (source === '' || source.includes('\0')) return undefined;
   const root = path.resolve(config.contentDir, UPLOAD_DIRECTORY);
   const file = path.resolve(root, source);

@@ -25,14 +25,17 @@ export interface ShareImage {
  */
 export const LARGE_CARD_MIN_WIDTH = 1200;
 
+export interface ShareImageFallback {
+  readonly url: string | undefined;
+  readonly describedAs: string;
+}
+
 /**
- * The page's share image, or `undefined` when it has none: the entry's own
- * `image`, else the site's avatar.
+ * The page's share image, or `undefined` when it has none.
  *
  * The alt text is the front matter's `imageAlt` for the entry's own picture,
  * because one picture can need describing differently in two posts; else what
- * the media library says about the upload; else the entry's title for its own
- * picture and the site's author for the avatar, which is a picture of them.
+ * the media library says about the upload.
  *
  * The size is read off the variant sidecar, never off the file, so a render
  * never opens an image (decision-10). A picture with no sidecar has no size
@@ -46,13 +49,15 @@ export function shareImage(input: {
   imageAlt: unknown;
   /** What the page is called, for an undescribed picture of its own. */
   title: string;
-  /** The site's avatar, and who it is a picture of. */
-  avatar: string | undefined;
-  owner: string;
+  fallbacks: readonly ShareImageFallback[];
 }): ShareImage | undefined {
   const own = nonEmpty(input.image);
-  const url = own ?? nonEmpty(input.avatar);
-  if (url === undefined) return undefined;
+  const chosen =
+    own === undefined
+      ? input.fallbacks.find((fallback) => nonEmpty(fallback.url) !== undefined)
+      : { url: own, describedAs: input.title };
+  const url = nonEmpty(chosen?.url);
+  if (chosen === undefined || url === undefined) return undefined;
 
   const source = uploadPath(url);
   const described =
@@ -60,7 +65,7 @@ export function shareImage(input: {
   const alt =
     (own === undefined ? undefined : nonEmpty(input.imageAlt)) ??
     (described?.kind === 'described' ? nonEmpty(described.text) : undefined) ??
-    (own === undefined ? input.owner : input.title);
+    chosen.describedAs;
 
   const record = source === undefined ? undefined : siteImageRecord(input.config, source);
   const size = record === undefined ? undefined : { width: record.width, height: record.height };

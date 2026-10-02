@@ -40,9 +40,8 @@
 
     `metaDescription` is the page's own description, else the entry's summary
     — the very line the feeds publish — else the site's tagline. `metaImage` is
-    `shareImage.url`: the picture the front matter names, else the site's
-    avatar; with neither, nothing is printed rather than an empty tag. The CMS
-    works out `shareImage` because its alt text and its size live in files a
+    `shareImage.url`; with none, nothing is printed rather than an empty tag.
+    The CMS works out `shareImage` because its alt text and its size live in files a
     template cannot read. `isEntry` is a rendered post
     or page, which is what Open Graph calls an article: a listing has
     `pagination`, and the posts page is a listing carrying a page's front
@@ -281,7 +280,7 @@
 
       {% block footer %}
       <footer>
-        <p>&copy; {{ "now" | date("year") }}, {{ soloAuthor.name or site.title }} &middot; Published with Geekity</p>
+        <p>&copy; {{ "now" | date("year") }}, {{ soloAuthor.name or site.title }}{% if license %} &middot; <a rel="license" href="{{ license.url }}">{{ license.name }}</a>{% endif %} &middot; Published with Geekity</p>
         {#
           The footer menu: the `footer` area this theme declares in its
           `theme.json`, which a site fills in on the Navigation screen, and the

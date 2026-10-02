@@ -32,6 +32,8 @@ import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, FrontPageSlugs, NeighbourContext, SiteData } from './context.ts';
 import { navigationMenus } from './navigation.ts';
+import { resolveLicense } from './license.ts';
+import type { ContentLicense } from './license.ts';
 import { shareImage } from './share-image.ts';
 import type { Pagination } from './pagination.ts';
 import { snippetHtml } from './search.ts';
@@ -425,13 +427,17 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     const title = [context['title'], context['label']].find(
       (value): value is string => typeof value === 'string' && value !== '',
     );
+    const by = (context['siteAuthor'] ?? siteOwner) as AuthorContext | undefined;
     const image = shareImage({
       config,
       image: context['image'],
       imageAlt: context['imageAlt'],
       title: title ?? site.title,
-      avatar: site.avatar,
-      owner: siteOwner?.name ?? site.title,
+      fallbacks: [
+        { url: site.avatar, describedAs: siteOwner?.name ?? site.title },
+        { url: by?.avatar, describedAs: by?.name ?? site.title },
+        { url: iconSetting(site), describedAs: site.title },
+      ],
     });
     return environment.render(template, {
       site,
@@ -450,6 +456,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // where the claim back is printed. A site with several authors has none.
       ...(siteOwner === undefined ? {} : { soloAuthor: siteOwner }),
       ...context,
+      ...licenseContext(site, context),
     });
   }
 
@@ -896,4 +903,11 @@ function replyContextFor(context: ReplyContext): Record<string, unknown> {
   return published === undefined || Number.isNaN(published.getTime())
     ? rest
     : { ...rest, published };
+}
+
+function licenseContext(
+  site: SiteData,
+  context: Record<string, unknown>,
+): { license: ContentLicense | undefined; siteLicense: ContentLicense | undefined } {
+  return { license: resolveLicense(site, context), siteLicense: resolveLicense(site) };
 }

@@ -2092,3 +2092,112 @@ describe('who a feed credits (TASK-192)', () => {
     ]);
   });
 });
+
+describe('the license a feed declares (TASK-206)', () => {
+  const BY_SA = 'https://creativecommons.org/licenses/by-sa/4.0/';
+  const CC_NAMESPACE = 'http://backend.userland.com/creativeCommonsRssModule';
+  const posts = {
+    'posts/2026-09-03-mine.md':
+      "---\ntitle: Mine\ndate: '2026-09-03T09:00:00Z'\npermalink: /2026/09/mine/\nlicense: https://example.com/terms\nlicenseName: House terms\n---\n\nAll mine.\n",
+    'posts/2026-09-02-reserved.md':
+      "---\ntitle: Reserved\ndate: '2026-09-02T09:00:00Z'\npermalink: /2026/09/reserved/\nlicense: none\n---\n\nAsk first.\n",
+    'posts/2026-09-01-hello.md': post('Hello', {
+      date: '2026-09-01T09:00:00Z',
+      permalink: '/2026/09/hello/',
+    }),
+  };
+
+  function licenseHrefs(element: XmlElement): string[] {
+    return childrenNamed(element, 'link')
+      .filter((link) => link.attributes['rel'] === 'license')
+      .map((link) => link.attributes['href'] ?? '');
+  }
+
+  function ccLicenses(element: XmlElement): string[] {
+    return childrenNamed(element, 'creativeCommons:license').map((license) => license.text);
+  }
+
+  it('declares the site license on the Atom feed and the RSS channel (AC #3)', async () => {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({ title: 'A Site', license: 'cc-by-sa' }),
+      'posts/2026-09-01-hello.md': posts['posts/2026-09-01-hello.md'],
+    });
+
+    const { feed } = await atom(cms, '/feed/atom/');
+    const feedLicense = childrenNamed(feed, 'link').find(
+      (link) => link.attributes['rel'] === 'license',
+    );
+    assert.equal(feedLicense?.attributes['href'], BY_SA);
+    assert.equal(feedLicense?.attributes['title'], 'CC BY-SA 4.0');
+    assert.deepEqual(licenseHrefs(child(feed, 'entry')), [BY_SA], 'and on each entry, RFC 4946');
+
+    const { rss: document, channel } = await rss(cms, '/feed/');
+    assert.equal(document.attributes['xmlns:creativeCommons'], CC_NAMESPACE);
+    assert.deepEqual(ccLicenses(channel), [BY_SA]);
+    assert.deepEqual(ccLicenses(child(channel, 'item')), [BY_SA]);
+  });
+
+  it("gives a post's feed item the license its front matter names (AC #4)", async () => {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({ title: 'A Site', license: 'cc-by-sa' }),
+      ...posts,
+    });
+
+    const { feed } = await atom(cms, '/feed/atom/');
+    assert.deepEqual(childrenNamed(feed, 'entry').map(licenseHrefs), [
+      ['https://example.com/terms'],
+      [],
+      [BY_SA],
+    ]);
+
+    const { channel } = await rss(cms, '/feed/');
+    assert.deepEqual(childrenNamed(channel, 'item').map(ccLicenses), [
+      ['https://example.com/terms'],
+      [],
+      [BY_SA],
+    ]);
+  });
+
+  it('declares nothing when no license is chosen (AC #5)', async () => {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({ title: 'A Site' }),
+      'posts/2026-09-02-reserved.md': posts['posts/2026-09-02-reserved.md'],
+      'posts/2026-09-01-hello.md': posts['posts/2026-09-01-hello.md'],
+    });
+
+    for (const url of ['/feed/', '/feed/atom/', '/feed/json/']) {
+      const text = await (await cms.app.request(url)).text();
+      assert.doesNotMatch(text, /license|creativeCommons/i, url);
+    }
+  });
+
+  it('declares a post license on a site that has none, and only there (AC #4, AC #5)', async () => {
+    const { cms } = await site({
+      '_data/site.json': JSON.stringify({ title: 'A Site' }),
+      ...posts,
+    });
+
+    const { channel, rss: document } = await rss(cms, '/feed/');
+    assert.equal(document.attributes['xmlns:creativeCommons'], CC_NAMESPACE);
+    assert.deepEqual(ccLicenses(channel), [], 'the site has none to declare');
+    assert.deepEqual(childrenNamed(channel, 'item').map(ccLicenses), [
+      ['https://example.com/terms'],
+      [],
+      [],
+    ]);
+  });
+
+  it('moves the ETag when the site license changes', async () => {
+    const { cms, contentDir } = await site({
+      '_data/site.json': JSON.stringify({ title: 'A Site' }),
+      'posts/2026-09-01-hello.md': posts['posts/2026-09-01-hello.md'],
+    });
+    const before = (await cms.app.request('/feed/atom/')).headers.get('etag');
+    await writeSiteJson({
+      contentDir,
+      settings: { ...readSiteSettings(contentDir), license: 'cc0' },
+    });
+    const after = (await cms.app.request('/feed/atom/')).headers.get('etag');
+    assert.notEqual(after, before);
+  });
+});

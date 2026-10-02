@@ -331,21 +331,28 @@ function isSvg(source: string): boolean {
   return path.extname(source).toLowerCase() === '.svg';
 }
 
-/** The upload an icon setting names, or `undefined` when it names none. */
-function iconSource(setting: string | undefined): string | undefined {
-  if (setting === undefined || !setting.startsWith(UPLOAD_ASSET_PREFIX)) return undefined;
+export function parseIconSetting(
+  setting: string,
+): { source: string } | { problem: 'not-an-upload' | 'not-an-image' } {
+  if (!setting.startsWith(UPLOAD_ASSET_PREFIX)) return { problem: 'not-an-upload' };
 
   const relative = setting.slice(UPLOAD_ASSET_PREFIX.length);
-  if (relative === '' || relative.includes('..')) return undefined;
-  if (!ICON_SOURCES.has(path.extname(relative).toLowerCase())) return undefined;
+  if (relative === '' || relative.includes('..')) return { problem: 'not-an-upload' };
+  if (!ICON_SOURCES.has(path.extname(relative).toLowerCase())) return { problem: 'not-an-image' };
 
   // The setting holds a URL and the lookup wants a path, so whatever the
   // upload endpoint encoded comes off again here.
   try {
-    return relative.split('/').map(decodeURIComponent).join('/');
+    return { source: relative.split('/').map(decodeURIComponent).join('/') };
   } catch {
-    return undefined;
+    return { problem: 'not-an-upload' };
   }
+}
+
+function iconSource(setting: string | undefined): string | undefined {
+  if (setting === undefined) return undefined;
+  const parsed = parseIconSetting(setting);
+  return 'source' in parsed ? parsed.source : undefined;
 }
 
 /** Where one derived icon of one upload is served. */
