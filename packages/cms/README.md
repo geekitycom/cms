@@ -1190,8 +1190,10 @@ still hears a fediverse reply.
 Some services copy a post when it links to them and sends them a webmention,
 and answer with the address of the copy. IndieNews lists posts about the
 IndieWeb; Bridgy Publish posts to Mastodon, Bluesky, GitHub and Flickr. The
-CMS knows none of them by name. A site lists the ones it uses in
-`content/_data/syndicationTargets.json`:
+CMS knows none of them by name. A site lists the ones it uses on the admin's
+**Posts > Syndication** screen (`/admin/syndication`), which reads
+and writes `content/_data/syndicationTargets.json`. The file stays the source of
+truth, so it can still be edited by hand, and it looks like this:
 
 ```json
 [
@@ -1218,8 +1220,19 @@ CMS knows none of them by name. A site lists the ones it uses in
 | `languages` | Optional. The language tags the target takes posts in. A post in any other language skips it. |
 
 An entry missing any of the first three, repeating an id, or with a `languages`
-value that is not a list of language tags, is reported in the log when the site
-starts and ignored. No file means no targets.
+value that is not a list of language tags, is ignored. It is reported in the log
+when the site starts, and the Syndication screen shows it with its problem so it
+can be fixed or removed there. No file means no targets.
+
+The screen has a panel for each entry, in file order, and an **Add a target**
+form. A save is checked by the same rules the file is read by: a field that
+breaks one is marked on the form and the file is left as it was. A save that
+passes is written atomically, and the editor's **Syndicate to** checkboxes and
+Micropub's `q=syndicate-to` offer the change on the next request. A save or
+remove is refused when the entry changed in the file since the page was drawn.
+A file that is not a JSON list is shown with its problem and never saved over.
+To keep the default theme's old IndieNews link, add a target with the id
+`indienews`, the url `https://news.indieweb.org/{lang}` and the tag `indienews`.
 
 Some targets have a page per language. IndieNews has `news.indieweb.org/en`,
 `/de`, `/fr` and more. Declare one target and put `{lang}` where the language

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  checkSyndicationTarget,
   handSyndicationOf,
   parseSyndicationTargets,
   selectedTargets,
@@ -63,6 +64,61 @@ describe('reading the declared targets', () => {
     assert.deepEqual(parseSyndicationTargets('{').targets, []);
     assert.equal(parseSyndicationTargets('{').problems.length, 1);
     assert.equal(parseSyndicationTargets('{"targets": []}').problems.length, 1);
+  });
+});
+
+describe('checking one target, field by field (TASK-218)', () => {
+  it('answers the target for a valid entry, trimmed and with canonical languages', () => {
+    assert.deepEqual(
+      checkSyndicationTarget({
+        id: 'news',
+        name: ' News ',
+        url: 'https://news.example/{lang}',
+        tag: ' indienews ',
+        languages: ['EN', 'de-at'],
+      }),
+      {
+        target: {
+          id: 'news',
+          name: 'News',
+          url: 'https://news.example/{lang}',
+          tag: 'indienews',
+          languages: ['en', 'de-AT'],
+        },
+      },
+    );
+  });
+
+  it('names every field that is wrong at once, so a form can mark each', () => {
+    const checked = checkSyndicationTarget({
+      id: 'has space',
+      name: '  ',
+      url: 'ftp://a.example/',
+      tag: '',
+      languages: ['de', 'not a tag!'],
+    });
+
+    assert.ok('problems' in checked, 'the entry is refused');
+    assert.deepEqual(Object.keys(checked.problems).sort(), [
+      'id',
+      'languages',
+      'name',
+      'tag',
+      'url',
+    ]);
+  });
+
+  it('is the rule the file is read by: a bad field in the file is reported with its sentence', () => {
+    const checked = checkSyndicationTarget({ id: 'x', name: 'X', url: 'mailto:a@b.example' });
+    assert.ok('problems' in checked);
+    const { problems } = parseSyndicationTargets(
+      JSON.stringify([{ id: 'x', name: 'X', url: 'mailto:a@b.example' }]),
+    );
+    assert.equal(problems.length, 1);
+    assert.ok(
+      problems[0]?.includes(checked.problems.url ?? 'missing'),
+      `the log line carries the form's sentence: ${problems[0] ?? ''}`,
+    );
   });
 });
 

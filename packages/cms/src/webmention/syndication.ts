@@ -66,59 +66,128 @@ export interface ParsedSyndicationTargets {
   readonly problems: readonly string[];
 }
 
+/** The keys a target is declared with, in the order a form or a file lists them. */
+export type SyndicationTargetField = 'id' | 'name' | 'url' | 'tag' | 'languages';
+
+/** A sentence for each key of one entry that is wrong. */
+export type SyndicationTargetProblems = Partial<Record<SyndicationTargetField, string>>;
+
+/** One entry checked: the target it declares, or what is wrong with each key. */
+export type CheckedSyndicationTarget =
+  { readonly target: SyndicationTarget } | { readonly problems: SyndicationTargetProblems };
+
+/** One entry of the file as written, and what it declares or why it declares nothing. */
+export type SyndicationEntry =
+  | { readonly raw: unknown; readonly target: SyndicationTarget }
+  | { readonly raw: unknown; readonly problems: readonly string[] };
+
+/** The file's text read as a list of entries, or the one reason it is not a list. */
+export type SyndicationEntries =
+  { readonly entries: readonly SyndicationEntry[] } | { readonly problem: string };
+
 /** Read the targets file's text. An entry that is not a target is reported and left out. */
 export function parseSyndicationTargets(text: string): ParsedSyndicationTargets {
+  const read = syndicationEntries(text);
+  if ('problem' in read) return { targets: [], problems: [read.problem] };
+
+  const targets: SyndicationTarget[] = [];
+  const problems: string[] = [];
+  read.entries.forEach((entry, index) => {
+    if ('target' in entry) {
+      targets.push(entry.target);
+      return;
+    }
+    const id = isRecord(entry.raw) && typeof entry.raw['id'] === 'string' ? entry.raw['id'] : '';
+    const named = id === '' ? '' : ` ("${id}")`;
+    problems.push(
+      `${SYNDICATION_TARGETS_FILE} entry ${String(index + 1)}${named} was ignored. ${entry.problems.join(' ')}`,
+    );
+  });
+  return { targets, problems };
+}
+
+/**
+ * Every entry of the targets file's text, each with the target it declares or
+ * its problems, in file order. A later entry repeating an earlier one's id
+ * declares nothing, so the first one wins.
+ */
+export function syndicationEntries(text: string): SyndicationEntries {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return { targets: [], problems: [`${SYNDICATION_TARGETS_FILE} is not valid JSON.`] };
+    return { problem: `${SYNDICATION_TARGETS_FILE} is not valid JSON.` };
   }
   if (!Array.isArray(parsed)) {
-    return { targets: [], problems: [`${SYNDICATION_TARGETS_FILE} is not a list of targets.`] };
+    return { problem: `${SYNDICATION_TARGETS_FILE} is not a list of targets.` };
   }
 
-  const targets: SyndicationTarget[] = [];
-  const problems: string[] = [];
   const seen = new Set<string>();
-
-  parsed.forEach((entry: unknown, index) => {
-    const where = `${SYNDICATION_TARGETS_FILE} entry ${String(index + 1)}`;
-    const target = targetOf(entry);
-    if (typeof target === 'string') {
-      problems.push(`${where} ${target}, so it was ignored.`);
-    } else if (seen.has(target.id)) {
-      problems.push(`${where} repeats the id "${target.id}", so it was ignored.`);
-    } else {
-      seen.add(target.id);
-      targets.push(target);
+  const entries = parsed.map((raw: unknown): SyndicationEntry => {
+    if (!isRecord(raw)) {
+      return { raw, problems: ['It is not an object with an id, a name and a url.'] };
     }
+    const checked = checkSyndicationTarget(raw);
+    if ('problems' in checked) return { raw, problems: Object.values(checked.problems) };
+    if (seen.has(checked.target.id)) {
+      return { raw, problems: [repeatedIdProblem(checked.target.id)] };
+    }
+    seen.add(checked.target.id);
+    return { raw, target: checked.target };
   });
-
-  return { targets, problems };
+  return { entries };
 }
 
-/** One entry as a target, or the reason it is not one. */
-function targetOf(entry: unknown): SyndicationTarget | string {
-  if (!isRecord(entry)) return 'is not an object';
+/** What an id another target already has is told. */
+export function repeatedIdProblem(id: string): string {
+  return `Another target already has the id "${id}".`;
+}
+
+/**
+ * One entry as a target, or a sentence for each key that is wrong. The one
+ * rule a target is read by, whether it comes from the file or from the admin's
+ * form; whether its id is unique depends on the other entries, so that is the
+ * caller's.
+ */
+export function checkSyndicationTarget(
+  entry: Readonly<Record<string, unknown>>,
+): CheckedSyndicationTarget {
   const { id, name, url, tag, languages } = entry;
+  const problems: SyndicationTargetProblems = {};
+
   if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
-    return 'has no id made of letters, digits, dots, dashes and underscores';
+    problems.id = 'An id is letters, digits, dots, dashes and underscores, and nothing else.';
   }
-  if (typeof name !== 'string' || name.trim() === '') return `("${id}") has no name`;
+  if (typeof name !== 'string' || name.trim() === '') problems.name = 'A target needs a name.';
   const href = urlTemplate(url);
-  if (href === undefined) return `("${id}") has no http or https url`;
+  if (href === undefined) {
+    problems.url = `The url must be an http or https address. It may hold ${LANGUAGE_PLACEHOLDER} where the language goes.`;
+  }
   if (tag !== undefined && (typeof tag !== 'string' || tag.trim() === '')) {
-    return `("${id}") has a tag that is not a word`;
+    problems.tag = 'A tag must be a word, or left out.';
   }
   const tags = languages === undefined ? undefined : languageList(languages);
-  if (tags === null) return `("${id}") has a languages list that is not a list of language tags`;
+  if (tags === null) {
+    problems.languages = 'Languages must be a list of language tags, such as en or de-AT.';
+  }
+
+  if (
+    typeof id !== 'string' ||
+    typeof name !== 'string' ||
+    href === undefined ||
+    tags === null ||
+    Object.keys(problems).length > 0
+  ) {
+    return { problems };
+  }
   return {
-    id,
-    name: name.trim(),
-    url: href,
-    ...(tag === undefined ? {} : { tag: tag.trim() }),
-    ...(tags === undefined ? {} : { languages: tags }),
+    target: {
+      id,
+      name: name.trim(),
+      url: href,
+      ...(typeof tag === 'string' ? { tag: tag.trim() } : {}),
+      ...(tags === undefined ? {} : { languages: tags }),
+    },
   };
 }
 

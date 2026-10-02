@@ -60,7 +60,26 @@ const refused = {
  */
 const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> = {
   'pages/users/edit.njk': [{ profileProblems: everyProblem }, { passwordProblems: everyProblem }],
+  // One panel per syndication target and the Add form (TASK-218).
+  'pages/documents/syndication.njk': [
+    syndicationRefused('target-0'),
+    syndicationRefused('target-new'),
+  ],
 };
+
+/** The Syndication screen with one target and the Add form, `key` the one refused. */
+function syndicationRefused(key: string): Record<string, unknown> {
+  const form = { id: 'x', name: 'X', url: '', tag: '', languages: '' };
+  const panel = (own: string): Record<string, unknown> => ({
+    key: own,
+    index: 0,
+    was: '{}',
+    form,
+    problems: own === key ? everyProblem : {},
+    fileProblems: [],
+  });
+  return { panels: [panel('target-0')], adding: panel('target-new'), refusedKey: key };
+}
 
 /**
  * Screens whose form is never shown back refused. The IndieAuth consent form

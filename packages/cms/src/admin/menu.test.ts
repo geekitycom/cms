@@ -41,6 +41,7 @@ describe('the admin menu registry', () => {
         ['Add new', '/admin/posts/new'],
         ['Categories', '/admin/categories'],
         ['Tags', '/admin/tags'],
+        ['Syndication', '/admin/syndication'],
       ],
     );
     assert.deepEqual(

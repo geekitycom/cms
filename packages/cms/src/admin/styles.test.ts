@@ -28,6 +28,8 @@ const SCREENS = [
   // styles of its own that nothing else on the admin would have caught
   // (TASK-77).
   'pages/appearance/themes.njk',
+  // Posts > Syndication borrows the Navigation screen's panels (TASK-218).
+  'pages/documents/syndication.njk',
 ];
 
 /** Marks where a `{{ … }}` stood, so an interpolated name is not mistaken
