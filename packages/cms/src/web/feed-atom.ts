@@ -102,6 +102,14 @@ export function atomEntry(item: FeedItem): string[] {
       : [element('published', item.published.toISOString(), 2)]),
     link({ rel: 'alternate', type: 'text/html', href: item.link }, 2),
     ...inReplyTo(item.inReplyTo),
+    // RFC 4287's own way to say a large file goes with the entry. Only the main
+    // file: Atom has no way to say the others are versions of it.
+    ...(item.enclosure === undefined
+      ? []
+      : [
+          `    <link rel="enclosure" type="${escapeXml(item.enclosure.type)}"` +
+            ` length="${String(item.enclosure.length)}" href="${escapeXml(item.enclosure.url)}"/>`,
+        ]),
     ...licenseLink(item.license, 2),
     ...author(item.author, 2),
     ...item.terms.map((term) => `    <category term="${escapeXml(term)}"/>`),

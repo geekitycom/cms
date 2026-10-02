@@ -112,6 +112,12 @@ export function optionalElement(name: string, text: string | undefined, depth = 
   return text === undefined ? [] : [element(name, text, depth)];
 }
 
+/** The Podcasting 2.0 namespace: alternate versions, transcripts and the channel's medium (TASK-213). */
+export const PODCAST_NAMESPACE = 'https://podcastindex.org/namespace/1.0';
+
+/** Apple's iTunes namespace, of which a feed prints only `itunes:duration` (TASK-213). */
+export const ITUNES_NAMESPACE = 'http://www.itunes.com/dtds/podcast-1.0.dtd';
+
 /** The Creative Commons RSS module, whose `license` element names an item's or a channel's license. */
 export const CREATIVE_COMMONS_NAMESPACE = 'http://backend.userland.com/creativeCommonsRssModule';
 

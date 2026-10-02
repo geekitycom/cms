@@ -4,6 +4,7 @@ import type { FeedItem } from './feed-item.ts';
 import { feedLanguage, notifyServerOf } from './feed-source.ts';
 import type { FeedSource } from './feed-source.ts';
 import { absoluteUrl } from './negotiate.ts';
+import type { Enclosure } from '../content/enclosure.ts';
 
 /**
  * JSON Feed 1.1: the document, its items, and the vocabulary they are spelled
@@ -86,12 +87,26 @@ export interface JsonFeedItem {
   authors?: JsonFeedAuthor[];
   /** The post's own language, when it is not the feed's (TASK-154). */
   language?: string;
+  /** The post's recording, the main file first and then its other versions (TASK-213). */
+  attachments?: JsonFeedAttachment[];
   /**
    * This CMS's extension object, which JSON Feed 1.1 allows under any key that
    * starts with an underscore, and which a reader that does not know it
    * ignores. Present only on a reply.
    */
   _geekity?: JsonFeedGeekity;
+}
+
+/** A file that goes with an item, as JSON Feed 1.1 models one. */
+export interface JsonFeedAttachment {
+  url: string;
+  mime_type: string;
+  /** What a reader calls this version, when the author named it. */
+  title?: string;
+  /** Bytes, when known. */
+  size_in_bytes?: number;
+  /** How long it plays, for audio or video whose duration is known. */
+  duration_in_seconds?: number;
 }
 
 /** The `_geekity` extension on a {@link JsonFeedItem}. */
@@ -135,7 +150,27 @@ export function jsonFeedItem(item: FeedItem): JsonFeedItem {
   if (item.terms.length > 0) entry.tags = [...item.terms];
   if (item.author !== undefined) entry.authors = [{ name: item.author }];
   if (item.language !== undefined) entry.language = item.language;
+  if (item.enclosure !== undefined) entry.attachments = attachments(item.enclosure);
   if (item.inReplyTo !== undefined) entry._geekity = { in_reply_to: item.inReplyTo };
 
   return entry;
+}
+
+/**
+ * A recording as attachments: the main file first, then the other versions.
+ * Every version is the same recording, so the duration goes on each one that
+ * plays.
+ */
+function attachments(enclosure: Enclosure): JsonFeedAttachment[] {
+  const { duration } = enclosure;
+  return [enclosure, ...enclosure.alternates].map((version) => {
+    const plays = /^(audio|video)\//i.test(version.type);
+    return {
+      url: version.url,
+      mime_type: version.type,
+      ...('title' in version && version.title !== undefined ? { title: version.title } : {}),
+      ...(version.length === undefined ? {} : { size_in_bytes: version.length }),
+      ...(plays && duration !== undefined ? { duration_in_seconds: duration } : {}),
+    };
+  });
 }

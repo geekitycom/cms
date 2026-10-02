@@ -84,6 +84,7 @@ export type {
   JsonFeed,
   JsonFeedAuthor,
   JsonFeedGeekity,
+  JsonFeedAttachment,
   JsonFeedHub,
   JsonFeedItem,
 } from './feed-json.ts';

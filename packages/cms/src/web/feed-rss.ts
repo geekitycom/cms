@@ -16,7 +16,9 @@ import {
   DC_NAMESPACE,
   element,
   escapeXml,
+  ITUNES_NAMESPACE,
   optionalElement,
+  PODCAST_NAMESPACE,
   rfc822,
   SOURCE_NAMESPACE,
   SY_NAMESPACE,
@@ -24,6 +26,8 @@ import {
 } from './feed-xml.ts';
 import { resolveLicense } from './license.ts';
 import { absoluteUrl, latestModified } from './negotiate.ts';
+import { isCaptions } from '../content/enclosure.ts';
+import type { AlternateEnclosure, Enclosure } from '../content/enclosure.ts';
 import { sanitizeCommentHtml } from './sanitize.ts';
 
 /**
@@ -43,6 +47,11 @@ export function rssFeed(source: FeedSource): string {
   const items = feedItems(documents, source);
   const license = resolveLicense(site);
   const licensed = license !== undefined || items.some((item) => item.license !== undefined);
+  // Each namespace is declared only when something in the feed is in it, so a
+  // feed with no recording is byte for byte what it was before TASK-213. Any
+  // recording prints a podcast element, `podcast:medium` on the channel.
+  const recorded = items.some((item) => item.enclosure !== undefined);
+  const timed = items.some((item) => item.enclosure?.duration !== undefined);
 
   const lines: string[] = [
     '<?xml version="1.0" encoding="utf-8"?>',
@@ -51,6 +60,8 @@ export function rssFeed(source: FeedSource): string {
     '     xmlns:content="http://purl.org/rss/1.0/modules/content/"',
     ...(licensed ? [`     xmlns:creativeCommons="${CREATIVE_COMMONS_NAMESPACE}"`] : []),
     `     xmlns:dc="${DC_NAMESPACE}"`,
+    ...(timed ? [`     xmlns:itunes="${ITUNES_NAMESPACE}"`] : []),
+    ...(recorded ? [`     xmlns:podcast="${PODCAST_NAMESPACE}"`] : []),
     `     xmlns:source="${SOURCE_NAMESPACE}"`,
     `     xmlns:sy="${SY_NAMESPACE}"`,
     `     xmlns:wfw="${WFW_NAMESPACE}">`,
@@ -70,6 +81,9 @@ export function rssFeed(source: FeedSource): string {
     ...cloudElements(site),
     ...channelImage(source, link),
     ...optionalElement('creativeCommons:license', license?.url, 2),
+    // A blog that sometimes has a recording, which is what the namespace's
+    // `blog` medium is for: without it an app takes the feed for a podcast.
+    ...(recorded ? [element('podcast:medium', 'blog', 2)] : []),
   ];
 
   for (const item of items) {
@@ -159,6 +173,7 @@ export function rssItem(item: FeedItem): string[] {
     ...item.terms.map((term) => `      <category>${escapeXml(term)}</category>`),
     ...commentPointers(item),
     ...optionalElement('creativeCommons:license', item.license?.url, 3),
+    ...(item.enclosure === undefined ? [] : recordingElements(item.enclosure)),
     element('description', item.summary, 3),
     `      <content:encoded>${cdata(item.html)}</content:encoded>`,
     // The source of the item, per the namespace: a reader that understands
@@ -166,6 +181,50 @@ export function rssItem(item: FeedItem): string[] {
     // the same text the ActivityStreams `Article` carries as its `source`.
     `      <source:markdown>${cdata(item.markdown)}</source:markdown>`,
     '    </item>',
+  ];
+}
+
+/**
+ * A post's recording as RSS: the main file as the `<enclosure>` RSS 2.0
+ * defines, which every podcast app reads, and what RSS has no element for in
+ * the Podcasting 2.0 namespace. The Apple directory tags are left out on
+ * purpose; `itunes:duration` is the one players show outside a directory.
+ */
+function recordingElements(enclosure: Enclosure): string[] {
+  const { transcript, duration } = enclosure;
+  return [
+    `      <enclosure url="${escapeXml(enclosure.url)}" length="${String(enclosure.length)}"` +
+      ` type="${escapeXml(enclosure.type)}"/>`,
+    ...enclosure.alternates.flatMap(alternateEnclosure),
+    ...(transcript === undefined
+      ? []
+      : [
+          `      <podcast:transcript url="${escapeXml(transcript.url)}"` +
+            ` type="${escapeXml(transcript.type)}"` +
+            `${isCaptions(transcript) ? ' rel="captions"' : ''}/>`,
+        ]),
+    ...(duration === undefined
+      ? []
+      : [element('itunes:duration', String(Math.round(duration)), 3)]),
+  ];
+}
+
+/** One other version of the recording, as `podcast:alternateEnclosure` with its one source. */
+function alternateEnclosure(alternate: AlternateEnclosure): string[] {
+  const attributes = [
+    ['type', alternate.type],
+    ['length', alternate.length],
+    ['title', alternate.title],
+    ['height', alternate.height],
+    ['lang', alternate.lang],
+  ]
+    .filter((pair): pair is [string, string | number] => pair[1] !== undefined)
+    .map(([name, value]) => ` ${name}="${escapeXml(String(value))}"`)
+    .join('');
+  return [
+    `      <podcast:alternateEnclosure${attributes}>`,
+    `        <podcast:source uri="${escapeXml(alternate.url)}"/>`,
+    '      </podcast:alternateEnclosure>',
   ];
 }
 
