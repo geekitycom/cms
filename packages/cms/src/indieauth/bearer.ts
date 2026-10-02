@@ -44,12 +44,12 @@ export interface BearerEnv {
 export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
   return async (c, next) => {
     const { config } = c.var;
-    const tokens = await presentedTokens(c);
-    if (tokens.length > 1) {
-      const description = 'Send the access token in the header or the body, not both.';
+    const tokens = new Set(await presentedTokens(c));
+    if (tokens.size > 1) {
+      const description = 'The header and the body carry different access tokens.';
       return refuse(c, 400, 'invalid_request', description, { error: 'invalid_request' });
     }
-    const presented = tokens[0];
+    const [presented] = tokens;
     if (presented === undefined) {
       return refuse(c, 401, 'unauthorized', 'An access token is required.', {});
     }
@@ -88,8 +88,9 @@ export function insufficientScope(c: Context<BearerEnv>, scope: Scope): Response
 }
 
 /**
- * Every access token the request carries. More than one is refused, as RFC
- * 6750 section 3.1 says, even when they are the same token.
+ * Every access token the request carries. RFC 6750 section 3.1 says a client
+ * sends one, but Quill sends the same token in the header and a form body for
+ * servers that drop the header, so only two different tokens are refused.
  */
 async function presentedTokens(c: Context): Promise<string[]> {
   const tokens: string[] = [];

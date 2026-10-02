@@ -1412,7 +1412,10 @@ resource, such as an MCP endpoint, works only there. decision-24 records the
 rules.
 
 An app sends its token in an `Authorization: Bearer` header, or in an
-`access_token` form field as Micropub allows, but not both. A request that sends it both ways gets 400 `invalid_request` (RFC 6750). A request with no token, or
+`access_token` form field as Micropub allows. RFC 6750 asks for one or the
+other, but Quill sends the same token both ways for servers that drop the
+header, so the same token in both is accepted. Two different tokens get 400
+`invalid_request`. A request with no token, or
 with one that is unknown, expired or revoked, gets 401. A token without the scope a
 route needs gets 403 `insufficient_scope`. Each refusal carries a
 `WWW-Authenticate: Bearer` header whose `resource_metadata` points at
@@ -1677,13 +1680,9 @@ replayed with curl against a local site. Every test passes except these:
 - 804 expects 401 for a token without the create scope. The site answers 403
   `insufficient_scope`, as the Micropub spec says
   ([micropub.rocks#101](https://github.com/aaronpk/micropub.rocks/issues/101)).
-- 805 sends the token in the header and the body. The site answers 400
-  `invalid_request` as RFC 6750 says, but micropub.rocks expects the error to
-  read `bad request`
-  ([micropub.rocks#104](https://github.com/aaronpk/micropub.rocks/issues/104)).
-- 802 passes as written, but micropub.rocks sends its token in the header as
-  well as the body, so the site refuses it there as it refuses 805
-  ([micropub.rocks#103](https://github.com/aaronpk/micropub.rocks/issues/103)).
+- 805 sends the same token in the header and the body and expects it refused,
+  as RFC 6750 says. The site accepts it, because Quill sends its token that way
+  and refusing it would refuse every Quill post.
 
 No app has been tried against a deployed site yet. TASK-170 lists the runs to
 make with Quill and a mobile app.

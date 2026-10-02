@@ -4,15 +4,23 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 19:43'
+updated_date: '2026-10-02 20:45'
 labels:
   - micropub
   - indieauth
   - interop
 dependencies: []
 references:
+  - 'https://micropub.rocks/'
+  - 'https://github.com/aaronpk/micropub.rocks/blob/main/app/Controller.php'
+  - packages/cms/src/indieauth/request.ts
+  - packages/cms/src/indieauth/discovery.ts
+  - 'https://github.com/barryf/micropublish'
+  - 'https://github.com/gRegorLove/indiebookclub'
+  - 'https://github.com/inklings-io/inkstone'
   - 'https://getindiekit.com/introduction'
   - 'https://indieauth.spec.indieweb.org/'
+  - 'https://github.com/aaronpk/Quill'
 priority: medium
 type: chore
 ordinal: 235800
@@ -131,6 +139,14 @@ Unknown: whether iA Writer sends a PKCE code_challenge. Nothing public says. If 
 This revisits one part of the no-legacy decision. iA Writer is maintained, unlike micropub.rocks and Inkstone. The current IndieAuth spec says a client should look for rel=authorization_endpoint and rel=token_endpoint for compatibility with earlier revisions, and Indiekit (getindiekit.com/introduction) publishes both beside indieauth-metadata 'for compatibility with older Micropub applications'. Publishing the links costs nothing and relaxes nothing: an authorization request without PKCE is still refused, with 'code_challenge must be an S256 PKCE challenge' on the redirect.
 
 Proposed: publish rel="authorization_endpoint" and rel="token_endpoint" in the Link header and head beside rel="indieauth-metadata" (advertiseIdentityEndpoints in packages/cms/src/indieauth/discovery.ts), then try iA Writer again. Its next error settles the PKCE question.
+
+## Quill (quill.p3k.io, 2026-10-02, shll.me on 0.16.0)
+
+Result: sign-in works. A note with no image fails with 400: {"error":"invalid_request","error_description":"Send the access token in the header or the body, not both."}
+
+Cause: our own refusal, added in c9add8f (TASK-170) for micropub.rocks test 805, which follows RFC 6750 section 3.1 strictly. Quill (maintained, last commit 2026-09-17) sends the token in the Authorization header and, on every form-encoded post, again as an access_token field (micropub_post, lib/helpers.php:157-163), on purpose: its comment links Quill issue #4 (2015) about servers that strip the Authorization header.
+
+Fix: branch fix-accept-same-token-in-header-and-body. requireBearer accepts the same token sent both ways and refuses only two different tokens. Consequence: micropub.rocks 805 (same token both ways, expects refusal) now fails, and 802 now passes. Quill is the reference Micropub client; 805 only matters through micropub.rocks, whose sign-in is unsupported anyway.
 
 ## Quill follow-up (2026-10-02)
 
