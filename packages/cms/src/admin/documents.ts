@@ -915,7 +915,8 @@ function resolveExtra(
   if (kind.type === 'post') {
     const offered = new Set(declared.map((target) => target.id));
     const kept = syndicateToOf(extra).filter((id) => !offered.has(id));
-    const listed = [...form.syndicateTo, ...kept];
+    // A form loaded from the file (a Micropub update) already holds those ids.
+    const listed = [...new Set([...form.syndicateTo, ...kept])];
     if (listed.length === 0) delete extra[SYNDICATE_TO_FRONT_MATTER_KEY];
     else extra[SYNDICATE_TO_FRONT_MATTER_KEY] = listed;
   }

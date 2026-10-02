@@ -22,6 +22,8 @@ import type { ResolvedConfig } from '../config.ts';
 import { removeImageVariants } from '../images/variants.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { userForAuthor } from '../web/authors.ts';
+import { syndicationTargetsReader } from '../webmention/syndication.ts';
+import type { SyndicationTarget } from '../webmention/syndication.ts';
 import { createForm, fromForm, fromJson } from './create.ts';
 import type { CreatedForm, CreateRequest } from './create.ts';
 import { parseChanges, sourceProperties, updateForm } from './update.ts';
@@ -47,6 +49,8 @@ type Query = (typeof QUERY_NAMES)[number];
 interface QueryContext {
   readonly baseUrl: string;
   readonly store: ContentStore;
+  /** The syndication targets the site declares (TASK-155). */
+  readonly targets: readonly SyndicationTarget[];
   /** The `filter` parameter, which narrows `q=category`. */
   readonly filter: string | undefined;
   /** The `properties[]` parameters, which narrow `q=source`. */
@@ -60,18 +64,18 @@ interface QueryContext {
  * instead.
  */
 const QUERIES: Readonly<Record<Query, (context: QueryContext) => object>> = {
-  config: ({ baseUrl }) => ({
+  config: ({ baseUrl, targets }) => ({
     'media-endpoint': `${baseUrl}${MICROPUB_MEDIA_PATH}`,
-    'syndicate-to': SYNDICATE_TO,
+    'syndicate-to': offered(targets),
     'post-types': Object.entries(POST_TYPE_NAMES).map(([type, name]) => ({ type, name })),
     q: QUERY_NAMES,
   }),
-  'syndicate-to': () => ({ 'syndicate-to': SYNDICATE_TO }),
+  'syndicate-to': ({ targets }) => ({ 'syndicate-to': offered(targets) }),
   category: ({ store, filter }) => ({ categories: categories(store, filter) }),
-  source: ({ baseUrl, properties, post }) => {
+  source: ({ baseUrl, targets, properties, post }) => {
     const document = post();
     if (document instanceof Refusal) return document;
-    const all = sourceProperties(document, baseUrl);
+    const all = sourceProperties(document, { baseUrl, targets });
     // Asked for by name, the answer is the properties alone, as the spec has it.
     if (properties.length === 0) return { type: ['h-entry'], properties: all };
     return {
@@ -129,8 +133,10 @@ function postAt(
   return document;
 }
 
-/** The targets a client may offer: none until TASK-168 lists the site's own. */
-const SYNDICATE_TO: readonly { uid: string; name: string }[] = [];
+/** The site's targets as a client offers them: a target's id is its uid (decision-26). */
+function offered(targets: readonly SyndicationTarget[]): { uid: string; name: string }[] {
+  return targets.map(({ id, name }) => ({ uid: id, name }));
+}
 
 /**
  * Every tag and category on a published post, once each, alphabetically
@@ -285,6 +291,7 @@ const ACTIONS: {
       timezone,
       now: store.now(),
       baseUrl: siteBaseUrl(c),
+      targets: syndicationTargetsReader(config.contentDir)(),
     });
     if ('errors' in created) return invalid(created.errors.join(' ')).answer(c);
 
@@ -317,6 +324,7 @@ const ACTIONS: {
       timezone: readSiteSettings(config.contentDir).timezone,
       now: store.now(),
       baseUrl: siteBaseUrl(c),
+      targets: syndicationTargetsReader(config.contentDir)(),
     });
     if ('errors' in updated) return invalid(updated.errors.join(' ')).answer(c);
 
@@ -407,6 +415,7 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
     const answer = QUERIES[q]({
       baseUrl: siteBaseUrl(c),
       store: c.var.store,
+      targets: syndicationTargetsReader(c.var.config.contentDir)(),
       filter: c.req.query('filter'),
       properties: c.req.queries('properties[]') ?? c.req.queries('properties') ?? [],
       post: () => postFor(c, c.req.query('url')),

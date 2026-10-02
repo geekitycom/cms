@@ -5,6 +5,7 @@ import { isWebUrl } from '../content/enclosure.ts';
 import { normalizeBody } from '../content/writer.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
+import type { SyndicationTarget } from '../webmention/syndication.ts';
 
 /**
  * A Micropub create (TASK-164), whichever way it was encoded: the one
@@ -40,6 +41,7 @@ const PROPERTIES = new Set<string>([
   'category',
   'photo',
   'post-status',
+  'mp-syndicate-to',
 ]);
 
 /** What `post-status` may say, and whether it makes a draft. */
@@ -92,14 +94,16 @@ export interface PhotoUpload {
 }
 
 /**
- * Who a create is by and the site it lands on: its zone and clock, and its
- * base URL, whose own uploads are written as paths.
+ * Who a create is by and the site it lands on: its zone and clock, its base
+ * URL, whose own uploads are written as paths, and the syndication targets it
+ * declares, which are all `mp-syndicate-to` may name.
  */
 export interface CreateSite {
   readonly author: string;
   readonly timezone: string;
   readonly now: Date;
   readonly baseUrl: string;
+  readonly targets: readonly SyndicationTarget[];
 }
 
 /** A create that can be written, once its {@link PhotoUpload}s are stored. */
@@ -150,6 +154,7 @@ export function createForm(
     author,
     body: normalizeBody(content(request.properties.get('content') ?? [], errors)),
     tags: categories(request.properties.get('category') ?? [], errors),
+    syndicateTo: syndicateTo(request.properties.get('mp-syndicate-to') ?? [], site.targets, errors),
   };
   const uploads: PhotoUpload[] = [];
   form.photos = (request.properties.get('photo') ?? []).map((value, row) => {
@@ -229,4 +234,26 @@ function categories(values: readonly unknown[], errors: string[]): string {
     terms.push(value);
   }
   return terms.join(', ');
+}
+
+/**
+ * The targets `mp-syndicate-to` selects, each once, as the editor's checkboxes
+ * would. A uid the site does not declare is refused by name: a post read back
+ * ignores it, so a client would never learn the post went nowhere.
+ */
+function syndicateTo(
+  values: readonly unknown[],
+  targets: readonly SyndicationTarget[],
+  errors: string[],
+): string[] {
+  if (!values.every((value) => typeof value === 'string')) {
+    errors.push('mp-syndicate-to has to be text, one target uid to a value.');
+    return [];
+  }
+  const declared = new Set(targets.map(({ id }) => id));
+  const unknown = values.filter((uid) => !declared.has(uid));
+  if (unknown.length > 0) {
+    errors.push(`mp-syndicate-to names no syndication target ${unknown.join(', ')}.`);
+  }
+  return [...new Set(values)];
 }

@@ -3,6 +3,7 @@ import type { EditorForm } from '../admin/documents.ts';
 import { photoRows } from '../admin/photo-field.ts';
 import type { Document } from '../content/document.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
+import { syndicateToOf } from '../webmention/syndication.ts';
 import { createForm } from './create.ts';
 import type { CreateSite } from './create.ts';
 
@@ -21,14 +22,22 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   published: ['date'],
   'post-status': [],
   photo: ['photos'],
+  'mp-syndicate-to': ['syndicateTo'],
 };
 
 /**
  * A post's properties as `q=source` answers them: the create mapping
  * (decision-27) read backwards, so a client can send them back as they came.
- * A property the post does not have is left out.
+ * A property the post does not have is left out. `mp-syndicate-to` holds
+ * only the targets the site declares, the ones a client can offer; an id the
+ * file lists that names none stays in the file, as it does through an editor
+ * save.
  */
-export function sourceProperties(document: Document, baseUrl: string): Record<string, unknown[]> {
+export function sourceProperties(
+  document: Document,
+  site: Pick<CreateSite, 'baseUrl' | 'targets'>,
+): Record<string, unknown[]> {
+  const { baseUrl } = site;
   const properties: Record<string, unknown[]> = {};
   const text = (name: string, value: string | undefined): void => {
     if (value !== undefined && value !== '') properties[name] = [value];
@@ -45,6 +54,9 @@ export function sourceProperties(document: Document, baseUrl: string): Record<st
     return alt === '' ? value : { value, alt };
   });
   if (photos.length > 0) properties['photo'] = photos;
+  const declared = new Set(site.targets.map(({ id }) => id));
+  const selected = syndicateToOf(document.extra).filter((id) => declared.has(id));
+  if (selected.length > 0) properties['mp-syndicate-to'] = selected;
   return properties;
 }
 
@@ -107,7 +119,7 @@ export function updateForm(
   const unknown = touched.filter((property) => !(property in UPDATABLE));
   if (unknown.length > 0) return { errors: [`This endpoint cannot update ${unknown.join(', ')}.`] };
 
-  const source = sourceProperties(document, site.baseUrl);
+  const source = sourceProperties(document, site);
   const properties = new Map(touched.map((property) => [property, source[property] ?? []]));
   for (const change of changes) {
     const current = properties.get(change.property) ?? [];

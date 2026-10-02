@@ -1467,7 +1467,11 @@ gets 401. It answers these queries:
 - `?q=config` lists the media endpoint (`/_geekity/micropub/media`), the
   syndication targets under `syndicate-to`, the post types the site accepts
   (note, article, reply and photo) and the queries it answers.
-- `?q=syndicate-to` lists the syndication targets on their own.
+- `?q=syndicate-to` lists the syndication targets on their own. Each is the
+  `uid` and `name` of a target the site declares in
+  `content/_data/syndicationTargets.json`, with its `id` as the `uid`. A site
+  that declares none lists `[]`. The file is read again on each query, so a
+  target added by hand is offered at once.
 - `?q=category` lists every tag and category on a published post, once each,
   in alphabetical order. Add `&filter=` to keep only the terms that contain
   that text, ignoring case.
@@ -1504,6 +1508,11 @@ post's URL. The properties it understands are:
   own uploads is written as the upload's path, so the theme serves its
   resizes. A photo with no alt text of its own uses the media library's. A
   post with a photo and no reply target is a photo post.
+- `mp-syndicate-to` selects a syndication target by its `uid`, once per
+  value. The targets are written to the post's `syndicate-to` list, as the
+  editor's Syndicate to checkboxes write them, and the post is sent to them
+  when it is published. A `uid` the site does not declare gets 400
+  `invalid_request` naming it, and nothing is written.
 
 Any other type or property, such as `h=event`, `like-of` or `location`, gets 400
 `invalid_request` with a description that names it, and nothing is written.
@@ -1519,7 +1528,12 @@ The same is true of `?q=source`.
   sets a property's values, `add` adds values to it, and `delete` takes the
   values it lists away, or, given a list of property names, the whole
   properties. Only the properties it names change. It accepts the properties
-  a create accepts except `mp-slug`. The post is saved exactly as an editor
+  a create accepts except `mp-slug`. `add` and `delete` on `mp-syndicate-to`
+  select and deselect targets as the editor's checkboxes do, and a deselected
+  target is told the post no longer links to it. `?q=source` reports the
+  selected targets under `mp-syndicate-to`. An id in the post's
+  `syndicate-to` that names no declared target is left out of it and kept in
+  the file. The post is saved exactly as an editor
   save, so it is stamped updated, federates an `Update` and sends webmentions.
   An editor that has the post open reports a conflict on its next save
   instead of overwriting the update. The site answers 204, or 201 with a
