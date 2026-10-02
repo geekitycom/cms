@@ -120,7 +120,10 @@ describe('alt text in the media library (TASK-141)', () => {
     assert.match(screen, /name="decorative"[^>]*checked/);
 
     const { html } = await publish(agent, `A rule:\n\n![](${PHOTO_URL})`);
-    assert.doesNotMatch(html, /alt text/i, 'nothing to warn about');
+    const flashes = [...html.matchAll(/<p class="admin-flash[^"]*"[^>]*>([\s\S]*?)<\/p>/g)].map(
+      ([, text]) => text,
+    );
+    assert.doesNotMatch(flashes.join('\n'), /alt text/i, 'nothing to warn about');
 
     const page = await (await cms.app.request('/2026/03/with-a-picture/')).text();
     assert.match(page, new RegExp(`<img src="${PHOTO_URL}" alt="">`));

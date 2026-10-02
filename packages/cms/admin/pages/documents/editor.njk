@@ -64,6 +64,28 @@
       </div>
 
       {% if kind.type == "post" %}
+        <fieldset class="admin-editor-enclosure admin-editor-photos">
+          <legend>Photos</legend>
+          <p class="admin-hint">
+            Each is an image in the media library or an address starting https://. Leave the alt text
+            empty to use the media library’s. Empty an address to remove that photo.
+          </p>
+          {% for row in photoRows %}
+            {% set n = loop.index0 %}
+            <fieldset class="admin-editor-alternate">
+              <legend>{% if row.url %}Photo {{ loop.index }}{% else %}Add a photo{% endif %}</legend>
+              <label for="editor-photo-url-{{ n }}">Address</label>
+              <input id="editor-photo-url-{{ n }}" name="{{ photoFields.url }}{{ n }}" type="text" value="{{ row.url }}" list="editor-photo-uploads" autocomplete="off" />
+              <label for="editor-photo-alt-{{ n }}">Alt text</label>
+              <input id="editor-photo-alt-{{ n }}" name="{{ photoFields.alt }}{{ n }}" type="text" value="{{ row.alt }}"{% if row.libraryAlt %} placeholder="{{ row.libraryAlt }}"{% endif %} />
+            </fieldset>
+          {% endfor %}
+          <datalist id="editor-photo-uploads">
+            {% for url in photoChoices %}
+              <option value="{{ url }}"></option>
+            {% endfor %}
+          </datalist>
+        </fieldset>
         <fieldset class="admin-editor-enclosure">
           <legend>Recording</legend>
 

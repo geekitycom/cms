@@ -1,6 +1,10 @@
 import { blankForm, POST_KIND } from '../admin/documents.ts';
 import type { EditorForm } from '../admin/documents.ts';
+import type { PhotoRow } from '../admin/photo-field.ts';
+import { isWebUrl } from '../content/enclosure.ts';
 import { normalizeBody } from '../content/writer.ts';
+import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
+import { absoluteUrl } from '../web/negotiate.ts';
 
 /**
  * A Micropub create (TASK-164), whichever way it was encoded: the one
@@ -34,6 +38,7 @@ const PROPERTIES = new Set<string>([
   ...Object.keys(SINGLE_VALUED),
   'content',
   'category',
+  'photo',
   'post-status',
 ]);
 
@@ -82,19 +87,43 @@ export function fromJson(body: unknown): CreateRequest | { readonly error: strin
   return { type: type[0], properties: new Map(entries as [string, unknown[]][]) };
 }
 
+/** A photo sent as a file part of a multipart create, for the editor row it fills. */
+export interface PhotoUpload {
+  /** The index of its row in the form's photos, whose address is empty until it is stored. */
+  readonly row: number;
+  readonly file: File;
+}
+
 /**
- * The editor form a create fills in, authored by `author`, or every reason it
- * cannot be, each naming the type or property at fault.
+ * Who a create is by and the site it lands on: its zone and clock, and its
+ * base URL, whose own uploads are written as paths.
+ */
+export interface CreateSite {
+  readonly author: string;
+  readonly timezone: string;
+  readonly now: Date;
+  readonly baseUrl: string;
+}
+
+/** A create that can be written, once its {@link PhotoUpload}s are stored. */
+export interface CreatedForm {
+  readonly form: EditorForm;
+  readonly draft: boolean;
+  readonly uploads: readonly PhotoUpload[];
+}
+
+/**
+ * The editor form a create fills in, or every reason it cannot be, each
+ * naming the type or property at fault.
  *
  * The form then goes through the editor's own write path, which is what makes
  * a Micropub post indistinguishable from an editor post (AC #2).
  */
 export function createForm(
   request: CreateRequest,
-  author: string,
-  timezone: string,
-  now: Date,
-): { readonly form: EditorForm; readonly draft: boolean } | { readonly errors: string[] } {
+  site: CreateSite,
+): CreatedForm | { readonly errors: string[] } {
+  const { author, timezone, now } = site;
   if (request.type !== 'h-entry') {
     const named = request.type === '' ? 'no type' : request.type;
     return { errors: [`This endpoint creates h-entry posts, not ${named}.`] };
@@ -125,6 +154,19 @@ export function createForm(
     body: normalizeBody(content(request.properties.get('content') ?? [], errors)),
     tags: categories(request.properties.get('category') ?? [], errors),
   };
+  const uploads: PhotoUpload[] = [];
+  form.photos = (request.properties.get('photo') ?? []).map((value, row) => {
+    if (value instanceof File) {
+      uploads.push({ row, file: value });
+      return { url: '', alt: '' };
+    }
+    const photo = photoRow(value, site.baseUrl);
+    if (photo === undefined) {
+      errors.push('photo is a web address, { "value": "…", "alt": "…" } or an uploaded file.');
+      return { url: '', alt: '' };
+    }
+    return photo;
+  });
   for (const [property, field] of Object.entries(SINGLE_VALUED)) {
     form[field] = text(property);
   }
@@ -135,7 +177,29 @@ export function createForm(
     errors.push(`post-status is published or draft, not ${status}.`);
   }
 
-  return errors.length > 0 || draft === undefined ? { errors } : { form, draft };
+  return errors.length > 0 || draft === undefined ? { errors } : { form, draft, uploads };
+}
+
+/**
+ * A photo given as a URL or as `{ value, alt }`, as the editor row it fills.
+ * A URL into this site's own uploads becomes the path the editor would have
+ * written, so the theme serves its responsive variants.
+ */
+function photoRow(value: unknown, baseUrl: string): PhotoRow | undefined {
+  let url: unknown = value;
+  let alt: unknown = '';
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    ({ value: url, alt = '' } = value as Record<string, unknown>);
+  }
+  if (typeof url !== 'string' || typeof alt !== 'string' || !isWebUrl(url.trim())) return undefined;
+  const uploads = absoluteUrl(UPLOAD_ASSET_PREFIX, baseUrl);
+  const address = url.trim();
+  return {
+    url: address.startsWith(uploads)
+      ? `${UPLOAD_ASSET_PREFIX}${address.slice(uploads.length)}`
+      : address,
+    alt: alt.trim(),
+  };
 }
 
 /** The body: plain text as the Markdown it is written in, or HTML as it came. */

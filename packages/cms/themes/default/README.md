@@ -424,6 +424,16 @@ other versions by their title, else their media type. A post without a
 recording, or whose front matter is missing what a player needs, prints none of
 it.
 
+**A post with photos shows them** (TASK-166), from `partials/photos.njk`, after
+the recording and before the `e-content`, each in a `figure.post-photo`. Each is
+the context's `photo.html`: an `<img class="u-photo">` with its alt text, so a
+microformats parser finds every photo on the entry, and a `<picture>` with the
+upload's resizes when it has them. The alt text is the post's own, else the
+media library's. A listing prints them the same way above each entry, and the
+JSON-LD `BlogPosting` lists each as an `ImageObject` with its absolute `url`
+and its alt text as `caption`. The first photo is the post's share image when
+its front matter names no `image`.
+
 ```html
 <figure class="post-recording">
   <audio controls preload="metadata" aria-label="Recording of Episode twelve">
@@ -1146,6 +1156,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `permalink`, `slug`, `draft`, `description` | Straight from the front matter.                                                                                   |
 | `lang`                                      | The `lang` front matter as a canonical tag, such as `fr-CA`. Absent when it names none or no tag.                 |
 | `enclosure`                                 | The post's recording, parsed, with `player` (`audio` or `video`) and `transcript.captions`. Absent with none.     |
+| `photos`                                    | The post's photos, each `{ url, alt, html }`; `html` is the `img.u-photo`, responsive. Empty with none.           |
 | `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                  |
 | `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made. |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |

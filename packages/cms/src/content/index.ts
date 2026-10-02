@@ -8,6 +8,8 @@ export {
   TRANSCRIPT_TYPES,
 } from './enclosure.ts';
 export type { AlternateEnclosure, Enclosure, Transcript, TranscriptType } from './enclosure.ts';
+export { PHOTO_FRONT_MATTER_KEY, photoAlt, photosOf } from './photo.ts';
+export type { Photo } from './photo.ts';
 export { renderMarkdown } from './markdown.ts';
 export {
   KNOWN_UPLOAD_TYPES,

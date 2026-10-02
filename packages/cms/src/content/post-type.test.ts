@@ -130,6 +130,38 @@ describe('a reply', () => {
   });
 });
 
+describe('a photo post (AC #3)', () => {
+  const target = 'https://example.com/post';
+
+  it('is a post with a photo and no name, ahead of the note/article tail', () => {
+    assert.equal(discoverPostType({ photo: ['/uploads/a.jpg'] }), 'photo');
+    assert.equal(
+      discoverPostType({ photo: ['/uploads/a.jpg'], content: 'At the beach.' }),
+      'photo',
+    );
+  });
+
+  it('is not made by an empty photo list', () => {
+    assert.equal(discoverPostType({ photo: [], content: 'At the beach.' }), 'note');
+  });
+
+  it('gives way to a reply, which comes first in the spec’s order', () => {
+    assert.equal(
+      discoverPostType({ 'in-reply-to': target, photo: ['/uploads/a.jpg'], content: 'Same.' }),
+      'reply',
+    );
+    assert.equal(
+      postTypeOf(post(`in-reply-to: ${target}\nphoto:\n  - url: /uploads/a.jpg\n`, 'Same.')),
+      'reply',
+    );
+  });
+
+  it('reads the photo key of a document', () => {
+    assert.equal(postTypeOf(post('photo:\n  - url: /uploads/a.jpg\n    alt: A\n', '')), 'photo');
+    assert.equal(postTypeOf(post('photo:\n  - url: not-a-url\n', 'Words.')), 'note');
+  });
+});
+
 describe('postTypeOf', () => {
   it('reads an untitled post as a note', () => {
     assert.equal(postTypeOf(post('', 'Coffee first.')), 'note');

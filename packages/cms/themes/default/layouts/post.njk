@@ -60,6 +60,10 @@
   {% include "partials/recording.njk" %}
   {% endif %}
 
+  {% if photos.length %}
+  {% include "partials/photos.njk" %}
+  {% endif %}
+
   <section class="e-content">
     {{ content | safe }}
     <p class="entry-meta">

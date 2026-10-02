@@ -5,9 +5,11 @@ import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf, isCaptions, playsAsVideo } from '../content/enclosure.ts';
 import type { Enclosure, Transcript } from '../content/enclosure.ts';
+import { photoAlt, photosOf } from '../content/photo.ts';
 import { isNamed, postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { DEFAULT_TIMEZONE } from '../content/time.ts';
+import { readAltTexts } from '../images/alt-text.ts';
 import { siteImageMarkup } from '../images/markup.ts';
 import type { ImageLoading } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
@@ -204,6 +206,11 @@ export interface DocumentContext {
    */
   enclosure?: EnclosureContext | undefined;
   /**
+   * The post's photos (TASK-166), in the order its `photo` front matter lists
+   * them, over the raw value. Empty when it has none.
+   */
+  photos: PhotoContext[];
+  /**
    * The post's copies elsewhere, each printed as `u-syndication` (TASK-155):
    * the URLs its `syndication` front matter lists by hand, and on a post's own
    * page the copies its syndication targets answered with. Over the raw front
@@ -233,6 +240,20 @@ export interface EnclosureContext extends Omit<Enclosure, 'transcript'> {
   /** The element that plays it, the same answer the fediverse's attachment type gives. */
   player: 'audio' | 'video';
   transcript?: (Transcript & { captions: boolean }) | undefined;
+}
+
+/** One of a post's photos as a theme prints it. See {@link DocumentContext.photos}. */
+export interface PhotoContext {
+  /** As the front matter wrote it: an upload's site-relative URL, or a web address. */
+  url: string;
+  /** Its alt text: the post's own, else the media library's (TASK-141). Empty when nobody said. */
+  alt: string;
+  /**
+   * `<img class="u-photo" src alt>`, the microformats2 photo of the h-entry,
+   * as a responsive `<picture>` when the upload's variants exist, the same
+   * rewrite `content` gets (decision-10).
+   */
+  html: string;
 }
 
 /**
@@ -284,6 +305,7 @@ export function documentContext(
   loading?: ImageLoading,
 ): DocumentContext {
   const date = toDate(document.date);
+  const photos = photoContexts(document, images, loading);
 
   return {
     ...document.extra,
@@ -307,7 +329,13 @@ export function documentContext(
     ...optional('date', date),
     tags: document.tags,
     categories: document.categories,
-    content: images === undefined ? document.html : siteImageMarkup(images, document.html, loading),
+    photos,
+    // The first photo opens a page that leads with this document, so the
+    // body's images are only first when there are no photos.
+    content:
+      images === undefined
+        ? document.html
+        : siteImageMarkup(images, document.html, photos.length > 0 ? {} : loading),
     // The plain-text summary, taken off the document rather than off the
     // markup above: an excerpt is text, and the `<picture>` a site's image
     // config puts in the HTML is not something to cut words out of.
@@ -506,6 +534,33 @@ function toDate(value: string | undefined): Date | undefined {
 
 function optional<K extends string, V>(key: K, value: V | undefined): Record<K, V> | object {
   return value === undefined ? {} : ({ [key]: value } as Record<K, V>);
+}
+
+function photoContexts(
+  document: Document,
+  images: ImageConfig | undefined,
+  loading: ImageLoading | undefined,
+): PhotoContext[] {
+  const photos = photosOf(document.extra);
+  if (photos.length === 0) return [];
+  const library = images === undefined ? new Map() : readAltTexts(images.contentDir);
+  return photos.map((photo, index) => {
+    const alt = photoAlt(photo, library) ?? '';
+    const tag = `<img class="u-photo" src="${escapeAttribute(photo.url)}" alt="${escapeAttribute(alt)}">`;
+    const html =
+      images === undefined
+        ? tag
+        : siteImageMarkup(images, tag, { lead: index === 0 && loading?.lead === true });
+    return { url: photo.url, alt, html };
+  });
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
 }
 
 function enclosureContext(document: Document): EnclosureContext | undefined {

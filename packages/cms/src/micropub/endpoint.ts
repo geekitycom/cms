@@ -1,6 +1,9 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
 import { POST_KIND, writeDocument } from '../admin/documents.ts';
+import type { EditorForm } from '../admin/documents.ts';
+import { deleteUpload } from '../admin/media.ts';
+import { refusedUpload, storeUpload } from '../admin/uploads.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 
 import type { PostType } from '../content/post-type.ts';
@@ -11,8 +14,11 @@ import { MICROPUB_MEDIA_PATH, MICROPUB_PATH, siteBaseUrl } from '../indieauth/di
 import type { GeekityEnv } from '../env.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
+import type { ResolvedConfig } from '../config.ts';
+import { removeImageVariants } from '../images/variants.ts';
+import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { createForm, fromForm, fromJson } from './create.ts';
-import type { CreateRequest } from './create.ts';
+import type { CreatedForm, CreateRequest } from './create.ts';
 
 /**
  * The name a client shows for each post type the site accepts, in the order
@@ -22,6 +28,7 @@ const POST_TYPE_NAMES: Readonly<Record<PostType, string>> = {
   note: 'Note',
   article: 'Article',
   reply: 'Reply',
+  photo: 'Photo',
 };
 
 /** Each `q` the endpoint answers. */
@@ -105,6 +112,42 @@ async function createRequest(
   return { error: 'A create is form-encoded, multipart or JSON.' };
 }
 
+/**
+ * The create's form with each photo file stored in the media library, the way
+ * the media endpoint stores one, and the addresses stored. Nothing is kept
+ * when a file is refused.
+ */
+async function storePhotos(
+  created: CreatedForm,
+  config: ResolvedConfig,
+): Promise<{ form: EditorForm; stored: string[] } | { error: string }> {
+  const stored: string[] = [];
+  const photos = [...created.form.photos];
+  for (const { row, file } of created.uploads) {
+    const upload = await storeUpload(file, config, { imagesOnly: true });
+    if (refusedUpload(upload)) {
+      await removeUploads(stored, config);
+      return { error: `photo: ${upload.error}` };
+    }
+    stored.push(upload.url);
+    photos[row] = { url: upload.url, alt: photos[row]?.alt ?? '' };
+  }
+  return { form: { ...created.form, photos }, stored };
+}
+
+/** Take uploads stored for a create that was then refused back out, variants and all. */
+async function removeUploads(urls: readonly string[], config: ResolvedConfig): Promise<void> {
+  for (const url of urls) {
+    await deleteUpload({
+      contentDir: config.contentDir,
+      path: url.slice(UPLOAD_ASSET_PREFIX.length),
+      removeDerived: async (source) => {
+        await removeImageVariants(config, source);
+      },
+    });
+  }
+}
+
 function invalidRequest(c: Context<BearerEnv>, description: string): Response {
   c.header('cache-control', 'no-store');
   return c.json({ error: 'invalid_request', error_description: description }, 400);
@@ -124,14 +167,25 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
 
     const { store, config, announce, bearer } = c.var;
     const timezone = readSiteSettings(config.contentDir).timezone;
-    const created = createForm(request, bearer.user.username, timezone, store.now());
+    const created = createForm(request, {
+      author: bearer.user.username,
+      timezone,
+      now: store.now(),
+      baseUrl: siteBaseUrl(c),
+    });
     if ('errors' in created) return invalidRequest(c, created.errors.join(' '));
+
+    const photos = await storePhotos(created, config);
+    if ('error' in photos) return invalidRequest(c, photos.error);
 
     const written = await writeDocument(
       { store, config, announce, writer: bearer.user.username },
-      { kind: POST_KIND, document: undefined, ...created },
+      { kind: POST_KIND, document: undefined, ...created, form: photos.form },
     );
-    if (written.outcome === 'refused') return invalidRequest(c, written.message);
+    if (written.outcome === 'refused') {
+      await removeUploads(photos.stored, config);
+      return invalidRequest(c, written.message);
+    }
     if (written.outcome === 'conflict') throw new Error('A new post has no file to conflict with.');
 
     c.header('cache-control', 'no-store');

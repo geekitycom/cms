@@ -1466,7 +1466,7 @@ gets 401. It answers these queries:
 
 - `?q=config` lists the media endpoint (`/_geekity/micropub/media`), the
   syndication targets under `syndicate-to`, the post types the site accepts
-  (note, article and reply) and the queries it answers.
+  (note, article, reply and photo) and the queries it answers.
 - `?q=syndicate-to` lists the syndication targets on their own.
 - `?q=category` lists every tag and category on a published post, once each,
   in alphabetical order. Add `&filter=` to keep only the terms that contain
@@ -1493,8 +1493,15 @@ post's URL. The properties it understands are:
 - `post-status` is `published` or `draft`. A draft is not published,
   federated or sent webmentions.
 - `mp-slug` sets the slug.
+- `photo` adds a photo to the post, once per value. A value is a URL, an
+  object `{"value": "…", "alt": "…"}` that carries alt text, or, in a multipart
+  request, a file part. A file part is stored in the media library the way
+  the media endpoint stores one, and must be an image. A URL to this site's
+  own uploads is written as the upload's path, so the theme serves its
+  resizes. A photo with no alt text of its own uses the media library's. A
+  post with a photo and no reply target is a photo post.
 
-Any other type or property, such as `h=event`, `like-of` or `photo`, gets 400
+Any other type or property, such as `h=event`, `like-of` or `location`, gets 400
 `invalid_request` with a description that names it, and nothing is written.
 decision-27 records the mapping.
 

@@ -30,7 +30,13 @@ import type { ContactFormContext } from '../contact/form.ts';
 import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
-import type { DocumentContext, FrontPageSlugs, NeighbourContext, SiteData } from './context.ts';
+import type {
+  DocumentContext,
+  FrontPageSlugs,
+  NeighbourContext,
+  PhotoContext,
+  SiteData,
+} from './context.ts';
 import { navigationMenus } from './navigation.ts';
 import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
@@ -446,12 +452,17 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       (value): value is string => typeof value === 'string' && value !== '',
     );
     const by = (context['siteAuthor'] ?? siteOwner) as AuthorContext | undefined;
+    // A photo post is shown by its first photo (TASK-166).
+    const [photo] = (context['photos'] ?? []) as readonly PhotoContext[];
     const image = shareImage({
       config,
       image: context['image'],
       imageAlt: context['imageAlt'],
       title: title ?? site.title,
       fallbacks: [
+        ...(photo === undefined
+          ? []
+          : [{ url: photo.url, describedAs: photo.alt || (title ?? site.title) }]),
         { url: site.avatar, describedAs: siteOwner?.name ?? site.title },
         { url: by?.avatar, describedAs: by?.name ?? site.title },
         { url: iconSetting(site), describedAs: site.title },

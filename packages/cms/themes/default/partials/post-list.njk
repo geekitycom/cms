@@ -39,6 +39,10 @@
     {% set lang = post.lang %}
     {% include "partials/reply-context.njk" %}
     {% endif %}
+    {% if post.photos.length %}
+    {% set photos = post.photos %}
+    {% include "partials/photos.njk" %}
+    {% endif %}
     {% if not post.named %}
     <div class="feed-excerpt e-content">{{ post.content | safe }}</div>
     {% else %}

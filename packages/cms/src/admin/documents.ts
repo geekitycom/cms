@@ -10,6 +10,8 @@ import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import { ENCLOSURE_FRONT_MATTER_KEY, enclosureOf, TRANSCRIPT_TYPES } from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
+import { PHOTO_FRONT_MATTER_KEY, photoFrontMatter } from '../content/photo.ts';
+import type { Photo } from '../content/photo.ts';
 import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
 import { scheduledFor } from '../content/schedule.ts';
 import { htmlToText } from '../content/search.ts';
@@ -27,7 +29,7 @@ import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import type { GeekityEnv } from '../env.ts';
-import { readAltTexts, undescribedImages } from '../images/alt-text.ts';
+import { readAltTexts, undescribedImages, undescribedPhotos } from '../images/alt-text.ts';
 import type { UndescribedImage } from '../images/alt-text.ts';
 import { isPublicDocument } from '../web/documents.ts';
 import { LANG_FRONT_MATTER_KEY } from '../web/locale.ts';
@@ -55,6 +57,15 @@ import {
   resolveEnclosure,
 } from './enclosure-field.ts';
 import type { EnclosureForm } from './enclosure-field.ts';
+import {
+  PHOTO_FIELDS,
+  photoChoices,
+  photoRows,
+  photoRowViews,
+  readPhotoForm,
+  resolvePhotos,
+} from './photo-field.ts';
+import type { PhotoRow } from './photo-field.ts';
 import {
   SYNDICATE_TO_FRONT_MATTER_KEY,
   syndicateToOf,
@@ -351,6 +362,7 @@ async function saveFromForm(
     pinned: kind.type === 'post' && body['pinned'] !== undefined,
     comments: commentSetting(text(body['comments'])),
     enclosure: kind.type === 'post' ? readEnclosureForm(body) : BLANK_ENCLOSURE_FORM,
+    photos: kind.type === 'post' ? readPhotoForm(body) : [],
     syndicateTo:
       kind.type === 'post'
         ? syndicationTargetsReader(contentDir)()
@@ -393,7 +405,7 @@ async function saveFromForm(
       render,
       document: written.document,
       form: { ...form, draft },
-      recording: written.recording,
+      media: written.media,
       conflict: written.conflict,
     });
   }
@@ -436,10 +448,16 @@ export type WriteOutcome =
       readonly outcome: 'conflict';
       /** The document as the form loaded it, which only an edit has. */
       readonly document: Document;
-      /** The recording the form resolved to. */
-      readonly recording: Enclosure | undefined;
+      /** The recording and the photos the form resolved to. */
+      readonly media: ResolvedMedia;
       readonly conflict: Conflict;
     };
+
+/** The post's recording and photos, as a form resolved them against the media library. */
+interface ResolvedMedia {
+  readonly recording: Enclosure | undefined;
+  readonly photos: readonly Photo[];
+}
 
 /**
  * The write path behind the editor and Micropub (TASK-164): one form in, one
@@ -477,7 +495,7 @@ export async function writeDocument(
     return refused('That is not a language tag, such as en, fr or pt-BR.');
   }
 
-  let recording: Enclosure | undefined;
+  let media: ResolvedMedia = { recording: undefined, photos: [] };
   if (kind.type === 'post') {
     const resolved = resolveEnclosure(
       form.enclosure,
@@ -485,7 +503,9 @@ export async function writeDocument(
       contentDir,
     );
     if ('error' in resolved) return refused(resolved.error);
-    recording = resolved.enclosure;
+    const photos = resolvePhotos(form.photos, contentDir);
+    if ('error' in photos) return refused(photos.error);
+    media = { recording: resolved.enclosure, photos: photos.photos };
   }
 
   // TASK-207: a pin is new when the file does not carry one yet, and only a
@@ -504,9 +524,14 @@ export async function writeDocument(
 
   // TASK-141: an image nobody described is a problem to fix before readers
   // meet it. A draft is not checked, since nobody meets a draft.
+  // A photo counts too, unless the media library describes it (TASK-166).
+  const library = readAltTexts(contentDir);
   const undescribed = draft
     ? []
-    : undescribedImages(renderMarkdown(form.body), readAltTexts(contentDir));
+    : [
+        ...undescribedPhotos(media.photos, library),
+        ...undescribedImages(renderMarkdown(form.body), library),
+      ];
   if (undescribed.length > 0 && config.requireAltText) {
     return refused(`This site publishes no image without alt text. ${missingAltText(undescribed)}`);
   }
@@ -569,7 +594,7 @@ export async function writeDocument(
   if (document !== undefined) {
     const conflict = await conflictWith(contentDir, document, form.hash);
     if (conflict !== undefined) {
-      return { outcome: 'conflict', document, recording, conflict };
+      return { outcome: 'conflict', document, media, conflict };
     }
   }
 
@@ -595,7 +620,7 @@ export async function writeDocument(
       document,
       form,
       store.now(),
-      recording,
+      media,
       syndicationTargetsReader(contentDir)(),
     ),
     body: form.body,
@@ -872,14 +897,16 @@ function resolveExtra(
   document: Document | undefined,
   form: Pick<EditorForm, 'exclude' | 'comments' | 'contact' | 'lang' | 'pinned' | 'syndicateTo'>,
   now: Date,
-  recording: Enclosure | undefined,
+  media: ResolvedMedia,
   declared: readonly SyndicationTarget[],
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
 
   if (kind.type === 'post') {
-    if (recording === undefined) delete extra[ENCLOSURE_FRONT_MATTER_KEY];
-    else extra[ENCLOSURE_FRONT_MATTER_KEY] = enclosureFrontMatter(recording);
+    if (media.recording === undefined) delete extra[ENCLOSURE_FRONT_MATTER_KEY];
+    else extra[ENCLOSURE_FRONT_MATTER_KEY] = enclosureFrontMatter(media.recording);
+    if (media.photos.length === 0) delete extra[PHOTO_FRONT_MATTER_KEY];
+    else extra[PHOTO_FRONT_MATTER_KEY] = photoFrontMatter(media.photos);
   }
 
   // The checkboxes speak for the targets the site declares (TASK-155). An id
@@ -1078,8 +1105,8 @@ interface RenderConflictOptions {
   render: AdminRender;
   document: Document;
   form: EditorForm;
-  /** The recording the submitted form resolved to. */
-  recording: Enclosure | undefined;
+  /** The recording and the photos the submitted form resolved to. */
+  media: ResolvedMedia;
   conflict: Conflict;
 }
 
@@ -1109,7 +1136,7 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
       document,
       form,
       c.var.store.now(),
-      options.recording,
+      options.media,
       syndicationTargetsReader(c.var.config.contentDir)(),
     ),
     body: form.body,
@@ -1294,6 +1321,8 @@ export interface EditorForm {
   comments: string;
   /** The post's recording (TASK-213). Posts only; blank on a page. */
   enclosure: EnclosureForm;
+  /** The post's photos (TASK-166), without the blank row the editor adds. Posts only. */
+  photos: PhotoRow[];
   /** The ids of the declared syndication targets it selects (TASK-155). Posts only. */
   syndicateTo: string[];
   body: string;
@@ -1333,6 +1362,7 @@ export function blankForm(
     pinned: false,
     comments: COMMENT_SETTINGS.site,
     enclosure: BLANK_ENCLOSURE_FORM,
+    photos: [],
     syndicateTo: [],
     body: '',
     hash: '',
@@ -1368,6 +1398,7 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     pinned: pinnedAt(document) !== undefined,
     comments: commentSettingOf(document),
     enclosure: document.type === 'post' ? enclosureForm(document) : BLANK_ENCLOSURE_FORM,
+    photos: document.type === 'post' ? photoRows(document) : [],
     syndicateTo: document.type === 'post' ? syndicateToOf(document.extra) : [],
     body: document.body,
     hash: document.hash,
@@ -1442,6 +1473,9 @@ async function renderEditor(
           enclosureChoices: await enclosureChoices(c.var.config.contentDir, form.enclosure.url),
           transcriptTypes: TRANSCRIPT_TYPES,
           alternateRows: [...form.enclosure.alternates, BLANK_ALTERNATE_ROW],
+          photoFields: PHOTO_FIELDS,
+          photoRows: photoRowViews(form.photos, readAltTexts(c.var.config.contentDir)),
+          photoChoices: await photoChoices(c.var.config.contentDir),
           // TASK-155: one checkbox per target the site declares.
           syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
             ...target,

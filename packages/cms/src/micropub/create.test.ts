@@ -3,9 +3,12 @@
  * the post the admin editor would have written.
  */
 import assert from 'node:assert/strict';
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+
+import matter from 'gray-matter';
+import sharp from 'sharp';
 
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
@@ -199,6 +202,42 @@ describe('what a Micropub post is (AC #2)', () => {
     assert.equal(postTypeOf(micropubPost), postTypeOf(editorPost));
   });
 
+  it('writes the same photo post the editor writes (TASK-166)', async () => {
+    const editorSite = await site();
+    const html = await (await editorSite.agent.get('/admin/posts/new')).text();
+    const csrf = csrfField(html);
+    assert.ok(csrf !== undefined);
+    const saved = await editorSite.agent.post('/admin/posts/new', {
+      csrf_token: csrf,
+      date: '2026-09-19T09:00:00Z',
+      'photo-url-0': 'https://peer.example/a.jpg',
+      'photo-alt-0': 'A gull on a post',
+      body: 'At the harbour.',
+      action: 'publish',
+    });
+    assert.equal(saved.status, 303);
+
+    const micropubSite = await site();
+    const created = await postJson(micropubSite.cms, micropubSite.token, {
+      type: ['h-entry'],
+      properties: {
+        content: ['At the harbour.'],
+        photo: [{ value: 'https://peer.example/a.jpg', alt: 'A gull on a post' }],
+        published: ['2026-09-19T09:00:00Z'],
+      },
+    });
+    assert.equal(created.status, 201);
+
+    const [editorFile] = await postFiles(editorSite.cms);
+    const [micropubFile] = await postFiles(micropubSite.cms);
+    assert.ok(editorFile !== undefined && micropubFile !== undefined);
+    assert.equal(micropubFile, editorFile);
+    assert.equal(
+      await fileAt(micropubSite.cms, `posts/${micropubFile}`),
+      await fileAt(editorSite.cms, `posts/${editorFile}`),
+    );
+  });
+
   for (const [label, properties, type] of [
     ['an untitled post', { content: ['Just a note.'] }, 'note'],
     ['a named post', { name: ['Named'], content: ['Its own words.'] }, 'article'],
@@ -359,11 +398,11 @@ describe('a refused create', () => {
       send: (cms, token) =>
         postForm(cms, token, [
           ['h', 'entry'],
-          ['content', 'With a photo'],
-          ['photo', 'https://peer.example/a.jpg'],
+          ['content', 'With a place'],
+          ['checkin', 'https://places.example/cafe'],
           ['location', 'geo:1,2'],
         ]),
-      names: ['photo', 'location'],
+      names: ['checkin', 'location'],
     },
     {
       label: 'an h=event',
@@ -429,6 +468,164 @@ describe('a refused create', () => {
       body: 'h=entry&content=hi',
     });
     assert.equal(response.status, 400);
+    assert.deepEqual(await postFiles(cms), []);
+  });
+});
+
+describe('a photo post (TASK-166 AC #1)', () => {
+  /** A site with a JPEG at /uploads/2026/09/beach.jpg, described in the media library. */
+  async function photoSite(): Promise<Site> {
+    const created = await site(['create']);
+    const uploads = path.join(created.cms.config.contentDir, 'uploads', '2026', '09');
+    await mkdir(uploads, { recursive: true });
+    await writeFile(path.join(uploads, 'beach.jpg'), await jpeg());
+    return created;
+  }
+
+  async function jpeg(): Promise<Uint8Array<ArrayBuffer>> {
+    return Uint8Array.from(
+      await sharp({
+        create: { width: 40, height: 20, channels: 3, background: { r: 40, g: 90, b: 160 } },
+      })
+        .jpeg()
+        .toBuffer(),
+    );
+  }
+
+  async function postMultipart(cms: Cms, token: string, body: FormData): Promise<Response> {
+    return await cms.app.request(ENDPOINT, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      body,
+    });
+  }
+
+  async function photosAt(cms: Cms, location: string | null): Promise<unknown> {
+    assert.ok(location !== null, 'the create answered with a Location');
+    const document = cms.store.getByPermalink(new URL(location).pathname);
+    assert.ok(document !== undefined, 'the post is in the index');
+    assert.equal(postTypeOf(document), 'photo');
+    return matter(await fileAt(cms, document.path)).data['photo'];
+  }
+
+  async function uploadedFiles(cms: Cms): Promise<string[]> {
+    try {
+      const entries = await readdir(path.join(cms.config.contentDir, 'uploads'), {
+        recursive: true,
+        withFileTypes: true,
+      });
+      return entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
+    } catch {
+      return [];
+    }
+  }
+
+  it('stores a photo given as a URL, this site’s own upload as its path', async () => {
+    const { cms, token } = await photoSite();
+    const response = await postJson(cms, token, {
+      type: ['h-entry'],
+      properties: {
+        photo: [`${BASE}/uploads/2026/09/beach.jpg`, 'https://peer.example/a.jpg'],
+      },
+    });
+
+    assert.equal(response.status, 201);
+    assert.deepEqual(await photosAt(cms, response.headers.get('location')), [
+      { url: '/uploads/2026/09/beach.jpg' },
+      { url: 'https://peer.example/a.jpg' },
+    ]);
+  });
+
+  it('stores a photo given as { value, alt } with its alt text', async () => {
+    const { cms, token } = await photoSite();
+    const response = await postJson(cms, token, {
+      type: ['h-entry'],
+      properties: {
+        content: ['At the beach.'],
+        photo: [{ value: `${BASE}/uploads/2026/09/beach.jpg`, alt: 'Waves breaking at dusk' }],
+      },
+    });
+
+    assert.equal(response.status, 201);
+    assert.deepEqual(await photosAt(cms, response.headers.get('location')), [
+      { url: '/uploads/2026/09/beach.jpg', alt: 'Waves breaking at dusk' },
+    ]);
+  });
+
+  it('stores form-encoded photo[] URLs', async () => {
+    const { cms, token } = await photoSite();
+    const response = await postForm(cms, token, [
+      ['h', 'entry'],
+      ['photo[]', `${BASE}/uploads/2026/09/beach.jpg`],
+    ]);
+
+    assert.equal(response.status, 201);
+    assert.deepEqual(await photosAt(cms, response.headers.get('location')), [
+      { url: '/uploads/2026/09/beach.jpg' },
+    ]);
+  });
+
+  it('stores a multipart photo file in the media library and the post points at it', async () => {
+    const { cms, token } = await photoSite();
+    const body = new FormData();
+    body.set('h', 'entry');
+    body.set('content', 'Straight from the camera.');
+    body.set('photo', new File([await jpeg()], 'Sunset.JPG', { type: 'image/jpeg' }));
+
+    const response = await postMultipart(cms, token, body);
+
+    assert.equal(response.status, 201);
+    const photos = (await photosAt(cms, response.headers.get('location'))) as { url: string }[];
+    assert.equal(photos.length, 1);
+    assert.match(photos[0]?.url ?? '', /^\/uploads\/\d{4}\/\d{2}\/sunset\.jpg$/);
+    const stored = await readFile(path.join(cms.config.contentDir, ...photos[0]!.url.split('/')));
+    assert.ok(stored.byteLength > 0, 'the file is in the media library');
+  });
+
+  it('refuses a multipart photo that is not an image, and keeps nothing', async () => {
+    const { cms, token } = await photoSite();
+    const body = new FormData();
+    body.set('h', 'entry');
+    body.set('photo', new File(['just words'], 'notes.txt', { type: 'text/plain' }));
+
+    const response = await postMultipart(cms, token, body);
+
+    assert.equal(response.status, 400);
+    assert.match(
+      ((await response.json()) as { error_description: string }).error_description,
+      /image/,
+    );
+    assert.deepEqual(await postFiles(cms), []);
+    assert.deepEqual(await uploadedFiles(cms), ['beach.jpg']);
+  });
+
+  it('takes a stored photo back out when the post itself is refused', async () => {
+    const { cms, token } = await photoSite();
+    const body = new FormData();
+    body.set('h', 'entry');
+    body.set('in-reply-to', 'not a url');
+    body.set('photo', new File([await jpeg()], 'sunset.jpg', { type: 'image/jpeg' }));
+
+    const response = await postMultipart(cms, token, body);
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await postFiles(cms), []);
+    assert.deepEqual(await uploadedFiles(cms), ['beach.jpg']);
+  });
+
+  it('refuses a photo that is not a web address, naming photo', async () => {
+    const { cms, token } = await photoSite();
+    for (const photo of ['beach.jpg', { alt: 'no value' }, 7]) {
+      const response = await postJson(cms, token, {
+        type: ['h-entry'],
+        properties: { photo: [photo] },
+      });
+      assert.equal(response.status, 400, JSON.stringify(photo));
+      assert.match(
+        ((await response.json()) as { error_description: string }).error_description,
+        /photo/,
+      );
+    }
     assert.deepEqual(await postFiles(cms), []);
   });
 });

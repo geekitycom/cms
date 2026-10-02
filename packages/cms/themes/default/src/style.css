@@ -676,6 +676,15 @@
     @apply mt-1 flex flex-wrap gap-x-4 gap-y-1;
   }
 
+  /* A post's photos (TASK-166), one under another at the column's width. */
+  .post-photos {
+    @apply my-8 grid gap-4;
+  }
+
+  .post-photo img {
+    @apply block h-auto w-full;
+  }
+
   /* An untitled post is its words, set larger. It is the one entry whose
      heading is the hidden one TASK-144 gave it. */
   .blog-post > .screen-reader-text ~ .e-content {

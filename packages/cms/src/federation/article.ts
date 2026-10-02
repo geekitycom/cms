@@ -25,7 +25,8 @@ import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
-import { enclosureOf, playsAsVideo } from '../content/enclosure.ts';
+import { enclosureOf, isUploadUrl, playsAsVideo } from '../content/enclosure.ts';
+import { photoAlt, photosOf } from '../content/photo.ts';
 import { canonicalType, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import { readAltTexts } from '../images/alt-text.ts';
 import { imagesIn } from '../images/markup.ts';
@@ -133,10 +134,12 @@ type PostObjectType = keyof typeof OBJECT_TYPES;
 /**
  * The object type each discovered post type federates as: the rows of Post
  * Type Discovery's own AS2 mapping (section 6) that this site has post types
- * for. A reply is a `Note` even with a title of its own (decision-18).
+ * for. A reply is a `Note` even with a title of its own (decision-18), and so
+ * is a photo post, whose photos are its attachments (TASK-166).
  */
 const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = {
   reply: 'Note',
+  photo: 'Note',
   note: 'Note',
   article: 'Article',
 };
@@ -225,6 +228,7 @@ export function postObject(
     interactionPolicy: QUOTABLE_BY_ANYONE,
     attachments: [
       ...recordingAttachment(document, baseUrl),
+      ...photoAttachments(document, context.data.config),
       ...imageAttachments(document, context.data.config),
     ],
     // Both taxonomies become hashtags: a relay or a search that keys on a
@@ -286,6 +290,32 @@ function recordingAttachment(document: Document, baseUrl: string): (Audio | Vide
 }
 
 /**
+ * Each of the post's photos (TASK-166), as an `Image` whose `name` is its alt
+ * text, the media library's when the post gives none.
+ *
+ * They go after the recording and before the body's images, because they are
+ * what a photo post is. A photo from another site is attached without a media
+ * type, which this site cannot check.
+ */
+function photoAttachments(
+  document: Document,
+  config: { contentDir: string; baseUrl: string },
+): Image[] {
+  const library = readAltTexts(config.contentDir);
+  return photosOf(document.extra).map((photo) => {
+    const media = isUploadUrl(photo.url)
+      ? UPLOAD_MEDIA_TYPES.get(path.extname(photo.url).toLowerCase())
+      : undefined;
+    const alt = photoAlt(photo, library) ?? '';
+    return new Image({
+      url: new URL(absoluteUrl(photo.url, config.baseUrl)),
+      mediaType: media?.kind === 'image' ? (canonicalType(media) ?? null) : null,
+      name: alt === '' ? null : alt,
+    });
+  });
+}
+
+/**
  * Each image the post shows from the site's own uploads, as an `Image` whose
  * `name` is its alt text (TASK-141).
  *
@@ -300,9 +330,11 @@ function imageAttachments(
   config: { contentDir: string; baseUrl: string },
 ): Image[] {
   const library = readAltTexts(config.contentDir);
+  // A photo shown again in the body is already attached.
+  const photos = new Set(photosOf(document.extra).map((photo) => photo.url));
   const attachments: Image[] = [];
   for (const image of imagesIn(document.html)) {
-    if (image.source === undefined) continue;
+    if (image.source === undefined || photos.has(image.src)) continue;
     if (library.get(image.source)?.kind === 'decorative') continue;
     const extension = path.extname(image.source).toLowerCase();
     const media = UPLOAD_MEDIA_TYPES.get(extension);

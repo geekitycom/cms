@@ -1,6 +1,8 @@
 import path from 'node:path';
 
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
+import { photoAlt } from '../content/photo.ts';
+import type { Photo } from '../content/photo.ts';
 import { imagesIn } from './markup.ts';
 import type { ShownImage } from './markup.ts';
 
@@ -83,6 +85,19 @@ export function undescribedImages(html: string, library: AltTextLibrary): Undesc
   return imagesIn(html)
     .filter((image) => !described(image, library))
     .map((image) => ({ src: image.src, name: imageName(image.src) }));
+}
+
+/**
+ * A post's photos (TASK-166) that nobody has described, neither the post nor
+ * the media library.
+ */
+export function undescribedPhotos(
+  photos: readonly Photo[],
+  library: AltTextLibrary,
+): UndescribedImage[] {
+  return photos
+    .filter((photo) => photoAlt(photo, library) === undefined)
+    .map((photo) => ({ src: photo.url, name: imageName(photo.url) }));
 }
 
 function described(image: ShownImage, library: AltTextLibrary): boolean {
