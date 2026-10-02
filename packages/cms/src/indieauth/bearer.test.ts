@@ -104,7 +104,7 @@ describe('a route behind the bearer guard', () => {
     assert.deepEqual(await response.json(), { username: 'ada', scopes: ['create', 'media'] });
   });
 
-  it('answers 400 invalid_request when the token came in both the header and the body', async () => {
+  it('accepts the same token in the header and the body, as Quill sends it', async () => {
     const { cms, grant } = await site();
     const { accessToken } = await issueTokens(cms.config.dataDir, grant, new Date());
     const response = await guarded(cms, { audience: MICROPUB }).request(
@@ -112,6 +112,21 @@ describe('a route behind the bearer guard', () => {
       withHeader(
         accessToken,
         new URLSearchParams({ h: 'entry', access_token: accessToken }).toString(),
+      ),
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { username: 'ada', scopes: ['create', 'media'] });
+  });
+
+  it('answers 400 invalid_request when the header and the body carry different tokens', async () => {
+    const { cms, grant } = await site();
+    const first = await issueTokens(cms.config.dataDir, grant, new Date());
+    const second = await issueTokens(cms.config.dataDir, grant, new Date());
+    const response = await guarded(cms, { audience: MICROPUB }).request(
+      '/thing',
+      withHeader(
+        first.accessToken,
+        new URLSearchParams({ h: 'entry', access_token: second.accessToken }).toString(),
       ),
     );
     assert.equal(response.status, 400);
