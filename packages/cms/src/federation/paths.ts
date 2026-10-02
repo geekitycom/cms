@@ -129,3 +129,16 @@ export function federationOrigin(baseUrl: string): FederationOrigin {
 export function accountOf(username: string, baseUrl: string): string {
   return `${username}@${federationOrigin(baseUrl === '' ? 'http://localhost' : baseUrl).handleHost}`;
 }
+
+/**
+ * The domain a user's actor lists in `attributionDomains` (TASK-210): the
+ * host links to this site are shared from.
+ *
+ * The hostname, not {@link federationOrigin}'s `handleHost`. Mastodon credits
+ * a `fediverse:creator` account when this list holds the shared link's
+ * `normalized_host`, which never carries a port, so a site on a port would
+ * otherwise never match.
+ */
+export function attributionDomainOf(baseUrl: string): string {
+  return new URL(baseUrl).hostname;
+}

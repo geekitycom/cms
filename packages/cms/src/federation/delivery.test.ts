@@ -1261,6 +1261,30 @@ describe('a user’s own profile', () => {
     );
   });
 
+  it('keeps the attribution domain on the actor it sends (TASK-210 AC #1)', async () => {
+    // Mastodon hands an Update's embedded actor straight to the code that
+    // reads `attributionDomains`, and an actor without it clears the list.
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+
+    assert.equal((await saveProfile(agent, { display_name: 'Ada Lovelace' })).status, 303);
+    await cms.delivery.settled();
+
+    const update = delivered('Update')[0] as Delivery | undefined;
+    assert.ok(update !== undefined, `expected an Update, saw ${JSON.stringify(deliveries)}`);
+    const object = update.body['object'] as Record<string, unknown>;
+    assert.deepEqual(object['attributionDomains'], ['blog.example']);
+    const contexts = update.body['@context'] as unknown[];
+    assert.ok(
+      contexts.some(
+        (entry) =>
+          JSON.stringify((entry as Record<string, unknown>)['attributionDomains']) ===
+          JSON.stringify({ '@id': 'toot:attributionDomains', '@container': '@set' }),
+      ),
+      `the Update's context defines the term as Mastodon does: ${JSON.stringify(contexts)}`,
+    );
+  });
+
   it('delivers another Update when the avatar is taken off again', async () => {
     const { cms } = await site();
     const agent = await signedIn(cms);

@@ -13,7 +13,7 @@ import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { seedActorKeys } from './__testing__/keys.ts';
 import { FOLLOWERS_PAGE_SIZE, followersPage } from './followers.ts';
-import { federationOrigin } from './paths.ts';
+import { attributionDomainOf, federationOrigin } from './paths.ts';
 
 /** The origin every request in this file is sent to; Fedify checks it. */
 const BASE_URL = 'https://blog.example';
@@ -90,6 +90,36 @@ async function get(instance: Cms, pathname: string, accept?: string): Promise<Re
     accept === undefined ? {} : { headers: { accept } },
   );
   return await instance.app.request(request);
+}
+
+/**
+ * How Mastodon's own actor serializer defines `attributionDomains`
+ * (app/helpers/context_helper.rb), and so the definition a peer that expands
+ * the actor has to find.
+ */
+const MASTODON_ATTRIBUTION_DOMAINS_TERM = {
+  '@id': 'toot:attributionDomains',
+  '@container': '@set',
+};
+
+/** The `attributionDomains` definition among an actor's contexts, if any. */
+function attributionDomainsTerm(actor: Record<string, unknown>): unknown {
+  const contexts = actor['@context'];
+  const entries = Array.isArray(contexts) ? contexts : [contexts];
+  const defining = entries.filter(
+    (entry): entry is Record<string, unknown> =>
+      typeof entry === 'object' && entry !== null && 'attributionDomains' in entry,
+  );
+  assert.ok(
+    entries.some(
+      (entry) =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        (entry as Record<string, unknown>)['toot'] === 'http://joinmastodon.org/ns#',
+    ),
+    'the toot: prefix the term is written in is defined',
+  );
+  return defining.at(-1)?.['attributionDomains'];
 }
 
 describe('WebFinger', () => {
@@ -302,6 +332,17 @@ describe('a user actor', () => {
     assert.deepEqual(actor['alsoKnownAs'], [ACTOR_URL, `${BASE_URL}/@${ADA}`]);
   });
 
+  it('lists the site host as an attribution domain, termed as Mastodon reads it (TASK-210 AC #1)', async () => {
+    const instance = await site();
+
+    const actor = (await (
+      await get(instance, `/author/${ADA}/`, 'application/activity+json')
+    ).json()) as Record<string, unknown>;
+
+    assert.deepEqual(actor['attributionDomains'], ['blog.example']);
+    assert.deepEqual(attributionDomainsTerm(actor), MASTODON_ATTRIBUTION_DOMAINS_TERM);
+  });
+
   it('publishes an RSA public key and an Ed25519 assertion method', async () => {
     const instance = await site();
 
@@ -477,6 +518,17 @@ describe('a user whose record carries a stored actor id', () => {
     assert.equal(actor['id'], STORED);
     assert.equal(actor['preferredUsername'], ADA);
     assert.equal((actor['publicKey'] as { id?: string }).id, `${STORED}#main-key`);
+  });
+
+  it('lists the site host as an attribution domain at the stored URL too (TASK-210 AC #1)', async () => {
+    const instance = await migrated();
+
+    const actor = (await (
+      await get(instance, '/?author=2', 'application/activity+json')
+    ).json()) as Record<string, unknown>;
+
+    assert.deepEqual(actor['attributionDomains'], ['blog.example']);
+    assert.deepEqual(attributionDomainsTerm(actor), MASTODON_ATTRIBUTION_DOMAINS_TERM);
   });
 
   it('redirects a browser from the stored URL to the author archive (AC #1)', async () => {
@@ -773,5 +825,14 @@ describe('federationOrigin', () => {
       handleHost: 'localhost:3000',
       webOrigin: 'http://localhost:3000',
     });
+  });
+});
+
+describe('attributionDomainOf', () => {
+  it('is the host a shared link is compared by, without a port (TASK-210)', () => {
+    // Mastodon compares attribution domains with the link's normalized_host,
+    // which has no port, so a site on a port is still credited by its name.
+    assert.equal(attributionDomainOf('http://localhost:3000'), 'localhost');
+    assert.equal(attributionDomainOf('https://Blog.Example/notes'), 'blog.example');
   });
 });

@@ -970,8 +970,13 @@ list under **Preferences > Public profile > Verification > Author
 attribution**, by adding a domain such as `example.com`. Mastodon reads the
 same list from a remote account's `attributionDomains`. The account this tag
 names is the user's actor on this site, not a Mastodon account, so there is no
-Mastodon setting to change for it. Its actor does not publish
-`attributionDomains` yet, so Mastodon does not show the credit until it does.
+Mastodon setting to change. Every user's actor publishes `attributionDomains`
+with the host of `baseUrl`, such as `example.com`, and so does the Update a
+profile change sends. The port is left out, because Mastodon compares the list
+with the shared link's host, which has none. A Mastodon server that fetched
+the actor before this list existed reads it when it next refreshes the
+account, or at once when the user saves their profile and the Update reaches
+it.
 
 `site.json` stores the chosen username as `author`, and has no `author` on a
 site with several authors. **Breaking:** the free-text Author field and the

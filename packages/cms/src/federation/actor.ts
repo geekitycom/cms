@@ -1,12 +1,20 @@
 import type { Context, RequestContext, SenderKeyPair } from '@fedify/fedify';
-import { CryptographicKey, Endpoints, Image, Multikey, Person, PropertyValue } from '@fedify/vocab';
+import {
+  CryptographicKey,
+  Endpoints,
+  Image,
+  Multikey,
+  Person,
+  PropertyValue,
+  Update,
+} from '@fedify/vocab';
 import type { Actor } from '@fedify/vocab';
 
 import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { authorHref, profileContext } from '../web/authors.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
-import { handleHref } from './paths.ts';
+import { attributionDomainOf, handleHref } from './paths.ts';
 
 /**
  * A user as the fediverse sees them (decision-14).
@@ -199,7 +207,8 @@ export async function userActor(
 
   const rsa = keys[0];
 
-  return new Person({
+  return new AttributedPerson({
+    attributionDomains: [attributionDomainOf(baseUrl)],
     id,
     preferredUsername: user.username,
     name: profile.name,
@@ -243,6 +252,109 @@ export async function userActor(
     discoverable: true,
     indexable: true,
   });
+}
+
+/**
+ * Mastodon's `attributionDomains` term, defined as its own actor serializer
+ * defines it (app/helpers/context_helper.rb). Mastodon reads the property by
+ * this exact key off the raw actor JSON, so the key has to be the bare term.
+ */
+const ATTRIBUTION_DOMAINS_CONTEXT = {
+  toot: 'http://joinmastodon.org/ns#',
+  attributionDomains: { '@id': 'toot:attributionDomains', '@container': '@set' },
+} as const;
+
+const ATTRIBUTION_DOMAINS_IRI = 'http://joinmastodon.org/ns#attributionDomains';
+
+/** What Fedify's own contexts compact the IRI to, lacking the term. */
+const PREFIXED_ATTRIBUTION_DOMAINS = 'toot:attributionDomains';
+
+type ToJsonLdOptions = Parameters<Person['toJsonLd']>[0];
+
+/**
+ * A `Person` that lists the domains Mastodon may credit it from (TASK-210).
+ *
+ * Fedify's `Person` has no `attributionDomains`, and drops what it does not
+ * know when it builds the document, so the property is added to what it
+ * builds: as the toot IRI when the person is expanded to sit inside an
+ * activity, and as the term with its definition when the person is the
+ * document.
+ */
+class AttributedPerson extends Person {
+  #attributionDomains: readonly string[];
+
+  constructor(
+    values: ConstructorParameters<typeof Person>[0] & { attributionDomains?: readonly string[] },
+    options?: ConstructorParameters<typeof Person>[1],
+  ) {
+    super(values, options);
+    this.#attributionDomains = values.attributionDomains ?? [];
+  }
+
+  override clone(
+    values: Parameters<Person['clone']>[0] = {},
+    options?: Parameters<Person['clone']>[1],
+  ): Person {
+    // Fedify clones through `new this.constructor`, so the copy is one of
+    // these, built without the domains.
+    const clone = super.clone(values, options);
+    if (clone instanceof AttributedPerson) clone.#attributionDomains = this.#attributionDomains;
+    return clone;
+  }
+
+  override async toJsonLd(options: ToJsonLdOptions = {}): Promise<unknown> {
+    const json = await super.toJsonLd(options);
+    const domains = this.#attributionDomains;
+    if (domains.length === 0) return json;
+
+    if (options.format === 'expand') {
+      const [node] = json as Record<string, unknown>[];
+      if (node !== undefined) {
+        node[ATTRIBUTION_DOMAINS_IRI] = domains.map((domain) => ({ '@value': domain }));
+      }
+      return json;
+    }
+    const document = json as Record<string, unknown>;
+    document['@context'] = [...contextList(document['@context']), ATTRIBUTION_DOMAINS_CONTEXT];
+    document['attributionDomains'] = [...domains];
+    return document;
+  }
+}
+
+/**
+ * An `Update` of a user's actor, which keeps the actor's `attributionDomains`
+ * under the key Mastodon reads.
+ *
+ * Mastodon hands an Update's embedded actor to the same code that reads a
+ * fetched one, and an actor without `attributionDomains` there resets the
+ * account's list to empty. Fedify compacts the activity with its own contexts,
+ * which know the `toot:` prefix but not the term, so the person's property
+ * comes out as `toot:attributionDomains`; this spells it as the term and adds
+ * the term's definition, which leaves the document's meaning unchanged.
+ */
+export class ActorUpdate extends Update {
+  override async toJsonLd(options: Parameters<Update['toJsonLd']>[0] = {}): Promise<unknown> {
+    const json = await super.toJsonLd(options);
+    if (options.format === 'expand') return json;
+
+    const document = json as Record<string, unknown>;
+    const object = document['object'];
+    if (typeof object !== 'object' || object === null || Array.isArray(object)) return document;
+    const actor = object as Record<string, unknown>;
+    const domains = actor[PREFIXED_ATTRIBUTION_DOMAINS];
+    if (domains === undefined) return document;
+
+    delete actor[PREFIXED_ATTRIBUTION_DOMAINS];
+    actor['attributionDomains'] = Array.isArray(domains) ? domains : [domains];
+    document['@context'] = [...contextList(document['@context']), ATTRIBUTION_DOMAINS_CONTEXT];
+    return document;
+  }
+}
+
+/** A JSON-LD `@context` as the list it can always be written as. */
+function contextList(context: unknown): unknown[] {
+  if (context === undefined) return [];
+  return Array.isArray(context) ? context : [context];
 }
 
 /** The five characters that cannot travel unescaped inside an attribute. */
