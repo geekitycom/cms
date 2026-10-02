@@ -5,6 +5,8 @@ import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { activityStreamsId } from './documents.ts';
 import { feedLanguage, feedPathUnder } from './feed-source.ts';
+import { resolveLicense } from './license.ts';
+import type { ContentLicense } from './license.ts';
 import { canonicalLocale, documentLanguage } from './locale.ts';
 import { absoluteUrl, lastModifiedOf } from './negotiate.ts';
 
@@ -108,6 +110,13 @@ export interface FeedItem {
    * JSON Feed as the item's `language`.
    */
   language?: string | undefined;
+  /**
+   * What readers may do with the post (TASK-206): its front matter's
+   * `license`, else the site's, or absent for none. Atom writes it as an
+   * entry's `rel="license"` link and RSS as `creativeCommons:license`; JSON
+   * Feed has no field for it and leaves it out.
+   */
+  license?: ContentLicense | undefined;
 }
 
 /**
@@ -194,6 +203,9 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   if (language !== undefined && language !== canonicalLocale(feedLanguage(context.site))) {
     item.language = language;
   }
+
+  const license = resolveLicense(context.site, document.extra);
+  if (license !== undefined) item.license = license;
 
   const counts = context.commentCounts;
   if (counts !== undefined) {

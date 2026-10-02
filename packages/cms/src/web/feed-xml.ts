@@ -112,12 +112,19 @@ export function optionalElement(name: string, text: string | undefined, depth = 
   return text === undefined ? [] : [element(name, text, depth)];
 }
 
-/** An Atom `<link>`. The `type` is left off when there is nothing to declare. */
-export function link(attributes: { rel: string; type?: string; href: string }, depth = 1): string {
+/** The Creative Commons RSS module, whose `license` element names an item's or a channel's license. */
+export const CREATIVE_COMMONS_NAMESPACE = 'http://backend.userland.com/creativeCommonsRssModule';
+
+/** An Atom `<link>`. The `type` and `title` are left off when there is nothing to declare. */
+export function link(
+  attributes: { rel: string; type?: string; href: string; title?: string },
+  depth = 1,
+): string {
   const type = attributes.type === undefined ? '' : ` type="${escapeXml(attributes.type)}"`;
+  const title = attributes.title === undefined ? '' : ` title="${escapeXml(attributes.title)}"`;
   return `${'  '.repeat(depth)}<link rel="${escapeXml(
     attributes.rel,
-  )}"${type} href="${escapeXml(attributes.href)}"/>`;
+  )}"${type} href="${escapeXml(attributes.href)}"${title}/>`;
 }
 
 /** An Atom `<author>`, or nothing when nobody is named. */

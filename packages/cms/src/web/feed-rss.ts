@@ -12,6 +12,7 @@ import {
 import type { CommentFeedSource, FeedComment, FeedSource } from './feed-source.ts';
 import {
   cdata,
+  CREATIVE_COMMONS_NAMESPACE,
   DC_NAMESPACE,
   element,
   escapeXml,
@@ -21,6 +22,7 @@ import {
   SY_NAMESPACE,
   WFW_NAMESPACE,
 } from './feed-xml.ts';
+import { resolveLicense } from './license.ts';
 import { absoluteUrl, latestModified } from './negotiate.ts';
 import { sanitizeCommentHtml } from './sanitize.ts';
 
@@ -38,12 +40,21 @@ export function rssFeed(source: FeedSource): string {
   const { site, documents, baseUrl } = source;
   const link = absoluteUrl(source.href, baseUrl);
   const built = latestModified(documents) ?? EMPTY_FEED_UPDATED;
+  const items = feedItems(documents, source);
+  // The license as the Creative Commons module says it, on the channel for
+  // the site and on each item for the post (TASK-206). The module names any
+  // license by URL, Creative Commons or not, where `dc:rights` would be free
+  // text no reader can act on. Its namespace is declared only when something
+  // uses it, so a site with no license prints nothing about one.
+  const license = resolveLicense(site);
+  const licensed = license !== undefined || items.some((item) => item.license !== undefined);
 
   const lines: string[] = [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<rss version="2.0"',
     '     xmlns:atom="http://www.w3.org/2005/Atom"',
     '     xmlns:content="http://purl.org/rss/1.0/modules/content/"',
+    ...(licensed ? [`     xmlns:creativeCommons="${CREATIVE_COMMONS_NAMESPACE}"`] : []),
     `     xmlns:dc="${DC_NAMESPACE}"`,
     `     xmlns:source="${SOURCE_NAMESPACE}"`,
     `     xmlns:sy="${SY_NAMESPACE}"`,
@@ -63,9 +74,10 @@ export function rssFeed(source: FeedSource): string {
     )}" href="${escapeXml(absoluteUrl(source.feedHref, baseUrl))}"/>`,
     ...cloudElements(site),
     ...channelImage(source, link),
+    ...optionalElement('creativeCommons:license', license?.url, 2),
   ];
 
-  for (const item of feedItems(documents, source)) {
+  for (const item of items) {
     lines.push(...rssItem(item));
   }
 
@@ -151,6 +163,7 @@ export function rssItem(item: FeedItem): string[] {
     // publishes tags and categories too.
     ...item.terms.map((term) => `      <category>${escapeXml(term)}</category>`),
     ...commentPointers(item),
+    ...optionalElement('creativeCommons:license', item.license?.url, 3),
     element('description', item.summary, 3),
     `      <content:encoded>${cdata(item.html)}</content:encoded>`,
     // The source of the item, per the namespace: a reader that understands

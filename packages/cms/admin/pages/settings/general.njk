@@ -9,6 +9,9 @@
   {{ field.problem('settings-language', problems.language) }}
   {{ field.problem('settings-locale', problems.locale) }}
   {{ field.problem('settings-icon', problems.icon) }}
+  {{ field.problem('settings-license', problems.license) }}
+  {{ field.problem('settings-license-url', problems.licenseUrl) }}
+  {{ field.problem('settings-license-name', problems.licenseName) }}
 {% endblock %}
 
 {% block settingsFields %}
@@ -70,6 +73,21 @@
       {% endif %}
     </p>
   </div>
+
+  {% set licenseHint %}What readers may do with your posts. The footer links it, and the structured data and the feeds declare it. A post can name its own with <code>license</code> in its front matter.{% endset %}
+  {% call field.select('settings-license', fields.license, 'License', error=problems.license, hint=licenseHint) %}
+    <option value=""{% if not form.license %} selected{% endif %}>No license (all rights reserved)</option>
+    {% for choice in licenseChoices %}
+      <option value="{{ choice.key }}"{% if choice.key == form.license %} selected{% endif %}>{{ choice.name }}</option>
+    {% endfor %}
+    <option value="custom"{% if form.license == 'custom' %} selected{% endif %}>Custom license</option>
+  {% endcall %}
+
+  {{ field.text('settings-license-url', fields.licenseUrl, 'Custom license URL', form.licenseUrl,
+       error=problems.licenseUrl, inputmode='url', hint='Where its terms are. Only read for a custom license.') }}
+
+  {{ field.text('settings-license-name', fields.licenseName, 'Custom license name', form.licenseName,
+       error=problems.licenseName, hint='What the footer calls it. Only read for a custom license.') }}
 {% endblock %}
 
 {% block settingsPanels %}{% endblock %}

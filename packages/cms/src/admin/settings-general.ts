@@ -11,6 +11,7 @@
 import type { ResolvedConfig } from '../config.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
 import { userForAuthor } from '../web/authors.ts';
+import { CREATIVE_COMMONS_LICENSES } from '../web/license.ts';
 import { listUsers } from './accounts.ts';
 import { bodyField, settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';
@@ -24,7 +25,19 @@ export const GENERAL_SETTINGS: SettingsPage = {
   label: 'General',
   path: settingsPagePath('general'),
   template: ADMIN_TEMPLATES.settingsGeneral,
-  fields: ['title', 'tagline', 'author', 'baseUrl', 'timezone', 'language', 'locale', 'icon'],
+  fields: [
+    'title',
+    'tagline',
+    'author',
+    'baseUrl',
+    'timezone',
+    'language',
+    'locale',
+    'icon',
+    'license',
+    'licenseUrl',
+    'licenseName',
+  ],
 
   // The base URL field shows the one in effect rather than the one the file
   // happens to hold: a site.json with no `url` at all would otherwise render an
@@ -48,6 +61,10 @@ export const GENERAL_SETTINGS: SettingsPage = {
   panels: (c, settings) => ({
     ...baseUrlPanel(c.var.config, settings),
     ...iconPanel(c.var.config, settings),
+    licenseChoices: Object.entries(CREATIVE_COMMONS_LICENSES).map(([key, license]) => ({
+      key,
+      name: `${license.name}, ${license.title}`,
+    })),
     authorChoices: listUsers(c.var.config.dataDir).map((user) => ({
       username: user.username,
       name: user.profile?.displayName ?? user.username,

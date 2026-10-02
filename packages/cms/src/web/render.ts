@@ -32,6 +32,8 @@ import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, FrontPageSlugs, NeighbourContext, SiteData } from './context.ts';
 import { navigationMenus } from './navigation.ts';
+import { resolveLicense } from './license.ts';
+import type { ContentLicense } from './license.ts';
 import { shareImage } from './share-image.ts';
 import type { Pagination } from './pagination.ts';
 import { snippetHtml } from './search.ts';
@@ -456,6 +458,11 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // where the claim back is printed. A site with several authors has none.
       ...(siteOwner === undefined ? {} : { soloAuthor: siteOwner }),
       ...context,
+      // What readers may do with this page and with the site (TASK-206), as
+      // `{ name, url }` or nothing, resolved once so the footer and the
+      // structured data print one answer. After the context, because the
+      // front matter's own `license` is the raw value this reads.
+      ...licenseContext(site, context),
     });
   }
 
@@ -902,4 +909,16 @@ function replyContextFor(context: ReplyContext): Record<string, unknown> {
   return published === undefined || Number.isNaN(published.getTime())
     ? rest
     : { ...rest, published };
+}
+
+/**
+ * `license`, the page's license, and `siteLicense`, the site's, or undefined
+ * for none, so a theme asks `{% if license %}`. `license` is always set,
+ * because the front matter's raw value would otherwise show through it.
+ */
+function licenseContext(
+  site: SiteData,
+  context: Record<string, unknown>,
+): { license: ContentLicense | undefined; siteLicense: ContentLicense | undefined } {
+  return { license: resolveLicense(site, context), siteLicense: resolveLicense(site) };
 }

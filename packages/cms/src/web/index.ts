@@ -120,6 +120,15 @@ export {
   splitFeedPath,
   WFW_NAMESPACE,
 } from './feeds.ts';
+export { CREATIVE_COMMONS_NAMESPACE } from './feed-xml.ts';
+export {
+  CREATIVE_COMMONS_LICENSES,
+  isCreativeCommonsKey,
+  isLicenseUrl,
+  NO_LICENSE,
+  resolveLicense,
+} from './license.ts';
+export type { ContentLicense, CreativeCommonsKey, LicenseSource } from './license.ts';
 export type {
   CommentFeedSource,
   FeedComment,

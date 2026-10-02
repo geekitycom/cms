@@ -508,3 +508,147 @@ describe('the Site icon field (TASK-212)', () => {
     assert.equal(stored['avatar'], ICON);
   });
 });
+
+/** The License select: each option's value and label, and which is selected. */
+function licenseOptions(html: string): { value: string; label: string; selected: boolean }[] {
+  const select = /<select id="settings-license" name="license"[^>]*>([\s\S]*?)<\/select>/.exec(
+    html,
+  );
+  assert.ok(select !== null, 'General has a License select');
+  return [
+    ...(select[1] ?? '').matchAll(/<option value="([^"]*)"( selected)?>([^<]*)<\/option>/g),
+  ].map((option) => ({
+    value: option[1] ?? '',
+    label: option[3] ?? '',
+    selected: option[2] !== undefined,
+  }));
+}
+
+/** A signed-in site whose `site.json` says `fields`. */
+async function siteWith(fields: Record<string, unknown> = {}) {
+  const contentDir = await box.dir('geekity-settings-license-');
+  await mkdir(path.join(contentDir, '_data'), { recursive: true });
+  await writeFile(
+    path.join(contentDir, '_data', 'site.json'),
+    JSON.stringify({ title: 'A Site', ...fields }),
+    'utf8',
+  );
+  const cms = await box.site({ contentDir });
+  return { cms, contentDir, agent: await signedIn(cms) };
+}
+
+describe('the License field (TASK-206)', () => {
+  it('offers no license, the seven Creative Commons licenses and a custom one (AC #1)', async () => {
+    const { agent } = await siteWith();
+    const html = await (await agent.get('/admin/settings')).text();
+    const options = licenseOptions(html);
+
+    assert.deepEqual(
+      options.map((option) => option.value),
+      [
+        '',
+        'cc-by',
+        'cc-by-sa',
+        'cc-by-nc',
+        'cc-by-nc-sa',
+        'cc-by-nd',
+        'cc-by-nc-nd',
+        'cc0',
+        'custom',
+      ],
+    );
+    assert.equal(options.find((option) => option.selected)?.value, '', 'none by default');
+    assert.match(options[0]?.label ?? '', /all rights reserved/i);
+    assert.match(options[2]?.label ?? '', /CC BY-SA 4\.0/);
+    assert.ok(field(html, 'license_url') !== undefined, 'a box for the custom URL');
+    assert.ok(field(html, 'license_name') !== undefined, 'and one for its name');
+    assert.ok(
+      html.indexOf('name="license"') > html.indexOf('name="icon"'),
+      'the license comes after the site icon',
+    );
+  });
+
+  it('saves a Creative Commons key to site.json license (AC #1)', async () => {
+    const { contentDir, agent } = await siteWith();
+
+    const saved = await saveSettings(agent, 'general', {
+      license: 'cc-by-sa',
+      license_url: 'https://ignored.example/',
+      license_name: 'Ignored',
+    });
+    assert.equal(saved.status, 303);
+    const stored = await siteJson(contentDir);
+    assert.equal(stored['license'], 'cc-by-sa');
+    assert.equal('licenseName' in stored, false, 'a known license carries its own name');
+
+    const html = await (await agent.get('/admin/settings')).text();
+    assert.equal(licenseOptions(html).find((option) => option.selected)?.value, 'cc-by-sa');
+  });
+
+  it('saves a custom license as its URL and name, and shows it back (AC #1)', async () => {
+    const { contentDir, agent } = await siteWith();
+
+    const saved = await saveSettings(agent, 'general', {
+      license: 'custom',
+      license_url: ' https://example.com/terms ',
+      license_name: ' House terms ',
+    });
+    assert.equal(saved.status, 303);
+    const stored = await siteJson(contentDir);
+    assert.equal(stored['license'], 'https://example.com/terms');
+    assert.equal(stored['licenseName'], 'House terms');
+
+    const html = await (await agent.get('/admin/settings')).text();
+    assert.equal(licenseOptions(html).find((option) => option.selected)?.value, 'custom');
+    assert.equal(field(html, 'license_url'), 'https://example.com/terms');
+    assert.equal(field(html, 'license_name'), 'House terms');
+  });
+
+  it('removes both keys when no license is chosen again (AC #1, AC #5)', async () => {
+    const { contentDir, agent } = await siteWith({
+      license: 'https://example.com/terms',
+      licenseName: 'House terms',
+    });
+
+    assert.equal((await saveSettings(agent, 'general', { license: '' })).status, 303);
+    const stored = await siteJson(contentDir);
+    assert.equal('license' in stored, false);
+    assert.equal('licenseName' in stored, false);
+  });
+
+  it('refuses a custom license without a web URL or a name, and saves nothing (AC #1)', async () => {
+    const { contentDir, agent } = await siteWith({ license: 'cc-by' });
+
+    const refusals: [Record<string, string>, string, RegExp][] = [
+      [{ license_url: '', license_name: 'Terms' }, 'license_url', /URL/],
+      [{ license_url: 'example.com/terms', license_name: 'Terms' }, 'license_url', /URL/],
+      [{ license_url: 'javascript:alert(1)', license_name: 'Terms' }, 'license_url', /URL/],
+      [{ license_url: 'https://example.com/terms', license_name: ' ' }, 'license_name', /name/],
+    ];
+    for (const [form, name, message] of refusals) {
+      const response = await saveSettings(agent, 'general', { license: 'custom', ...form });
+      assert.equal(response.status, 400, JSON.stringify(form));
+      const html = await response.text();
+      assert.match(html, message);
+      assert.match(html, new RegExp(`name="${name}"[^>]*aria-invalid="true"`));
+    }
+
+    const unknown = await saveSettings(agent, 'general', { license: 'cc-by-9' });
+    assert.equal(unknown.status, 400);
+
+    assert.equal((await siteJson(contentDir))['license'], 'cc-by', 'the license is untouched');
+  });
+
+  it('reads a hand-written key in any case, and leaves a license alone on another page’s save', async () => {
+    const { contentDir, agent } = await siteWith({ license: 'CC0' });
+    const html = await (await agent.get('/admin/settings')).text();
+    assert.equal(licenseOptions(html).find((option) => option.selected)?.value, 'cc0');
+
+    assert.equal((await saveSettings(agent, 'reading', {})).status, 303);
+    assert.equal(
+      (await siteJson(contentDir))['license'],
+      'cc0',
+      'kept, in the form the file reads',
+    );
+  });
+});

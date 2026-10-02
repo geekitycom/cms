@@ -2016,3 +2016,93 @@ describe('breadcrumbs (TASK-150)', () => {
     assert.equal(atRest(html, crumbs, 'min-block-size'), '24px');
   });
 });
+
+describe('the content license (TASK-206)', () => {
+  const BY_SA = 'https://creativecommons.org/licenses/by-sa/4.0/';
+  const BY = 'https://creativecommons.org/licenses/by/4.0/';
+  const OVERRIDES = {
+    'posts/mine.md':
+      "---\ntitle: Mine\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/mine/\nlicense: https://example.com/terms\nlicenseName: House terms\n---\n\nAll mine.\n",
+    'posts/reserved.md':
+      "---\ntitle: Reserved\ndate: '2026-09-04T10:00:00Z'\npermalink: /2026/09/reserved/\nlicense: none\n---\n\nAsk first.\n",
+    'posts/by.md':
+      "---\ntitle: By\ndate: '2026-09-04T11:00:00Z'\npermalink: /2026/09/by/\nlicense: CC-BY\n---\n\nCredit me.\n",
+  };
+
+  /** The `rel="license"` links in the page footer, as `{ href, text }`. */
+  function licenseLinks(html: string): { href: string; text: string }[] {
+    return [...footer(html).matchAll(/<a rel="license" href="([^"]*)">([^<]*)<\/a>/g)].map(
+      (match) => ({ href: match[1] ?? '', text: match[2] ?? '' }),
+    );
+  }
+
+  it('links the chosen license with rel="license" on every page (AC #2)', async () => {
+    const cms = await site({ license: 'cc-by-sa' });
+
+    for (const pathname of ['/', '/2026/09/hello/', '/about/', '/tag/notes/', '/search/']) {
+      assert.deepEqual(
+        licenseLinks(await body(cms, pathname)),
+        [{ href: BY_SA, text: 'CC BY-SA 4.0' }],
+        pathname,
+      );
+    }
+  });
+
+  it('puts the license on the JSON-LD WebSite and the BlogPosting (AC #2)', async () => {
+    const cms = await site({ license: 'cc-by-sa' });
+
+    const post = graph(await body(cms, '/2026/09/hello/'));
+    assert.equal(node(post, 'WebSite')?.['license'], BY_SA);
+    assert.equal(node(post, 'BlogPosting')?.['license'], BY_SA);
+
+    const page = graph(await body(cms, '/about/'));
+    assert.equal(node(page, 'Article')?.['license'], BY_SA);
+    assert.equal(node(graph(await body(cms, '/')), 'WebSite')?.['license'], BY_SA);
+  });
+
+  it('names a custom license by the name it was given (AC #2)', async () => {
+    const cms = await site({ license: 'https://example.com/terms', licenseName: 'House <terms>' });
+    const html = await body(cms, '/2026/09/hello/');
+    assert.deepEqual(licenseLinks(html), [
+      { href: 'https://example.com/terms', text: 'House &lt;terms&gt;' },
+    ]);
+    assert.equal(node(graph(html), 'WebSite')?.['license'], 'https://example.com/terms');
+  });
+
+  it("lets a post's front matter override the site's on that post (AC #4)", async () => {
+    const { cms } = await siteWithContent({ license: 'cc-by-sa' }, {}, OVERRIDES);
+
+    const mine = await body(cms, '/2026/09/mine/');
+    assert.deepEqual(licenseLinks(mine), [
+      { href: 'https://example.com/terms', text: 'House terms' },
+    ]);
+    assert.equal(node(graph(mine), 'BlogPosting')?.['license'], 'https://example.com/terms');
+    assert.equal(node(graph(mine), 'WebSite')?.['license'], BY_SA, 'the site keeps its own');
+
+    const by = await body(cms, '/2026/09/by/');
+    assert.deepEqual(licenseLinks(by), [{ href: BY, text: 'CC BY 4.0' }]);
+    assert.equal(node(graph(by), 'BlogPosting')?.['license'], BY);
+
+    const reserved = await body(cms, '/2026/09/reserved/');
+    assert.deepEqual(licenseLinks(reserved), [], 'none is no license on this post');
+    assert.equal('license' in (node(graph(reserved), 'BlogPosting') ?? {}), false);
+
+    assert.deepEqual(licenseLinks(await body(cms, '/2026/09/hello/')), [
+      { href: BY_SA, text: 'CC BY-SA 4.0' },
+    ]);
+  });
+
+  it('prints nothing about a license when none is chosen (AC #5)', async () => {
+    const { cms } = await siteWithContent(
+      {},
+      {},
+      { 'posts/reserved.md': OVERRIDES['posts/reserved.md'] },
+    );
+
+    for (const pathname of ['/', '/2026/09/hello/', '/about/', '/2026/09/reserved/']) {
+      const html = await body(cms, pathname);
+      assert.doesNotMatch(html, /rel="license"/, pathname);
+      assert.doesNotMatch(html, /"license"/, pathname);
+    }
+  });
+});

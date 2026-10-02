@@ -1847,7 +1847,7 @@ at once cannot each keep half of what the other kept.
 The file carries `title`, `tagline`, `url`, `author` (a username, when the
 site has one author), `postsPerPage`, `homepage`, `postsPage`,
 `timezone`, `language`, `locale` (when it is set), `icon` (when it is set),
-`tagBase`,
+`license` and `licenseName` (when a license is chosen; see below), `tagBase`,
 `categoryBase`, `notifyServer`, `feedUpdatePeriod`, `feedUpdateFrequency`,
 `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
@@ -2871,8 +2871,22 @@ to read them on, `wfw:commentRss` (the [Well-Formed Web][wfw-ns] comment API) is
 the feed to poll, and `source:comments` is that same feed with a `count`
 attribute, so a reader can say "3 comments" without fetching anything.
 
+When the site has a license (Settings > General, or `license` in `site.json`),
+the channel carries a `creativeCommons:license` holding its URL, and every item
+carries one for its own license: the post's `license` front matter, else the
+site's. A post whose front matter says `license: none` carries none. The
+element is the [Creative Commons RSS module][cc-rss], declared as
+`xmlns:creativeCommons` only when some license is printed. It names a license
+by URL, Creative Commons or not, which a reader can act on; `dc:rights` would be
+free text. Nothing about a license is printed on a site and posts without one.
+RSS has no element that says "no license", so a post saying `license: none`
+on a licensed site carries no item license while the channel still names the
+site's; a reader that applies the channel's license to every item reads that
+post as under it.
+
 [source-ns]: https://source.scripting.com/
 [wfw-ns]: http://wellformedweb.org/CommentAPI/
+[cc-rss]: https://cyber.harvard.edu/rss/creativeCommonsRssModule.html
 
 ### Comments
 
@@ -2926,6 +2940,14 @@ post as `content type="html"`. The feed itself carries `id`, `title`,
 `link rel="alternate"` to the HTML page, a `generator`, an
 `xml:lang` from the `language` setting, and — when the site names a notify
 server — a `source:cloud` and a `link rel="hub"`.
+
+With a license, the feed carries an [RFC 4946][rfc4946] `link rel="license"`
+to the site's license, its name as the `title`, and every entry carries one for
+its own license, the post's `license` front matter else the site's. An entry
+states its own because RFC 4946 does not let an entry inherit the feed's. JSON
+Feed has no field for a license and says nothing about one.
+
+[rfc4946]: https://www.rfc-editor.org/rfc/rfc4946
 
 A JSON Feed item carries `id` (the object id), `url` (the permalink), `title`,
 `content_html`, `summary`, `date_published`, `date_modified`, `tags` (the

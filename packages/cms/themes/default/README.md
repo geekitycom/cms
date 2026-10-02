@@ -207,7 +207,8 @@ it sits beside the link home. See [Navigation](#navigation).
 **The footer** prints the copyright with the current year and the site
 author's display name, `soloAuthor.name`, or the site title on a site with
 several authors,
-`Published with Geekity`, and then `menus.footer` — the `footer` area this
+then the page's license, when it has one, as `<a rel="license">` with its name,
+then `Published with Geekity`, and then `menus.footer` — the `footer` area this
 theme declares, and the whole of what the footer links. A site that wants its
 feed there types an `RSS | /feed/` line into it, the way the starter site does.
 Nothing in the footer is read off an account: it used to hold one `rel="me"`
@@ -216,7 +217,9 @@ presented as the site's. An empty or missing footer menu prints no list at all,
 and the copyright line stands on its own. The year is
 `{{ "now" | date("year") }}` — `now` is the one word the `date` filter reads
 rather than parses — so it is the year at the moment the page is rendered, in
-the site's own timezone.
+the site's own timezone. The license is `license`: a post's own from its
+`license` front matter, else the site's from Settings > General, and nothing
+on a site with none.
 
 **The breadcrumb** opens `<main>` on a page with a place in the site's
 hierarchy (TASK-150): a post filed under a category, and a category, tag or
@@ -230,8 +233,8 @@ two cannot disagree. Every other page has an empty trail and prints nothing. A
 site that wants no visible breadcrumb empties the `breadcrumbs` block, and the
 `BreadcrumbList` stays in the graph.
 
-Webrings, badges, a licence notice and anything else that is markup rather than
-a link are deliberately not in the package. They go in a site theme's `footer`
+Webrings, badges and anything else that is markup rather than a link are
+deliberately not in the package. They go in a site theme's `footer`
 block:
 
 ```njk
@@ -789,7 +792,7 @@ IndieWeb. The graph holds:
   `/search/?q={search_term_string}`. On a site whose author is a user, its
   `publisher` and `about` both point at that user's Person, on every page. On
   a site with several authors its `publisher` is the Organization below and it
-  has no `about`.
+  has no `about`. With a site license, `license` is its URL.
 - `Organization`, on a site with several authors only: the site itself, named
   for its title, at `{baseUrl}/#organization`. It publishes the `WebSite` and
   every entry.
@@ -807,7 +810,8 @@ IndieWeb. The graph holds:
   Organization. A post with no title is headed by the words its `<title>`
   names it by, its `label`, cut on a word boundary to at most 110 characters.
   Its `image` is the picture the Open Graph tags print, so the two always
-  agree (see [The head](#the-head)).
+  agree (see [The head](#the-head)). Its `license` is the page's license URL,
+  the front matter's over the site's, and absent with none.
 - `BreadcrumbList` wherever the page prints a breadcrumb (see
   [The page shell](#the-page-shell)): one `ListItem` per crumb with its
   `position`, `name` and absolute URL as `item`.
@@ -1066,16 +1070,18 @@ an Eleventy build needs few edits. It is part of the package's semver contract.
 
 Every template gets:
 
-| Key          | What it holds                                                                                                                                                                                           |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `site`       | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
-| `menus`      | Every menu the site stores, by name, marked for this page: `menus.primary`, `menus.footer`, and any other name. See [Navigation](#navigation).                                                          |
-| `siteAuthor` | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
-| `soloAuthor` | The site author's profile, on every page of a site whose Site author setting names a user. **Absent** on a site with several authors. See [The bio](#the-bio).                                          |
-| `icons`      | The site's icons, as `{ rel, sizes, type, href }`. Empty until the site has an icon or an avatar to derive them from. See [The head](#the-head).                                                        |
-| `theme`      | The colours the theme declares, as `{ colorScheme, themeColor: { light, dark } }`, each absent when no theme declares it. See [The manifest](#the-manifest).                                            |
-| `shareImage` | The picture a shared link shows, as `{ url, alt, size: { width, height }, card }`. `size` is absent when it is not known. **Absent** when there is no picture. See [The head](#the-head).               |
-| `llmsTxt`    | The path of `/llms.txt`, while the site serves it. **Absent** when the site has turned it off. The default theme links it from the front page only.                                                     |
+| Key           | What it holds                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `site`        | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
+| `menus`       | Every menu the site stores, by name, marked for this page: `menus.primary`, `menus.footer`, and any other name. See [Navigation](#navigation).                                                          |
+| `siteAuthor`  | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
+| `soloAuthor`  | The site author's profile, on every page of a site whose Site author setting names a user. **Absent** on a site with several authors. See [The bio](#the-bio).                                          |
+| `icons`       | The site's icons, as `{ rel, sizes, type, href }`. Empty until the site has an icon or an avatar to derive them from. See [The head](#the-head).                                                        |
+| `theme`       | The colours the theme declares, as `{ colorScheme, themeColor: { light, dark } }`, each absent when no theme declares it. See [The manifest](#the-manifest).                                            |
+| `shareImage`  | The picture a shared link shows, as `{ url, alt, size: { width, height }, card }`. `size` is absent when it is not known. **Absent** when there is no picture. See [The head](#the-head).               |
+| `llmsTxt`     | The path of `/llms.txt`, while the site serves it. **Absent** when the site has turned it off. The default theme links it from the front page only.                                                     |
+| `license`     | The page's license as `{ name, url }`: the page's `license` front matter, else the site's. **Undefined** with none. It replaces the raw front matter value on the context.                              |
+| `siteLicense` | The site's own license as `{ name, url }`, whatever the page says. **Undefined** with none.                                                                                                             |
 
 A document — one post, one page, or one entry of a listing — adds:
 

@@ -18,6 +18,8 @@ import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from '../web/fee
 import type { UpdatePeriod } from '../web/feed-source.ts';
 import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
 import { generateIndexNowKey, isIndexNowKey } from '../web/indexnow.ts';
+import { isCreativeCommonsKey, isLicenseUrl, NO_LICENSE } from '../web/license.ts';
+import type { CreativeCommonsKey } from '../web/license.ts';
 import { canonicalLocale } from '../web/locale.ts';
 import { DEFAULT_MENU_NAME, menuItemsFromText, menusOf } from '../web/navigation.ts';
 import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from '../web/robots.ts';
@@ -156,6 +158,18 @@ export interface SiteSettings {
    * setting, so a save of it never writes one into the other.
    */
   icon: string;
+  /**
+   * What readers may do with the site's posts (TASK-206): empty for no
+   * license, which is all rights reserved, a Creative Commons key, or
+   * `custom` for the URL and name beside it. `site.json` writes a key, or a
+   * custom license's URL, under `license`, so the file says it the way a
+   * post's front matter does.
+   */
+  license: LicenseChoice;
+  /** A custom license's terms, as an absolute URL. Empty unless `license` is `custom`. */
+  licenseUrl: string;
+  /** A custom license's name. Empty unless `license` is `custom`. */
+  licenseName: string;
   /**
    * The first URL segment the tag archives live under, `tag` by default: one
    * URL-safe path segment, no slashes. WordPress's own base, so a site
@@ -363,6 +377,9 @@ export interface SiteSettings {
 /** What a site says about one Content-Signal: yes, no, or nothing. */
 export type ContentSignalChoice = '' | 'yes' | 'no';
 
+/** The License select's choices: none, a Creative Commons key, or a custom URL. */
+export type LicenseChoice = '' | CreativeCommonsKey | 'custom';
+
 /** Whether a string is a {@link ContentSignalChoice}. */
 function isContentSignalChoice(value: unknown): value is ContentSignalChoice {
   return value === '' || value === 'yes' || value === 'no';
@@ -434,6 +451,9 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   author: '',
   theme: '',
   icon: '',
+  license: '',
+  licenseUrl: '',
+  licenseName: '',
   tagBase: DEFAULT_TAXONOMY_BASES.tag,
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
   comments: true,
@@ -484,6 +504,9 @@ export const SETTINGS_FIELDS = {
   author: 'author',
   theme: 'theme',
   icon: 'icon',
+  license: 'license',
+  licenseUrl: 'license_url',
+  licenseName: 'license_name',
   tagBase: 'tag_base',
   categoryBase: 'category_base',
   comments: 'comments',
@@ -577,6 +600,7 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     // has never written the key, so anything but a string is that site.
     ...(typeof file['theme'] === 'string' ? { theme: file['theme'] } : {}),
     ...(typeof file['icon'] === 'string' ? { icon: file['icon'].trim() } : {}),
+    ...licenseFromSiteJson(file),
     // Absent is the ordinary state of these two: a site showing its latest
     // posts writes neither key, so anything but a string is read as none.
     ...(typeof file['homepage'] === 'string' ? { homepage: file['homepage'] } : {}),
@@ -789,6 +813,16 @@ export function siteJsonFor(
   // that has turned it off again should go back to saying nothing.
   if (settings.wordpressActivityPub) file['wordpressActivityPub'] = true;
   else delete file['wordpressActivityPub'];
+
+  // No license is no key, the way a post with none says nothing; a custom
+  // license is written as its URL, which is what front matter takes too.
+  delete file['licenseName'];
+  if (settings.license === '') delete file['license'];
+  else if (settings.license !== 'custom') file['license'] = settings.license;
+  else {
+    file['license'] = settings.licenseUrl;
+    file['licenseName'] = settings.licenseName;
+  }
 
   // A site that has never turned IndexNow on has no key to write down.
   if (settings.indexNowKey !== '') file['indexNowKey'] = settings.indexNowKey;
@@ -1049,6 +1083,22 @@ const FIELD_CHECKS: Record<
 
   icon: (form, context) => iconProblem(form.icon.trim(), context),
 
+  license: (form) =>
+    isLicenseChoice(form.license.trim()) ? undefined : 'Choose a license from the list.',
+
+  // The URL and the name are only read for a custom license, so they are only
+  // checked for one: a box left filled in under a Creative Commons choice is
+  // dropped on save rather than refused.
+  licenseUrl: (form) =>
+    form.license.trim() === 'custom' && !isLicenseUrl(form.licenseUrl.trim())
+      ? 'A custom license needs the URL of its terms, starting http:// or https://.'
+      : undefined,
+
+  licenseName: (form) =>
+    form.license.trim() === 'custom' && form.licenseName.trim() === ''
+      ? 'A custom license needs a name for the footer to show.'
+      : undefined,
+
   comments: () => undefined,
 
   // The empty string is refused rather than read as zero, which is what
@@ -1181,7 +1231,27 @@ const FIELD_CHECKS: Record<
     taxonomyBaseProblems({ tag: form.tagBase, category: form.categoryBase }).category,
 };
 
-/** What is wrong with a submitted Content-Signal choice. */
+/** Whether a submitted License choice is one the select offers. */
+function isLicenseChoice(value: string): value is LicenseChoice {
+  return value === '' || value === 'custom' || isCreativeCommonsKey(value);
+}
+
+/**
+ * The license `site.json` says, as the three settings the form edits. A value
+ * the public site would not read as a license reads as none here too.
+ */
+function licenseFromSiteJson(
+  file: Record<string, unknown>,
+): Pick<SiteSettings, 'license' | 'licenseUrl' | 'licenseName'> | Record<string, never> {
+  const value = typeof file['license'] === 'string' ? file['license'].trim() : '';
+  const key = value.toLowerCase();
+  if (isCreativeCommonsKey(key)) return { license: key, licenseUrl: '', licenseName: '' };
+  if (key === NO_LICENSE || !isLicenseUrl(value)) return {};
+
+  const name = typeof file['licenseName'] === 'string' ? file['licenseName'].trim() : '';
+  return { license: 'custom', licenseUrl: value, licenseName: name };
+}
+
 /**
  * What stops a typed icon being one the site can derive icons from, or
  * `undefined` for none. Empty is no icon. The upload has to be there, because
@@ -1212,6 +1282,7 @@ function isFile(file: string): boolean {
   }
 }
 
+/** What is wrong with a submitted Content-Signal choice. */
 function contentSignalProblem(value: string): string | undefined {
   return isContentSignalChoice(value) ? undefined : 'A content signal is yes, no, or not said.';
 }
@@ -1273,6 +1344,7 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     author: form.author.trim(),
     theme: form.theme.trim(),
     icon: form.icon.trim(),
+    ...licenseFromForm(form),
     tagBase: form.tagBase.trim(),
     categoryBase: form.categoryBase.trim(),
     // A checkbox submits nothing at all when it is clear, which is what the
@@ -1325,6 +1397,21 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
   };
 }
 
+/** A validated License choice, with the custom URL and name kept only for a custom one. */
+function licenseFromForm(
+  form: SettingsForm,
+): Pick<SiteSettings, 'license' | 'licenseUrl' | 'licenseName'> {
+  const license = form.license.trim();
+  if (license === 'custom') {
+    return { license, licenseUrl: form.licenseUrl.trim(), licenseName: form.licenseName.trim() };
+  }
+  return {
+    license: isLicenseChoice(license) ? license : '',
+    licenseUrl: '',
+    licenseName: '',
+  };
+}
+
 /** The settings as the form shows them. */
 export function formFromSettings(settings: SiteSettings): SettingsForm {
   return {
@@ -1340,6 +1427,9 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     author: settings.author,
     theme: settings.theme,
     icon: settings.icon,
+    license: settings.license,
+    licenseUrl: settings.licenseUrl,
+    licenseName: settings.licenseName,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
     comments: settings.comments ? '1' : '',

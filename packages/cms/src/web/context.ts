@@ -60,6 +60,15 @@ export interface SiteData {
    * as well as rasterised. Absent means the avatar.
    */
   icon?: string | undefined;
+  /**
+   * What readers may do with the site's posts (TASK-206): a Creative Commons
+   * key such as `cc-by-sa`, or a custom license's URL. Absent, or `none`, is
+   * all rights reserved. A post's own `license` front matter overrides it;
+   * `resolveLicense` in `license.ts` is the one reading of both.
+   */
+  license?: string | undefined;
+  /** A custom license's name, beside its URL in `license`. */
+  licenseName?: string | undefined;
   /** How many posts a listing page holds. */
   postsPerPage?: number | undefined;
   /**

@@ -1007,6 +1007,36 @@ the avatar as its icon. The field shows that avatar, and the next save of the
 General page writes it as `icon`. With image optimization turned off, no icons
 are derived and the site links none.
 
+**License** on the General page says what readers may do with the site's
+posts. The choices are no license, which is the default and means all rights
+reserved, one of the seven Creative Commons licenses (CC BY, BY-SA, BY-NC,
+BY-NC-SA, BY-ND and BY-NC-ND at version 4.0, and CC0 1.0), or a custom license
+with the URL of its terms and a name. A custom license without an `http://` or
+`https://` URL, or without a name, is refused. With a license chosen, the
+default theme's footer links it with `rel="license"`, the JSON-LD `WebSite`
+and each `BlogPosting` or `Article` carry it as `license`, the Atom feed and
+each entry carry a `link rel="license"`, and the RSS channel and each item
+carry a `creativeCommons:license`. JSON Feed has no field for a license and
+says nothing. With no license, none of these is printed.
+
+`site.json` stores a Creative Commons choice as its key under `license`, such
+as `"license": "cc-by-sa"`, and a custom license as its URL under `license`
+with its name under `licenseName`. Neither key is written when there is no
+license.
+
+A post or page can name its own license in its front matter, and it then
+applies to that post's footer, its JSON-LD and its feed items instead of the
+site's. The value takes the same forms as `site.json`:
+
+- `license: cc-by` names a Creative Commons license by its key, in any case.
+- `license: https://example.com/terms` names a custom license, with
+  `licenseName: House terms` beside it. Without a name, a Creative Commons URL
+  is named by its deed and any other URL by itself.
+- `license: none` is all rights reserved on that post, whatever the site says.
+
+A value that is neither a key, an `http` or `https` URL, nor `none` is
+ignored, and the post keeps the site's license.
+
 Nothing on those pages is an ActivityPub profile. Every user is an actor with a
 name, a summary, a picture and links of their own, edited on that user's own
 screen under `/admin/users`; saving one sends an `Update` of that actor to
