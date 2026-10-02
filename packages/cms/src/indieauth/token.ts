@@ -3,6 +3,7 @@ import type { Context, Hono } from 'hono';
 import { findUserById } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import type { GeekityEnv } from '../env.ts';
+import { logTokenRequest, noteActivity } from './activity-log.ts';
 import { requireBearer } from './bearer.ts';
 import {
   INTROSPECTION_PATH,
@@ -32,7 +33,7 @@ import type { IssuedTokens } from './tokens.ts';
  * mode, like the authorization endpoint beside it.
  */
 export function mountTokenEndpoint(app: Hono<GeekityEnv>): void {
-  app.post(TOKEN_PATH, async (c) => {
+  app.post(TOKEN_PATH, logTokenRequest, async (c) => {
     c.header('cache-control', 'no-store');
     const form = redemptionForm(await c.req.parseBody());
     const now = c.var.config.now();
@@ -70,6 +71,7 @@ function sameResource(form: RedemptionForm, approved: string | undefined): boole
 
 function answer(c: Context<GeekityEnv>, issued: IssuedTokens, user: User): Response {
   const { token } = issued;
+  noteActivity(c, { user: user.username, scopes: token.scopes });
   return c.json({
     access_token: issued.accessToken,
     token_type: 'Bearer',
