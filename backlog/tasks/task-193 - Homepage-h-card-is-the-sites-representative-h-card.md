@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-01 17:01'
-updated_date: '2026-10-01 21:32'
+updated_date: '2026-10-02 06:56'
 labels:
   - indieweb
   - microformats
@@ -53,6 +53,8 @@ partials/bio.njk takes bioHome: when set it prints <data class="u-url u-uid" val
 Before this change the homepage card was already found by rule 2 of the algorithm (its archive url is in rels.me since TASK-180); it is now found by rule 1 (uid and url equal the page URL), which is the one the task asks for.
 microformats-parser ^2.0.6 added as a devDependency of @geekity/cms; the test implements the representative h-card algorithm over its output (all h-cards including nested, WHATWG URL matching).
 Validation: pnpm build && pnpm test (3088 + 30 pass) && pnpm typecheck && pnpm lint && pnpm format:check all exit 0. Live check: a copy of the demo content with author "ada" served on port 3591 from packages/cms/dist; microformats-parser + the algorithm on curl'd http://localhost:3591/ picked Ada's card by rule 1 with name, url [home, archive, mastodon], uid [home], photo, for both the static front page (homepage: about) and the listing homepage; /author/ada/ and a post kept their cards with no uid and the archive as first url. Server stopped.
+
+2026-10-02, 0.14.0 on shll.me: pin13.net/mf2 on https://shll.me/ returns the h-card with uid [https://shll.me/], url [https://shll.me/, https://shll.me/author/a/, https://me.dm/@andrewshell], name Andrew Shell and photo.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
