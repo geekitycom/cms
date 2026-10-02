@@ -4,13 +4,22 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 19:43'
+updated_date: '2026-10-02 20:45'
 labels:
   - micropub
   - indieauth
   - interop
 dependencies: []
 references:
+  - 'https://micropub.rocks/'
+  - 'https://github.com/aaronpk/micropub.rocks/blob/main/app/Controller.php'
+  - packages/cms/src/indieauth/request.ts
+  - packages/cms/src/indieauth/discovery.ts
+  - 'https://github.com/barryf/micropublish'
+  - 'https://github.com/gRegorLove/indiebookclub'
+  - 'https://github.com/inklings-io/inkstone'
+  - 'https://getindiekit.com/introduction'
+  - 'https://indieauth.spec.indieweb.org/'
   - 'https://github.com/aaronpk/Quill'
 priority: medium
 type: chore
