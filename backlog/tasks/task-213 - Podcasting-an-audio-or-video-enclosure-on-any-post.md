@@ -1,11 +1,11 @@
 ---
 id: TASK-213
 title: 'Podcasting: an audio or video enclosure on any post'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-02 11:41'
-updated_date: '2026-10-02 12:51'
+updated_date: '2026-10-02 14:38'
 labels:
   - feeds
   - media
@@ -73,7 +73,7 @@ A post cannot carry a recording, so a site cannot publish a spoken version of an
 - [x] #11 The RSS feed with an enclosure, alternate versions and a transcript validates with xmllint and is read correctly by a Podcasting 2.0 validator or app, or the notes record what was checked
 - [x] #12 The README documents the front matter, the feed elements and when each is printed, and the elements deliberately left out
 - [x] #13 The ActivityPub object of a post with a main file carries it as an Audio or Video attachment with an absolute url, mediaType and name, beside its Image attachments; a post without one is unchanged
-- [ ] #14 A post with an audio main file, federated to a real Mastodon account, plays in the timeline, or the notes record what Mastodon showed and why
+- [x] #14 A post with an audio main file, federated to a real Mastodon account, plays in the timeline, or the notes record what Mastodon showed and why
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -102,4 +102,12 @@ Verification (2026-10-02, branch task-213-podcast-enclosures):
 - Beyond the brief: /uploads/ now answers single byte ranges (206, If-Range, 416), because Safari will not play media without them, and serves audio, video and text/vtt with their real types.
 - Known gap: a site that already had hand-written enclosure keys before upgrading gets new feed bytes under its old ETag until that post changes.
 - Open: AC#14, a real Mastodon check, waits on a deploy.
+
+AC#14 verified 2026-10-02 after 0.15.0 deployed to shll.me: a post with monster-mash.m4a (audio/mp4, 6508495 bytes) as its main file plays on the post page and in the me.dm timeline, and seeking works there. The podba.se validator, run on https://shll.me/feed/, flagged: no cover art; no byte-range support; channel missing itunes:category, itunes:explicit and itunes:image. The byte-range flag looks like a false positive: through Caddy, HEAD returns Accept-Ranges: bytes, and Range bytes=0-1, 0-, 1000-2000, -100 and 0-0 all return 206 with the right lengths over HTTP/2 and HTTP/1.1, as does HEAD with Range. The cover art and itunes flags are the Apple directory tags the README lists as left out on purpose; adding them is a follow-up, not filed yet.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Posts can carry an audio or video main file, alternate versions and a transcript, set in the editor and stored in front matter. RSS prints enclosure, podcast:alternateEnclosure, podcast:transcript, itunes:duration and podcast:medium blog, with namespaces only when used; Atom and JSON Feed carry the same files; the default theme plays it; federation sends it as an Audio or Video attachment; /uploads/ answers byte ranges. Verified by the cms suite and gates, an editor-to-feed run checked with xmllint and podcast-partytime, and after the 0.15.0 deploy a real post on shll.me that played and seeked in the me.dm timeline. podba.se flags the Apple directory tags left out on purpose and a byte-range warning that curl does not reproduce.
+<!-- SECTION:FINAL_SUMMARY:END -->

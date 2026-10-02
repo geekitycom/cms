@@ -1,11 +1,11 @@
 ---
 id: TASK-211
 title: 'Share image falls back to the author''s photo, then the site icon'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-02 07:01'
-updated_date: '2026-10-02 07:25'
+updated_date: '2026-10-02 14:27'
 labels:
   - theme
   - seo
@@ -36,7 +36,7 @@ The picture a shared link shows (og:image, twitter:image, TASK-146) is the entry
 - [x] #4 The fallback image's og:image:alt is the media library's description, else the author's display name for their photo or the site title for the icon; its width and height come from the variant sidecar when one exists
 - [x] #5 The default theme's JSON-LD image on a post or page is the same URL as its og:image
 - [x] #6 The default theme README describes the new fallback order
-- [ ] #7 Sharing https://shll.me/ on Mastodon after deploy shows the author's photo in the preview card, or the notes record what was checked
+- [x] #7 Sharing https://shll.me/ on Mastodon after deploy shows the author's photo in the preview card, or the notes record what was checked
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -62,10 +62,12 @@ Built as planned. shareImage() in share-image.ts now takes an ordered `fallbacks
 Evidence: new describe block 'the share image falls back to a photo, then the icon (TASK-211)' in page-shell.test.ts failed before the change (og:image undefined, expected the photo or icon URL) and passes after. Gates: pnpm build && pnpm test (3119 + 30 pass) && pnpm typecheck && pnpm lint && pnpm format:check all exit 0. Scratch sites curled over HTTP: solo author with photo prints the photo on / and a post with alt 'Ada Lovelace' and width/height 400; several-authors site prints the icon on / (alt 'Scratch', 512x512) and Grace's photo on her post (alt 'Grace Hopper'); solo author with no photo prints the icon. JSON-LD image equalled og:image on every entry checked.
 
 AC#7 is open: it needs a deploy to shll.me and a real Mastodon share, which this run does not have. The task stays In Progress until that check is done.
+
+AC#7 verified 2026-10-02 after 0.15.0 deployed to shll.me: curl https://shll.me/ prints og:image and twitter:image https://shll.me/uploads/2026/09/andrew-004.jpg with alt 'Andrew Shell'. Sharing https://shll.me/ from @andrewshell on me.dm rendered a preview card titled Shll.me with the author's photo as its image.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-The share image (og:image, twitter:image) now falls back from the entry's own image and a hand-set site.avatar to the photo of the person the page is by, then the site icon, and the default theme's JSON-LD prints that same image. Verified by new page-shell tests (failing before, passing after), the full gate suite, and curl against scratch sites. AC#7 (Mastodon card on shll.me after deploy) is not yet checked.
+The share image (og:image, twitter:image) now falls back from the entry's own image and a hand-set site.avatar to the photo of the person the page is by, then the site icon, and the default theme's JSON-LD prints that same image. Verified by new page-shell tests (failing before, passing after), the full gate suite, curl against scratch sites, and a real Mastodon share of https://shll.me/ after the 0.15.0 deploy, whose preview card showed the author's photo.
 <!-- SECTION:FINAL_SUMMARY:END -->
