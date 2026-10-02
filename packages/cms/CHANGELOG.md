@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.14.0](https://github.com/geekitycom/cms/compare/v0.13.0...v0.14.0) (2026-10-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** site.json author holds a username and soloAuthor is gone; an author that names no user now makes a several-authors site whose footer and feeds show the site title.
+
+### Features
+
+* **cms:** add opensearch, an oembed provider and pinned posts ([eadcf0a](https://github.com/geekitycom/cms/commit/eadcf0a33b2555f6f4c9a4d3b8a3121b7f577ee8))
+* **cms:** give untitled posts a json-ld headline and a fallback image ([25c9c67](https://github.com/geekitycom/cms/commit/25c9c67fbcb2c00cd71558c8f04e516c96371dc4))
+* **cms:** make the site author one select of a user or several authors ([566d5a2](https://github.com/geekitycom/cms/commit/566d5a2e0970b2687880ece41a231cf4c67e2d78))
+* **cms:** pin posts to the actor's featured collection ([5bb40d0](https://github.com/geekitycom/cms/commit/5bb40d06fb212438e33bbc720a2251f0b2a8b448))
+* **cms:** print a fediverse:creator meta tag naming the author's own actor ([893a80d](https://github.com/geekitycom/cms/commit/893a80dfc0ea2a21cebe9f36e4a4023611b015a3))
+* **cms:** publish attributionDomains on every actor ([f4cbbd2](https://github.com/geekitycom/cms/commit/f4cbbd2ddf11be00a08fb141a8a94b60f944b4b3))
+* **cms:** publish attributionDomains on every actor ([bb3a0c3](https://github.com/geekitycom/cms/commit/bb3a0c358e7fe2d4fe9073a7a1bd015c09a3ee6f))
+* **cms:** serve an embed view so wordpress can frame posts ([dd12b8c](https://github.com/geekitycom/cms/commit/dd12b8cd3e53f1de767b4b15afd19cb134f493f5))
+* **cms:** serve an oembed provider for posts and pages ([10e1761](https://github.com/geekitycom/cms/commit/10e17617c8540c2f71ee133524f52429a91c3e41))
+* **cms:** serve an opensearch description and link it from every page ([1e3ab45](https://github.com/geekitycom/cms/commit/1e3ab4596fa8b3d15d7d6510995b4a2fac1f5bc7))
+
+
+### Bug Fixes
+
+* **cms:** make the solo-author homepage h-card the site's representative h-card ([f36f6cf](https://github.com/geekitycom/cms/commit/f36f6cfed6d232533bb675790d15fe0ecc7ec80c))
+* **cms:** wait for image derivation before close returns ([84e5f44](https://github.com/geekitycom/cms/commit/84e5f442c0d24b0ee21898c8d0ad5af1ffc49ac5))
+
 ## [0.13.0](https://github.com/geekitycom/cms/compare/v0.12.0...v0.13.0) (2026-10-01)
 
 
