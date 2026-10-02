@@ -1,10 +1,11 @@
 ---
 id: TASK-213
 title: 'Podcasting: an audio or video enclosure on any post'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-10-02 11:41'
-updated_date: '2026-10-02 11:43'
+updated_date: '2026-10-02 12:51'
 labels:
   - feeds
   - media
@@ -59,18 +60,46 @@ A post cannot carry a recording, so a site cannot publish a spoken version of an
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The post editor can attach one uploaded audio or video file to a post as its main enclosure, and remove it; the choice is saved in the post's front matter
-- [ ] #2 The post editor can add, edit and remove alternate versions, each either an uploaded file or a linked URL with a MIME type; a linked version without an http(s) URL or a MIME type is refused with a message and nothing is saved
-- [ ] #3 The media library and editor upload accept MP3, M4A/AAC, Ogg/Opus, MP4 and WebM files, checked by extension, declared type and first bytes, and the upload size limit for them is configurable and documented, including the reverse-proxy note
-- [ ] #4 The RSS item for a post with a main file has an enclosure whose url is absolute and whose length and type match the uploaded file
-- [ ] #5 Each alternate version prints as a podcast:alternateEnclosure with type, a podcast:source uri, and length, title, height and lang when known; the podcast namespace is declared only when a feed prints a podcast element
-- [ ] #6 A post with a transcript or captions file prints podcast:transcript with its type, and rel="captions" for VTT or SRT
-- [ ] #7 A post with a known duration prints itunes:duration in RSS and duration_in_seconds in JSON Feed; with no duration neither appears and the itunes namespace is not declared
-- [ ] #8 An RSS feed with at least one enclosure declares podcast:medium blog on the channel; a feed with none prints no podcast or itunes namespace or element and its ETag is unchanged
-- [ ] #9 Atom prints the main file as link rel="enclosure" with type and length, and JSON Feed lists the main file and alternate versions as attachments
-- [ ] #10 The default theme plays the main file on the post page with a native audio or video element, links the alternate versions and the transcript, and prints nothing on a post without one
-- [ ] #11 The RSS feed with an enclosure, alternate versions and a transcript validates with xmllint and is read correctly by a Podcasting 2.0 validator or app, or the notes record what was checked
-- [ ] #12 The README documents the front matter, the feed elements and when each is printed, and the elements deliberately left out
-- [ ] #13 The ActivityPub object of a post with a main file carries it as an Audio or Video attachment with an absolute url, mediaType and name, beside its Image attachments; a post without one is unchanged
+- [x] #1 The post editor can attach one uploaded audio or video file to a post as its main enclosure, and remove it; the choice is saved in the post's front matter
+- [x] #2 The post editor can add, edit and remove alternate versions, each either an uploaded file or a linked URL with a MIME type; a linked version without an http(s) URL or a MIME type is refused with a message and nothing is saved
+- [x] #3 The media library and editor upload accept MP3, M4A/AAC, Ogg/Opus, MP4 and WebM files, checked by extension, declared type and first bytes, and the upload size limit for them is configurable and documented, including the reverse-proxy note
+- [x] #4 The RSS item for a post with a main file has an enclosure whose url is absolute and whose length and type match the uploaded file
+- [x] #5 Each alternate version prints as a podcast:alternateEnclosure with type, a podcast:source uri, and length, title, height and lang when known; the podcast namespace is declared only when a feed prints a podcast element
+- [x] #6 A post with a transcript or captions file prints podcast:transcript with its type, and rel="captions" for VTT or SRT
+- [x] #7 A post with a known duration prints itunes:duration in RSS and duration_in_seconds in JSON Feed; with no duration neither appears and the itunes namespace is not declared
+- [x] #8 An RSS feed with at least one enclosure declares podcast:medium blog on the channel; a feed with none prints no podcast or itunes namespace or element and its ETag is unchanged
+- [x] #9 Atom prints the main file as link rel="enclosure" with type and length, and JSON Feed lists the main file and alternate versions as attachments
+- [x] #10 The default theme plays the main file on the post page with a native audio or video element, links the alternate versions and the transcript, and prints nothing on a post without one
+- [x] #11 The RSS feed with an enclosure, alternate versions and a transcript validates with xmllint and is read correctly by a Podcasting 2.0 validator or app, or the notes record what was checked
+- [x] #12 The README documents the front matter, the feed elements and when each is printed, and the elements deliberately left out
+- [x] #13 The ActivityPub object of a post with a main file carries it as an Audio or Video attachment with an absolute url, mediaType and name, beside its Image attachments; a post without one is unchanged
 - [ ] #14 A post with an audio main file, federated to a real Mastodon account, plays in the timeline, or the notes record what Mastodon showed and why
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Model the enclosure once: content/enclosure.ts parses the 'enclosure' front matter (url, type, length, duration, transcript, alternates[]) into a typed Enclosure at the boundary; incomplete data is dropped.
+2. Media table: replace UploadMediaType.image with a kind (image/audio/video/text/document), add MP3, M4A, AAC, Ogg/Opus, MP4, WebM with byte signatures, plus VTT and SRT for transcripts. Add a separate configurable size limit for audio and video (uploadMediaMaxBytes / GEEKITY_UPLOAD_MEDIA_MAX_BYTES).
+3. Editor: main file select of uploaded audio/video, duration, transcript, alternate rows (upload or link + MIME, title, height, lang); save writes type and length from the file on disk; refuse bad links.
+4. Feeds: FeedItem.enclosure with absolute URLs; RSS enclosure, podcast:alternateEnclosure/source, podcast:transcript, itunes:duration, channel podcast:medium blog, namespaces only when used; Atom rel=enclosure; JSON Feed attachments. FEED_ITEM_REVISION unchanged so feeds without enclosures keep their ETag.
+5. Default theme: audio/video player, alternate links, transcript link.
+6. Federation: Audio or Video attachment beside the Image attachments.
+7. README docs; xmllint and parser checks on a real feed; Mastodon check after deploy.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implementation (branch task-213-podcast-enclosures, 7 commits): upload table gains kind + MP3/M4A/AAC/Ogg/Opus/MP4/M4V/WebM/VTT/SRT with signatures; uploadMediaMaxBytes (GEEKITY_UPLOAD_MEDIA_MAX_BYTES, 200 MiB); uploads now served with media types and single-range 206 support (Safari needs it to play). content/enclosure.ts parses the front matter; editor Recording fieldset on posts; RSS/Atom/JSON Feed elements with conditional podcast/itunes namespaces, FEED_ITEM_REVISION unchanged and a test pins no-recording feed bytes+ETag; default theme partials/recording.njk; federation Audio/Video attachment placed before images. AC#11 check: a feed built through the real editor save and /feed/ route (main mp3 upload, mp4 upload alternate, CDN link alternate, VTT transcript, duration 30:34) passes xmllint --noout; Atom passes xmllint; JSON Feed parses; no-recording feeds print neither namespace. Not yet run through a Podcasting 2.0 validator or app (needs a public URL). AC#14 (real Mastodon) not done: needs a deploy.
+
+Verification (2026-10-02, branch task-213-podcast-enclosures):
+- cms suite 3211/3211 pass; typecheck, lint, format:check clean.
+- Demo site, real Chrome: published a post through the editor with an uploaded MP3 main file, duration 0:08, an uploaded VTT transcript and an uploaded MP4 alternate (title Video, height 240). The front matter got type audio/mpeg, length 64617 and 105548 (the true file sizes) and duration 8.
+- The post page renders the audio player, the Captions link and the Video link. The tab was hidden, so Chrome deferred loading the media element itself. Instead, in-page fetches with Range bytes=0- and bytes=60000- got 206 with 64617 and 4617 bytes, Web Audio decoded 8.0 s, and the VTT is served as text/vtt.
+- AC#11: xmllint --noout passes on the live RSS. podcast-partytime (Podcast Index's parser) reads medium=blog, the enclosure (url, length 64617, audio/mpeg), duration 8, the alternateEnclosure (video/mp4, 105548, title Video, height 240, its source) and the transcript (text/vtt, rel captions). No public URL, so the podba.se web validator was not run.
+- AC#8: feed-enclosure.test.ts pins the sha256 and ETag of RSS, Atom and JSON Feed for a site with no recording, and asserts FEED_ITEM_REVISION is 6.
+- Beyond the brief: /uploads/ now answers single byte ranges (206, If-Range, 416), because Safari will not play media without them, and serves audio, video and text/vtt with their real types.
+- Known gap: a site that already had hand-written enclosure keys before upgrading gets new feed bytes under its old ETag until that post changes.
+- Open: AC#14, a real Mastodon check, waits on a deploy.
+<!-- SECTION:NOTES:END -->
