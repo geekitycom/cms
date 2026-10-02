@@ -1,4 +1,7 @@
-import type { Hono, MiddlewareHandler } from 'hono';
+import type { Context, Hono, MiddlewareHandler } from 'hono';
+
+import { POST_KIND, writeDocument } from '../admin/documents.ts';
+import { readSiteSettings } from '../admin/settings.ts';
 
 import type { PostType } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
@@ -6,6 +9,10 @@ import { requireBearer } from '../indieauth/bearer.ts';
 import type { BearerEnv } from '../indieauth/bearer.ts';
 import { MICROPUB_MEDIA_PATH, MICROPUB_PATH, siteBaseUrl } from '../indieauth/discovery.ts';
 import type { GeekityEnv } from '../env.ts';
+import type { Scope } from '../indieauth/request.ts';
+import { absoluteUrl } from '../web/negotiate.ts';
+import { createForm, fromForm, fromJson } from './create.ts';
+import type { CreateRequest } from './create.ts';
 
 /**
  * The name a client shows for each post type the site accepts, in the order
@@ -67,19 +74,72 @@ function isQuery(q: string | undefined): q is Query {
 /**
  * The bearer guard for a token bound to this site, the resource its protected
  * resource metadata names, or bound to none, as Micropub clients' tokens are
- * (decision-24). Built per request because the base URL is a setting.
+ * (decision-24), and granted `scope` when one is named. Built per request
+ * because the base URL is a setting.
  */
-const requireSiteToken: MiddlewareHandler<BearerEnv> = async (c, next) =>
-  await requireBearer({ audience: { resource: siteBaseUrl(c), acceptsUnbound: true } })(c, next);
+function requireSiteToken(scope?: Scope): MiddlewareHandler<BearerEnv> {
+  return async (c, next) =>
+    await requireBearer({
+      audience: { resource: siteBaseUrl(c), acceptsUnbound: true },
+      ...(scope === undefined ? {} : { scope }),
+    })(c, next);
+}
+
+/** The request body as a create, or why it is not one. */
+async function createRequest(
+  c: Context<BearerEnv>,
+): Promise<CreateRequest | { readonly error: string }> {
+  const type = c.req.header('content-type') ?? '';
+  if (/^(application\/x-www-form-urlencoded|multipart\/form-data)\b/i.test(type)) {
+    return fromForm(await c.req.formData());
+  }
+  if (/^application\/json\b/i.test(type)) {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return { error: 'The request body is not JSON.' };
+    }
+    return fromJson(body);
+  }
+  return { error: 'A create is form-encoded, multipart or JSON.' };
+}
+
+function invalidRequest(c: Context<BearerEnv>, description: string): Response {
+  c.header('cache-control', 'no-store');
+  return c.json({ error: 'invalid_request', error_description: description }, 400);
+}
 
 /**
- * The Micropub endpoint (TASK-163): for now, the queries a client asks before
- * it posts. Any live token of this site's will do, whatever its scopes; one
- * bound to another resource will not (decision-24). Behind the maintenance
- * gate, like the IndieAuth endpoints beside it.
+ * The Micropub endpoint: the queries a client asks before it posts (TASK-163),
+ * which any live token of this site's may ask whatever its scopes, and the
+ * create (TASK-164), which needs the create scope. A token bound to another
+ * resource is refused either way (decision-24). Behind the maintenance gate,
+ * like the IndieAuth endpoints beside it.
  */
 export function mountMicropub(app: Hono<GeekityEnv>): void {
-  app.get(MICROPUB_PATH, requireSiteToken, (c) => {
+  app.post(MICROPUB_PATH, requireSiteToken('create'), async (c) => {
+    const request = await createRequest(c);
+    if ('error' in request) return invalidRequest(c, request.error);
+
+    const { store, config, announce, bearer } = c.var;
+    const timezone = readSiteSettings(config.contentDir).timezone;
+    const created = createForm(request, bearer.user.username, timezone, store.now());
+    if ('errors' in created) return invalidRequest(c, created.errors.join(' '));
+
+    const written = await writeDocument(
+      { store, config, announce, writer: bearer.user.username },
+      { kind: POST_KIND, document: undefined, ...created },
+    );
+    if (written.outcome === 'refused') return invalidRequest(c, written.message);
+    if (written.outcome === 'conflict') throw new Error('A new post has no file to conflict with.');
+
+    c.header('cache-control', 'no-store');
+    c.header('location', absoluteUrl(written.saved.permalink, siteBaseUrl(c)));
+    return c.body(null, 201);
+  });
+
+  app.get(MICROPUB_PATH, requireSiteToken(), (c) => {
     c.header('cache-control', 'no-store');
     const q = c.req.query('q');
     if (!isQuery(q)) {

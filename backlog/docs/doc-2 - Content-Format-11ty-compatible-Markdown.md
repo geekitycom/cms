@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-23 19:29'
+updated_date: '2026-10-02 15:16'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -117,6 +117,24 @@ Feeds, the sitemap and the ActivityStreams objects emit instants and are not aff
 ## Drafts and status
 
 `draft: true` is the only status flag. There is no scheduled publishing in phase one; a future date with `draft: false` is simply published with that date, which matches 11ty. Trashing a post moves the file to `content/_trash/` (an underscore directory that Eleventy ignores) so it can be restored.
+
+## Micropub
+
+A post created over Micropub (TASK-164) is written by the editor's own write path, so its file is the one the editor would write for the same fields. decision-27 records why. Each property fills one editor field:
+
+| Micropub property | Front matter |
+| --- | --- |
+| `name` | `title` |
+| `content`, plain text | the body, as the Markdown it is |
+| `content`, `{ "html": "…" }` | the body, as the HTML it is |
+| `summary` | `description` |
+| `category`, each value | `tags` |
+| `in-reply-to` | `in-reply-to` |
+| `published` | `date`, as a UTC instant; now when it is missing |
+| `post-status: draft` | `draft: true`; `published`, or none, is `draft: false` |
+| `mp-slug` | the slug, in the file name and the permalink |
+
+The token's user is `author`. Only `h-entry` is created. Any other type or property, a second value where one is expected, or a value that is not text is refused by name and nothing is written.
 
 ## Markdown dialect
 

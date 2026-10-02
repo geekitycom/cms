@@ -24,6 +24,8 @@ import {
   zoneLabel,
 } from '../content/time.ts';
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
+import type { ResolvedConfig } from '../config.ts';
+import type { DocumentChange } from '../content/sync.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readAltTexts, undescribedImages } from '../images/alt-text.ts';
 import type { UndescribedImage } from '../images/alt-text.ts';
@@ -320,14 +322,9 @@ interface SaveFromFormOptions {
 }
 
 /**
- * Write what the editor submitted.
- *
- * The order matters: the form is read and checked before anything is touched,
- * the on-disk file is re-hashed and compared with the hash the form loaded with
- * (doc-1's conflict rule), and only then is a file written. A save that is
- * refused — a page with no title, an unreadable date, a stale hash, a URL
- * another document already holds — leaves the content directory exactly as it
- * was.
+ * Write what the editor submitted through {@link writeDocument}, and answer
+ * with the editor again: the refusal on the form, the conflict side by side,
+ * or the saved document under a flash.
  */
 async function saveFromForm(
   c: Context<GeekityEnv>,
@@ -380,19 +377,104 @@ async function saveFromForm(
     });
   }
 
+  const written = await writeDocument(
+    {
+      store,
+      config: c.var.config,
+      announce: c.var.announce,
+      writer: currentUsername(c),
+    },
+    { kind, document, form, draft },
+  );
+  if (written.outcome === 'refused') return refuse(written.message);
+  if (written.outcome === 'conflict') {
+    return renderConflict(c, {
+      kind,
+      render,
+      document: written.document,
+      form: { ...form, draft },
+      recording: written.recording,
+      conflict: written.conflict,
+    });
+  }
+  const { saved, undescribed } = written;
+
+  flash(c, 'notice', savedMessage(kind, document, saved, store.now()));
+  if (undescribed.length > 0) flash(c, 'warning', missingAltText(undescribed));
+  return c.redirect(editorPath(kind, saved.slug), 303);
+}
+
+/** What a write needs from the site, as plain values rather than a request. */
+export interface DocumentSite {
+  readonly store: ContentStore;
+  readonly config: ResolvedConfig;
+  readonly announce: (change: DocumentChange) => Promise<void>;
+  /** The username of whoever is writing: the author a new document starts on. */
+  readonly writer: string | undefined;
+}
+
+/** What {@link writeDocument} is asked to write. */
+export interface DocumentWrite {
+  readonly kind: DocumentKind;
+  /** The document being replaced, or `undefined` when one is being made. */
+  readonly document: Document | undefined;
+  readonly form: EditorForm;
+  /** Whether it is saved as a draft, which the editor's buttons decide. */
+  readonly draft: boolean;
+}
+
+/** What came of a {@link writeDocument}. */
+export type WriteOutcome =
+  | {
+      readonly outcome: 'saved';
+      readonly saved: Document;
+      /** Images published without alt text, which the editor warns about. */
+      readonly undescribed: readonly UndescribedImage[];
+    }
+  | { readonly outcome: 'refused'; readonly message: string }
+  | {
+      readonly outcome: 'conflict';
+      /** The document as the form loaded it, which only an edit has. */
+      readonly document: Document;
+      /** The recording the form resolved to. */
+      readonly recording: Enclosure | undefined;
+      readonly conflict: Conflict;
+    };
+
+/**
+ * The write path behind the editor and Micropub (TASK-164): one form in, one
+ * file out, announced to every subscriber.
+ *
+ * The order matters: the form is checked before anything is touched, the
+ * on-disk file is re-hashed and compared with the hash the form loaded with
+ * (doc-1's conflict rule), and only then is a file written. A write that is
+ * refused leaves the content directory exactly as it was.
+ */
+export async function writeDocument(
+  site: DocumentSite,
+  write: DocumentWrite,
+): Promise<WriteOutcome> {
+  const { store, config, writer } = site;
+  const { kind, document, form, draft } = write;
+  const contentDir = config.contentDir;
+
+  function refused(message: string): WriteOutcome {
+    return { outcome: 'refused', message };
+  }
+
   // A post with no title is a note; a page is always named.
   if (form.title === '' && kind.type === 'page') {
-    return refuse(`A ${kind.singular} needs a title.`);
+    return refused(`A ${kind.singular} needs a title.`);
   }
 
   // A post is a reply only when the target is a URL (Post Type Discovery), so
   // anything else would be saved as a reply that is not one.
   if (kind.type === 'post' && form.inReplyTo !== '' && replyTarget(form) === undefined) {
-    return refuse('In reply to has to be a web address, like https://example.com/a-post/.');
+    return refused('In reply to has to be a web address, like https://example.com/a-post/.');
   }
 
   if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
-    return refuse('That is not a language tag, such as en, fr or pt-BR.');
+    return refused('That is not a language tag, such as en, fr or pt-BR.');
   }
 
   let recording: Enclosure | undefined;
@@ -402,18 +484,21 @@ async function saveFromForm(
       document === undefined ? undefined : enclosureOf(document.extra),
       contentDir,
     );
-    if ('error' in resolved) return refuse(resolved.error);
+    if ('error' in resolved) return refused(resolved.error);
     recording = resolved.enclosure;
   }
 
   // TASK-207: a pin is new when the file does not carry one yet, and only a
   // new one can take an author past Mastodon's limit.
   if (form.pinned && (document === undefined || pinnedAt(document) === undefined)) {
-    const users = listUsers(c.var.config.dataDir);
-    const author = userForAuthor(users, chosenAuthor(c, form.author, document) ?? '');
+    const users = listUsers(config.dataDir);
+    const author = userForAuthor(
+      users,
+      chosenAuthor(config.dataDir, form.author, document, writer) ?? '',
+    );
     const names = author === undefined ? [] : authorNames(users, author);
     if (store.listPinnedByAuthor(names).length >= PINNED_POST_LIMIT) {
-      return refuse(`You can pin up to ${String(PINNED_POST_LIMIT)} posts. Unpin one first.`);
+      return refused(`You can pin up to ${String(PINNED_POST_LIMIT)} posts. Unpin one first.`);
     }
   }
 
@@ -422,21 +507,21 @@ async function saveFromForm(
   const undescribed = draft
     ? []
     : undescribedImages(renderMarkdown(form.body), readAltTexts(contentDir));
-  if (undescribed.length > 0 && c.var.config.requireAltText) {
-    return refuse(`This site publishes no image without alt text. ${missingAltText(undescribed)}`);
+  if (undescribed.length > 0 && config.requireAltText) {
+    return refused(`This site publishes no image without alt text. ${missingAltText(undescribed)}`);
   }
 
-  const timezone = siteTimezone(c);
+  const timezone = readSiteSettings(contentDir).timezone;
 
   // decision-11: what the file gets is a UTC instant, and an offset-less field
   // is the site's own wall clock rather than the server's.
   const typed = kind.dated ? (form.date === '' ? store.now().toISOString() : form.date) : undefined;
   if (typed !== undefined && !/^\d{4}-\d{2}-\d{2}/.test(typed)) {
-    return refuse('A date has to start with a year, a month and a day, like 2026-03-04.');
+    return refused('A date has to start with a year, a month and a day, like 2026-03-04.');
   }
   const date = typed === undefined ? undefined : toUtcInstant(typed, timezone);
   if (typed !== undefined && date === undefined) {
-    return refuse('That date is not one anybody can read. Try 2026-03-04 09:00.');
+    return refused('That date is not one anybody can read. Try 2026-03-04 09:00.');
   }
 
   const slug =
@@ -484,19 +569,12 @@ async function saveFromForm(
   if (document !== undefined) {
     const conflict = await conflictWith(contentDir, document, form.hash);
     if (conflict !== undefined) {
-      return renderConflict(c, {
-        kind,
-        render,
-        document,
-        form: { ...form, draft },
-        recording,
-        conflict,
-      });
+      return { outcome: 'conflict', document, recording, conflict };
     }
   }
 
   if (target !== document?.path && store.getByPath(target) !== undefined) {
-    return refuse(`Another ${kind.singular} already lives in ${target}.`);
+    return refused(`Another ${kind.singular} already lives in ${target}.`);
   }
 
   const content: DocumentContent = {
@@ -509,9 +587,9 @@ async function saveFromForm(
     categories: kind.categorised ? splitTags(form.categories) : [],
     draft,
     ...(form.description === '' ? {} : { description: form.description }),
-    ...optional('author', chosenAuthor(c, form.author, document)),
+    ...optional('author', chosenAuthor(config.dataDir, form.author, document, writer)),
     ...optional('inReplyTo', replyTo(kind, form, document)),
-    ...optional('activitypub', keptIdentity(document, promised, permalink, c.var.config.baseUrl)),
+    ...optional('activitypub', keptIdentity(document, promised, permalink, config.baseUrl)),
     extra: resolveExtra(
       kind,
       document,
@@ -534,7 +612,7 @@ async function saveFromForm(
   } catch (error) {
     // Nothing was written, so the row that was taken out of the way goes back.
     if (renamedFrom !== undefined) store.upsert(renamedFrom);
-    if (error instanceof DuplicatePermalinkError) return refuse(error.message);
+    if (error instanceof DuplicatePermalinkError) return refused(error.message);
     throw error;
   }
 
@@ -548,7 +626,7 @@ async function saveFromForm(
   // back to the file — the federation stamping `activitypub` into a post it
   // has just announced — has finished before the editor is reloaded with a
   // hash that would otherwise be one save behind.
-  await c.var.announce({
+  await site.announce({
     type: document === undefined ? 'created' : 'updated',
     path: saved.path,
     previous: document,
@@ -556,13 +634,11 @@ async function saveFromForm(
     origin: 'admin',
   });
 
-  flash(c, 'notice', savedMessage(kind, document, saved, store.now()));
-  if (undescribed.length > 0) flash(c, 'warning', missingAltText(undescribed));
-  return c.redirect(editorPath(kind, saved.slug), 303);
+  return { outcome: 'saved', saved, undescribed };
 }
 
 /** What a save says about the images it found with no alt text, naming each. */
-function missingAltText(images: UndescribedImage[]): string {
+function missingAltText(images: readonly UndescribedImage[]): string {
   const names = images.map((image) => image.name).join(', ');
   const count = images.length === 1 ? '1 image has' : `${String(images.length)} images have`;
   return (
@@ -894,13 +970,14 @@ function currentUsername(c: Context<GeekityEnv>): string | undefined {
  * save, and neither is a reason to reattribute somebody's post.
  */
 function chosenAuthor(
-  c: Context<GeekityEnv>,
+  dataDir: string,
   submitted: string,
   document: Document | undefined,
+  writer: string | undefined,
 ): string | undefined {
-  const named = userForAuthor(listUsers(c.var.config.dataDir), submitted);
+  const named = userForAuthor(listUsers(dataDir), submitted);
   if (named !== undefined) return named.username;
-  return document?.author ?? currentUsername(c);
+  return document?.author ?? writer;
 }
 
 /** One entry of the editor's Author select. */

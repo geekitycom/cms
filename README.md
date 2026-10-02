@@ -1475,6 +1475,29 @@ gets 401. It answers these queries:
 A query with no `q`, or one the endpoint does not answer, gets 400
 `invalid_request`. The endpoint answers 503 in maintenance mode.
 
+A `POST` creates a post. The token needs the create scope, and a token without
+it gets 403 `insufficient_scope`. The body is form-encoded (`h=entry`),
+multipart, or JSON (`{"type": ["h-entry"], "properties": {…}}`). The post is
+written exactly as the admin editor writes a new post, by the user the token
+belongs to, and publishing it sends webmentions and federates as an editor
+publish does. The site answers 201 with a `Location` header naming the new
+post's URL. The properties it understands are:
+
+- `name` becomes the title. A post without one is a note.
+- `content` becomes the body. Plain text is kept as Markdown, and
+  `{"html": "…"}` is kept as HTML.
+- `summary` becomes the description.
+- `category` becomes the tags, one tag per value.
+- `in-reply-to` makes the post a reply to that URL.
+- `published` becomes the date. Without it, the post is dated now.
+- `post-status` is `published` or `draft`. A draft is not published,
+  federated or sent webmentions.
+- `mp-slug` sets the slug.
+
+Any other type or property, such as `h=event`, `like-of` or `photo`, gets 400
+`invalid_request` with a description that names it, and nothing is written.
+decision-27 records the mapping.
+
 ## The theme
 
 Templates are Nunjucks (decision-4). The default theme lives in
