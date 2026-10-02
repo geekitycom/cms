@@ -1,5 +1,5 @@
 import type { Context } from '@fedify/fedify';
-import { Activity, getTypeId, PUBLIC_COLLECTION, Update } from '@fedify/vocab';
+import { Activity, getTypeId, PUBLIC_COLLECTION } from '@fedify/vocab';
 import type { Recipient } from '@fedify/vocab';
 
 import { listUsers } from '../admin/accounts.ts';
@@ -14,7 +14,7 @@ import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { documentContent } from '../content/writer.ts';
 import { authorNames } from '../web/authors.ts';
-import { actorId, senderKeyPairs, userActor } from './actor.ts';
+import { ActorUpdate, actorId, senderKeyPairs, userActor } from './actor.ts';
 import {
   articleObjectId,
   documentAuthor,
@@ -397,7 +397,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         // times the followers have to be told rather than recognise an id
         // they have already seen and skip it.
         const activityId = updateActivityId(id, new Date().toISOString());
-        const activity = new Update({
+        const activity = new ActorUpdate({
           id: activityId,
           actor: id,
           object: actor,
