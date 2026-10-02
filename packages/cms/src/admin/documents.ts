@@ -1170,7 +1170,53 @@ interface MoveDocumentOptions {
 }
 
 /**
- * Move a document into `content/_trash/` or back out of it.
+ * Move a document into the trash or back out of it from the editor, and go
+ * back where the form came from.
+ */
+async function moveDocument(
+  c: Context<GeekityEnv>,
+  options: MoveDocumentOptions,
+): Promise<Response> {
+  const { kind, document, action } = options;
+
+  const trashed = isTrashedPath(document.path);
+  if (action === 'trash' && trashed) return backTo(c, options, `It is already in the trash.`);
+  if (action === 'restore' && !trashed) return backTo(c, options, `It is not in the trash.`);
+
+  const moved = await moveDocumentFile(
+    { store: c.var.store, contentDir: c.var.config.contentDir, announce: c.var.announce },
+    document,
+    action,
+  );
+  if (moved === undefined) {
+    return backTo(c, options, `Could not move ${document.path}. Is the file still there?`);
+  }
+
+  const message =
+    action === 'trash'
+      ? `Moved to the trash: ${postLabel(document)}`
+      : `Restored: ${postLabel(document)}`;
+  flash(c, 'notice', message);
+
+  return c.redirect(
+    returnPath(options.returnTo) ??
+      (action === 'trash' ? kind.basePath : editorPath(kind, document.slug)),
+    303,
+  );
+}
+
+/** What moving a document's file needs from the site. */
+export interface MoveSite {
+  readonly store: ContentStore;
+  readonly contentDir: string;
+  readonly announce: (change: DocumentChange) => Promise<void>;
+}
+
+/**
+ * Move a document into `content/_trash/` or back out of it, the move behind
+ * the editor's trash and restore and Micropub's delete and undelete
+ * (TASK-167). The document is the moved one, or `undefined` when its file
+ * could not be moved.
  *
  * The trash mirrors the content tree — `posts/2026-03-04-x.md` becomes
  * `_trash/posts/2026-03-04-x.md` — so restoring is the same move backwards and
@@ -1178,18 +1224,12 @@ interface MoveDocumentOptions {
  * landed rather than waiting for the watcher, so the public site stops or
  * starts serving the document with this request (doc-1).
  */
-async function moveDocument(
-  c: Context<GeekityEnv>,
-  options: MoveDocumentOptions,
-): Promise<Response> {
-  const { kind, document, action } = options;
-  const store = c.var.store;
-  const contentDir = c.var.config.contentDir;
-
-  const trashed = isTrashedPath(document.path);
-  if (action === 'trash' && trashed) return backTo(c, options, `It is already in the trash.`);
-  if (action === 'restore' && !trashed) return backTo(c, options, `It is not in the trash.`);
-
+export async function moveDocumentFile(
+  site: MoveSite,
+  document: Document,
+  action: 'trash' | 'restore',
+): Promise<Document | undefined> {
+  const { store, contentDir } = site;
   const target =
     action === 'trash'
       ? `${TRASH_DIRECTORY}/${document.path}`
@@ -1207,7 +1247,7 @@ async function moveDocument(
     await mkdir(path.dirname(to), { recursive: true });
     await rename(from, to);
   } catch {
-    return backTo(c, options, `Could not move ${document.path}. Is the file still there?`);
+    return undefined;
   }
 
   const moved = parseDocument(source, { path: target, type: document.type });
@@ -1216,25 +1256,14 @@ async function moveDocument(
 
   // Trashing takes a post off the public site and restoring puts it back, so
   // both are visibility changes a subscriber has to hear about.
-  await c.var.announce({
+  await site.announce({
     type: 'updated',
     path: target,
     previous: document,
     next: moved,
     origin: 'admin',
   });
-
-  const message =
-    action === 'trash'
-      ? `Moved to the trash: ${postLabel(document)}`
-      : `Restored: ${postLabel(document)}`;
-  flash(c, 'notice', message);
-
-  return c.redirect(
-    returnPath(options.returnTo) ??
-      (action === 'trash' ? kind.basePath : editorPath(kind, document.slug)),
-    303,
-  );
+  return moved;
 }
 
 /** Report a move that did not happen and go back where the form came from. */

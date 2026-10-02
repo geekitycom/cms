@@ -83,7 +83,7 @@ describe('q=config', () => {
       { type: 'reply', name: 'Reply' },
       { type: 'photo', name: 'Photo' },
     ]);
-    assert.deepEqual(config['q'], ['config', 'syndicate-to', 'category']);
+    assert.deepEqual(config['q'], ['config', 'syndicate-to', 'category', 'source']);
   });
 
   it('accepts a token bound to the site as its resource', async () => {

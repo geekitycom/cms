@@ -69,10 +69,7 @@ export function fromJson(body: unknown): CreateRequest | { readonly error: strin
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return { error: 'A JSON request is an object with type and properties.' };
   }
-  const { type, properties, action } = body as Record<string, unknown>;
-  if (action !== undefined) {
-    return { error: `This endpoint does not support action=${JSON.stringify(action)}.` };
-  }
+  const { type, properties } = body as Record<string, unknown>;
   if (!Array.isArray(type) || type.length !== 1 || typeof type[0] !== 'string') {
     return { error: 'A JSON request names exactly one type, such as ["h-entry"].' };
   }

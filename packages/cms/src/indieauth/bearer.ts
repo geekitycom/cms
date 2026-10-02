@@ -61,17 +61,25 @@ export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
     }
 
     if (guard.scope !== undefined && !token.scopes.includes(guard.scope)) {
-      const description = `The access token was not granted the ${guard.scope} scope.`;
-      return refuse(c, 403, 'insufficient_scope', description, {
-        error: 'insufficient_scope',
-        scope: guard.scope,
-      });
+      return insufficientScope(c, guard.scope);
     }
 
     await recordUse(config.dataDir, token, now);
     c.set('bearer', { token, user });
     await next();
   };
+}
+
+/**
+ * The 403 for a token that lacks `scope`, for a route that only learns which
+ * scope it needs from the request, as a Micropub POST does from its action.
+ */
+export function insufficientScope(c: Context<BearerEnv>, scope: Scope): Response {
+  const description = `The access token was not granted the ${scope} scope.`;
+  return refuse(c, 403, 'insufficient_scope', description, {
+    error: 'insufficient_scope',
+    scope,
+  });
 }
 
 async function presentedToken(c: Context): Promise<string | undefined> {

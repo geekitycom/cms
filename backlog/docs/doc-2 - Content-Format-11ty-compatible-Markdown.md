@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-02 15:52'
+updated_date: '2026-10-02 16:30'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -137,6 +137,8 @@ A post created over Micropub (TASK-164) is written by the editor's own write pat
 | `photo`, each value | an entry in `photo`: a URL, or `{ "value": "…", "alt": "…" }` with its `alt`. A URL into the site's own uploads is written as its `/uploads/…` path. A file part of a multipart create is stored in the media library as the media endpoint stores one, and its path written; it is taken back out if the post is refused |
 
 The token's user is `author`. Only `h-entry` is created. Any other type or property, a second value where one is expected, or a value that is not text is refused by name and nothing is written.
+
+An update (TASK-167) reads the same table backwards: `q=source` answers a post's front matter as those properties, with an upload's path as its absolute URL, and `action=update` applies `replace`, `add` and `delete` to them, fills only the editor fields the named properties own, and leaves every other key as it was. `mp-slug` and any property outside the table are refused, so an update moves a URL only where an editor save with the same date would, which is a draft nobody has been shown. `action=delete` moves the file into `content/_trash/` as the editor's Move to trash does, and `action=undelete` moves it back. A post whose `author` is another user is refused.
 
 ## Markdown dialect
 

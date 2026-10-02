@@ -1471,6 +1471,10 @@ gets 401. It answers these queries:
 - `?q=category` lists every tag and category on a published post, once each,
   in alphabetical order. Add `&filter=` to keep only the terms that contain
   that text, ignoring case.
+- `?q=source&url=…` answers a post's properties as JSON, in the same mapping a
+  create takes, so a client can edit them and send them back. A photo in the
+  media library is given as its absolute URL. Add `&properties[]=content`,
+  once per property, to get only those properties, without the type.
 
 A query with no `q`, or one the endpoint does not answer, gets 400
 `invalid_request`. The endpoint answers 503 in maintenance mode.
@@ -1504,6 +1508,29 @@ post's URL. The properties it understands are:
 Any other type or property, such as `h=event`, `like-of` or `location`, gets 400
 `invalid_request` with a description that names it, and nothing is written.
 decision-27 records the mapping.
+
+A `POST` with an `action` changes a post that already exists. The `url` names
+the post by its URL on this site. A URL that is not a post here gets 400
+`invalid_request`, and a post written by another user gets 403 `forbidden`.
+The same is true of `?q=source`.
+
+- `action=update` needs the update scope and a JSON body, as in
+  `{"action": "update", "url": "…", "replace": {"content": ["…"]}}`. `replace`
+  sets a property's values, `add` adds values to it, and `delete` takes the
+  values it lists away, or, given a list of property names, the whole
+  properties. Only the properties it names change. It accepts the properties
+  a create accepts except `mp-slug`. The post is saved exactly as an editor
+  save, so it is stamped updated, federates an `Update` and sends webmentions.
+  An editor that has the post open reports a conflict on its next save
+  instead of overwriting the update. The site answers 204, or 201 with a
+  `Location` header when the post's URL moved, which only a re-dated draft can
+  do.
+- `action=delete` needs the delete scope. It moves the post to the trash, as
+  the editor's Move to trash does: the post leaves the site, its feeds and
+  search, and federates a `Delete`. The body is form-encoded or JSON. The site
+  answers 204.
+- `action=undelete` needs the delete scope. It restores the post from the
+  trash and answers 204.
 
 The media endpoint at `/_geekity/micropub/media` takes the file a client
 uploads before it names it in a post. The token needs the media scope, and a
