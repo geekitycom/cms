@@ -4,7 +4,7 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 20:45'
+updated_date: '2026-10-02 23:44'
 labels:
   - micropub
   - indieauth
@@ -173,4 +173,8 @@ Gaps, most common first:
 7. Legacy 'post' scope: Quill offers it as a radio at sign-in; request.ts drops it silently, so every create then fails insufficient_scope. Rare.
 
 Need a data-model decision first (not filed): location (geo: URI from the note editor, opt-in in Quill), rsvp (replies to h-events; Post Type Discovery treats rsvp as its own type), code posts (p3k-content-type code/<lang>), and the editors Quill already hides for this site: event (h-event, sends some properties not in lists), review (h-review), itinerary, exercise, weight.
+
+## Quill location (2026-10-02, shll.me after PR #95)
+
+Quill now posts. With its location checkbox on, a note is refused: 'This endpoint does not understand location.' Quill sends a geo: URI, 'geo:LAT,LNG;u=ACC', rounded to five decimals (views/new-post.php:591). Filed as TASK-223, which starts with a privacy decision on how much of a location the site publishes.
 <!-- SECTION:NOTES:END -->
