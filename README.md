@@ -1365,6 +1365,14 @@ metadata document itself is served at `/_geekity/indieauth/metadata` and at
 `/.well-known/oauth-authorization-server` (RFC 8414), where generic OAuth and
 MCP clients look for it.
 
+The same pages also carry `rel="authorization_endpoint"` and
+`rel="token_endpoint"`, in the `Link` header and in the head, naming the same
+two URLs as the metadata document. Some Micropub apps, such as iA Writer, look
+only for these older links and do not read the metadata, and the IndieAuth spec
+asks clients to check them for compatibility with earlier versions. The links
+relax nothing: the site still refuses a sign-in request that has no S256 PKCE
+`code_challenge`, so an app that sends none still cannot sign in.
+
 When a client sends you to the site, you sign in to the admin if you are not
 signed in already, and then see a consent screen. It names the app (or its
 URL when the app publishes no name), the host it will send you back to, the

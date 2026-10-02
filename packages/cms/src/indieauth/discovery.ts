@@ -145,9 +145,10 @@ function isIdentityPath(pathname: string): boolean {
 }
 
 /**
- * Point every identity URL at the metadata (TASK-157) and the Micropub
- * endpoint (TASK-163), each with a `Link` header and a `<link>` before
- * `</head>`.
+ * Point every identity URL at the metadata (TASK-157), at the authorization
+ * and token endpoints for clients that predate the metadata (TASK-220), and at
+ * the Micropub endpoint (TASK-163), each with a `Link` header and a `<link>`
+ * before `</head>`.
  *
  * Added to the response rather than left to the layouts so that every theme
  * carries them, a custom one that replaces the packaged base layout included. A
@@ -160,8 +161,11 @@ export const advertiseIdentityEndpoints: MiddlewareHandler<GeekityEnv> = async (
   if (status !== 304 && (status < 200 || status >= 300)) return;
 
   const baseUrl = siteBaseUrl(c);
+  const metadata = authorizationServerMetadata(baseUrl);
   const links = [
     { rel: 'indieauth-metadata', href: `${baseUrl}${INDIEAUTH_METADATA_PATH}` },
+    { rel: 'authorization_endpoint', href: metadata.authorization_endpoint },
+    { rel: 'token_endpoint', href: metadata.token_endpoint },
     { rel: 'micropub', href: `${baseUrl}${MICROPUB_PATH}` },
   ];
   for (const { rel, href } of links) c.res.headers.append('link', `<${href}>; rel="${rel}"`);
