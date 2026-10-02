@@ -26,7 +26,7 @@ import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf, playsAsVideo } from '../content/enclosure.ts';
-import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
+import { canonicalType, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import { readAltTexts } from '../images/alt-text.ts';
 import { imagesIn } from '../images/markup.ts';
 import type { ContentStore } from '../content/store.ts';
@@ -311,7 +311,7 @@ function imageAttachments(
     attachments.push(
       new Image({
         url: new URL(absoluteUrl(image.src, config.baseUrl)),
-        mediaType: media.declared[0] ?? null,
+        mediaType: canonicalType(media) ?? null,
         name: alt === '' ? null : alt,
       }),
     );

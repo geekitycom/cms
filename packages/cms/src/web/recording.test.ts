@@ -1,9 +1,3 @@
-/**
- * A post's recording on its page in the default theme (TASK-213 AC #10): the
- * browser's own player for the main file, links to the other versions and to
- * the transcript, and nothing at all on a post without one. Asserted over
- * HTTP, because the markup is the behaviour.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

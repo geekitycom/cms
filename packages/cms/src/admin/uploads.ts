@@ -190,6 +190,17 @@ export function uploadLimit(
 }
 
 /**
+ * The most any upload may weigh. The headers do not say what a file is, so a
+ * check made before reading it can only hold it to the larger limit, and
+ * {@link storeUpload} holds each file to its own once it knows.
+ */
+function largestUploadLimit(
+  config: Pick<ResolvedConfig, 'uploadMaxBytes' | 'uploadMediaMaxBytes'>,
+): number {
+  return Math.max(config.uploadMaxBytes, config.uploadMediaMaxBytes);
+}
+
+/**
  * Refuse an oversized upload by its headers, before anything reads it.
  *
  * This is registered in front of the admin guard on purpose. The guard finds
@@ -204,10 +215,7 @@ export const refuseOversizedUpload: MiddlewareHandler<GeekityEnv> = async (c, ne
   if (c.req.method !== 'POST') return next();
 
   const declared = Number(c.req.header('content-length') ?? '');
-  // The headers do not say what the file is, so this lets through anything
-  // the larger of the two limits would, and {@link storeUpload} holds each
-  // file to its own once it knows.
-  const limit = Math.max(c.var.config.uploadMaxBytes, c.var.config.uploadMediaMaxBytes);
+  const limit = largestUploadLimit(c.var.config);
   if (Number.isFinite(declared) && declared > limit + UPLOAD_ENVELOPE_BYTES) {
     // JSON for the editor's control, which reads it, and plain text for the
     // media screen's form, which is a navigation: a browser that has just

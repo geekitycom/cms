@@ -65,10 +65,6 @@ function field(html: string, name: string): string | undefined {
   return match?.[1];
 }
 
-/**
- * The recording fields a browser would send back from a rendered editor: every
- * text field as it was filled in, and each select's chosen option.
- */
 function recordingFields(html: string): Record<string, string> {
   const fields: Record<string, string> = {};
   for (const [, name = '', value = ''] of html.matchAll(

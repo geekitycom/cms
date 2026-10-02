@@ -23,7 +23,7 @@ import {
 } from '../content/enclosure.ts';
 import type { Document } from '../content/document.ts';
 import type { AlternateEnclosure, Enclosure, Transcript } from '../content/enclosure.ts';
-import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
+import { canonicalType, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import type { UploadMediaType } from '../content/media.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { listUploads } from './media.ts';
@@ -67,6 +67,15 @@ export const ENCLOSURE_FIELDS = {
   },
 } as const;
 
+/** The empty row the editor adds so a form with no script can add a version. */
+export const BLANK_ALTERNATE_ROW: AlternateRow = {
+  url: '',
+  type: '',
+  title: '',
+  height: '',
+  lang: '',
+};
+
 /** No recording. */
 export const BLANK_ENCLOSURE_FORM: EnclosureForm = {
   url: '',
@@ -94,7 +103,7 @@ export function enclosureForm(document: Document): EnclosureForm {
   }
   return {
     url: enclosure.url,
-    duration: enclosure.duration === undefined ? '' : clockTime(enclosure.duration),
+    duration: enclosure.duration === undefined ? '' : formatDuration(enclosure.duration),
     transcriptUrl: enclosure.transcript?.url ?? '',
     transcriptType: enclosure.transcript?.type ?? '',
     alternates: enclosure.alternates.map((alternate) => ({
@@ -157,14 +166,14 @@ export function resolveEnclosure(
 ): ResolvedEnclosure {
   if (form.url === '') return { enclosure: undefined };
 
-  const main = uploaded(form.url, contentDir, ['audio', 'video']);
+  const main = measuredUpload(form.url, contentDir, ['audio', 'video']);
   if (main === undefined) {
     return { error: 'The recording has to be an audio or video file in the media library.' };
   }
 
   let duration: number | undefined;
   if (form.duration !== '') {
-    duration = seconds(form.duration);
+    duration = parseDuration(form.duration);
     if (duration === undefined) {
       return {
         error: 'A duration is seconds, or minutes and seconds like 30:34, or hours like 1:02:03.',
@@ -288,7 +297,7 @@ function resolveAlternate(
   };
 
   if (isUploadUrl(row.url)) {
-    const file = uploaded(row.url, contentDir, ['audio', 'video']);
+    const file = measuredUpload(row.url, contentDir, ['audio', 'video']);
     if (file === undefined) {
       return {
         error: `${row.url} is not an audio or video file in the media library.`,
@@ -312,8 +321,7 @@ function resolveAlternate(
   return { url: row.url, type, ...(length === undefined ? {} : { length }), ...described };
 }
 
-/** An upload of one of these kinds, with what the table and the disk say it is. */
-function uploaded(
+function measuredUpload(
   url: string,
   contentDir: string,
   kinds: readonly UploadMediaType['kind'][],
@@ -322,19 +330,18 @@ function uploaded(
   const media = UPLOAD_MEDIA_TYPES.get(path.extname(url).toLowerCase());
   if (media === undefined || !kinds.includes(media.kind)) return undefined;
   const asset = findUpload(url.slice(UPLOAD_ASSET_PREFIX.length), contentDir);
-  const type = media.declared[0];
+  const type = canonicalType(media);
   if (asset === undefined || type === undefined || asset.stats.size === 0) return undefined;
   return { type, length: asset.stats.size };
 }
 
-/** The transcript type an upload's extension implies, for the ones a feed can carry. */
 function transcriptTypeFor(extension: string): Transcript['type'] | undefined {
-  const declared = UPLOAD_MEDIA_TYPES.get(extension)?.declared[0];
+  const media = UPLOAD_MEDIA_TYPES.get(extension);
+  const declared = media === undefined ? undefined : canonicalType(media);
   return TRANSCRIPT_TYPES.find((known) => known === declared);
 }
 
-/** `1834`, `30:34` or `1:02:03` as seconds; `undefined` for anything else. */
-function seconds(value: string): number | undefined {
+function parseDuration(value: string): number | undefined {
   const parts = value.split(':');
   if (parts.length > 3 || !parts.every((part) => /^\d+$/.test(part))) return undefined;
   const numbers = parts.map(Number);
@@ -343,8 +350,7 @@ function seconds(value: string): number | undefined {
   return total > 0 ? total : undefined;
 }
 
-/** Seconds as the editor shows them: `30:34`, or `1:02:03` past the hour. */
-function clockTime(total: number): string {
+function formatDuration(total: number): string {
   if (!Number.isInteger(total)) return String(total);
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);

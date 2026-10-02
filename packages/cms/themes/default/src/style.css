@@ -660,8 +660,6 @@
     @apply text-[1.08rem] leading-[1.65];
   }
 
-  /* A post's recording (TASK-213): the player as wide as the words, its other
-     versions and its transcript under it in the meta line's small type. */
   .post-recording {
     @apply my-8;
   }

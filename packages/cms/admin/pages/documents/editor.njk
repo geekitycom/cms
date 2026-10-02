@@ -64,12 +64,6 @@
       </div>
 
       {% if kind.type == "post" %}
-        {# TASK-213: one audio or video file from the media library, which the
-           feeds carry as the post's enclosure and the theme plays, plus its
-           transcript and any other versions of it. The server reads the file's
-           type and size off the upload, so the form never asks for them. The
-           version rows are numbered, with one blank row on the end, so adding,
-           editing and removing all work as a plain form. #}
         <fieldset class="admin-editor-enclosure">
           <legend>Recording</legend>
 

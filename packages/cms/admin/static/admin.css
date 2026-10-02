@@ -490,8 +490,6 @@ button[type='submit']:hover,
   min-height: 28rem;
 }
 
-/* A post's recording (TASK-213), under the body it goes with. */
-
 .admin-editor-enclosure {
   margin: 1.25rem 0 0;
   padding: 0.75rem 1rem 1rem;

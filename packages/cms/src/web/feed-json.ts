@@ -156,11 +156,6 @@ export function jsonFeedItem(item: FeedItem): JsonFeedItem {
   return entry;
 }
 
-/**
- * A recording as attachments: the main file first, then the other versions.
- * Every version is the same recording, so the duration goes on each one that
- * plays.
- */
 function attachments(enclosure: Enclosure): JsonFeedAttachment[] {
   const { duration } = enclosure;
   return [enclosure, ...enclosure.alternates].map((version) => {

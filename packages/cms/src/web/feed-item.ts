@@ -234,7 +234,6 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   return item;
 }
 
-/** A recording with each of its URLs absolute; one that already is stays as it is. */
 function absoluteEnclosure(enclosure: Enclosure, baseUrl: string): Enclosure {
   const { transcript } = enclosure;
   return {

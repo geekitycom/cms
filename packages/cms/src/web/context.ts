@@ -279,8 +279,6 @@ export function documentContext(
     ...optional('inReplyTo', replyTarget(document)),
     // Over the raw front-matter value the spread above put here.
     lang: documentLanguage(document),
-    // Over the raw front matter too: a recording that is missing what a player
-    // needs is no recording, rather than a broken one.
     enclosure: enclosureContext(document),
     label: postLabel(document),
     ...optional('date', date),

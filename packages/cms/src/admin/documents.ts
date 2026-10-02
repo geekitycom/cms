@@ -43,6 +43,7 @@ import { ADMIN_PREFIX } from './session.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { UPLOADS_PATH } from './uploads.ts';
 import {
+  BLANK_ALTERNATE_ROW,
   BLANK_ENCLOSURE_FORM,
   ENCLOSURE_FIELDS,
   enclosureChoices,
@@ -382,8 +383,6 @@ async function saveFromForm(
     return refuse('That is not a language tag, such as en, fr or pt-BR.');
   }
 
-  // TASK-213: the recording is checked against the media library, and what
-  // only the file can say — its type and its length — is read off it here.
   let recording: Enclosure | undefined;
   if (kind.type === 'post') {
     const resolved = resolveEnclosure(
@@ -782,8 +781,6 @@ function resolveExtra(
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
 
-  // A post's recording is written whole or not at all (TASK-213): without a
-  // main file there is nothing for the other versions to be versions of.
   if (kind.type === 'post') {
     if (recording === undefined) delete extra[ENCLOSURE_FRONT_MATTER_KEY];
     else extra[ENCLOSURE_FRONT_MATTER_KEY] = enclosureFrontMatter(recording);
@@ -1320,12 +1317,7 @@ async function renderEditor(
           enclosureFields: ENCLOSURE_FIELDS,
           enclosureChoices: await enclosureChoices(c.var.config.contentDir, form.enclosure.url),
           transcriptTypes: TRANSCRIPT_TYPES,
-          // The rows there are, and one blank one, so a form with no script
-          // can add a version as well as edit and remove them.
-          alternateRows: [
-            ...form.enclosure.alternates,
-            { url: '', type: '', title: '', height: '', lang: '' },
-          ],
+          alternateRows: [...form.enclosure.alternates, BLANK_ALTERNATE_ROW],
         }
       : {}),
     // Who this can be attributed to, and who it is attributed to now.

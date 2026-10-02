@@ -160,9 +160,9 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
       kind: 'document',
     },
   ],
-  // Transcripts and captions for a post's enclosure. WebVTT opens with its
-  // name, after a byte order mark when the editor that wrote it added one.
-  // SubRip has no header, so it is taken as text like the two formats above.
+  // WebVTT opens with its name, after a byte order mark when the editor that
+  // wrote it added one. SubRip has no header, so it is taken as text like the
+  // two formats above.
   [
     '.vtt',
     {
@@ -181,8 +181,6 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
       kind: 'document',
     },
   ],
-  // Audio and video, for a post's enclosure. The first declared type of each
-  // is the one a feed announces, so it is the most widely understood one.
   [
     '.mp3',
     {
@@ -245,6 +243,15 @@ export function normalizeUploadType(value: string): string {
   const trimmed = value.trim().toLowerCase();
   if (trimmed === '') return '';
   return trimmed.startsWith('.') ? trimmed : `.${trimmed}`;
+}
+
+/**
+ * The media type a feed or an attachment announces for this kind of file: the
+ * first one {@link UploadMediaType.declared} lists, which is the registered
+ * name where a browser may also send an older one.
+ */
+export function canonicalType(media: UploadMediaType): string | undefined {
+  return media.declared[0];
 }
 
 /**

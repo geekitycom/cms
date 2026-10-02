@@ -9,6 +9,7 @@ import { resolveNothing } from '../admin/__testing__/harness.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { child, childrenNamed, parseXml } from './__testing__/xml.ts';
+import { FEED_ITEM_REVISION } from './feed-item.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -18,7 +19,6 @@ after(async () => {
   await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-/** A synced CMS over these files, relative paths to contents. */
 async function site(files: Record<string, string | Uint8Array>): Promise<Cms> {
   const contentDir = await mkdtemp(path.join(tmpdir(), 'geekity-enclosure-content-'));
   const dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-enclosure-data-'));
@@ -40,7 +40,6 @@ async function site(files: Record<string, string | Uint8Array>): Promise<Cms> {
   return cms;
 }
 
-/** Two plain posts, with nothing a podcast app would look at. */
 const PLAIN = {
   'posts/2026-09-01-first.md': [
     '---',
@@ -70,12 +69,6 @@ function sha256(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
 
-/**
- * What these posts' three feeds were, byte for byte, before TASK-213. A feed
- * with no recording in it has to stay exactly this, validator included, or
- * every reader polling it would download it again for nothing. A change that
- * means to move them bumps FEED_ITEM_REVISION and these with it.
- */
 const BEFORE_RECORDINGS: Record<string, { etag: string; sha256: string }> = {
   '/feed/': {
     etag: '"fdca69ee8605dfc918f3c5fd2e16c21e"',
@@ -91,7 +84,6 @@ const BEFORE_RECORDINGS: Record<string, { etag: string; sha256: string }> = {
   },
 };
 
-/** A post with a recording, written the way the editor writes one. */
 function episode(enclosure: string[]): string {
   return [
     '---',
@@ -135,6 +127,7 @@ const UNTIMED = episode([
 
 describe('a feed with no recording in it (TASK-213 AC #8)', () => {
   it('prints the bytes and the validator it printed before recordings existed', async () => {
+    assert.equal(FEED_ITEM_REVISION, 6, 'a revision bump moves every ETag; refresh these fixtures');
     const cms = await site(PLAIN);
 
     for (const [url, before] of Object.entries(BEFORE_RECORDINGS)) {

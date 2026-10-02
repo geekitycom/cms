@@ -582,12 +582,10 @@ describe('who a post says wrote it (TASK-67 AC #2)', () => {
   });
 });
 
-/** The bytes of an ASCII string. */
 function ascii(value: string): number[] {
   return [...value].map((character) => character.charCodeAt(0));
 }
 
-/** The head of an ISO base media file of some brand: a box length, `ftyp`, the brand. */
 function isoBaseMedia(brand: string): number[] {
   return [0x00, 0x00, 0x00, 0x20, ...ascii('ftyp'), ...ascii(brand)];
 }

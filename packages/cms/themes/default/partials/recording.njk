@@ -1,13 +1,8 @@
 {#
-  A post's recording (TASK-213): the main file in the browser's own player,
-  then its other versions and its transcript as links.
-
-  `enclosure` is on the context only when the front matter describes one a
-  player can use, and `player` says which element plays it, the same answer
-  that decides the post's attachment type in the fediverse. Timed captions in
-  WebVTT go on a video as a track as well as in the links, since that is the
-  one format a browser shows over the picture. The source carries `u-audio`
-  or `u-video`, so a microformats parser finds the file on the entry.
+  Timed captions in WebVTT go on a video as a track as well as in the links,
+  since that is the one format a browser shows over the picture. The source
+  carries `u-audio` or `u-video`, so a microformats parser finds the file on
+  the entry.
 
   The `preload="metadata"` asks for the length and the first frame and no
   more: a reader who never presses play does not download the episode.

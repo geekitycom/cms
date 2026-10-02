@@ -47,9 +47,6 @@ export function rssFeed(source: FeedSource): string {
   const items = feedItems(documents, source);
   const license = resolveLicense(site);
   const licensed = license !== undefined || items.some((item) => item.license !== undefined);
-  // Each namespace is declared only when something in the feed is in it, so a
-  // feed with no recording is byte for byte what it was before TASK-213. Any
-  // recording prints a podcast element, `podcast:medium` on the channel.
   const recorded = items.some((item) => item.enclosure !== undefined);
   const timed = items.some((item) => item.enclosure?.duration !== undefined);
 
@@ -209,7 +206,6 @@ function recordingElements(enclosure: Enclosure): string[] {
   ];
 }
 
-/** One other version of the recording, as `podcast:alternateEnclosure` with its one source. */
 function alternateEnclosure(alternate: AlternateEnclosure): string[] {
   const attributes = [
     ['type', alternate.type],
