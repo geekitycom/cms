@@ -8,6 +8,7 @@
   {{ field.problem('settings-timezone', problems.timezone) }}
   {{ field.problem('settings-language', problems.language) }}
   {{ field.problem('settings-locale', problems.locale) }}
+  {{ field.problem('settings-icon', problems.icon) }}
 {% endblock %}
 
 {% block settingsFields %}
@@ -41,6 +42,34 @@
   {% set localeHint %}How the public site writes dates and counts, such as <code>en-US</code> for <code>September 2, 2026</code>. Leave it empty to follow the language.{% endset %}
   {{ field.text('settings-locale', fields.locale, 'Locale', form.locale,
        error=problems.locale, hint=localeHint) }}
+
+  {# The favicon, the touch icon, /favicon.ico and the manifest's icons are
+     all cropped to the middle of this one picture, so the hint asks for the
+     shape and size that survive the crop and the 512 pixel manifest icon. #}
+  {% set iconHint %}A square image at least 512 pixels wide, uploaded on <a href="{{ adminUrl }}/media">Media</a>: a path such as <code>/uploads/2026/10/icon.png</code>. It is the favicon, the home screen icon, <code>/favicon.ico</code> and the web app manifest's icon. Anything not square is cropped to its middle.{% endset %}
+  {{ field.text('settings-icon', fields.icon, 'Site icon', form.icon,
+       error=problems.icon, hint=iconHint) }}
+
+  <div class="admin-avatar-current">
+    {% if iconPreview %}
+      <img class="admin-icon-preview" src="{{ iconPreview }}" alt="The current site icon" width="96" height="96" />
+    {% else %}
+      <span class="admin-icon-preview admin-avatar-blank"></span>
+    {% endif %}
+    <p class="admin-hint">
+      {% if iconUnderived and not imageOptimization %}
+        Image optimization is off, so no icons are derived and the site links none.
+      {% elif iconUnderived %}
+        The site cannot derive icons from <code>{{ iconInEffect }}</code>, so it links none.
+      {% elif iconPreview and iconFromAvatar %}
+        The current icon, from the <code>avatar</code> in <code>site.json</code>. Saving this page writes it as the icon; clearing the field leaves the avatar in use.
+      {% elif iconPreview %}
+        The current icon, as a browser tab and a home screen show it.
+      {% else %}
+        The site has no icon yet, so browsers show their own.
+      {% endif %}
+    </p>
+  </div>
 {% endblock %}
 
 {% block settingsPanels %}{% endblock %}

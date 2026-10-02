@@ -9,6 +9,8 @@ import {
   updateFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
+import { parseIconSetting } from '../images/icons.ts';
+import { sourceFile } from '../images/paths.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
@@ -147,6 +149,13 @@ export interface SiteSettings {
    * site, so a hand-edited file is a warning in the log rather than a 500.
    */
   theme: string;
+  /**
+   * The upload the site's icons are derived from, as a path such as
+   * `/uploads/2026/10/icon.png`, or empty for none (TASK-212). Only the
+   * `icon` key: a hand-set `avatar` the icons fall back to is not this
+   * setting, so a save of it never writes one into the other.
+   */
+  icon: string;
   /**
    * The first URL segment the tag archives live under, `tag` by default: one
    * URL-safe path segment, no slashes. WordPress's own base, so a site
@@ -424,6 +433,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   postsPage: '',
   author: '',
   theme: '',
+  icon: '',
   tagBase: DEFAULT_TAXONOMY_BASES.tag,
   categoryBase: DEFAULT_TAXONOMY_BASES.category,
   comments: true,
@@ -473,6 +483,7 @@ export const SETTINGS_FIELDS = {
   postsPage: 'posts_page',
   author: 'author',
   theme: 'theme',
+  icon: 'icon',
   tagBase: 'tag_base',
   categoryBase: 'category_base',
   comments: 'comments',
@@ -524,7 +535,15 @@ export type SettingsProblems = Partial<Record<SettingsField, string>>;
  * with the settings screen there to put it right.
  */
 export function readSiteSettings(contentDir: string): SiteSettings {
-  return settingsFromSiteJson(readSiteJsonSync(siteDataPath(contentDir)));
+  return settingsFromSiteJson(readSiteJson(contentDir));
+}
+
+/**
+ * `content/_data/site.json` as it is, keys the settings do not model and all,
+ * or empty when it is missing or will not parse.
+ */
+export function readSiteJson(contentDir: string): Record<string, unknown> {
+  return readSiteJsonSync(siteDataPath(contentDir));
 }
 
 /**
@@ -557,6 +576,7 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     // Absent is the ordinary state of this one: a site on the packaged theme
     // has never written the key, so anything but a string is that site.
     ...(typeof file['theme'] === 'string' ? { theme: file['theme'] } : {}),
+    ...(typeof file['icon'] === 'string' ? { icon: file['icon'].trim() } : {}),
     // Absent is the ordinary state of these two: a site showing its latest
     // posts writes neither key, so anything but a string is read as none.
     ...(typeof file['homepage'] === 'string' ? { homepage: file['homepage'] } : {}),
@@ -756,8 +776,9 @@ export function siteJsonFor(
   // not a choice a site should have to write down, and a `theme` of `""` would
   // be a name no directory has. `locale` too: a site whose dates follow its
   // language has made no choice to write down.
-  // `author` too: a site with several authors names nobody (TASK-192).
-  for (const key of ['homepage', 'postsPage', 'theme', 'locale', 'author'] as const) {
+  // `author` too: a site with several authors names nobody (TASK-192). And
+  // `icon`, so a cleared icon lets a hand-set `avatar` show through again.
+  for (const key of ['homepage', 'postsPage', 'theme', 'locale', 'author', 'icon'] as const) {
     if (settings[key] === '') delete file[key];
     else file[key] = settings[key];
   }
@@ -937,6 +958,8 @@ export function effectiveBaseUrl(
 export interface SettingsContext {
   /** Where the site's themes are: {@link ResolvedConfig.themesDir}. */
   themesDir?: string | undefined;
+  /** Where the site's content is, uploads and all: {@link ResolvedConfig.contentDir}. */
+  contentDir?: string | undefined;
 }
 
 /**
@@ -1023,6 +1046,8 @@ const FIELD_CHECKS: Record<
     const read = readTheme(path.join(context.themesDir, name));
     return read.ok ? undefined : `There is no theme called "${name}": ${read.reason}`;
   },
+
+  icon: (form, context) => iconProblem(form.icon.trim(), context),
 
   comments: () => undefined,
 
@@ -1157,6 +1182,36 @@ const FIELD_CHECKS: Record<
 };
 
 /** What is wrong with a submitted Content-Signal choice. */
+/**
+ * What stops a typed icon being one the site can derive icons from, or
+ * `undefined` for none. Empty is no icon. The upload has to be there, because
+ * a path to nothing links three icons that 404.
+ */
+function iconProblem(icon: string, context: SettingsContext): string | undefined {
+  if (icon === '') return undefined;
+
+  const parsed = parseIconSetting(icon);
+  if ('problem' in parsed) {
+    return parsed.problem === 'not-an-upload'
+      ? 'The site icon has to be a file in the media library, a path such as /uploads/2026/10/icon.png.'
+      : 'The site icon has to be an image: PNG, JPEG, GIF, WebP, AVIF, TIFF or SVG.';
+  }
+  if (context.contentDir === undefined) return undefined;
+
+  const file = sourceFile({ contentDir: context.contentDir }, parsed.source);
+  return file !== undefined && isFile(file)
+    ? undefined
+    : `There is no upload at ${icon}. Upload the picture on the Media screen first.`;
+}
+
+function isFile(file: string): boolean {
+  try {
+    return statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
 function contentSignalProblem(value: string): string | undefined {
   return isContentSignalChoice(value) ? undefined : 'A content signal is yes, no, or not said.';
 }
@@ -1217,6 +1272,7 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     postsPage: form.homepage.trim() === '' ? '' : form.postsPage.trim(),
     author: form.author.trim(),
     theme: form.theme.trim(),
+    icon: form.icon.trim(),
     tagBase: form.tagBase.trim(),
     categoryBase: form.categoryBase.trim(),
     // A checkbox submits nothing at all when it is clear, which is what the
@@ -1283,6 +1339,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     postsPage: settings.postsPage,
     author: settings.author,
     theme: settings.theme,
+    icon: settings.icon,
     tagBase: settings.tagBase,
     categoryBase: settings.categoryBase,
     comments: settings.comments ? '1' : '',

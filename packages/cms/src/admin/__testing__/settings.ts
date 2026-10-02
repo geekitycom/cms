@@ -25,6 +25,7 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     timezone: 'UTC',
     language: 'en',
     locale: '',
+    icon: '',
   },
   reading: {
     homepage: '',

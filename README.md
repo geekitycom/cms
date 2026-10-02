@@ -932,8 +932,8 @@ offered.
 
 `/admin/settings` holds the values that are a site's own rather than a post's,
 on six pages under the Settings menu: **General** (title, tagline, author, base
-URL, time zone, language, and the locale dates and counts are written in when
-it is not the language), **Reading** (what the homepage displays, posts per
+URL, time zone, language, the locale dates and counts are written in when
+it is not the language, and the site icon), **Reading** (what the homepage displays, posts per
 page, the notify server the feeds advertise), **Permalinks** (the tag and category
 archive bases), **Discussion** (comments and when they close, webmentions sent
 and received, and how long commenter emails, address hashes and contact
@@ -986,6 +986,26 @@ and the General page writes the username at its next save. An `author` that
 names nobody, such as a free-text name, now makes a site with several authors:
 its footer and feeds print the site title instead of the old name. decision-25
 records the shape.
+
+**Site icon** on the General page is the picture a browser tab, a home screen
+and a search box show for the site. It takes the path of an image in the media
+library, such as `/uploads/2026/10/icon.png`, the same form the Avatar field on
+a user's screen takes. Use a square image at least 512 pixels wide: every icon
+is cropped to the middle of it, and the largest one the web app manifest lists
+is 512 pixels. From that one upload the site derives the 32 and 16 pixel
+favicons and the 180 pixel `apple-touch-icon` the head links, `/favicon.ico`,
+the 192, 512 and maskable 512 pixel icons in `/manifest.webmanifest`, and the
+`Image` in `/opensearch.xml`. The page shows the current icon beside the field.
+A full URL, a path outside `/uploads/`, a file that is not an image (PNG, JPEG,
+GIF, WebP, AVIF, TIFF or SVG) and a path with no upload behind it are refused
+with a message that says which, and nothing is saved. Clearing the field takes
+the icon away.
+
+`site.json` stores the path as `icon`, and has no `icon` when the field is
+empty. A `site.json` written by hand with an `avatar` and no `icon` keeps using
+the avatar as its icon. The field shows that avatar, and the next save of the
+General page writes it as `icon`. With image optimization turned off, no icons
+are derived and the site links none.
 
 Nothing on those pages is an ActivityPub profile. Every user is an actor with a
 name, a summary, a picture and links of their own, edited on that user's own

@@ -1671,53 +1671,53 @@ that ship inside the package, deliberately outside the theme search path: a
 site's theme may override any public template, and must not be able to
 shadow the login form.
 
-| Route                                            | What it does                                                                        |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.              |
-| `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                       |
-| `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                   |
-| `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                     |
-| `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                        |
-| `/admin/navigation`                              | Navigation > Menus: every menu the site holds. `POST` saves one menu's items.       |
-| `/admin/navigation/add`                          | `POST` only. Adds an empty menu under the name the form gives.                      |
-| `/admin/navigation/delete`                       | `POST` only. Deletes one menu the active theme renders nowhere.                     |
-| `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it.    |
-| `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.             |
-| `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.         |
-| `/admin/media/alt`                               | `POST` only. Sets a picture's alt text, or marks it decorative, in `media.json`.    |
-| `/admin/comments`                                | Pending, approved and spam, with approve, spam, delete and reply.                   |
-| `/admin/comments/moderate`                       | `POST` only. Approves one comment, files it as spam, or deletes it.                 |
-| `/admin/comments/reply`                          | `POST` only. Posts an approved reply under the comment it answers.                  |
-| `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                               |
-| `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                               |
-| `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                             |
-| `/admin/appearance/themes`                       | Appearance > Themes: the themes on disk. `POST` activates the one named.            |
-| `/admin/tools`                                   | Tools > Content index: what the index holds, and the button that rebuilds it.       |
-| `/admin/tools/rebuild-index`                     | `POST` only. Offers the rebuild, then reads every file again on the live site.      |
-| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language, locale.  |
-| `/admin/settings/reading`                        | What the homepage displays, posts per page, the notify server.                      |
-| `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.             |
-| `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                  |
-| `/admin/settings/akismet`                        | `POST` only. Saves the Akismet key, or forgets it.                                  |
-| `/admin/settings/email`                          | The mail provider, the From line, the reply-to and the contact address.             |
-| `/admin/settings/mail`                           | `POST` only. Saves a mail credential, or forgets every one of them.                 |
-| `/admin/settings/mail/test`                      | `POST` only. Sends the theme's test message through the whole chain.                |
-| `/admin/users`                                   | Who may sign in: a row each, with Edit and Delete. Nothing on it edits anybody.     |
-| `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                     |
-| `/admin/users/<id>`                              | One user: the account, the profile, the notices, your password, and the delete.     |
-| `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                            |
-| `/admin/users/email`                             | `POST` only. Sets or clears the email address on the user the form names.           |
-| `/admin/users/profile`                           | `POST` only. Saves the whole public profile of the user the form names.             |
-| `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the user the form names.                |
-| `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice arrives: as they arrive, hourly or daily.   |
-| `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                       |
-| `/admin/federation`                              | The actors, their followers, the inbox log, and per-post delivery.                  |
-| `/admin/federation/settings`                     | Federation > Settings: the relays the site subscribes to, and the WordPress switch. |
-| `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.          |
-| `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                      |
-| `/admin/login`                                   | Username and password.                                                              |
-| `/admin/logout`                                  | `POST` only. Deletes the session row and sends `Clear-Site-Data`.                   |
-| `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                         |
+| Route                                            | What it does                                                                                  |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.                        |
+| `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                                 |
+| `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                             |
+| `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                               |
+| `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                                  |
+| `/admin/navigation`                              | Navigation > Menus: every menu the site holds. `POST` saves one menu's items.                 |
+| `/admin/navigation/add`                          | `POST` only. Adds an empty menu under the name the form gives.                                |
+| `/admin/navigation/delete`                       | `POST` only. Deletes one menu the active theme renders nowhere.                               |
+| `/admin/media`                                   | Everything under `content/uploads`, with the URL, the Markdown and what uses it.              |
+| `/admin/media/upload`                            | `POST` only. Stores one file by the rules the editor's upload enforces.                       |
+| `/admin/media/delete`                            | `POST` only. Deletes one upload, asking first when a document points at it.                   |
+| `/admin/media/alt`                               | `POST` only. Sets a picture's alt text, or marks it decorative, in `media.json`.              |
+| `/admin/comments`                                | Pending, approved and spam, with approve, spam, delete and reply.                             |
+| `/admin/comments/moderate`                       | `POST` only. Approves one comment, files it as spam, or deletes it.                           |
+| `/admin/comments/reply`                          | `POST` only. Posts an approved reply under the comment it answers.                            |
+| `/admin/messages`                                | The contact form's inbox, with a Spam list beside it.                                         |
+| `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                                         |
+| `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                                       |
+| `/admin/appearance/themes`                       | Appearance > Themes: the themes on disk. `POST` activates the one named.                      |
+| `/admin/tools`                                   | Tools > Content index: what the index holds, and the button that rebuilds it.                 |
+| `/admin/tools/rebuild-index`                     | `POST` only. Offers the rebuild, then reads every file again on the live site.                |
+| `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language, locale, site icon. |
+| `/admin/settings/reading`                        | What the homepage displays, posts per page, the notify server.                                |
+| `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.                       |
+| `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                            |
+| `/admin/settings/akismet`                        | `POST` only. Saves the Akismet key, or forgets it.                                            |
+| `/admin/settings/email`                          | The mail provider, the From line, the reply-to and the contact address.                       |
+| `/admin/settings/mail`                           | `POST` only. Saves a mail credential, or forgets every one of them.                           |
+| `/admin/settings/mail/test`                      | `POST` only. Sends the theme's test message through the whole chain.                          |
+| `/admin/users`                                   | Who may sign in: a row each, with Edit and Delete. Nothing on it edits anybody.               |
+| `/admin/users/new`                               | Users > Add new: the add form. `POST` adds one.                                               |
+| `/admin/users/<id>`                              | One user: the account, the profile, the notices, your password, and the delete.               |
+| `/admin/users/password`                          | `POST` only. Changes the signed-in admin's own password.                                      |
+| `/admin/users/email`                             | `POST` only. Sets or clears the email address on the user the form names.                     |
+| `/admin/users/profile`                           | `POST` only. Saves the whole public profile of the user the form names.                       |
+| `/admin/users/notifications`                     | `POST` only. Turns one notice on or off for the user the form names.                          |
+| `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice arrives: as they arrive, hourly or daily.             |
+| `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                                 |
+| `/admin/federation`                              | The actors, their followers, the inbox log, and per-post delivery.                            |
+| `/admin/federation/settings`                     | Federation > Settings: the relays the site subscribes to, and the WordPress switch.           |
+| `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.                    |
+| `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                                |
+| `/admin/login`                                   | Username and password.                                                                        |
+| `/admin/logout`                                  | `POST` only. Deletes the session row and sends `Clear-Site-Data`.                             |
+| `/admin/_static/*`                               | The admin's own stylesheet and scripts, cached for an hour.                                   |
 
 The screens behind the login share one layout: a bar across the top with the
 site name and a link to the public site, the menu down the left, and a place for
@@ -1846,7 +1846,8 @@ at once cannot each keep half of what the other kept.
 
 The file carries `title`, `tagline`, `url`, `author` (a username, when the
 site has one author), `postsPerPage`, `homepage`, `postsPage`,
-`timezone`, `language`, `locale` (when it is set), `tagBase`,
+`timezone`, `language`, `locale` (when it is set), `icon` (when it is set),
+`tagBase`,
 `categoryBase`, `notifyServer`, `feedUpdatePeriod`, `feedUpdateFrequency`,
 `webmentionsSend`, `webmentionsReceive`,
 `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`,
@@ -1999,7 +2000,7 @@ would have done anyway.
 | `removeImageVariants`              | Take a source's derived directory away.                                              |
 | `responsiveImages(html, describe)` | Rewrite `<img src="/uploads/…">` as `<picture>`. Pure: hand it any lookup.           |
 | `siteImageMarkup(config, html)`    | The same, over one site's own records, deriving in the background for a record miss. |
-| `siteIcons(config, avatar)`        | The head's icon links for a site's avatar: `{ rel, sizes, href }`, or none at all.   |
+| `siteIcons(config, setting)`       | The head's icon links for a site's icon setting: `{ rel, sizes, href }`, or none.    |
 
 `describeImage` is synchronous and cached because it is called once per image
 while a page renders, and decision-10 forbids probing an image file at render
@@ -2009,10 +2010,11 @@ markup that asks for them back, and the first request for each one rebuilds it.
 
 The site's icons are derived copies of the same kind, and `siteIcons` is how a
 head gets at them: three square PNGs, `icon` at 32 and 16 pixels and
-`apple-touch-icon` at 180, cropped from the middle of the site's avatar and
+`apple-touch-icon` at 180, cropped from the middle of the site's icon (the
+`icon` that Settings > General writes, else a hand-set `avatar`) and
 encoded the first time a browser asks for one. It answers an empty list — and
-the packaged theme then links no icon at all — when the site has no avatar, when
-its avatar is a file no icon can be made of, or when `imageOptimization` is off,
+the packaged theme then links no icon at all — when the site has no icon, when
+its icon is a file no icon can be made of, or when `imageOptimization` is off,
 so a head never advertises a URL this server would answer 404 for.
 
 `documentContext(document, images)` is where the rewrite is applied. Passing the

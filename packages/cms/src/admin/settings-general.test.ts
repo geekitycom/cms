@@ -3,6 +3,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import sharp from 'sharp';
+
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { saveSettings, SETTINGS_PAGE_FORMS } from './__testing__/settings.ts';
@@ -361,5 +363,148 @@ describe('the Site author select (TASK-192)', () => {
       shown.filter((option) => option.selected).map((option) => option.value),
       [''],
     );
+  });
+});
+
+const ICON = '/uploads/2026/10/icon.png';
+
+/** A site whose `site.json` says `fields`, with a 600 pixel PNG at {@link ICON}. */
+async function siteWithIconUpload(fields: Record<string, unknown> = {}) {
+  const contentDir = await box.dir('geekity-settings-icon-');
+  await mkdir(path.join(contentDir, '_data'), { recursive: true });
+  await mkdir(path.join(contentDir, 'uploads', '2026', '10'), { recursive: true });
+  await writeFile(
+    path.join(contentDir, '_data', 'site.json'),
+    JSON.stringify({ title: 'A Site', ...fields }),
+    'utf8',
+  );
+  await writeFile(
+    path.join(contentDir, 'uploads', '2026', '10', 'icon.png'),
+    await sharp({
+      create: { width: 600, height: 600, channels: 3, background: { r: 179, g: 57, b: 0 } },
+    })
+      .png()
+      .toBuffer(),
+  );
+  await writeFile(path.join(contentDir, 'uploads', '2026', '10', 'notes.pdf'), '%PDF-1.4\n');
+  const cms = await box.site({ contentDir });
+  const agent = await signedIn(cms);
+  return { cms, contentDir, agent };
+}
+
+describe('the Site icon field (TASK-212)', () => {
+  it('saves an upload path to site.json icon, and clearing it removes the key (AC #1)', async () => {
+    const { contentDir, agent } = await siteWithIconUpload();
+
+    assert.equal((await saveSettings(agent, 'general', { icon: ` ${ICON} ` })).status, 303);
+    assert.equal((await siteJson(contentDir))['icon'], ICON);
+    assert.equal(field(await (await agent.get('/admin/settings')).text(), 'icon'), ICON);
+
+    assert.equal((await saveSettings(agent, 'general', { icon: '' })).status, 303);
+    assert.equal('icon' in (await siteJson(contentDir)), false, 'an empty field writes no key');
+  });
+
+  it('previews the current icon and says it should be square and 512 pixels (AC #2)', async () => {
+    const { agent } = await siteWithIconUpload({ icon: ICON });
+    const html = await (await agent.get('/admin/settings')).text();
+
+    assert.match(
+      html,
+      /<img[^>]*src="\/uploads\/_\/2026\/10\/icon\.png\/icon-180\.png\?v=[^"]+"/,
+      'the preview is the icon the site derives',
+    );
+    assert.match(html, /square/i);
+    assert.match(html, /at least 512 pixels/);
+  });
+
+  it('says there is no icon yet when none is set (AC #2)', async () => {
+    const { agent } = await siteWithIconUpload();
+    const html = await (await agent.get('/admin/settings')).text();
+    assert.doesNotMatch(html, /icon-180\.png/);
+    assert.match(html, /no icon/i);
+  });
+
+  it('refuses a path it cannot derive icons from, says why, and saves nothing (AC #3)', async () => {
+    const { contentDir, agent } = await siteWithIconUpload({ icon: ICON });
+
+    const refusals: [string, RegExp][] = [
+      ['https://example.com/icon.png', /media library/],
+      ['icon.png', /media library/],
+      ['/uploads/../secrets.png', /media library/],
+      ['/uploads/2026/10/notes.pdf', /has to be an image/],
+      ['/uploads/2026/10/missing.png', /no upload at/],
+    ];
+    for (const [bad, message] of refusals) {
+      const response = await saveSettings(agent, 'general', { title: 'After', icon: bad });
+      assert.equal(response.status, 400, bad);
+      const html = await response.text();
+      assert.match(html, message, bad);
+      assert.equal(field(html, 'icon'), bad, 'the form comes back with what was typed');
+    }
+
+    const stored = await siteJson(contentDir);
+    assert.equal(stored['icon'], ICON, 'the icon is untouched');
+    assert.equal(stored['title'], 'A Site', 'and so is everything else');
+  });
+
+  it('gives the public site its icons once one is saved (AC #4)', async () => {
+    const { cms, agent } = await siteWithIconUpload();
+    assert.equal((await cms.app.request('/favicon.ico')).status, 404, 'no icon to begin with');
+
+    assert.equal((await saveSettings(agent, 'general', { icon: ICON })).status, 303);
+
+    const home = await (await cms.app.request('/')).text();
+    assert.match(
+      home,
+      /<link rel="icon"[^>]*href="\/uploads\/_\/2026\/10\/icon\.png\/icon-32\.png/,
+    );
+    assert.match(
+      home,
+      /<link rel="apple-touch-icon"[^>]*href="\/uploads\/_\/2026\/10\/icon\.png\/icon-180\.png/,
+    );
+    const favicon = await cms.app.request('/favicon.ico');
+    assert.equal(favicon.status, 200);
+    assert.equal(favicon.headers.get('content-type'), 'image/x-icon');
+
+    const manifest = (await (await cms.app.request('/manifest.webmanifest')).json()) as {
+      icons: { src: string }[];
+    };
+    assert.ok(
+      manifest.icons.some((icon) => icon.src.includes('/2026/10/icon.png/icon-512.png')),
+      'the manifest lists the icon',
+    );
+    assert.match(
+      await (await cms.app.request('/opensearch.xml')).text(),
+      /<Image [^>]*>[^<]*\/favicon\.ico<\/Image>/,
+    );
+  });
+
+  it('shows and keeps a stored icon (AC #5)', async () => {
+    const { contentDir, agent } = await siteWithIconUpload({ icon: ICON });
+    const shown = field(await (await agent.get('/admin/settings')).text(), 'icon');
+    assert.equal(shown, ICON);
+
+    assert.equal((await saveSettings(agent, 'general', { icon: shown ?? '' })).status, 303);
+    assert.equal((await siteJson(contentDir))['icon'], ICON);
+  });
+
+  it('shows a hand-set avatar as the icon, and a save keeps it as the icon (AC #5)', async () => {
+    const { contentDir, agent } = await siteWithIconUpload({ avatar: ICON });
+    const html = await (await agent.get('/admin/settings')).text();
+    assert.equal(field(html, 'icon'), ICON);
+    assert.match(html, /icon-180\.png/, 'the preview is the avatar it falls back to');
+
+    assert.equal((await saveSettings(agent, 'general', { icon: ICON })).status, 303);
+    const stored = await siteJson(contentDir);
+    assert.equal(stored['icon'], ICON);
+    assert.equal(stored['avatar'], ICON, 'the avatar is left for what else reads it');
+  });
+
+  it('is left alone by a save of another settings page (AC #5)', async () => {
+    const { contentDir, agent } = await siteWithIconUpload({ avatar: ICON });
+    assert.equal((await saveSettings(agent, 'reading', {})).status, 303);
+    const stored = await siteJson(contentDir);
+    assert.equal('icon' in stored, false);
+    assert.equal(stored['avatar'], ICON);
   });
 });
