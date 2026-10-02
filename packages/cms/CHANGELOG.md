@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.16.0](https://github.com/geekitycom/cms/compare/v0.15.0...v0.16.0) (2026-10-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** the default theme no longer links posts tagged indienews to IndieNews on its own; declare an IndieNews target with tag "indienews" in content/_data/syndicationTargets.json.
+
+### Features
+
+* **cms:** accept micropub media uploads into the media library ([bf5c88b](https://github.com/geekitycom/cms/commit/bf5c88b356ca7bd38e747835d2cdacd16c70464a))
+* **cms:** create posts over micropub ([fac52dd](https://github.com/geekitycom/cms/commit/fac52ddffaa9c08a8a4d58fd49e01fdde036dcaa))
+* **cms:** like, repost and bookmark posts over micropub, the editor and federation ([bae3499](https://github.com/geekitycom/cms/commit/bae349904f2c79d92250a95f675740c902e81c64))
+* **cms:** manage syndication targets from the admin ([f73bc6c](https://github.com/geekitycom/cms/commit/f73bc6c1746813ed7141c231a6ee3381cd2f4e9c))
+* **cms:** offer and select syndication targets over micropub ([fa955f8](https://github.com/geekitycom/cms/commit/fa955f877ad1302e5e6215bfd31039d93eaf93cc))
+* **cms:** post photos over micropub and render and federate them ([3ed1b6a](https://github.com/geekitycom/cms/commit/3ed1b6a009ad330093fa7c4afa04693a6457624e))
+* **cms:** send posts to per-language syndication targets ([72a176a](https://github.com/geekitycom/cms/commit/72a176abebacc3d3f869c9d2a7cef30218e03e21))
+* **cms:** serve micropub discovery and configuration queries ([556f88c](https://github.com/geekitycom/cms/commit/556f88cba0d0d30a657011dd5e33464fb0076ab9))
+* **cms:** syndicate posts to declared targets such as indienews and bridgy ([75b1a6a](https://github.com/geekitycom/cms/commit/75b1a6a3d2714a83bcdfb27f97f7940d96b90125))
+* **cms:** update, delete and undelete posts and answer q=source over micropub ([ac74b19](https://github.com/geekitycom/cms/commit/ac74b19663754836455708f9094c409907e7fb0d))
+
+
+### Bug Fixes
+
+* **cms:** refuse an access token sent in both the header and the body ([c9add8f](https://github.com/geekitycom/cms/commit/c9add8f18b5547f6c2c3c69b5bdf71969b8c19a3))
+
 ## [0.15.0](https://github.com/geekitycom/cms/compare/v0.14.0...v0.15.0) (2026-10-02)
 
 
