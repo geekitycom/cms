@@ -1,11 +1,11 @@
 ---
 id: TASK-201
 title: JSON-LD headline and image for untitled notes
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-01 17:07'
-updated_date: '2026-10-01 21:39'
+updated_date: '2026-10-02 06:56'
 labels:
   - theme
   - seo
@@ -32,7 +32,7 @@ The default theme's JSON-LD BlogPosting takes headline from the post's title (pa
 - [x] #1 An untitled note's BlogPosting has a headline matching its visible title text (the hidden h1 / <title>), at most 110 characters, cut on a word boundary
 - [x] #2 A post with no image of its own has image set to the author's photo, or the site icon when there is no photo; a post with an image keeps it
 - [x] #3 Titled posts and pages print the same headline and image as before
-- [ ] #4 A note's page passes Google's Rich Results Test for Article with no missing recommended headline or image
+- [x] #4 A note's page passes Google's Rich Results Test for Article with no missing recommended headline or image
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -55,10 +55,12 @@ Tests: 6 new in packages/cms/src/web/page-shell.test.ts (TASK-201 describe). Bef
 Gates: pnpm build && pnpm test (3094 + 30 pass) && pnpm typecheck && pnpm lint && pnpm format:check, exit 0.
 HTTP: served a scratch copy of the demo content with an untitled note on port 3491; the note's BlogPosting printed headline 'This post should be able to say something without a …' matching its <title>; with site.icon set, both the note and a titled post without an image printed image http://localhost:3491/uploads/2026/09/icon.png. Server stopped.
 AC #4 not checked: Google's Rich Results Test needs a public URL. Structurally the BlogPosting now carries every Article recommended property (author, datePublished, dateModified, headline, image) when the site has an author photo, avatar or icon; verify on shll.me after deploy.
+
+2026-10-02, 0.14.0 on shll.me: Google's Rich Results Test on https://shll.me/2026/09/this-post-should-be-able/ reported Articles: 1 valid item detected, with no missing recommended fields (screenshot from the site owner).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-The default theme's JSON-LD now heads an untitled post with the words its <title> names it by, cut to 110 characters on a word boundary, and pictures a post with no image by its author's photo, else the site icon; titled posts and pages are unchanged. Verified by six tests in page-shell.test.ts (four failing before), the full gates, and curl against a served note. AC #4 (Rich Results Test) waits on a deployed public URL.
+The default theme's JSON-LD now heads an untitled post with the words its <title> names it by, cut to 110 characters on a word boundary, and gives a post with no image the site avatar, else its author's photo, else the site icon; titled posts and pages are unchanged. Verified by six tests in page-shell.test.ts (four failing before), the full gates, curl against a served note, and Google's Rich Results Test on the deployed note (1 valid Article).
 <!-- SECTION:FINAL_SUMMARY:END -->

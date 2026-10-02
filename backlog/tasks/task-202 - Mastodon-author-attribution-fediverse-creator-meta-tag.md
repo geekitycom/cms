@@ -1,11 +1,11 @@
 ---
 id: TASK-202
 title: 'Mastodon author attribution: fediverse:creator meta tag'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-01 17:13'
-updated_date: '2026-10-01 21:45'
+updated_date: '2026-10-02 06:58'
 labels:
   - federation
   - theme
@@ -33,7 +33,7 @@ When a post is shared on Mastodon, the link preview can name the author's fedive
 - [x] #1 A post by a user carries <meta name="fediverse:creator"> with that user's @username@host handle; a page about nobody in particular carries none
 - [x] #2 The handle matches what WebFinger answers for the user
 - [x] #3 The README explains the Mastodon-side author attribution setting
-- [ ] #4 Sharing a post on a Mastodon instance whose account lists the domain shows the author attribution in the preview card, or the notes record what was checked
+- [x] #4 Sharing a post on a Mastodon instance whose account lists the domain shows the author attribution in the preview card, or the notes record what was checked
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -57,10 +57,14 @@ Built: accountOf(username, baseUrl) in federation/paths.ts is now the one source
 Verified: pnpm build, test (3099 + 30 pass), typecheck, lint, format:check all clean. page-shell.test.ts 'the fediverse:creator tag (TASK-202)' covers AC #1 and AC #2 (the meta value is fed back to /.well-known/webfinger, which answers with that subject and the user's actor as self). Live: a scratch site on port 3471 served @ada@localhost:3471 on /2026/09/by/ and on / (solo), none on /tag/notes/; curl of /.well-known/webfinger?resource=acct:ada@localhost:3471 answered subject acct:ada@localhost:3471 and self http://localhost:3471/author/ada/. Server stopped.
 
 AC #4 not checked, and blocked by more than a deployment. Mastodon credits a fediverse:creator account only when that account's attribution_domains include the link's domain. For a remote account Mastodon reads them from the actor's attributionDomains (app/services/activitypub/process_account_service.rb, set_immediate_attributes!). The handle this tag names is the user's actor on this site, not a Mastodon account, so the Mastodon settings screen the description mentions does not apply, and the actor document served at /author/ada/ carries no attributionDomains (checked with curl). Fedify 2.3.8's Person has no attributionDomains property. Until the actor publishes attributionDomains: [site host], a real Mastodon will not show the credit. The README says this. Follow-up needed, not created: publish attributionDomains on every actor.
+
+2026-10-02: shll.me/ and posts print <meta name="fediverse:creator" content="@a@shll.me">. Sharing a post URL on me.dm (https://me.dm/@andrewshell/117369998450640643) did not exercise the credit: the post URL is an ActivityPub object, so Mastodon rendered it as an accepted quote of a@shll.me and built no preview card (card: null). The credit needs a link Mastodon cards, such as https://shll.me/ itself (answers 406 to activity+json).
+
+2026-10-02, after TASK-210 shipped: me.dm toot https://me.dm/@andrewshell/117370013142466994 linking https://shll.me/: the API's card.authors lists account a@shll.me and the card shows 'More from Andrew Shell'. Mastodon only attaches that account when its attribution_domains include the link's host, so me.dm stored shll.me from the actor.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Pages now print <meta name="fediverse:creator" content="@username@host"> for the user an entry is by, and for the site author on a solo site's homepage, from one accountOf shared with WebFinger. Verified by tests and by curl against a running site, where the meta matched WebFinger's subject. Left In Progress: Mastodon will not show the credit until the actor publishes attributionDomains (see notes).
+Posts and pages by a user, and a solo-author homepage, print <meta name="fediverse:creator"> with the user's own @username@host, built by the same accountOf helper as WebFinger. Verified by tests that feed the handle back into WebFinger, curl on a scratch site and on shll.me, and a me.dm preview card of https://shll.me/ showing 'More from Andrew Shell' (with TASK-210's attributionDomains).
 <!-- SECTION:FINAL_SUMMARY:END -->

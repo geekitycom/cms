@@ -1,11 +1,11 @@
 ---
 id: TASK-210
 title: 'Actors publish attributionDomains so Mastodon credits fediverse:creator'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-01 21:47'
-updated_date: '2026-10-02 01:45'
+updated_date: '2026-10-02 06:58'
 labels:
   - federation
   - activitypub
@@ -29,8 +29,8 @@ TASK-202 prints <meta name="fediverse:creator" content="@username@host"> naming 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 Every user's actor JSON carries attributionDomains containing the site's host, with a @context that maps the term the way Mastodon reads it
-- [ ] #2 A remote Mastodon instance that fetches the actor stores the domain as an attribution domain (or the notes record what was checked)
-- [ ] #3 Sharing a post link on Mastodon shows the author credit card, and TASK-202 AC #4 is checked
+- [x] #2 A remote Mastodon instance that fetches the actor stores the domain as an attribution domain (or the notes record what was checked)
+- [x] #3 Sharing a post link on Mastodon shows the author credit card, and TASK-202 AC #4 is checked
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -53,10 +53,14 @@ Built: userActor returns an AttributedPerson (actor.ts), a Person subclass that 
 Verified: pnpm build, test (3103 + 30 pass), typecheck, lint, format:check clean. Failing first: federation.test.ts 'lists the site host as an attribution domain' (author URL and stored /?author=2 URL) and delivery.test.ts 'keeps the attribution domain on the actor it sends' failed with actual: undefined, expected: [ 'blog.example' ]; attributionDomainOf unit test covers dropping the port. Live: scratch site on port 3472 (baseUrl http://localhost:3472); curl -H 'Accept: application/activity+json' /author/ada/ answered 200 application/activity+json with attributionDomains ['localhost'] and the term in @context; jsonld 9.0.0 expansion with Fedify's preloaded contexts gave http://joinmastodon.org/ns#attributionDomains: [{@value: localhost}]. The delivered profile Update body expanded the same way (object attributionDomains ['blog.example']), and its RsaSignature2017 LD signature, which Mastodon checks, verified with Fedify's verifyJsonLd against the actor's own key, as it did on a control Update with no domains. Server stopped.
 
 AC #2 and #3 not checked: they need a public deployment and a remote Mastodon instance, which this run did not have. Nothing was checked against a real Mastodon; the Mastodon behaviour above is read from its source.
+
+2026-10-02, after 0.14.0 deployed: curl -H 'Accept: application/activity+json' https://shll.me/author/a/ | jq .attributionDomains returned ["shll.me"] on production. AC #2/#3 still wait on a Mastodon instance fetching the actor and a fresh link preview.
+
+2026-10-02: me.dm toot https://me.dm/@andrewshell/117370013142466994 linking https://shll.me/: the API's card.authors lists account a@shll.me and the card shows 'More from Andrew Shell'. Mastodon only attaches that account when its attribution_domains include the link's host, so me.dm stored shll.me from the actor. AC #2 is proven by that effect; there was no console access to read Account#attribution_domains directly.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Every user's actor now publishes attributionDomains with the host of baseUrl (no port), with Mastodon's own toot:attributionDomains @set definition in @context, at the author URL, a stored actor id and the WordPress actor path, and in the Update a profile save sends, so Mastodon can credit the fediverse:creator account TASK-202 prints. Verified by tests that failed first, by curl against a running site, and by JSON-LD expansion to the toot IRI. Left In Progress: AC #2 and #3 need a deployed site and a real Mastodon instance.
+Every user's actor publishes attributionDomains with the site's hostname, under Mastodon's own term definition, and profile Updates keep the bare key so a save does not clear it. Verified by tests that failed first, JSON-LD expansion, curl of the production actor (['shll.me']), and a me.dm link preview of https://shll.me/ crediting a@shll.me.
 <!-- SECTION:FINAL_SUMMARY:END -->
