@@ -7,6 +7,7 @@ import type { Document } from './content/document.ts';
 import type { ContentStore } from './content/store.ts';
 import type { DocumentChange, SyncResult } from './content/sync.ts';
 import type { DeliveryService } from './federation/delivery.ts';
+import type { ActivityNote } from './indieauth/activity-log.ts';
 import type { IndieAuthState } from './indieauth/grants.ts';
 import type { ActorProfileService } from './federation/profiles.ts';
 import type { RelayService } from './federation/relays.ts';
@@ -156,6 +157,12 @@ export interface GeekityEnv {
      * the endpoints that redeem one.
      */
     indieauth: IndieAuthState;
+    /**
+     * What an IndieAuth or Micropub handler adds to the activity log's entry
+     * for this request (TASK-221), beyond what its response shows.
+     * `undefined` until a handler says something.
+     */
+    activityNote: ActivityNote | undefined;
     /**
      * Who the public site's session names, set once at the public site's door
      * (TASK-183): the page drawn for them carries the admin bar and is theirs

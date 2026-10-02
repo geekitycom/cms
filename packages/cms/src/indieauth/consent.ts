@@ -8,6 +8,11 @@ import { effectiveBaseUrl, readSiteSettings } from '../admin/settings.ts';
 import { ADMIN_TEMPLATES } from '../admin/templates.ts';
 import type { GeekityEnv } from '../env.ts';
 import { isPrivateHost } from '../webmention/public-address.ts';
+import {
+  logAuthorizationRedemption,
+  logAuthorizationRequest,
+  noteActivity,
+} from './activity-log.ts';
 import { fetchClientInformation, fetchClientLogo } from './client.ts';
 import type { ClientInformation } from './client.ts';
 import { AUTHORIZATION_PATH, authorizationServerMetadata } from './discovery.ts';
@@ -48,7 +53,7 @@ export function mountAuthorizationEndpoint(app: Hono<GeekityEnv>): void {
     c.redirect(`${CONSENT_PATH}${new URL(c.req.url).search}`, 302),
   );
 
-  app.post(AUTHORIZATION_PATH, async (c) => {
+  app.post(AUTHORIZATION_PATH, logAuthorizationRedemption, async (c) => {
     c.header('cache-control', 'no-store');
     const { config } = c.var;
     const form = redemptionForm(await c.req.parseBody());
@@ -64,6 +69,7 @@ export function mountAuthorizationEndpoint(app: Hono<GeekityEnv>): void {
         400,
       );
     }
+    noteActivity(c, { user: user.username });
     const baseUrl = effectiveBaseUrl(config, readSiteSettings(config.contentDir));
     return c.json(profileResponse(grant, user, baseUrl));
   });
@@ -75,10 +81,11 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
 
   function refuse(c: Context<GeekityEnv>, message: string): Response {
     c.status(400);
+    noteActivity(c, { refusal: { error: 'invalid_request', description: message } });
     return render(c, ADMIN_TEMPLATES.indieauthRefused, { message });
   }
 
-  app.get(CONSENT_PATH, async (c) => {
+  app.get(CONSENT_PATH, logAuthorizationRequest, async (c) => {
     const { config } = c.var;
     const user = signedInUser(c);
     if (user === undefined) return c.redirect(ADMIN_PREFIX, 302);
