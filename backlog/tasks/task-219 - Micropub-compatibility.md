@@ -4,7 +4,7 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 19:07'
+updated_date: '2026-10-02 19:38'
 labels:
   - micropub
   - indieauth
@@ -131,4 +131,13 @@ Unknown: whether iA Writer sends a PKCE code_challenge. Nothing public says. If 
 This revisits one part of the no-legacy decision. iA Writer is maintained, unlike micropub.rocks and Inkstone. The current IndieAuth spec says a client should look for rel=authorization_endpoint and rel=token_endpoint for compatibility with earlier revisions, and Indiekit (getindiekit.com/introduction) publishes both beside indieauth-metadata 'for compatibility with older Micropub applications'. Publishing the links costs nothing and relaxes nothing: an authorization request without PKCE is still refused, with 'code_challenge must be an S256 PKCE challenge' on the redirect.
 
 Proposed: publish rel="authorization_endpoint" and rel="token_endpoint" in the Link header and head beside rel="indieauth-metadata" (advertiseIdentityEndpoints in packages/cms/src/indieauth/discovery.ts), then try iA Writer again. Its next error settles the PKCE question.
+
+## Quill follow-up (2026-10-02)
+
+Decision: support Quill fully, as a maintained client that does modern IndieAuth with PKCE.
+
+- Photo alt text: Quill sends photo: [{value, alt}] as JSON to a site with a media endpoint, already accepted (TASK-166). TASK-217 closed as not needed.
+- p3k-content-type: refused today as an unknown property. Quill adds it to a note when its content-type selector is shown (views/new-post.php:849; shown by switchToMarkdown at :552 or the ctrl+shift+c easter egg), with text/plain or text/markdown. Proposed: accept it. text/markdown and text/plain both map to the Markdown body the site stores. Anything else (text/html) is refused with a message naming the type.
+- Token in header and body: fixed in PR #95.
+- A full inventory of every Quill editor's request against the create mapping follows.
 <!-- SECTION:NOTES:END -->
