@@ -1451,6 +1451,30 @@ app's next request gets 401 `invalid_token`, and the screen confirms with a
 message. The app has to ask you again through the consent screen to reconnect.
 With no apps connected, the screen says what kinds of app connect here.
 
+### Micropub
+
+The site has a [Micropub](https://www.w3.org/TR/micropub/) endpoint at
+`/_geekity/micropub`. The site root and every author archive advertise it with
+a `Link: <…>; rel="micropub"` header and a `<link rel="micropub">` in the head,
+beside the IndieAuth metadata, so a client finds it from the URL you sign in
+with. Like that link, the CMS adds both to the response, so every theme carries
+them.
+
+The endpoint takes a bearer token from the token endpoint. Any scope will do
+for a query. A token issued for another resource, such as an MCP endpoint,
+gets 401. It answers these queries:
+
+- `?q=config` lists the media endpoint (`/_geekity/micropub/media`), the
+  syndication targets under `syndicate-to`, the post types the site accepts
+  (note, article and reply) and the queries it answers.
+- `?q=syndicate-to` lists the syndication targets on their own.
+- `?q=category` lists every tag and category on a published post, once each,
+  in alphabetical order. Add `&filter=` to keep only the terms that contain
+  that text, ignoring case.
+
+A query with no `q`, or one the endpoint does not answer, gets 400
+`invalid_request`. The endpoint answers 503 in maintenance mode.
+
 ## The theme
 
 Templates are Nunjucks (decision-4). The default theme lives in

@@ -26,6 +26,12 @@ export const REVOCATION_PATH = '/_geekity/indieauth/revoke';
 /** Where a client asks for the profile a token was approved to see (TASK-161). */
 export const USERINFO_PATH = '/_geekity/indieauth/userinfo';
 
+/** Where a Micropub client creates posts and asks what the site supports (TASK-163). */
+export const MICROPUB_PATH = '/_geekity/micropub';
+
+/** Where a Micropub client uploads a file before it names it in a post (TASK-165). */
+export const MICROPUB_MEDIA_PATH = '/_geekity/micropub/media';
+
 /**
  * RFC 9728's well-known location for the protected resource metadata, which
  * an MCP client reads to learn where to sign in (TASK-161).
@@ -139,26 +145,32 @@ function isIdentityPath(pathname: string): boolean {
 }
 
 /**
- * Point every identity URL at the metadata, with a `Link` header and a
- * `<link>` before `</head>` (TASK-157).
+ * Point every identity URL at the metadata (TASK-157) and the Micropub
+ * endpoint (TASK-163), each with a `Link` header and a `<link>` before
+ * `</head>`.
  *
  * Added to the response rather than left to the layouts so that every theme
- * carries it, a custom one that replaces the packaged base layout included. A
+ * carries them, a custom one that replaces the packaged base layout included. A
  * 404 for a username nobody has is left alone: it is nobody's identity.
  */
-export const advertiseIndieAuthMetadata: MiddlewareHandler<GeekityEnv> = async (c, next) => {
+export const advertiseIdentityEndpoints: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   await next();
   if (!isIdentityPath(requestPath(c))) return;
   const { status } = c.res;
   if (status !== 304 && (status < 200 || status >= 300)) return;
 
-  const href = `${siteBaseUrl(c)}${INDIEAUTH_METADATA_PATH}`;
-  c.res.headers.append('link', `<${href}>; rel="indieauth-metadata"`);
+  const baseUrl = siteBaseUrl(c);
+  const links = [
+    { rel: 'indieauth-metadata', href: `${baseUrl}${INDIEAUTH_METADATA_PATH}` },
+    { rel: 'micropub', href: `${baseUrl}${MICROPUB_PATH}` },
+  ];
+  for (const { rel, href } of links) c.res.headers.append('link', `<${href}>; rel="${rel}"`);
   if (status === 304 || !(c.res.headers.get('content-type') ?? '').startsWith('text/html')) return;
 
   const headers = new Headers(c.res.headers);
   headers.delete('content-length');
-  const body = withHeadLink(await c.res.text(), `<link rel="indieauth-metadata" href="${href}">`);
+  const headLinks = links.map(({ rel, href }) => `<link rel="${rel}" href="${href}">`).join('');
+  const body = withHeadLink(await c.res.text(), headLinks);
   // Cleared first, because assigning over a response copies its headers onto
   // the new one.
   c.res = undefined;

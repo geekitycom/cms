@@ -86,6 +86,7 @@ import { mountAuthorizationEndpoint } from './indieauth/consent.ts';
 import { mountIndieAuthDiscovery } from './indieauth/discovery.ts';
 import { createIndieAuthState } from './indieauth/grants.ts';
 import { mountTokenEndpoint, mountTokenInfoEndpoints } from './indieauth/token.ts';
+import { mountMicropub } from './micropub/endpoint.ts';
 import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
 import {
   selectedTargets,
@@ -1983,6 +1984,8 @@ export function createCms(config: GeekityConfig = {}): Cms {
   mountAuthorizationEndpoint(app);
   mountTokenEndpoint(app);
   mountTokenInfoEndpoints(app);
+  // Micropub (TASK-163), which stands on those tokens.
+  mountMicropub(app);
 
   // Federation goes on first. It answers its own paths and falls through on
   // every other, so putting it in front costs the rest of the app nothing and
