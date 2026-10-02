@@ -4,14 +4,14 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 18:59'
+updated_date: '2026-10-02 19:03'
 labels:
   - micropub
   - indieauth
   - interop
 dependencies: []
 references:
-  - 'https://github.com/gRegorLove/indiebookclub'
+  - 'https://github.com/inklings-io/inkstone'
 priority: medium
 type: chore
 ordinal: 235800
@@ -99,4 +99,14 @@ Proposed fix: a read post type.
 - The default theme prints the IndieWeb markup indiebookclub itself uses: <data class="p-read-status" value="to-read">Want to read</data> and a p-read-of h-cite with p-name, p-author and p-uid (an ISBN linked if the site wants). q=source and update round-trip both.
 - Federation: a Note whose content is the same sentence the page prints. A read has no fediverse object to Like or Announce.
 - Advertise read in q=config post-types, with its property list, so clients that read the list know it is accepted.
+
+## Inkstone (inklings.io/inkstone, 2026-10-02, shll.me on 0.16.0)
+
+Result: cannot sign in. Entering https://shll.me/ answers 'You do not seem to have a IndieAuth Endpoint.'
+
+Cause, from its source (last commit 2017-12-28, indieauth/client ^0.1.16): the same two gaps as micropub.rocks.
+1. Discovery. php/discoverEndpoints.php:17 calls discoverAuthorizationEndpoint, which looks only for rel="authorization_endpoint"; php/token.php:10 likewise for rel="token_endpoint". The site advertises only rel="indieauth-metadata".
+2. PKCE. The authorization URL it builds (src/micropub.js:42) carries me, redirect_uri, state, client_id, scope and response_type=code, and no code_challenge, so parseAuthorizationRequest would refuse it even once discovery worked.
+
+Pattern so far: two of four clients (micropub.rocks, Inkstone) predate PKCE and the metadata endpoint. Adding the legacy rels alone fixes neither; both also need an authorization request without PKCE to be accepted. That is a security trade-off to decide on its own: the current IndieAuth spec requires PKCE, and these are public clients, so accepting requests without it removes the protection against an intercepted code. If it is ever allowed, it should be narrow (for example, opt-in per site, and only for a client_id whose redirect_uri is on the same host) and documented as a legacy mode. The Create token proposal from the micropub.rocks entry does not help Inkstone, which has no manual token entry.
 <!-- SECTION:NOTES:END -->
