@@ -15,6 +15,7 @@ import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
 import {
   ASSET_VERSION_PARAM,
   assetNotModified,
+  assetRangeResponse,
   assetResponse,
   assetVersion,
   findThemeAsset,
@@ -1674,9 +1675,13 @@ function upload(c: Context<GeekityEnv>): Response {
   if (asset === undefined) return notFound(c);
 
   const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
-  return matchesEtag(c.req.header('if-none-match'), asset.etag)
-    ? assetNotModified(asset, options)
-    : assetResponse(asset, options);
+  if (matchesEtag(c.req.header('if-none-match'), asset.etag)) {
+    return assetNotModified(asset, options);
+  }
+  const part = assetRangeResponse(asset, c.req.header('range'), c.req.header('if-range'), options);
+  const whole = part ?? assetResponse(asset, options);
+  whole.headers.set('accept-ranges', 'bytes');
+  return whole;
 }
 
 /** The URL of a page of the home listing, by zero-based index. */

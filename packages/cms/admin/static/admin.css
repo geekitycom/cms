@@ -490,6 +490,31 @@ button[type='submit']:hover,
   min-height: 28rem;
 }
 
+.admin-editor-enclosure {
+  margin: 1.25rem 0 0;
+  padding: 0.75rem 1rem 1rem;
+  border: 1px solid var(--admin-border);
+}
+
+.admin-editor-enclosure-heading {
+  margin: 1.25rem 0 0;
+  font-size: 1em;
+}
+
+.admin-editor-alternate {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.4rem 0.75rem;
+  align-items: center;
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.75rem 0.75rem;
+  border: 1px solid var(--admin-border);
+}
+
+.admin-editor-alternate label {
+  margin: 0;
+}
+
 .admin-hint {
   margin: 0.25rem 0 0;
   color: var(--admin-muted);

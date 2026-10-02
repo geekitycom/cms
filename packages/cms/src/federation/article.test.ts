@@ -320,6 +320,111 @@ describe('image attachments (TASK-141 AC #5)', () => {
   });
 });
 
+describe('a recording as an attachment (TASK-213 AC #13)', () => {
+  const RECORDING = [
+    'enclosure:',
+    '  url: /uploads/2026/09/episode-12.mp3',
+    '  type: audio/mpeg',
+    '  length: 23456789',
+    '  alternates:',
+    '    - url: https://cdn.example.com/episode-12.mp4',
+    '      type: video/mp4',
+  ];
+
+  async function attachmentsOf(
+    files: Record<string, string>,
+    permalink: string,
+  ): Promise<Record<string, unknown>[]> {
+    const instance = await site(files);
+    const object = (await (await get(instance, permalink, ACTIVITY_STREAMS)).json()) as Record<
+      string,
+      unknown
+    >;
+    const raw = object['attachment'];
+    return (raw === undefined ? [] : Array.isArray(raw) ? raw : [raw]) as Record<string, unknown>[];
+  }
+
+  it('attaches the main file as Audio, named for the post, before the images', async () => {
+    const attachments = await attachmentsOf(
+      {
+        'posts/2026-09-02-episode.md': rawPost(
+          [
+            'title: Episode twelve',
+            "date: '2026-09-02T09:00:00Z'",
+            'permalink: /2026/09/episode/',
+            ...RECORDING,
+          ],
+          '![The studio](/uploads/2026/09/studio.jpg)',
+        ),
+      },
+      '/2026/09/episode/',
+    );
+
+    assert.deepEqual(attachments, [
+      {
+        type: 'Audio',
+        mediaType: 'audio/mpeg',
+        url: `${BASE_URL}/uploads/2026/09/episode-12.mp3`,
+        name: 'Episode twelve',
+      },
+      {
+        type: 'Image',
+        mediaType: 'image/jpeg',
+        url: `${BASE_URL}/uploads/2026/09/studio.jpg`,
+        name: 'The studio',
+      },
+    ]);
+  });
+
+  it('attaches a video as Video, and names a note by its words', async () => {
+    const attachments = await attachmentsOf(
+      {
+        'posts/2026-09-02-clip.md': rawPost(
+          [
+            "date: '2026-09-02T09:00:00Z'",
+            'permalink: /2026/09/clip/',
+            'enclosure:',
+            '  url: /uploads/2026/09/clip.webm',
+            '  type: video/webm',
+            '  length: 4096',
+          ],
+          'A quick clip of the garden.',
+        ),
+      },
+      '/2026/09/clip/',
+    );
+
+    assert.deepEqual(attachments, [
+      {
+        type: 'Video',
+        mediaType: 'video/webm',
+        url: `${BASE_URL}/uploads/2026/09/clip.webm`,
+        name: 'A quick clip of the garden.',
+      },
+    ]);
+  });
+
+  it('leaves a post without one as it was', async () => {
+    const attachments = await attachmentsOf(
+      {
+        'posts/2026-09-02-half.md': rawPost(
+          [
+            'title: Half a recording',
+            "date: '2026-09-02T09:00:00Z'",
+            'permalink: /2026/09/half/',
+            'enclosure:',
+            '  url: /uploads/2026/09/half.mp3',
+          ],
+          'No length, so no enclosure.',
+        ),
+      },
+      '/2026/09/half/',
+    );
+
+    assert.deepEqual(attachments, []);
+  });
+});
+
 describe('the quote policy (TASK-125 AC #1)', () => {
   const QUOTABLE = { canQuote: { automaticApproval: 'as:Public' } };
 

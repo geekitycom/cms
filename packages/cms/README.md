@@ -2959,6 +2959,93 @@ The XML is written by this package rather than by a library. Text is escaped;
 `content:encoded` and `source:markdown` are CDATA sections, with any `]]>` in
 the text split across two sections so it cannot end one early.
 
+### A recording on a post
+
+A post can carry one recording: a spoken version of an article, or an episode
+now and then. The site is a blog that sometimes has audio, not a podcast host,
+so the feeds carry what a podcast app needs to play, describe and caption an
+item, and leave the podcast directory tags out. The front matter spells it the
+way RSS does:
+
+```yaml
+enclosure:
+  url: /uploads/2026/10/episode-12.mp3 # an upload; written by the editor
+  type: audio/mpeg # from the upload table; written by the editor
+  length: 23456789 # bytes, from the file on disk; written by the editor
+  duration: 1834 # seconds, optional
+  transcript: # optional
+    url: /uploads/2026/10/episode-12.vtt # an upload or an http(s) URL
+    type: text/vtt # text/vtt, application/x-subrip, text/html or text/plain
+  alternates: # optional, any number
+    - url: /uploads/2026/10/episode-12.mp4
+      type: video/mp4
+      length: 98765432
+      title: Video # optional, at most 32 characters
+      height: 720 # optional, for video
+      lang: en # optional
+    - url: https://cdn.example.com/episode-12-low.mp3
+      type: audio/mpeg # required for a link
+      title: Low bandwidth # a link's length is optional
+```
+
+**The main file is always an upload** under `/uploads/`, because RSS requires
+its `url`, `length` and `type`, and an upload is the only file whose length the
+site knows. A main file without all three is no recording at all. A bad
+alternate version or transcript is dropped on its own, so one wrong line in a
+hand-edited file costs that line and not the episode. `enclosureOf(extra)` is
+the one reading of the key, and the feeds, the theme and the federation read
+only what it returns.
+
+**The post editor** has a Recording section on posts. The main file is a select
+of the audio and video in the media library, and None removes the whole key,
+transcript and alternate versions included. The duration takes seconds, `30:34`
+or `1:02:03`. The transcript is an upload (`.vtt`, `.srt` or `.txt`) or an
+`https` address with its type. Alternate versions are numbered rows with one
+blank row at the end, so a plain form can add, edit and remove them; emptying a
+row's address removes it. On save, the type and length of every upload are read
+from the upload table and from the file on disk, never from the form. A main
+file that is not an audio or video upload, a linked version without an `http`
+or `https` address or a media type, or a title over 32 characters is refused
+with a message, and nothing is written.
+
+**What the feeds print, and when.** A post with no recording prints none of
+this, and a feed with no recording in it declares neither namespace, so its
+bytes and its ETag are what they were before recordings existed.
+
+| Element                                                     | Format      | Printed when                                                                                                                                                                            |
+| ----------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<enclosure url length type/>`                              | RSS item    | The post has a main file. `url` is absolute.                                                                                                                                            |
+| `<podcast:alternateEnclosure>` with `<podcast:source uri/>` | RSS item    | Once per alternate version, with `type`, and `length`, `title`, `height` and `lang` when known.                                                                                         |
+| `<podcast:transcript url type/>`                            | RSS item    | The post has a transcript, with `rel="captions"` for WebVTT or SubRip.                                                                                                                  |
+| `<itunes:duration>`                                         | RSS item    | The duration is known, in whole seconds.                                                                                                                                                |
+| `<podcast:medium>blog</podcast:medium>`                     | RSS channel | Any item in the feed has a recording. Without it an app assumes `podcast`; `blog` is the spec's word for articles that sometimes have audio.                                            |
+| `<link rel="enclosure" type length href/>`                  | Atom entry  | The post has a main file. Atom has no way to say the others are versions of it.                                                                                                         |
+| `attachments`                                               | JSON Feed   | The main file and then each alternate version, with `url`, `mime_type`, `size_in_bytes` and `title` when known, and `duration_in_seconds` on audio or video when the duration is known. |
+
+`xmlns:podcast="https://podcastindex.org/namespace/1.0"` is declared only on a
+feed that prints a podcast element, and
+`xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"` only on one that
+prints `itunes:duration`.
+
+**Left out on purpose:** the Apple directory tags (`itunes:image`,
+`itunes:category`, `itunes:explicit`, `itunes:owner`), and `podcast:guid`,
+`podcast:locked`, `podcast:person`, `podcast:season`, `podcast:episode`,
+`podcast:value` and `podcast:chapters`. Each one matters only to a podcast
+directory or a dedicated show. Adding them is a follow-up for a site that wants
+to be listed in Apple Podcasts, and so is `podcast:license`, which could reuse
+the [content license](#rss-20).
+
+**The fediverse** gets the main file as an `Audio` or `Video` attachment with
+its absolute `url`, its `mediaType`, and the post's title, or a note's first
+words, as its `name`. It goes before the post's `Image` attachments, because
+Mastodon shows a player or a gallery by the type of the first attachment and
+keeps only four. Alternate versions and linked files stay out: a remote server
+fetches and re-encodes what it is given, and a link to another host is a type
+this site cannot check. `playsAsVideo(type)` decides `Video` against `Audio`,
+and the default theme's `<video>` against `<audio>`, so the two never disagree.
+
+The default theme plays the main file on the post page; see its README.
+
 ### Real-time notification
 
 A feed reader that polls hears about a post when it next polls. An [rssCloud][]

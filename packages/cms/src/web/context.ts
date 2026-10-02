@@ -3,6 +3,8 @@ import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { enclosureOf, isCaptions, playsAsVideo } from '../content/enclosure.ts';
+import type { Enclosure, Transcript } from '../content/enclosure.ts';
 import { isNamed, postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { DEFAULT_TIMEZONE } from '../content/time.ts';
@@ -192,8 +194,23 @@ export interface DocumentContext {
   page: PageContext;
   /** `post` or `page`. */
   type: string;
+  /**
+   * The post's recording (TASK-213), read once by `enclosureOf` over the raw
+   * front matter, with what a player needs decided: whether it is played by a
+   * `<video>` or an `<audio>`, and whether its transcript is timed captions.
+   * Absent when the front matter describes none worth playing, so a theme
+   * asks `{% if enclosure %}`.
+   */
+  enclosure?: EnclosureContext | undefined;
   /** Everything else from the front matter, including unmodelled keys. */
   [key: string]: unknown;
+}
+
+/** A post's recording as a theme plays it. See {@link DocumentContext.enclosure}. */
+export interface EnclosureContext extends Omit<Enclosure, 'transcript'> {
+  /** The element that plays it, the same answer the fediverse's attachment type gives. */
+  player: 'audio' | 'video';
+  transcript?: (Transcript & { captions: boolean }) | undefined;
 }
 
 /**
@@ -262,6 +279,7 @@ export function documentContext(
     ...optional('inReplyTo', replyTarget(document)),
     // Over the raw front-matter value the spread above put here.
     lang: documentLanguage(document),
+    enclosure: enclosureContext(document),
     label: postLabel(document),
     ...optional('date', date),
     tags: document.tags,
@@ -465,4 +483,17 @@ function toDate(value: string | undefined): Date | undefined {
 
 function optional<K extends string, V>(key: K, value: V | undefined): Record<K, V> | object {
   return value === undefined ? {} : ({ [key]: value } as Record<K, V>);
+}
+
+function enclosureContext(document: Document): EnclosureContext | undefined {
+  const enclosure = enclosureOf(document.extra);
+  if (enclosure === undefined) return undefined;
+  const { transcript, ...rest } = enclosure;
+  return {
+    ...rest,
+    player: playsAsVideo(enclosure.type) ? 'video' : 'audio',
+    ...(transcript === undefined
+      ? {}
+      : { transcript: { ...transcript, captions: isCaptions(transcript) } }),
+  };
 }

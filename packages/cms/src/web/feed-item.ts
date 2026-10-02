@@ -1,5 +1,7 @@
 import type { User } from '../admin/accounts.ts';
 import type { Document } from '../content/document.ts';
+import { enclosureOf } from '../content/enclosure.ts';
+import type { Enclosure } from '../content/enclosure.ts';
 import { isNamed, replyTarget } from '../content/post-type.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
@@ -117,6 +119,16 @@ export interface FeedItem {
    * Feed has no field for it and leaves it out.
    */
   license?: ContentLicense | undefined;
+  /**
+   * The post's recording (TASK-213), with every URL absolute on the site's
+   * base URL. RSS writes the main file as `<enclosure>` and the rest in the
+   * Podcasting 2.0 namespace, Atom writes the main file as a
+   * `rel="enclosure"` link, and JSON Feed lists every version as an
+   * attachment. A post without one prints none of it, so its bytes are what
+   * they were before recordings existed, which is why
+   * {@link FEED_ITEM_REVISION} did not move for it.
+   */
+  enclosure?: Enclosure | undefined;
 }
 
 /**
@@ -207,6 +219,9 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   const license = resolveLicense(context.site, document.extra);
   if (license !== undefined) item.license = license;
 
+  const enclosure = enclosureOf(document.extra);
+  if (enclosure !== undefined) item.enclosure = absoluteEnclosure(enclosure, baseUrl);
+
   const counts = context.commentCounts;
   if (counts !== undefined) {
     item.comments = {
@@ -217,6 +232,21 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   }
 
   return item;
+}
+
+function absoluteEnclosure(enclosure: Enclosure, baseUrl: string): Enclosure {
+  const { transcript } = enclosure;
+  return {
+    ...enclosure,
+    url: absoluteUrl(enclosure.url, baseUrl),
+    ...(transcript === undefined
+      ? {}
+      : { transcript: { ...transcript, url: absoluteUrl(transcript.url, baseUrl) } }),
+    alternates: enclosure.alternates.map((alternate) => ({
+      ...alternate,
+      url: absoluteUrl(alternate.url, baseUrl),
+    })),
+  };
 }
 
 /** One item per document, in the order the feed was given them. */

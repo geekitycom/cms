@@ -220,18 +220,59 @@ describe('resolveConfig', () => {
     );
   });
 
-  it('allows images, PDFs and plain text uploads by default, and no SVG', () => {
+  it('caps an audio or video upload at two hundred mebibytes unless the site says otherwise', () => {
+    assert.equal(
+      resolveConfig({}, { cwd: '/srv/site', env: {} }).uploadMediaMaxBytes,
+      200 * 1024 * 1024,
+    );
+    assert.equal(
+      resolveConfig({ uploadMediaMaxBytes: 4096 }, { cwd: '/srv/site', env: {} })
+        .uploadMediaMaxBytes,
+      4096,
+    );
+    assert.equal(
+      resolveConfig(
+        { uploadMediaMaxBytes: 4096 },
+        { cwd: '/srv/site', env: { GEEKITY_UPLOAD_MEDIA_MAX_BYTES: '1024' } },
+      ).uploadMediaMaxBytes,
+      1024,
+    );
+  });
+
+  it('rejects a media upload limit that is not a positive whole number of bytes', () => {
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_UPLOAD_MEDIA_MAX_BYTES: '1.5' } }),
+      /GEEKITY_UPLOAD_MEDIA_MAX_BYTES/,
+    );
+    assert.throws(
+      () => resolveConfig({ uploadMediaMaxBytes: -1 }, { cwd: '/srv/site', env: {} }),
+      /uploadMediaMaxBytes/,
+    );
+  });
+
+  it('allows images, PDFs, text, captions, audio and video uploads by default, and no SVG', () => {
     const { uploadTypes } = resolveConfig({}, { cwd: '/srv/site', env: {} });
 
     assert.deepEqual(uploadTypes, [
+      '.aac',
       '.avif',
       '.gif',
       '.jpeg',
       '.jpg',
+      '.m4a',
+      '.m4v',
       '.md',
+      '.mp3',
+      '.mp4',
+      '.oga',
+      '.ogg',
+      '.opus',
       '.pdf',
       '.png',
+      '.srt',
       '.txt',
+      '.vtt',
+      '.webm',
       '.webp',
     ]);
   });

@@ -46,14 +46,17 @@ export interface UploadResult {
  * generated later, or by whichever screen remembered to ask, would be an
  * upload that is responsive on some pages and not on others.
  */
-export type UploadConfig = Pick<ResolvedConfig, 'contentDir' | 'uploadTypes' | 'uploadMaxBytes'> &
+export type UploadConfig = Pick<
+  ResolvedConfig,
+  'contentDir' | 'uploadTypes' | 'uploadMaxBytes' | 'uploadMediaMaxBytes'
+> &
   ImageConfig;
 
 /** One file that has landed under `content/uploads/`. */
 export interface StoredUpload {
   /** The public URL of the file, which the site serves straight away. */
   url: string;
-  /** What the CMS decided the file is; `media.image` says whether it is one. */
+  /** What the CMS decided the file is; `media.kind` says what it is for. */
   media: UploadMediaType;
   /** The submitted name without its extension, for the text of a link to it. */
   label: string;
@@ -123,7 +126,7 @@ export async function storeUpload(
   // the table has no entry for.
   const media = UPLOAD_MEDIA_TYPES.get(extension) as UploadMediaType;
 
-  if (options.imagesOnly === true && !media.image) {
+  if (options.imagesOnly === true && media.kind !== 'image') {
     return { status: 415, error: `A ${extension} is not an image, and this has to be one.` };
   }
 
@@ -135,8 +138,9 @@ export async function storeUpload(
     };
   }
 
-  if (file.size > config.uploadMaxBytes) {
-    return { status: 413, error: tooLargeMessage(config.uploadMaxBytes) };
+  const limit = uploadLimit(media, config);
+  if (file.size > limit) {
+    return { status: 413, error: tooLargeMessage(limit) };
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -173,6 +177,30 @@ export async function storeUpload(
 }
 
 /**
+ * The largest file of this kind a site accepts: audio and video have a limit
+ * of their own, since an episode is far bigger than any picture.
+ */
+export function uploadLimit(
+  media: UploadMediaType,
+  config: Pick<ResolvedConfig, 'uploadMaxBytes' | 'uploadMediaMaxBytes'>,
+): number {
+  return media.kind === 'audio' || media.kind === 'video'
+    ? config.uploadMediaMaxBytes
+    : config.uploadMaxBytes;
+}
+
+/**
+ * The most any upload may weigh. The headers do not say what a file is, so a
+ * check made before reading it can only hold it to the larger limit, and
+ * {@link storeUpload} holds each file to its own once it knows.
+ */
+function largestUploadLimit(
+  config: Pick<ResolvedConfig, 'uploadMaxBytes' | 'uploadMediaMaxBytes'>,
+): number {
+  return Math.max(config.uploadMaxBytes, config.uploadMediaMaxBytes);
+}
+
+/**
  * Refuse an oversized upload by its headers, before anything reads it.
  *
  * This is registered in front of the admin guard on purpose. The guard finds
@@ -187,7 +215,7 @@ export const refuseOversizedUpload: MiddlewareHandler<GeekityEnv> = async (c, ne
   if (c.req.method !== 'POST') return next();
 
   const declared = Number(c.req.header('content-length') ?? '');
-  const limit = c.var.config.uploadMaxBytes;
+  const limit = largestUploadLimit(c.var.config);
   if (Number.isFinite(declared) && declared > limit + UPLOAD_ENVELOPE_BYTES) {
     // JSON for the editor's control, which reads it, and plain text for the
     // media screen's form, which is a navigation: a browser that has just
@@ -233,7 +261,7 @@ export function mountUploads(app: Hono<GeekityEnv>): void {
       markdown: uploadMarkdown({
         url: outcome.url,
         label: outcome.label,
-        image: outcome.media.image,
+        image: outcome.media.kind === 'image',
       }),
     };
     return c.json(result, 201);

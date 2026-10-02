@@ -8,6 +8,8 @@ import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
 import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
+import { ENCLOSURE_FRONT_MATTER_KEY, enclosureOf, TRANSCRIPT_TYPES } from '../content/enclosure.ts';
+import type { Enclosure } from '../content/enclosure.ts';
 import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
 import { scheduledFor } from '../content/schedule.ts';
 import { htmlToText } from '../content/search.ts';
@@ -40,6 +42,17 @@ import { PREVIEW_PATH } from './preview.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { UPLOADS_PATH } from './uploads.ts';
+import {
+  BLANK_ALTERNATE_ROW,
+  BLANK_ENCLOSURE_FORM,
+  ENCLOSURE_FIELDS,
+  enclosureChoices,
+  enclosureForm,
+  enclosureFrontMatter,
+  readEnclosureForm,
+  resolveEnclosure,
+} from './enclosure-field.ts';
+import type { EnclosureForm } from './enclosure-field.ts';
 
 /**
  * Everything that differs between the posts screens and the pages screens.
@@ -334,6 +347,7 @@ async function saveFromForm(
     contact: body['contact'] !== undefined,
     pinned: kind.type === 'post' && body['pinned'] !== undefined,
     comments: commentSetting(text(body['comments'])),
+    enclosure: kind.type === 'post' ? readEnclosureForm(body) : BLANK_ENCLOSURE_FORM,
     body: normalizeBody(text(body['body'])),
     hash: text(body['hash']),
   };
@@ -343,7 +357,7 @@ async function saveFromForm(
   // Publish say what they do, and Update leaves the decision to the checkbox.
   const draft = action === 'save-draft' ? true : action === 'publish' ? false : form.draft;
 
-  function refuse(message: string): Response {
+  function refuse(message: string): Promise<Response> {
     return renderEditor(c, {
       kind,
       render,
@@ -367,6 +381,17 @@ async function saveFromForm(
 
   if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
     return refuse('That is not a language tag, such as en, fr or pt-BR.');
+  }
+
+  let recording: Enclosure | undefined;
+  if (kind.type === 'post') {
+    const resolved = resolveEnclosure(
+      form.enclosure,
+      document === undefined ? undefined : enclosureOf(document.extra),
+      contentDir,
+    );
+    if ('error' in resolved) return refuse(resolved.error);
+    recording = resolved.enclosure;
   }
 
   // TASK-207: a pin is new when the file does not carry one yet, and only a
@@ -447,7 +472,14 @@ async function saveFromForm(
   if (document !== undefined) {
     const conflict = await conflictWith(contentDir, document, form.hash);
     if (conflict !== undefined) {
-      return renderConflict(c, { kind, render, document, form: { ...form, draft }, conflict });
+      return renderConflict(c, {
+        kind,
+        render,
+        document,
+        form: { ...form, draft },
+        recording,
+        conflict,
+      });
     }
   }
 
@@ -468,7 +500,7 @@ async function saveFromForm(
     ...optional('author', chosenAuthor(c, form.author, document)),
     ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', keptIdentity(document, promised, permalink, c.var.config.baseUrl)),
-    extra: resolveExtra(kind, document, form, store.now()),
+    extra: resolveExtra(kind, document, form, store.now(), recording),
     body: form.body,
   };
 
@@ -745,8 +777,14 @@ function resolveExtra(
   document: Document | undefined,
   form: Pick<EditorForm, 'exclude' | 'comments' | 'contact' | 'lang' | 'pinned'>,
   now: Date,
+  recording: Enclosure | undefined,
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
+
+  if (kind.type === 'post') {
+    if (recording === undefined) delete extra[ENCLOSURE_FRONT_MATTER_KEY];
+    else extra[ENCLOSURE_FRONT_MATTER_KEY] = enclosureFrontMatter(recording);
+  }
 
   // The moment a post was pinned is what orders the featured collection, so a
   // pin the file already carries keeps its moment through every later save,
@@ -927,6 +965,8 @@ interface RenderConflictOptions {
   render: AdminRender;
   document: Document;
   form: EditorForm;
+  /** The recording the submitted form resolved to. */
+  recording: Enclosure | undefined;
   conflict: Conflict;
 }
 
@@ -951,7 +991,7 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     ...optional('author', document.author),
     ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', document.activitypub),
-    extra: resolveExtra(kind, document, form, c.var.store.now()),
+    extra: resolveExtra(kind, document, form, c.var.store.now(), options.recording),
     body: form.body,
   });
 
@@ -1132,6 +1172,8 @@ export interface EditorForm {
    * lose is the default every document starts at.
    */
   comments: string;
+  /** The post's recording (TASK-213). Posts only; blank on a page. */
+  enclosure: EnclosureForm;
   body: string;
   /** The hash of the file the form was filled in from; empty for a new one. */
   hash: string;
@@ -1168,6 +1210,7 @@ export function blankForm(
     contact: false,
     pinned: false,
     comments: COMMENT_SETTINGS.site,
+    enclosure: BLANK_ENCLOSURE_FORM,
     body: '',
     hash: '',
   };
@@ -1201,6 +1244,7 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
     pinned: pinnedAt(document) !== undefined,
     comments: commentSettingOf(document),
+    enclosure: document.type === 'post' ? enclosureForm(document) : BLANK_ENCLOSURE_FORM,
     body: document.body,
     hash: document.hash,
   };
@@ -1233,7 +1277,10 @@ interface RenderEditorOptions {
  * Update, and anything that exists can be thrown away or, if it already has
  * been, restored.
  */
-function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Response {
+async function renderEditor(
+  c: Context<GeekityEnv>,
+  options: RenderEditorOptions,
+): Promise<Response> {
   const { kind, document, form } = options;
   const trashed = document !== undefined && isTrashedPath(document.path);
   const now = c.var.store.now();
@@ -1265,6 +1312,14 @@ function renderEditor(c: Context<GeekityEnv>, options: RenderEditorOptions): Res
     actions,
     trashed,
     commentSettings: COMMENT_SETTINGS,
+    ...(kind.type === 'post'
+      ? {
+          enclosureFields: ENCLOSURE_FIELDS,
+          enclosureChoices: await enclosureChoices(c.var.config.contentDir, form.enclosure.url),
+          transcriptTypes: TRANSCRIPT_TYPES,
+          alternateRows: [...form.enclosure.alternates, BLANK_ALTERNATE_ROW],
+        }
+      : {}),
     // Who this can be attributed to, and who it is attributed to now.
     authors: authorChoices(c, form.author),
     // What an empty Language field means.

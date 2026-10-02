@@ -56,6 +56,10 @@
   {% include "partials/reply-context.njk" %}
   {% endif %}
 
+  {% if enclosure %}
+  {% include "partials/recording.njk" %}
+  {% endif %}
+
   <section class="e-content">
     {{ content | safe }}
     <p class="entry-meta">

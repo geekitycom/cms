@@ -48,7 +48,8 @@
     <label for="media-file">Add a file</label>
     <input id="media-file" name="{{ fields.file }}" type="file" accept="{{ accepts }}" required />
     <p class="admin-hint">
-      This site accepts {{ accepts | replace(',', ', ') }}, up to {{ maxBytes }} bytes. The same
+      This site accepts {{ accepts | replace(',', ', ') }}, up to {{ maxBytes }} bytes, or
+      {{ mediaMaxBytes }} bytes for audio and video. The same
       rules the editor’s upload control enforces.
     </p>
     <p class="admin-settings-buttons">
@@ -76,7 +77,7 @@
         {% for file in files %}
           <tr>
             <td class="admin-media-file">
-              {% if file.image %}
+              {% if file.kind == 'image' %}
                 <a href="{{ file.url }}">
                   <img class="admin-media-thumbnail" src="{{ file.url }}" alt="" width="60" height="60" />
                 </a>
@@ -86,7 +87,7 @@
               <a href="{{ file.url }}">{{ file.path }}</a>
             </td>
             <td class="admin-media-alt">
-              {% if file.image %}
+              {% if file.kind == 'image' %}
                 <form method="post" action="{{ altUrl }}">
                   <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
                   <input type="hidden" name="{{ fields.path }}" value="{{ file.path }}" />

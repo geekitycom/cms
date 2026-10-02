@@ -17,6 +17,7 @@ import path from 'node:path';
 import type { Context, Hono } from 'hono';
 
 import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
+import type { UploadKind } from '../content/media.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
@@ -83,8 +84,12 @@ export interface MediaFile {
   bytes: number;
   /** When it last changed, as an ISO 8601 instant, which is what sorts the list. */
   modified: string;
-  /** Whether a browser will render it as a picture, so the row shows a thumbnail. */
-  image: boolean;
+  /**
+   * What it is for, from its extension: an image row shows a thumbnail and an
+   * alt-text field, and an audio or video file can be a post's enclosure.
+   * Unset for a file whose extension the CMS does not know.
+   */
+  kind: UploadKind | undefined;
   /** What the library says an image is, from `content/_data/media.json`. Unset when nothing has been said. */
   alt: AltText | undefined;
   /** The Markdown for it: an embed with its alt text for an image, a link for anything else. */
@@ -155,7 +160,8 @@ export function describeUpload(
 ): MediaFile {
   const name = relative.slice(relative.lastIndexOf('/') + 1);
   const extension = path.extname(name).toLowerCase();
-  const image = UPLOAD_MEDIA_TYPES.get(extension)?.image ?? false;
+  const kind = UPLOAD_MEDIA_TYPES.get(extension)?.kind;
+  const image = kind === 'image';
   const url = `${UPLOAD_ASSET_PREFIX}${relative}`;
 
   return {
@@ -165,7 +171,7 @@ export function describeUpload(
     extension,
     bytes,
     modified: modified.toISOString(),
-    image,
+    kind,
     alt: image ? alt : undefined,
     // The same Markdown the editor's upload control pastes, from the same
     // function, so a file linked from the media screen and the same file
@@ -429,6 +435,7 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
       fields: MEDIA_FIELDS,
       accepts: c.var.config.uploadTypes.join(','),
       maxBytes: c.var.config.uploadMaxBytes,
+      mediaMaxBytes: c.var.config.uploadMediaMaxBytes,
       total: files.length,
       page,
       pages: Math.max(1, Math.ceil(files.length / MEDIA_PER_PAGE)),

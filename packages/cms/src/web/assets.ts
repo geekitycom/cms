@@ -165,6 +165,55 @@ export function assetResponse(asset: StaticAsset, options: AssetResponseOptions 
   return new Response(body, { headers: assetHeaders(asset, options) });
 }
 
+/**
+ * Part of an asset, for a request that asked for one byte range of it.
+ *
+ * Audio and video are why this exists: Safari will not play a file whose
+ * server does not answer a range request, and every player seeks by asking
+ * for the bytes at the new position rather than downloading the whole
+ * episode first. One range is all a player asks for, so a header naming
+ * several, or one that cannot be read, gets the whole file, which is what
+ * HTTP allows a server that ignores `Range` to send. So does a request whose
+ * `If-Range` no longer names this file: its earlier part was of other bytes.
+ *
+ * Returns `undefined` when the whole file is the answer.
+ */
+export function assetRangeResponse(
+  asset: StaticAsset,
+  range: string | undefined,
+  ifRange: string | undefined,
+  options: AssetResponseOptions = {},
+): Response | undefined {
+  if (range === undefined) return undefined;
+  if (ifRange !== undefined && ifRange.trim() !== asset.etag) return undefined;
+
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  if (match === null) return undefined;
+  const [, first = '', last = ''] = match;
+  if (first === '' && last === '') return undefined;
+
+  if (first !== '' && last !== '' && Number(last) < Number(first)) return undefined;
+
+  const size = asset.stats.size;
+  // `bytes=-500` is the last five hundred bytes; `bytes=500-` is all but the first five hundred.
+  const start = first === '' ? Math.max(0, size - Number(last)) : Number(first);
+  const end = first === '' || last === '' ? size - 1 : Math.min(Number(last), size - 1);
+
+  const headers = assetHeaders(asset, options);
+  headers.set('accept-ranges', 'bytes');
+  if (start >= size) {
+    headers.delete('content-type');
+    headers.set('content-length', '0');
+    headers.set('content-range', `bytes */${String(size)}`);
+    return new Response(null, { status: 416, headers });
+  }
+
+  headers.set('content-length', String(end - start + 1));
+  headers.set('content-range', `bytes ${String(start)}-${String(end)}/${String(size)}`);
+  const body = Readable.toWeb(createReadStream(asset.file, { start, end })) as ReadableStream;
+  return new Response(body, { status: 206, headers });
+}
+
 /** The 304 an unchanged asset gets, which carries the validators and no body. */
 export function assetNotModified(asset: StaticAsset, options: AssetResponseOptions = {}): Response {
   const headers = assetHeaders(asset, options);
@@ -216,7 +265,7 @@ function normalizeAssetPath(relative: string): string | undefined {
   return relative.replace(/^\/+/, '');
 }
 
-/** Media types for what a theme actually ships. */
+/** Media types for what a theme ships and what the upload endpoint accepts. */
 const CONTENT_TYPES: ReadonlyMap<string, string> = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
@@ -236,6 +285,18 @@ const CONTENT_TYPES: ReadonlyMap<string, string> = new Map([
   ['.ttf', 'font/ttf'],
   ['.otf', 'font/otf'],
   ['.txt', 'text/plain; charset=utf-8'],
+  // A `<track>` is ignored unless its file is served as `text/vtt`.
+  ['.vtt', 'text/vtt; charset=utf-8'],
+  ['.srt', 'application/x-subrip; charset=utf-8'],
+  ['.mp3', 'audio/mpeg'],
+  ['.m4a', 'audio/mp4'],
+  ['.aac', 'audio/aac'],
+  ['.ogg', 'audio/ogg'],
+  ['.oga', 'audio/ogg'],
+  ['.opus', 'audio/ogg'],
+  ['.mp4', 'video/mp4'],
+  ['.m4v', 'video/mp4'],
+  ['.webm', 'video/webm'],
   ['.webmanifest', 'application/manifest+json'],
 ]);
 

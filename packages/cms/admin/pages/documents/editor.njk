@@ -62,6 +62,75 @@
           formnovalidate
         >Preview</button>
       </div>
+
+      {% if kind.type == "post" %}
+        <fieldset class="admin-editor-enclosure">
+          <legend>Recording</legend>
+
+          <label for="editor-enclosure-url">Audio or video file</label>
+          <select id="editor-enclosure-url" name="{{ enclosureFields.url }}" aria-describedby="editor-enclosure-url-hint">
+            <option value=""{% if form.enclosure.url == "" %} selected{% endif %}>None</option>
+            {% for choice in enclosureChoices.media %}
+              <option value="{{ choice.url }}"{% if choice.url == form.enclosure.url %} selected{% endif %}>{{ choice.label }}</option>
+            {% endfor %}
+          </select>
+          <p class="admin-hint" id="editor-enclosure-url-hint">
+            Upload the file to the media library first. Feeds carry it as the post’s enclosure and the
+            post page plays it. None removes the recording, its transcript and its other versions.
+          </p>
+
+          <label for="editor-enclosure-duration">Duration</label>
+          <input id="editor-enclosure-duration" name="{{ enclosureFields.duration }}" type="text" inputmode="numeric" value="{{ form.enclosure.duration }}" autocomplete="off" aria-describedby="editor-enclosure-duration-hint" />
+          <p class="admin-hint" id="editor-enclosure-duration-hint">Seconds, or 30:34, or 1:02:03. Leave it empty if you do not know.</p>
+
+          <label for="editor-enclosure-transcript">Transcript or captions</label>
+          <input id="editor-enclosure-transcript" name="{{ enclosureFields.transcriptUrl }}" type="text" value="{{ form.enclosure.transcriptUrl }}" list="editor-transcript-uploads" autocomplete="off" aria-describedby="editor-enclosure-transcript-hint" />
+          <datalist id="editor-transcript-uploads">
+            {% for url in enclosureChoices.transcripts %}
+              <option value="{{ url }}"></option>
+            {% endfor %}
+          </datalist>
+          <label for="editor-enclosure-transcript-type">Transcript type</label>
+          <select id="editor-enclosure-transcript-type" name="{{ enclosureFields.transcriptType }}" aria-describedby="editor-enclosure-transcript-hint">
+            <option value=""{% if form.enclosure.transcriptType == "" %} selected{% endif %}>From the file</option>
+            {% for type in transcriptTypes %}
+              <option value="{{ type }}"{% if type == form.enclosure.transcriptType %} selected{% endif %}>{{ type }}</option>
+            {% endfor %}
+          </select>
+          <p class="admin-hint" id="editor-enclosure-transcript-hint">
+            A .vtt, .srt or .txt file in the media library, or an address starting https://. A linked
+            transcript needs its type.
+          </p>
+
+          <h2 class="admin-editor-enclosure-heading">Other versions</h2>
+          <p class="admin-hint">
+            A video of an audio episode, a smaller file, another language. Each is a file in the media
+            library or an address starting https://, which needs its type. Empty an address to remove
+            that version.
+          </p>
+          {% for row in alternateRows %}
+            {% set n = loop.index0 %}
+            <fieldset class="admin-editor-alternate">
+              <legend>{% if row.url %}Version {{ loop.index }}{% else %}Add a version{% endif %}</legend>
+              <label for="editor-alternate-url-{{ n }}">Address</label>
+              <input id="editor-alternate-url-{{ n }}" name="{{ enclosureFields.alternate.url }}{{ n }}" type="text" value="{{ row.url }}" list="editor-media-uploads" autocomplete="off" />
+              <label for="editor-alternate-type-{{ n }}">Type</label>
+              <input id="editor-alternate-type-{{ n }}" name="{{ enclosureFields.alternate.type }}{{ n }}" type="text" value="{{ row.type }}" placeholder="video/mp4" autocomplete="off" spellcheck="false" />
+              <label for="editor-alternate-title-{{ n }}">Title</label>
+              <input id="editor-alternate-title-{{ n }}" name="{{ enclosureFields.alternate.title }}{{ n }}" type="text" value="{{ row.title }}" maxlength="32" />
+              <label for="editor-alternate-height-{{ n }}">Height</label>
+              <input id="editor-alternate-height-{{ n }}" name="{{ enclosureFields.alternate.height }}{{ n }}" type="text" inputmode="numeric" value="{{ row.height }}" autocomplete="off" />
+              <label for="editor-alternate-lang-{{ n }}">Language</label>
+              <input id="editor-alternate-lang-{{ n }}" name="{{ enclosureFields.alternate.lang }}{{ n }}" type="text" value="{{ row.lang }}" autocomplete="off" spellcheck="false" />
+            </fieldset>
+          {% endfor %}
+          <datalist id="editor-media-uploads">
+            {% for choice in enclosureChoices.media %}
+              <option value="{{ choice.url }}"></option>
+            {% endfor %}
+          </datalist>
+        </fieldset>
+      {% endif %}
     </div>
 
     <div class="admin-editor-side">

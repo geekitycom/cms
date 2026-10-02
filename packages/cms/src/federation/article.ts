@@ -2,6 +2,7 @@ import type { Context } from '@fedify/fedify';
 import {
   Add,
   Article,
+  Audio,
   Create,
   Delete,
   Hashtag,
@@ -15,6 +16,7 @@ import {
   Source,
   Tombstone,
   Update,
+  Video,
 } from '@fedify/vocab';
 import { Temporal as TemporalPolyfill } from '@js-temporal/polyfill';
 import path from 'node:path';
@@ -23,11 +25,12 @@ import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
-import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
+import { enclosureOf, playsAsVideo } from '../content/enclosure.ts';
+import { canonicalType, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import { readAltTexts } from '../images/alt-text.ts';
 import { imagesIn } from '../images/markup.ts';
 import type { ContentStore } from '../content/store.ts';
-import { postTypeOf, replyTarget } from '../content/post-type.ts';
+import { postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
 import { userForAuthor } from '../web/authors.ts';
@@ -220,7 +223,10 @@ export function postObject(
     // post that federates is addressed to Public, so anybody may quote it, and
     // the inbox approves each QuoteRequest on the same rule (TASK-125).
     interactionPolicy: QUOTABLE_BY_ANYONE,
-    attachments: imageAttachments(document, context.data.config),
+    attachments: [
+      ...recordingAttachment(document, baseUrl),
+      ...imageAttachments(document, context.data.config),
+    ],
     // Both taxonomies become hashtags: a relay or a search that keys on a
     // hashtag has no reason to care which of the two a term came from, and
     // each one points at the archive the site serves for it.
@@ -255,6 +261,31 @@ function inLanguage(text: string, language: string): (string | LanguageString)[]
 }
 
 /**
+ * The post's recording, as the `Audio` or `Video` Mastodon plays in the
+ * timeline (TASK-213), or nothing for a post without one.
+ *
+ * It goes before the images on purpose. Mastodon shows a status's media by
+ * the type of its first attachment, a player for audio or video and a gallery
+ * otherwise, and keeps only the first four, so a recording after the pictures
+ * could be shown as a broken tile or dropped. Only the main file goes: it is
+ * always an upload, while an alternate version may be a link to another host
+ * whose type this site cannot check, and a remote server fetches and
+ * re-encodes whatever it is given. Its `name` is the post's title, or a
+ * note's first words, since a player with no label says nothing about what
+ * it plays.
+ */
+function recordingAttachment(document: Document, baseUrl: string): (Audio | Video)[] {
+  const enclosure = enclosureOf(document.extra);
+  if (enclosure === undefined) return [];
+  const values = {
+    url: new URL(absoluteUrl(enclosure.url, baseUrl)),
+    mediaType: enclosure.type,
+    name: postLabel(document),
+  };
+  return [playsAsVideo(enclosure.type) ? new Video(values) : new Audio(values)];
+}
+
+/**
  * Each image the post shows from the site's own uploads, as an `Image` whose
  * `name` is its alt text (TASK-141).
  *
@@ -275,12 +306,12 @@ function imageAttachments(
     if (library.get(image.source)?.kind === 'decorative') continue;
     const extension = path.extname(image.source).toLowerCase();
     const media = UPLOAD_MEDIA_TYPES.get(extension);
-    if (media?.image !== true) continue;
+    if (media?.kind !== 'image') continue;
     const alt = image.alt?.trim() ?? '';
     attachments.push(
       new Image({
         url: new URL(absoluteUrl(image.src, config.baseUrl)),
-        mediaType: media.declared[0] ?? null,
+        mediaType: canonicalType(media) ?? null,
         name: alt === '' ? null : alt,
       }),
     );
