@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-02 16:30'
+updated_date: '2026-10-02 16:54'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -64,6 +64,7 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | `author` | the username of a user; see below |
 | `in-reply-to` | the URL of the post this one answers, under its microformats2 name. An http or https URL makes the post a reply (Post Type Discovery, TASK-121): the theme cites it as an embedded `u-in-reply-to h-cite` filled in from `_data/replyContexts.json` (TASK-123, decision-19), the ActivityStreams object carries it as `inReplyTo`, and publishing sends it a webmention. Any other value is kept in the file, logged as a warning when the file is indexed, and ignored; the admin editor refuses to save one |
 | `photo` | the post's photos (TASK-166), a list in Micropub's name. Each entry is `url`, an upload's `/uploads/…` path or an http or https URL, and an optional `alt`; a bare URL string reads as an entry without `alt`. An entry with no `alt` takes the media library's alt text for that upload (TASK-141), so a library image is described once. The theme prints each as an `img.u-photo` in the h-entry, the ActivityStreams object attaches each as an `Image` named by its alt text, and the JSON-LD lists each as an `ImageObject`. A post with a photo is a photo post under Post Type Discovery unless it is a reply, which comes first. An entry whose `url` is neither is dropped when read; the admin editor refuses to save one, and refuses an upload that is not an image in the library |
+| `like-of`, `repost-of`, `bookmark-of` | the URL a post likes, reposts or bookmarks (TASK-169), each under its microformats2 name, one URL each; a list of one reads as that URL. An http or https URL makes the post a like, a repost or a bookmark under Post Type Discovery, in the order repost, like, reply, photo, bookmark: the spec's order, with bookmark, which the spec leaves to note and article, just ahead of them. The theme cites each as an embedded `u-like-of`, `u-repost-of` or `u-bookmark-of` `h-cite`, and publishing sends the URL a webmention. A like or repost of a fediverse object federates as a `Like` or `Announce` of it; anything else federates as the note it is, with a line linking the page (decision-28). Any other value is ignored; the admin editor refuses to save one |
 | `activitypub.published` | timestamp of first delivery, a UTC instant. The only key the CMS writes here: it records that the post has been announced and when, which is what decides `Create` against `Update` |
 | `activitypub.id` | never written by the CMS. A post's ActivityStreams object id is its permalink (decision-13); this key is read, not minted, so a post migrated from elsewhere keeps the id its followers already hold — `https://example.com/?p=813` — and every `Update` and `Delete` names it |
 | `activitypub.type` | never written by the CMS. `Note` or `Article`, overriding the ActivityStreams type Post Type Discovery derives for the post (decision-17). Any other value is kept in the file, logged as a warning, and ignored. The `activitypub` block is everything about how a post federates, whether the author set it or the CMS wrote it back, and a save never rewrites what the author set |
@@ -131,6 +132,7 @@ A post created over Micropub (TASK-164) is written by the editor's own write pat
 | `summary` | `description` |
 | `category`, each value | `tags` |
 | `in-reply-to` | `in-reply-to` |
+| `like-of`, `repost-of`, `bookmark-of` | the key of the same name |
 | `published` | `date`, as a UTC instant; now when it is missing |
 | `post-status: draft` | `draft: true`; `published`, or none, is `draft: false` |
 | `mp-slug` | the slug, in the file name and the permalink |

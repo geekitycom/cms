@@ -24,6 +24,8 @@ import path from 'node:path';
 import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
+import { citationsOf } from '../content/citation.ts';
+import type { CitationProperty } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf, isUploadUrl, playsAsVideo } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
@@ -138,6 +140,11 @@ type PostObjectType = keyof typeof OBJECT_TYPES;
  * is a photo post, whose photos are its attachments (TASK-166).
  */
 const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = {
+  // A like or a repost of a fediverse object goes as a `Like` or an
+  // `Announce` instead (decision-28); this is the object its permalink serves.
+  repost: 'Note',
+  like: 'Note',
+  bookmark: 'Note',
   reply: 'Note',
   photo: 'Note',
   note: 'Note',
@@ -243,7 +250,10 @@ export function postObject(
   };
 
   if (postObjectType(document) === 'Note') {
-    return new Note({ ...common, contents: inLanguage(noteContent(document), language) });
+    return new Note({
+      ...common,
+      contents: inLanguage(citing(document) + noteContent(document), language),
+    });
   }
 
   const summary = feedExcerpt(document);
@@ -251,7 +261,7 @@ export function postObject(
     ...common,
     name: document.title === '' ? null : document.title,
     summaries: summary === '' ? [] : inLanguage(summary, language),
-    contents: inLanguage(document.html, language),
+    contents: inLanguage(citing(document) + document.html, language),
   });
 }
 
@@ -354,6 +364,25 @@ function imageAttachments(
 const QUOTABLE_BY_ANYONE = new InteractionPolicy({
   canQuote: new InteractionRule({ automaticApproval: PUBLIC_COLLECTION }),
 });
+
+/**
+ * What a like, a repost or a bookmark cites, as a line linking each page
+ * (decision-28): the words a peer shows, since a `Note` has no field for it.
+ */
+function citing(document: Document): string {
+  return citationsOf(document.extra)
+    .map(({ property, url }) => {
+      const href = escapeHtml(url).replaceAll('"', '&quot;');
+      return `<p>${CITING_VERBS[property]} <a href="${href}">${escapeHtml(url)}</a></p>\n`;
+    })
+    .join('');
+}
+
+const CITING_VERBS: Readonly<Record<CitationProperty, string>> = {
+  'repost-of': 'Reposted',
+  'like-of': 'Liked',
+  'bookmark-of': 'Bookmarked',
+};
 
 /** A note's HTML: its title first when its text does not already open with it. */
 function noteContent(document: Document): string {

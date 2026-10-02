@@ -31,6 +31,9 @@ const SINGLE_VALUED = {
   name: 'title',
   summary: 'description',
   'in-reply-to': 'inReplyTo',
+  'repost-of': 'repostOf',
+  'like-of': 'likeOf',
+  'bookmark-of': 'bookmarkOf',
   published: 'date',
   'mp-slug': 'slug',
 } as const satisfies Record<string, keyof EditorForm>;

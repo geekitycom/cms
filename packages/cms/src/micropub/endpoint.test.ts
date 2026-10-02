@@ -82,6 +82,9 @@ describe('q=config', () => {
       { type: 'article', name: 'Article' },
       { type: 'reply', name: 'Reply' },
       { type: 'photo', name: 'Photo' },
+      { type: 'like', name: 'Like' },
+      { type: 'repost', name: 'Repost' },
+      { type: 'bookmark', name: 'Bookmark' },
     ]);
     assert.deepEqual(config['q'], ['config', 'syndicate-to', 'category', 'source']);
   });

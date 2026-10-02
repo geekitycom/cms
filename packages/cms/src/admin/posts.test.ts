@@ -105,6 +105,9 @@ async function submit(
     categories: field(html, 'categories') ?? '',
     description: field(html, 'description') ?? '',
     'in-reply-to': field(html, 'in-reply-to') ?? '',
+    'like-of': field(html, 'like-of') ?? '',
+    'repost-of': field(html, 'repost-of') ?? '',
+    'bookmark-of': field(html, 'bookmark-of') ?? '',
     lang: field(html, 'lang') ?? '',
     ...recordingFields(html),
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
@@ -484,6 +487,64 @@ describe('the reply target in the editor', () => {
 
     assert.equal(response.status, 400);
     assert.match(await response.text(), /In reply to has to be a web address/);
+    assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+  });
+});
+
+describe('likes, reposts and bookmarks in the editor (TASK-169 AC #4)', () => {
+  const TARGET = 'https://them.example/2026/09/their-post/';
+  const FILE = ['posts', '2026-01-02-published.md'];
+
+  async function published(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  for (const property of ['like-of', 'repost-of', 'bookmark-of']) {
+    it(`sets ${property}, shows it on reload, and clears it again`, async () => {
+      const { contentDir, agent } = await published();
+
+      const blank = await (await agent.get('/admin/posts/new')).text();
+      assert.equal(field(blank, property), '', `a new post offers ${property} empty`);
+
+      assert.equal(
+        (await submit(agent, '/admin/posts/published', { [property]: TARGET })).status,
+        303,
+      );
+      let written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+      assert.match(written, new RegExp(`^${property}: ${TARGET}$`, 'm'));
+      const reloaded = await (await agent.get('/admin/posts/published')).text();
+      assert.equal(field(reloaded, property), TARGET);
+
+      assert.equal(
+        (await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status,
+        303,
+      );
+      written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+      assert.match(written, new RegExp(`^${property}: ${TARGET}$`, 'm'), 'another save keeps it');
+
+      assert.equal((await submit(agent, '/admin/posts/published', { [property]: '' })).status, 303);
+      written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+      assert.doesNotMatch(written, new RegExp(property), 'the key is gone, not left empty');
+    });
+  }
+
+  it('refuses a like target that is not a web address, and writes nothing', async () => {
+    const { contentDir, agent } = await published();
+    const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+    const response = await submit(agent, '/admin/posts/published', { 'like-of': 'their post' });
+
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /Like of has to be a web address/);
     assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
   });
 });

@@ -1,6 +1,7 @@
 import { formFor } from '../admin/documents.ts';
 import type { EditorForm } from '../admin/documents.ts';
 import { photoRows } from '../admin/photo-field.ts';
+import { citationsOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { syndicateToOf } from '../webmention/syndication.ts';
@@ -19,6 +20,9 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   summary: ['description'],
   category: ['tags'],
   'in-reply-to': ['inReplyTo'],
+  'repost-of': ['repostOf'],
+  'like-of': ['likeOf'],
+  'bookmark-of': ['bookmarkOf'],
   published: ['date'],
   'post-status': [],
   photo: ['photos'],
@@ -47,6 +51,7 @@ export function sourceProperties(
   text('summary', document.description);
   if (document.tags.length > 0) properties['category'] = [...document.tags];
   text('in-reply-to', document.inReplyTo);
+  for (const { property, url } of citationsOf(document.extra)) text(property, url);
   text('published', document.date);
   properties['post-status'] = [document.draft ? 'draft' : 'published'];
   const photos = photoRows(document).map(({ url, alt }) => {

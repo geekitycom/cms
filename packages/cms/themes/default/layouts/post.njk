@@ -39,6 +39,7 @@
   {#- A reply cites the post it answers, whose URL is also the link its
       webmention points a receiver at. -#}
   {% include "partials/reply-context.njk" %}
+  {% include "partials/citations.njk" %}
   <header class="post-header">
     {{ kicker.line(postType | capitalize, false, false, categories) }}
     <h1 class="p-name">{{ title }}</h1>
@@ -48,12 +49,13 @@
   </header>
   {% else %}
   <h1 class="screen-reader-text">
-    {{- "Reply" if postType == "reply" else "Note" }}
+    {{- postType | capitalize if postType in ["reply", "like", "repost", "bookmark"] else "Note" }}
     {%- if bioAuthor.name %} by {{ bioAuthor.name }}{% endif %}
     {%- if date %}, {{ date | date("readable", none, lang) }}{% endif -%}
   </h1>
   {{ kicker.line(postType | capitalize, false, false, categories) }}
   {% include "partials/reply-context.njk" %}
+  {% include "partials/citations.njk" %}
   {% endif %}
 
   {% if enclosure %}

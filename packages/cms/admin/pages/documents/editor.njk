@@ -189,6 +189,16 @@
         <label for="editor-in-reply-to">In reply to</label>
         <input id="editor-in-reply-to" name="in-reply-to" type="url" value="{{ form.inReplyTo }}" />
         <p class="admin-hint">The address of the post this one answers. Leave it empty for a post that answers nobody.</p>
+
+        {#- The mf2 `like-of`, `repost-of` and `bookmark-of` (TASK-169): each
+            cites a page the way a reply does, and sends it a webmention. -#}
+        <label for="editor-like-of">Like of</label>
+        <input id="editor-like-of" name="like-of" type="url" value="{{ form.likeOf }}" />
+        <label for="editor-repost-of">Repost of</label>
+        <input id="editor-repost-of" name="repost-of" type="url" value="{{ form.repostOf }}" />
+        <label for="editor-bookmark-of">Bookmark of</label>
+        <input id="editor-bookmark-of" name="bookmark-of" type="url" value="{{ form.bookmarkOf }}" />
+        <p class="admin-hint">The address of a post this one likes, reposts or bookmarks. Leave them empty for a post that cites nothing.</p>
       {% endif %}
 
       <label for="editor-description">Description</label>

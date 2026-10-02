@@ -1466,7 +1466,8 @@ gets 401. It answers these queries:
 
 - `?q=config` lists the media endpoint (`/_geekity/micropub/media`), the
   syndication targets under `syndicate-to`, the post types the site accepts
-  (note, article, reply and photo) and the queries it answers.
+  (note, article, reply, photo, like, repost and bookmark) and the queries it
+  answers.
 - `?q=syndicate-to` lists the syndication targets on their own. Each is the
   `uid` and `name` of a target the site declares in
   `content/_data/syndicationTargets.json`, with its `id` as the `uid`. A site
@@ -1497,6 +1498,11 @@ post's URL. The properties it understands are:
 - `summary` becomes the description.
 - `category` becomes the tags, one tag per value.
 - `in-reply-to` makes the post a reply to that URL.
+- `like-of`, `repost-of` and `bookmark-of` make the post a like, a repost or
+  a bookmark of that URL, one URL each, and need no content. Each is written
+  under the same front matter key, cited on the post's page, and sent a
+  webmention when the post is published. A like or repost of a fediverse
+  status federates as a `Like` or `Announce` of it (decision-28).
 - `published` becomes the date. Without it, the post is dated now.
 - `post-status` is `published` or `draft`. A draft is not published,
   federated or sent webmentions.
@@ -1514,7 +1520,7 @@ post's URL. The properties it understands are:
   when it is published. A `uid` the site does not declare gets 400
   `invalid_request` naming it, and nothing is written.
 
-Any other type or property, such as `h=event`, `like-of` or `location`, gets 400
+Any other type or property, such as `h=event`, `rsvp` or `location`, gets 400
 `invalid_request` with a description that names it, and nothing is written.
 decision-27 records the mapping.
 

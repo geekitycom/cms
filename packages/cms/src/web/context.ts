@@ -6,6 +6,8 @@ import type { Document } from '../content/document.ts';
 import { enclosureOf, isCaptions, playsAsVideo } from '../content/enclosure.ts';
 import type { Enclosure, Transcript } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
+import { citationsOf } from '../content/citation.ts';
+import type { Citation } from '../content/citation.ts';
 import { isNamed, postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { DEFAULT_TIMEZONE } from '../content/time.ts';
@@ -148,9 +150,9 @@ export interface DocumentContext {
   /** Display title. Empty for an untitled post. */
   title: string;
   /**
-   * `reply`, `note` or `article`, discovered from the front matter, the title
-   * and the body (Post Type Discovery) on every render rather than read from
-   * the file.
+   * `repost`, `like`, `reply`, `photo`, `bookmark`, `note` or `article`,
+   * discovered from the front matter, the title and the body (Post Type
+   * Discovery) on every render rather than read from the file.
    */
   postType: PostType;
   /**
@@ -161,6 +163,12 @@ export interface DocumentContext {
   named: boolean;
   /** The URL a reply answers, present only on a reply. */
   inReplyTo?: string | undefined;
+  /**
+   * What the post reposts, likes or bookmarks (TASK-169): each valid
+   * `repost-of`, `like-of` and `bookmark-of`, as its property and its URL, in
+   * that order. Empty for a post that cites nothing.
+   */
+  citations: Citation[];
   /**
    * The language the document is written in, as a canonical BCP 47 tag, when
    * its front matter names one (TASK-154). A theme marks the article with it
@@ -321,6 +329,7 @@ export function documentContext(
     postType: postTypeOf(document),
     named: isNamed(document),
     ...optional('inReplyTo', replyTarget(document)),
+    citations: citationsOf(document.extra),
     // Over the raw front-matter value the spread above put here.
     lang: documentLanguage(document),
     enclosure: enclosureContext(document),

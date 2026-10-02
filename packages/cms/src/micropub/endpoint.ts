@@ -38,6 +38,9 @@ const POST_TYPE_NAMES: Readonly<Record<PostType, string>> = {
   article: 'Article',
   reply: 'Reply',
   photo: 'Photo',
+  like: 'Like',
+  repost: 'Repost',
+  bookmark: 'Bookmark',
 };
 
 /** Each `q` the endpoint answers. */

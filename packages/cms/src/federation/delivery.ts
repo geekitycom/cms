@@ -25,6 +25,8 @@ import {
   postUpdateActivity,
 } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
+import { citingActivity, undoActivity } from './citations.ts';
+import type { Citing } from './citations.ts';
 import { followerRecipient } from './followers.ts';
 import { updateActivityId } from './paths.ts';
 import { acceptedRelays, relayRecipient } from './relays.ts';
@@ -211,6 +213,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     context: Context<FederationContextData>,
     activity: Activity,
     about: Document,
+    also: readonly DeliveryTarget[] = [],
   ): Promise<DeliveryReport> {
     const activityId = activity.id?.href;
     if (activityId === undefined) {
@@ -224,12 +227,64 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       );
     }
 
-    return await fanOut(context, author, activity, {
-      activityId,
-      activityType: typeNameOf(activity),
-      objectId: articleObjectId(context, about).href,
-      slug: about.slug,
-    });
+    return await fanOut(
+      context,
+      author,
+      activity,
+      {
+        activityId,
+        activityType: typeNameOf(activity),
+        objectId: articleObjectId(context, about).href,
+        slug: about.slug,
+      },
+      also,
+    );
+  }
+
+  /**
+   * What a version of a post is to a peer: the `Like` or `Announce` of the
+   * fediverse object it cites, or the object it is (decision-28). Asked of
+   * the post as it reads now, so a target that stops answering makes it the
+   * object again.
+   */
+  async function shapeOf(
+    context: Context<FederationContextData>,
+    document: Document,
+  ): Promise<Shape> {
+    const citing = await citingActivity(context, document);
+    return citing === undefined
+      ? { kind: 'object', id: articleObjectId(context, document).href }
+      : { kind: 'citing', id: citing.activity.id?.href ?? '', citing };
+  }
+
+  /** Tell the peers a post is out: its `Create`, or its `Like` or `Announce`. */
+  async function announce(
+    context: Context<FederationContextData>,
+    document: Document,
+    shape: Shape,
+  ): Promise<DeliveryReport> {
+    if (shape.kind === 'object') {
+      return await send(context, postCreateActivity(context, document), document);
+    }
+    return await send(context, shape.citing.activity, document, citedAuthor(shape.citing));
+  }
+
+  /** Take a post back: a `Delete` of its object, or an `Undo` of its `Like` or `Announce`. */
+  async function withdraw(
+    context: Context<FederationContextData>,
+    document: Document,
+    shape: Shape,
+  ): Promise<DeliveryReport> {
+    const deleted = new Date().toISOString();
+    if (shape.kind === 'object') {
+      return await send(context, postDeleteActivity(context, document, deleted), document);
+    }
+    return await send(
+      context,
+      undoActivity(shape.citing.activity, deleted),
+      document,
+      citedAuthor(shape.citing),
+    );
   }
 
   /**
@@ -257,11 +312,16 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       /** The post it was about, or `null` for an activity about the actor. */
       slug: string | null;
     },
+    also: readonly DeliveryTarget[] = [],
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
     const keys = await senderKeyPairs(context, sender);
+    const targets = deliveryTargets(admin, sender.username);
+    // One POST to an inbox the followers already share is enough.
+    const reached = new Set(targets.map((target) => target.inboxId));
+    targets.push(...also.filter((target) => !reached.has(target.inboxId)));
 
-    for (const target of deliveryTargets(admin, sender.username)) {
+    for (const target of targets) {
       let status: DeliveryStatus = synchronous ? 'sent' : 'queued';
       let error: string | null = null;
 
@@ -349,36 +409,28 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         // Unpublished, trashed or deleted; `before` is the post as it last
         // stood, and the only version there is to build a Tombstone from.
         if (before === undefined) return;
-        const deleted = new Date().toISOString();
-        queue(() => send(context, postDeleteActivity(context, before, deleted), before));
+        queue(async () => await withdraw(context, before, await shapeOf(context, before)));
         return;
       }
 
-      {
-        const stamped = await stamp(after);
-
-        if (before === undefined) {
-          queue(() => send(context, postCreateActivity(context, stamped), stamped));
-          queuePinChange(context, undefined, stamped);
-          return;
+      const stamped = await stamp(after);
+      // The same object after a save is an `Update`, or nothing at all for a
+      // like or a repost, which has no content of its own to update. Anything
+      // else, a rename or a change of what it cites, takes the old version back
+      // before the new one goes out.
+      const sameId = before !== undefined && sameObject(context, before, stamped);
+      queue(async () => {
+        const is = await shapeOf(context, stamped);
+        if (before === undefined) return await announce(context, stamped, is);
+        const was = await shapeOf(context, before);
+        if (was.kind === is.kind && was.id === is.id) {
+          if (is.kind === 'citing') return undefined;
+          return await send(context, postUpdateActivity(context, stamped), stamped);
         }
-
-        // Almost always the same id, because the stamped one follows the post
-        // through a rename. When it is not — a post federated before this
-        // version, renamed since — the old object is withdrawn rather than
-        // left standing under an id nothing answers to any more.
-        const previousId = articleObjectId(context, before).href;
-        if (previousId === articleObjectId(context, stamped).href) {
-          queue(() => send(context, postUpdateActivity(context, stamped), stamped));
-          queuePinChange(context, before, stamped);
-          return;
-        }
-
-        const deleted = new Date().toISOString();
-        queue(() => send(context, postDeleteActivity(context, before, deleted), before));
-        queue(() => send(context, postCreateActivity(context, stamped), stamped));
-        queuePinChange(context, undefined, stamped);
-      }
+        await withdraw(context, before, was);
+        return await announce(context, stamped, is);
+      });
+      queuePinChange(context, sameId ? before : undefined, stamped);
     },
 
     async updateActor(user) {
@@ -440,17 +492,14 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
           // A draft, a trashed post, or one re-dated into the future: every
           // one of them is gone as far as a follower is concerned, and the
           // file still carries the id their copy is filed under.
-          return await send(
-            context,
-            postDeleteActivity(context, document, new Date().toISOString()),
-            document,
-          );
+          return await withdraw(context, document, await shapeOf(context, document));
         }
 
         const stamped = await stamp(document);
-        if (!announced) {
-          return await send(context, postCreateActivity(context, stamped), stamped);
-        }
+        const shape = await shapeOf(context, stamped);
+        // A like or a repost is sent again as it is: its id is one a peer
+        // that already holds it recognises, and one that missed it does not.
+        if (!announced || shape.kind === 'citing') return await announce(context, stamped, shape);
 
         // The moment rather than the content hash, which is what a save uses:
         // the point of a resend is that the followers hear about a revision
@@ -481,6 +530,37 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       logger.warn(`A delivery failed: ${messageOf(thrown)}`);
     });
   }
+}
+
+/**
+ * What a version of a post is to a peer (decision-28), and the id that names
+ * it: the post's object id, or its `Like` or `Announce`'s activity id, which
+ * carries the id of what it cites.
+ */
+type Shape =
+  | { readonly kind: 'object'; readonly id: string }
+  | { readonly kind: 'citing'; readonly id: string; readonly citing: Citing };
+
+/** The author of what a like or a repost cites, as one more inbox to tell. */
+function citedAuthor(citing: Citing): DeliveryTarget[] {
+  const { author } = citing;
+  if (author?.id == null || author.inboxId === null) return [];
+  return [
+    {
+      inboxId: (author.endpoints?.sharedInbox ?? author.inboxId).href,
+      recipients: [author],
+      actorIds: [author.id.href],
+    },
+  ];
+}
+
+/** Whether two versions of a post are one object to a peer: the same id. */
+function sameObject(
+  context: Context<FederationContextData>,
+  before: Document,
+  after: Document,
+): boolean {
+  return articleObjectId(context, before).href === articleObjectId(context, after).href;
 }
 
 /**

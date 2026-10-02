@@ -385,13 +385,13 @@ describe('a refused create', () => {
     names: string[];
   }[] = [
     {
-      label: 'a like-of, a type the site does not have yet',
+      label: 'an rsvp, a type the site does not have',
       send: (cms, token) =>
         postJson(cms, token, {
           type: ['h-entry'],
-          properties: { 'like-of': ['https://peer.example/a-post/'] },
+          properties: { rsvp: ['yes'], 'in-reply-to': ['https://peer.example/an-event/'] },
         }),
-      names: ['like-of'],
+      names: ['rsvp'],
     },
     {
       label: 'form properties the site does not understand',
@@ -470,6 +470,96 @@ describe('a refused create', () => {
     assert.equal(response.status, 400);
     assert.deepEqual(await postFiles(cms), []);
   });
+});
+
+describe('a like, a repost and a bookmark (TASK-169 AC #5)', () => {
+  const target = 'https://peer.example/a-post/';
+  const cases = [
+    { property: 'like-of', type: 'like' },
+    { property: 'repost-of', type: 'repost' },
+    { property: 'bookmark-of', type: 'bookmark' },
+  ] as const;
+
+  for (const { property, type } of cases) {
+    it(`writes ${property} into the front matter and makes a ${type} post`, async () => {
+      const { cms, token } = await site();
+      const response = await postJson(cms, token, {
+        type: ['h-entry'],
+        properties: { [property]: [target], content: ['Worth it.'] },
+      });
+      assert.equal(response.status, 201, await response.clone().text());
+
+      const [file] = await postFiles(cms);
+      assert.ok(file !== undefined);
+      const { data } = matter(await fileAt(cms, `posts/${file}`));
+      assert.equal(data[property], target);
+      const document = cms.store.getByPath(`posts/${file}`);
+      assert.ok(document !== undefined);
+      assert.equal(postTypeOf(document), type);
+    });
+  }
+
+  it('takes one from a form-encoded create with no content at all', async () => {
+    const { cms, token } = await site();
+    const response = await postForm(cms, token, [
+      ['h', 'entry'],
+      ['like-of', target],
+    ]);
+    assert.equal(response.status, 201, await response.clone().text());
+    const [file] = await postFiles(cms);
+    assert.ok(file !== undefined);
+    const document = cms.store.getByPath(`posts/${file}`);
+    assert.ok(document !== undefined);
+    assert.equal(postTypeOf(document), 'like');
+  });
+
+  it('writes the same like the editor writes for the same post', async () => {
+    const editorSite = await site();
+    const html = await (await editorSite.agent.get('/admin/posts/new')).text();
+    const csrf = csrfField(html);
+    assert.ok(csrf !== undefined);
+    const saved = await editorSite.agent.post('/admin/posts/new', {
+      csrf_token: csrf,
+      date: '2026-09-19T09:00:00Z',
+      'like-of': target,
+      body: 'So good.',
+      action: 'publish',
+    });
+    assert.equal(saved.status, 303);
+
+    const micropubSite = await site();
+    const created = await postForm(micropubSite.cms, micropubSite.token, [
+      ['h', 'entry'],
+      ['content', 'So good.'],
+      ['like-of', target],
+      ['published', '2026-09-19T09:00:00Z'],
+    ]);
+    assert.equal(created.status, 201);
+
+    const [editorFile] = await postFiles(editorSite.cms);
+    const [micropubFile] = await postFiles(micropubSite.cms);
+    assert.ok(editorFile !== undefined && micropubFile !== undefined);
+    assert.equal(micropubFile, editorFile);
+    assert.equal(
+      await fileAt(micropubSite.cms, `posts/${micropubFile}`),
+      await fileAt(editorSite.cms, `posts/${editorFile}`),
+    );
+  });
+
+  for (const { property } of cases) {
+    it(`refuses a ${property} that is not a web address, and writes nothing`, async () => {
+      const { cms, token } = await site();
+      const response = await postForm(cms, token, [
+        ['h', 'entry'],
+        ['content', 'Hm'],
+        [property, 'not a url'],
+      ]);
+      assert.equal(response.status, 400);
+      const body = (await response.json()) as { error_description: string };
+      assert.match(body.error_description, /web address/);
+      assert.deepEqual(await postFiles(cms), []);
+    });
+  }
 });
 
 describe('a photo post (TASK-166 AC #1)', () => {

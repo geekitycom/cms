@@ -3,12 +3,19 @@ import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
 
+import { CITATION_PROPERTIES, citationText } from '../content/citation.ts';
+import type { CitationProperty } from '../content/citation.ts';
 import type { Document, DocumentContent, DocumentType } from '../content/document.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
 import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
-import { ENCLOSURE_FRONT_MATTER_KEY, enclosureOf, TRANSCRIPT_TYPES } from '../content/enclosure.ts';
+import {
+  ENCLOSURE_FRONT_MATTER_KEY,
+  enclosureOf,
+  isWebUrl,
+  TRANSCRIPT_TYPES,
+} from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
 import { PHOTO_FRONT_MATTER_KEY, photoFrontMatter } from '../content/photo.ts';
 import type { Photo } from '../content/photo.ts';
@@ -355,6 +362,7 @@ async function saveFromForm(
     description: text(body['description']).trim(),
     author: text(body['author']).trim(),
     inReplyTo: text(body['in-reply-to']).trim(),
+    ...citationFields((property) => (kind.type === 'post' ? text(body[property]).trim() : '')),
     lang: text(body['lang']).trim(),
     draft: body['draft'] !== undefined,
     exclude: body['exclude'] !== undefined,
@@ -489,6 +497,17 @@ export async function writeDocument(
   // anything else would be saved as a reply that is not one.
   if (kind.type === 'post' && form.inReplyTo !== '' && replyTarget(form) === undefined) {
     return refused('In reply to has to be a web address, like https://example.com/a-post/.');
+  }
+
+  if (kind.type === 'post') {
+    for (const property of CITATION_PROPERTIES) {
+      const cited = form[CITATION_FIELDS[property]];
+      if (cited !== '' && !isWebUrl(cited)) {
+        return refused(
+          `${CITATION_LABELS[property]} has to be a web address, like https://example.com/a-post/.`,
+        );
+      }
+    }
   }
 
   if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
@@ -895,7 +914,16 @@ function normalizePermalink(value: string): string | undefined {
 function resolveExtra(
   kind: DocumentKind,
   document: Document | undefined,
-  form: Pick<EditorForm, 'exclude' | 'comments' | 'contact' | 'lang' | 'pinned' | 'syndicateTo'>,
+  form: Pick<
+    EditorForm,
+    | 'exclude'
+    | 'comments'
+    | 'contact'
+    | 'lang'
+    | 'pinned'
+    | 'syndicateTo'
+    | (typeof CITATION_FIELDS)[CitationProperty]
+  >,
   now: Date,
   media: ResolvedMedia,
   declared: readonly SyndicationTarget[],
@@ -907,6 +935,11 @@ function resolveExtra(
     else extra[ENCLOSURE_FRONT_MATTER_KEY] = enclosureFrontMatter(media.recording);
     if (media.photos.length === 0) delete extra[PHOTO_FRONT_MATTER_KEY];
     else extra[PHOTO_FRONT_MATTER_KEY] = photoFrontMatter(media.photos);
+    for (const property of CITATION_PROPERTIES) {
+      const cited = form[CITATION_FIELDS[property]];
+      if (cited === '') delete extra[property];
+      else extra[property] = cited;
+    }
   }
 
   // The checkboxes speak for the targets the site declares (TASK-155). An id
@@ -1311,6 +1344,34 @@ function replyTo(
   return form.inReplyTo === '' ? undefined : form.inReplyTo;
 }
 
+/**
+ * The editor field each citing property fills (TASK-169). The form submits it
+ * under the property's own name, as `in-reply-to` is.
+ */
+export const CITATION_FIELDS = {
+  'repost-of': 'repostOf',
+  'like-of': 'likeOf',
+  'bookmark-of': 'bookmarkOf',
+} as const satisfies Record<CitationProperty, keyof EditorForm>;
+
+/** What the editor calls each citing field, which a refusal names. */
+const CITATION_LABELS: Readonly<Record<CitationProperty, string>> = {
+  'repost-of': 'Repost of',
+  'like-of': 'Like of',
+  'bookmark-of': 'Bookmark of',
+};
+
+/** The three citing fields, each filled from its property. */
+function citationFields(
+  value: (property: CitationProperty) => string,
+): Pick<EditorForm, (typeof CITATION_FIELDS)[CitationProperty]> {
+  return {
+    repostOf: value('repost-of'),
+    likeOf: value('like-of'),
+    bookmarkOf: value('bookmark-of'),
+  };
+}
+
 /** The editor's fields, as strings, which is what a form has. */
 export interface EditorForm {
   title: string;
@@ -1331,6 +1392,12 @@ export interface EditorForm {
   author: string;
   /** The post this one replies to, the mf2 `in-reply-to`. Posts only. */
   inReplyTo: string;
+  /** The post this one reposts, the mf2 `repost-of` (TASK-169). Posts only. */
+  repostOf: string;
+  /** The post this one likes, the mf2 `like-of` (TASK-169). Posts only. */
+  likeOf: string;
+  /** The page this one bookmarks, the mf2 `bookmark-of` (TASK-169). Posts only. */
+  bookmarkOf: string;
   /** The language it is written in, the `lang` key; empty for the site's. */
   lang: string;
   draft: boolean;
@@ -1385,6 +1452,7 @@ export function blankForm(
     // {@link authorChoices} is where the default is applied.
     author: '',
     inReplyTo: '',
+    ...citationFields(() => ''),
     lang: '',
     draft: false,
     exclude: false,
@@ -1418,6 +1486,10 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     description: document.description ?? '',
     author: document.author ?? '',
     inReplyTo: document.inReplyTo ?? '',
+    // As the file spells it, so a save writes back what it read.
+    ...citationFields((property) =>
+      document.type === 'post' ? citationText(document.extra[property]) : '',
+    ),
     lang:
       typeof document.extra[LANG_FRONT_MATTER_KEY] === 'string'
         ? document.extra[LANG_FRONT_MATTER_KEY]

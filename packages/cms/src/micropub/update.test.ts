@@ -160,6 +160,23 @@ describe('q=source (AC #1)', () => {
     });
   });
 
+  it('answers a like, a repost and a bookmark under their own properties (TASK-169)', async () => {
+    const { cms, token } = await site();
+    const url = await created(cms, token, {
+      'like-of': ['https://peer.example/liked/'],
+      'repost-of': ['https://peer.example/reposted/'],
+      'bookmark-of': ['https://peer.example/kept/'],
+      content: ['Three at once.'],
+    });
+
+    const response = await query(cms, token, `q=source&url=${encodeURIComponent(url)}`);
+
+    const body = (await response.json()) as { properties: Record<string, unknown[]> };
+    assert.deepEqual(body.properties['like-of'], ['https://peer.example/liked/']);
+    assert.deepEqual(body.properties['repost-of'], ['https://peer.example/reposted/']);
+    assert.deepEqual(body.properties['bookmark-of'], ['https://peer.example/kept/']);
+  });
+
   it('leaves out what the post does not have, and says draft for a draft', async () => {
     const { cms, token } = await site();
     const url = await created(cms, token, { content: ['Just a note.'], 'post-status': ['draft'] });
@@ -225,6 +242,29 @@ describe('q=source (AC #1)', () => {
     const { cms, token } = await site();
     const config = (await (await query(cms, token, 'q=config')).json()) as { q: string[] };
     assert.ok(config.q.includes('source'));
+  });
+});
+
+describe('updating a like, a repost and a bookmark (TASK-169)', () => {
+  it('replaces one citation and deletes another', async () => {
+    const { cms, token } = await site(ALL);
+    const url = await created(cms, token, {
+      'like-of': ['https://peer.example/liked/'],
+      'bookmark-of': ['https://peer.example/kept/'],
+      content: ['Two at once.'],
+    });
+
+    const response = await postJson(cms, token, {
+      action: 'update',
+      url,
+      replace: { 'bookmark-of': ['https://peer.example/kept-instead/'] },
+      delete: ['like-of'],
+    });
+
+    assert.equal(response.status, 204, await response.clone().text());
+    const document = documentAt(cms, url);
+    assert.equal(document.extra['bookmark-of'], 'https://peer.example/kept-instead/');
+    assert.equal(document.extra['like-of'], undefined);
   });
 });
 

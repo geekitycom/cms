@@ -5,7 +5,7 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
 import { exportJwk, importJwk } from '@fedify/fedify';
-import { CryptographicKey, Endpoints, Image, Person } from '@fedify/vocab';
+import { CryptographicKey, Endpoints, Image, Note, Person } from '@fedify/vocab';
 
 import { csrfField, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
@@ -50,6 +50,19 @@ const BROKEN_ORIGIN = 'https://broken.example';
 const BROKEN_ACTOR = `${BROKEN_ORIGIN}/users/nobody`;
 const BROKEN_INBOX = `${BROKEN_ORIGIN}/users/nobody/inbox`;
 
+/**
+ * A fediverse author nobody here follows, and the status of theirs a post
+ * likes or reposts (TASK-169). The status is served at its id and at the URL
+ * a browser shows, which differ, as Mastodon's do.
+ */
+const CAROL_ACTOR = `${REMOTE_ORIGIN}/users/carol`;
+const CAROL_INBOX = `${REMOTE_ORIGIN}/users/carol/inbox`;
+const STATUS_ID = `${REMOTE_ORIGIN}/users/carol/statuses/1`;
+const STATUS_URL = `${REMOTE_ORIGIN}/@carol/1`;
+
+/** A page on the remote host that is no ActivityPub object. */
+const PLAIN_PAGE = `${REMOTE_ORIGIN}/blog/a-page/`;
+
 /** One POST the site made while delivering. */
 interface Delivery {
   /** Where it went. */
@@ -68,11 +81,24 @@ const temporaryDirs: string[] = [];
 const deliveries: Delivery[] = [];
 
 let remoteActorDocument: unknown;
+let carolDocument: unknown;
+let statusDocument: unknown;
 let restoreFetch: () => void;
 
 before(async () => {
   const keys = await testKeyPair(REMOTE_PAIR);
   remoteActorDocument = await remoteActor(keys.publicKey);
+  carolDocument = await new Person({
+    id: new URL(CAROL_ACTOR),
+    preferredUsername: 'carol',
+    inbox: new URL(CAROL_INBOX),
+  }).toJsonLd();
+  statusDocument = await new Note({
+    id: new URL(STATUS_ID),
+    url: new URL(STATUS_URL),
+    attribution: new URL(CAROL_ACTOR),
+    content: 'Something worth liking.',
+  }).toJsonLd();
   restoreFetch = routeRemoteHost();
 });
 
@@ -132,6 +158,21 @@ function routeRemoteHost(): () => void {
     if (url.pathname === new URL(REMOTE_ACTOR).pathname) {
       return new Response(JSON.stringify(remoteActorDocument), {
         headers: { 'content-type': 'application/activity+json' },
+      });
+    }
+    const served = new Map([
+      [new URL(CAROL_ACTOR).pathname, carolDocument],
+      [new URL(STATUS_ID).pathname, statusDocument],
+      [new URL(STATUS_URL).pathname, statusDocument],
+    ]).get(url.pathname);
+    if (served !== undefined) {
+      return new Response(JSON.stringify(served), {
+        headers: { 'content-type': 'application/activity+json' },
+      });
+    }
+    if (url.href === PLAIN_PAGE) {
+      return new Response('<!doctype html><title>A page</title>', {
+        headers: { 'content-type': 'text/html' },
       });
     }
     return new Response('Not found.', { status: 404 });
@@ -598,6 +639,132 @@ describe('unpublishing a post', () => {
       headers: { accept: 'application/activity+json' },
     });
     assert.equal(response.status, 404);
+  });
+});
+
+describe('likes, reposts and bookmarks (TASK-169 AC #3)', () => {
+  /** Publish a note citing `target` under `property`, and wait for what it sent. */
+  async function cite(property: string, target: string): Promise<Site & { agent: Browser }> {
+    const published = await site();
+    const agent = await signedIn(published.cms);
+    const response = await publishNewPost(agent, {
+      title: '',
+      slug: 'cited',
+      body: 'So good.',
+      [property]: target,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await published.cms.delivery.settled();
+    return { ...published, agent };
+  }
+
+  it('sends a Like of a fediverse status to the followers and the status’s author', async () => {
+    await cite('like-of', STATUS_URL);
+
+    assert.deepEqual(delivered('Create'), [], 'a like is no post of its own to a peer');
+    const likes = delivered('Like');
+    assert.deepEqual(likes.map((one) => one.url).sort(), [CAROL_INBOX, REMOTE_SHARED_INBOX].sort());
+    const like = likes[0] as Delivery;
+    assert.equal(like.body['actor'], ACTOR_URL);
+    assert.equal(
+      like.body['object'],
+      STATUS_ID,
+      'the status by its id, not the URL it was liked at',
+    );
+    assert.equal(
+      like.body['id'],
+      `${BASE_URL}/2026/03/cited/#like/${encodeURIComponent(STATUS_ID)}`,
+    );
+  });
+
+  it('sends an Announce of a fediverse status, in public', async () => {
+    await cite('repost-of', STATUS_URL);
+
+    assert.deepEqual(delivered('Create'), []);
+    const announces = delivered('Announce');
+    assert.deepEqual(
+      announces.map((one) => one.url).sort(),
+      [CAROL_INBOX, REMOTE_SHARED_INBOX].sort(),
+    );
+    const announce = announces[0] as Delivery;
+    assert.equal(announce.body['object'], STATUS_ID);
+    assert.equal(announce.body['to'], 'https://www.w3.org/ns/activitystreams#Public');
+    assert.deepEqual(
+      [announce.body['cc']].flat().sort(),
+      [`${ACTOR_URL}followers/`, CAROL_ACTOR].sort(),
+    );
+  });
+
+  it('federates a like of a page that is no fediverse object as a note linking it', async () => {
+    await cite('like-of', PLAIN_PAGE);
+
+    assert.deepEqual(delivered('Like'), []);
+    const [create] = delivered('Create');
+    assert.ok(create !== undefined, `expected a Create, saw ${JSON.stringify(deliveries)}`);
+    assert.deepEqual([create.url], [REMOTE_SHARED_INBOX], 'to the followers only');
+    const object = create.body['object'] as Record<string, unknown>;
+    assert.equal(object['type'], 'Note');
+    assert.match(String(object['content']), new RegExp(`Liked <a href="${PLAIN_PAGE}">`));
+    assert.match(String(object['content']), /So good\./);
+  });
+
+  it('federates a bookmark, even of a fediverse status, as a note linking it', async () => {
+    await cite('bookmark-of', STATUS_URL);
+
+    assert.deepEqual(delivered('Like'), []);
+    assert.deepEqual(delivered('Announce'), []);
+    const [create] = delivered('Create');
+    assert.ok(create !== undefined);
+    const object = create.body['object'] as Record<string, unknown>;
+    assert.match(String(object['content']), new RegExp(`Bookmarked <a href="${STATUS_URL}">`));
+  });
+
+  it('takes a like back with an Undo when the post stops being published', async () => {
+    const { cms, agent } = await cite('like-of', STATUS_URL);
+    deliveries.length = 0;
+
+    const response = await submitEditor(agent, '/admin/posts/cited', {
+      action: 'save-draft',
+      'like-of': STATUS_URL,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    assert.deepEqual(delivered('Delete'), [], 'there is no note of its own to delete');
+    const undos = delivered('Undo');
+    assert.deepEqual(undos.map((one) => one.url).sort(), [CAROL_INBOX, REMOTE_SHARED_INBOX].sort());
+    const undone = (undos[0] as Delivery).body['object'] as Record<string, unknown>;
+    assert.equal(undone['type'], 'Like');
+    assert.equal(undone['id'], `${BASE_URL}/2026/03/cited/#like/${encodeURIComponent(STATUS_ID)}`);
+    assert.equal(undone['object'], STATUS_ID);
+  });
+
+  it('sends the same Like again on a resend', async () => {
+    const { cms } = await cite('like-of', STATUS_URL);
+    deliveries.length = 0;
+
+    const report = await cms.delivery.resend('cited');
+
+    assert.equal(report?.activityType, 'Like');
+    const id = `${BASE_URL}/2026/03/cited/#like/${encodeURIComponent(STATUS_ID)}`;
+    assert.deepEqual(
+      delivered('Like').map((one) => one.body['id']),
+      [id, id],
+      'one to the followers and one to the author, under the id they already hold',
+    );
+  });
+
+  it('sends nothing more when a like is edited without changing what it likes', async () => {
+    const { cms, agent } = await cite('like-of', STATUS_URL);
+    deliveries.length = 0;
+
+    await submitEditor(agent, '/admin/posts/cited', {
+      body: 'So very good.',
+      'like-of': STATUS_URL,
+    });
+    await cms.delivery.settled();
+
+    assert.deepEqual(deliveries, []);
   });
 });
 
