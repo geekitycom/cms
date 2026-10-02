@@ -4,7 +4,7 @@ title: Micropub compatibility
 status: To Do
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 23:52'
+updated_date: '2026-10-02 23:53'
 labels:
   - micropub
   - indieauth
@@ -183,4 +183,8 @@ Quill now posts. With its location checkbox on, a note is refused: 'This endpoin
 The rel=authorization_endpoint link worked: iA Writer now finds the endpoint and reaches the authorization screen. It is then refused: 302 invalid_request 'code_challenge must be an S256 PKCE challenge'. App activity shows what it sent: response_type=code, me=https://shll.me/, client_id=https://ia.net/writer, redirect_uri=https://ia.net/writer/indieauth/redirect, state (a UUID), scope='create media', and no code_challenge or code_challenge_method.
 
 So iA Writer, a maintained client, does not do PKCE. Under the no-legacy decision it is unsupported. Its redirect_uri is https on the same host as its client_id, which matters if a narrow exception is ever made.
+
+## Decision: per-app PKCE allowlist (2026-10-02)
+
+Amends the no-legacy decision. PKCE stays required by default. The owner can list apps allowed to sign in without it, and only with an https redirect_uri on the app's own host. Built for iA Writer. Filed as TASK-225. micropub.rocks and Inkstone stay unsupported: they also lack metadata discovery, and they are unmaintained.
 <!-- SECTION:NOTES:END -->
