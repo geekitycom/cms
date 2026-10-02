@@ -1209,15 +1209,38 @@ CMS knows none of them by name. A site lists the ones it uses in
 ]
 ```
 
-| Key    | What it is                                                                   |
-| ------ | ---------------------------------------------------------------------------- |
-| `id`   | What a post's `syndicate-to` lists. Letters, digits, `.`, `-` and `_`.       |
-| `name` | What the editor's checkbox and the post's link say.                          |
-| `url`  | The page the post links to and sends its webmention to.                      |
-| `tag`  | Optional. A post carrying this tag is sent to the target without listing it. |
+| Key         | What it is                                                                                    |
+| ----------- | --------------------------------------------------------------------------------------------- |
+| `id`        | What a post's `syndicate-to` lists. Letters, digits, `.`, `-` and `_`.                        |
+| `name`      | What the editor's checkbox and the post's link say.                                           |
+| `url`       | The page the post links to and sends its webmention to. May hold `{lang}`.                    |
+| `tag`       | Optional. A post carrying this tag is sent to the target without listing it.                  |
+| `languages` | Optional. The language tags the target takes posts in. A post in any other language skips it. |
 
-An entry missing any of the first three, or repeating an id, is reported in the
-log when the site starts and ignored. No file means no targets.
+An entry missing any of the first three, repeating an id, or with a `languages`
+value that is not a list of language tags, is reported in the log when the site
+starts and ignored. No file means no targets.
+
+Some targets have a page per language. IndieNews has `news.indieweb.org/en`,
+`/de`, `/fr` and more. Declare one target and put `{lang}` where the language
+goes:
+
+```json
+{
+  "id": "indienews",
+  "name": "IndieNews",
+  "url": "https://news.indieweb.org/{lang}",
+  "tag": "indienews",
+  "languages": ["en", "de", "fr"]
+}
+```
+
+The CMS fills `{lang}` with the post's language: its `lang` front matter, or the
+site's language when the post names none. With `languages`, a post in a
+language the list does not name neither links to the target nor notifies it. A
+regional tag counts as its language, so a `de-AT` post goes to
+`news.indieweb.org/de`, and `{lang}` takes the tag from the list. Without
+`languages`, `{lang}` takes the post's own tag as written, region and all.
 
 A post selects targets in one of two ways:
 

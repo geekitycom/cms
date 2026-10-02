@@ -144,6 +144,11 @@ export function createWebmentionService(
   const targets = syndicationTargetsReader(config.contentDir);
   const copies = syndicationCopies(config.contentDir);
 
+  /** The language a post that names none is in, as the file says now. */
+  function siteLanguage(): string {
+    return readSiteSettings(config.contentDir).language;
+  }
+
   /**
    * Tell one page about one post, and answer with what happened and, when the
    * page made a copy of the post, where the copy is.
@@ -197,6 +202,12 @@ export function createWebmentionService(
     return admin.recordSentWebmention({ slug, source, target, endpoint, status, error });
   }
 
+  /** The URLs of the targets a version of a post selects. */
+  function selectedUrls(document: Document | undefined): string[] {
+    if (document === undefined) return [];
+    return selectedTargets(document, targets(), siteLanguage()).map((target) => target.url);
+  }
+
   /** Tell every one of a post's targets, one after another. */
   async function tellAll(slug: string, source: string, links: readonly string[]): Promise<Told[]> {
     const outcomes: Told[] = [];
@@ -207,19 +218,20 @@ export function createWebmentionService(
   /**
    * Bring the post's recorded copies in line with what was just sent
    * (decision-26): a target the post selects keeps the copy it answered with,
-   * and one it no longer selects, or a post nobody can read, claims none.
+   * and one only an earlier version selected, or any of a post nobody can
+   * read, claims none. A target's URL is the one it had for the version that
+   * selected it, since it can follow the post's language (TASK-156).
    */
   async function keepCopies(
     permalink: string,
+    versions: readonly (Document | undefined)[],
     current: Document | undefined,
     outcomes: readonly Told[],
   ): Promise<void> {
-    const declared = new Set(targets().map((target) => target.url));
-    const selected = new Set(
-      current === undefined ? [] : selectedTargets(current, targets()).map((target) => target.url),
-    );
+    const targeted = new Set(versions.flatMap((version) => selectedUrls(version)));
+    const selected = new Set(selectedUrls(current));
     for (const { sent, copy } of outcomes) {
-      if (!declared.has(sent.target)) continue;
+      if (!targeted.has(sent.target)) continue;
       if (!selected.has(sent.target)) await copies.write(permalink, sent.target, undefined);
       else if (copy !== undefined) await copies.write(permalink, sent.target, copy);
     }
@@ -246,7 +258,12 @@ export function createWebmentionService(
       // it was showing. That is how a webmention is withdrawn — there is no
       // other way to say it.
       const source = absoluteUrl(document.permalink, config.baseUrl);
-      const links = targetsOf([change.previous, change.next], targets(), config.baseUrl);
+      const links = targetsOf(
+        [change.previous, change.next],
+        targets(),
+        config.baseUrl,
+        siteLanguage(),
+      );
       if (links.length === 0) return;
 
       // A post that moved is a new source to its targets, which answer with
@@ -261,7 +278,12 @@ export function createWebmentionService(
 
       enqueue(async () => {
         if (moved !== undefined) await copies.forget(moved);
-        await keepCopies(document.permalink, current, await tellAll(document.slug, source, links));
+        await keepCopies(
+          document.permalink,
+          [change.previous, change.next],
+          current,
+          await tellAll(document.slug, source, links),
+        );
       }).catch((thrown: unknown) => {
         logger.warn(`A webmention failed: ${messageOf(thrown)}`);
       });
@@ -274,12 +296,12 @@ export function createWebmentionService(
       const source = absoluteUrl(document.permalink, config.baseUrl);
       if (!sending()) return { slug, source, sent: [] };
 
-      const links = targetsOf([document], targets(), config.baseUrl);
+      const links = targetsOf([document], targets(), config.baseUrl, siteLanguage());
 
       return await enqueue(async () => {
         const outcomes = await tellAll(slug, source, links);
         const current = isPublic(document, config.now()) ? document : undefined;
-        await keepCopies(document.permalink, current, outcomes);
+        await keepCopies(document.permalink, [document], current, outcomes);
         return { slug, source, sent: outcomes.map((one) => one.sent) };
       });
     },
@@ -337,6 +359,7 @@ function targetsOf(
   documents: readonly (Document | undefined)[],
   declared: readonly SyndicationTarget[],
   baseUrl: string,
+  siteLanguage: string,
 ): string[] {
   const targets = new Set<string>();
 
@@ -349,7 +372,7 @@ function targetsOf(
       if (cited !== undefined) targets.add(cited);
     }
     for (const target of externalLinks(document.html, baseUrl)) targets.add(target);
-    for (const target of selectedTargets(document, declared)) targets.add(target.url);
+    for (const target of selectedTargets(document, declared, siteLanguage)) targets.add(target.url);
   }
 
   return [...targets];

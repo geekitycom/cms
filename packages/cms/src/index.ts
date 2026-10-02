@@ -1722,7 +1722,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // The targets a post links to and the copies they made of it (TASK-155),
     // read from the site's files like the reply contexts.
     syndication: (document) => ({
-      targets: selectedTargets(document, syndicationTargets()),
+      targets: selectedTargets(
+        document,
+        syndicationTargets(),
+        readSiteSettings(resolved.contentDir).language,
+      ),
       copies: Object.values(copies.read(document.permalink)),
     }),
     // The pages that put themselves in the site menu are found by asking for

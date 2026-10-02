@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import type { Document } from '../content/document.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
+import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../web/locale.ts';
 
 /**
  * Syndication targets (TASK-155): services such as IndieNews and Bridgy
@@ -35,16 +36,28 @@ export const SYNDICATION_FRONT_MATTER_KEY = 'syndication';
 /** What an id may be made of, so it can name a form field and a Micropub uid alike. */
 const ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
+/** What a target's `url` may hold to follow the post's language (TASK-156). */
+export const LANGUAGE_PLACEHOLDER = '{lang}';
+
 /** One place a post can be syndicated to. */
 export interface SyndicationTarget {
   /** What `syndicate-to` names it by, and its Micropub uid. */
   readonly id: string;
   /** What the editor's checkbox and the post's link say. */
   readonly name: string;
-  /** The page the post links to and the webmention is sent to. */
+  /**
+   * The page the post links to and the webmention is sent to. As declared it
+   * may hold {@link LANGUAGE_PLACEHOLDER}; a target {@link selectedTargets}
+   * answers with has it filled for the post.
+   */
   readonly url: string;
   /** A tag that selects this target without the post listing it. */
   readonly tag?: string | undefined;
+  /**
+   * The languages, as canonical BCP 47 tags, the target takes posts in. A post
+   * in any other language does not select it. Absent means every language.
+   */
+  readonly languages?: readonly string[] | undefined;
 }
 
 /** The declared targets, and a sentence for each entry that was not one. */
@@ -88,17 +101,50 @@ export function parseSyndicationTargets(text: string): ParsedSyndicationTargets 
 /** One entry as a target, or the reason it is not one. */
 function targetOf(entry: unknown): SyndicationTarget | string {
   if (!isRecord(entry)) return 'is not an object';
-  const { id, name, url, tag } = entry;
+  const { id, name, url, tag, languages } = entry;
   if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
     return 'has no id made of letters, digits, dots, dashes and underscores';
   }
   if (typeof name !== 'string' || name.trim() === '') return `("${id}") has no name`;
-  const href = webUrl(url);
+  const href = urlTemplate(url);
   if (href === undefined) return `("${id}") has no http or https url`;
   if (tag !== undefined && (typeof tag !== 'string' || tag.trim() === '')) {
     return `("${id}") has a tag that is not a word`;
   }
-  return { id, name: name.trim(), url: href, ...(tag === undefined ? {} : { tag: tag.trim() }) };
+  const tags = languages === undefined ? undefined : languageList(languages);
+  if (tags === null) return `("${id}") has a languages list that is not a list of language tags`;
+  return {
+    id,
+    name: name.trim(),
+    url: href,
+    ...(tag === undefined ? {} : { tag: tag.trim() }),
+    ...(tags === undefined ? {} : { languages: tags }),
+  };
+}
+
+/**
+ * A declared `url` as kept: an http or https URL, which may hold
+ * {@link LANGUAGE_PLACEHOLDER}. One with the placeholder is checked with a
+ * language filled in and kept as written, since a URL parser would escape the
+ * braces.
+ */
+function urlTemplate(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  if (!value.includes(LANGUAGE_PLACEHOLDER)) return webUrl(value);
+  const template = value.trim();
+  return webUrl(fillLanguage(template, DEFAULT_LOCALE)) === undefined ? undefined : template;
+}
+
+/** A non-empty list of language tags, canonical, or `null` when it is not one. */
+function languageList(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const tags: string[] = [];
+  for (const item of value) {
+    const tag = typeof item === 'string' ? canonicalLocale(item) : undefined;
+    if (tag === undefined) return null;
+    tags.push(tag);
+  }
+  return tags;
 }
 
 /**
@@ -137,20 +183,50 @@ export function syndicationTargetProblems(contentDir: string): readonly string[]
 }
 
 /**
- * The declared targets a post selects, in the order the site declares them:
- * those its `syndicate-to` names, and those whose tag it carries. An id
- * nobody declared selects nothing.
+ * The declared targets a post selects, in the order the site declares them,
+ * each with its `url` filled for the post: those its `syndicate-to` names, and
+ * those whose tag it carries. An id nobody declared selects nothing.
+ *
+ * The post's language is its own `lang`, else `siteLanguage` (TASK-156). A
+ * target that lists `languages` is selected only for a post in one of them or
+ * in a regional form of one, so `de-AT` goes to a target that lists `de`, and
+ * {@link LANGUAGE_PLACEHOLDER} takes the listed tag; without a list it takes
+ * the post's. The one place the URL is decided, so the theme's link, the
+ * webmention and the stored copy's key cannot disagree.
  */
 export function selectedTargets(
   document: Pick<Document, 'tags' | 'extra'>,
   targets: readonly SyndicationTarget[],
+  siteLanguage: string,
 ): SyndicationTarget[] {
   const listed = new Set(stringsOf(document.extra[SYNDICATE_TO_FRONT_MATTER_KEY]));
   const tags = new Set(document.tags.map((tag) => tag.toLowerCase()));
-  return targets.filter(
-    (target) =>
-      listed.has(target.id) || (target.tag !== undefined && tags.has(target.tag.toLowerCase())),
-  );
+  const language = documentLanguage(document) ?? canonicalLocale(siteLanguage) ?? DEFAULT_LOCALE;
+
+  return targets.flatMap((target) => {
+    const selected =
+      listed.has(target.id) || (target.tag !== undefined && tags.has(target.tag.toLowerCase()));
+    if (!selected) return [];
+    const filled =
+      target.languages === undefined ? language : matchingLanguage(language, target.languages);
+    if (filled === undefined) return [];
+    if (!target.url.includes(LANGUAGE_PLACEHOLDER)) return [target];
+    const url = webUrl(fillLanguage(target.url, filled));
+    return url === undefined ? [] : [{ ...target, url }];
+  });
+}
+
+/** The first of `languages` that `language` is, or is a regional form of. */
+function matchingLanguage(language: string, languages: readonly string[]): string | undefined {
+  const wanted = language.toLowerCase();
+  return languages.find((tag) => {
+    const listed = tag.toLowerCase();
+    return wanted === listed || wanted.startsWith(`${listed}-`);
+  });
+}
+
+function fillLanguage(template: string, language: string): string {
+  return template.replaceAll(LANGUAGE_PLACEHOLDER, encodeURIComponent(language));
 }
 
 /** The ids a post's `syndicate-to` lists, as written. */

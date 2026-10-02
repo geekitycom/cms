@@ -3,7 +3,7 @@ id: doc-7
 title: Webmentions
 type: specification
 created_date: '2026-09-04 23:08'
-updated_date: '2026-10-02 14:58'
+updated_date: '2026-10-02 17:01'
 ---
 # Webmentions
 
@@ -30,7 +30,11 @@ service with this site's name on it.
    syndication target the post selects (TASK-155): the targets
    `content/_data/syndicationTargets.json` declares that its `syndicate-to`
    lists or whose tag it carries. The theme links to each inside the post's
-   `h-entry`, which is what the target checks for.
+   `h-entry`, which is what the target checks for. A target's URL may hold
+   `{lang}`, filled with the post's `lang` or else the site's language, and a
+   target may list the `languages` it takes, so a post in another language
+   neither links to it nor tells it (TASK-156). The filled URL is the one the
+   theme links, the webmention names and the copy is kept under.
 2. **The endpoint.** Per the W3C discovery order: the HTTP `Link` header first,
    then the first `<link>` **or** `<a>` carrying `rel="webmention"` in document
    order — one search over both, not one each — resolved against the URL the

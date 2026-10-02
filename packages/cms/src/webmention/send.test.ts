@@ -30,6 +30,10 @@ const NEWS = 'https://news.example/en';
 const NEWS_ENDPOINT = 'https://news.example/en/webmention';
 const NEWS_COPY = 'https://news.example/en/blog.example/2026/03/hello-world';
 
+/** The same service's German page, for a target that follows the post's language. */
+const NEWS_DE = 'https://news.example/de';
+const NEWS_DE_ENDPOINT = 'https://news.example/de/webmention';
+
 /** The targets file the syndication tests declare. */
 const TARGETS_FILE = JSON.stringify([
   { id: 'news', name: 'News', url: NEWS, tag: 'news' },
@@ -73,7 +77,7 @@ function routeTheWeb(): () => void {
     const url = request.url;
 
     if (request.method === 'POST') {
-      if (url === NEWS_ENDPOINT) {
+      if (url === NEWS_ENDPOINT || url === NEWS_DE_ENDPOINT) {
         const body = new URLSearchParams(await request.text());
         sent.push({
           endpoint: url,
@@ -104,6 +108,7 @@ function routeTheWeb(): () => void {
     }
     if (url === QUIET) return html('<p>Just a page.</p>');
     if (url === NEWS) return html(`<link rel="webmention" href="${NEWS_ENDPOINT}">`);
+    if (url === NEWS_DE) return html(`<link rel="webmention" href="${NEWS_DE_ENDPOINT}">`);
 
     return new Response('missing', { status: 404 });
   }) as typeof fetch;
@@ -477,6 +482,90 @@ describe('syndicating a post to the site’s targets', () => {
     assert.deepEqual(await copiesOf(cms), {
       '/2026/03/hello-world/': { [NEWS]: NEWS_COPY },
     });
+  });
+});
+
+describe('syndicating to a target per language (TASK-156)', () => {
+  const PER_LANGUAGE = JSON.stringify([
+    {
+      id: 'news',
+      name: 'News',
+      url: 'https://news.example/{lang}',
+      tag: 'news',
+      languages: ['en', 'de'],
+    },
+  ]);
+
+  /** The pages of the news service this site was told about. */
+  function toldNews(): string[] {
+    return sent
+      .filter((one) => new URL(one.target).host === 'news.example')
+      .map((one) => one.target);
+  }
+
+  it('tells the German page about a German post and keeps its copy under that page', async () => {
+    const cms = await site({ files: { '_data/syndicationTargets.json': PER_LANGUAGE } });
+    const agent = await signedIn(cms);
+
+    await publish(agent, 'Nichts verlinkt.', { tags: 'news', lang: 'de' });
+    await cms.webmentions.settled();
+
+    assert.deepEqual(toldNews(), [NEWS_DE]);
+    assert.deepEqual(await copiesOf(cms), { '/2026/03/hello-world/': { [NEWS_DE]: NEWS_COPY } });
+    const page = await (await cms.app.request('/2026/03/hello-world/')).text();
+    assert.match(
+      page,
+      /<a class="u-syndication small" href="https:\/\/news\.example\/de">News<\/a>/,
+    );
+  });
+
+  it('tells the English page about a post in the site’s language', async () => {
+    const cms = await site({ files: { '_data/syndicationTargets.json': PER_LANGUAGE } });
+    const agent = await signedIn(cms);
+
+    await publish(agent, 'Nothing linked.', { tags: 'news' });
+    await cms.webmentions.settled();
+
+    assert.deepEqual(toldNews(), [NEWS]);
+    const page = await (await cms.app.request('/2026/03/hello-world/')).text();
+    assert.match(
+      page,
+      /<a class="u-syndication small" href="https:\/\/news\.example\/en">News<\/a>/,
+    );
+  });
+
+  it('neither links to nor tells a target about a post in a language it does not list', async () => {
+    const cms = await site({ files: { '_data/syndicationTargets.json': PER_LANGUAGE } });
+    const agent = await signedIn(cms);
+
+    await publish(agent, 'Rien de lié.', { tags: 'news', lang: 'fr' });
+    await cms.webmentions.settled();
+
+    assert.deepEqual(toldNews(), []);
+    const page = await (await cms.app.request('/2026/03/hello-world/')).text();
+    assert.doesNotMatch(page, /news\.example/);
+  });
+
+  it('tells the German page the link is gone when the post turns English, and forgets its copy', async () => {
+    const cms = await site({ files: { '_data/syndicationTargets.json': PER_LANGUAGE } });
+    const agent = await signedIn(cms);
+    await publish(agent, 'Nichts verlinkt.', { tags: 'news', lang: 'de' });
+    await cms.webmentions.settled();
+    sent.length = 0;
+
+    const german = cms.store.getBySlug('hello-world');
+    assert.ok(german !== undefined);
+    cms.webmentions.handle({
+      type: 'updated',
+      origin: 'watch',
+      path: 'posts/hello-world.md',
+      previous: german,
+      next: { ...german, extra: { ...german.extra, lang: 'en' } },
+    });
+    await cms.webmentions.settled();
+
+    assert.deepEqual(toldNews().sort(), [NEWS, NEWS_DE].sort());
+    assert.deepEqual(await copiesOf(cms), { '/2026/03/hello-world/': { [NEWS]: NEWS_COPY } });
   });
 });
 

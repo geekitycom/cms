@@ -22,6 +22,7 @@ import { absoluteUrl } from '../web/negotiate.ts';
 import { editorPath, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
+import { readSiteSettings } from './settings.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import type {
   Delivery,
@@ -108,6 +109,7 @@ export function mountFederationScreen(
     const users = listUsers(c.var.config.dataDir);
     const targets = syndicationTargetsReader(c.var.config.contentDir);
     const copies = syndicationCopies(c.var.config.contentDir);
+    const siteLanguage = readSiteSettings(c.var.config.contentDir).language;
 
     return render(c, ADMIN_TEMPLATES.federation, {
       section: 'federation',
@@ -142,7 +144,7 @@ export function mountFederationScreen(
         syndication: (document) => {
           const outcomes = admin.listSentWebmentions(document.slug);
           const made = copies.read(document.permalink);
-          return selectedTargets(document, targets()).map((target) => {
+          return selectedTargets(document, targets(), siteLanguage).map((target) => {
             const outcome = outcomes.find((one) => one.target === target.url);
             return {
               name: target.name,

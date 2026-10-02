@@ -16,6 +16,8 @@ const INDIENEWS: SyndicationTarget = {
   tag: 'indienews',
 };
 
+const SITE_LANGUAGE = 'en';
+
 const MASTODON: SyndicationTarget = {
   id: 'mastodon',
   name: 'Mastodon',
@@ -71,6 +73,7 @@ describe('which targets a post selects', () => {
     const selected = selectedTargets(
       { tags: [], extra: { [SYNDICATE_TO_FRONT_MATTER_KEY]: ['mastodon', 'indienews'] } },
       targets,
+      SITE_LANGUAGE,
     );
 
     assert.deepEqual(selected, [INDIENEWS, MASTODON]);
@@ -78,21 +81,26 @@ describe('which targets a post selects', () => {
 
   it('accepts a single id written as a string, and ignores an id nobody declared', () => {
     assert.deepEqual(
-      selectedTargets({ tags: [], extra: { 'syndicate-to': 'mastodon' } }, targets),
+      selectedTargets({ tags: [], extra: { 'syndicate-to': 'mastodon' } }, targets, SITE_LANGUAGE),
       [MASTODON],
     );
     assert.deepEqual(
-      selectedTargets({ tags: [], extra: { 'syndicate-to': ['nowhere'] } }, targets),
+      selectedTargets({ tags: [], extra: { 'syndicate-to': ['nowhere'] } }, targets, SITE_LANGUAGE),
       [],
     );
   });
 
   it('selects a target whose tag the post carries, whatever its case', () => {
-    assert.deepEqual(selectedTargets({ tags: ['IndieNews'], extra: {} }, targets), [INDIENEWS]);
+    assert.deepEqual(selectedTargets({ tags: ['IndieNews'], extra: {} }, targets, SITE_LANGUAGE), [
+      INDIENEWS,
+    ]);
   });
 
   it('selects nothing for an untagged post that lists nothing', () => {
-    assert.deepEqual(selectedTargets({ tags: ['indieweb'], extra: {} }, targets), []);
+    assert.deepEqual(
+      selectedTargets({ tags: ['indieweb'], extra: {} }, targets, SITE_LANGUAGE),
+      [],
+    );
   });
 });
 
@@ -108,5 +116,114 @@ describe('syndication URLs written by hand', () => {
       'https://a.example/1',
     ]);
     assert.deepEqual(handSyndicationOf({}), []);
+  });
+});
+
+/** IndieNews as a site declares it once for every language it has a page in. */
+const INDIENEWS_BY_LANGUAGE: SyndicationTarget = {
+  id: 'indienews',
+  name: 'IndieNews',
+  url: 'https://news.indieweb.org/{lang}',
+  tag: 'indienews',
+  languages: ['en', 'de', 'fr'],
+};
+
+/** A target whose URL follows the post's language, whatever it is. */
+const ANY_LANGUAGE: SyndicationTarget = {
+  id: 'wiki',
+  name: 'Wiki',
+  url: 'https://{lang}.wiki.example/notify',
+};
+
+function tagged(lang?: string): { tags: string[]; extra: Record<string, unknown> } {
+  return { tags: ['indienews'], extra: lang === undefined ? {} : { lang } };
+}
+
+describe('reading a per-language target (TASK-156)', () => {
+  it('keeps a {lang} placeholder in the url and a list of languages as canonical tags', () => {
+    const { targets, problems } = parseSyndicationTargets(
+      JSON.stringify([{ ...INDIENEWS_BY_LANGUAGE, languages: ['EN', 'de', 'fr'] }, ANY_LANGUAGE]),
+    );
+
+    assert.deepEqual(problems, []);
+    assert.deepEqual(targets, [INDIENEWS_BY_LANGUAGE, ANY_LANGUAGE]);
+  });
+
+  it('reports and drops a languages list that is empty or names something that is not a tag', () => {
+    const { targets, problems } = parseSyndicationTargets(
+      JSON.stringify([
+        { ...INDIENEWS_BY_LANGUAGE, id: 'empty', languages: [] },
+        { ...INDIENEWS_BY_LANGUAGE, id: 'not-a-list', languages: 'de' },
+        { ...INDIENEWS_BY_LANGUAGE, id: 'bad-tag', languages: ['de', 'not a tag!'] },
+        { ...INDIENEWS_BY_LANGUAGE, id: 'bad-url', url: 'ftp://news.example/{lang}' },
+      ]),
+    );
+
+    assert.deepEqual(targets, []);
+    assert.equal(problems.length, 4, problems.join(' | '));
+  });
+});
+
+describe('a target that follows the post’s language (TASK-156 AC #1)', () => {
+  it('fills {lang} from the post’s language', () => {
+    assert.deepEqual(
+      selectedTargets(
+        { tags: [], extra: { 'syndicate-to': 'wiki', lang: 'de' } },
+        [ANY_LANGUAGE],
+        'en',
+      ).map((target) => target.url),
+      ['https://de.wiki.example/notify'],
+    );
+  });
+
+  it('falls back to the site’s language for a post that names none', () => {
+    assert.deepEqual(
+      selectedTargets({ tags: [], extra: { 'syndicate-to': 'wiki' } }, [ANY_LANGUAGE], 'fr').map(
+        (target) => target.url,
+      ),
+      ['https://fr.wiki.example/notify'],
+    );
+  });
+
+  it('leaves a url without a placeholder as it was declared', () => {
+    assert.deepEqual(selectedTargets(tagged('de'), [INDIENEWS], 'en'), [INDIENEWS]);
+  });
+});
+
+describe('a target restricted to some languages (TASK-156 AC #2, #3)', () => {
+  it('sends a German post to /de and an English one to /en', () => {
+    assert.deepEqual(
+      selectedTargets(tagged('de'), [INDIENEWS_BY_LANGUAGE], 'en').map((target) => target.url),
+      ['https://news.indieweb.org/de'],
+    );
+    assert.deepEqual(
+      selectedTargets(tagged('en'), [INDIENEWS_BY_LANGUAGE], 'de').map((target) => target.url),
+      ['https://news.indieweb.org/en'],
+    );
+    assert.deepEqual(
+      selectedTargets(tagged(), [INDIENEWS_BY_LANGUAGE], 'de').map((target) => target.url),
+      ['https://news.indieweb.org/de'],
+      'a post that names no language is in the site’s',
+    );
+  });
+
+  it('takes a regional post under the language it lists, and fills {lang} with that', () => {
+    assert.deepEqual(
+      selectedTargets(tagged('de-AT'), [INDIENEWS_BY_LANGUAGE], 'en').map((target) => target.url),
+      ['https://news.indieweb.org/de'],
+    );
+  });
+
+  it('does not select a target for a post in a language it does not list', () => {
+    assert.deepEqual(selectedTargets(tagged('es'), [INDIENEWS_BY_LANGUAGE], 'en'), []);
+    assert.deepEqual(
+      selectedTargets(
+        { tags: [], extra: { 'syndicate-to': 'indienews', lang: 'ja' } },
+        [INDIENEWS_BY_LANGUAGE],
+        'en',
+      ),
+      [],
+      'not even when the post lists it by id',
+    );
   });
 });
