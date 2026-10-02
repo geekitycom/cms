@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.17.0](https://github.com/geekitycom/cms/compare/v0.16.0...v0.17.0) (2026-10-02)
+
+
+### Features
+
+* **cms:** advertise authorization and token endpoint rels on identity urls ([e1f8596](https://github.com/geekitycom/cms/commit/e1f859634942f95209d21cd4a87d7b017266873d))
+* **cms:** advertise legacy indieauth rels and log app activity in the admin ([60ad59e](https://github.com/geekitycom/cms/commit/60ad59e74a01ec5167708bbeaf2a37c4d679e675))
+* **cms:** log indieauth and micropub requests for the admin ([6438fdf](https://github.com/geekitycom/cms/commit/6438fdf082107fc158746cd6a78f5d010711bc39))
+
+
+### Bug Fixes
+
+* **cms:** accept the same access token in the header and the body ([8bbbd68](https://github.com/geekitycom/cms/commit/8bbbd683e9bac58b2566d05175c32b1ed3a0010d))
+* **cms:** accept the same access token in the header and the body ([7458e7f](https://github.com/geekitycom/cms/commit/7458e7f49aa9232d17ee69ce5d306cca3f118fe4))
+
 ## [0.16.0](https://github.com/geekitycom/cms/compare/v0.15.0...v0.16.0) (2026-10-02)
 
 
