@@ -94,12 +94,13 @@ site (or `npx geekity`, or a `package.json` script, which is how the generated
 | `geekity rebuild`                         | Delete `data/geekity.db` and build it again from the files.                                                                                                           |
 | `geekity resend --all`, `<slug>...`       | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                            |
 | `geekity maintenance on`, `off`, `status` | Take the public site down on purpose with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` names when it should be back.             |
+| `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`. See [The media library](#the-media-library).                                             |
 | `geekity user add <name>`                 | Create an admin account, so a site can get its first login without the setup screen.                                                                                  |
 | `geekity import wordpress-actor <name>`   | Bring one person across from the WordPress ActivityPub plugin: their key pair, the actor id their followers hold, the plugin's numeric actor id, and their followers. |
 | `geekity --help`, `-h`                    | The same table, on the terminal.                                                                                                                                      |
 | `geekity --version`                       | The installed version.                                                                                                                                                |
 
-`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `user add` and `import wordpress-actor` take
+`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `strip-metadata`, `user add` and `import wordpress-actor` take
 `--config <file>`; without it they look for `geekity.config.ts`, then
 `geekity.config.js`, then `geekity.config.mjs` in the working directory, and run
 on defaults if there is none.
@@ -267,29 +268,29 @@ export default defineConfig({
 Every field is optional. Relative directories resolve against the working
 directory; absolute ones are used as given.
 
-| Field              | Default                               | Environment override         | Meaning                                                                                                                                                                                   |
-| ------------------ | ------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `port`             | `3000`                                | `GEEKITY_PORT`, then `PORT`  | Port the HTTP server listens on. `0` picks a free one.                                                                                                                                    |
-| `contentDir`       | `<cwd>/content`                       | `GEEKITY_CONTENT_DIR`        | Markdown content.                                                                                                                                                                         |
-| `dataDir`          | `<cwd>/data`                          | `GEEKITY_DATA_DIR`           | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs. |
-| `themesDir`        | `<cwd>/themes`                        | `GEEKITY_THEMES_DIR`         | The site's themes, one directory per theme, each with a `theme.json`. Which one is in use is the `theme` setting in `site.json`, not a path. Need not exist.                              |
-| `baseUrl`          | `http://localhost:<port>`             | `GEEKITY_BASE_URL`           | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                |
-| `watch`            | `true`                                | `GEEKITY_WATCH`              | Watch `contentDir` while serving and keep the index in step.                                                                                                                              |
-| `sessionLifetime`  | `1209600` (14 days)                   | `GEEKITY_SESSION_LIFETIME`   | How long an admin login lasts, in seconds.                                                                                                                                                |
-| `loginAttempts`    | `5`                                   | `GEEKITY_LOGIN_ATTEMPTS`     | Failed sign-ins a username or an address may make before it is locked out.                                                                                                                |
-| `loginLockout`     | `900` (15 minutes)                    | `GEEKITY_LOGIN_LOCKOUT`      | How long the first lockout lasts, in seconds. See [Login hardening](#login-hardening).                                                                                                    |
-| `trustProxy`       | `false`                               | `GEEKITY_TRUST_PROXY`        | Believe `X-Forwarded-For` when deciding which address a sign-in came from.                                                                                                                |
-| `accessLog`        | `false`; `true` under `geekity serve` | `GEEKITY_ACCESS_LOG`         | One line per request on stdout: method, path with query, status, duration. See [The access log](#the-access-log).                                                                         |
-| `accessLogAddress` | `false`                               | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address on the end of each access-log line. `trustProxy` decides which address that is.                                                                                    |
-| `accessLogWriter`  | stdout                                | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                        |
-| `maintenance`      | `false`                               | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode, answering 503, until a restart without it.                                                                                                             |
-| `compression`      | `true`                                | `GEEKITY_COMPRESSION`        | Compress text responses with brotli or gzip. Turn it off behind a proxy that compresses. See [Compression](#compression).                                                                 |
-| `securityHeaders`  | [see below](#security-headers)        | —                            | Headers every response carries. A string replaces a default or adds a header, `false` removes one.                                                                                        |
-| `onDocumentChange` | none                                  | —                            | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                              |
-| `onPublish`        | none                                  | —                            | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                            |
-| `federation`       | `{}`                                  | —                            | Federation stores and guards. See [Federation](#federation).                                                                                                                              |
-| `commentChecker`   | Akismet                               | —                            | A spam checker of the site's own, which wins over the key in `data/akismet.json`. See [Akismet](#akismet).                                                                                |
-| `mail`             | `{}`                                  | —                            | Mail provider, retries, backoff and logger. See [Email](#email).                                                                                                                          |
+| Field              | Default                               | Environment override         | Meaning                                                                                                                                                                                                                                                         |
+| ------------------ | ------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port`             | `3000`                                | `GEEKITY_PORT`, then `PORT`  | Port the HTTP server listens on. `0` picks a free one.                                                                                                                                                                                                          |
+| `contentDir`       | `<cwd>/content`                       | `GEEKITY_CONTENT_DIR`        | Markdown content.                                                                                                                                                                                                                                               |
+| `dataDir`          | `<cwd>/data`                          | `GEEKITY_DATA_DIR`           | Derived state — the SQLite index, the image variants — and the files that are not derived and must be backed up, such as `users.json`, the actor key pairs under `keys/` and `locations.json`. [Two directories](#two-directories-content-and-data) lists them. |
+| `themesDir`        | `<cwd>/themes`                        | `GEEKITY_THEMES_DIR`         | The site's themes, one directory per theme, each with a `theme.json`. Which one is in use is the `theme` setting in `site.json`, not a path. Need not exist.                                                                                                    |
+| `baseUrl`          | `http://localhost:<port>`             | `GEEKITY_BASE_URL`           | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                                                                                      |
+| `watch`            | `true`                                | `GEEKITY_WATCH`              | Watch `contentDir` while serving and keep the index in step.                                                                                                                                                                                                    |
+| `sessionLifetime`  | `1209600` (14 days)                   | `GEEKITY_SESSION_LIFETIME`   | How long an admin login lasts, in seconds.                                                                                                                                                                                                                      |
+| `loginAttempts`    | `5`                                   | `GEEKITY_LOGIN_ATTEMPTS`     | Failed sign-ins a username or an address may make before it is locked out.                                                                                                                                                                                      |
+| `loginLockout`     | `900` (15 minutes)                    | `GEEKITY_LOGIN_LOCKOUT`      | How long the first lockout lasts, in seconds. See [Login hardening](#login-hardening).                                                                                                                                                                          |
+| `trustProxy`       | `false`                               | `GEEKITY_TRUST_PROXY`        | Believe `X-Forwarded-For` when deciding which address a sign-in came from.                                                                                                                                                                                      |
+| `accessLog`        | `false`; `true` under `geekity serve` | `GEEKITY_ACCESS_LOG`         | One line per request on stdout: method, path with query, status, duration. See [The access log](#the-access-log).                                                                                                                                               |
+| `accessLogAddress` | `false`                               | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address on the end of each access-log line. `trustProxy` decides which address that is.                                                                                                                                                          |
+| `accessLogWriter`  | stdout                                | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                                                                                              |
+| `maintenance`      | `false`                               | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode, answering 503, until a restart without it.                                                                                                                                                                                   |
+| `compression`      | `true`                                | `GEEKITY_COMPRESSION`        | Compress text responses with brotli or gzip. Turn it off behind a proxy that compresses. See [Compression](#compression).                                                                                                                                       |
+| `securityHeaders`  | [see below](#security-headers)        | —                            | Headers every response carries. A string replaces a default or adds a header, `false` removes one.                                                                                                                                                              |
+| `onDocumentChange` | none                                  | —                            | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                                                                                                    |
+| `onPublish`        | none                                  | —                            | Hook run when a document becomes visible. See [Hooks](#hooks).                                                                                                                                                                                                  |
+| `federation`       | `{}`                                  | —                            | Federation stores and guards. See [Federation](#federation).                                                                                                                                                                                                    |
+| `commentChecker`   | Akismet                               | —                            | A spam checker of the site's own, which wins over the key in `data/akismet.json`. See [Akismet](#akismet).                                                                                                                                                      |
+| `mail`             | `{}`                                  | —                            | Mail provider, retries, backoff and logger. See [Email](#email).                                                                                                                                                                                                |
 
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site. A boolean environment variable
@@ -352,7 +353,7 @@ the same directory reads all of it, and everything in it is meant to be public:
 | Path                                               | What it holds                                                            |
 | -------------------------------------------------- | ------------------------------------------------------------------------ |
 | `content/posts/`, `content/pages/`                 | The Markdown documents, `_trash/` included.                              |
-| `content/uploads/`                                 | Uploaded files exactly as they arrived.                                  |
+| `content/uploads/`                                 | Uploaded files, with their location and camera metadata removed.         |
 | `content/_data/site.json`                          | Every site setting.                                                      |
 | `content/_data/federation/followers.json`          | Who follows the site.                                                    |
 | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` | Every activity the inbox was handed, one per line.                       |
@@ -364,6 +365,7 @@ the same directory reads all of it, and everything in it is meant to be public:
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `data/users.json`                 | Usernames and argon2id password hashes. Mode `0600`.                                                                            |
 | `data/keys/`                      | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                      |
+| `data/locations.json`             | Where each post was written, keyed by permalink (decision-29). Mode `0600`.                                                     |
 | `data/comment-salt`               | What hides commenters' addresses in the published comment files. Mode `0600`.                                                   |
 | `data/comments/{slug}.json`       | The emails of that post's commenters, and whether each asked to hear about replies, keyed by comment id. Mode `0600`.           |
 | `data/akismet.json`               | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                         |
@@ -1517,25 +1519,27 @@ This is every piece of personal data the CMS stores, where it is, and how long
 it stays. "Kept" means until somebody deletes it, unless a retention period
 says otherwise.
 
-| What                                                                                                                 | Where                                                         | How long                                                                       |
-| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| A commenter's name, website and words                                                                                | `content/_data/comments/{slug}.json`, public and in git       | Kept. Erasing on request replaces the name and drops the website.              |
-| A commenter's email, and whether they asked to be told about replies                                                 | `data/comments/{slug}.json`, mode `0600`, keyed by comment id | `commentEmailRetentionDays`: forever unless set, 180 on a new site.            |
-| A salted hash of the address a comment, webmention or contact message came from (the address itself is never stored) | The comment file, or the contact message file                 | `addressHashRetentionDays`: forever unless set, 30 on a new site.              |
-| A webmention's author name, website, avatar URL and the source page's words                                          | `content/_data/comments/{slug}.json`                          | Kept, as a copy of a page that is public already.                              |
-| A contact message: the sender's name, email, subject and message                                                     | `data/contact/{id}.json`, mode `0600`                         | `contactMessageRetentionDays`: forever unless set, 365 on a new site.          |
-| The addresses that unsubscribed from reply notices                                                                   | `data/comment-optouts.json`, mode `0600`                      | Kept, so the site goes on not writing to them. Erasing on request removes one. |
-| Followers: actor id, handle, display name, avatar URL, profile URL                                                   | `content/_data/federation/{username}/followers.json`, in git  | Until they unfollow.                                                           |
-| Inbound likes, boosts, replies and quotes, with the actor who sent them                                              | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`, in git    | Kept.                                                                          |
-| What a reply shows of the post it answers: its title, words and author                                               | `content/_data/replyContexts.json`, in git                    | Kept.                                                                          |
-| Other actors who liked, boosted, answered or quoted: handle, display name, avatar URL, profile URL                   | `data/geekity.db`, fetched from their actor document          | A cache. Refetched weekly while the inbox log names them.                      |
-| Remote avatars, shrunk                                                                                               | `data/avatars/`                                               | Deleted by the avatar sweep once nothing shown names them.                     |
-| Users: username, email, argon2id password hash, profile                                                              | `data/users.json`, mode `0600`                                | Until the user is deleted.                                                     |
-| The apps a user signed in to with IndieAuth: app, scopes, hashes of its tokens, when they expire                     | `data/indieauth-tokens.json`, mode `0600`                     | Until the user is deleted, or 60 days after the app last refreshed.            |
-| Recent IndieAuth and Micropub requests: app, username, what it sent (no secrets, values cut short), the answer       | `data/indieauth-activity.json`, mode `0600`                   | The last 100 requests, none older than 14 days.                                |
-| An index of all of the above, and sessions, reset tokens and spent link tokens                                       | `data/geekity.db`                                             | A cache of the files. Sessions and tokens are pruned when they expire.         |
-| Client addresses in the rate limits                                                                                  | Memory                                                        | Until the window passes or the site restarts.                                  |
-| Client addresses in the access log                                                                                   | stdout, and whatever collects it                              | Only with `accessLogAddress` on. The collector keeps them.                     |
+| What                                                                                                                 | Where                                                         | How long                                                                                                             |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| A commenter's name, website and words                                                                                | `content/_data/comments/{slug}.json`, public and in git       | Kept. Erasing on request replaces the name and drops the website.                                                    |
+| A commenter's email, and whether they asked to be told about replies                                                 | `data/comments/{slug}.json`, mode `0600`, keyed by comment id | `commentEmailRetentionDays`: forever unless set, 180 on a new site.                                                  |
+| A salted hash of the address a comment, webmention or contact message came from (the address itself is never stored) | The comment file, or the contact message file                 | `addressHashRetentionDays`: forever unless set, 30 on a new site.                                                    |
+| A webmention's author name, website, avatar URL and the source page's words                                          | `content/_data/comments/{slug}.json`                          | Kept, as a copy of a page that is public already.                                                                    |
+| A contact message: the sender's name, email, subject and message                                                     | `data/contact/{id}.json`, mode `0600`                         | `contactMessageRetentionDays`: forever unless set, 365 on a new site.                                                |
+| The addresses that unsubscribed from reply notices                                                                   | `data/comment-optouts.json`, mode `0600`                      | Kept, so the site goes on not writing to them. Erasing on request removes one.                                       |
+| Followers: actor id, handle, display name, avatar URL, profile URL                                                   | `content/_data/federation/{username}/followers.json`, in git  | Until they unfollow.                                                                                                 |
+| Inbound likes, boosts, replies and quotes, with the actor who sent them                                              | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`, in git    | Kept.                                                                                                                |
+| What a reply shows of the post it answers: its title, words and author                                               | `content/_data/replyContexts.json`, in git                    | Kept.                                                                                                                |
+| Other actors who liked, boosted, answered or quoted: handle, display name, avatar URL, profile URL                   | `data/geekity.db`, fetched from their actor document          | A cache. Refetched weekly while the inbox log names them.                                                            |
+| Remote avatars, shrunk                                                                                               | `data/avatars/`                                               | Deleted by the avatar sweep once nothing shown names them.                                                           |
+| Users: username, email, argon2id password hash, profile                                                              | `data/users.json`, mode `0600`                                | Until the user is deleted.                                                                                           |
+| The apps a user signed in to with IndieAuth: app, scopes, hashes of its tokens, when they expire                     | `data/indieauth-tokens.json`, mode `0600`                     | Until the user is deleted, or 60 days after the app last refreshed.                                                  |
+| Recent IndieAuth and Micropub requests: app, username, what it sent (no secrets, values cut short), the answer       | `data/indieauth-activity.json`, mode `0600`                   | The last 100 requests, none older than 14 days.                                                                      |
+| An index of all of the above, and sessions, reset tokens and spent link tokens                                       | `data/geekity.db`                                             | A cache of the files. Sessions and tokens are pruned when they expire.                                               |
+| Client addresses in the rate limits                                                                                  | Memory                                                        | Until the window passes or the site restarts.                                                                        |
+| Where and when a photo or video was taken, and the camera or phone (EXIF, XMP, IPTC, a video's `©xyz`)               | Removed from `content/uploads/` on upload                     | Never stored. Older uploads keep it until `geekity strip-metadata`; git history keeps the old bytes until rewritten. |
+| Where the author wrote a post: coordinates, accuracy, and the place's name, locality, region and country             | `data/locations.json`, mode `0600`, keyed by permalink        | Kept until the author clears it. Published only as far as **Settings > Privacy** allows, nothing by default.         |
+| Client addresses in the access log                                                                                   | stdout, and whatever collects it                              | Only with `accessLogAddress` on. The collector keeps them.                                                           |
 
 Two services outside the site see personal data when a site turns them on.
 Akismet is sent a commenter's or sender's address, user agent, referrer, name,
@@ -1868,8 +1872,8 @@ email address, notification preferences, a public profile and the
 [stored actor id](#a-users-stored-actor-id) they were published under
 elsewhere. Written atomically with `0600` permissions and serialised against
 itself, so two admins adding the same name at once cannot both succeed. It is in `data/` rather than `content/` because
-`content/` is published with the site, and it is one of the two things under
-`dataDir` that must be backed up — the users' actor keys are the other.
+`content/` is published with the site, and it is one of the files under
+`dataDir` that must be backed up.
 
 Sessions stay in SQLite, where the rest of the cache lives. They name a user by
 id and are joined against the file on every admin request, so a session whose
@@ -2087,6 +2091,60 @@ the truth (decision-9) and is read on each request, so an entry written by hand
 shows up without a restart. `readAltTexts(contentDir)` and
 `undescribedImages(html, library)` in `src/images/alt-text.ts` are what the
 editor's publish check and the federated `Image` attachments read.
+
+#### Location and camera metadata
+
+A phone photo carries where it was taken, when, and on what camera, and the
+original under `content/uploads` is what the site serves at `/uploads/…`, puts
+in every `<picture>` as the fallback, and federates as a photo post's
+attachment. So `storeUpload` removes that metadata before the file is written,
+for every upload: the editor's control, the media library, the Micropub media
+endpoint and Micropub photos. It is not a setting.
+
+| Format   | What goes                                                                                                                                       | What stays                                                    |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| JPEG     | EXIF (GPS, camera, lens, serial, time), XMP, IPTC, comments, other APPn segments, data after the image                                          | JFIF, the ICC profile, Adobe's colour flag, the orientation   |
+| PNG      | `eXIf`, `tEXt`, `zTXt`, `iTXt` (XMP), `tIME` and private chunks                                                                                 | Image and colour chunks, APNG animation, the orientation      |
+| WebP     | `EXIF`, `XMP ` and unknown chunks                                                                                                               | The bitstream, alpha, animation, ICC profile, the orientation |
+| AVIF     | The contents of the Exif and XMP items, overwritten with an empty EXIF block and an empty XMP packet                                            | The picture, and its `irot`/`imir` orientation                |
+| GIF      | Comment extensions and application extensions other than looping and ICC (XMP lives in one)                                                     | Frames, timing, looping                                       |
+| MP4, M4V | `udta` (the `©xyz` location, camera), `meta` (the QuickTime location key) and `uuid` (XMP) boxes, in the movie, its tracks and at the top level | Every other box                                               |
+
+Nothing is re-encoded. Segments, chunks and blocks are cut out and the pixel
+data is copied byte for byte, so a stored JPEG or PNG decodes to the same
+pixels as the upload. A picture taken sideways keeps a minimal EXIF block
+holding its orientation and nothing else, so it still shows the right way up.
+AVIF and MP4 keep their layout exactly: the metadata is overwritten in place
+and a removed box becomes a zero-filled `free` box of the same size, so no
+offset inside the file moves. A file whose structure cannot be followed far
+enough to find its metadata is refused with a 415 rather than stored as it is.
+
+Audio (MP3, M4A, Ogg), WebM, PDF and the text formats are stored as they
+arrive. An episode's tags are its title and artwork, not where it was
+recorded.
+
+Files uploaded before this version still carry their metadata. Strip them
+with
+
+```sh
+geekity strip-metadata
+```
+
+which rewrites each file under `content/uploads` that has something to remove,
+prints what it removed, keeps the file's modification time (the library sorts
+by it), and leaves alone, and names, a file it cannot read, exiting `1`. It is
+safe to run again: a clean file is left as it is, and a second run reports
+every file already clean. The derived variants under `data/images` never
+carried metadata.
+
+A site that keeps `content/` in git still has the old bytes in its history,
+and so does every clone and fork of it. Removing them means rewriting that
+history. One way: run `geekity strip-metadata`, copy `content/uploads`
+somewhere outside the repository, remove it from every commit with
+[`git filter-repo`](https://github.com/newren/git-filter-repo)
+`--path content/uploads --invert-paths`, copy the stripped files back, commit
+them, and force-push. That changes every commit hash, so anybody else with a
+clone has to clone again.
 
 ### Image variants
 
@@ -2956,6 +3014,16 @@ its own item: RSS as `dc:language`, Atom as `xml:lang` on the `entry` and JSON
 Feed as the item's `language`. A post in the site's language, or whose `lang`
 is not a language tag, adds nothing.
 
+**Photos.** A post's `photo` front matter prints in every format's content,
+before the body, which is where the page prints it too. Each photo is a plain
+`<figure><img src alt></figure>` of the original upload, never the responsive
+variants, which a reader cannot resolve (decision-10). Its `src` is absolute on
+the site's base URL. Its `alt` is the post's own text, else the media library's,
+else empty. So a photo-only post reads in a feed reader as its photos. JSON Feed
+also names the item's main image as `image`: the post's `image` front matter,
+else its first photo. A photo is never an RSS `enclosure`, an Atom
+`rel="enclosure"` link or a JSON Feed attachment. Those carry a recording only.
+
 ### RSS 2.0
 
 The channel carries `title`, `link`, `description` (the tagline), `language`
@@ -3058,7 +3126,7 @@ Feed has no field for a license and says nothing about one.
 [rfc4946]: https://www.rfc-editor.org/rfc/rfc4946
 
 A JSON Feed item carries `id` (the object id), `url` (the permalink), `title`,
-`content_html`, `summary`, `date_published`, `date_modified`, `tags` (the
+`content_html`, `image` (see Photos above), `summary`, `date_published`, `date_modified`, `tags` (the
 terms) and `authors`; the feed carries `version`, `title`, `home_page_url`,
 `feed_url`, `description`, `authors` and `hubs`. Keys with nothing behind them
 are left out rather than sent empty.

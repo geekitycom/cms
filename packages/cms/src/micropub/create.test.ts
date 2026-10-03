@@ -400,9 +400,9 @@ describe('a refused create', () => {
           ['h', 'entry'],
           ['content', 'With a place'],
           ['checkin', 'https://places.example/cafe'],
-          ['location', 'geo:1,2'],
+          ['weight', '70kg'],
         ]),
-      names: ['checkin', 'location'],
+      names: ['checkin', 'weight'],
     },
     {
       label: 'an h=event',

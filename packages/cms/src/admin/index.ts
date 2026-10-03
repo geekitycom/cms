@@ -250,6 +250,7 @@ export {
   MAIL_TEST_TEMPLATE,
   mailPanel,
 } from './settings-email.ts';
+export { PRIVACY_SETTINGS } from './settings-privacy.ts';
 export { FEDERATION_SETTINGS } from './settings-federation.ts';
 export {
   addUserProblems,

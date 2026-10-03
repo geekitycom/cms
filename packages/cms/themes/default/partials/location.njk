@@ -1,0 +1,12 @@
+<span class="p-location {{ location.type }}">
+  {%- for word in location.words -%}
+    <span class="{{ word.property }}">{{ word.text }}</span>{% if not loop.last %}, {% endif %}
+  {%- endfor -%}
+  {%- if location.geo -%}
+    {%- if location.words.length -%}
+      <data class="p-latitude" value="{{ location.geo.latitude }}"></data><data class="p-longitude" value="{{ location.geo.longitude }}"></data>
+    {%- else -%}
+      <data class="p-latitude" value="{{ location.geo.latitude }}">{{ location.geo.latitude }}</data>, <data class="p-longitude" value="{{ location.geo.longitude }}">{{ location.geo.longitude }}</data>
+    {%- endif -%}
+  {%- endif -%}
+</span>

@@ -54,6 +54,7 @@ export const ADMIN_TEMPLATES = {
   settingsPermalinks: 'pages/settings/permalinks.njk',
   settingsDiscussion: 'pages/settings/discussion.njk',
   settingsEmail: 'pages/settings/email.njk',
+  settingsPrivacy: 'pages/settings/privacy.njk',
   toolsContentIndex: 'pages/tools/content-index.njk',
   toolsPersonalData: 'pages/tools/personal-data.njk',
   usersList: 'pages/users/list.njk',

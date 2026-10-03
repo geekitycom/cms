@@ -15,6 +15,8 @@ import {
 import { readSiteSettings } from '../admin/settings.ts';
 
 import type { Document } from '../content/document.ts';
+import { postLocations } from '../content/locations.ts';
+import type { PostLocations } from '../content/locations.ts';
 import type { PostType } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
@@ -61,6 +63,7 @@ interface QueryContext {
   readonly store: ContentStore;
   /** The syndication targets the site declares (TASK-155). */
   readonly targets: readonly SyndicationTarget[];
+  readonly locations: PostLocations;
   /** The `filter` parameter, which narrows `q=category`. */
   readonly filter: string | undefined;
   /** The `properties[]` parameters, which narrow `q=source`. */
@@ -83,10 +86,10 @@ const QUERIES: Readonly<Record<Query, (context: QueryContext) => object>> = {
   }),
   'syndicate-to': ({ targets }) => ({ 'syndicate-to': offered(targets) }),
   category: ({ store, filter }) => ({ categories: categories(store, filter) }),
-  source: ({ baseUrl, targets, properties, post }) => {
+  source: ({ baseUrl, targets, locations, properties, post }) => {
     const document = post();
     if (document instanceof Refusal) return document;
-    const all = sourceProperties(document, { baseUrl, targets });
+    const all = sourceProperties(document, { baseUrl, targets, locations });
     // Asked for by name, the answer is the properties alone, as the spec has it.
     if (properties.length === 0) return { type: ['h-entry'], properties: all };
     return {
@@ -343,6 +346,7 @@ const ACTIONS: {
       now: store.now(),
       baseUrl: siteBaseUrl(c),
       targets: syndicationTargetsReader(config.contentDir)(),
+      locations: postLocations(config.dataDir),
     });
     if ('errors' in updated) return invalid(updated.errors.join(' ')).answer(c);
 
@@ -434,6 +438,7 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
       baseUrl: siteBaseUrl(c),
       store: c.var.store,
       targets: syndicationTargetsReader(c.var.config.contentDir)(),
+      locations: postLocations(c.var.config.dataDir),
       filter: c.req.query('filter'),
       properties: c.req.queries('properties[]') ?? c.req.queries('properties') ?? [],
       post: () => postFor(c, c.req.query('url')),

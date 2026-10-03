@@ -32,3 +32,7 @@ The CMS uses [sharp](https://sharp.pixelplumbing.com/) directly to generate imag
 - Encoding happens in the request that uploads the file, which makes uploads slower by the encode time. AVIF is left out of the default set because its encoder is an order of magnitude slower than WebP; it can be turned on by config.
 - The variant directory is the first derived state outside SQLite. It must be excluded from git, from Eleventy input, and from the content sync, and the file-first milestone must treat it as rebuildable.
 - Rendering has to know an image's dimensions without opening the file on every request, so the dimensions are recorded when variants are generated and read from the index or a sidecar, never probed at render time.
+
+## Amendment (2026-10-02, TASK-224)
+
+The original under `content/uploads/` is no longer stored exactly as it arrived. On upload its location, camera and other metadata (EXIF, XMP, IPTC, comments, and the location boxes of MP4 and M4V) is removed without re-encoding, keeping only a JPEG, PNG or WebP's orientation. It is still the only source of truth for the variants. `geekity strip-metadata` applies the same to files stored before this change.

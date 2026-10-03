@@ -1,7 +1,9 @@
 import { blankForm, POST_KIND } from '../admin/documents.ts';
 import type { EditorForm } from '../admin/documents.ts';
+import { locationForm } from '../admin/location-field.ts';
 import type { PhotoRow } from '../admin/photo-field.ts';
 import { isWebUrl } from '../content/enclosure.ts';
+import { locationFromMicropub } from '../content/location.ts';
 import { normalizeBody } from '../content/writer.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
@@ -63,6 +65,7 @@ const PROPERTIES = new Set<string>([
   'content',
   'category',
   'photo',
+  'location',
   'post-status',
   'mp-syndicate-to',
 ]);
@@ -211,6 +214,7 @@ export function createForm(
     }
     return photo;
   });
+  form.location = location(properties.get('location') ?? [], errors);
   for (const [property, field] of Object.entries(SINGLE_VALUED)) {
     form[field] = text(property);
   }
@@ -249,6 +253,18 @@ function photoRow(value: unknown, baseUrl: string): PhotoRow | undefined {
       : address,
     alt: alt.trim(),
   };
+}
+
+function location(values: readonly unknown[], errors: string[]): EditorForm['location'] {
+  if (values.length > 1) errors.push('location takes one value.');
+  const [value] = values;
+  if (value === undefined) return locationForm(undefined);
+  const parsed = locationFromMicropub(value);
+  if ('error' in parsed) {
+    errors.push(parsed.error);
+    return locationForm(undefined);
+  }
+  return locationForm(parsed);
 }
 
 /** The body: plain text as the Markdown it is written in, or HTML as it came. */

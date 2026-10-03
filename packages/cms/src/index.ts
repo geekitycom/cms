@@ -23,6 +23,8 @@ import { withRebuiltDatabase } from './cache.ts';
 import { resolveConfig } from './config.ts';
 import type { DocumentChangeHook, GeekityConfig, ResolvedConfig } from './config.ts';
 import { createContentSync, createScheduler, openContentStore } from './content/index.ts';
+import { shareLocation } from './content/location.ts';
+import { postLocations } from './content/locations.ts';
 import type {
   ContentEvents,
   ContentEventMap,
@@ -1699,6 +1701,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // with, both files in the content directory (TASK-155, decision-26).
   const syndicationTargets = syndicationTargetsReader(resolved.contentDir);
   const copies = syndicationCopies(resolved.contentDir);
+  const locations = postLocations(resolved.dataDir);
 
   const replyContexts = createReplyContextService({
     store,
@@ -1730,6 +1733,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
       ),
       copies: Object.values(copies.read(document.permalink)),
     }),
+    location: (document) =>
+      shareLocation(
+        locations.read(document.permalink),
+        readSiteSettings(resolved.contentDir).locationSharing,
+      ),
     // The pages that put themselves in the site menu are found by asking for
     // every public page and reading their front matter, rather than by an
     // index of their own: a site has a handful of pages, the query is the

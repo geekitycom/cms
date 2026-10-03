@@ -6,6 +6,7 @@ import type { Document } from '../content/document.ts';
 import { enclosureOf, isCaptions, playsAsVideo } from '../content/enclosure.ts';
 import type { Enclosure, Transcript } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
+import type { SharedLocation } from '../content/location.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { Citation } from '../content/citation.ts';
 import { isNamed, postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
@@ -227,6 +228,32 @@ export interface DocumentContext {
   syndication: SyndicationLink[];
   /** Everything else from the front matter, including unmodelled keys. */
   [key: string]: unknown;
+}
+
+export interface LocationContext {
+  type: 'h-card' | 'h-adr' | 'h-geo';
+  words: readonly { property: string; text: string }[];
+  geo?: { latitude: string; longitude: string } | undefined;
+}
+
+export function locationContext(shared: SharedLocation): LocationContext {
+  const { place } = shared;
+  const words = [
+    ['p-name', place.name],
+    ['p-locality', place.locality],
+    ['p-region', place.region],
+    ['p-country-name', place.country],
+  ]
+    .filter((pair): pair is [string, string] => pair[1] !== undefined)
+    .map(([property, text]) => ({ property, text }));
+  const type = place.name !== undefined ? 'h-card' : words.length > 0 ? 'h-adr' : 'h-geo';
+  return {
+    type,
+    words,
+    ...(shared.kind === 'exact'
+      ? { geo: { latitude: String(shared.geo.latitude), longitude: String(shared.geo.longitude) } }
+      : {}),
+  };
 }
 
 /** One copy of a post elsewhere: its URL, and the host a link to it says. */

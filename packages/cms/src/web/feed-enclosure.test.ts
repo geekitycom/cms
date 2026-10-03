@@ -71,15 +71,15 @@ function sha256(text: string): string {
 
 const BEFORE_RECORDINGS: Record<string, { etag: string; sha256: string }> = {
   '/feed/': {
-    etag: '"fdca69ee8605dfc918f3c5fd2e16c21e"',
+    etag: '"5db39310c73cf96997d7c78b17675520"',
     sha256: 'e6d764c278395c2ab6e60a981ed0caa921572effe1c929eb9d84f991df928573',
   },
   '/feed/atom/': {
-    etag: '"0d0bcce1dcacfcc9cbfc36cb81bf0ed6"',
+    etag: '"eff48c5f98bb3317620f70d9d035b356"',
     sha256: '5236065b0772b50726ec08650945918a6a399b18388c0616c6f7c87ee32a310b',
   },
   '/feed/json/': {
-    etag: '"b1e6d72b3c8898b0e3059649af6bb568"',
+    etag: '"2f94d4f7fd97a318de442239d43c3c5d"',
     sha256: 'e7c8117a31ce46f35a0ccc60779e6840d5bb5c1a28c9082d4679568f09dc4683',
   },
 };
@@ -127,7 +127,7 @@ const UNTIMED = episode([
 
 describe('a feed with no recording in it (TASK-213 AC #8)', () => {
   it('prints the bytes and the validator it printed before recordings existed', async () => {
-    assert.equal(FEED_ITEM_REVISION, 6, 'a revision bump moves every ETag; refresh these fixtures');
+    assert.equal(FEED_ITEM_REVISION, 7, 'a revision bump moves every ETag; refresh these fixtures');
     const cms = await site(PLAIN);
 
     for (const [url, before] of Object.entries(BEFORE_RECORDINGS)) {

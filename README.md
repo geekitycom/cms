@@ -155,7 +155,7 @@ directory; absolute ones are used as given.
 | ------------------ | ----------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `port`             | `3000`                                    | `GEEKITY_PORT`, then `PORT`  | Port the HTTP server listens on.                                                                                                                                                                                                                                                                                                                                                           |
 | `contentDir`       | `<cwd>/content`                           | `GEEKITY_CONTENT_DIR`        | Markdown content.                                                                                                                                                                                                                                                                                                                                                                          |
-| `dataDir`          | `<cwd>/data`                              | `GEEKITY_DATA_DIR`           | Derived state — the SQLite index, the image variants — and the two things in it that are not derived and must be backed up: `users.json` and, under `keys/`, each user's actor key pairs.                                                                                                                                                                                                  |
+| `dataDir`          | `<cwd>/data`                              | `GEEKITY_DATA_DIR`           | Derived state — the SQLite index, the image variants — and the files that are not derived and must be backed up, such as `users.json`, the actor key pairs under `keys/` and `locations.json`. [Two directories](#two-directories-content-and-data) lists them.                                                                                                                            |
 | `themesDir`        | `<cwd>/themes`                            | `GEEKITY_THEMES_DIR`         | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                                                                                                                                                                                                                        |
 | `baseUrl`          | `http://localhost:<port>`                 | `GEEKITY_BASE_URL`           | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                                                                                                                                                                                                                 |
 | `watch`            | `true`                                    | `GEEKITY_WATCH`              | Watch `contentDir` while serving and keep the index in step.                                                                                                                                                                                                                                                                                                                               |
@@ -205,7 +205,9 @@ in front of the site has its own limit on a request body; see
 [Start it and point the proxy at it](#3-start-it-and-point-the-proxy-at-it).
 Uploads are served with their media type and answer a single `Range` request
 with `206 Partial Content`, which Safari needs before it plays a file and every
-player uses to seek.
+player uses to seek. Location and camera metadata is removed from pictures and
+videos before they are stored; see
+[the media library](packages/cms/README.md#the-media-library).
 
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site.
@@ -291,7 +293,7 @@ reads the same directory, and everything in it is meant to be public:
 | Path                                                 | What it holds                                      |
 | ---------------------------------------------------- | -------------------------------------------------- |
 | `content/posts/`, `content/pages/`                   | The Markdown documents, `_trash/` included.        |
-| `content/uploads/`                                   | Uploaded files exactly as they arrived.            |
+| `content/uploads/`                                   | Uploaded files, with location and camera stripped. |
 | `content/_data/site.json`                            | Every site setting.                                |
 | `content/_data/media.json`                           | The media library's alt text, keyed by upload.     |
 | `content/_data/federation/{username}/followers.json` | Who follows that user.                             |
@@ -300,10 +302,11 @@ reads the same directory, and everything in it is meant to be public:
 `data/` is private. It is never in git, and it is the half that has to be
 copied somewhere safe:
 
-| Path              | What it holds                                                                      |
-| ----------------- | ---------------------------------------------------------------------------------- |
-| `data/users.json` | Usernames and argon2id password hashes, mode 0600.                                 |
-| `data/keys/`      | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.** |
+| Path                  | What it holds                                                                                                                           |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/users.json`     | Usernames and argon2id password hashes, mode 0600.                                                                                      |
+| `data/keys/`          | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.**                                                      |
+| `data/locations.json` | Where each post was written, keyed by permalink, mode 0600. Never in `content/`, so a public repository never carries it (decision-29). |
 
 And three things under `data/` may be deleted at any time the site is stopped:
 
@@ -333,6 +336,11 @@ for an address hash and 365 for a contact message.
 **Tools > Personal data** erases one person's data on request. The package
 README lists [every piece of personal data the CMS stores and
 where](packages/cms/README.md#personal-data).
+
+The author's own location on a post is personal data too. A Micropub app or
+the editor may attach where a post was written; the site keeps it in
+`data/locations.json` and publishes nothing of it until **Settings > Privacy**
+says otherwise. [Location on posts](#location-on-posts) describes the choice.
 
 ### What is in the database, and what a rebuild loses
 
@@ -868,9 +876,9 @@ nothing is ever upscaled, and the original's own width is always added so a
 wide display has a full-size copy to pick that is not the unprocessed upload.
 The formats are [`imageFormats`](#configuration) plus the original's own, which
 is what the `<img>` falls back to. EXIF orientation is applied and the metadata
-— the camera, the timestamp, the location — is dropped. A GIF is stored and
-served exactly as it arrived: an animation cannot survive being resized into a
-still.
+— the camera, the timestamp, the location — is dropped. A GIF gets no variants
+and is served as it was stored: an animation cannot survive being resized into
+a still.
 
 A post page then renders the picture as
 
@@ -952,15 +960,47 @@ offered.
 ## Site settings
 
 `/admin/settings` holds the values that are a site's own rather than a post's,
-on six pages under the Settings menu: **General** (title, tagline, author, base
+on seven pages under the Settings menu: **General** (title, tagline, author, base
 URL, time zone, language, the locale dates and counts are written in when
 it is not the language, and the site icon), **Reading** (what the homepage displays, posts per
 page, the notify server the feeds advertise), **Permalinks** (the tag and category
 archive bases), **Discussion** (comments and when they close, webmentions sent
 and received, and how long commenter emails, address hashes and contact
 messages are kept), **Email** (how the site sends mail and where a message written to
-it goes) and **Federation** (the relays the site subscribes to). They live in
+it goes), **Privacy** (what the site shares of where a post was written, and
+every later privacy choice) and **Federation** (the relays the site subscribes to). They live in
 `content/_data/site.json`, which is published with the site and in git.
+
+### Location on posts
+
+A Micropub app such as Quill can send where a post was written, and the
+editor has a Location box for it: coordinates, their accuracy, and the place's
+name, locality, region and country. The site keeps it in `data/locations.json`,
+keyed by the post's permalink, at mode 0600. It is never written into the
+post's file, so `content/` and its git history never carry it, whatever the
+setting says (decision-29). An Eleventy build of the same `content/` prints no
+location for the same reason.
+
+**Location on posts** on Settings > Privacy decides what readers see, and
+takes effect on the next request for every post without rewriting one:
+
+| Choice                   | `locationSharing` | What a reader sees                                                                                       |
+| ------------------------ | ----------------- | -------------------------------------------------------------------------------------------------------- |
+| Keep it, publish nothing | `none`            | Nothing. The default.                                                                                    |
+| Publish the place only   | `place`           | The name, locality, region and country, never a coordinate. A post with coordinates alone shows nothing. |
+| Publish the coordinates  | `exact`           | The words and the coordinates.                                                                           |
+
+What is shared is printed inside the post's h-entry as `p-location`, an h-card
+when the place is named, an h-adr for its words, an h-geo for coordinates
+alone, and federates as an ActivityStreams `Place` on the post's object,
+with `latitude`, `longitude` and `accuracy` only under `exact`. The feeds, the
+JSON and Markdown representations, the JSON-LD, oEmbed, search and `llms.txt`
+carry no location at any level. The post's author gets the whole location back
+from `q=source` whatever the setting.
+
+The same page says that location and camera metadata is always removed from
+uploads, and names `geekity strip-metadata` for files uploaded before that was
+so.
 
 **Site author** on the General page says who the site is. It lists every
 user by display name, and Several authors. A new site has several authors.
@@ -1618,26 +1658,27 @@ The endpoint maps these properties onto the editor's fields, and decision-27
 records the mapping. Each property takes one value unless the table says
 otherwise.
 
-| Property               | Becomes                                                                                                                                                                                      |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `h=entry`              | The only type accepted. In JSON, `"type": ["h-entry"]`.                                                                                                                                      |
-| `content`              | The body. Plain text is kept as Markdown. `{"html": "…"}` is kept as HTML.                                                                                                                   |
-| `name`                 | The title. A post without one is a note.                                                                                                                                                     |
-| `summary`              | The description.                                                                                                                                                                             |
-| `category`             | The tags, one tag per value. Several values.                                                                                                                                                 |
-| `published`            | The date. A date without an offset is in the site's time zone. Without it, the post is dated now.                                                                                            |
-| `post-status`          | `published` or `draft`. A draft is not published, federated or sent webmentions.                                                                                                             |
-| `mp-slug`              | The slug in the file name and the URL.                                                                                                                                                       |
-| `in-reply-to`          | Makes the post a reply to that URL.                                                                                                                                                          |
-| `like-of`              | Makes the post a like of that URL. Needs no content. A like of a fediverse status federates as a `Like` of it (decision-28).                                                                 |
-| `repost-of`            | Makes the post a repost of that URL. Needs no content. A repost of a fediverse status federates as an `Announce` of it (decision-28).                                                        |
-| `bookmark-of`          | Makes the post a bookmark of that URL. Needs no content.                                                                                                                                     |
-| `photo`                | A photo on the post. Several values. A value is a URL, `{"value": "…", "alt": "…"}` in JSON, or a file part in a multipart request. A post with a photo and no reply target is a photo post. |
-| `mp-syndicate-to`      | Selects a syndication target by its `uid`, as the editor's Syndicate to checkboxes do. Several values. The post is sent to the targets when it is published.                                 |
-| `slug`, `syndicate-to` | The same as `mp-slug` and `mp-syndicate-to`. Quill accounts created before Quill renamed them still send these names.                                                                        |
-| `p3k-content-type`     | `text/plain` or `text/markdown`, which Quill sends from its content type selector. Either way the content is kept as Markdown, and nothing else is stored. Any other type is refused.        |
-| `visibility`           | `public`, which every published post is. Nothing is stored. `unlisted` and `private` are refused, since the site does not publish either yet.                                                |
-| `access_token`         | The token, when it is not in the header. It is never stored on the post.                                                                                                                     |
+| Property               | Becomes                                                                                                                                                                                                                                                           |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `h=entry`              | The only type accepted. In JSON, `"type": ["h-entry"]`.                                                                                                                                                                                                           |
+| `content`              | The body. Plain text is kept as Markdown. `{"html": "…"}` is kept as HTML.                                                                                                                                                                                        |
+| `name`                 | The title. A post without one is a note.                                                                                                                                                                                                                          |
+| `summary`              | The description.                                                                                                                                                                                                                                                  |
+| `category`             | The tags, one tag per value. Several values.                                                                                                                                                                                                                      |
+| `published`            | The date. A date without an offset is in the site's time zone. Without it, the post is dated now.                                                                                                                                                                 |
+| `post-status`          | `published` or `draft`. A draft is not published, federated or sent webmentions.                                                                                                                                                                                  |
+| `mp-slug`              | The slug in the file name and the URL.                                                                                                                                                                                                                            |
+| `in-reply-to`          | Makes the post a reply to that URL.                                                                                                                                                                                                                               |
+| `like-of`              | Makes the post a like of that URL. Needs no content. A like of a fediverse status federates as a `Like` of it (decision-28).                                                                                                                                      |
+| `repost-of`            | Makes the post a repost of that URL. Needs no content. A repost of a fediverse status federates as an `Announce` of it (decision-28).                                                                                                                             |
+| `bookmark-of`          | Makes the post a bookmark of that URL. Needs no content.                                                                                                                                                                                                          |
+| `photo`                | A photo on the post. Several values. A value is a URL, `{"value": "…", "alt": "…"}` in JSON, or a file part in a multipart request. A post with a photo and no reply target is a photo post.                                                                      |
+| `location`             | Where the post was written: a `geo:` URI such as `geo:48.85837,2.29448;u=50`, which Quill sends, or an h-geo, h-adr or h-card object. Kept in `data/locations.json`, never in the post's file; [Settings > Privacy](#location-on-posts) decides what readers see. |
+| `mp-syndicate-to`      | Selects a syndication target by its `uid`, as the editor's Syndicate to checkboxes do. Several values. The post is sent to the targets when it is published.                                                                                                      |
+| `slug`, `syndicate-to` | The same as `mp-slug` and `mp-syndicate-to`. Quill accounts created before Quill renamed them still send these names.                                                                                                                                             |
+| `p3k-content-type`     | `text/plain` or `text/markdown`, which Quill sends from its content type selector. Either way the content is kept as Markdown, and nothing else is stored. Any other type is refused.                                                                             |
+| `visibility`           | `public`, which every published post is. Nothing is stored. `unlisted` and `private` are refused, since the site does not publish either yet.                                                                                                                     |
+| `access_token`         | The token, when it is not in the header. It is never stored on the post.                                                                                                                                                                                          |
 
 A like, repost or bookmark cites its URL on the post's page and sends that URL
 a webmention when the post is published, as a reply does.
@@ -1656,7 +1697,8 @@ form-encoded bodies too. The media endpoint has the same check.
 
 Anything else gets 400 `invalid_request` with a description that names it, and
 nothing is written. That covers another type such as `h=event`, a property not
-in the table such as `rsvp`, `location` or `checkin`, a second value for a
+in the table such as `rsvp` or `checkin`, a `location` that is not a `geo:`
+URI or an h-geo, h-adr or h-card, a second value for a
 property that takes one, a `uid` the site does not declare, and anything the
 editor itself refuses, such as an `in-reply-to` that is not a URL.
 
@@ -1710,7 +1752,11 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
   takes, so an app can edit them and send them back. The selected syndication
   targets are under `mp-syndicate-to`; an id in the post's `syndicate-to` that
   names no declared target is left out and kept in the file. A photo in the
-  media library is given as its absolute URL. Add `&properties[]=content`, once
+  media library is given as its absolute URL. The post's `location` is
+  answered whatever Settings > Privacy shares, because the token's user is the
+  author who sent it: a `geo:` URI for coordinates alone, an h-adr for a
+  place's words, an h-card for a named place, each with the coordinates and
+  their accuracy nested as `geo`. Add `&properties[]=content`, once
   per property, to get only those properties, without the type. The same
   ownership rules as an update apply.
 - `?q=source` on the media endpoint answers
@@ -1748,12 +1794,12 @@ replayed with curl against a local site. Every test passes except these:
   and refusing it would refuse every Quill post.
 
 [Quill](https://quill.p3k.io/) is supported: its note, article, bookmark, like
-and repost editors, its photo uploads through the media endpoint, and its last
-photo offer. Tests replay the requests its source builds. On a site with
-`requireAltText` on, a photo needs alt text: type it in Quill's photo dialog,
-which then sends `{"value": "…", "alt": "…"}`, or the post is refused. Quill's
-location, RSVP, code, event, review, itinerary, exercise and weight posts are
-not supported yet.
+and repost editors, the location its note editor attaches, its photo uploads
+through the media endpoint, and its last photo offer. Tests replay the
+requests its source builds. On a site with `requireAltText` on, a photo needs
+alt text: type it in Quill's photo dialog, which then sends
+`{"value": "…", "alt": "…"}`, or the post is refused. Quill's RSVP, code,
+event, review, itinerary, exercise and weight posts are not supported yet.
 
 ## The theme
 

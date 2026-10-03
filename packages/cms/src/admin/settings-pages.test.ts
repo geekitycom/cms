@@ -13,7 +13,7 @@ const box = sandbox();
 after(() => box.cleanup());
 
 describe('the settings pages', () => {
-  it('are the five the Settings menu lists, General first (AC #1)', () => {
+  it('are the six the Settings menu lists, General first (AC #1)', () => {
     const settings = ADMIN_SECTIONS.find((section) => section.section === 'settings');
 
     assert.deepEqual(
@@ -24,8 +24,9 @@ describe('the settings pages', () => {
         ['permalinks', 'Permalinks', '/admin/settings/permalinks'],
         ['discussion', 'Discussion', '/admin/settings/discussion'],
         ['email', 'Email', '/admin/settings/email'],
+        ['privacy', 'Privacy', '/admin/settings/privacy'],
       ],
-      'Settings no longer lists Federation (TASK-109)',
+      'Settings no longer lists Federation (TASK-109), and lists Privacy (TASK-223)',
     );
     assert.equal(settings?.url, '/admin/settings', 'the heading lands on General');
     assert.deepEqual(

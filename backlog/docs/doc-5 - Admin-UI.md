@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-20 15:55'
+updated_date: '2026-10-03 01:24'
 ---
 # Admin UI
 
@@ -32,7 +32,7 @@ know whether it is the only one of its kind.
 | Appearance | Themes                                       |
 | Users      | All users, Add new                           |
 | Tools      | Content index                                |
-| Settings   | General, Reading, Permalinks, Discussion, Email |
+| Settings   | General, Reading, Permalinks, Discussion, Email, Privacy |
 | Federation | Followers, Settings                          |
 
 The terms are under Posts rather than at the top level because that is what
@@ -70,6 +70,7 @@ instead of becoming a sliver.
 | `/admin/settings/permalinks` | the tag and category bases, and the archive redirects the taxonomy screens recorded |
 | `/admin/settings/discussion` | comments on or off and the closing window, webmentions sent and received, the Akismet key |
 | `/admin/settings/email` | the mail provider, the From line and reply-to, the contact address, the credential and the test message |
+| `/admin/settings/privacy` | what the site shares of where a post was written (TASK-223, decision-29), and every later privacy choice |
 | `/admin/appearance/themes` | the packaged theme and the site's own, with the active one marked and an Activate on every other |
 | `/admin/tools` | Tools > Content index: what the index holds, and the button that empties it and reads every file again on the running site (`POST /admin/tools/rebuild-index`, behind a confirm step) |
 | `/admin/users` | list, edit each user's public profile, set their email, which notices go to it and how often, change your own password (single role: admin) |
@@ -79,7 +80,7 @@ instead of becoming a sliver.
 
 ## Editor
 
-- Fields: title, slug (auto from title until touched), permalink preview, date, tags (comma separated), description, **author**, draft checkbox, comments (follow the site settings / open / closed), body. A page also carries **Contact form**, which writes `contact: true` and puts a contact form under the page. The site menu is not here: it is a menu on the Navigation screen and nothing else (TASK-106, TASK-108).
+- Fields: title, slug (auto from title until touched), permalink preview, date, tags (comma separated), description, **author**, draft checkbox, comments (follow the site settings / open / closed), body. A post also carries a **Location** box (coordinates, accuracy, place, locality, region, country), the one field a save writes to `data/locations.json` rather than the file (TASK-223, decision-29); emptying every box removes it. A page also carries **Contact form**, which writes `contact: true` and puts a contact form under the page. The site menu is not here: it is a menu on the Navigation screen and nothing else (TASK-106, TASK-108).
 - Body is a plain `<textarea>` enhanced with CodeMirror 6 in markdown mode. A preview tab posts the body to `/admin/preview` and shows rendered HTML in the theme's post template.
 - Save writes the file (see doc-1 sync model). The form carries the file hash it was loaded with; a mismatch on save returns the form with a warning and both versions.
 - **Author** is a select of the site's users, not a free box: doc-2's `author` names a user, and after decision-14 that decides whose archive the post lands on and, once the actors land, whose followers hear about it. A new document starts on whoever is signed in; an existing one opens on the user the file names, which for a file written before decision-14 is the one its display name reads as. A file naming somebody with no account here keeps an option of its own, marked, so opening the editor and pressing Update cannot quietly reattribute the post.
@@ -173,7 +174,7 @@ instead of becoming a sliver.
 
 ## Settings
 
-- Settings is five pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (what the homepage displays, posts per page, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), and **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message). `/admin/settings` is the General page, which is where the Settings heading lands. A sixth page of exactly the same kind, **Federation** (the relays the site subscribes to and the WordPress ActivityPub compatibility switch), is filed under the Federation section at `/admin/federation/settings` rather than here: a screen belongs to the section its subject belongs to, and the admin used to carry two menu entries called Federation with neither saying the other existed (TASK-109).
+- Settings is six pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (what the homepage displays, posts per page, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message), and **Privacy** (what the site shares of where a post was written: nothing, the place's words, or the coordinates too, nothing by default; and the home of every later privacy choice. The page also says that location and camera metadata is always removed from uploads). `/admin/settings` is the General page, which is where the Settings heading lands. A seventh page of exactly the same kind, **Federation** (the relays the site subscribes to and the WordPress ActivityPub compatibility switch), is filed under the Federation section at `/admin/federation/settings` rather than here: a screen belongs to the section its subject belongs to, and the admin used to carry two menu entries called Federation with neither saying the other existed (TASK-109).
 - Every page is one form of its own with its own POST, and every one of them rewrites `content/_data/site.json` through the same update (decision-9). A page writes the fields it carries and no others, onto the file as re-read inside the write, so two people saving two different pages at the same moment both land and a key the settings do not model is kept. A page validates its own fields and no others: a refused save comes back on the page it was sent from, with the problems on the fields that have them, having written nothing at all.
 - Three things are not fields of any form, and each is its own pair of forms — save and remove — because none can travel in that body and because a rejected one must not lose an edit beside it: the **avatar**, on General; the **Akismet key**, on Discussion; and the **mail credential**, on Email.
 - **Spam checking.** The Akismet key lives in `data/akismet.json` at mode `0600` rather than in `site.json`, which is public and in git. Saving one checks it with Akismet's `verify-key` first; the panel then says connected, "does not recognise this key", "could not be reached", or not connected, and shows the last four characters rather than the key. Remove key turns Akismet off. See doc-6.

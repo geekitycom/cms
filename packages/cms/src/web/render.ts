@@ -5,6 +5,7 @@ import type { Environment } from 'nunjucks';
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import type { SharedLocation } from '../content/location.ts';
 import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
@@ -50,7 +51,7 @@ import type { ThemeColors, ThemeSource } from './themes.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
-import { syndicationLinks } from './context.ts';
+import { locationContext, syndicationLinks } from './context.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 
 /** Templates the default theme ships and the public routes ask for by name. */
@@ -287,6 +288,13 @@ export interface CreateRendererOptions {
    * matter lists by hand.
    */
   syndication?: ((document: Document) => PostSyndication) | undefined;
+  /**
+   * What the site shares of where a post was written (TASK-223), already
+   * reduced by Settings > Privacy (decision-29). Read per render so the
+   * setting takes effect on the next request. A renderer built without it
+   * prints no location, which is what every test over one template wants.
+   */
+  location?: ((document: Document) => SharedLocation | undefined) | undefined;
   /**
    * The comment form for a post that is taking comments, and `undefined` for
    * one that is not (TASK-50).
@@ -654,6 +662,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // (TASK-155): the links a target verifies sit inside the h-entry, so they
     // are on the post's own page, which is the page a target fetches.
     const syndicated = options.syndication?.(document);
+    const shared = options.location?.(document);
 
     const drawn = render(template, {
       ...context,
@@ -685,6 +694,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         ...handSyndicationOf(document.extra),
         ...(syndicated?.copies ?? []),
       ]),
+      ...(shared === undefined ? {} : { location: locationContext(shared) }),
       ...extra,
     });
 

@@ -160,8 +160,8 @@ describe('a feed item', () => {
     }
   });
 
-  it('is at revision 6, so feeds cached before authors printed as display names are refetched', () => {
-    assert.equal(FEED_ITEM_REVISION, 6);
+  it('is at revision 7, so feeds cached before photos printed are refetched', () => {
+    assert.equal(FEED_ITEM_REVISION, 7);
   });
 
   it('names the post’s language when it differs from the feed’s (TASK-154 AC #3)', () => {

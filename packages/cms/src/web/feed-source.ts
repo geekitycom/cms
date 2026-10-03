@@ -1,5 +1,6 @@
 import type { User } from '../admin/accounts.ts';
 import type { Document } from '../content/document.ts';
+import type { AltTextLibrary } from '../images/alt-text.ts';
 import type { SiteData } from './context.ts';
 
 /**
@@ -358,6 +359,11 @@ export interface FeedSource {
    * since is a changed feed even though no post moved.
    */
   commentCounts?: ReadonlyMap<string, number> | undefined;
+  /**
+   * The media library, for the alt text of a photo the post does not describe
+   * itself. Part of the validator, like the counts, for the same reason.
+   */
+  altTexts?: AltTextLibrary | undefined;
 }
 
 /** Everything one comments feed is built from. */

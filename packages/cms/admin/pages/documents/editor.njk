@@ -86,6 +86,27 @@
             {% endfor %}
           </datalist>
         </fieldset>
+        <fieldset class="admin-editor-enclosure admin-editor-location">
+          <legend>Location</legend>
+          <p class="admin-hint">
+            Kept in <code>data/locations.json</code>, not in the post’s file. What readers see of it
+            is chosen on Settings &gt; Privacy. Empty every box to remove it.
+          </p>
+          <label for="editor-location-geo">Coordinates</label>
+          <input id="editor-location-geo" name="{{ locationFields.geo }}" type="text" value="{{ form.location.geo }}" placeholder="48.85837, 2.29448" autocomplete="off" spellcheck="false" aria-describedby="editor-location-geo-hint" />
+          <p class="admin-hint" id="editor-location-geo-hint">Latitude, longitude, as decimal degrees. A <code>geo:</code> URI works too.</p>
+          <label for="editor-location-accuracy">Accuracy</label>
+          <input id="editor-location-accuracy" name="{{ locationFields.accuracy }}" type="text" inputmode="numeric" value="{{ form.location.accuracy }}" autocomplete="off" aria-describedby="editor-location-accuracy-hint" />
+          <p class="admin-hint" id="editor-location-accuracy-hint">Metres. Leave it empty if you do not know.</p>
+          <label for="editor-location-name">Place</label>
+          <input id="editor-location-name" name="{{ locationFields.name }}" type="text" value="{{ form.location.name }}" />
+          <label for="editor-location-locality">Locality</label>
+          <input id="editor-location-locality" name="{{ locationFields.locality }}" type="text" value="{{ form.location.locality }}" />
+          <label for="editor-location-region">Region</label>
+          <input id="editor-location-region" name="{{ locationFields.region }}" type="text" value="{{ form.location.region }}" />
+          <label for="editor-location-country">Country</label>
+          <input id="editor-location-country" name="{{ locationFields.country }}" type="text" value="{{ form.location.country }}" />
+        </fieldset>
         <fieldset class="admin-editor-enclosure">
           <legend>Recording</legend>
 

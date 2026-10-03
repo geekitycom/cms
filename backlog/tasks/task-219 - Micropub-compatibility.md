@@ -1,10 +1,10 @@
 ---
 id: TASK-219
 title: Micropub compatibility
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-02 18:44'
-updated_date: '2026-10-02 23:55'
+updated_date: '2026-10-03 01:33'
 labels:
   - micropub
   - indieauth
@@ -34,9 +34,9 @@ A running record of how real Micropub clients get on with a Geekity site, collec
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Each client tried is recorded in the notes with what worked and what failed
-- [ ] #2 Each failure has a cause traced to code, on our side or the client's, and a proposed fix or a reason not to fix it
-- [ ] #3 The fixes worth making are filed as follow-up tasks, and this task links them
+- [x] #1 Each client tried is recorded in the notes with what worked and what failed
+- [x] #2 Each failure has a cause traced to code, on our side or the client's, and a proposed fix or a reason not to fix it
+- [x] #3 The fixes worth making are filed as follow-up tasks, and this task links them
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -189,4 +189,18 @@ So iA Writer, a maintained client, does not do PKCE. Under the no-legacy decisio
 Amends the no-legacy decision. PKCE stays required by default. The owner can list apps allowed to sign in without it, and only with an https redirect_uri on the app's own host. Built for iA Writer. Filed as TASK-225. micropub.rocks and Inkstone stay unsupported: they also lack metadata discovery, and they are unmaintained.
 
 Correction to the per-app PKCE allowlist decision: micropub.rocks and Inkstone are not excluded. TASK-220's rel=authorization_endpoint and rel=token_endpoint links fix their discovery, so PKCE is their only remaining blocker, and both pass the same-host rule: micropub.rocks uses its base URL as client_id with redirect_uri {base}endpoints/callback (app/Controller.php:13, :207); Inkstone uses https://inklings.io/inkstone/ for both (src/config.js:10-11). The owner can list either once TASK-225 lands. Unverified: whether their 2017 IndieAuth clients accept the site's token response.
+
+## Follow-ups (2026-10-02)
+
+Built: TASK-220 (legacy rel links), TASK-221 (App activity), PR #95 (same token in header and body, for Quill), TASK-222 (Quill's note, article and media flows), TASK-223 (location, Settings > Privacy), TASK-225 (per-app PKCE allowlist, for iA Writer, micropub.rocks, Inkstone). TASK-217 closed as not needed.
+
+Filed: TASK-227 (unlisted posts), TASK-228 (q=config per-type property lists, for Micropublish), TASK-229 (read posts, for indiebookclub), TASK-230 (create a token from Connected apps).
+
+Not filed, need a data-model decision first: rsvp, code posts, and Quill's event, review, itinerary, exercise and weight editors. Unsupported by choice: private visibility.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Recorded micropub.rocks, Micropublish, indiebookclub, Inkstone, iA Writer and Quill against shll.me, each failure traced to code on our side or the client's from their source and from App activity. Fixes built in TASK-220/221/222/223/225 and PR #95; the rest filed as TASK-227 to TASK-230; decisions on visibility (public and unlisted, no private), legacy IndieAuth (PKCE required, owner allowlist) and Quill (supported as a peer) recorded in the notes.
+<!-- SECTION:FINAL_SUMMARY:END -->
