@@ -10,6 +10,7 @@ import {
   InteractionPolicy,
   InteractionRule,
   LanguageString,
+  Mention,
   Note,
   Place,
   PUBLIC_COLLECTION,
@@ -49,6 +50,7 @@ import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../web/locale
 import { absoluteUrl } from '../web/negotiate.ts';
 import { categoryHref, tagHref } from '../web/taxonomy.ts';
 import { actorId } from './actor.ts';
+import type { CitedObject } from './citations.ts';
 import type { FederationContextData } from './federation.ts';
 import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } from './paths.ts';
 
@@ -101,12 +103,35 @@ function attribution(
  * Who a post, its `Create` and its `Update` are addressed to. A public post is
  * to Public with its author's followers in `cc`; an unlisted one swaps the
  * two, which is how Mastodon marks a post anybody may fetch but that stays off
- * public timelines (TASK-227).
+ * public timelines (TASK-227). The author of a status it replies to is copied
+ * in either way (TASK-240).
  */
-function addressing(document: Document, followers: URL): { to: URL; cc: URL } {
+function addressing(
+  document: Document,
+  followers: URL,
+  replyTo: CitedObject | undefined,
+): { tos: URL[]; ccs: URL[] } {
+  const mentioned = replyTo?.author?.id ?? undefined;
+  const also = mentioned === undefined ? [] : [mentioned];
   return visibilityOf(document) === 'unlisted'
-    ? { to: followers, cc: PUBLIC_COLLECTION }
-    : { to: PUBLIC_COLLECTION, cc: followers };
+    ? { tos: [followers], ccs: [PUBLIC_COLLECTION, ...also] }
+    : { tos: [PUBLIC_COLLECTION], ccs: [followers, ...also] };
+}
+
+/**
+ * The `Mention` of the author a reply answers, which is what makes Mastodon
+ * notify them, or nothing for a reply to no fediverse status.
+ */
+function replyMention(replyTo: CitedObject | undefined): Mention[] {
+  const author = replyTo?.author;
+  if (author?.id == null) return [];
+  const username = author.preferredUsername?.toString();
+  return [
+    new Mention({
+      href: author.id,
+      name: username === undefined ? null : `@${username}@${author.id.host}`,
+    }),
+  ];
 }
 
 /** The media type an `Article`'s `source` is labelled with. */
@@ -218,10 +243,15 @@ function postObjectType(document: Document): PostObjectType {
  * `attributedTo` is the actor of the user the post's `author` names
  * (decision-14), and `cc` is that user's followers: a post belongs to a person
  * on this site, not to the site.
+ *
+ * `replyTo` is the fediverse status a reply answers, which only delivery
+ * looks up (TASK-240): its id becomes `inReplyTo`, and its author is
+ * mentioned and copied in. Without it a reply names the URL it cites.
  */
 export function postObject(
   context: Context<FederationContextData>,
   document: Document,
+  replyTo?: CitedObject,
 ): Article | Note {
   const { baseUrl } = context.data.config;
   const { actor, followers } = attribution(context, document);
@@ -238,13 +268,13 @@ export function postObject(
   const common = {
     id: articleObjectId(context, document),
     // On either type, so an activitypub.type override never breaks a thread.
-    replyTarget: inReplyTo === undefined ? null : new URL(inReplyTo),
+    replyTarget: replyTo?.id ?? (inReplyTo === undefined ? null : new URL(inReplyTo)),
     url: new URL(absoluteUrl(document.permalink, baseUrl)),
     source: new Source({ content: document.body, mediaType: SOURCE_MEDIA_TYPE }),
     published: toInstant(document.date) ?? null,
     updated: toInstant(document.updated) ?? null,
     attribution: actor,
-    ...addressing(document, followers),
+    ...addressing(document, followers, replyTo),
     // FEP-044f: a post with no policy is one Mastodon lets nobody quote. Every
     // post that federates names Public, so anybody may quote it, and
     // the inbox approves each QuoteRequest on the same rule (TASK-125).
@@ -264,6 +294,7 @@ export function postObject(
     // hashtag has no reason to care which of the two a term came from, and
     // each one points at the archive the site serves for it.
     tags: [
+      ...replyMention(replyTo),
       ...document.tags.map((tag) => hashtag(tag, tagHref(tag, 0, bases), baseUrl)),
       ...document.categories.map((category) =>
         hashtag(category, categoryHref(category, 0, bases), baseUrl),
@@ -460,8 +491,9 @@ function hashtag(term: string, href: string, baseUrl: string): Hashtag {
 export function postCreateActivity(
   context: Context<FederationContextData>,
   document: Document,
+  replyTo?: CitedObject,
 ): Create {
-  const object = postObject(context, document);
+  const object = postObject(context, document, replyTo);
   const { actor, followers } = attribution(context, document);
 
   return new Create({
@@ -469,7 +501,7 @@ export function postCreateActivity(
     actor,
     object,
     published: toInstant(document.date) ?? null,
-    ...addressing(document, followers),
+    ...addressing(document, followers, replyTo),
   });
 }
 
@@ -491,8 +523,9 @@ export function postUpdateActivity(
   context: Context<FederationContextData>,
   document: Document,
   revision: string = revisionOf(document),
+  replyTo?: CitedObject,
 ): Update {
-  const object = postObject(context, document);
+  const object = postObject(context, document, replyTo);
   const { actor, followers } = attribution(context, document);
 
   return new Update({
@@ -500,7 +533,7 @@ export function postUpdateActivity(
     actor,
     object,
     published: toInstant(document.updated ?? document.date) ?? null,
-    ...addressing(document, followers),
+    ...addressing(document, followers, replyTo),
   });
 }
 
