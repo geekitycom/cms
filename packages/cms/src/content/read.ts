@@ -62,12 +62,6 @@ export function readWorkFrontMatter({ name, author, uid, url }: ReadOf): ReadOf 
   };
 }
 
-/**
- * The sentence a read post says, as the HTML every surface prints: the page,
- * the federated Note and the feeds. It carries the page's microformats, so a
- * parser reading any of them finds p-read-status and the p-read-of h-cite.
- * Empty for a post that read nothing.
- */
 export function readLine(read: Read | undefined): string {
   if (read === undefined) return '';
   const { status, of } = read;

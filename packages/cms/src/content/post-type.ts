@@ -109,8 +109,7 @@ const LABEL_WORDS = 10;
 
 /**
  * The words a link to a document says: its title, or for an untitled post the
- * first words of its text, so a note is never an empty link. A read post's
- * text opens with its read line, as its page does.
+ * first words of its text, so a note is never an empty link.
  */
 export function postLabel(
   document: Pick<Document, 'title' | 'html' | 'description' | 'extra'>,

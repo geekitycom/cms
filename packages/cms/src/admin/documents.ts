@@ -442,12 +442,6 @@ async function saveFromForm(
     });
   }
 
-  if (form.readStatus !== '' && form.description !== '') {
-    return refuse(
-      'A read is described by what it says, so it keeps no Description. Empty Description to save it.',
-    );
-  }
-
   const written = await writeDocument(
     {
       store,
@@ -563,6 +557,11 @@ export async function writeDocument(
     const resolved = resolveRead(form.readStatus, form.readOf);
     if ('error' in resolved) return refused(resolved.error);
     read = resolved.read;
+  }
+  if (read !== undefined && form.description !== '') {
+    return refused(
+      'A read is described by what it says, so it keeps no Description. Empty Description to save it.',
+    );
   }
 
   if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
@@ -693,9 +692,7 @@ export async function writeDocument(
     tags: kind.tagged ? splitTags(form.tags) : [],
     categories: kind.categorised ? splitTags(form.categories) : [],
     draft,
-    // A read post's summary is its read line (decision-27), so a stored one
-    // would only go stale when the read status changes.
-    ...(form.description === '' || read !== undefined ? {} : { description: form.description }),
+    ...(form.description === '' ? {} : { description: form.description }),
     ...optional('author', chosenAuthor(config.dataDir, form.author, document, writer)),
     ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', keptIdentity(document, promised, permalink, config.baseUrl)),

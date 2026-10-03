@@ -1,8 +1,5 @@
 {#
   An entry includes it with `read` on the context; a listing sets it from the
   entry it is printing. Nothing is printed for a post that read nothing.
-  `read.line` is the sentence the feeds and the federated Note carry too, with
-  p-read-status and a p-read-of h-cite; a theme wanting other markup has
-  `read.status`, `read.statusLabel` and `read.of` to build it from.
 #}
 {% if read %}{{ read.line | safe }}{% endif %}

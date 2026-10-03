@@ -824,15 +824,6 @@ export default function (eleventyConfig) {
     if (data.draft === true && !process.env.BUILD_DRAFTS) return false;
   });
 
-  // `visibility` is absent or `public` for a listed document. `unlisted` keeps
-  // the page and takes it out of every collection, so a feed, a sitemap or an
-  // archive built from collections leaves it out, and sets `noindex` — the
-  // flag the CMS hands its own theme — for a layout to print:
-  //
-  //     {% if noindex %}<meta name="robots" content="noindex">{% endif %}
-  //
-  // Any other value fails closed: the CMS does not serve it, so neither does
-  // the build.
   eleventyConfig.addPreprocessor('geekity-visibility', '*', (data) => {
     const visibility = data.visibility;
     if (visibility === undefined || visibility === null || visibility === 'public') return;
