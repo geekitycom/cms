@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
@@ -17,9 +17,18 @@ import { requireSiteToken } from './endpoint.ts';
 /** Each user's most recent upload, relative to `dataDir`. */
 export const LAST_UPLOADS_FILE = 'micropub-media.json';
 
-/** The file's shape: a user id to the site path of their last upload, `/uploads/…`. */
+/** A user's last upload: its site path, `/uploads/…`, and when it was uploaded. */
+interface LastUpload {
+  url: string;
+  published: string;
+}
+
+/**
+ * The file's shape: a user id to their last upload, or to its bare site path
+ * when it was recorded before upload times were kept.
+ */
 interface LastUploads {
-  last: Record<string, string>;
+  last: Record<string, LastUpload | string>;
 }
 
 function lastUploadsFile(dataDir: string): string {
@@ -31,23 +40,32 @@ function readLastUploads(dataDir: string): LastUploads {
   return text === undefined ? { last: {} } : (JSON.parse(text) as LastUploads);
 }
 
-async function recordLastUpload(dataDir: string, userId: number, url: string): Promise<void> {
+async function recordLastUpload(
+  dataDir: string,
+  userId: number,
+  upload: LastUpload,
+): Promise<void> {
   await updateFileAtomically(lastUploadsFile(dataDir), (current) => {
     const uploads: LastUploads =
       current === undefined ? { last: {} } : (JSON.parse(current) as LastUploads);
-    return `${JSON.stringify({ last: { ...uploads.last, [String(userId)]: url } }, null, 2)}\n`;
+    return `${JSON.stringify({ last: { ...uploads.last, [String(userId)]: upload } }, null, 2)}\n`;
   });
 }
 
 /**
  * The user's last upload while it is still in the library: a file deleted
- * from the media screen since is no upload to offer.
+ * from the media screen since is no upload to offer. One recorded without its
+ * time is dated by its file.
  */
-function lastUpload(contentDir: string, dataDir: string, userId: number): string | undefined {
-  const url = readLastUploads(dataDir).last[String(userId)];
-  if (url === undefined) return undefined;
+function lastUpload(contentDir: string, dataDir: string, userId: number): LastUpload | undefined {
+  const recorded = readLastUploads(dataDir).last[String(userId)];
+  if (recorded === undefined) return undefined;
+  const url = typeof recorded === 'string' ? recorded : recorded.url;
   const file = resolveUpload(contentDir, url.slice(UPLOAD_ASSET_PREFIX.length));
-  return file !== undefined && existsSync(file) ? url : undefined;
+  if (file === undefined || !existsSync(file)) return undefined;
+  return typeof recorded === 'string'
+    ? { url, published: statSync(file).mtime.toISOString() }
+    : recorded;
 }
 
 function invalidRequest(c: Context, description: string): Response {
@@ -60,8 +78,10 @@ function invalidRequest(c: Context, description: string): Response {
  * {@link storeUpload}, the media library's own rules and directory, so a
  * client's photo is a library file like any other with its variants derived
  * (decision-10). Every refusal is Micropub's 400 `invalid_request` rather
- * than the admin's 413 or 415. `q=last` answers the token's user's last
- * upload, which Quill and other clients offer as the photo of the next post.
+ * than the admin's 413 or 415. `q=source` answers the token's user's last
+ * upload as `{ items: [{ url, published }] }`, which Quill offers as the photo
+ * of the next note when it is under 15 minutes old; `q=last` answers it as
+ * `{ url }`, the micropub-extensions query other clients ask.
  */
 export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
   app.post(
@@ -79,7 +99,10 @@ export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
       const stored = await storeUpload(body[UPLOAD_FIELD], config);
       if (refusedUpload(stored)) return invalidRequest(c, stored.error);
 
-      await recordLastUpload(config.dataDir, bearer.user.id, stored.url);
+      await recordLastUpload(config.dataDir, bearer.user.id, {
+        url: stored.url,
+        published: c.var.store.now().toISOString(),
+      });
       c.header('cache-control', 'no-store');
       c.header('location', absoluteUrl(stored.url, siteBaseUrl(c)));
       return c.body(null, 201);
@@ -88,7 +111,7 @@ export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
 
   app.get(MICROPUB_MEDIA_PATH, logMediaRequest, requireSiteToken(), (c) => {
     const q = c.req.query('q');
-    if (q !== 'last') {
+    if (q !== 'last' && q !== 'source') {
       return invalidRequest(
         c,
         q === undefined || q === ''
@@ -96,9 +119,18 @@ export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
           : `This endpoint does not answer q=${q}.`,
       );
     }
+    const limit = c.req.query('limit');
+    if (q === 'source' && limit !== undefined && !/^\d+$/.test(limit)) {
+      return invalidRequest(c, `limit is a whole number, not ${limit}.`);
+    }
     const { config, bearer } = c.var;
-    const url = lastUpload(config.contentDir, config.dataDir, bearer.user.id);
+    const upload = lastUpload(config.contentDir, config.dataDir, bearer.user.id);
+    const item =
+      upload === undefined
+        ? undefined
+        : { url: absoluteUrl(upload.url, siteBaseUrl(c)), published: upload.published };
     c.header('cache-control', 'no-store');
-    return c.json(url === undefined ? {} : { url: absoluteUrl(url, siteBaseUrl(c)) });
+    if (q === 'last') return c.json(item === undefined ? {} : { url: item.url });
+    return c.json({ items: item === undefined || Number(limit) === 0 ? [] : [item] });
   });
 }

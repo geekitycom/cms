@@ -60,6 +60,18 @@ describe('parseAuthorizationRequest', () => {
     });
   });
 
+  it('reads the legacy post scope, which Quill still offers, as create and update', () => {
+    const parsed = parse({ scope: 'post' });
+    assert.equal(parsed.kind, 'valid');
+    if (parsed.kind !== 'valid') return;
+    assert.deepEqual(parsed.request.scopes, ['create', 'update']);
+
+    const mixed = parse({ scope: 'profile update post' });
+    assert.equal(mixed.kind, 'valid');
+    if (mixed.kind !== 'valid') return;
+    assert.deepEqual(mixed.request.scopes, ['profile', 'update', 'create']);
+  });
+
   it('refuses a request with no code_challenge', () => {
     assert.equal(refusal(parse({ code_challenge: undefined })), 'invalid_request');
   });

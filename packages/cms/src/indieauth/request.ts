@@ -59,6 +59,15 @@ const SCRIPTING_SCHEMES: ReadonlySet<string> = new Set([
   'about:',
 ]);
 
+/**
+ * Scopes from before the IndieAuth spec named create and update, as the
+ * scopes they stand for, so the consent screen and the grant show those.
+ * Quill still offers `post` at sign-in.
+ */
+const LEGACY_SCOPES: Readonly<Record<string, readonly Scope[]>> = {
+  post: ['create', 'update'],
+};
+
 /** Read an authorization request off its query string, for a site at `baseUrl`. */
 export function parseAuthorizationRequest(
   params: URLSearchParams,
@@ -103,9 +112,12 @@ export function parseAuthorizationRequest(
   }
 
   const offered: ReadonlySet<string> = new Set(SCOPES);
-  const scopes = [...new Set((params.get('scope') ?? '').split(' '))].filter(
-    (scope): scope is Scope => offered.has(scope),
-  );
+  const asked = (params.get('scope') ?? '')
+    .split(' ')
+    .flatMap((scope) =>
+      Object.hasOwn(LEGACY_SCOPES, scope) ? (LEGACY_SCOPES[scope] ?? []) : scope,
+    );
+  const scopes = [...new Set(asked)].filter((scope): scope is Scope => offered.has(scope));
   const me = params.get('me') ?? '';
 
   return {

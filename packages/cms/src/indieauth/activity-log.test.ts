@@ -565,7 +565,7 @@ describe('Users > App activity', () => {
     const detail = await agent.get(`${SCREEN}/${newest.id}`);
     assert.equal(detail.status, 200);
     const full = await detail.text();
-    assert.match(full, /This endpoint does not understand visibility\./);
+    assert.match(full, /This site does not publish private posts;/);
     assert.match(full, /visibility/);
     assert.match(full, /private/);
     assert.match(full, new RegExp(APP.replaceAll('.', '\\.')));
