@@ -14,6 +14,8 @@ import { openAdminStore } from './admin/store.ts';
 import type { AdminStore } from './admin/store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
 import { resolveConfig } from './config.ts';
+import { stripStoredUploads } from './content/metadata/sweep.ts';
+import { UPLOAD_DIRECTORY } from './web/assets.ts';
 import { importWordPressActor } from './federation/import-wordpress.ts';
 import type { ImportWordPressActorReport } from './federation/import-wordpress.ts';
 import { createCms } from './index.ts';
@@ -35,6 +37,7 @@ export type Command =
   | 'user'
   | 'import'
   | 'maintenance'
+  | 'strip-metadata'
   | 'help'
   | 'version';
 
@@ -48,6 +51,7 @@ const COMMANDS: readonly Command[] = [
   'user',
   'import',
   'maintenance',
+  'strip-metadata',
 ];
 
 /**
@@ -111,6 +115,7 @@ Usage:
   geekity rebuild [--config <file>]
   geekity resend (--all | <slug>...) [--config <file>]
   geekity maintenance (on [--until <time>] | off | status) [--config <file>]
+  geekity strip-metadata [--config <file>]
   geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
   geekity import wordpress-actor <username> --actor-id <url> --wordpress-id <n>
           (--keypair <file> | --private-key <file> [--public-key <file>])
@@ -133,6 +138,11 @@ Commands:
                    503 with Retry-After; the admin, /healthz and signed-in
                    users are let through. A running site notices within a
                    second, with no restart.
+  strip-metadata   Remove location and camera metadata (EXIF, XMP, IPTC, a
+                   video's location) from files already in content/uploads.
+                   New uploads are stripped as they arrive; this is for the
+                   ones from before. Safe to run again: a clean file is left
+                   as it is.
   user add         Create an admin user, so a site can get its first login
                    without the setup screen.
   import
@@ -443,6 +453,7 @@ async function main(argv: readonly string[]): Promise<number> {
   if (command === 'rebuild') return rebuildCommand(configPath);
   if (command === 'resend') return resendCommand(args, configPath, flags);
   if (command === 'maintenance') return maintenanceCommand(args, configPath, flags);
+  if (command === 'strip-metadata') return stripMetadataCommand(configPath);
 
   return serveCommand(configPath);
 }
@@ -533,6 +544,41 @@ function forcedLine(forced: boolean): string {
   return forced
     ? ' GEEKITY_MAINTENANCE or the maintenance setting keeps it on until the site restarts without it.'
     : '';
+}
+
+/**
+ * `geekity strip-metadata` (TASK-224): take location and camera metadata out
+ * of the uploads that were stored before uploads were stripped on arrival.
+ *
+ * It touches only `content/uploads`, so it is safe with the site running. The
+ * derived variants under `data/images` never carried metadata and are left
+ * alone. A site that keeps `content/` in git still has the old bytes in its
+ * history; the README says how to rewrite it.
+ */
+async function stripMetadataCommand(configPath: string | undefined): Promise<number> {
+  const config = resolveConfig(await loadConfig(process.cwd(), configPath));
+  const results = await stripStoredUploads(path.join(config.contentDir, UPLOAD_DIRECTORY));
+
+  let stripped = 0;
+  let clean = 0;
+  let unreadable = 0;
+  for (const result of results) {
+    if (result.outcome === 'stripped') {
+      stripped += 1;
+      process.stdout.write(`${result.path}: removed ${result.removed.join(', ')}\n`);
+    } else if (result.outcome === 'clean') {
+      clean += 1;
+    } else {
+      unreadable += 1;
+      process.stderr.write(`${result.path}: ${result.problem} Left as it was.\n`);
+    }
+  }
+
+  process.stdout.write(
+    `Checked ${count(results.length, 'file')}: ${String(stripped)} stripped, ` +
+      `${String(clean)} already clean, ${String(unreadable)} unreadable\n`,
+  );
+  return unreadable === 0 ? 0 : 1;
 }
 
 /**

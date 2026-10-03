@@ -205,7 +205,9 @@ in front of the site has its own limit on a request body; see
 [Start it and point the proxy at it](#3-start-it-and-point-the-proxy-at-it).
 Uploads are served with their media type and answer a single `Range` request
 with `206 Partial Content`, which Safari needs before it plays a file and every
-player uses to seek.
+player uses to seek. Location and camera metadata is removed from pictures and
+videos before they are stored; see
+[the media library](packages/cms/README.md#the-media-library).
 
 Precedence is environment variable, then config file, then default, so a host
 can override anything without editing the site.
@@ -291,7 +293,7 @@ reads the same directory, and everything in it is meant to be public:
 | Path                                                 | What it holds                                      |
 | ---------------------------------------------------- | -------------------------------------------------- |
 | `content/posts/`, `content/pages/`                   | The Markdown documents, `_trash/` included.        |
-| `content/uploads/`                                   | Uploaded files exactly as they arrived.            |
+| `content/uploads/`                                   | Uploaded files, with location and camera stripped. |
 | `content/_data/site.json`                            | Every site setting.                                |
 | `content/_data/media.json`                           | The media library's alt text, keyed by upload.     |
 | `content/_data/federation/{username}/followers.json` | Who follows that user.                             |
@@ -868,9 +870,9 @@ nothing is ever upscaled, and the original's own width is always added so a
 wide display has a full-size copy to pick that is not the unprocessed upload.
 The formats are [`imageFormats`](#configuration) plus the original's own, which
 is what the `<img>` falls back to. EXIF orientation is applied and the metadata
-— the camera, the timestamp, the location — is dropped. A GIF is stored and
-served exactly as it arrived: an animation cannot survive being resized into a
-still.
+— the camera, the timestamp, the location — is dropped. A GIF gets no variants
+and is served as it was stored: an animation cannot survive being resized into
+a still.
 
 A post page then renders the picture as
 

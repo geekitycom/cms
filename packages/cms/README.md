@@ -94,12 +94,13 @@ site (or `npx geekity`, or a `package.json` script, which is how the generated
 | `geekity rebuild`                         | Delete `data/geekity.db` and build it again from the files.                                                                                                           |
 | `geekity resend --all`, `<slug>...`       | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                            |
 | `geekity maintenance on`, `off`, `status` | Take the public site down on purpose with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` names when it should be back.             |
+| `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`. See [The media library](#the-media-library).                                             |
 | `geekity user add <name>`                 | Create an admin account, so a site can get its first login without the setup screen.                                                                                  |
 | `geekity import wordpress-actor <name>`   | Bring one person across from the WordPress ActivityPub plugin: their key pair, the actor id their followers hold, the plugin's numeric actor id, and their followers. |
 | `geekity --help`, `-h`                    | The same table, on the terminal.                                                                                                                                      |
 | `geekity --version`                       | The installed version.                                                                                                                                                |
 
-`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `user add` and `import wordpress-actor` take
+`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `strip-metadata`, `user add` and `import wordpress-actor` take
 `--config <file>`; without it they look for `geekity.config.ts`, then
 `geekity.config.js`, then `geekity.config.mjs` in the working directory, and run
 on defaults if there is none.
@@ -352,7 +353,7 @@ the same directory reads all of it, and everything in it is meant to be public:
 | Path                                               | What it holds                                                            |
 | -------------------------------------------------- | ------------------------------------------------------------------------ |
 | `content/posts/`, `content/pages/`                 | The Markdown documents, `_trash/` included.                              |
-| `content/uploads/`                                 | Uploaded files exactly as they arrived.                                  |
+| `content/uploads/`                                 | Uploaded files, with their location and camera metadata removed.         |
 | `content/_data/site.json`                          | Every site setting.                                                      |
 | `content/_data/federation/followers.json`          | Who follows the site.                                                    |
 | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl` | Every activity the inbox was handed, one per line.                       |
@@ -1517,25 +1518,26 @@ This is every piece of personal data the CMS stores, where it is, and how long
 it stays. "Kept" means until somebody deletes it, unless a retention period
 says otherwise.
 
-| What                                                                                                                 | Where                                                         | How long                                                                       |
-| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| A commenter's name, website and words                                                                                | `content/_data/comments/{slug}.json`, public and in git       | Kept. Erasing on request replaces the name and drops the website.              |
-| A commenter's email, and whether they asked to be told about replies                                                 | `data/comments/{slug}.json`, mode `0600`, keyed by comment id | `commentEmailRetentionDays`: forever unless set, 180 on a new site.            |
-| A salted hash of the address a comment, webmention or contact message came from (the address itself is never stored) | The comment file, or the contact message file                 | `addressHashRetentionDays`: forever unless set, 30 on a new site.              |
-| A webmention's author name, website, avatar URL and the source page's words                                          | `content/_data/comments/{slug}.json`                          | Kept, as a copy of a page that is public already.                              |
-| A contact message: the sender's name, email, subject and message                                                     | `data/contact/{id}.json`, mode `0600`                         | `contactMessageRetentionDays`: forever unless set, 365 on a new site.          |
-| The addresses that unsubscribed from reply notices                                                                   | `data/comment-optouts.json`, mode `0600`                      | Kept, so the site goes on not writing to them. Erasing on request removes one. |
-| Followers: actor id, handle, display name, avatar URL, profile URL                                                   | `content/_data/federation/{username}/followers.json`, in git  | Until they unfollow.                                                           |
-| Inbound likes, boosts, replies and quotes, with the actor who sent them                                              | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`, in git    | Kept.                                                                          |
-| What a reply shows of the post it answers: its title, words and author                                               | `content/_data/replyContexts.json`, in git                    | Kept.                                                                          |
-| Other actors who liked, boosted, answered or quoted: handle, display name, avatar URL, profile URL                   | `data/geekity.db`, fetched from their actor document          | A cache. Refetched weekly while the inbox log names them.                      |
-| Remote avatars, shrunk                                                                                               | `data/avatars/`                                               | Deleted by the avatar sweep once nothing shown names them.                     |
-| Users: username, email, argon2id password hash, profile                                                              | `data/users.json`, mode `0600`                                | Until the user is deleted.                                                     |
-| The apps a user signed in to with IndieAuth: app, scopes, hashes of its tokens, when they expire                     | `data/indieauth-tokens.json`, mode `0600`                     | Until the user is deleted, or 60 days after the app last refreshed.            |
-| Recent IndieAuth and Micropub requests: app, username, what it sent (no secrets, values cut short), the answer       | `data/indieauth-activity.json`, mode `0600`                   | The last 100 requests, none older than 14 days.                                |
-| An index of all of the above, and sessions, reset tokens and spent link tokens                                       | `data/geekity.db`                                             | A cache of the files. Sessions and tokens are pruned when they expire.         |
-| Client addresses in the rate limits                                                                                  | Memory                                                        | Until the window passes or the site restarts.                                  |
-| Client addresses in the access log                                                                                   | stdout, and whatever collects it                              | Only with `accessLogAddress` on. The collector keeps them.                     |
+| What                                                                                                                 | Where                                                         | How long                                                                                                             |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| A commenter's name, website and words                                                                                | `content/_data/comments/{slug}.json`, public and in git       | Kept. Erasing on request replaces the name and drops the website.                                                    |
+| A commenter's email, and whether they asked to be told about replies                                                 | `data/comments/{slug}.json`, mode `0600`, keyed by comment id | `commentEmailRetentionDays`: forever unless set, 180 on a new site.                                                  |
+| A salted hash of the address a comment, webmention or contact message came from (the address itself is never stored) | The comment file, or the contact message file                 | `addressHashRetentionDays`: forever unless set, 30 on a new site.                                                    |
+| A webmention's author name, website, avatar URL and the source page's words                                          | `content/_data/comments/{slug}.json`                          | Kept, as a copy of a page that is public already.                                                                    |
+| A contact message: the sender's name, email, subject and message                                                     | `data/contact/{id}.json`, mode `0600`                         | `contactMessageRetentionDays`: forever unless set, 365 on a new site.                                                |
+| The addresses that unsubscribed from reply notices                                                                   | `data/comment-optouts.json`, mode `0600`                      | Kept, so the site goes on not writing to them. Erasing on request removes one.                                       |
+| Followers: actor id, handle, display name, avatar URL, profile URL                                                   | `content/_data/federation/{username}/followers.json`, in git  | Until they unfollow.                                                                                                 |
+| Inbound likes, boosts, replies and quotes, with the actor who sent them                                              | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`, in git    | Kept.                                                                                                                |
+| What a reply shows of the post it answers: its title, words and author                                               | `content/_data/replyContexts.json`, in git                    | Kept.                                                                                                                |
+| Other actors who liked, boosted, answered or quoted: handle, display name, avatar URL, profile URL                   | `data/geekity.db`, fetched from their actor document          | A cache. Refetched weekly while the inbox log names them.                                                            |
+| Remote avatars, shrunk                                                                                               | `data/avatars/`                                               | Deleted by the avatar sweep once nothing shown names them.                                                           |
+| Users: username, email, argon2id password hash, profile                                                              | `data/users.json`, mode `0600`                                | Until the user is deleted.                                                                                           |
+| The apps a user signed in to with IndieAuth: app, scopes, hashes of its tokens, when they expire                     | `data/indieauth-tokens.json`, mode `0600`                     | Until the user is deleted, or 60 days after the app last refreshed.                                                  |
+| Recent IndieAuth and Micropub requests: app, username, what it sent (no secrets, values cut short), the answer       | `data/indieauth-activity.json`, mode `0600`                   | The last 100 requests, none older than 14 days.                                                                      |
+| An index of all of the above, and sessions, reset tokens and spent link tokens                                       | `data/geekity.db`                                             | A cache of the files. Sessions and tokens are pruned when they expire.                                               |
+| Client addresses in the rate limits                                                                                  | Memory                                                        | Until the window passes or the site restarts.                                                                        |
+| Where and when a photo or video was taken, and the camera or phone (EXIF, XMP, IPTC, a video's `©xyz`)               | Removed from `content/uploads/` on upload                     | Never stored. Older uploads keep it until `geekity strip-metadata`; git history keeps the old bytes until rewritten. |
+| Client addresses in the access log                                                                                   | stdout, and whatever collects it                              | Only with `accessLogAddress` on. The collector keeps them.                                                           |
 
 Two services outside the site see personal data when a site turns them on.
 Akismet is sent a commenter's or sender's address, user agent, referrer, name,
@@ -2087,6 +2089,60 @@ the truth (decision-9) and is read on each request, so an entry written by hand
 shows up without a restart. `readAltTexts(contentDir)` and
 `undescribedImages(html, library)` in `src/images/alt-text.ts` are what the
 editor's publish check and the federated `Image` attachments read.
+
+#### Location and camera metadata
+
+A phone photo carries where it was taken, when, and on what camera, and the
+original under `content/uploads` is what the site serves at `/uploads/…`, puts
+in every `<picture>` as the fallback, and federates as a photo post's
+attachment. So `storeUpload` removes that metadata before the file is written,
+for every upload: the editor's control, the media library, the Micropub media
+endpoint and Micropub photos. It is not a setting.
+
+| Format   | What goes                                                                                                                                       | What stays                                                    |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| JPEG     | EXIF (GPS, camera, lens, serial, time), XMP, IPTC, comments, other APPn segments, data after the image                                          | JFIF, the ICC profile, Adobe's colour flag, the orientation   |
+| PNG      | `eXIf`, `tEXt`, `zTXt`, `iTXt` (XMP), `tIME` and private chunks                                                                                 | Image and colour chunks, APNG animation, the orientation      |
+| WebP     | `EXIF`, `XMP ` and unknown chunks                                                                                                               | The bitstream, alpha, animation, ICC profile, the orientation |
+| AVIF     | The contents of the Exif and XMP items, overwritten with an empty EXIF block and an empty XMP packet                                            | The picture, and its `irot`/`imir` orientation                |
+| GIF      | Comment extensions and application extensions other than looping and ICC (XMP lives in one)                                                     | Frames, timing, looping                                       |
+| MP4, M4V | `udta` (the `©xyz` location, camera), `meta` (the QuickTime location key) and `uuid` (XMP) boxes, in the movie, its tracks and at the top level | Every other box                                               |
+
+Nothing is re-encoded. Segments, chunks and blocks are cut out and the pixel
+data is copied byte for byte, so a stored JPEG or PNG decodes to the same
+pixels as the upload. A picture taken sideways keeps a minimal EXIF block
+holding its orientation and nothing else, so it still shows the right way up.
+AVIF and MP4 keep their layout exactly: the metadata is overwritten in place
+and a removed box becomes a zero-filled `free` box of the same size, so no
+offset inside the file moves. A file whose structure cannot be followed far
+enough to find its metadata is refused with a 415 rather than stored as it is.
+
+Audio (MP3, M4A, Ogg), WebM, PDF and the text formats are stored as they
+arrive. An episode's tags are its title and artwork, not where it was
+recorded.
+
+Files uploaded before this version still carry their metadata. Strip them
+with
+
+```sh
+geekity strip-metadata
+```
+
+which rewrites each file under `content/uploads` that has something to remove,
+prints what it removed, keeps the file's modification time (the library sorts
+by it), and leaves alone, and names, a file it cannot read, exiting `1`. It is
+safe to run again: a clean file is left as it is, and a second run reports
+every file already clean. The derived variants under `data/images` never
+carried metadata.
+
+A site that keeps `content/` in git still has the old bytes in its history,
+and so does every clone and fork of it. Removing them means rewriting that
+history. One way: run `geekity strip-metadata`, copy `content/uploads`
+somewhere outside the repository, remove it from every commit with
+[`git filter-repo`](https://github.com/newren/git-filter-repo)
+`--path content/uploads --invert-paths`, copy the stripped files back, commit
+them, and force-push. That changes every commit hash, so anybody else with a
+clone has to clone again.
 
 ### Image variants
 

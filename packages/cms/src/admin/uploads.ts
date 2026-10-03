@@ -5,6 +5,7 @@ import type { Hono, MiddlewareHandler } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
 import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
+import { stripMetadata, UnreadableMetadataError } from '../content/metadata/index.ts';
 import type { UploadMediaType } from '../content/media.ts';
 import { slugify } from '../content/slug.ts';
 import type { GeekityEnv } from '../env.ts';
@@ -148,13 +149,26 @@ export async function storeUpload(
     return { status: 415, error: `That file does not look like a ${extension} inside.` };
   }
 
+  // Where a photo was taken, and with what, is not the site's to publish: the
+  // original is served as it is stored, so the metadata goes before it lands.
+  let clean: Uint8Array;
+  try {
+    clean = stripMetadata(extension, bytes).bytes;
+  } catch (error) {
+    if (!(error instanceof UnreadableMetadataError)) throw error;
+    return {
+      status: 415,
+      error: `${error.message} Its location and camera details could not be removed, so it was not stored.`,
+    };
+  }
+
   const now = new Date();
   const month = `${String(now.getUTCFullYear()).padStart(4, '0')}/${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   const directory = path.join(config.contentDir, UPLOAD_DIRECTORY, ...month.split('/'));
   await mkdir(directory, { recursive: true });
 
   const stem = slugify(original.slice(0, original.length - extension.length)) || 'upload';
-  const name = await writeWithoutOverwriting(directory, stem, extension, bytes);
+  const name = await writeWithoutOverwriting(directory, stem, extension, clean);
 
   // Derived immediately rather than on first sight in a page, so the encoding
   // is paid for by whoever uploaded the file and not by whoever reads the
