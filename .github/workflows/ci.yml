@@ -31,7 +31,6 @@ jobs:
   # release-please too.
   already-tested:
     name: already-tested
-    if: github.event_name == 'push'
     runs-on: ubuntu-24.04-arm
     permissions:
       actions: read
@@ -40,6 +39,7 @@ jobs:
       skip: ${{ steps.look.outputs.skip }}
     steps:
       - id: look
+        if: github.event_name == 'push'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -287,14 +287,9 @@ jobs:
             invalid: it must start with a lower case letter and must not end
             with a full stop.
 
-  # Spelled out on the direct needs: the implicit success() also counts the
-  # skipped already-tested job above them, which would skip this job too.
   record-tested-tree:
     name: record-tested-tree
-    if: >-
-      ${{ !cancelled() && github.event_name == 'pull_request' &&
-      !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') &&
-      !contains(needs.*.result, 'skipped') }}
+    if: github.event_name == 'pull_request'
     needs:
       [
         lint,
