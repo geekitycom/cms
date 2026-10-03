@@ -1407,9 +1407,10 @@ export interface Cms {
   readonly webmentions: WebmentionService;
   /**
    * What a post shows of the page it answers, reposts, likes or bookmarks
-   * (TASK-123, TASK-244): fetched when the post is saved or synced, kept in `content/_data/replyContexts.json`, and read
-   * from there when a page is drawn. Already subscribed to the index; a site
-   * or a test reaches for it to wait for the fetches in flight.
+   * (TASK-123, TASK-244): fetched when the post is saved or synced, kept in
+   * `content/_data/replyContexts.json`, and read from there when a page is
+   * drawn. Already subscribed to the index; a site or a test reaches for it to
+   * wait for the fetches in flight.
    */
   readonly replyContexts: ReplyContextService;
   /**

@@ -48,10 +48,11 @@ export interface ReplyContextService {
    */
   handle(change: DocumentChange): void;
   /**
-   * Fetch every target a live post cites that the file holds nothing for. Run when the site starts serving, because a scan of an index that is
-   * already up to date reports no change: a site upgraded to reply contexts,
-   * or one whose file was removed, would otherwise wait for each reply to be
-   * edited. Queued like {@link ReplyContextService.handle}.
+   * Fetch every target a live post cites that the file holds nothing for. Run
+   * when the site starts serving, because a scan of an index that is already
+   * up to date reports no change: a site upgraded to reply contexts, or one
+   * whose file was removed, would otherwise wait for each reply to be edited.
+   * Queued like {@link ReplyContextService.handle}.
    */
   catchUp(): void;
   /** The stored context for a target, from the file. Never touches the network. */

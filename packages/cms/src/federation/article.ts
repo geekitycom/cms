@@ -111,8 +111,8 @@ function addressing(
   followers: URL,
   replyTo: CitedObject | undefined,
 ): { tos: URL[]; ccs: URL[] } {
-  const mentioned = replyTo?.author?.id ?? undefined;
-  const also = mentioned === undefined ? [] : [mentioned];
+  const mentioned = replyTo?.author?.id;
+  const also = mentioned == null ? [] : [mentioned];
   return visibilityOf(document) === 'unlisted'
     ? { tos: [followers], ccs: [PUBLIC_COLLECTION, ...also] }
     : { tos: [PUBLIC_COLLECTION], ccs: [followers, ...also] };
