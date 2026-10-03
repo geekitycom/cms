@@ -90,23 +90,12 @@ export function propertyName(name: string): string {
   return LEGACY_NAMES.get(name) ?? name;
 }
 
-/**
- * Whether `name` is a property the site keeps privately rather than maps: one
- * it does not understand and that is not an `mp-*` command, which is an
- * instruction to carry out rather than data to keep.
- */
 export function keptPrivately(name: string): boolean {
   return !PROPERTIES.has(name) && !name.startsWith('mp-');
 }
 
-/**
- * The most a post keeps of properties the site does not understand, as JSON.
- * The file holding them is read whole on each `q=source` and rewritten on each
- * save; a checkin's h-card is well under a kilobyte.
- */
-const KEPT_PROPERTIES_LIMIT = 16 * 1024;
+const KEPT_PROPERTIES_LIMIT_BYTES = 16 * 1024;
 
-/** Why `kept` cannot be kept, naming the properties at fault, or nothing. */
 export function keptRefusal(kept: KeptProperties): string | undefined {
   const names = Object.keys(kept);
   const files = Object.entries(kept)
@@ -116,16 +105,12 @@ export function keptRefusal(kept: KeptProperties): string | undefined {
     return `${files.join(', ')} is not understood here and is not a photo, so a file cannot be sent as it.`;
   }
   const size = Buffer.byteLength(JSON.stringify(kept));
-  if (size > KEPT_PROPERTIES_LIMIT) {
-    return `This endpoint keeps up to ${String(KEPT_PROPERTIES_LIMIT / 1024)} KiB of properties it does not understand on a post, and ${names.join(', ')} come to ${String(Math.ceil(size / 1024))} KiB.`;
+  if (size > KEPT_PROPERTIES_LIMIT_BYTES) {
+    return `This endpoint keeps up to ${String(KEPT_PROPERTIES_LIMIT_BYTES / 1024)} KiB of properties it does not understand on a post, and ${names.join(', ')} come to ${String(Math.ceil(size / 1024))} KiB.`;
   }
   return undefined;
 }
 
-/**
- * The properties that give a post something to publish. A create that keeps
- * properties privately and sends none of these would publish an empty post.
- */
 const PUBLISHABLE: readonly Property[] = [
   'content',
   'name',
@@ -205,7 +190,6 @@ export interface CreatedForm {
   readonly form: EditorForm;
   readonly draft: boolean;
   readonly uploads: readonly PhotoUpload[];
-  /** The properties the site does not understand, kept as they were sent. */
   readonly keptProperties: KeptProperties;
 }
 
@@ -285,7 +269,7 @@ export function createForm(
     return photo;
   });
   form.location = locationForm(
-    oneLocation(
+    checkinOverLocation(
       parsedLocation('location', properties.get('location') ?? [], locationFromMicropub, errors),
       parsedLocation('checkin', properties.get('checkin') ?? [], checkinFromMicropub, errors),
     ),
@@ -362,12 +346,7 @@ function parsedLocation(
   return parsed;
 }
 
-/**
- * A post has one location, so a `location` sent beside a `checkin`, as a
- * Swarm client may send one, describes the same place: the checkin's own
- * words and coordinates win, and the location fills in what it leaves out.
- */
-function oneLocation(
+function checkinOverLocation(
   location: PostLocation | undefined,
   checkin: PostLocation | undefined,
 ): PostLocation | undefined {

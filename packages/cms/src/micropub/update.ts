@@ -92,11 +92,14 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
   const declared = new Set(site.targets.map(({ id }) => id));
   const selected = syndicateToOf(document.extra).filter((id) => declared.has(id));
   if (selected.length > 0) properties['mp-syndicate-to'] = selected;
-  // One the site has since learnt to map is answered from where it is mapped.
-  for (const [name, values] of Object.entries(site.kept.read(document.permalink) ?? {})) {
-    if (keptPrivately(name)) properties[name] = [...values];
+  for (const [name, values] of stillUnmapped(site.kept.read(document.permalink) ?? {})) {
+    properties[name] = [...values];
   }
   return properties;
+}
+
+function stillUnmapped(kept: KeptProperties): [string, KeptProperties[string]][] {
+  return Object.entries(kept).filter(([name]) => keptPrivately(name));
 }
 
 function readCite(of: ReadOf): object {

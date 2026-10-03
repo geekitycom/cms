@@ -156,7 +156,6 @@ describe('locationToMicropub', () => {
   });
 });
 
-/** micropub.rocks test 204's checkin, as it sends it. */
 const ROCKS_204_CHECKIN = {
   type: ['h-card'],
   properties: {

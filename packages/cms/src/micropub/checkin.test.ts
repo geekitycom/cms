@@ -1,8 +1,3 @@
-/**
- * A Micropub checkin (TASK-236): the post's location, marked as a checkin,
- * kept in data/locations.json and shared only as far as Settings > Privacy
- * allows.
- */
 import assert from 'node:assert/strict';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -124,7 +119,6 @@ async function text(cms: Cms, pathname: string, accept?: string): Promise<string
   return await response.text();
 }
 
-/** micropub.rocks test 204, "Create an h-entry post with a nested object", as it sends it. */
 const ROCKS_204 = {
   type: ['h-entry'],
   properties: {

@@ -16,7 +16,6 @@ export interface PlaceWords {
 
 export interface LocationParts extends PlaceWords {
   readonly geo?: GeoPoint | undefined;
-  /** Sent as a Micropub `checkin`, and answered as one; nothing public reads it. */
   readonly checkin?: true | undefined;
 }
 
@@ -198,11 +197,17 @@ function isLocationType(value: unknown): value is string {
   return typeof value === 'string' && Object.hasOwn(LOCATION_TYPES, value);
 }
 
-/**
- * A Micropub `checkin`: the h-card of the venue, read as a location. Its
- * `url`, `street-address` and `postal-code` are not kept: under `place`
- * sharing they would publish more than a place name.
- */
+const CHECKIN_KEPT_FIELDS = [
+  'name',
+  'locality',
+  'region',
+  'country-name',
+  'geo',
+  'latitude',
+  'longitude',
+  'altitude',
+] as const;
+
 export function checkinFromMicropub(value: unknown): PostLocation | { readonly error: string } {
   const type = isRecord(value) ? value['type'] : undefined;
   if (!Array.isArray(type) || !type.includes('h-card')) {
@@ -210,7 +215,14 @@ export function checkinFromMicropub(value: unknown): PostLocation | { readonly e
       error: 'checkin is an h-card, { "type": ["h-card"], "properties": { "name": ["…"] } }.',
     };
   }
-  const read = locationFromMicropub(value);
+  const given = isRecord(value) && isRecord(value['properties']) ? value['properties'] : {};
+  const kept = Object.fromEntries(
+    CHECKIN_KEPT_FIELDS.filter((field) => Object.hasOwn(given, field)).map((field) => [
+      field,
+      given[field],
+    ]),
+  );
+  const read = locationFromMicropub({ type, properties: kept });
   if ('error' in read) return { error: read.error.replace(/^location/, 'checkin') };
   return { ...read, checkin: true };
 }

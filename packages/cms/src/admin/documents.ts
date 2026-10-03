@@ -488,11 +488,6 @@ export interface DocumentWrite {
   readonly form: EditorForm;
   /** Whether it is saved as a draft, which the editor's buttons decide. */
   readonly draft: boolean;
-  /**
-   * The Micropub properties the site does not understand, kept privately
-   * under the saved permalink (decision-27). Left out, as the editor leaves
-   * it, what the post already keeps stays.
-   */
   readonly keptProperties?: KeptProperties | undefined;
 }
 
@@ -784,14 +779,8 @@ function noteSlug(body: string): string {
   return slugify(words.join(' '));
 }
 
-/** How many of a cited page's words a post with nothing else to go on is named after. */
 const TARGET_SLUG_WORDS = 4;
 
-/**
- * The slug of a post with no title and no text, from what it is (TASK-242):
- * a like, repost, bookmark or reply is named after the page it cites, and a
- * photo post is `photo`. Empty for anything else.
- */
 function typeSlug(kind: DocumentKind, form: EditorForm, photos: readonly Photo[]): string {
   if (kind.type !== 'post') return '';
   const type = discoverPostType({
@@ -817,20 +806,17 @@ function typeSlug(kind: DocumentKind, form: EditorForm, photos: readonly Photo[]
   }
 }
 
-/**
- * A cited page's address as slug words: its host without `www.`, then the
- * path segments that hold a letter, since a status id or a date says nothing.
- */
 function targetWords(address: string): string {
   const url = new URL(address);
-  const segments = url.pathname
-    .split('/')
-    .map(decodedSegment)
-    .filter((segment) => /\p{L}/u.test(segment));
+  const segments = url.pathname.split('/').map(decodedSegment).filter(holdsALetter);
   return slugify([url.hostname.replace(/^www\./, ''), ...segments].join(' '))
     .split('-')
     .slice(0, TARGET_SLUG_WORDS)
     .join('-');
+}
+
+function holdsALetter(segment: string): boolean {
+  return /\p{L}/u.test(segment);
 }
 
 function decodedSegment(segment: string): string {

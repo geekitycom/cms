@@ -1,7 +1,3 @@
-/**
- * Micropub properties the site does not understand (TASK-237): kept privately
- * under dataDir, never in content/ and never on a public surface.
- */
 import assert from 'node:assert/strict';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -131,7 +127,6 @@ async function text(cms: Cms, pathname: string, accept?: string): Promise<string
   return await response.text();
 }
 
-/** A post with a nested object the site does not understand, as micropub.rocks test 204 nests its checkin. */
 const NESTED = {
   type: ['h-entry'],
   properties: {
