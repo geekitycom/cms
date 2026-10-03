@@ -4,7 +4,7 @@ title: Skip CI on a push to main when the merged tree was already tested
 status: In Progress
 assignee: []
 created_date: '2026-10-03 15:01'
-updated_date: '2026-10-03 15:03'
+updated_date: '2026-10-03 15:23'
 labels:
   - ci
 dependencies: []
@@ -21,7 +21,7 @@ Every PR runs CI, then the same jobs run again on the push to main when it merge
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A pull_request run whose jobs all pass uploads an artifact named for the tree it tested
+- [x] #1 A pull_request run whose jobs all pass uploads an artifact named for the tree it tested
 - [ ] #2 A push to main whose tree has such an artifact, from a run whose head repository is this one, skips every CI job; release-please is unaffected
 - [ ] #3 A push whose tree has no such artifact, or whose lookup fails, runs every job
 - [ ] #4 The workflow comments explain the rule
@@ -40,4 +40,6 @@ Every PR runs CI, then the same jobs run again on the push to main when it merge
 
 <!-- SECTION:NOTES:BEGIN -->
 Premise checked: for the last six merge commits on main, git merge-tree --write-tree of the two parents gives exactly the merge commit's tree, so a push whose main had not moved since the PR run carries the tree that run tested. The artifacts API returns workflow_run.head_repository_id and repository_id (checked against coverage-summary artifacts), and the commits API's tree sha matches git rev-parse. actionlint and prettier pass.
+
+PR #106 merged before the fix reached it: on its runs record-tested-tree stayed skipped (already-tested, skipped on every pull_request run, sat in its dependency chain). PR #107: already-tested runs on every event with only its lookup step limited to push. Its run passed every job including record-tested-tree, which uploaded tested-tree-e216ce52a1ee8aae7382920fbcc434fe24c0f899, the exact tree of refs/pull/107/merge. The push-side lookup query by hand finds 1 same-repo artifact for that tree and 0 for an unknown tree. AC #2 and #3 wait on the push run after #107 merges.
 <!-- SECTION:NOTES:END -->
