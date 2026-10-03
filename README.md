@@ -2292,7 +2292,6 @@ Each gate is its own job so it can be named as a required status check:
 | `test-11ty`    | `pnpm test:11ty`, the Eleventy compatibility suite. |
 | `pack-install` | `scripts/pack-install-smoke.sh`.                    |
 | `docker-smoke` | Builds the image, then `scripts/docker-smoke.sh`.   |
-| `pr-title`     | The pull request title, as a Conventional Commit.   |
 
 The four steps every job shares — install pnpm from the pinned
 `packageManager`, install Node with the pnpm store cached, run
@@ -2342,15 +2341,9 @@ pnpm docker:smoke some-image:tag   # tests an image that is already built
 The script removes its container, its volumes and any image it built however it
 exits.
 
-`pr-title` exists because a squash merge takes the pull request title as the
-commit message, and release-please reads that message. It accepts the types and
-scopes of `commitlint.config.js`; a scope is optional, but a title that names
-one has to name an allowed one. The workflow listens for `edited` as well as
-`opened` and `synchronize`, so correcting a title re-runs the check.
-
 `.github/dependabot.yml` opens weekly grouped update pull requests for the
-GitHub Actions and npm ecosystems, titled `ci(deps): …` and `chore(deps): …` so
-they pass `pr-title` and commitlint.
+GitHub Actions and npm ecosystems, whose commits are `ci(deps): …` and
+`chore(deps): …`, so release-please reads them like any other commit.
 
 ### Branch protection
 
@@ -2361,13 +2354,14 @@ On GitHub, under Settings → Rules → Rulesets (or Settings → Branches), pro
   the release flow assumes never happen.
 - **Require status checks to pass**, and select exactly these, spelled as the
   job names above: `lint`, `typecheck`, `test`, `test-node-26`, `build`,
-  `test-11ty`, `pack-install`, `pr-title`. Tick "Require branches to be up to date
+  `test-11ty`, `pack-install`. Tick "Require branches to be up to date
   before merging".
-- **Require linear history**, and allow only **Squash and merge** in Settings →
-  General → Pull Requests. Squashing is what makes `pr-title` sufficient: the
-  title becomes the commit message release-please parses. Turn off "Default to
-  PR title and description" only if you are prepared to police merge commit
-  messages by hand.
+- Allow only **merge commits** in Settings → General → Pull Requests. A merge
+  keeps every commit of the branch, and release-please reads each one, so every
+  change gets its own changelog line. GitHub puts the pull request title in the
+  merge commit's body, and release-please reads any Conventional Commit line
+  there too, so pull request titles are plain prose: a `feat(cms): …` title
+  would list the branch's work a second time.
 - Leave "Allow specified actors to bypass" empty except for administrators, and
   do **not** require signed commits: release-please commits with the Actions
   token, which does not sign.
@@ -2393,8 +2387,9 @@ tracked.
 
 ### How a release flows
 
-1. A pull request titled `feat(cms): serve Atom and JSON feeds for posts` is
-   squash-merged into `main`. The squashed commit carries that title.
+1. A pull request whose branch holds the commit
+   `feat(cms): serve Atom and JSON feeds for posts` is merged into `main` with a
+   merge commit, which keeps that commit as it is.
 2. `.github/workflows/release-please.yml` runs on the push. release-please
    reads every Conventional Commit since the last release, works out the next
    version, and opens or updates a **release pull request** that bumps
@@ -2423,8 +2418,7 @@ component name (`cms`) from the package name and only recognises a merged
 release pull request whose branch carries that component. Grouped release pull
 requests use a branch without one, so the merge is silently ignored and no
 tag is cut (release-please issue 2214). Separate pull requests put the
-component in the branch. The pinned title keeps the `pr-title` check happy,
-since the default would use the target branch as the scope.
+component in the branch.
 
 `.release-please-manifest.json` is the current released version of each tracked
 package and must agree with `packages/cms/package.json`. release-please writes
