@@ -5,7 +5,9 @@ import type { PhotoRow } from '../admin/photo-field.ts';
 import { BLANK_READ_OF_FORM } from '../admin/read-field.ts';
 import type { ReadOfForm } from '../admin/read-field.ts';
 import { isWebUrl } from '../content/enclosure.ts';
-import { locationFromMicropub } from '../content/location.ts';
+import type { KeptProperties } from '../content/kept-properties.ts';
+import { checkinFromMicropub, locationFromMicropub, postLocation } from '../content/location.ts';
+import type { PostLocation } from '../content/location.ts';
 import { isReadStatus, READ_STATUSES } from '../content/read.ts';
 import { isVisibility } from '../content/visibility.ts';
 import { normalizeBody } from '../content/writer.ts';
@@ -30,8 +32,8 @@ interface HtmlContent {
 
 /**
  * The properties a post can be created with, and the editor field each one
- * fills (decision-27). Anything else is refused by name rather than dropped,
- * so a client can tell its user what did not land.
+ * fills (decision-27). Anything else is kept privately, as it was sent, except
+ * an `mp-*` command the site does not carry out, which is refused by name.
  */
 const SINGLE_VALUED = {
   name: 'title',
@@ -56,6 +58,7 @@ const MAPPED_ON_THEIR_OWN = [
   'category',
   'photo',
   'location',
+  'checkin',
   'post-status',
   'mp-syndicate-to',
   'visibility',
@@ -86,6 +89,39 @@ const LEGACY_NAMES: ReadonlyMap<string, string> = new Map([
 export function propertyName(name: string): string {
   return LEGACY_NAMES.get(name) ?? name;
 }
+
+export function keptPrivately(name: string): boolean {
+  return !PROPERTIES.has(name) && !name.startsWith('mp-');
+}
+
+const KEPT_PROPERTIES_LIMIT_BYTES = 16 * 1024;
+
+export function keptRefusal(kept: KeptProperties): string | undefined {
+  const names = Object.keys(kept);
+  const files = Object.entries(kept)
+    .filter(([, values]) => values.some((value) => value instanceof File))
+    .map(([name]) => name);
+  if (files.length > 0) {
+    return `${files.join(', ')} is not understood here and is not a photo, so a file cannot be sent as it.`;
+  }
+  const size = Buffer.byteLength(JSON.stringify(kept));
+  if (size > KEPT_PROPERTIES_LIMIT_BYTES) {
+    return `This endpoint keeps up to ${String(KEPT_PROPERTIES_LIMIT_BYTES / 1024)} KiB of properties it does not understand on a post, and ${names.join(', ')} come to ${String(Math.ceil(size / 1024))} KiB.`;
+  }
+  return undefined;
+}
+
+const PUBLISHABLE: readonly Property[] = [
+  'content',
+  'name',
+  'photo',
+  'in-reply-to',
+  'like-of',
+  'repost-of',
+  'bookmark-of',
+  'read-of',
+  'checkin',
+];
 
 /** What `post-status` may say, and whether it makes a draft. */
 const POST_STATUSES: Readonly<Record<string, boolean>> = { published: false, draft: true };
@@ -154,6 +190,7 @@ export interface CreatedForm {
   readonly form: EditorForm;
   readonly draft: boolean;
   readonly uploads: readonly PhotoUpload[];
+  readonly keptProperties: KeptProperties;
 }
 
 /**
@@ -180,9 +217,22 @@ export function createForm(
   }
 
   const errors: string[] = [];
-  const unknown = [...properties.keys()].filter((name) => !PROPERTIES.has(name));
-  if (unknown.length > 0) {
-    errors.push(`This endpoint does not understand ${unknown.join(', ')}.`);
+  const commands = [...properties.keys()].filter(
+    (name) => name.startsWith('mp-') && !PROPERTIES.has(name),
+  );
+  if (commands.length > 0) {
+    errors.push(`This endpoint does not support ${commands.join(', ')}.`);
+  }
+  const keptProperties = Object.fromEntries(
+    [...properties].filter(([name, values]) => keptPrivately(name) && values.length > 0),
+  );
+  const kept = Object.keys(keptProperties);
+  const refused = keptRefusal(keptProperties);
+  if (refused !== undefined) errors.push(refused);
+  if (kept.length > 0 && !PUBLISHABLE.some((name) => (properties.get(name) ?? []).length > 0)) {
+    errors.push(
+      `This endpoint does not understand ${kept.join(', ')}, and the post has nothing else to publish.`,
+    );
   }
 
   const text = (name: string): string => {
@@ -218,7 +268,12 @@ export function createForm(
     }
     return photo;
   });
-  form.location = location(properties.get('location') ?? [], errors);
+  form.location = locationForm(
+    checkinOverLocation(
+      parsedLocation('location', properties.get('location') ?? [], locationFromMicropub, errors),
+      parsedLocation('checkin', properties.get('checkin') ?? [], checkinFromMicropub, errors),
+    ),
+  );
   form.readOf = readOf(properties.get('read-of') ?? [], errors);
   form.readStatus = text('read-status');
   if (form.readStatus !== '' && !isReadStatus(form.readStatus)) {
@@ -227,12 +282,13 @@ export function createForm(
   for (const [property, field] of Object.entries(SINGLE_VALUED)) {
     form[field] = text(property);
   }
-  const visibility = text('visibility');
+  const sentVisibility = text('visibility');
+  const visibility = sentVisibility.toLowerCase();
   if (isVisibility(visibility)) form.visibility = visibility;
   else if (visibility === 'private') {
     errors.push('This site does not publish private posts; visibility is public or unlisted.');
   } else if (visibility !== '') {
-    errors.push(`visibility is public or unlisted, not ${visibility}.`);
+    errors.push(`visibility is public or unlisted, not ${sentVisibility}.`);
   }
   for (const [property, refused] of Object.entries(ACCEPTED_WITHOUT_EFFECT)) {
     const value = text(property);
@@ -246,7 +302,9 @@ export function createForm(
     errors.push(`post-status is published or draft, not ${status}.`);
   }
 
-  return errors.length > 0 || draft === undefined ? { errors } : { form, draft, uploads };
+  return errors.length > 0 || draft === undefined
+    ? { errors }
+    : { form, draft, uploads, keptProperties };
 }
 
 /**
@@ -271,16 +329,29 @@ function photoRow(value: unknown, baseUrl: string): PhotoRow | undefined {
   };
 }
 
-function location(values: readonly unknown[], errors: string[]): EditorForm['location'] {
-  if (values.length > 1) errors.push('location takes one value.');
+function parsedLocation(
+  name: string,
+  values: readonly unknown[],
+  parse: (value: unknown) => PostLocation | { readonly error: string },
+  errors: string[],
+): PostLocation | undefined {
+  if (values.length > 1) errors.push(`${name} takes one value.`);
   const [value] = values;
-  if (value === undefined) return locationForm(undefined);
-  const parsed = locationFromMicropub(value);
+  if (value === undefined) return undefined;
+  const parsed = parse(value);
   if ('error' in parsed) {
     errors.push(parsed.error);
-    return locationForm(undefined);
+    return undefined;
   }
-  return locationForm(parsed);
+  return parsed;
+}
+
+function checkinOverLocation(
+  location: PostLocation | undefined,
+  checkin: PostLocation | undefined,
+): PostLocation | undefined {
+  if (location === undefined || checkin === undefined) return checkin ?? location;
+  return postLocation({ ...location, ...checkin, geo: checkin.geo ?? location.geo });
 }
 
 const READ_OF_PROPERTIES = ['name', 'author', 'uid', 'url'] as const;

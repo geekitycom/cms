@@ -172,7 +172,7 @@ describe('a route behind the bearer guard', () => {
   it('lets the route require a scope the token holds', async () => {
     const { cms, grant } = await site();
     const { accessToken } = await issueTokens(cms.config.dataDir, grant, new Date());
-    const response = await guarded(cms, { audience: MICROPUB, scope: 'media' }).request(
+    const response = await guarded(cms, { audience: MICROPUB, scopes: ['media'] }).request(
       '/thing',
       withHeader(accessToken),
     );
@@ -244,7 +244,7 @@ describe('a route behind the bearer guard', () => {
   it('answers 403 insufficient_scope, naming the scope, for a token without it', async () => {
     const { cms, grant } = await site();
     const { accessToken } = await issueTokens(cms.config.dataDir, grant, new Date());
-    const response = await guarded(cms, { audience: MICROPUB, scope: 'delete' }).request(
+    const response = await guarded(cms, { audience: MICROPUB, scopes: ['delete'] }).request(
       '/thing',
       withHeader(accessToken),
     );

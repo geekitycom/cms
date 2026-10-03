@@ -359,15 +359,33 @@ describe('who wrote it and who hears about it (AC #3, AC #4)', () => {
 });
 
 describe('a refused create', () => {
-  it('answers 403 insufficient_scope to a token without create (AC #5)', async () => {
+  it('answers 401 insufficient_scope to a token without create, as Micropub section 3.8 says', async () => {
     const { cms, token } = await site(['profile', 'update']);
     const response = await postForm(cms, token, [
       ['h', 'entry'],
       ['content', 'Should not land.'],
     ]);
-    assert.equal(response.status, 403);
+    assert.equal(response.status, 401);
     assert.equal(((await response.json()) as { error: string }).error, 'insufficient_scope');
-    assert.match(response.headers.get('www-authenticate') ?? '', /scope="create"/);
+    assert.equal(
+      response.headers.get('www-authenticate'),
+      `Bearer error="insufficient_scope", scope="create", resource_metadata="${BASE}/.well-known/oauth-protected-resource"`,
+    );
+    assert.deepEqual(await postFiles(cms), []);
+  });
+
+  it('answers micropub.rocks test 804, a note from a token without create, with 401', async () => {
+    const { cms, token } = await site(['update']);
+    const response = await cms.app.request(ENDPOINT, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: 'h=entry&content=Hello+World',
+    });
+    assert.equal(response.status, 401);
+    assert.equal(((await response.json()) as { error: string }).error, 'insufficient_scope');
     assert.deepEqual(await postFiles(cms), []);
   });
 
@@ -385,24 +403,23 @@ describe('a refused create', () => {
     names: string[];
   }[] = [
     {
-      label: 'an rsvp, a type the site does not have',
+      label: 'an mp- command the site does not carry out',
       send: (cms, token) =>
         postJson(cms, token, {
           type: ['h-entry'],
-          properties: { rsvp: ['yes'], 'in-reply-to': ['https://peer.example/an-event/'] },
+          properties: { content: ['Hi'], 'mp-channel': ['notes'] },
         }),
-      names: ['rsvp'],
+      names: ['mp-channel'],
     },
     {
-      label: 'form properties the site does not understand',
+      label: 'form properties the site does not understand and nothing to publish',
       send: (cms, token) =>
         postForm(cms, token, [
           ['h', 'entry'],
-          ['content', 'With a place'],
-          ['checkin', 'https://places.example/cafe'],
+          ['rsvp', 'yes'],
           ['weight', '70kg'],
         ]),
-      names: ['checkin', 'weight'],
+      names: ['rsvp', 'weight'],
     },
     {
       label: 'an h=event',
@@ -511,6 +528,20 @@ describe('a like, a repost and a bookmark (TASK-169 AC #5)', () => {
     const document = cms.store.getByPath(`posts/${file}`);
     assert.ok(document !== undefined);
     assert.equal(postTypeOf(document), 'like');
+  });
+
+  it('files a like with no content under what it likes (TASK-242)', async () => {
+    const { cms, token } = await site();
+    const response = await postForm(cms, token, [
+      ['h', 'entry'],
+      ['like-of', 'https://indieweb.social/@andrewshell/117249870148068466'],
+    ]);
+    assert.equal(response.status, 201, await response.clone().text());
+    assert.equal(
+      response.headers.get('location'),
+      `${BASE}/2026/09/liked-indieweb-social-andrewshell/`,
+    );
+    assert.deepEqual(await postFiles(cms), ['2026-09-20-liked-indieweb-social-andrewshell.md']);
   });
 
   it('writes the same like the editor writes for the same post', async () => {

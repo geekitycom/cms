@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-03 13:43'
+updated_date: '2026-10-03 17:37'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -117,7 +117,7 @@ Feeds, the sitemap and the ActivityStreams objects emit instants and are not aff
 ## Permalink rules
 
 - Posts default to `/{yyyy}/{mm}/{slug}/`. Pages default to `/{slug}/`. Both are just defaults the admin form fills in; the stored value is what counts.
-- Slug is derived from the title on creation, lowercased, ASCII, hyphenated, and unique within the index. Editing the slug later rewrites `permalink` but does not rename the file.
+- Slug is derived on creation, lowercased, ASCII, hyphenated, and unique within the index (a repeat gets `-2`). It comes from the title, or for a post with no title from its first five words, or a read's title. A post with no title and no text is named after what it is (TASK-242): `liked-`, `reposted-`, `bookmarked-` or `reply-to-` and up to four words of the cited page's address (its host without `www.`, then the path segments that hold a letter), or `photo`. `untitled` is the last fallback. A checkin's venue never names it, since the slug is public and the location is private. Only a new post is named this way: an existing one keeps its slug. Editing the slug later rewrites `permalink` but does not rename the file.
 - Trailing slash is canonical. Requests without it redirect.
 
 ## Drafts and status
@@ -152,12 +152,13 @@ A post created over Micropub (TASK-164) is written by the editor's own write pat
 | `visibility` | `unlisted` writes `visibility: unlisted`; `public` writes nothing. `private` is refused with its own message, and any other value by name |
 | `photo`, each value | an entry in `photo`: a URL, or `{ "value": "…", "alt": "…" }` with its `alt`. A URL into the site's own uploads is written as its `/uploads/…` path. A file part of a multipart create is stored in the media library as the media endpoint stores one, and its path written; it is taken back out if the post is refused |
 | `location` | nothing in the file. A `geo:` URI (`geo:LAT,LNG;u=ACC`, Quill's form), an h-geo, an h-adr or an h-card is parsed at the boundary and kept in `data/locations.json`, keyed by the post's permalink (TASK-223, decision-29). The editor's Location box writes the same entry. The file is private because `content/` may be a public repository; Settings > Privacy decides what a page or the ActivityStreams object shows of it, nothing by default. `q=source` answers it whatever the setting, as a `geo:` URI, an h-adr or an h-card with the coordinates nested as `geo` |
+| `checkin` | the post's location, as `location` is, marked `checkin: true` in `data/locations.json` (TASK-236). An h-card only: its name, locality, region, country and coordinates are kept, and its `url`, `street-address` and `postal-code` dropped. A `location` sent beside it is the same place and fills in what the checkin leaves out. The editor's Location box shows the mark as A check-in. A reader sees an ordinary location, under the same setting. `q=source` answers it as `checkin`, an h-card |
 
 `slug` and `syndicate-to`, which Quill accounts from before its renames send, are read as `mp-slug` and `mp-syndicate-to`. `p3k-content-type` (`text/plain` or `text/markdown`) is accepted and writes nothing (TASK-222); any other value is refused by name. `q=config` advertises `visibility: ["public", "unlisted"]`, and `q=source` answers every post's `visibility`.
 
-The token's user is `author`. Only `h-entry` is created. Any other type or property, a second value where one is expected, or a value that is not text is refused by name and nothing is written.
+The token's user is `author`. Only `h-entry` is created. A property outside the table is kept verbatim in the private `data/kept-properties.json` and published nowhere (TASK-237, decision-27); an `mp-*` command the site does not support, another type, a second value where one is expected, or a value that is not text is refused by name and nothing is written.
 
-An update (TASK-167) reads the same table backwards: `q=source` answers a post's front matter as those properties, with an upload's path as its absolute URL, and `action=update` applies `replace`, `add` and `delete` to them, fills only the editor fields the named properties own, and leaves every other key as it was. `mp-slug` and any property outside the table are refused, so an update moves a URL only where an editor save with the same date would, which is a draft nobody has been shown. `action=delete` moves the file into `content/_trash/` as the editor's Move to trash does, and `action=undelete` moves it back. A post whose `author` is another user is refused.
+An update (TASK-167) reads the same table backwards: `q=source` answers a post's front matter as those properties, with an upload's path as its absolute URL, and `action=update` applies `replace`, `add` and `delete` to them, fills only the editor fields the named properties own, and leaves every other key as it was. A kept property outside the table is replaced, added to or deleted in `data/kept-properties.json`. `mp-slug` and unsupported `mp-*` commands are refused, so an update moves a URL only where an editor save with the same date would, which is a draft nobody has been shown. `action=delete` moves the file into `content/_trash/` as the editor's Move to trash does, and `action=undelete` moves it back. A post whose `author` is another user is refused.
 
 ## Markdown dialect
 

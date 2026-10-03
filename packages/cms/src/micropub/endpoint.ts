@@ -15,15 +15,18 @@ import {
 import { readSiteSettings } from '../admin/settings.ts';
 
 import type { Document } from '../content/document.ts';
+import { keptProperties } from '../content/kept-properties.ts';
+import type { KeptProperties } from '../content/kept-properties.ts';
 import { postLocations } from '../content/locations.ts';
 import type { PostLocations } from '../content/locations.ts';
+import type { PermalinkFile } from '../content/permalink-file.ts';
 import type { PostType } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import { VISIBILITIES } from '../content/visibility.ts';
 import { logMicropubRequest } from '../indieauth/activity-log.ts';
 import { insufficientScope, requireBearer } from '../indieauth/bearer.ts';
-import type { BearerEnv } from '../indieauth/bearer.ts';
+import type { BearerEnv, Scopes } from '../indieauth/bearer.ts';
 import { MICROPUB_MEDIA_PATH, MICROPUB_PATH, siteBaseUrl } from '../indieauth/discovery.ts';
 import type { GeekityEnv } from '../env.ts';
 import type { Scope } from '../indieauth/request.ts';
@@ -101,6 +104,7 @@ interface QueryContext {
   /** The syndication targets the site declares (TASK-155). */
   readonly targets: readonly SyndicationTarget[];
   readonly locations: PostLocations;
+  readonly kept: PermalinkFile<KeptProperties>;
   /** The `filter` parameter, which narrows `q=category`. */
   readonly filter: string | undefined;
   /** The `properties[]` parameters, which narrow `q=source`. */
@@ -128,10 +132,10 @@ const QUERIES: Readonly<Record<Query, (context: QueryContext) => object>> = {
   }),
   'syndicate-to': ({ targets }) => ({ 'syndicate-to': offered(targets) }),
   category: ({ store, filter }) => ({ categories: categories(store, filter) }),
-  source: ({ baseUrl, targets, locations, properties, post }) => {
+  source: ({ baseUrl, targets, locations, kept, properties, post }) => {
     const document = post();
     if (document instanceof Refusal) return document;
-    const all = sourceProperties(document, { baseUrl, targets, locations });
+    const all = sourceProperties(document, { baseUrl, targets, locations, kept });
     // Asked for by name, the answer is the properties alone, as the spec has it.
     if (properties.length === 0) return { type: ['h-entry'], properties: all };
     return {
@@ -213,13 +217,16 @@ function isQuery(q: string | undefined): q is Query {
   return (QUERY_NAMES as readonly (string | undefined)[]).includes(q);
 }
 
+/** Micropub's error table (section 3.8) answers insufficient_scope with 401. */
+const MICROPUB_INSUFFICIENT_SCOPE_STATUS = 401;
+
 /**
  * The bearer guard for a token bound to this site, the resource its protected
  * resource metadata names, or bound to none, as Micropub clients' tokens are
- * (decision-24), and granted `scope` when one is named. Built per request
- * because the base URL is a setting.
+ * (decision-24), and granted any one of `scopes` when they are named. Built per
+ * request because the base URL is a setting.
  */
-export function requireSiteToken(scope?: Scope): MiddlewareHandler<BearerEnv> {
+export function requireSiteToken(scopes?: Scopes): MiddlewareHandler<BearerEnv> {
   return async (c, next) => {
     const declared = Number(c.req.header('content-length') ?? '');
     const limit = largestUploadLimit(c.var.config);
@@ -229,7 +236,8 @@ export function requireSiteToken(scope?: Scope): MiddlewareHandler<BearerEnv> {
     }
     return await requireBearer({
       audience: { resource: siteBaseUrl(c), acceptsUnbound: true },
-      ...(scope === undefined ? {} : { scope }),
+      ...(scopes === undefined ? {} : { scopes }),
+      insufficientScopeStatus: MICROPUB_INSUFFICIENT_SCOPE_STATUS,
     })(c, next);
   };
 }
@@ -394,6 +402,7 @@ const ACTIONS: {
       baseUrl: siteBaseUrl(c),
       targets: syndicationTargetsReader(config.contentDir)(),
       locations: postLocations(config.dataDir),
+      kept: keptProperties(config.dataDir),
     });
     if ('errors' in updated) return invalid(updated.errors.join(' ')).answer(c);
 
@@ -464,7 +473,9 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
     const post = await micropubPost(c);
     if (post instanceof Refusal) return post.answer(c);
     const scope = ACTION_SCOPES[post.action];
-    if (!c.var.bearer.token.scopes.includes(scope)) return insufficientScope(c, scope);
+    if (!c.var.bearer.token.scopes.includes(scope)) {
+      return insufficientScope(c, [scope], MICROPUB_INSUFFICIENT_SCOPE_STATUS);
+    }
     const handle = ACTIONS[post.action] as (
       c: Context<BearerEnv>,
       post: MicropubPost,
@@ -486,6 +497,7 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
       store: c.var.store,
       targets: syndicationTargetsReader(c.var.config.contentDir)(),
       locations: postLocations(c.var.config.dataDir),
+      kept: keptProperties(c.var.config.dataDir),
       filter: c.req.query('filter'),
       properties: c.req.queries('properties[]') ?? c.req.queries('properties') ?? [],
       post: () => postFor(c, c.req.query('url')),

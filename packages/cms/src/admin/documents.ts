@@ -9,7 +9,7 @@ import type { Document, DocumentContent, DocumentType } from '../content/documen
 import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
 import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
-import { postLabel, replyTarget } from '../content/post-type.ts';
+import { discoverPostType, postLabel, replyTarget } from '../content/post-type.ts';
 import {
   isReadStatus,
   READ_OF_FRONT_MATTER_KEY,
@@ -30,6 +30,8 @@ import type { Enclosure } from '../content/enclosure.ts';
 import { PHOTO_FRONT_MATTER_KEY, photoFrontMatter } from '../content/photo.ts';
 import type { Photo } from '../content/photo.ts';
 import type { PostLocation } from '../content/location.ts';
+import { keptProperties } from '../content/kept-properties.ts';
+import type { KeptProperties } from '../content/kept-properties.ts';
 import { postLocations } from '../content/locations.ts';
 import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
 import { scheduledFor } from '../content/schedule.ts';
@@ -486,6 +488,7 @@ export interface DocumentWrite {
   readonly form: EditorForm;
   /** Whether it is saved as a draft, which the editor's buttons decide. */
   readonly draft: boolean;
+  readonly keptProperties?: KeptProperties | undefined;
 }
 
 /** What came of a {@link writeDocument}. */
@@ -635,6 +638,7 @@ export async function writeDocument(
     (document?.slug ?? '') ||
     noteSlug(form.body) ||
     slugify(form.readOf.name) ||
+    typeSlug(kind, form, media.photos) ||
     'untitled';
   const trashed = document !== undefined && isTrashedPath(document.path);
   // The calendar day the document is filed under: the site zone's day at its
@@ -728,10 +732,15 @@ export async function writeDocument(
 
   if (kind.type === 'post') {
     const locations = postLocations(config.dataDir);
+    const kept = keptProperties(config.dataDir);
     if (document !== undefined && document.permalink !== saved.permalink) {
       await locations.move(document.permalink, saved.permalink);
+      await kept.move(document.permalink, saved.permalink);
     }
     await locations.set(saved.permalink, location);
+    if (write.keptProperties !== undefined) {
+      await kept.set(saved.permalink, write.keptProperties);
+    }
   }
 
   // Announced rather than left to the watcher: the index already holds what
@@ -768,6 +777,54 @@ const NOTE_SLUG_WORDS = 5;
 function noteSlug(body: string): string {
   const words = htmlToText(renderMarkdown(body)).split(' ').slice(0, NOTE_SLUG_WORDS);
   return slugify(words.join(' '));
+}
+
+const TARGET_SLUG_WORDS = 4;
+
+function typeSlug(kind: DocumentKind, form: EditorForm, photos: readonly Photo[]): string {
+  if (kind.type !== 'post') return '';
+  const type = discoverPostType({
+    'repost-of': form.repostOf,
+    'like-of': form.likeOf,
+    'in-reply-to': form.inReplyTo,
+    'bookmark-of': form.bookmarkOf,
+    photo: photos.map((photo) => photo.url),
+  });
+  switch (type) {
+    case 'repost':
+      return `reposted-${targetWords(form.repostOf)}`;
+    case 'like':
+      return `liked-${targetWords(form.likeOf)}`;
+    case 'reply':
+      return `reply-to-${targetWords(form.inReplyTo)}`;
+    case 'bookmark':
+      return `bookmarked-${targetWords(form.bookmarkOf)}`;
+    case 'photo':
+      return 'photo';
+    default:
+      return '';
+  }
+}
+
+function targetWords(address: string): string {
+  const url = new URL(address);
+  const segments = url.pathname.split('/').map(decodedSegment).filter(holdsALetter);
+  return slugify([url.hostname.replace(/^www\./, ''), ...segments].join(' '))
+    .split('-')
+    .slice(0, TARGET_SLUG_WORDS)
+    .join('-');
+}
+
+function holdsALetter(segment: string): boolean {
+  return /\p{L}/u.test(segment);
+}
+
+function decodedSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }
 
 /** What the flash says after a save, which depends on what the save did. */

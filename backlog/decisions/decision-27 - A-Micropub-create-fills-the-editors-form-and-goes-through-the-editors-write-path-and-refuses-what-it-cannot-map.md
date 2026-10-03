@@ -90,3 +90,34 @@ Micropublish, and any client that follows the micropub-extensions post-types con
 - `properties` are those, then the properties that never change a post's type: `content`, `summary`, `category`, `location`, `published`, `post-status`, `visibility`, `mp-slug`, `mp-syndicate-to`, and `name` on every type but a note, where it would make an article.
 - Another type's own property is not listed, though a create accepts it, since it makes the post that type instead: a like with `in-reply-to` is still accepted, as a like, but the reply form is where that property is offered.
 - `slug`, `syndicate-to` and `p3k-content-type` are accepted and not listed: the first two are legacy names for listed properties, and the third changes nothing the site writes.
+
+## Amendment (TASK-237, 2026-10-03): a property the site does not understand is kept privately
+
+micropub.rocks test 204 sends a `checkin` h-card beside its content and expects the post published. Clients send extension properties too, and refusing one refused the whole post. A property the site does not map is now kept instead of refused, on a create and an update alike. It is never written to front matter: `content/` may be a public repository (decision-9), and a raw nested object there, a checkin's coordinates say, would be public whatever Settings > Privacy says (decision-29).
+
+- **Where.** `data/kept-properties.json`, mode 0600, one JSON object keyed by the post's permalink, kept, moved and left exactly as `data/locations.json` is. Both are one `permalinkFile` (`src/content/permalink-file.ts`). The editor's write path owns the entry: a Micropub create replaces it, an editor save leaves it, a save that moves the permalink moves it, and trash and restore keep it. Nothing renders it: no page, representation, feed, object, search entry, oEmbed or `llms.txt` reads the file.
+- **What.** The values verbatim, as mf2 JSON: each name and its list of values as the client sent them, strings from a form, objects and numbers from JSON. The site does not parse what it does not understand, so it does not reshape it. The cap is 16 KiB of JSON per post, refused by name when a post's kept properties come to more; the file is read whole on each `q=source` and rewritten on each save, and a checkin's h-card is under a kilobyte. A file part sent as a property that is not `photo` is refused, since it has no JSON form.
+- **What counts as understood.** Everything `createForm` maps, the legacy names `slug` and `syndicate-to`, and the accepted-without-effect `p3k-content-type` stay as they were: mapped, checked and refused as before. A read's `summary` is still accepted and not stored (TASK-233). A property the site later learns to map stops being kept: `q=source` answers it from where it is mapped, and the old copy stays in the file, unread, until an update next rewrites what the post keeps.
+- **`mp-*` commands.** Still refused by name, `This endpoint does not support mp-channel.` They are instructions to the server, not data, and keeping one would tell the client it was carried out.
+- **Nothing to publish.** A create that keeps properties and sends none of `content`, `name`, `photo`, `in-reply-to`, `like-of`, `repost-of`, `bookmark-of` or `read-of` is refused with 400 `invalid_request` naming the kept properties. Quill's weight editor sends `weight` and `published` alone, and would otherwise publish an empty post at `/…/untitled/`.
+- **Read and update.** `q=source` answers kept properties to the token's user, beside the mapped ones. An update's `replace`, `add` and `delete` change them as they change a mapped property; an update that names none leaves them.
+
+Limits: a kept property is not shown anywhere, not even to the author in the admin editor. A post copied to another site by its file goes without them, as it goes without its location. `checkin` is kept here until TASK-236 maps it onto the post's location.
+
+## Amendment (TASK-236, 2026-10-03): a checkin is the post's location
+
+micropub.rocks test 204 and Swarm-style clients send `checkin`, an h-card naming the venue. TASK-237 kept it privately as a property the site did not understand. It now maps onto the post's location (decision-29), on a create and an update alike:
+
+| Micropub property | Editor field | Where it lives |
+| --- | --- | --- |
+| `checkin`, an h-card | Location, with A check-in ticked | `data/locations.json`, the location with `checkin: true` |
+
+- **What is kept.** The venue's `name`, `locality`, `region`, `country-name` and its coordinates, as `latitude` and `longitude` on the h-card or a nested `geo`. Its `url`, `street-address` and `postal-code` are dropped. Under the `place` sharing level they would publish more than a place name: a street address and postcode say which door, and a venue URL may be a map link carrying coordinates. Nothing renders a URL either, so keeping it would keep data for no reader.
+- **Publishable.** A checkin gives a post something to publish, as a like does: Swarm sends one with no content.
+- **One location.** A post has one location. A `location` sent beside a `checkin` describes the same place: the checkin's words and coordinates win, and the location fills in what the checkin leaves out. The post is then a checkin. A second `checkin` value, or one that is not an h-card naming a place, is refused by name.
+- **Read and update.** `q=source` answers a checkin as `checkin`, an h-card, and no `location`; a create takes that answer back as the same checkin. An update's `replace` of `checkin` replaces the location, and `delete` of it removes the location. An update that replaces `location` on a checkin leaves an ordinary location, and one that deletes `location` removes the checkin too, since they are one value.
+- **The editor.** The Location box has an A check-in box, ticked for a checkin, so an editor save keeps the mark, and unticking it leaves an ordinary location.
+- **Readers.** The mark is for the author's own clients. `shareLocation` never passes it on, so the theme prints a checkin as any other `p-location` and federation as any other `Place`, only as far as Settings > Privacy allows, and with the default nothing of it. The IndieWeb checkin post type ("Checked in at …") was not built. It would put the mark into `SharedLocation`, and so publish one more fact, that the author was at the venue when posting, which no sharing level names, for a sentence the printed place already says.
+- **`q=config`.** `checkin` is not listed in any post type's `properties`: the clients that send it, Swarm bridges and micropub.rocks, do not read the list, and a client that does would offer a field for an h-card.
+
+A checkin kept by TASK-237 before this lands stays in `data/kept-properties.json`, unread. Both ship together, so no site has one.

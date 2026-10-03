@@ -367,11 +367,7 @@ describe('action=update (AC #2)', () => {
   });
 
   for (const [label, update, named] of [
-    [
-      'a property it does not map',
-      { replace: { checkin: ['https://places.example/'] } },
-      /checkin/,
-    ],
+    ['an mp- command', { replace: { 'mp-channel': ['notes'] } }, /mp-channel/],
     ['mp-slug', { replace: { 'mp-slug': ['moved'] } }, /mp-slug/],
     ['a second name', { add: { name: ['Another'] } }, /name takes one value/],
     ['replace that is not an object', { replace: ['content'] }, /replace/],
@@ -558,7 +554,7 @@ describe('scopes (AC #5)', () => {
       const file = await fileOf(cms, url);
 
       const refused = await postJson(cms, without, { action, url, ...body });
-      assert.equal(refused.status, 403);
+      assert.equal(refused.status, 401);
       assert.equal(((await refused.json()) as { error: string }).error, 'insufficient_scope');
       assert.equal(await fileOf(cms, url), file);
 

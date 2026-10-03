@@ -1464,6 +1464,109 @@ describe('writing a post', () => {
   });
 });
 
+describe('the slug of a post with no title and no text (TASK-242)', () => {
+  async function slugOf(fields: Record<string, string>): Promise<string | null> {
+    const cms = await box.site({ contentDir: await seeded([]) });
+    const agent = await signedIn(cms);
+    const response = await submit(agent, '/admin/posts/new', {
+      title: '',
+      slug: '',
+      body: '',
+      action: 'save-draft',
+      ...fields,
+    });
+    assert.equal(response.status, 303, await response.clone().text());
+    return response.headers.get('location');
+  }
+
+  const cases = [
+    ['like-of', 'http://scripting.com/', 'liked-scripting-com'],
+    [
+      'like-of',
+      'https://indieweb.social/@andrewshell/117249870148068466',
+      'liked-indieweb-social-andrewshell',
+    ],
+    [
+      'repost-of',
+      'https://www.peer.example/notes/a-quiet-morning',
+      'reposted-peer-example-notes-a',
+    ],
+    ['bookmark-of', 'https://peer.example/', 'bookmarked-peer-example'],
+    ['in-reply-to', 'https://peer.example/2026/10/03/hello/', 'reply-to-peer-example-hello'],
+    ['in-reply-to', 'https://peer.example/%C3%A9t%C3%A9', 'reply-to-peer-example-ete'],
+  ] as const;
+
+  for (const [property, target, slug] of cases) {
+    it(`names a ${property} of ${target} ${slug}`, async () => {
+      assert.equal(await slugOf({ [property]: target }), `/admin/posts/${slug}`);
+    });
+  }
+
+  it('names a photo post photo', async () => {
+    assert.equal(
+      await slugOf({ 'photo-url-0': 'https://peer.example/a.jpg', 'photo-alt-0': 'A gull' }),
+      '/admin/posts/photo',
+    );
+  });
+
+  it('names a reply with a photo by what it replies to, as its type does', async () => {
+    assert.equal(
+      await slugOf({
+        'in-reply-to': 'https://peer.example/a-post/',
+        'photo-url-0': 'https://peer.example/a.jpg',
+        'photo-alt-0': 'A gull',
+      }),
+      '/admin/posts/reply-to-peer-example-a-post',
+    );
+  });
+
+  it('still takes a like’s slug from its text when it has some', async () => {
+    assert.equal(
+      await slugOf({ 'like-of': 'http://scripting.com/', body: 'So good.' }),
+      '/admin/posts/so-good',
+    );
+  });
+
+  it('gives a second like of the same page -2', async () => {
+    const cms = await box.site({ contentDir: await seeded([]) });
+    const agent = await signedIn(cms);
+    const like = {
+      title: '',
+      slug: '',
+      body: '',
+      date: '2026-10-03T10:00:00Z',
+      'like-of': 'http://scripting.com/',
+      action: 'publish',
+    };
+    const first = await submit(agent, '/admin/posts/new', like);
+    const second = await submit(agent, '/admin/posts/new', like);
+    assert.equal(first.headers.get('location'), '/admin/posts/liked-scripting-com');
+    assert.equal(second.headers.get('location'), '/admin/posts/liked-scripting-com-2');
+  });
+
+  it('leaves an existing untitled post at its slug when it becomes a like', async () => {
+    const cms = await box.site({
+      contentDir: await seeded([
+        {
+          file: 'posts/2026-10-03-untitled.md',
+          title: '',
+          date: '2026-10-03',
+          permalink: '/2026/10/untitled/',
+          body: '',
+        },
+      ]),
+    });
+    const agent = await signedIn(cms);
+    const response = await submit(agent, '/admin/posts/untitled', {
+      'like-of': 'http://scripting.com/',
+      action: 'update',
+    });
+    assert.equal(response.status, 303, await response.clone().text());
+    assert.equal(response.headers.get('location'), '/admin/posts/untitled');
+    assert.equal(cms.store.getBySlug('untitled')?.permalink, '/2026/10/untitled/');
+  });
+});
+
 describe('editing a post', () => {
   it('updates the file and the public page without a restart', async () => {
     const contentDir = await seeded([

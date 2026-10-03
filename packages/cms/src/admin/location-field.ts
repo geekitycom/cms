@@ -8,6 +8,7 @@ export interface LocationForm {
   locality: string;
   region: string;
   country: string;
+  checkin: boolean;
 }
 
 export const LOCATION_FIELDS = {
@@ -17,6 +18,7 @@ export const LOCATION_FIELDS = {
   locality: 'location-locality',
   region: 'location-region',
   country: 'location-country',
+  checkin: 'location-checkin',
 } as const satisfies Record<keyof LocationForm, string>;
 
 export const BLANK_LOCATION_FORM: LocationForm = {
@@ -26,6 +28,7 @@ export const BLANK_LOCATION_FORM: LocationForm = {
   locality: '',
   region: '',
   country: '',
+  checkin: false,
 };
 
 export function locationForm(location: PostLocation | undefined): LocationForm {
@@ -43,6 +46,7 @@ export function locationForm(location: PostLocation | undefined): LocationForm {
     locality: location.locality ?? '',
     region: location.region ?? '',
     country: location.country ?? '',
+    checkin: location.checkin === true,
   };
 }
 
@@ -55,6 +59,7 @@ export function readLocationForm(body: Record<string, unknown>): LocationForm {
     locality: field(LOCATION_FIELDS.locality),
     region: field(LOCATION_FIELDS.region),
     country: field(LOCATION_FIELDS.country),
+    checkin: body[LOCATION_FIELDS.checkin] !== undefined,
   };
 }
 
@@ -75,6 +80,7 @@ export function resolveLocation(
       locality: word(form.locality),
       region: word(form.region),
       country: word(form.country),
+      checkin: form.checkin ? true : undefined,
     }),
   };
 }

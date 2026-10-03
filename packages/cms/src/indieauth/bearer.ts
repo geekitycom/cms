@@ -18,9 +18,13 @@ import type { Audience, StoredToken } from './tokens.ts';
  */
 export interface Guard {
   readonly audience: Audience | 'authorization-server';
-  /** The scope the route needs, when it needs one. */
-  readonly scope?: Scope;
+  readonly scopes?: Scopes;
+  readonly insufficientScopeStatus?: InsufficientScopeStatus;
 }
+
+export type InsufficientScopeStatus = 401 | 403;
+
+export type Scopes = readonly [Scope, ...Scope[]];
 
 /** What a guarded route is handed: the connection and the person behind it. */
 export interface Bearer {
@@ -34,7 +38,8 @@ export interface BearerEnv {
 
 /**
  * Turn the access token on a request into the user and scopes it grants, and
- * refuse the request when it has none, a bad one, or one without `scope`.
+ * refuse the request when it has none, a bad one, or one without any of
+ * `scopes`.
  *
  * The token comes from an `Authorization: Bearer` header or, as Micropub
  * allows, an `access_token` field of a form body. A refusal carries
@@ -69,8 +74,8 @@ export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
       return refuse(c, 401, 'invalid_token', description, { error: 'invalid_token' });
     }
 
-    if (guard.scope !== undefined && !token.scopes.includes(guard.scope)) {
-      return insufficientScope(c, guard.scope);
+    if (guard.scopes !== undefined && !guard.scopes.some((scope) => token.scopes.includes(scope))) {
+      return insufficientScope(c, guard.scopes, guard.insufficientScopeStatus ?? 403);
     }
 
     await recordUse(config.dataDir, token, now);
@@ -80,14 +85,19 @@ export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
 }
 
 /**
- * The 403 for a token that lacks `scope`, for a route that only learns which
- * scope it needs from the request, as a Micropub POST does from its action.
+ * The refusal of a token that lacks every one of `scopes`, for a route that
+ * only learns which scope it needs from the request, as a Micropub POST does
+ * from its action.
  */
-export function insufficientScope(c: Context<BearerEnv>, scope: Scope): Response {
-  const description = `The access token was not granted the ${scope} scope.`;
-  return refuse(c, 403, 'insufficient_scope', description, {
+export function insufficientScope(
+  c: Context<BearerEnv>,
+  scopes: Scopes,
+  status: InsufficientScopeStatus,
+): Response {
+  const description = `The access token was not granted the ${scopes.join(' or ')} scope.`;
+  return refuse(c, status, 'insufficient_scope', description, {
     error: 'insufficient_scope',
-    scope,
+    scope: scopes.join(' '),
   });
 }
 

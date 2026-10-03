@@ -182,6 +182,36 @@ describe("indiebookclub's read posts (TASK-229)", () => {
     assert.deepEqual(data['read-of'], STORED);
   });
 
+  it('answers 201 to the request App activity recorded, visibility Public (TASK-243)', async () => {
+    const { cms, token } = await site();
+    const location = await created(
+      await post(cms, token, {
+        type: ['h-entry'],
+        properties: {
+          summary: ['Finished reading: The Left Hand of Darkness by Ursula K. Le Guin'],
+          'read-status': ['finished'],
+          'read-of': [
+            {
+              type: ['h-cite'],
+              properties: {
+                name: ['The Left Hand of Darkness'],
+                author: ['Ursula K. Le Guin'],
+                uid: ['isbn:9780441478125'],
+              },
+            },
+          ],
+          'post-status': ['published'],
+          visibility: ['Public'],
+          category: ['books'],
+        },
+      }),
+    );
+    const { data } = matter(await fileOf(cms, location));
+    assert.equal(data['visibility'], undefined, 'public is the default, so no key');
+    assert.deepEqual(data['tags'], ['books']);
+    assert.equal(data['read-status'], 'finished');
+  });
+
   it('refuses a read-status it does not know and a read-of that is no h-cite', async () => {
     const { cms, token } = await site();
     for (const [properties, message] of [

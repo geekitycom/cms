@@ -382,9 +382,31 @@ describe('visibility (AC #4, TASK-227)', () => {
     assert.equal(saved.data['visibility'], 'private');
   });
 
+  for (const [value, stored] of [
+    ['Public', undefined],
+    ['PUBLIC', undefined],
+    ['Unlisted', 'unlisted'],
+  ] as const) {
+    it(`takes ${value} in any case on a create and an update, storing it lowercase`, async () => {
+      const { cms, token } = await site();
+      const location = await created(
+        await quillPost(cms, token, { content: 'Cased.', visibility: value }),
+      );
+      assert.equal(matter(await fileOf(cms, location)).data['visibility'], stored);
+
+      const other = await created(await quillPost(cms, token, { content: 'Later.' }));
+      await update(cms, token, other, { replace: { visibility: ['unlisted'] } });
+      const response = await update(cms, token, other, { replace: { visibility: [value] } });
+      assert.equal(response.status, 204, await response.clone().text());
+      assert.equal(matter(await fileOf(cms, other)).data['visibility'], stored);
+    });
+  }
+
   for (const [value, message] of [
     ['private', /does not publish private posts/],
+    ['Private', /does not publish private posts/],
     ['followers', /visibility is public or unlisted, not followers/],
+    ['Followers', /visibility is public or unlisted, not Followers\./],
   ] as const) {
     it(`refuses ${value} on a create and an update, saying so`, async () => {
       const { cms, token } = await site();

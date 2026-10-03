@@ -129,7 +129,7 @@ export function mountTokenInfoEndpoints(app: Hono<GeekityEnv>): void {
 
   app.get(
     USERINFO_PATH,
-    requireBearer({ audience: 'authorization-server', scope: 'profile' }),
+    requireBearer({ audience: 'authorization-server', scopes: ['profile'] }),
     (c) => {
       c.header('cache-control', 'no-store');
       const { token, user } = c.var.bearer;
