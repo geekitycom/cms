@@ -405,16 +405,23 @@ is an `h3` inside the form's section.
 `div.reply-context.cite.u-in-reply-to.h-cite`: a rule on the start side, a
 `p.cite-line` saying "In reply to" and the target's name, author and date as
 far as they are known, and its excerpt as a `blockquote.cite-quote.p-content`.
-An untitled reply prints it under the kicker; a titled reply prints it above
-its header. The same partial cites a reply in a feed.
+Where it goes depends on whether the post shows a title. An untitled reply
+opens on it, under the kicker and before its words. A titled reply prints its
+`header.post-header` first and the citation after it, before the `e-content`,
+so the page opens on its title rather than on a link. A listing follows the
+same rule: an untitled entry cites under its kicker, a titled one after its
+title and summary. The same partial cites a reply in a feed. The layouts own
+the placement; the partial owns only what the citation says, and it stays
+inside the `h-entry` wherever it is printed.
 
 **A like, a repost or a bookmark cites what it cites** (TASK-169) with
 `partials/citations.njk`, beside the reply context and drawn the same way: one
 `div.reply-context.cite.h-cite` per entry of `citations`, classed
 `u-repost-of`, `u-like-of` or `u-bookmark-of`, whose `p.cite-line` says
 Reposted, Liked or Bookmarked and links the target as its `u-url`. Its kicker
-and its hidden `h1` say Repost, Like or Bookmark. A listing cites each entry's
-from the same partial.
+and its hidden `h1` say Repost, Like or Bookmark. It is placed as the reply
+context is: at the top of an untitled post, after the header of a titled one.
+A listing cites each entry's from the same partial, by the same rule.
 
 **A read says what was read** (TASK-229) with `partials/read.njk`, a
 `p.read-line` at the top of the `e-content` that reads like indiebookclub's
@@ -602,7 +609,8 @@ its kicker:
 **Only an article has a headline.** A note, which has no title, is printed
 whole as its `e-content`, and the date in its kicker is its `u-url`. A reply is
 a note that first cites what it answers with `partials/reply-context.njk`, and
-a reply with a title is an article that does. An article's categories are in
+a reply with a title is an article that cites it after its title and summary.
+A like, a repost and a bookmark place `partials/citations.njk` the same way. An article's categories are in
 its kicker; a note's are on its own page.
 
 The excerpt is the entry's `summary`, the very line the feeds publish, so a
