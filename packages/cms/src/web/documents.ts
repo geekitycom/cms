@@ -21,8 +21,6 @@ export type HiddenReason =
   | { readonly kind: 'unrecognized-visibility'; readonly visibility: string };
 
 /**
- * Why a document is hidden, or `undefined` when the public site serves it.
- *
  * The index answers the same rule in SQL, so anything that has to decide
  * about a single document in hand — a permalink, a View link — asks it here
  * rather than deriving the rule again. The clock defaults to the system one; a
@@ -41,7 +39,6 @@ export function hiddenReason(document: Document, now: Date = new Date()): Hidden
   return undefined;
 }
 
-/** Whether the public site serves a document at its URL: whether nothing hides it. */
 export function isServed(document: Document, now: Date = new Date()): boolean {
   return hiddenReason(document, now) === undefined;
 }
@@ -70,12 +67,6 @@ export function publicDocumentAt(store: ContentStore, permalink: string): Docume
   return document;
 }
 
-/**
- * The document a signed-in user may read at a permalink the public site does
- * not serve, or `undefined`: a draft, a scheduled post, or one whose
- * visibility the site does not recognize (TASK-235). A trashed one is not
- * anybody's to read.
- */
 export function previewDocumentAt(store: ContentStore, permalink: string): Document | undefined {
   const document = store.getByPermalink(permalink);
   if (document === undefined) return undefined;

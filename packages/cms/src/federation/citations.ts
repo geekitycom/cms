@@ -2,8 +2,7 @@
  * How a like or a repost federates (decision-28): as the `Like` or `Announce`
  * of the fediverse object it cites, when what it cites is one. Every other
  * post, a bookmark included, federates as the `Note` or `Article` it is, whose
- * content links the page it cites. A reply to a fediverse status names that
- * status by its id and mentions its author (TASK-240).
+ * content links the page it cites.
  */
 
 import type { Context } from '@fedify/fedify';
@@ -77,19 +76,11 @@ export async function citingActivity(
   return { activity, author };
 }
 
-/** A fediverse object a post cites, by the id its server gives it, and who wrote it. */
 export interface CitedObject {
   readonly id: URL;
   readonly author: Actor | undefined;
 }
 
-/**
- * The fediverse status a reply answers (TASK-240), or `undefined` for a reply
- * to anything else, which federates with the URL it names as its `inReplyTo`.
- *
- * A reply to one of the site's own pages is not looked up: its URL is already
- * the object's id, and its author is this site, which needs no telling.
- */
 export async function repliedTo(
   context: Context<FederationContextData>,
   document: Document,
@@ -102,10 +93,6 @@ export async function repliedTo(
 }
 
 /**
- * What `target` is as a fediverse object, or `undefined` when it is none this
- * site can fetch: a page with no ActivityPub form, an actor, or a host that
- * does not answer.
- *
  * The object is named by the id its server gives it, not by the URL the post
  * cites, because a status's page and its id are often two URLs. The fetch is
  * signed as the post's author, as a server in authorized fetch mode needs.

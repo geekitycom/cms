@@ -163,7 +163,6 @@ export function createReplyContextService(
   };
 }
 
-/** Every URL a post cites: what it answers, then what it reposts, likes or bookmarks. */
 function targetsOf(document: Document | undefined): string[] {
   if (document === undefined) return [];
   const answered = replyTarget(document);

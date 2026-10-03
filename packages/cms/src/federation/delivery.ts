@@ -304,7 +304,6 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     );
   }
 
-  /** Tell the peers that already hold a post how it reads now: its `Update`. */
   async function revise(
     context: Context<FederationContextData>,
     document: Document,

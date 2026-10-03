@@ -99,10 +99,6 @@ function renderBar(c: Context<GeekityEnv>, account: SignedInAccount): string {
     .trim();
 }
 
-/**
- * What the page of a document the public site does not serve tells the
- * signed-in user reading it (TASK-235), or `undefined` for a served one.
- */
 function unpublishedNotice(c: Context<GeekityEnv>, document: Document): string | undefined {
   const reason = hiddenReason(document, c.var.store.now());
   if (reason === undefined) return undefined;

@@ -1,9 +1,3 @@
-/**
- * A post the public site does not serve, read at its permalink by the person
- * signed in (TASK-235): iA Writer posts a draft over Micropub and opens the URL
- * it was handed, which has to show the author the draft and nobody else
- * anything at all.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -65,7 +59,6 @@ async function site(): Promise<Cms> {
   return await box.open({ contentDir, dataDir, baseUrl: BASE_URL, watch: false, now: () => NOW });
 }
 
-/** A request with whatever headers it names, carrying the browser's session when given one. */
 async function request(
   cms: Cms,
   url: string,
@@ -83,10 +76,6 @@ async function request(
   return await cms.app.request(url, { method: options.method ?? 'GET', headers });
 }
 
-/**
- * Status, headers and body, less the clock and the URL itself: a 404 page
- * names the address it was asked for, whatever lived there.
- */
 async function snapshot(
   response: Response,
   url: string,

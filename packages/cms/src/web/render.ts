@@ -672,8 +672,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // an entry (TASK-79). Each is on the context only when there is one, so a
     // theme asks `{% if previous %}` and the ends of the archive draw nothing.
     const either = options.neighbours?.(document) ?? {};
-    // What the pages it answers, reposts, likes or bookmarks say about
-    // themselves (TASK-123, TASK-244).
     const cited = citedBy(document);
     // The targets this post links to and the copies they made of it
     // (TASK-155): the links a target verifies sit inside the h-entry, so they

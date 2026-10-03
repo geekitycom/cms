@@ -103,8 +103,7 @@ function attribution(
  * Who a post, its `Create` and its `Update` are addressed to. A public post is
  * to Public with its author's followers in `cc`; an unlisted one swaps the
  * two, which is how Mastodon marks a post anybody may fetch but that stays off
- * public timelines (TASK-227). The author of a status it replies to is copied
- * in either way (TASK-240).
+ * public timelines (TASK-227).
  */
 function addressing(
   document: Document,
@@ -243,10 +242,6 @@ function postObjectType(document: Document): PostObjectType {
  * `attributedTo` is the actor of the user the post's `author` names
  * (decision-14), and `cc` is that user's followers: a post belongs to a person
  * on this site, not to the site.
- *
- * `replyTo` is the fediverse status a reply answers, which only delivery
- * looks up (TASK-240): its id becomes `inReplyTo`, and its author is
- * mentioned and copied in. Without it a reply names the URL it cites.
  */
 export function postObject(
   context: Context<FederationContextData>,

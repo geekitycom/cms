@@ -33,8 +33,6 @@
     {% else %}
     {{ kicker.line(post.postType | capitalize, post.date, post.url, [], post.label, lang=post.lang) }}
     {% endif %}
-    {#- What it answers, reposts, likes or bookmarks, from the partials an
-        entry cites them with, printed where the entry's page prints them. -#}
     {% set cited %}
     {% if post.inReplyTo %}
     {% set inReplyTo = post.inReplyTo %}

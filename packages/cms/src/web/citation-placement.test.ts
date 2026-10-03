@@ -1,10 +1,3 @@
-/**
- * A post that shows a title prints its header first and what it cites or
- * answers after it, before its words; a post with no title opens on the
- * citation (TASK-241). Moving the markup changes nothing a microformats parser
- * reads. Asserted over HTTP against the packaged theme, because the markup is
- * the behaviour.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -81,7 +74,6 @@ before(async () => {
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, contents, 'utf8');
   }
-  // The replies' target is not a public address, so fetching its context warns.
   const warn = console.warn;
   console.warn = () => undefined;
   try {
@@ -98,7 +90,6 @@ async function get(pathname: string): Promise<string> {
   return response.text();
 }
 
-/** The `<article>` on a page, or in a listing the one that links to the slug. */
 function article(html: string, slug?: string): string {
   const all = [...html.matchAll(/<article\b[\s\S]*?<\/article>/g)].map((match) => match[0]);
   const found = slug === undefined ? all[0] : all.find((one) => one.includes(`/2026/09/${slug}/`));
@@ -106,7 +97,6 @@ function article(html: string, slug?: string): string {
   return found;
 }
 
-/** Where each pattern first matches, in the order given; -1 when it does not. */
 function at(html: string, ...patterns: RegExp[]): number[] {
   return patterns.map((pattern) => html.search(pattern));
 }
@@ -194,7 +184,6 @@ function entries(html: string, url: string): Item[] {
   return found;
 }
 
-/** What a parser should read from a post's h-entry, wherever its citation sits. */
 function expected({ slug, title, property }: Post, listed: boolean): Record<string, unknown> {
   const keys = ['published', 'url'];
   if (title !== undefined) keys.push('name', 'summary');

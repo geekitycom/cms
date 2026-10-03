@@ -60,13 +60,9 @@ const CAROL_INBOX = `${REMOTE_ORIGIN}/users/carol/inbox`;
 const STATUS_ID = `${REMOTE_ORIGIN}/users/carol/statuses/1`;
 const STATUS_URL = `${REMOTE_ORIGIN}/@carol/1`;
 
-/**
- * A second fediverse author on the followers' own instance, so a reply to her
- * status reaches an inbox the followers already share (TASK-240).
- */
-const DORA_ACTOR = `${REMOTE_ORIGIN}/users/dora`;
-const DORA_STATUS_ID = `${REMOTE_ORIGIN}/users/dora/statuses/2`;
-const DORA_STATUS_URL = `${REMOTE_ORIGIN}/@dora/2`;
+const SHARED_INBOX_AUTHOR = `${REMOTE_ORIGIN}/users/dora`;
+const SHARED_INBOX_AUTHOR_STATUS_ID = `${REMOTE_ORIGIN}/users/dora/statuses/2`;
+const SHARED_INBOX_AUTHOR_STATUS_URL = `${REMOTE_ORIGIN}/@dora/2`;
 
 /** A page on the remote host that is no ActivityPub object. */
 const PLAIN_PAGE = `${REMOTE_ORIGIN}/blog/a-page/`;
@@ -87,14 +83,13 @@ interface Delivery {
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const deliveries: Delivery[] = [];
-/** Every URL on the site's own origin it asked of the network. */
 const ownFetches: string[] = [];
 
 let remoteActorDocument: unknown;
 let carolDocument: unknown;
 let statusDocument: unknown;
-let doraDocument: unknown;
-let doraStatusDocument: unknown;
+let sharedInboxAuthorDocument: unknown;
+let sharedInboxAuthorStatusDocument: unknown;
 let restoreFetch: () => void;
 
 before(async () => {
@@ -111,16 +106,16 @@ before(async () => {
     attribution: new URL(CAROL_ACTOR),
     content: 'Something worth liking.',
   }).toJsonLd();
-  doraDocument = await new Person({
-    id: new URL(DORA_ACTOR),
+  sharedInboxAuthorDocument = await new Person({
+    id: new URL(SHARED_INBOX_AUTHOR),
     preferredUsername: 'dora',
-    inbox: new URL(`${DORA_ACTOR}/inbox`),
+    inbox: new URL(`${SHARED_INBOX_AUTHOR}/inbox`),
     endpoints: new Endpoints({ sharedInbox: new URL(REMOTE_SHARED_INBOX) }),
   }).toJsonLd();
-  doraStatusDocument = await new Note({
-    id: new URL(DORA_STATUS_ID),
-    url: new URL(DORA_STATUS_URL),
-    attribution: new URL(DORA_ACTOR),
+  sharedInboxAuthorStatusDocument = await new Note({
+    id: new URL(SHARED_INBOX_AUTHOR_STATUS_ID),
+    url: new URL(SHARED_INBOX_AUTHOR_STATUS_URL),
+    attribution: new URL(SHARED_INBOX_AUTHOR),
     content: 'Something worth answering.',
   }).toJsonLd();
   restoreFetch = routeRemoteHost();
@@ -189,9 +184,9 @@ function routeRemoteHost(): () => void {
       [new URL(CAROL_ACTOR).pathname, carolDocument],
       [new URL(STATUS_ID).pathname, statusDocument],
       [new URL(STATUS_URL).pathname, statusDocument],
-      [new URL(DORA_ACTOR).pathname, doraDocument],
-      [new URL(DORA_STATUS_ID).pathname, doraStatusDocument],
-      [new URL(DORA_STATUS_URL).pathname, doraStatusDocument],
+      [new URL(SHARED_INBOX_AUTHOR).pathname, sharedInboxAuthorDocument],
+      [new URL(SHARED_INBOX_AUTHOR_STATUS_ID).pathname, sharedInboxAuthorStatusDocument],
+      [new URL(SHARED_INBOX_AUTHOR_STATUS_URL).pathname, sharedInboxAuthorStatusDocument],
     ]).get(url.pathname);
     if (served !== undefined) {
       return new Response(JSON.stringify(served), {
@@ -869,7 +864,6 @@ describe('a reply to a fediverse status (TASK-240)', () => {
   const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
   const FOLLOWERS = `${BASE_URL}/author/${ADA}/followers/`;
 
-  /** Publish a note in reply to `target`, and wait for what it sent. */
   async function reply(
     target: string,
     fields: Record<string, string> = {},
@@ -940,7 +934,7 @@ describe('a reply to a fediverse status (TASK-240)', () => {
   });
 
   it('posts once to an inbox the author shares with the followers (AC #2)', async () => {
-    await reply(DORA_STATUS_URL);
+    await reply(SHARED_INBOX_AUTHOR_STATUS_URL);
 
     const creates = delivered('Create');
     assert.deepEqual(
@@ -948,8 +942,8 @@ describe('a reply to a fediverse status (TASK-240)', () => {
       [REMOTE_SHARED_INBOX],
     );
     const note = objectOf(creates[0] as Delivery);
-    assert.equal(note['inReplyTo'], DORA_STATUS_ID);
-    assert.deepEqual(list(note['cc']).sort(), [DORA_ACTOR, FOLLOWERS].sort());
+    assert.equal(note['inReplyTo'], SHARED_INBOX_AUTHOR_STATUS_ID);
+    assert.deepEqual(list(note['cc']).sort(), [SHARED_INBOX_AUTHOR, FOLLOWERS].sort());
   });
 
   it('sends the Update of an edited reply to the author as well (AC #2)', async () => {

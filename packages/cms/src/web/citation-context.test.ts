@@ -1,9 +1,3 @@
-/**
- * A like, a repost or a bookmark names what it cites (TASK-244): the target is
- * fetched when the post is saved or synced, the way a reply's is (decision-19),
- * and its title and author fill in the citation line on the post's page and in
- * listings. Asserted over HTTP, because the markup is the behaviour.
- */
 import assert from 'node:assert/strict';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -29,7 +23,6 @@ const SOUND = 'https://sound.example/forss/flickermood';
 const SOUND_LOWER = 'https://sound.example/forss/lower';
 const RICK = 'https://video.example/watch?v=dQw4w9WgXcQ';
 
-/** A page named only by its oEmbed endpoint, which answers `oembed`. */
 function oembedPage(
   page: string,
   oembed: Record<string, string>,
@@ -152,14 +145,12 @@ async function get(cms: Cms, pathname: string): Promise<string> {
   return response.text();
 }
 
-/** The citation of one property on a page, or `undefined` when there is none. */
 function cite(html: string, property: string): string | undefined {
   return new RegExp(`<div class="reply-context cite u-${property} h-cite">[\\s\\S]*?</div>`).exec(
     html,
   )?.[0];
 }
 
-/** One entry of a listing, the one that links to the post. */
 function entry(html: string, name: string): string {
   const items = html.split('<article class="feed-item h-entry"');
   const found = items.find((each) => each.includes(`href="/2026/09/${name}/"`));
@@ -382,14 +373,12 @@ describe('a citation whose title already names its author', () => {
     page = (name) => get(cms, `/2026/09/${name}/`);
   });
 
-  /** What a reader sees of a citation: its text without the markup. */
   const seen = (citation: string): string =>
     citation
       .replace(/<[^>]+>/g, '')
       .replace(/\s+/g, ' ')
       .trim();
 
-  /** The h-cite a post likes, as a microformats parser reads it. */
   function likeOf(html: string, url: string): { name: unknown; url: unknown; author: unknown } {
     const entry = mf2(html, { baseUrl: url }).items.find((item) => item.type?.includes('h-entry'));
     const cite = entry?.properties['like-of']?.[0] as

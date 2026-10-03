@@ -22,12 +22,7 @@
    to the greeting when the menu closes with focus inside it: Chrome does that
    for a popover in the light DOM, not from inside a shadow root, where the
    focus is simply lost. A click elsewhere has already moved focus by then,
-   and keeps it.
-
-   `notice` is set on the page of a post the public site does not serve, which
-   only a signed-in user is ever shown (TASK-235). It sits in the page's flow
-   under the fixed bar, so it takes its own room without the script, and its
-   inline reset keeps a theme's rules for `body > *` off it. #}
+   and keeps it. #}
 <geekity-admin-bar style="all: initial; display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 99999"><template shadowrootmode="open"><style>{% include "static/admin-bar.css" %}</style>{% include "components/admin-bar.njk" %}<script>
 (() => {
   const host = document.querySelector('geekity-admin-bar');

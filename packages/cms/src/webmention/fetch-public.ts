@@ -23,10 +23,6 @@ export interface FetchPublicOptions {
   readonly timeoutMs: number;
   /** The most of a body that is read. */
   readonly maxBytes: number;
-  /**
-   * What happens to a body over {@link maxBytes}: refused unread (the default),
-   * or cut at the limit and returned marked as truncated.
-   */
   readonly overflow?: 'refuse' | 'truncate';
   /** The `Accept` header sent. */
   readonly accept: string;
@@ -45,7 +41,6 @@ export type PublicFetch =
       /** The response's `Link` header, or `null` when it sent none. */
       readonly link: string | null;
       readonly body: Uint8Array;
-      /** Whether `body` is only the first `maxBytes` of a bigger one. */
       readonly truncated: boolean;
     }
   | { readonly ok: false; readonly reason: string };

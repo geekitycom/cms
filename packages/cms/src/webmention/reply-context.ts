@@ -86,8 +86,6 @@ export async function fetchReplyContext(
   if (!fetched.ok) return fetched;
 
   const root = parseHtml(new TextDecoder().decode(fetched.body));
-  // An h-entry cut short could be missing its author, date or most of its
-  // text, so a truncated page gives only what its head says.
   const entry = fetched.truncated ? undefined : citedEntry(root, fetched.url);
   const endpoint = entry === undefined ? oembedEndpoint(root, fetched.url) : undefined;
   const oembed =
@@ -99,7 +97,6 @@ export async function fetchReplyContext(
   return context === undefined ? refuse('nothing to show') : { ok: true, context };
 }
 
-/** What an oEmbed endpoint says of a page: never its `html`, which is not shown. */
 export interface Oembed {
   readonly title?: string;
   readonly author?: { readonly name: string; readonly url?: string };
@@ -133,11 +130,11 @@ function describe(
   oembed: Oembed | undefined,
 ): ReplyContext | undefined {
   if (entry !== undefined) {
-    const entryName = visible(entry.name);
-    const entryText = visible(entry.text);
+    const entryName = withoutDirectionControls(entry.name);
+    const entryText = withoutDirectionControls(entry.text);
     const named = discoverPostType({ name: entryName, content: entryText }) === 'article';
     const text = excerpt(entryText);
-    const authorName = visible(entry.author?.name);
+    const authorName = withoutDirectionControls(entry.author?.name);
     const authorUrl = entry.author?.url === null ? undefined : webUrl(entry.author?.url ?? '');
     return {
       url: target,
@@ -155,14 +152,15 @@ function describe(
     };
   }
 
-  // A page that offers oEmbed is often one whose <title> is generic or written
-  // by script, so the endpoint's own title goes first.
   const name =
-    visible(oembed?.title) || visible(titleOf(root)) || visible(metaOf(root, 'og:title'));
+    withoutDirectionControls(oembed?.title) ||
+    withoutDirectionControls(titleOf(root)) ||
+    withoutDirectionControls(metaOf(root, 'og:title'));
   const text = excerpt(
-    visible(metaOf(root, 'description')) || visible(metaOf(root, 'og:description')),
+    withoutDirectionControls(metaOf(root, 'description')) ||
+      withoutDirectionControls(metaOf(root, 'og:description')),
   );
-  const authorName = visible(oembed?.author?.name);
+  const authorName = withoutDirectionControls(oembed?.author?.name);
   const author = authorName === '' ? undefined : { ...oembed?.author, name: authorName };
   if (name === '' && text === '' && author === undefined) return undefined;
 
@@ -174,18 +172,13 @@ function describe(
   };
 }
 
-/**
- * A stranger's text as one line without direction controls, which are
- * invisible but reorder what is printed around them.
- */
-function visible(text: string | undefined): string {
+function withoutDirectionControls(text: string | undefined): string {
   return (text ?? '')
     .replace(/\p{Bidi_Control}/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-/** The JSON oEmbed endpoint a page names in its `<link rel="alternate">`, if any. */
 function oembedEndpoint(root: HtmlElement, base: string): string | undefined {
   for (const element of elementsIn(root)) {
     if (element.name !== 'link') continue;
@@ -202,11 +195,6 @@ function oembedEndpoint(root: HtmlElement, base: string): string | undefined {
   return undefined;
 }
 
-/**
- * Ask a page's oEmbed endpoint for its title and author, through the same
- * guards as the page and within what is left of the page's timeout. Any
- * failure is `undefined`: the page is then described without it.
- */
 async function fetchOembed(
   endpoint: string,
   limits: { readonly lookup: HostLookup; readonly deadline: number; readonly maxBytes: number },
@@ -248,7 +236,6 @@ async function fetchOembed(
   };
 }
 
-/** A JSON value as one line of text, or `undefined` when it is no text or empty. */
 function plainText(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const text = value.replace(/\s+/g, ' ').trim();

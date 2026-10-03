@@ -458,13 +458,8 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     return negotiateDocument(c, document, selectFromAccept(c, DOCUMENT_REPRESENTATIONS));
   }
 
-  // The author's own view of a post nobody else may see (TASK-235). Anything
-  // short of a signed-in request for the HTML goes on to the 404 everybody
-  // else gets, so nothing about the answer says a hidden post is here.
-  if (c.var.signedIn !== undefined && selectFromAccept(c, DOCUMENT_REPRESENTATIONS) === 'html') {
-    const hidden = previewDocumentAt(store, pathname);
-    if (hidden !== undefined) return negotiateDocument(c, hidden, 'html');
-  }
+  const hidden = hiddenDocumentForSignedInHtml(c, pathname);
+  if (hidden !== undefined) return hidden;
 
   const extension = splitRepresentationExtension(pathname);
   if (extension !== undefined) {
@@ -591,6 +586,16 @@ function taxonomyArchive(
  * `/author/{username}/page/1/` collapses onto the archive root the way
  * `/page/1/` collapses onto the home page.
  */
+function hiddenDocumentForSignedInHtml(
+  c: Context<GeekityEnv>,
+  pathname: string,
+): Response | undefined {
+  if (c.var.signedIn === undefined) return undefined;
+  if (selectFromAccept(c, DOCUMENT_REPRESENTATIONS) !== 'html') return undefined;
+  const hidden = previewDocumentAt(c.var.store, pathname);
+  return hidden === undefined ? undefined : negotiateDocument(c, hidden, 'html');
+}
+
 function authorArchive(
   c: Context<GeekityEnv>,
   pathname: string,
