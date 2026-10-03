@@ -6,12 +6,13 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-03 23:56'
+updated_date: '2026-10-03 23:59'
 labels:
   - theme
   - webmention
   - indieweb
 dependencies:
-  - TASK-251
+  - TASK-253
 priority: medium
 type: feature
 ordinal: 267800
@@ -34,4 +35,11 @@ Rendering (theme partials for citations and reply context, page and listings): a
 - [ ] #3 No page makes a request to the cited site or its CDN; pictures are fetched through the guarded fetch with a size cap and stored under their own uploads path with metadata stripped
 - [ ] #4 A picture that fails, is too big or is absent leaves the citation as it is today; tests use stubbed hosts
 - [ ] #5 decision-19 records where pictures are kept and when they are forgotten; theme README describes the rendering
+- [ ] #6 The editor shows a cited page's preview card with a remove control (keyboard operable, named, works without JavaScript); removing it is saved in front matter and the page, listings and feeds show the plain citation; it can be shown again
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-03, site owner: likes and bookmarks get the preview too, not just reposts. Like Slack's link unfurl: the preview shows by default and the author can remove it per post with an X. Design: the editor's Responding to group shows the stored preview card (picture and title) under each cited URL once a context exists, with an X control that removes it. It must work without JavaScript, so a native control (a checkbox or a submit button) styled as an X with an accessible name such as 'Remove the preview of <title>'. Removing it writes a front matter key (e.g. preview: false) and the page, listings and feeds then show the plain citation line. A Micropub post shows the preview until the author removes it in the editor. A new post has no preview until its first save fetches the context (TASK-250); live fetching while typing is out of scope.
+<!-- SECTION:NOTES:END -->
