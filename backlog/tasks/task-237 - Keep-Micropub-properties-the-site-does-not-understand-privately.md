@@ -4,6 +4,7 @@ title: 'Keep Micropub properties the site does not understand, privately'
 status: To Do
 assignee: []
 created_date: '2026-10-03 16:05'
+updated_date: '2026-10-03 16:34'
 labels:
   - micropub
   - interop
@@ -35,4 +36,11 @@ To decide while building and record in decision-27: whether the private store ke
 - [ ] #3 No kept property appears on any public surface (page, .md, .json, feeds, ActivityPub object, search, llms.txt), proven by a test that searches each
 - [ ] #4 Unsupported mp-* commands are still refused; decision-27 records the new rule and its limits
 - [ ] #5 micropub.rocks test 204's request answers 201 even before TASK-236, and README's Micropub section, micropub.rocks results and the Personal data table are updated
+- [ ] #6 A create whose only properties are ones the site does not understand (Quill's weight post: weight as an h-measure plus published) is refused with 400 invalid_request naming them, rather than publishing an empty post
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-03: Quill's weight editor (reachable by URL though q=config hides it) sent type h-entry, weight [h-measure num 317 unit lbs], published, and nothing else; App activity shows 400 'does not understand weight'. Under this task's rule it would be kept privately and an empty post published at /…/untitled/, so a create with nothing the site can publish is refused. Weight is health data: publishing it would be its own post type and its own privacy choice, not part of this task.
+<!-- SECTION:NOTES:END -->
