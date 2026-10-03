@@ -4,12 +4,14 @@ title: Accept a Micropub checkin as the post's location
 status: To Do
 assignee: []
 created_date: '2026-10-03 16:02'
+updated_date: '2026-10-03 16:05'
 labels:
   - micropub
   - interop
   - privacy
 dependencies:
   - TASK-223
+  - TASK-237
 references:
   - packages/cms/src/content/location.ts
   - 'https://micropub.rocks/'
