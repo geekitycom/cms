@@ -5,13 +5,6 @@
  * Only ever your own connections, because a token acts as the person who
  * approved it. Revoking deletes the connection from `data/indieauth-tokens.json`,
  * so the access token and the refresh token stop working on the next request.
- *
- * A token can also be created here for a script or a test tool that takes a
- * pasted token (TASK-230). It is bound to the site, as a Micropub client's is
- * in effect, and has no refresh token because nothing could present one, so
- * it lives as long as the person chooses, never more than a year: long enough
- * for a script not to need a new one every week, short enough that a leaked
- * one stops working on its own.
  */
 
 import type { Context, Hono } from 'hono';
@@ -46,7 +39,6 @@ export const CLIENT_FIELD = 'client_id';
 
 export const CREATE_TOKEN_PATH = `${CONNECTED_APPS_PATH}/tokens`;
 
-/** The lifetimes a created token may be given, in days. */
 const TOKEN_LIFETIME_DAYS = [7, 30, 90, 365] as const;
 
 const DEFAULT_TOKEN_LIFETIME_DAYS = 30;
@@ -63,7 +55,6 @@ interface TokenForm {
 
 type TokenProblems = Partial<Record<keyof TokenForm, string>>;
 
-/** What the screen shows of the Create a token form: refused, or just created. */
 type TokenOutcome =
   | { readonly refused: TokenForm; readonly problems: TokenProblems }
   | { readonly created: { readonly name: string; readonly token: string } };
@@ -172,14 +163,7 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
       },
       config.now(),
     );
-    // Shown on this response rather than through a flash, which would keep it
-    // on the session row until the next page.
-    c.header('cache-control', 'no-store');
-    return render(
-      c,
-      ADMIN_TEMPLATES.connectedApps,
-      screen(c, undefined, { created: { name: form.name, token: accessToken } }),
-    );
+    return showTokenOnceWithoutStoringIt(c, render, form.name, accessToken);
   });
 
   app.post(REVOKE_CONNECTION_PATH, async (c) => {
@@ -263,8 +247,21 @@ function row(token: StoredToken, timezone: string) {
   };
 }
 
-/** What to call a connection: the name it was created with, the client's own, or its URL. */
 function clientLabel(token: StoredToken): string {
   if (token.kind === 'created') return token.name;
   return token.clientName ?? token.clientId;
+}
+
+function showTokenOnceWithoutStoringIt(
+  c: Context<GeekityEnv>,
+  render: AdminRender,
+  name: string,
+  token: string,
+): Response | Promise<Response> {
+  c.header('cache-control', 'no-store');
+  return render(
+    c,
+    ADMIN_TEMPLATES.connectedApps,
+    screen(c, undefined, { created: { name, token } }),
+  );
 }

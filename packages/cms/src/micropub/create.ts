@@ -63,7 +63,6 @@ const MAPPED_ON_THEIR_OWN = [
   'read-status',
 ] as const;
 
-/** A property {@link createForm} accepts under its own name. */
 export type Property =
   | keyof typeof SINGLE_VALUED
   | keyof typeof ACCEPTED_WITHOUT_EFFECT

@@ -1,8 +1,3 @@
-/**
- * q=config's post types (TASK-228): each type lists the properties a create of
- * that type accepts, so a client that reads the list, as Micropublish does,
- * never offers a field the site refuses.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -29,7 +24,6 @@ after(() => {
   globalThis.fetch = originalFetch;
 });
 
-/** A value createForm accepts for each property a listing may name. */
 const SAMPLES: Readonly<Record<string, unknown>> = {
   name: 'A title of its own',
   content: 'Words that do not open with the title.',

@@ -39,7 +39,6 @@ import type { CreatedForm, CreateRequest, Property } from './create.ts';
 import { parseChanges, sourceProperties, updateForm } from './update.ts';
 import type { Change } from './update.ts';
 
-/** The properties every type takes without becoming another type. */
 const ANY_TYPE: readonly Property[] = [
   'content',
   'summary',

@@ -41,12 +41,10 @@ export const REFRESH_TOKEN_LIFETIME_MS = 60 * 24 * 60 * 60 * 1000;
  */
 export const LAST_USE_RESOLUTION_MS = 60 * 60 * 1000;
 
-/** What every token in the file has, however it was issued. */
 interface Connection {
   /** Stable for the life of the connection, so a screen can name it. */
   readonly id: string;
   readonly userId: number;
-  /** The canonical me URL the token speaks for. */
   readonly me: string;
   readonly scopes: readonly Scope[];
   /** The RFC 8707 resource the token is good at, or absent when the client named none. */
@@ -60,7 +58,6 @@ interface Connection {
   readonly expiresAt: string;
 }
 
-/** One approval of a client at the consent screen, which renews its token by refreshing. */
 export interface AppConnection extends Connection {
   readonly kind?: undefined;
   readonly clientId: string;
@@ -71,12 +68,6 @@ export interface AppConnection extends Connection {
   readonly refreshExpiresAt: string;
 }
 
-/**
- * A token the person made on the connected apps screen to paste into a script
- * or a test tool (TASK-230). No client asked for it, so it has a name in place
- * of one, and nothing could present a refresh token, so it has none: it works
- * until its access token expires.
- */
 export interface CreatedToken extends Connection {
   readonly kind: 'created';
   readonly name: string;
@@ -85,7 +76,6 @@ export interface CreatedToken extends Connection {
 /** One connection as the file keeps it. */
 export type StoredToken = AppConnection | CreatedToken;
 
-/** What the connected apps screen asks a token to be made with. */
 interface TokenRequest {
   readonly userId: number;
   readonly me: string;
@@ -161,10 +151,6 @@ export async function issueTokens(
   return { accessToken: minted.accessToken, refreshToken: minted.refreshToken, token };
 }
 
-/**
- * Make a token for `request.userId`, answering it alongside its record: the
- * only time the token exists anywhere.
- */
 export async function createToken(
   dataDir: string,
   request: TokenRequest,
@@ -187,11 +173,6 @@ export async function createToken(
   return { accessToken, token };
 }
 
-/**
- * When `token` can no longer be used at all: an app's when its refresh token
- * expires, since it can renew its access token until then, and a created
- * token's when its access token does.
- */
 export function lapsesAt(token: StoredToken): string {
   return token.kind === 'created' ? token.expiresAt : token.refreshExpiresAt;
 }

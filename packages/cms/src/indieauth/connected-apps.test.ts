@@ -284,7 +284,6 @@ describe('creating a token (TASK-230)', () => {
     return await agent.post(CREATE, [['csrf_token', csrf], ...fields]);
   }
 
-  /** The token a successful create shows, read off the page. */
   function shownToken(html: string): string {
     const match = /id="created-token"[^>]*value="([^"]+)"/.exec(html);
     assert.ok(match?.[1] !== undefined, 'the page shows the new token');
@@ -302,7 +301,6 @@ describe('creating a token (TASK-230)', () => {
     });
   }
 
-  /** Every file under `dir` whose bytes hold `secret`. */
   async function filesHolding(dir: string, secret: string): Promise<string[]> {
     const found: string[] = [];
     for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
