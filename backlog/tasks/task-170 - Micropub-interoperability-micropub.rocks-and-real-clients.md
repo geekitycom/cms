@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-29 01:55'
-updated_date: '2026-10-03 16:43'
+updated_date: '2026-10-03 16:45'
 labels:
   - micropub
   - indieweb
@@ -33,7 +33,7 @@ Tests prove the endpoint against the spec as we read it; real clients prove it a
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 Every micropub.rocks server test that applies to the implemented features passes, and the results are noted on the task with any skipped tests explained
-- [ ] #2 A note, an article, a reply and a photo post from Quill publish correctly, and a post from one mobile client (Indigenous or similar) publishes
+- [x] #2 A note, an article, a reply and a photo post from Quill publish correctly, and a post from one mobile client (Indigenous or similar) publishes
 - [x] #3 README documents Micropub support, the supported properties, and connecting and revoking a client
 <!-- AC:END -->
 
@@ -99,6 +99,8 @@ AC#3: README.md ## Micropub rewritten as one section (it was ### Micropub under 
 - Inkstone: signs in through the PKCE allowlist but is flaky. Not supported: unmaintained since 2017; no task.
 - indiebookclub: refused for visibility 'Public' (it sends ucfirst labels); TASK-243.
 Still open for AC#2: a Quill note and an article, recorded as published.
+
+2026-10-03: Quill note https://shll.me/2026/10/quill-1/ (200, typed Note) and article https://shll.me/2026/10/quill-title/ (200, typed Article, p-name 'Quill Title') published. With the reply and the photo (greg-photo-quill) and iA Writer on iPadOS, AC#2 holds. AC#1 waits on the rest of the micropub.rocks run.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
