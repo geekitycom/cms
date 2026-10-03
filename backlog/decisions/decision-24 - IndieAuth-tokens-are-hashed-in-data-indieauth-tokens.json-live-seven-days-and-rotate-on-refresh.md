@@ -42,3 +42,7 @@ Micropub clients such as Quill were written for servers whose tokens never expir
 - A client that cannot refresh and is left idle for a week must sign in again.
 - A refresh token presented a second time is refused, but its connection is not revoked. Reuse detection would need the spent hashes kept, and can be added if a client is ever seen leaking one.
 - Changing either lifetime affects only tokens issued afterwards, because each record stores its own expiry.
+
+## Amendment (2026-10-03, TASK-230)
+
+`data/indieauth-tokens.json` also holds tokens a signed-in user creates on Users > Connected apps, for scripts and tools that take a pasted token. Such a record has a name instead of a client, no refresh token, an expiry of at most a year, and the site as its resource, so it works at the Micropub and media endpoints and nowhere else. It is listed and revoked like an app's token, and only its hash is stored.

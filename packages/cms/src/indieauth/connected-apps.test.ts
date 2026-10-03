@@ -3,6 +3,8 @@
  * signed-in person, and the button that cuts one off.
  */
 import assert from 'node:assert/strict';
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
@@ -262,5 +264,162 @@ describe('the list of apps allowed without PKCE (TASK-225)', () => {
     await add(agent, IA_WRITER);
     assert.equal((await agent.post(REMOVE, { client_id: IA_WRITER })).status, 403);
     assert.deepEqual(listed(cms), [IA_WRITER]);
+  });
+});
+
+describe('creating a token (TASK-230)', () => {
+  const CREATE = '/admin/users/apps/tokens';
+  const MICROPUB = '/_geekity/micropub';
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  async function create(
+    agent: Browser,
+    fields: [string, string][] = [
+      ['name', 'Publishing script'],
+      ['scope', 'create'],
+      ['expires', '30'],
+    ],
+  ): Promise<Response> {
+    const csrf = csrfField(await screen(agent)) ?? '';
+    return await agent.post(CREATE, [['csrf_token', csrf], ...fields]);
+  }
+
+  function shownToken(html: string): string {
+    const match = /id="created-token"[^>]*value="([^"]+)"/.exec(html);
+    assert.ok(match?.[1] !== undefined, 'the page shows the new token');
+    return match[1];
+  }
+
+  async function micropub(cms: Cms, token: string, fields: Record<string, string>) {
+    return await cms.app.request(MICROPUB, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams(fields).toString(),
+    });
+  }
+
+  async function filesHolding(dir: string, secret: string): Promise<string[]> {
+    const found: string[] = [];
+    for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const file = path.join(entry.parentPath, entry.name);
+      if ((await readFile(file)).includes(secret)) found.push(file);
+    }
+    return found;
+  }
+
+  it('shows the new token once, with no-store, and lists it by name after', async () => {
+    const { cms, agent } = await site();
+    const before = Date.now();
+    const response = await create(agent);
+    const html = await response.text();
+    assert.equal(response.status, 200, html);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const token = shownToken(html);
+    assert.match(html, /not be shown again/);
+
+    const later = await screen(agent);
+    assert.ok(!later.includes(token), 'the token is not shown a second time');
+    const row = rowFor(later, 'Publishing script');
+    assert.match(row, /Create posts as you/);
+    assert.ok(!row.includes('Upload media'), 'only the scope chosen');
+    assert.match(row, /<button type="submit">Revoke Publishing script<\/button>/);
+
+    const [stored] = listTokens(cms.config.dataDir);
+    assert.ok(stored?.kind === 'created');
+    assert.equal(stored.userId, 1);
+    assert.equal(stored.resource, BASE);
+    assert.deepEqual(stored.scopes, ['create']);
+    const lifetime = Date.parse(stored.expiresAt) - Date.parse(stored.issuedAt);
+    assert.equal(lifetime, 30 * DAY_MS);
+    assert.ok(Date.parse(stored.issuedAt) >= before - 1000);
+  });
+
+  it('posts to Micropub with exactly the scopes chosen, and its value is in no file', async () => {
+    const { cms, agent } = await site();
+    const token = shownToken(await (await create(agent)).text());
+
+    const created = await micropub(cms, token, { h: 'entry', content: 'Posted by a script.' });
+    assert.equal(created.status, 201, await created.clone().text());
+    const url = created.headers.get('location') ?? '';
+    const deleted = await micropub(cms, token, { action: 'delete', url });
+    assert.equal(deleted.status, 403);
+    assert.match(deleted.headers.get('www-authenticate') ?? '', /insufficient_scope/);
+
+    assert.deepEqual(await filesHolding(cms.config.dataDir, token), []);
+    assert.deepEqual(await filesHolding(cms.config.contentDir, token), []);
+  });
+
+  it('is introspected like an app’s token, and revoking it makes the next request 401', async () => {
+    const { cms, agent } = await site();
+    const token = shownToken(await (await create(agent)).text());
+    const introspected = await cms.app.request('/_geekity/indieauth/introspect', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ token }).toString(),
+    });
+    const answer = (await introspected.json()) as Record<string, unknown>;
+    assert.equal(answer['active'], true);
+    assert.equal(answer['scope'], 'create');
+    assert.equal(answer['client_id'], undefined);
+
+    const [stored] = listTokens(cms.config.dataDir);
+    const csrf = csrfField(await screen(agent)) ?? '';
+    const revoked = await agent.post(REVOKE, { csrf_token: csrf, connection: stored?.id ?? '' });
+    assert.equal(revoked.status, 303);
+    assert.match(await screen(agent), /Publishing script can no longer act as you\./);
+
+    const refused = await micropub(cms, token, { h: 'entry', content: 'Too late.' });
+    assert.equal(refused.status, 401);
+  });
+
+  it('refuses a missing name, no scope or an unknown expiry, saving nothing', async () => {
+    const { cms, agent } = await site();
+    for (const fields of [
+      [
+        ['name', ' '],
+        ['scope', 'create'],
+        ['expires', '30'],
+      ],
+      [
+        ['name', 'Script'],
+        ['expires', '30'],
+      ],
+      [
+        ['name', 'Script'],
+        ['scope', 'everything'],
+        ['expires', '30'],
+      ],
+      [
+        ['name', 'Script'],
+        ['scope', 'create'],
+        ['expires', '3650'],
+      ],
+    ] as [string, string][][]) {
+      const response = await create(agent, fields);
+      const html = await response.text();
+      assert.equal(response.status, 400, JSON.stringify(fields));
+      assert.match(html, /Nothing was saved/);
+      assert.match(html, /aria-invalid="true"/);
+      assert.ok(!html.includes('id="created-token"'));
+    }
+    assert.deepEqual(listTokens(cms.config.dataDir), []);
+  });
+
+  it('refuses a create without the CSRF token', async () => {
+    const { cms, agent } = await site();
+    const response = await agent.post(CREATE, [
+      ['name', 'Script'],
+      ['scope', 'create'],
+      ['expires', '30'],
+    ]);
+    assert.equal(response.status, 403);
+    assert.deepEqual(listTokens(cms.config.dataDir), []);
   });
 });

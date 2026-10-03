@@ -16,6 +16,7 @@ import {
   LAST_USE_RESOLUTION_MS,
   REFRESH_TOKEN_LIFETIME_MS,
   TOKENS_FILE,
+  createToken,
   issueTokens,
   listTokens,
   recordUse,
@@ -71,7 +72,7 @@ describe('issuing a token', () => {
     assert.equal((await stat(file)).mode & 0o777, 0o600);
 
     const [stored] = listTokens(dir);
-    assert.ok(stored !== undefined);
+    assert.ok(stored !== undefined && stored.kind !== 'created');
     assert.equal(stored.userId, 1);
     assert.equal(stored.clientId, GRANT.clientId);
     assert.equal(stored.me, GRANT.me);
@@ -86,6 +87,75 @@ describe('issuing a token', () => {
     const second = await issueTokens(dir, GRANT, T0);
     assert.notEqual(first.accessToken, second.accessToken);
     assert.equal(listTokens(dir).length, 2);
+  });
+});
+
+describe('creating a token on the connected apps screen (TASK-230)', () => {
+  const SITE = { resource: BASE, acceptsUnbound: true };
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const created = {
+    userId: 1,
+    me: `${BASE}/`,
+    name: 'Publishing script',
+    scopes: ['create'] as const,
+    resource: BASE,
+    lifetimeMs: THIRTY_DAYS_MS,
+  };
+
+  it('keeps only its hash, beside the apps’ connections, with no client and no refresh token', async () => {
+    const dir = await dataDir();
+    await issueTokens(dir, GRANT, T0);
+    const { accessToken, token } = await createToken(dir, created, T0);
+    const text = await readFile(path.join(dir, TOKENS_FILE), 'utf8');
+
+    assert.equal(text.includes(accessToken), false, 'no token in the file');
+    assert.equal(listTokens(dir).length, 2);
+    assert.equal(listTokens(dir)[1]?.id, token.id);
+    const stored = JSON.parse(text).tokens[1];
+    assert.deepEqual(Object.keys(stored).sort(), [
+      'accessTokenHash',
+      'expiresAt',
+      'id',
+      'issuedAt',
+      'kind',
+      'me',
+      'name',
+      'resource',
+      'scopes',
+      'userId',
+    ]);
+    assert.equal(stored.kind, 'created');
+    assert.equal(stored.expiresAt, later(THIRTY_DAYS_MS).toISOString());
+  });
+
+  it('works at the site resource with its scopes until it expires, and nowhere else', async () => {
+    const dir = await dataDir();
+    const { accessToken } = await createToken(dir, created, T0);
+    assert.deepEqual(verifyAccessToken(dir, accessToken, SITE, T0)?.scopes, ['create']);
+    assert.equal(verifyAccessToken(dir, accessToken, MCP, T0), undefined);
+    assert.ok(verifyAccessToken(dir, accessToken, SITE, later(THIRTY_DAYS_MS - 1)));
+    assert.equal(verifyAccessToken(dir, accessToken, SITE, later(THIRTY_DAYS_MS)), undefined);
+  });
+
+  it('cannot be refreshed, and is revoked by its token or its id', async () => {
+    const dir = await dataDir();
+    const first = await createToken(dir, created, T0);
+    const refreshed = await refreshTokens(dir, refreshForm(first.accessToken), T0);
+    assert.equal(refreshed.ok, false);
+
+    assert.equal(await revokeToken(dir, first.accessToken, T0), true);
+    assert.equal(verifyAccessToken(dir, first.accessToken, SITE, T0), undefined);
+
+    const second = await createToken(dir, created, T0);
+    assert.equal((await revokeConnection(dir, 1, second.token.id, T0))?.id, second.token.id);
+    assert.deepEqual(listTokens(dir), []);
+  });
+
+  it('is forgotten the next time the file is written after it expires', async () => {
+    const dir = await dataDir();
+    await createToken(dir, created, T0);
+    await issueTokens(dir, GRANT, later(THIRTY_DAYS_MS));
+    assert.equal(listTokens(dir).length, 1);
   });
 });
 

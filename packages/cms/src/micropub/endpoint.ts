@@ -35,23 +35,58 @@ import { userForAuthor } from '../web/authors.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 import { createForm, fromForm, fromJson } from './create.ts';
-import type { CreatedForm, CreateRequest } from './create.ts';
+import type { CreatedForm, CreateRequest, Property } from './create.ts';
 import { parseChanges, sourceProperties, updateForm } from './update.ts';
 import type { Change } from './update.ts';
 
+const ANY_TYPE: readonly Property[] = [
+  'content',
+  'summary',
+  'category',
+  'location',
+  'published',
+  'post-status',
+  'visibility',
+  'mp-slug',
+  'mp-syndicate-to',
+];
+
+/** A note has no name: a name its text does not open with makes it an article. */
+const NAMED: readonly Property[] = ['name', ...ANY_TYPE];
+
 /**
- * The name a client shows for each post type the site accepts, in the order
- * it offers them. A record, so a new {@link PostType} cannot go unoffered.
+ * Each post type the site accepts, in the order a client offers them: the
+ * name it shows, the properties it offers, and those Post Type Discovery
+ * needs to call a post that type. Another type's own property is not offered,
+ * since it would make the post that type instead. A record, so a new
+ * {@link PostType} cannot go unoffered.
  */
-const POST_TYPE_NAMES: Readonly<Record<PostType, string>> = {
-  note: 'Note',
-  article: 'Article',
-  reply: 'Reply',
-  photo: 'Photo',
-  like: 'Like',
-  repost: 'Repost',
-  bookmark: 'Bookmark',
-  read: 'Read',
+const POST_TYPES: Readonly<
+  Record<
+    PostType,
+    {
+      readonly name: string;
+      readonly properties: readonly Property[];
+      readonly required: readonly Property[];
+    }
+  >
+> = {
+  note: { name: 'Note', properties: ANY_TYPE, required: ['content'] },
+  article: { name: 'Article', properties: NAMED, required: ['name', 'content'] },
+  reply: { name: 'Reply', properties: ['in-reply-to', ...NAMED], required: ['in-reply-to'] },
+  photo: { name: 'Photo', properties: ['photo', ...NAMED], required: ['photo'] },
+  like: { name: 'Like', properties: ['like-of', ...NAMED], required: ['like-of'] },
+  repost: { name: 'Repost', properties: ['repost-of', ...NAMED], required: ['repost-of'] },
+  bookmark: {
+    name: 'Bookmark',
+    properties: ['bookmark-of', ...NAMED],
+    required: ['bookmark-of'],
+  },
+  read: {
+    name: 'Read',
+    properties: ['read-of', 'read-status', ...NAMED],
+    required: ['read-of', 'read-status'],
+  },
 };
 
 /** Each `q` the endpoint answers. */
@@ -82,7 +117,12 @@ const QUERIES: Readonly<Record<Query, (context: QueryContext) => object>> = {
   config: ({ baseUrl, targets }) => ({
     'media-endpoint': `${baseUrl}${MICROPUB_MEDIA_PATH}`,
     'syndicate-to': offered(targets),
-    'post-types': Object.entries(POST_TYPE_NAMES).map(([type, name]) => ({ type, name })),
+    'post-types': Object.entries(POST_TYPES).map(([type, { name, properties, required }]) => ({
+      type,
+      name,
+      properties,
+      'required-properties': required,
+    })),
     visibility: VISIBILITIES,
     q: QUERY_NAMES,
   }),

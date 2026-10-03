@@ -44,16 +44,14 @@ const SINGLE_VALUED = {
   'mp-slug': 'slug',
 } as const satisfies Record<string, keyof EditorForm>;
 
-const ACCEPTED_WITHOUT_EFFECT: Readonly<Record<string, (value: string) => string | undefined>> = {
-  'p3k-content-type': (type) =>
+const ACCEPTED_WITHOUT_EFFECT = {
+  'p3k-content-type': (type: string) =>
     type === 'text/plain' || type === 'text/markdown'
       ? undefined
       : `p3k-content-type is text/plain or text/markdown, not ${type}.`,
-};
+} as const satisfies Readonly<Record<string, (value: string) => string | undefined>>;
 
-const PROPERTIES = new Set<string>([
-  ...Object.keys(SINGLE_VALUED),
-  ...Object.keys(ACCEPTED_WITHOUT_EFFECT),
+const MAPPED_ON_THEIR_OWN = [
   'content',
   'category',
   'photo',
@@ -63,6 +61,17 @@ const PROPERTIES = new Set<string>([
   'visibility',
   'read-of',
   'read-status',
+] as const;
+
+export type Property =
+  | keyof typeof SINGLE_VALUED
+  | keyof typeof ACCEPTED_WITHOUT_EFFECT
+  | (typeof MAPPED_ON_THEIR_OWN)[number];
+
+const PROPERTIES = new Set<string>([
+  ...Object.keys(SINGLE_VALUED),
+  ...Object.keys(ACCEPTED_WITHOUT_EFFECT),
+  ...MAPPED_ON_THEIR_OWN,
 ]);
 
 /**

@@ -67,6 +67,14 @@ const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> =
   ],
   'pages/users/apps.njk': [
     { withoutPkce: { clients: [], field: 'client_id', value: 'x', problem: 'Wrong client.' } },
+    {
+      createToken: {
+        name: '',
+        scopes: [{ name: 'profile', label: 'Profile', checked: false }],
+        expiries: [{ days: 30, selected: true }],
+        problems: everyProblem,
+      },
+    },
   ],
 };
 
