@@ -48,3 +48,18 @@ A cited page bigger than the byte limit is no longer refused. Its first `maxByte
 ## Amendment (2026-10-03, TASK-250)
 
 A new post with no title and no text that cites a page is named after that page's title, so the fetch for such a post happens during the save rather than after it. The save takes the stored context when the file holds one. Otherwise it fetches the target once, with the same guards and byte limit as every other context fetch but a three-second timeout instead of ten, and waits for the answer. A context it found is written to the file before the post is, and the save's own change does not fetch that target again. A target that fails, has no title or does not answer in three seconds leaves the file as it was; the post is named after the target's address, and the change after the save fetches the target as before, with the full timeout. An edit never fetches during the save, since an existing post keeps its slug.
+
+## Amendment (2026-10-03, TASK-251)
+
+Some providers name no oEmbed endpoint on the page they serve a server, or refuse the server the page, while their endpoint answers it. A YouTube watch page can be a bot check whose `<title>` is only " - YouTube"; TikTok's page says "TikTok - Make Your Day" and Reddit's "Reddit", or Reddit answers 403. So the CMS keeps a table of providers whose JSON oEmbed endpoint is known, matched by host and path:
+
+| Provider | Cited URLs                                                                     | Endpoint                         |
+| -------- | ------------------------------------------------------------------------------ | -------------------------------- |
+| YouTube  | `youtube.com`, `www.youtube.com`, `m.youtube.com`: `/watch?v=…`, `/shorts/…`   | `https://www.youtube.com/oembed` |
+| YouTube  | `youtu.be/…`                                                                   | `https://www.youtube.com/oembed` |
+| TikTok   | `tiktok.com`, `www.tiktok.com`: `/@user/video/…`                               | `https://www.tiktok.com/oembed`  |
+| Reddit   | `reddit.com`, `www.reddit.com`: `/r/…/comments/…`                              | `https://www.reddit.com/oembed`  |
+
+The endpoint is asked with `format=json` and the cited URL. A page's own oEmbed link still wins; the table is asked when the page names none, and also when the page itself could not be fetched, so a refused page still gets a title. An `h-entry` still wins over either. The table's endpoint is fetched with the same guards, byte limit and one deadline as a discovered one, and only its `title`, `author_name` and `author_url` are kept. When the page failed and the endpoint gives nothing, the fetch fails with the page's own reason, as before.
+
+Without oEmbed, a page's `og:title` is now preferred over its `<title>`, which often carries a " - Site" suffix, and a title that is nothing but such a suffix (it starts with a separator such as "-", "|" or "·" and a space) counts as no title. Instagram is left out of the table: its endpoint needs a Facebook app token.

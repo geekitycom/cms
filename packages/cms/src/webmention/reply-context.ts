@@ -62,7 +62,8 @@ export interface FetchReplyContextOptions {
 
 /**
  * Fetch a page a post cites and read what it says about itself, asking its
- * oEmbed endpoint as well when it has no `h-entry`.
+ * oEmbed endpoint as well when it has no `h-entry`: the one the page links,
+ * or else a known provider's, which is asked even when the page is refused.
  *
  * Only http and https, only public hosts (every redirect hop is checked, and a
  * name is refused when any address it resolves to is private), one timeout
@@ -83,18 +84,63 @@ export async function fetchReplyContext(
     accept: 'text/html, */*;q=0.8',
     contentType: { pattern: /^\s*(text\/html|application\/xhtml\+xml)/i, name: 'an HTML page' },
   });
-  if (!fetched.ok) return fetched;
 
-  const root = parseHtml(new TextDecoder().decode(fetched.body));
-  const entry = fetched.truncated ? undefined : citedEntry(root, fetched.url);
-  const endpoint = entry === undefined ? oembedEndpoint(root, fetched.url) : undefined;
+  const root = parseHtml(fetched.ok ? new TextDecoder().decode(fetched.body) : '');
+  const entry = fetched.ok && !fetched.truncated ? citedEntry(root, fetched.url) : undefined;
+  const endpoint =
+    entry === undefined
+      ? ((fetched.ok ? oembedEndpoint(root, fetched.url) : undefined) ?? knownEndpoint(target))
+      : undefined;
   const oembed =
     endpoint === undefined
       ? undefined
       : await fetchOembed(endpoint, { lookup: options.lookup, deadline, maxBytes });
 
   const context = describe(root, entry, target, oembed);
-  return context === undefined ? refuse('nothing to show') : { ok: true, context };
+  if (context !== undefined) return { ok: true, context };
+  return fetched.ok ? refuse('nothing to show') : fetched;
+}
+
+/**
+ * Providers whose JSON oEmbed endpoint is known, for when their page names
+ * none: YouTube, TikTok and Reddit serve a server a generic page, or refuse
+ * it, while their endpoints answer (decision-19).
+ */
+const KNOWN_OEMBED_PROVIDERS: readonly {
+  readonly hosts: readonly string[];
+  /** Tested against the path and query of the cited URL. */
+  readonly path: RegExp;
+  readonly endpoint: string;
+}[] = [
+  {
+    hosts: ['youtube.com', 'www.youtube.com', 'm.youtube.com'],
+    path: /^\/(watch\?(.*&)?v=[\w-]+|shorts\/[\w-]+\/?(\?|$))/,
+    endpoint: 'https://www.youtube.com/oembed',
+  },
+  { hosts: ['youtu.be'], path: /^\/[\w-]+\/?(\?|$)/, endpoint: 'https://www.youtube.com/oembed' },
+  {
+    hosts: ['tiktok.com', 'www.tiktok.com'],
+    path: /^\/@[^/]+\/video\/\d+/,
+    endpoint: 'https://www.tiktok.com/oembed',
+  },
+  {
+    hosts: ['reddit.com', 'www.reddit.com'],
+    path: /^\/r\/[^/]+\/comments\//,
+    endpoint: 'https://www.reddit.com/oembed',
+  },
+];
+
+function knownEndpoint(target: string): string | undefined {
+  const url = webUrl(target);
+  if (url === undefined) return undefined;
+  const provider = KNOWN_OEMBED_PROVIDERS.find(
+    ({ hosts, path }) => hosts.includes(url.hostname) && path.test(url.pathname + url.search),
+  );
+  if (provider === undefined) return undefined;
+  const endpoint = new URL(provider.endpoint);
+  endpoint.searchParams.set('format', 'json');
+  endpoint.searchParams.set('url', target);
+  return endpoint.href;
 }
 
 export interface Oembed {
@@ -109,9 +155,10 @@ export interface Oembed {
  * The first `h-entry` when there is one: its name when it has one of its own
  * (the test Post Type Discovery uses), an excerpt of its text, its author and
  * its date. A page with no `h-entry` is described by its oEmbed title and
- * author when `oembed` holds them, then its `<title>`, `og:title` and
- * description metadata. Everything comes out as plain text; the theme escapes
- * it like any other string.
+ * author when `oembed` holds them, then its `og:title`, `<title>` and
+ * description metadata, where a title that is only a site suffix is none.
+ * Everything comes out as plain text; the theme escapes it like any other
+ * string.
  */
 export function readReplyContext(
   html: string,
@@ -154,8 +201,8 @@ function describe(
 
   const name =
     withoutDirectionControls(oembed?.title) ||
-    withoutDirectionControls(titleOf(root)) ||
-    withoutDirectionControls(metaOf(root, 'og:title'));
+    pageTitle(metaOf(root, 'og:title')) ||
+    pageTitle(titleOf(root));
   const text = excerpt(
     withoutDirectionControls(metaOf(root, 'description')) ||
       withoutDirectionControls(metaOf(root, 'og:description')),
@@ -177,6 +224,12 @@ function withoutDirectionControls(text: string | undefined): string {
     .replace(/\p{Bidi_Control}/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** A page's title, or empty when it is only a site suffix such as "- YouTube". */
+function pageTitle(text: string): string {
+  const title = withoutDirectionControls(text);
+  return /^[-–—|·•:]\s/u.test(title) ? '' : title;
 }
 
 function oembedEndpoint(root: HtmlElement, base: string): string | undefined {
