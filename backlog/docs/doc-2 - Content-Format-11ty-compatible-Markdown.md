@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-03 12:42'
+updated_date: '2026-10-03 13:43'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -53,7 +53,7 @@ Keys the CMS reads and writes. Eleventy semantics are preserved.
 | `tags` | no | collections | taxonomy; `post` tag comes from `posts.json`, not from the file |
 | `categories` | no | data | the second taxonomy, archived at `/category/{name}/`; Eleventy reads it as an ordinary data key |
 | `draft` | no | honoured by an 11ty preprocessor | `true` hides from public site and feeds |
-| `visibility` | no | data | `unlisted` keeps the document's page and drops it from every list; absent is public; any other value hides the document like a draft. See Visibility below |
+| `visibility` | no | honoured by an 11ty preprocessor | `unlisted` keeps the document's page and drops it from every list; absent is public; any other value hides the document like a draft. See Visibility below |
 | `description` | no | data | meta description and excerpt fallback |
 | `layout` | no | template | not written per file; comes from directory data |
 | `eleventyExcludeFromCollections` | no | hides from collections | mirrored for pages that should not list |
@@ -130,7 +130,7 @@ Feeds, the sitemap and the ActivityStreams objects emit instants and are not aff
 
 Public is the key's absence; the editor and Micropub remove the key rather than write `visibility: public`. There are no private posts. A value other than `public` or `unlisted` (a hand-typed `visibility: private`, a misspelling, a number) fails closed further: the document is not served, as if it were a draft. Its URL and its `.md` and `.json` answer 404, it is on no list, and a post the followers hold is withdrawn with a `Delete`. The editor offers the stored value as a third, selected choice and keeps it through a save until Public or Unlisted is chosen; the admin list marks the post Hidden; `q=source` returns the value as stored and a Micropub update that does not name `visibility` keeps it.
 
-In code, `visibilityOf` answers `public`, `unlisted` or `{ unrecognized }`. `isServed` (draft, trash, schedule, a recognized visibility) says whether the site serves a document and `isListed` (served, and public) whether it lists it; the content index answers the same two rules in SQL. An Eleventy build does not know the key and builds an unlisted post into its collections like any other.
+In code, `visibilityOf` answers `public`, `unlisted` or `{ unrecognized }`. `isServed` (draft, trash, schedule, a recognized visibility) says whether the site serves a document and `isListed` (served, and public) whether it lists it; the content index answers the same two rules in SQL. An Eleventy build with `docs/eleventy.config.example.js` reads the key in a preprocessor beside the draft one: `unlisted` sets `eleventyExcludeFromCollections`, so no collection and nothing built from one (a feed, a sitemap, an archive) holds the document, and sets the `noindex` flag for the layout to print as a robots meta; any other value returns `false`, so the build writes no page, as for a draft. A static build sends no `X-Robots-Tag` header and no `Delete`.
 
 ## Micropub
 
