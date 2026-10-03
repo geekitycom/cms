@@ -61,3 +61,27 @@ export function readWorkFrontMatter({ name, author, uid, url }: ReadOf): ReadOf 
     ...(url ? { url } : {}),
   };
 }
+
+export function readLine(read: Read | undefined): string {
+  if (read === undefined) return '';
+  const { status, of } = read;
+  const cited = `<cite class="p-name">${escapeHtml(of.name)}</cite>`;
+  return (
+    `<p class="read-line"><data class="p-read-status" value="${status}">` +
+    `${READ_STATUS_LABELS[status]}</data>: <span class="p-read-of h-cite">` +
+    (of.url === undefined ? cited : `<a class="u-url" href="${escapeHtml(of.url)}">${cited}</a>`) +
+    (of.author === undefined ? '' : ` by <span class="p-author">${escapeHtml(of.author)}</span>`) +
+    (of.uid === undefined
+      ? ''
+      : `, <data class="p-uid" value="${escapeHtml(of.uid)}">${escapeHtml(uidLabel(of.uid))}</data>`) +
+    '</span></p>\n'
+  );
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}

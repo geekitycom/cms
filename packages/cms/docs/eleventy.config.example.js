@@ -27,6 +27,9 @@
  * 12. `soloAuthor`: the user `author` in `site.json` names, read out of
  *     `data/users.json`, so a footer prints their display name as the CMS
  *     does rather than their username.
+ * 13. `visibility: unlisted` builds the page and leaves it out of every
+ *     collection, with `noindex` set for the layout; any other value besides
+ *     `public` hides the document like a draft.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
  * says `"layout": "post"`, `pages.json` says `"layout": "page"` — so
@@ -819,6 +822,15 @@ export default function (eleventyConfig) {
   // them locally.
   eleventyConfig.addPreprocessor('geekity-drafts', '*', (data) => {
     if (data.draft === true && !process.env.BUILD_DRAFTS) return false;
+  });
+
+  eleventyConfig.addPreprocessor('geekity-visibility', '*', (data) => {
+    const visibility = data.visibility;
+    if (visibility === undefined || visibility === null || visibility === 'public') return;
+    if (visibility !== 'unlisted') return false;
+
+    data.eleventyExcludeFromCollections = true;
+    data.noindex = true;
   });
 
   // A post dated in the future is scheduled: the CMS holds it until its date

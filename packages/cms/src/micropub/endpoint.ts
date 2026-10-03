@@ -363,7 +363,12 @@ const ACTIONS: {
 
     const written = await writeDocument(
       { store, config, announce, writer: bearer.user.username },
-      { kind: POST_KIND, document: undefined, ...created, form: photos.form },
+      {
+        kind: POST_KIND,
+        document: undefined,
+        ...created,
+        form: withoutClientReadSummary(photos.form),
+      },
     );
     if (written.outcome === 'refused') {
       await removeUploads(photos.stored, config);
@@ -394,7 +399,7 @@ const ACTIONS: {
 
     const written = await writeDocument(
       { store, config, announce, writer: bearer.user.username },
-      { kind: POST_KIND, document, ...updated },
+      { kind: POST_KIND, document, ...updated, form: withoutClientReadSummary(updated.form) },
     );
     if (written.outcome === 'refused') return invalid(written.message).answer(c);
     if (written.outcome === 'conflict') {
@@ -489,4 +494,8 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
     c.header('cache-control', 'no-store');
     return c.json(answer);
   });
+}
+
+function withoutClientReadSummary(form: EditorForm): EditorForm {
+  return form.readStatus === '' ? form : { ...form, description: '' };
 }

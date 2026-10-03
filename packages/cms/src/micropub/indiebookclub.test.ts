@@ -124,7 +124,7 @@ describe("indiebookclub's read posts (TASK-229)", () => {
     const { data, content } = matter(await fileOf(cms, location));
     assert.equal(data['read-status'], 'to-read');
     assert.deepEqual(data['read-of'], STORED);
-    assert.equal(data['description'], INDIEBOOKCLUB_DOCS_EXAMPLE.properties.summary[0]);
+    assert.equal(data['description'], undefined, 'its summary is the read, said again');
     assert.equal(content.trim(), '');
   });
 
@@ -249,8 +249,81 @@ describe("indiebookclub's read posts (TASK-229)", () => {
 
     assert.equal(object.type, 'Note');
     assert.match(
-      object.content,
-      /Want to read: <cite>The Left Hand of Darkness<\/cite> by Ursula K\. Le Guin, ISBN: 9780441478125/,
+      textOf(object.content),
+      /^Want to read: The Left Hand of Darkness by Ursula K\. Le Guin, ISBN: 9780441478125$/,
+    );
+  });
+
+  it('opens each feed item with the read line the page prints (TASK-233 AC #2)', async () => {
+    const { cms, token } = await site();
+    const location = await created(await post(cms, token, INDIEBOOKCLUB_DOCS_EXAMPLE));
+    const page = await (await cms.app.request(new URL(location).pathname)).text();
+    const line = /<p class="read-line">[\s\S]*?<\/p>/.exec(page)?.[0];
+    assert.ok(line !== undefined, 'the page prints a read line');
+
+    const rss = await (await cms.app.request('/feed/')).text();
+    const atom = await (await cms.app.request('/feed/atom/')).text();
+    const json = (await (await cms.app.request('/feed/json/')).json()) as {
+      items: { content_html: string }[];
+    };
+    const escaped = line
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+    assert.ok(rss.includes(`<content:encoded><![CDATA[${line}`), 'RSS opens with it');
+    assert.ok(atom.includes(`<content type="html">${escaped}`), 'so does Atom');
+    assert.ok(json.items[0]?.content_html.startsWith(line), 'and JSON Feed');
+  });
+
+  it('says the new status everywhere once read-status changes (TASK-233 AC #3)', async () => {
+    const { cms, token } = await site();
+    const location = await created(await post(cms, token, INDIEBOOKCLUB_DOCS_EXAMPLE));
+    const update = await post(cms, token, {
+      action: 'update',
+      url: location,
+      replace: { 'read-status': ['finished'] },
+    });
+    assert.equal(update.status, 204, await update.clone().text());
+
+    const href = new URL(location).pathname;
+    const published: Record<string, string> = {
+      page: await (await cms.app.request(href)).text(),
+      markdown: await (await cms.app.request(`${href}index.md`)).text(),
+      json: await (await cms.app.request(`${href}index.json`)).text(),
+      object: await (
+        await cms.app.request(href, { headers: { accept: 'application/activity+json' } })
+      ).text(),
+      home: await (await cms.app.request('/')).text(),
+      rss: await (await cms.app.request('/feed/')).text(),
+      atom: await (await cms.app.request('/feed/atom/')).text(),
+      jsonFeed: await (await cms.app.request('/feed/json/')).text(),
+      llms: await (await cms.app.request('/llms.txt')).text(),
+    };
+    for (const [surface, body] of Object.entries(published)) {
+      assert.doesNotMatch(body, /Want to read/, `${surface} no longer says the old status`);
+    }
+
+    const description = /<meta name="description" content="([^"]*)"/.exec(published['page'] ?? '');
+    assert.equal(
+      description?.[1],
+      'Finished reading: The Left Hand of Darkness by Ursula K. Le Guin, ISBN: 9780441478125',
+      'the page describes itself by the read',
+    );
+    const jsonLd = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(
+      published['page'] ?? '',
+    );
+    assert.match(
+      jsonLd?.[1] ?? '',
+      /Finished reading: The Left Hand of Darkness/,
+      'and so does JSON-LD',
     );
   });
 });
+
+function textOf(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}

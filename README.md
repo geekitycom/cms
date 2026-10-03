@@ -1694,9 +1694,12 @@ A like, repost or bookmark cites its URL on the post's page and sends that URL
 a webmention when the post is published, as a reply does.
 
 A read prints what was read, such as "Want to read: The Left Hand of Darkness
-by Ursula K. Le Guin, ISBN: 9780441478125", on its page and federates as a
-note that says the same. [indiebookclub](https://indiebookclub.biz/) posts
-reads this way, and a test replays the request its documentation shows.
+by Ursula K. Le Guin, ISBN: 9780441478125", on its page, opens its feed items
+with the same line and federates as a note that says the same. A `read-of`
+with a `url` is sent a webmention, as a citation is. A read keeps no `summary`:
+its summary is that line, so changing `read-status` changes it everywhere.
+[indiebookclub](https://indiebookclub.biz/) posts reads this way, and a test
+replays the request its documentation shows.
 
 A photo file part is stored in the media library the way the media endpoint
 stores a file, and must be an image. A photo URL that points at this site's own

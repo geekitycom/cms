@@ -616,6 +616,23 @@ describe('a read in the editor (TASK-229 AC #2)', () => {
     assert.doesNotMatch(written, /read-/, 'both keys are gone, not left empty');
   });
 
+  it('refuses a description on a read rather than dropping it', async () => {
+    const { contentDir, agent } = await published();
+    const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+    const response = await submit(agent, '/admin/posts/published', {
+      ...BOOK,
+      description: 'My notes on it',
+    });
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /Description/, 'the refusal names the field');
+    assert.equal(
+      await readFile(path.join(contentDir, ...FILE), 'utf8'),
+      before,
+      'nothing is written',
+    );
+  });
+
   it('offers a read-status it does not recognize back as the file spells it', async () => {
     const contentDir = await seeded([
       {

@@ -10,7 +10,7 @@ import type { GeekityEnv } from '../env.ts';
 import { authorHref, parseAuthorPath } from '../web/authors.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { absoluteUrl, prefersActivityStreams } from '../web/negotiate.ts';
-import { requestPath } from '../web/routes.ts';
+import { notFound, requestPath } from '../web/routes.ts';
 import { actorAliases, actorId, userActor } from './actor.ts';
 import { isFederatedDocument, postObject } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
@@ -341,6 +341,7 @@ async function article(
   document: Document,
 ): Promise<Response> {
   const context = federation.createContext(c.req.raw, contextData(c));
+  if (listUsers(c.var.config.dataDir).length === 0) return notFound(c);
   return await respondWithObject(postObject(context, document), {
     contextLoader: context.contextLoader,
   });
