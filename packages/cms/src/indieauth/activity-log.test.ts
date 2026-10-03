@@ -285,6 +285,27 @@ describe('the Micropub endpoint', () => {
     assert.equal(unscoped.error, 'insufficient_scope');
     assert.equal(unscoped.user, 'ada');
   });
+
+  it('logs a create refused for its declared size, carrying nothing it never read', async () => {
+    const { cms, dataDir, token } = await site();
+    const response = await cms.app.request(MICROPUB, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await token(['create'])}`,
+        'content-length': String(10 * 1024 * 1024 * 1024),
+        'content-type': 'multipart/form-data; boundary=x',
+      },
+      body: 'tiny',
+    });
+    assert.equal(response.status, 400);
+
+    const entry = await latest(dataDir);
+    assert.equal(entry.endpoint, 'micropub');
+    assert.equal(entry.action, 'create');
+    assert.equal(entry.status, 400);
+    assert.match(entry.errorDescription ?? '', /too big/);
+    assert.deepEqual(entry.carried, []);
+  });
 });
 
 describe('the media endpoint', () => {
