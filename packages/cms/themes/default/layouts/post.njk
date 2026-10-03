@@ -5,8 +5,9 @@
 
   An article, and a reply with a title, has the only headline: the title as its
   `p-name` and the author's `description` under it as the deck, a
-  `p-summary`. A post with no title opens on its words, set larger. A reply
-  cites what it answers above its words, or above its header when it has one.
+  `p-summary`. A post with no title opens on its words, set larger. What a
+  reply answers, and what a like, repost or bookmark cites, opens a post with
+  no title and follows the header of one with a title, before its words.
   Then the Published line, the tags, a rule and the bio. The neighbouring posts,
   the conversation and the comment form follow the entry.
 
@@ -36,10 +37,6 @@
       hidden from sight. It is no `p-name`: a parser would take that as a
       title and read the note as an article. -#}
   {% if named %}
-  {#- A reply cites the post it answers, whose URL is also the link its
-      webmention points a receiver at. -#}
-  {% include "partials/reply-context.njk" %}
-  {% include "partials/citations.njk" %}
   <header class="post-header">
     {{ kicker.line(postType | capitalize, false, false, categories) }}
     <h1 class="p-name">{{ title }}</h1>
@@ -47,6 +44,8 @@
     <p class="post-deck p-summary">{{ description }}</p>
     {% endif %}
   </header>
+  {% include "partials/reply-context.njk" %}
+  {% include "partials/citations.njk" %}
   {% else %}
   <h1 class="screen-reader-text">
     {{- postType | capitalize if postType in ["reply", "like", "repost", "bookmark", "read"] else "Note" }}

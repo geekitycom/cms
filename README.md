@@ -741,10 +741,22 @@ devDependency: nothing is fetched from a CDN, and the admin works offline.
 
 `POST /admin/preview` renders through the same `renderMarkdown` and the same
 theme layout the public site uses, so what the preview shows is what publishing
-would put on the site, theme overrides included. It writes nothing. It is also
-the only way to look at a scheduled post: the public permalink 404s until the
-date arrives, for a signed-in admin too, because the public site deliberately
-has no session and every response it gives is cacheable.
+would put on the site, theme overrides included. It writes nothing.
+
+A post the site does not publish yet can also be read at its own permalink
+while you are signed in: a draft, a scheduled post, or one whose visibility the
+site does not recognize. That is the URL a Micropub app such as iA Writer opens
+after it posts a draft. The page is drawn by the theme as it will be published,
+under a banner that says why it is not published and that only signed-in users
+can see it. It answers `Cache-Control: private, no-store`,
+`X-Robots-Tag: noindex` and a robots `noindex` meta, with no `ETag` or
+`Last-Modified`, so no shared cache keeps it and no later request revalidates
+against it. Only the HTML page is served this way. Its `.md` and `.json`
+representations and its ActivityStreams object still answer 404, and it stays
+off every list, feed, the sitemap and search, for you as for everybody. To
+anybody not signed in the permalink answers exactly as a URL nothing lives at
+does, with the same 404, body and headers. A post in the trash answers 404 to
+everybody.
 
 `POST /admin/uploads` stores one file at
 `content/uploads/{yyyy}/{mm}/{slug}{ext}` and answers with `{ url, markdown }`.

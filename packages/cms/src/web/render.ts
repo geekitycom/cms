@@ -5,6 +5,8 @@ import type { Environment } from 'nunjucks';
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { citationsOf } from '../content/citation.ts';
+import type { Citation } from '../content/citation.ts';
 import type { SharedLocation } from '../content/location.ts';
 import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
@@ -275,11 +277,12 @@ export interface CreateRendererOptions {
    */
   conversation?: ((document: Document) => Conversation) | undefined;
   /**
-   * What is stored about the post a reply answers, by its URL (TASK-123).
+   * What is stored about a page a post cites, by its URL: what a reply
+   * answers (TASK-123), and what a like, repost or bookmark cites (TASK-244).
    *
-   * Read, never fetched: the context was fetched when the reply was saved or
-   * synced, so drawing a reply waits on nobody's server. A renderer built
-   * without it draws every reply with a bare link.
+   * Read, never fetched: the context was fetched when the post was saved or
+   * synced, so drawing it waits on nobody's server. A renderer built without
+   * it draws every citation with a bare link.
    */
   replyContext?: ((target: string) => ReplyContext | undefined) | undefined;
   /**
@@ -499,15 +502,29 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   }
 
   /**
-   * What the post a reply answers says about itself, as a theme reads it, when
-   * it was fetched (TASK-123). Undefined for a post that answers nothing and
-   * for a reply whose target has not been fetched, so a theme draws the bare
-   * link from `inReplyTo` and fills it in from `replyContext`.
+   * What the pages a post cites say about themselves, as a theme reads them,
+   * when they were fetched. `replyContext` is what a reply answers (TASK-123),
+   * on the context only when it is known, so a theme draws the bare link from
+   * `inReplyTo` and fills it in from it. `citations` is what it reposts, likes
+   * or bookmarks, each with its `context` when that is known (TASK-244).
    */
-  function citedBy(document: Document): Record<string, unknown> | undefined {
+  function citedBy(document: Document): {
+    replyContext?: Record<string, unknown>;
+    citations: (Citation & { context?: Record<string, unknown> })[];
+  } {
+    const contextOf = (target: string): Record<string, unknown> | undefined => {
+      const cited = options.replyContext?.(target);
+      return cited === undefined ? undefined : replyContextFor(cited);
+    };
     const target = replyTarget(document);
-    const cited = target === undefined ? undefined : options.replyContext?.(target);
-    return cited === undefined ? undefined : replyContextFor(cited);
+    const replyContext = target === undefined ? undefined : contextOf(target);
+    return {
+      ...(replyContext === undefined ? {} : { replyContext }),
+      citations: citationsOf(document.extra).map((citation) => {
+        const context = contextOf(citation.url);
+        return context === undefined ? citation : { ...citation, context };
+      }),
+    };
   }
 
   /**
@@ -526,8 +543,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       authorContext(people, document.author),
       loading,
     );
-    const replyContext = citedBy(document);
-    return replyContext === undefined ? context : { ...context, replyContext };
+    return { ...context, ...citedBy(document) };
   }
 
   /**
@@ -656,8 +672,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // an entry (TASK-79). Each is on the context only when there is one, so a
     // theme asks `{% if previous %}` and the ends of the archive draw nothing.
     const either = options.neighbours?.(document) ?? {};
-    // What the post a reply answers says about itself (TASK-123), on the
-    // context only when there is some.
     const cited = citedBy(document);
     // The targets this post links to and the copies they made of it
     // (TASK-155): the links a target verifies sit inside the h-entry, so they
@@ -689,7 +703,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(form === undefined ? {} : { commentForm: form }),
       ...(contact === undefined ? {} : { contactForm: contact }),
       ...(webmention === undefined ? {} : { webmention }),
-      ...(cited === undefined ? {} : { replyContext: cited }),
+      ...cited,
       syndicateTo: syndicated?.targets ?? [],
       syndication: syndicationLinks([
         ...handSyndicationOf(document.extra),

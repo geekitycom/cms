@@ -21,8 +21,9 @@ export interface FetchPublicOptions {
   readonly lookup: HostLookup;
   /** How long the whole exchange is given, body included. */
   readonly timeoutMs: number;
-  /** The most of a body that is read. A bigger body is not read at all. */
+  /** The most of a body that is read. */
   readonly maxBytes: number;
+  readonly overflow?: 'refuse' | 'truncate';
   /** The `Accept` header sent. */
   readonly accept: string;
   /** The content types taken, and what to call anything else when refusing it. */
@@ -40,6 +41,7 @@ export type PublicFetch =
       /** The response's `Link` header, or `null` when it sent none. */
       readonly link: string | null;
       readonly body: Uint8Array;
+      readonly truncated: boolean;
     }
   | { readonly ok: false; readonly reason: string };
 
@@ -84,10 +86,10 @@ export async function fetchPublic(
         return refuse(`not ${options.contentType.name}`);
       }
 
-      const body = await readWithin(response, options.maxBytes);
-      if (body === undefined) return refuse(`larger than ${String(options.maxBytes)} bytes`);
+      const read = await readWithin(response, options.maxBytes, options.overflow ?? 'refuse');
+      if (read === undefined) return refuse(`larger than ${String(options.maxBytes)} bytes`);
 
-      return { ok: true, url: url.href, type, link: response.headers.get('link'), body };
+      return { ok: true, url: url.href, type, link: response.headers.get('link'), ...read };
     }
   } catch (thrown) {
     return refuse(thrown instanceof Error ? thrown.message : String(thrown));
@@ -106,16 +108,23 @@ export function webUrl(value: string): URL | undefined {
   return url.hostname === '' ? undefined : url;
 }
 
-/** A response body when it is no bigger than the limit, else `undefined`. */
-async function readWithin(response: Response, maxBytes: number): Promise<Uint8Array | undefined> {
+/**
+ * A response body no bigger than the limit. A bigger one is `undefined` when
+ * refused, or its first `maxBytes` when truncated.
+ */
+async function readWithin(
+  response: Response,
+  maxBytes: number,
+  overflow: 'refuse' | 'truncate',
+): Promise<{ body: Uint8Array; truncated: boolean } | undefined> {
   const declared = Number(response.headers.get('content-length') ?? '0');
-  if (declared > maxBytes) {
+  if (declared > maxBytes && overflow === 'refuse') {
     await response.body?.cancel();
     return undefined;
   }
 
   const body = response.body;
-  if (body === null) return new Uint8Array();
+  if (body === null) return { body: new Uint8Array(), truncated: false };
 
   const reader = (body as ReadableStream<Uint8Array>).getReader();
   const chunks: Uint8Array[] = [];
@@ -125,15 +134,17 @@ async function readWithin(response: Response, maxBytes: number): Promise<Uint8Ar
     const chunk = await reader.read();
     if (chunk.done) break;
     const value: Uint8Array = chunk.value;
-    read += value.length;
-    if (read > maxBytes) {
+    if (read + value.length > maxBytes) {
       await reader.cancel();
-      return undefined;
+      if (overflow === 'refuse') return undefined;
+      chunks.push(value.subarray(0, maxBytes - read));
+      return { body: Buffer.concat(chunks), truncated: true };
     }
+    read += value.length;
     chunks.push(value);
   }
 
-  return Buffer.concat(chunks);
+  return { body: Buffer.concat(chunks), truncated: false };
 }
 
 function refuse(reason: string): PublicFetch {

@@ -1,0 +1,41 @@
+{#
+  What a citation says of the page it cites: its name and its author, the part
+  of the line after "In reply to", "Liked" and the rest. Shared by
+  `reply-context.njk` and `citations.njk` (TASK-247).
+
+    {% import "partials/cited-page.njk" as cited %}
+    {{ cited.page(inReplyTo, replyContext) }}
+
+  `url` is the cited page, always its `u-url`. `context` is what the page said
+  about itself, from the reply contexts file. With a name, the name is the
+  link; with only an author, "a post" is; with neither, the bare URL. The
+  author follows as an `h-card`.
+
+  A name that already ends in " by " and the author's name, matched without
+  regard to case (SoundCloud's oEmbed gives "Flickermood by Forss" by Forss),
+  is not followed by the author again. Its last words become the `h-card`,
+  printed as the title wrote them, and the whole name stays the `p-name`, so a
+  parser reads the same name and author either way.
+#}
+{% macro page(url, context) %}
+{%- set title = (context.name or "") | trim -%}
+{%- set author = (context.author.name or "") | trim if context.author else "" -%}
+{%- set cut = title.length - author.length - 4 -%}
+{%- set byline = title.slice(cut) if (author and cut > 0) else "" -%}
+{%- set named = byline and byline.slice(0, 4).toLowerCase() == " by " and byline.slice(4).toLowerCase() == author.toLowerCase() -%}
+{%- if named %} <span class="p-name"><a class="u-url" href="{{ url }}">{{ title.slice(0, cut) }}</a>{{ byline.slice(0, 4) }}{{ card(context.author, byline.slice(4)) }}</span>
+{%- else %}
+  {%- if context.name %} <a class="u-url p-name" href="{{ url }}">{{ context.name }}</a>
+  {%- elif context.author %} <a class="u-url" href="{{ url }}">a post</a>
+  {%- else %} <a class="u-url" href="{{ url }}">{{ url }}</a>
+  {%- endif %}
+  {%- if context.author %} by {{ card(context.author, context.author.name) }}{% endif %}
+{%- endif %}
+{%- endmacro %}
+
+{% macro card(author, name) -%}
+<span class="p-author h-card">
+  {%- if author.url %}<a class="u-url p-name" href="{{ author.url }}">{{ name }}</a>
+  {%- else %}<span class="p-name">{{ name }}</span>{% endif -%}
+</span>
+{%- endmacro %}

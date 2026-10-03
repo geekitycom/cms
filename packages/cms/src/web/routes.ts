@@ -6,7 +6,6 @@ import { readSiteSettings, robotsPolicyOf } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
-import { visibilityOf } from '../content/visibility.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { mountAvatars } from '../avatars/routes.ts';
@@ -48,7 +47,13 @@ import {
 } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import { feedComments, spokenIn } from './conversation.ts';
-import { isListed, isServed, permalinkOfObjectId, publicDocumentAt } from './documents.ts';
+import {
+  isListed,
+  isServed,
+  permalinkOfObjectId,
+  previewDocumentAt,
+  publicDocumentAt,
+} from './documents.ts';
 import {
   commentsFeedPath,
   commentsFeedResponse,
@@ -453,6 +458,9 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     return negotiateDocument(c, document, selectFromAccept(c, DOCUMENT_REPRESENTATIONS));
   }
 
+  const hidden = hiddenDocumentForSignedInHtml(c, pathname);
+  if (hidden !== undefined) return hidden;
+
   const extension = splitRepresentationExtension(pathname);
   if (extension !== undefined) {
     for (const candidate of extension.paths) {
@@ -578,6 +586,16 @@ function taxonomyArchive(
  * `/author/{username}/page/1/` collapses onto the archive root the way
  * `/page/1/` collapses onto the home page.
  */
+function hiddenDocumentForSignedInHtml(
+  c: Context<GeekityEnv>,
+  pathname: string,
+): Response | undefined {
+  if (c.var.signedIn === undefined) return undefined;
+  if (selectFromAccept(c, DOCUMENT_REPRESENTATIONS) !== 'html') return undefined;
+  const hidden = previewDocumentAt(c.var.store, pathname);
+  return hidden === undefined ? undefined : negotiateDocument(c, hidden, 'html');
+}
+
 function authorArchive(
   c: Context<GeekityEnv>,
   pathname: string,
@@ -754,6 +772,7 @@ function negotiateDocument(
   const viewer = account === undefined ? undefined : commenterOf(account);
   // And which document it is, so the admin bar can offer its editor.
   if (representation === 'html') c.set('shownDocument', document);
+  const listed = isListed(document, c.var.store.now());
 
   // The thank-you after a comment was posted, which the redirect carried back
   // as a query, is the only thing about a document's HTML that the URL rather
@@ -763,7 +782,7 @@ function negotiateDocument(
     representation === 'html'
       ? c.var.renderer.renderPage(document, {
           frontPage: href === '/',
-          extra: commentNotice(c, document),
+          extra: { ...commentNotice(c, document), ...(listed ? {} : { noindex: true }) },
           viewer,
         })
       : undefined;
@@ -780,7 +799,7 @@ function negotiateDocument(
     representation,
     href: encodePath(href),
     available: DOCUMENT_REPRESENTATIONS,
-    noindex: visibilityOf(document) === 'unlisted',
+    noindex: !listed,
     // Where a webmention about this page is sent. It is a header rather than
     // only a `<link>` because a sender is allowed to find the endpoint without
     // parsing the page, and because the JSON and Markdown representations of a

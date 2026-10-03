@@ -60,6 +60,10 @@ const CAROL_INBOX = `${REMOTE_ORIGIN}/users/carol/inbox`;
 const STATUS_ID = `${REMOTE_ORIGIN}/users/carol/statuses/1`;
 const STATUS_URL = `${REMOTE_ORIGIN}/@carol/1`;
 
+const SHARED_INBOX_AUTHOR = `${REMOTE_ORIGIN}/users/dora`;
+const SHARED_INBOX_AUTHOR_STATUS_ID = `${REMOTE_ORIGIN}/users/dora/statuses/2`;
+const SHARED_INBOX_AUTHOR_STATUS_URL = `${REMOTE_ORIGIN}/@dora/2`;
+
 /** A page on the remote host that is no ActivityPub object. */
 const PLAIN_PAGE = `${REMOTE_ORIGIN}/blog/a-page/`;
 
@@ -79,10 +83,13 @@ interface Delivery {
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const deliveries: Delivery[] = [];
+const ownFetches: string[] = [];
 
 let remoteActorDocument: unknown;
 let carolDocument: unknown;
 let statusDocument: unknown;
+let sharedInboxAuthorDocument: unknown;
+let sharedInboxAuthorStatusDocument: unknown;
 let restoreFetch: () => void;
 
 before(async () => {
@@ -98,6 +105,18 @@ before(async () => {
     url: new URL(STATUS_URL),
     attribution: new URL(CAROL_ACTOR),
     content: 'Something worth liking.',
+  }).toJsonLd();
+  sharedInboxAuthorDocument = await new Person({
+    id: new URL(SHARED_INBOX_AUTHOR),
+    preferredUsername: 'dora',
+    inbox: new URL(`${SHARED_INBOX_AUTHOR}/inbox`),
+    endpoints: new Endpoints({ sharedInbox: new URL(REMOTE_SHARED_INBOX) }),
+  }).toJsonLd();
+  sharedInboxAuthorStatusDocument = await new Note({
+    id: new URL(SHARED_INBOX_AUTHOR_STATUS_ID),
+    url: new URL(SHARED_INBOX_AUTHOR_STATUS_URL),
+    attribution: new URL(SHARED_INBOX_AUTHOR),
+    content: 'Something worth answering.',
   }).toJsonLd();
   restoreFetch = routeRemoteHost();
 });
@@ -144,6 +163,7 @@ function routeRemoteHost(): () => void {
     if (url.origin === BROKEN_ORIGIN) {
       return new Response('This instance is having a bad day.', { status: 500 });
     }
+    if (url.origin === BASE_URL) ownFetches.push(url.href);
     if (url.origin !== REMOTE_ORIGIN) return await original(input, init);
 
     const request = new Request(input, init);
@@ -164,6 +184,9 @@ function routeRemoteHost(): () => void {
       [new URL(CAROL_ACTOR).pathname, carolDocument],
       [new URL(STATUS_ID).pathname, statusDocument],
       [new URL(STATUS_URL).pathname, statusDocument],
+      [new URL(SHARED_INBOX_AUTHOR).pathname, sharedInboxAuthorDocument],
+      [new URL(SHARED_INBOX_AUTHOR_STATUS_ID).pathname, sharedInboxAuthorStatusDocument],
+      [new URL(SHARED_INBOX_AUTHOR_STATUS_URL).pathname, sharedInboxAuthorStatusDocument],
     ]).get(url.pathname);
     if (served !== undefined) {
       return new Response(JSON.stringify(served), {
@@ -834,6 +857,197 @@ describe('likes, reposts and bookmarks (TASK-169 AC #3)', () => {
     await cms.delivery.settled();
 
     assert.deepEqual(deliveries, []);
+  });
+});
+
+describe('a reply to a fediverse status (TASK-240)', () => {
+  const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
+  const FOLLOWERS = `${BASE_URL}/author/${ADA}/followers/`;
+
+  async function reply(
+    target: string,
+    fields: Record<string, string> = {},
+  ): Promise<Site & { agent: Browser }> {
+    const published = await site();
+    const agent = await signedIn(published.cms);
+    const response = await publishNewPost(agent, {
+      title: '',
+      slug: 'answer',
+      body: 'I agree.',
+      'in-reply-to': target,
+      ...fields,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await published.cms.delivery.settled();
+    return { ...published, agent };
+  }
+
+  function objectOf(delivery: Delivery): Record<string, unknown> {
+    return delivery.body['object'] as Record<string, unknown>;
+  }
+
+  function list(value: unknown): unknown[] {
+    return value === undefined ? [] : [value].flat();
+  }
+
+  function mentions(note: Record<string, unknown>): unknown[] {
+    return list(note['tag']).filter(
+      (tag) => (tag as Record<string, unknown>)['type'] === 'Mention',
+    );
+  }
+
+  it('sends a Create in reply to the status’s id, mentioning its author (AC #1, #4)', async () => {
+    await reply(STATUS_URL);
+
+    const creates = delivered('Create');
+    const toCarol = creates.find((one) => one.url === CAROL_INBOX);
+    assert.ok(
+      toCarol !== undefined,
+      `expected a Create at carol's inbox, saw ${JSON.stringify(deliveries.map((one) => one.url))}`,
+    );
+    assert.equal(toCarol.body['to'], PUBLIC);
+    assert.deepEqual(list(toCarol.body['cc']).sort(), [CAROL_ACTOR, FOLLOWERS].sort());
+
+    const note = objectOf(toCarol);
+    assert.equal(note['type'], 'Note');
+    assert.equal(
+      note['inReplyTo'],
+      STATUS_ID,
+      'the status by its id, not the URL it was answered at',
+    );
+    assert.equal(note['to'], PUBLIC);
+    assert.deepEqual(list(note['cc']).sort(), [CAROL_ACTOR, FOLLOWERS].sort());
+    assert.deepEqual(mentions(note), [
+      { type: 'Mention', href: CAROL_ACTOR, name: '@carol@remote.example' },
+    ]);
+  });
+
+  it('delivers the Create to the author’s inbox and the followers’ (AC #2)', async () => {
+    await reply(STATUS_URL);
+
+    assert.deepEqual(
+      delivered('Create')
+        .map((one) => one.url)
+        .sort(),
+      [CAROL_INBOX, REMOTE_SHARED_INBOX].sort(),
+    );
+  });
+
+  it('posts once to an inbox the author shares with the followers (AC #2)', async () => {
+    await reply(SHARED_INBOX_AUTHOR_STATUS_URL);
+
+    const creates = delivered('Create');
+    assert.deepEqual(
+      creates.map((one) => one.url),
+      [REMOTE_SHARED_INBOX],
+    );
+    const note = objectOf(creates[0] as Delivery);
+    assert.equal(note['inReplyTo'], SHARED_INBOX_AUTHOR_STATUS_ID);
+    assert.deepEqual(list(note['cc']).sort(), [SHARED_INBOX_AUTHOR, FOLLOWERS].sort());
+  });
+
+  it('sends the Update of an edited reply to the author as well (AC #2)', async () => {
+    const { cms, agent } = await reply(STATUS_URL);
+    deliveries.length = 0;
+
+    const response = await submitEditor(agent, '/admin/posts/answer', {
+      body: 'I agree, mostly.',
+      'in-reply-to': STATUS_URL,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    const updates = delivered('Update');
+    assert.deepEqual(
+      updates.map((one) => one.url).sort(),
+      [CAROL_INBOX, REMOTE_SHARED_INBOX].sort(),
+    );
+    const note = objectOf(updates[0] as Delivery);
+    assert.equal(note['inReplyTo'], STATUS_ID);
+    assert.match(String(note['content']), /I agree, mostly\./);
+    assert.deepEqual(mentions(note), [
+      { type: 'Mention', href: CAROL_ACTOR, name: '@carol@remote.example' },
+    ]);
+  });
+
+  it('sends the Delete of a withdrawn reply to the author as well (AC #2)', async () => {
+    const { cms, agent } = await reply(STATUS_URL);
+    deliveries.length = 0;
+
+    const response = await submitEditor(agent, '/admin/posts/answer', {
+      action: 'save-draft',
+      'in-reply-to': STATUS_URL,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    const deletes = delivered('Delete');
+    assert.deepEqual(
+      deletes.map((one) => one.url).sort(),
+      [CAROL_INBOX, REMOTE_SHARED_INBOX].sort(),
+    );
+    assert.equal(objectOf(deletes[0] as Delivery)['id'], `${BASE_URL}/2026/03/answer/`);
+  });
+
+  it('resends a reply to the author as well', async () => {
+    const { cms } = await reply(STATUS_URL);
+    deliveries.length = 0;
+
+    await cms.delivery.resend('answer');
+
+    const updates = delivered('Update');
+    assert.deepEqual(
+      updates.map((one) => one.url).sort(),
+      [CAROL_INBOX, REMOTE_SHARED_INBOX].sort(),
+    );
+    assert.equal(objectOf(updates[0] as Delivery)['inReplyTo'], STATUS_ID);
+  });
+
+  it('keeps an unlisted reply’s addressing, plus the author', async () => {
+    await reply(STATUS_URL, { visibility: 'unlisted' });
+
+    const create = delivered('Create').find((one) => one.url === CAROL_INBOX);
+    assert.ok(
+      create !== undefined,
+      `expected a Create at carol's inbox, saw ${JSON.stringify(deliveries.map((one) => one.url))}`,
+    );
+    assert.equal(create.body['to'], FOLLOWERS);
+    assert.deepEqual(list(create.body['cc']).sort(), [CAROL_ACTOR, PUBLIC].sort());
+    const note = objectOf(create);
+    assert.equal(note['to'], FOLLOWERS);
+    assert.deepEqual(list(note['cc']).sort(), [CAROL_ACTOR, PUBLIC].sort());
+  });
+
+  it('federates a reply to a page that is no fediverse object as before (AC #3)', async () => {
+    await reply(PLAIN_PAGE);
+
+    const creates = delivered('Create');
+    assert.deepEqual(
+      creates.map((one) => one.url),
+      [REMOTE_SHARED_INBOX],
+      'to the followers only',
+    );
+    const note = objectOf(creates[0] as Delivery);
+    assert.equal(note['inReplyTo'], PLAIN_PAGE);
+    assert.equal(note['cc'], FOLLOWERS);
+    assert.deepEqual(mentions(note), []);
+  });
+
+  it('federates a reply to one of the site’s own posts as before, without asking itself', async () => {
+    const own = `${BASE_URL}/2026/03/earlier/`;
+    ownFetches.length = 0;
+    await reply(own);
+
+    assert.deepEqual(ownFetches, [], 'the site did not fetch its own post to deliver the reply');
+
+    const creates = delivered('Create');
+    assert.deepEqual(
+      creates.map((one) => one.url),
+      [REMOTE_SHARED_INBOX],
+    );
+    const note = objectOf(creates[0] as Delivery);
+    assert.equal(note['inReplyTo'], own);
+    assert.equal(note['cc'], FOLLOWERS);
   });
 });
 

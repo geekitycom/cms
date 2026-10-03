@@ -26,6 +26,7 @@ themes/default/
     kicker.njk        the line above an entry naming its kind and date
     reply-context.njk the citation of what a reply answers
     citations.njk     the citation of what a like, repost or bookmark cites
+    cited-page.njk    the name and author both citations print
     read.njk          what a read post read, and how far
     bio.njk           who an entry is by, as an h-card
     menu.njk          one named menu, as a nav of links
@@ -405,16 +406,37 @@ is an `h3` inside the form's section.
 `div.reply-context.cite.u-in-reply-to.h-cite`: a rule on the start side, a
 `p.cite-line` saying "In reply to" and the target's name, author and date as
 far as they are known, and its excerpt as a `blockquote.cite-quote.p-content`.
-An untitled reply prints it under the kicker; a titled reply prints it above
-its header. The same partial cites a reply in a feed.
+Where it goes depends on whether the post shows a title. An untitled reply
+opens on it, under the kicker and before its words. A titled reply prints its
+`header.post-header` first and the citation after it, before the `e-content`,
+so the page opens on its title rather than on a link. A listing follows the
+same rule: an untitled entry cites under its kicker, a titled one after its
+title and summary. The same partial cites a reply in a feed. The layouts own
+the placement; the partial owns only what the citation says, and it stays
+inside the `h-entry` wherever it is printed.
 
 **A like, a repost or a bookmark cites what it cites** (TASK-169) with
 `partials/citations.njk`, beside the reply context and drawn the same way: one
 `div.reply-context.cite.h-cite` per entry of `citations`, classed
 `u-repost-of`, `u-like-of` or `u-bookmark-of`, whose `p.cite-line` says
-Reposted, Liked or Bookmarked and links the target as its `u-url`. Its kicker
-and its hidden `h1` say Repost, Like or Bookmark. A listing cites each entry's
-from the same partial.
+Reposted, Liked or Bookmarked and links the target as its `u-url`. The link
+says the target's name, as the reply context does, with its author after it as
+a `p-author h-card`, when the target was read when the post was saved
+(TASK-244): its `h-entry` name, its oEmbed title, or its `<title>`. With only
+an author it says "a post", and with neither the bare URL. Its kicker
+and its hidden `h1` say Repost, Like or Bookmark. It is placed as the reply
+context is: at the top of an untitled post, after the header of a titled one.
+A listing cites each entry's from the same partial, by the same rule.
+
+**Both citations name the cited page** through `partials/cited-page.njk`, so
+they print its name and author by one rule. A name that already ends in " by "
+and the author's name, in any case, does not print the author again
+(TASK-247): SoundCloud titles a track "Flickermood by Forss" and names Forss
+as its author. The title link stops before " by ", and the words after it
+become the `p-author h-card`, so the line reads "Liked Flickermood by Forss"
+and a parser still reads the whole title as the `p-name`. A name that mentions
+its author anywhere else, such as "Rick Astley - Never Gonna Give You Up" by
+Rick Astley, keeps the author after it.
 
 **A read says what was read** (TASK-229) with `partials/read.njk`, a
 `p.read-line` at the top of the `e-content` that reads like indiebookclub's
@@ -602,7 +624,8 @@ its kicker:
 **Only an article has a headline.** A note, which has no title, is printed
 whole as its `e-content`, and the date in its kicker is its `u-url`. A reply is
 a note that first cites what it answers with `partials/reply-context.njk`, and
-a reply with a title is an article that does. An article's categories are in
+a reply with a title is an article that cites it after its title and summary.
+A like, a repost and a bookmark place `partials/citations.njk` the same way. An article's categories are in
 its kicker; a note's are on its own page.
 
 The excerpt is the entry's `summary`, the very line the feeds publish, so a
@@ -1179,7 +1202,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `lang`                                      | The `lang` front matter as a canonical tag, such as `fr-CA`. Absent when it names none or no tag.                 |
 | `enclosure`                                 | The post's recording, parsed, with `player` (`audio` or `video`) and `transcript.captions`. Absent with none.     |
 | `photos`                                    | The post's photos, each `{ url, alt, html }`; `html` is the `img.u-photo`, responsive. Empty with none.           |
-| `citations`                                 | What it reposts, likes or bookmarks, each `{ property, url }` with `property` the mf2 name. Empty with none.      |
+| `citations`                                 | What it reposts, likes or bookmarks, each `{ property, url, context }`; `context` as `replyContext`, when known.  |
 | `read`                                      | A read post's `{ status, statusLabel, of, line }`; `of` is `{ name, author, uid, uidLabel, url }`.                |
 | `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                  |
 | `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made. |
@@ -1191,7 +1214,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `postsPage`                                 | The page carrying the listing, as `{ title, url }`, on the front page only. Absent when the site names none.      |
 | `archiveMonths`                             | Every published post as `{ month, posts }`, newest month first. Only on a page that says `archive: true`.         |
 | `webmention`                                | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.      |
-| `noindex`                                   | `true` on the page of an unlisted document, which the base layout prints as a robots `noindex` meta. Else absent. |
+| `noindex`                                   | `true` on an unlisted or unpublished page, which the base layout prints as a robots `noindex` meta. Else absent.  |
 | `conversation`                              | The replies, likes and boosts under the post. Only when there are any. See [The conversation](#the-conversation). |
 | everything else                             | Any front matter key the CMS does not model is on the context under its own name.                                 |
 

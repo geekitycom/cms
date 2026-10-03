@@ -1,6 +1,6 @@
 import type { Context } from '@fedify/fedify';
 import { Activity, getTypeId, PUBLIC_COLLECTION } from '@fedify/vocab';
-import type { Recipient } from '@fedify/vocab';
+import type { Actor, Recipient } from '@fedify/vocab';
 
 import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
@@ -26,8 +26,8 @@ import {
   postUpdateActivity,
 } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
-import { citingActivity, undoActivity } from './citations.ts';
-import type { Citing } from './citations.ts';
+import { citingActivity, repliedTo, undoActivity } from './citations.ts';
+import type { Citing, CitedObject } from './citations.ts';
 import { followerRecipient } from './followers.ts';
 import { updateActivityId } from './paths.ts';
 import { acceptedRelays, relayRecipient } from './relays.ts';
@@ -245,18 +245,23 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
 
   /**
    * What a version of a post is to a peer: the `Like` or `Announce` of the
-   * fediverse object it cites, or the object it is (decision-28). Asked of
-   * the post as it reads now, so a target that stops answering makes it the
-   * object again.
+   * fediverse object it cites, or the object it is (decision-28), with the
+   * status it replies to when it answers one (TASK-240). Asked of the post as
+   * it reads now, so a target that stops answering makes it the object again.
    */
   async function shapeOf(
     context: Context<FederationContextData>,
     document: Document,
   ): Promise<Shape> {
     const citing = await citingActivity(context, document);
-    return citing === undefined
-      ? { kind: 'object', id: articleObjectId(context, document).href }
-      : { kind: 'citing', id: citing.activity.id?.href ?? '', citing };
+    if (citing !== undefined) {
+      return { kind: 'citing', id: citing.activity.id?.href ?? '', citing };
+    }
+    return {
+      kind: 'object',
+      id: articleObjectId(context, document).href,
+      replyTo: await repliedTo(context, document),
+    };
   }
 
   /** Tell the peers a post is out: its `Create`, or its `Like` or `Announce`. */
@@ -266,9 +271,14 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     shape: Shape,
   ): Promise<DeliveryReport> {
     if (shape.kind === 'object') {
-      return await send(context, postCreateActivity(context, document), document);
+      return await send(
+        context,
+        postCreateActivity(context, document, shape.replyTo),
+        document,
+        citedAuthor(shape.replyTo?.author),
+      );
     }
-    return await send(context, shape.citing.activity, document, citedAuthor(shape.citing));
+    return await send(context, shape.citing.activity, document, citedAuthor(shape.citing.author));
   }
 
   /** Take a post back: a `Delete` of its object, or an `Undo` of its `Like` or `Announce`. */
@@ -279,13 +289,32 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   ): Promise<DeliveryReport> {
     const deleted = new Date().toISOString();
     if (shape.kind === 'object') {
-      return await send(context, postDeleteActivity(context, document, deleted), document);
+      return await send(
+        context,
+        postDeleteActivity(context, document, deleted),
+        document,
+        citedAuthor(shape.replyTo?.author),
+      );
     }
     return await send(
       context,
       undoActivity(shape.citing.activity, deleted),
       document,
-      citedAuthor(shape.citing),
+      citedAuthor(shape.citing.author),
+    );
+  }
+
+  async function revise(
+    context: Context<FederationContextData>,
+    document: Document,
+    shape: Shape & { kind: 'object' },
+    revision?: string,
+  ): Promise<DeliveryReport> {
+    return await send(
+      context,
+      postUpdateActivity(context, document, revision, shape.replyTo),
+      document,
+      citedAuthor(shape.replyTo?.author),
     );
   }
 
@@ -428,7 +457,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         const was = await shapeOf(context, before);
         if (was.kind === is.kind && was.id === is.id) {
           if (is.kind === 'citing') return undefined;
-          return await send(context, postUpdateActivity(context, stamped), stamped);
+          return await revise(context, stamped, is);
         }
         await withdraw(context, before, was);
         return await announce(context, stamped, is);
@@ -508,11 +537,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         // the point of a resend is that the followers hear about a revision
         // they have already been sent and ignored, or never received at all,
         // and an activity id a peer has seen is one it is entitled to drop.
-        return await send(
-          context,
-          postUpdateActivity(context, stamped, new Date().toISOString()),
-          stamped,
-        );
+        return await revise(context, stamped, shape, new Date().toISOString());
       });
     },
 
@@ -541,12 +566,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
  * carries the id of what it cites.
  */
 type Shape =
-  | { readonly kind: 'object'; readonly id: string }
+  | { readonly kind: 'object'; readonly id: string; readonly replyTo: CitedObject | undefined }
   | { readonly kind: 'citing'; readonly id: string; readonly citing: Citing };
 
-/** The author of what a like or a repost cites, as one more inbox to tell. */
-function citedAuthor(citing: Citing): DeliveryTarget[] {
-  const { author } = citing;
+/** The author of what a post likes, reposts or replies to, as one more inbox to tell. */
+function citedAuthor(author: Actor | undefined): DeliveryTarget[] {
   if (author?.id == null || author.inboxId === null) return [];
   return [
     {
