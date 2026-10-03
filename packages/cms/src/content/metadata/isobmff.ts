@@ -1,4 +1,4 @@
-import { ascii, fourcc, sameBytes, UnreadableMetadataError, view } from './shared.ts';
+import { ascii, fourcc, sameBytes, unique, UnreadableMetadataError, view } from './shared.ts';
 import type { Stripped } from './shared.ts';
 
 /** One box of an ISO base media file: where it starts, where its body starts, where it ends. */
@@ -72,7 +72,7 @@ export function stripMovie(bytes: Uint8Array): Stripped {
   };
   walk(0, bytes.length);
 
-  return removed.length === 0 ? { bytes, removed } : { bytes: out, removed: [...new Set(removed)] };
+  return removed.length === 0 ? { bytes, removed } : { bytes: out, removed: unique(removed) };
 }
 
 /** An EXIF payload with nothing in it: a zero TIFF-header offset and a TIFF with an empty IFD. */
@@ -111,9 +111,9 @@ function blankPayload(kind: 'EXIF' | 'XMP', length: number): Uint8Array {
  * alone. The pixels are not touched, so nothing is re-encoded.
  */
 export function stripAvif(bytes: Uint8Array): Stripped {
-  const fail = (problem: string): never => {
+  function fail(problem: string): never {
     throw new UnreadableMetadataError('AVIF', problem);
-  };
+  }
   const meta = boxes(bytes, 0, bytes.length).find((box) => box.type === 'meta');
   if (meta === undefined) return { bytes, removed: [] };
 
@@ -194,14 +194,13 @@ export function stripAvif(bytes: Uint8Array): Stripped {
 
     const kind = metadataItems.get(id);
     if (kind === undefined) continue;
-    if (method === 1 && idat === undefined) fail('an item points into an idat that is not there');
     if (method > 1) fail('an item is built from other items');
-    const origin = method === 1 ? (idat as Box).body : 0;
-    const limit = method === 1 ? (idat as Box).end : bytes.length;
+    const area = method === 1 ? idat : { body: 0, end: bytes.length };
+    if (area === undefined) fail('an item points into an idat that is not there');
     const ranges = extents.map(([offset, length]): [number, number] => {
-      const start = origin + base + offset;
-      const end = length === 0 ? limit : start + length;
-      if (end > limit) fail('an item runs past the end');
+      const start = area.body + base + offset;
+      const end = length === 0 ? area.end : start + length;
+      if (end > area.end) fail('an item runs past the end');
       return [start, end];
     });
 
@@ -218,5 +217,5 @@ export function stripAvif(bytes: Uint8Array): Stripped {
     if (changed) removed.push(kind);
   }
 
-  return removed.length === 0 ? { bytes, removed } : { bytes: out, removed: [...new Set(removed)] };
+  return removed.length === 0 ? { bytes, removed } : { bytes: out, removed: unique(removed) };
 }

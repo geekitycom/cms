@@ -50,9 +50,9 @@ function segmentLabel(marker: number, body: Uint8Array): string | undefined {
  * of the image — a phone's appended depth map or preview — goes too.
  */
 export function stripJpeg(bytes: Uint8Array): Stripped {
-  const fail = (problem: string): never => {
+  function fail(problem: string): never {
     throw new UnreadableMetadataError('JPEG', problem);
-  };
+  }
   const data = view(bytes);
   const parts: Uint8Array[] = [bytes.subarray(0, 2)];
   const removed: string[] = [];

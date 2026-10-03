@@ -10,9 +10,9 @@ const PLAYBACK = new Set(['NETSCAPE2.0', 'ANIMEXTS1.0', 'ICCRGBG1012']);
  * graphic controls are copied as they were.
  */
 export function stripGif(bytes: Uint8Array): Stripped {
-  const fail = (problem: string): never => {
+  function fail(problem: string): never {
     throw new UnreadableMetadataError('GIF', problem);
-  };
+  }
   const parts: Uint8Array[] = [];
   const removed: string[] = [];
 
@@ -23,7 +23,7 @@ export function stripGif(bytes: Uint8Array): Stripped {
       const size = bytes[at];
       if (size === undefined) fail('a block runs past the end');
       if (size === 0) return at + 1;
-      at += 1 + (size as number);
+      at += 1 + size;
     }
   };
 

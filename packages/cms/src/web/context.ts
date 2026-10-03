@@ -6,7 +6,6 @@ import type { Document } from '../content/document.ts';
 import { enclosureOf, isCaptions, playsAsVideo } from '../content/enclosure.ts';
 import type { Enclosure, Transcript } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
-import { placeWordList } from '../content/location.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { Citation } from '../content/citation.ts';
@@ -259,8 +258,7 @@ export function locationContext(shared: SharedLocation): LocationContext {
   ]
     .filter((pair): pair is [string, string] => pair[1] !== undefined)
     .map(([property, text]) => ({ property, text }));
-  const type =
-    place.name !== undefined ? 'h-card' : placeWordList(place).length > 0 ? 'h-adr' : 'h-geo';
+  const type = place.name !== undefined ? 'h-card' : words.length > 0 ? 'h-adr' : 'h-geo';
   return {
     type,
     words,

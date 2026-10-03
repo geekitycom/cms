@@ -10,7 +10,7 @@ import type { Sharp } from 'sharp';
  * Every secret is a distinctive string, so a test can look for it in the raw
  * bytes a site stored: no decoder in between to forgive what is still there.
  */
-export const SECRETS = {
+const SECRETS = {
   camera: 'AcmeCamCo',
   datum: 'SECRETDATUM',
   xmpCity: 'Secretville',
@@ -25,7 +25,7 @@ export function leakedSecrets(bytes: Uint8Array): string[] {
   return Object.values(SECRETS).filter((secret) => text.includes(secret));
 }
 
-export function ascii(value: string): number[] {
+function ascii(value: string): number[] {
   return [...value].map((character) => character.charCodeAt(0));
 }
 
@@ -193,7 +193,7 @@ export function topLevelBoxes(bytes: Uint8Array): { type: string; size: number }
 }
 
 function box(type: string, body: readonly number[]): number[] {
-  return [...u32(body.length + 8), ...[...type].map((c) => c.charCodeAt(0) & 0xff), ...body];
+  return [...u32(body.length + 8), ...ascii(type), ...body];
 }
 
 function u32Name(value: number): string {

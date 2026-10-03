@@ -20,7 +20,7 @@ import type { PostLocation } from './location.ts';
 export const LOCATIONS_FILE = 'locations.json';
 
 /** Private to the process's user, like `users.json`. */
-export const LOCATIONS_FILE_MODE = 0o600;
+const LOCATIONS_FILE_MODE = 0o600;
 
 /** The stored locations, by permalink. */
 export interface PostLocations {

@@ -6,7 +6,7 @@ const ORIENTATION_TAG = 0x0112;
  * The orientation an EXIF block's first IFD gives, or 1 — upright — when it
  * gives none or cannot be read. `tiff` starts at the byte-order mark.
  */
-export function exifOrientation(tiff: Uint8Array): number {
+function exifOrientation(tiff: Uint8Array): number {
   if (tiff.length < 8) return 1;
   const little = tiff[0] === 0x49 && tiff[1] === 0x49;
   if (!little && !(tiff[0] === 0x4d && tiff[1] === 0x4d)) return 1;
@@ -32,7 +32,7 @@ export function exifOrientation(tiff: Uint8Array): number {
  * An EXIF block holding the orientation and nothing else: a big-endian TIFF
  * header, one IFD with one SHORT entry, no next IFD.
  */
-export function orientationOnlyTiff(orientation: number): Uint8Array {
+function orientationOnlyTiff(orientation: number): Uint8Array {
   const tiff = new Uint8Array(26);
   const data = view(tiff);
   tiff.set(ascii('MM'));
