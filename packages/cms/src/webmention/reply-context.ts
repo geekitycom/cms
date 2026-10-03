@@ -19,7 +19,10 @@ import type { HostLookup } from './public-address.ts';
 /** How long a target is given to answer, body included. */
 export const REPLY_CONTEXT_TIMEOUT_MS = 10_000;
 
-/** The most of a target page that is read. A bigger page is not read at all. */
+/**
+ * The most of a target page that is read. Only the head of a bigger page is
+ * read, and an oEmbed answer bigger than this is not read at all.
+ */
 export const REPLY_CONTEXT_MAX_BYTES = 1_000_000;
 
 /** How many words of a target's text a preview keeps. */
@@ -63,8 +66,8 @@ export interface FetchReplyContextOptions {
  *
  * Only http and https, only public hosts (every redirect hop is checked, and a
  * name is refused when any address it resolves to is private), one timeout
- * over the whole exchange, the oEmbed request included, and no page or oEmbed
- * answer over the byte limit. Nothing throws.
+ * over the whole exchange, the oEmbed request included, no more of a page than
+ * the byte limit, and no oEmbed answer over it. Nothing throws.
  */
 export async function fetchReplyContext(
   target: string,
@@ -76,13 +79,16 @@ export async function fetchReplyContext(
     lookup: options.lookup,
     timeoutMs: deadline - Date.now(),
     maxBytes,
+    overflow: 'truncate',
     accept: 'text/html, */*;q=0.8',
     contentType: { pattern: /^\s*(text\/html|application\/xhtml\+xml)/i, name: 'an HTML page' },
   });
   if (!fetched.ok) return fetched;
 
   const root = parseHtml(new TextDecoder().decode(fetched.body));
-  const entry = citedEntry(root, fetched.url);
+  // An h-entry cut short could be missing its author, date or most of its
+  // text, so a truncated page gives only what its head says.
+  const entry = fetched.truncated ? undefined : citedEntry(root, fetched.url);
   const endpoint = entry === undefined ? oembedEndpoint(root, fetched.url) : undefined;
   const oembed =
     endpoint === undefined

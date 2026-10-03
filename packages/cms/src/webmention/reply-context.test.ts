@@ -211,12 +211,65 @@ describe('fetchReplyContext', () => {
     assert.ok(Date.now() - started < 2_000, 'it did not wait on the target');
   });
 
-  it('gives up on a target that is too big, rather than reading part of it', async () => {
-    answer = () => html(`<title>Big</title>${'x'.repeat(5_000)}`);
+  it('reads the head of a target bigger than the limit, and nothing past the limit', async () => {
+    const head = `<title>Big</title>${'x'.repeat(1_000 - '<title>Big</title>'.length)}`;
+    const page = `${head}<meta name="description" content="Past the limit">${'x'.repeat(5_000)}`;
+
+    for (const headers of [{}, { 'content-length': String(page.length) }]) {
+      answer = () => html(page, headers);
+
+      assert.deepEqual(await fetchReplyContext(TARGET, { lookup, maxBytes: 1_000 }), {
+        ok: true,
+        context: { url: TARGET, name: 'Big' },
+      });
+    }
+  });
+
+  it('does not trust an h-entry on a page it read only part of', async () => {
+    answer = () => html(`${H_ENTRY}${'x'.repeat(5_000)}`);
+
+    assert.deepEqual(await fetchReplyContext(TARGET, { lookup, maxBytes: H_ENTRY.length + 10 }), {
+      ok: true,
+      context: { url: TARGET, name: 'Their site' },
+    });
+  });
+
+  it('stops reading an endless target at the limit', async () => {
+    const encoder = new TextEncoder();
+    let sent = 0;
+    let cancelled = false;
+    answer = () =>
+      new Response(
+        new ReadableStream(
+          {
+            pull(controller) {
+              const next = encoder.encode(sent === 0 ? '<title>Endless</title>' : 'x'.repeat(100));
+              sent += next.length;
+              controller.enqueue(next);
+            },
+            cancel() {
+              cancelled = true;
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+        { headers: { 'content-type': 'text/html' } },
+      );
+
+    assert.deepEqual(await fetchReplyContext(TARGET, { lookup, maxBytes: 1_000 }), {
+      ok: true,
+      context: { url: TARGET, name: 'Endless' },
+    });
+    assert.ok(cancelled, 'the rest of the body was cancelled');
+    assert.ok(sent <= 1_100, `pulled ${String(sent)} bytes`);
+  });
+
+  it('gives up on a big target whose head says nothing', async () => {
+    answer = () => html(`<p>${'x'.repeat(5_000)}</p>`);
 
     assert.deepEqual(await fetchReplyContext(TARGET, { lookup, maxBytes: 1_000 }), {
       ok: false,
-      reason: 'larger than 1000 bytes',
+      reason: 'nothing to show',
     });
   });
 
@@ -402,6 +455,19 @@ describe('fetchReplyContext with oEmbed', () => {
         context: { url: PAGE, name: 'The page title' },
       });
     }
+  });
+
+  it('reads the oEmbed link from the head of a page bigger than the limit', async () => {
+    answer = (request) =>
+      request.url === PAGE
+        ? html(pageWith('<title>- YouTube</title>', 'x'.repeat(5_000)))
+        : json({ title: 'A long video', author_name: 'Pat' });
+
+    assert.deepEqual(await fetchReplyContext(PAGE, { lookup, maxBytes: 1_000 }), {
+      ok: true,
+      context: { url: PAGE, name: 'A long video', author: { name: 'Pat' } },
+    });
+    assert.deepEqual(requested, [PAGE, OEMBED]);
   });
 
   it('does not read an oEmbed endpoint bigger than the byte limit', async () => {
