@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-29 01:55'
-updated_date: '2026-10-03 16:16'
+updated_date: '2026-10-03 16:17'
 labels:
   - micropub
   - indieweb
@@ -90,6 +90,8 @@ AC#3: README.md ## Micropub rewritten as one section (it was ### Micropub under 
 2026-10-03: micropub.rocks test 700 answers 403 insufficient_scope, because micropub.rocks requests 'create update delete undelete' and the media endpoint requires media. Filed as TASK-238 (accept create or media there).
 
 2026-10-03 correction: micropub.rocks test 804 answers 403 insufficient_scope. Earlier notes and the README said 403 is what the Micropub spec says; it is not. The Micropub spec's error table (section 3.8) gives insufficient_scope as 401; RFC 6750 gives 403. Filed as TASK-239 (401 on the Micropub endpoints).
+
+2026-10-03: micropub.rocks test 805 answers 201 and creates the post, by design since PR #95: Quill sends the same token in the header and the form body on every form post, the same shape 805 sends, so refusing it would refuse every Quill post. Only two different tokens are refused. No change planned; README lists 805.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
