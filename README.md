@@ -2282,18 +2282,17 @@ from the default theme.
 `.github/workflows/ci.yml` runs on every pull request and every push to `main`.
 Each gate is its own job so it can be named as a required status check:
 
-| Job            | What it runs                                           |
-| -------------- | ------------------------------------------------------ |
-| `lint`         | `pnpm lint`, then `pnpm format:check`.                 |
-| `typecheck`    | `pnpm typecheck`.                                      |
-| `test`         | `pnpm test` on Node 24.                                |
-| `test-node-26` | The same suite on Node 26, the current line.           |
-| `build`        | `pnpm build`.                                          |
-| `test-11ty`    | `pnpm test:11ty`, the Eleventy compatibility suite.    |
-| `pack-install` | `scripts/pack-install-smoke.sh`.                       |
-| `docker-smoke` | Builds the image, then `scripts/docker-smoke.sh`.      |
-| `coverage`     | `pnpm test:coverage`, summary uploaded as an artifact. |
-| `pr-title`     | The pull request title, as a Conventional Commit.      |
+| Job            | What it runs                                        |
+| -------------- | --------------------------------------------------- |
+| `lint`         | `pnpm lint`, then `pnpm format:check`.              |
+| `typecheck`    | `pnpm typecheck`.                                   |
+| `test`         | `pnpm test` on Node 24.                             |
+| `test-node-26` | The same suite on Node 26, the current line.        |
+| `build`        | `pnpm build`.                                       |
+| `test-11ty`    | `pnpm test:11ty`, the Eleventy compatibility suite. |
+| `pack-install` | `scripts/pack-install-smoke.sh`.                    |
+| `docker-smoke` | Builds the image, then `scripts/docker-smoke.sh`.   |
+| `pr-title`     | The pull request title, as a Conventional Commit.   |
 
 The four steps every job shares — install pnpm from the pinned
 `packageManager`, install Node with the pnpm store cached, run
@@ -2349,10 +2348,6 @@ scopes of `commitlint.config.js`; a scope is optional, but a title that names
 one has to name an allowed one. The workflow listens for `edited` as well as
 `opened` and `synchronize`, so correcting a title re-runs the check.
 
-Coverage is Node's own `--experimental-test-coverage`. The summary is uploaded
-as a build artifact called `coverage-summary`; no third-party coverage service
-is involved.
-
 `.github/dependabot.yml` opens weekly grouped update pull requests for the
 GitHub Actions and npm ecosystems, titled `ci(deps): …` and `chore(deps): …` so
 they pass `pr-title` and commitlint.
@@ -2366,7 +2361,7 @@ On GitHub, under Settings → Rules → Rulesets (or Settings → Branches), pro
   the release flow assumes never happen.
 - **Require status checks to pass**, and select exactly these, spelled as the
   job names above: `lint`, `typecheck`, `test`, `test-node-26`, `build`,
-  `test-11ty`, `pack-install`, `coverage`, `pr-title`. Tick "Require branches to be up to date
+  `test-11ty`, `pack-install`, `pr-title`. Tick "Require branches to be up to date
   before merging".
 - **Require linear history**, and allow only **Squash and merge** in Settings →
   General → Pull Requests. Squashing is what makes `pr-title` sufficient: the
