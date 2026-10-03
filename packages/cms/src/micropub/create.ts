@@ -78,14 +78,14 @@ const PROPERTIES = new Set<string>([
  * The names Quill accounts created before its migrations 0002 and 0004 send,
  * and the property each one is.
  */
-const LEGACY_NAMES: Readonly<Record<string, string>> = {
-  slug: 'mp-slug',
-  'syndicate-to': 'mp-syndicate-to',
-};
+const LEGACY_NAMES: ReadonlyMap<string, string> = new Map([
+  ['slug', 'mp-slug'],
+  ['syndicate-to', 'mp-syndicate-to'],
+]);
 
 /** A property's name, with a legacy name read as the one it stands for. */
 export function propertyName(name: string): string {
-  return Object.hasOwn(LEGACY_NAMES, name) ? (LEGACY_NAMES[name] ?? name) : name;
+  return LEGACY_NAMES.get(name) ?? name;
 }
 
 /** What `post-status` may say, and whether it makes a draft. */

@@ -12,9 +12,9 @@ import type { CreateSite } from './create.ts';
  * The properties an update may change, and the editor fields each one owns.
  * `post-status` owns none: it is the draft flag the write is given.
  * `p3k-content-type` and `visibility` own none either: they are checked as a
- * create checks them and change nothing. Anything
- * else, `mp-slug` included, is refused by name, so a post's URL only moves
- * when its author moves it in the editor.
+ * create checks them and change nothing. Anything else, `mp-slug` included,
+ * is refused by name, so a post's URL only moves when its author moves it in
+ * the editor.
  */
 const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   name: ['title'],

@@ -61,34 +61,38 @@ async function site(): Promise<Site> {
 type PhpParams = Record<string, string | readonly string[]>;
 
 /**
- * Quill's micropub_post (lib/helpers.php): a form post gets h=entry and the
- * token as access_token ahead of the params, encoded by PHP's
- * http_build_query with each `x[0]` rewritten to `x[]`; a JSON post carries
- * the token in the header only.
+ * Quill's micropub_post (lib/helpers.php) for a form: h=entry and the token
+ * as access_token ahead of the params, encoded by PHP's http_build_query with
+ * each `x[0]` rewritten to `x[]`.
  */
-async function quillPost(
-  cms: Cms,
-  token: string,
-  params: PhpParams | object,
-  json = false,
-): Promise<Response> {
-  const headers = { authorization: `Bearer ${token}`, accept: 'application/json' };
-  if (json) {
-    return await cms.app.request(ENDPOINT, {
-      method: 'POST',
-      headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify(params),
-    });
-  }
+async function quillPost(cms: Cms, token: string, params: PhpParams): Promise<Response> {
+  const fields: PhpParams = { h: 'entry', access_token: token, ...params };
   const pairs: [string, string][] = [];
-  for (const [name, value] of Object.entries({ h: 'entry', access_token: token, ...params })) {
+  for (const [name, value] of Object.entries(fields)) {
     if (typeof value === 'string') pairs.push([name, value]);
-    else (value as readonly string[]).forEach((item, i) => pairs.push([`${name}[${i}]`, item]));
+    else value.forEach((item, i) => pairs.push([`${name}[${i}]`, item]));
   }
   return await cms.app.request(ENDPOINT, {
     method: 'POST',
-    headers: { ...headers, 'content-type': 'application/x-www-form-urlencoded' },
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: 'application/json',
+      'content-type': 'application/x-www-form-urlencoded',
+    },
     body: new URLSearchParams(pairs).toString().replace(/%5B[0-9]+%5D/g, '%5B%5D'),
+  });
+}
+
+/** Quill's micropub_post for JSON, which carries the token in the header only. */
+async function quillJson(cms: Cms, token: string, body: object): Promise<Response> {
+  return await cms.app.request(ENDPOINT, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: 'application/json',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
   });
 }
 
@@ -113,7 +117,7 @@ async function refusal(response: Response): Promise<string> {
 }
 
 async function update(cms: Cms, token: string, url: string, body: object): Promise<Response> {
-  return await quillPost(cms, token, { action: 'update', url, ...body }, true);
+  return await quillJson(cms, token, { action: 'update', url, ...body });
 }
 
 describe("Quill's own requests (AC #6)", () => {
@@ -135,18 +139,13 @@ describe("Quill's own requests (AC #6)", () => {
   it('posts a note with a photo and its alt text as JSON', async () => {
     const { cms, token } = await site();
     const location = await created(
-      await quillPost(
-        cms,
-        token,
-        {
-          type: ['h-entry'],
-          properties: {
-            content: ['A heron.'],
-            photo: [{ value: 'https://photos.example/heron.jpg', alt: 'A heron on a post' }],
-          },
+      await quillJson(cms, token, {
+        type: ['h-entry'],
+        properties: {
+          content: ['A heron.'],
+          photo: [{ value: 'https://photos.example/heron.jpg', alt: 'A heron on a post' }],
         },
-        true,
-      ),
+      }),
     );
     assert.deepEqual(matter(await fileOf(cms, location)).data['photo'], [
       { url: 'https://photos.example/heron.jpg', alt: 'A heron on a post' },
@@ -170,19 +169,14 @@ describe("Quill's own requests (AC #6)", () => {
   it('posts an article as JSON { html } when the account opted into HTML content', async () => {
     const { cms, token } = await site();
     const location = await created(
-      await quillPost(
-        cms,
-        token,
-        {
-          type: ['h-entry'],
-          properties: {
-            name: ['A long read'],
-            content: [{ html: '<p>First paragraph.</p>' }],
-            'post-status': ['draft'],
-          },
+      await quillJson(cms, token, {
+        type: ['h-entry'],
+        properties: {
+          name: ['A long read'],
+          content: [{ html: '<p>First paragraph.</p>' }],
+          'post-status': ['draft'],
         },
-        true,
-      ),
+      }),
     );
     const { data, content } = matter(await fileOf(cms, location));
     assert.equal(data['title'], 'A long read');
@@ -230,20 +224,15 @@ describe('the names accounts from before Quill’s migrations send (AC #1)', () 
   it('takes them in JSON too', async () => {
     const { cms, token } = await site();
     const location = await created(
-      await quillPost(
-        cms,
-        token,
-        {
-          type: ['h-entry'],
-          properties: {
-            content: ['Old account.'],
-            slug: ['old-json'],
-            'syndicate-to': ['news'],
-            'post-status': ['draft'],
-          },
+      await quillJson(cms, token, {
+        type: ['h-entry'],
+        properties: {
+          content: ['Old account.'],
+          slug: ['old-json'],
+          'syndicate-to': ['news'],
+          'post-status': ['draft'],
         },
-        true,
-      ),
+      }),
     );
     assert.match(location, /old-json/);
     assert.deepEqual(matter(await fileOf(cms, location)).data['syndicate-to'], ['news']);

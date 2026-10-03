@@ -73,9 +73,9 @@ const SCRIPTING_SCHEMES: ReadonlySet<string> = new Set([
  * scopes they stand for, so the consent screen and the grant show those.
  * Quill still offers `post` at sign-in.
  */
-const LEGACY_SCOPES: Readonly<Record<string, readonly Scope[]>> = {
-  post: ['create', 'update'],
-};
+const LEGACY_SCOPES: ReadonlyMap<string, readonly Scope[]> = new Map([
+  ['post', ['create', 'update']],
+]);
 
 /**
  * Read an authorization request off its query string, for a site at `baseUrl`
@@ -127,9 +127,7 @@ export function parseAuthorizationRequest(
   const offered: ReadonlySet<string> = new Set(SCOPES);
   const asked = (params.get('scope') ?? '')
     .split(' ')
-    .flatMap((scope) =>
-      Object.hasOwn(LEGACY_SCOPES, scope) ? (LEGACY_SCOPES[scope] ?? []) : scope,
-    );
+    .flatMap((scope) => LEGACY_SCOPES.get(scope) ?? scope);
   const scopes = [...new Set(asked)].filter((scope): scope is Scope => offered.has(scope));
   const me = params.get('me') ?? '';
 
