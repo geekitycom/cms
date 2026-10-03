@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.18.0](https://github.com/geekitycom/cms/compare/v0.17.0...v0.18.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** the isPublicDocument export is removed; use isServed for whether a document has a public URL and isListed for whether the site lists it.
+
+### Features
+
+* **cms:** accept a post's location and add settings &gt; privacy to decide what is shared ([a186370](https://github.com/geekitycom/cms/commit/a1863706408098be23104a16101b051bb89329aa))
+* **cms:** accept everything quill's note, article and media flows send ([4186943](https://github.com/geekitycom/cms/commit/4186943a895da03f409e520686a052868b2a2fd5))
+* **cms:** create an access token from connected apps ([f6340c1](https://github.com/geekitycom/cms/commit/f6340c1618dfe7140d4db2f33c71af973caf7496))
+* **cms:** let listed apps sign in without pkce ([d38685b](https://github.com/geekitycom/cms/commit/d38685b37cb1908490e9a6e471ec8149c8d2a9ae))
+* **cms:** list each post type's properties in micropub q=config ([732058f](https://github.com/geekitycom/cms/commit/732058f2792ff894d1c7cbb581bec4f14a91379d))
+* **cms:** post-type property lists in q=config and access tokens from connected apps ([5c9b28d](https://github.com/geekitycom/cms/commit/5c9b28d93157196f14e77bf7901decee45e78ec1))
+* **cms:** read posts with read-of and read-status from micropub and the editor ([e29f524](https://github.com/geekitycom/cms/commit/e29f5245624221b316420ff66b8fc97fd8a1f312))
+* **cms:** strip upload metadata, photos in feeds, and location with a privacy page ([2afd371](https://github.com/geekitycom/cms/commit/2afd3718e789586bf90540110e1d2ebf811a9113))
+* **cms:** support quill and let listed apps sign in without pkce ([4015b55](https://github.com/geekitycom/cms/commit/4015b558fa33306e09af957b8cd663324dbb1299))
+* **cms:** unlisted posts, served at their url and left out of every list ([51cdb1b](https://github.com/geekitycom/cms/commit/51cdb1b8df99169a75dc8b92f315c1e2b3ca6f9f))
+
+
+### Bug Fixes
+
+* **cms:** answer 400 when a token-less form body cannot be read ([5c47c39](https://github.com/geekitycom/cms/commit/5c47c39f974e87eef148405a1c93a5ce98de124a))
+* **cms:** answer 404 for a post object on a site with no accounts ([c41f2d2](https://github.com/geekitycom/cms/commit/c41f2d27bed4c009e8b7e234ea37f188fdd6a213))
+* **cms:** carry a post's photos in the rss, atom and json feeds ([ac08e46](https://github.com/geekitycom/cms/commit/ac08e463995c1b68a709d89f3b93fa652d5b9c6d))
+* **cms:** harden how micropub reads a request body ([f417f5c](https://github.com/geekitycom/cms/commit/f417f5cdd548c27e974d1684237026321e8bb2ca))
+* **cms:** keep a read post's line, summary and webmention in step with the read ([d17198d](https://github.com/geekitycom/cms/commit/d17198d9bbad5efbd3359ca342f8eb0b7845195d))
+* **cms:** leave unlisted posts out of eleventy collections ([cb5802e](https://github.com/geekitycom/cms/commit/cb5802eae0fb983ccdf01b8726d49a1154245e4a))
+* **cms:** print relative body urls absolute in feeds ([22f2185](https://github.com/geekitycom/cms/commit/22f21856f0a34bf2c725015e0aa0cf4cb4200cf6))
+* **cms:** print relative body urls absolute in feeds ([fd3a333](https://github.com/geekitycom/cms/commit/fd3a333fdf63896bed759f1a43dc4764bc9ef60f))
+* **cms:** refuse an oversized micropub create before reading its body ([9896756](https://github.com/geekitycom/cms/commit/9896756ef05ffbbbc85b8c46ee7a276f4befc0c1))
+* **cms:** strip location and camera metadata from uploads ([0b0d68b](https://github.com/geekitycom/cms/commit/0b0d68b9b3249d1ac2953a142f3da46b4caa8399))
+* **cms:** unlisted posts in eleventy, a 404 for objects with no accounts, and read post gaps ([1aefd24](https://github.com/geekitycom/cms/commit/1aefd24deb46e68e2f4edf02d0081f8103c6f5d2))
+
 ## [0.17.0](https://github.com/geekitycom/cms/compare/v0.16.0...v0.17.0) (2026-10-02)
 
 
