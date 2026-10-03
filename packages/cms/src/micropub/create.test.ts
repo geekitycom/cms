@@ -416,10 +416,10 @@ describe('a refused create', () => {
       send: (cms, token) =>
         postForm(cms, token, [
           ['h', 'entry'],
-          ['checkin', 'https://places.example/cafe'],
+          ['rsvp', 'yes'],
           ['weight', '70kg'],
         ]),
-      names: ['checkin', 'weight'],
+      names: ['rsvp', 'weight'],
     },
     {
       label: 'an h=event',

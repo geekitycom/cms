@@ -103,3 +103,21 @@ micropub.rocks test 204 sends a `checkin` h-card beside its content and expects 
 - **Read and update.** `q=source` answers kept properties to the token's user, beside the mapped ones. An update's `replace`, `add` and `delete` change them as they change a mapped property; an update that names none leaves them.
 
 Limits: a kept property is not shown anywhere, not even to the author in the admin editor. A post copied to another site by its file goes without them, as it goes without its location. `checkin` is kept here until TASK-236 maps it onto the post's location.
+
+## Amendment (TASK-236, 2026-10-03): a checkin is the post's location
+
+micropub.rocks test 204 and Swarm-style clients send `checkin`, an h-card naming the venue. TASK-237 kept it privately as a property the site did not understand. It now maps onto the post's location (decision-29), on a create and an update alike:
+
+| Micropub property | Editor field | Where it lives |
+| --- | --- | --- |
+| `checkin`, an h-card | Location, with A check-in ticked | `data/locations.json`, the location with `checkin: true` |
+
+- **What is kept.** The venue's `name`, `locality`, `region`, `country-name` and its coordinates, as `latitude` and `longitude` on the h-card or a nested `geo`. Its `url`, `street-address` and `postal-code` are dropped. Under the `place` sharing level they would publish more than a place name: a street address and postcode say which door, and a venue URL may be a map link carrying coordinates. Nothing renders a URL either, so keeping it would keep data for no reader.
+- **Publishable.** A checkin gives a post something to publish, as a like does: Swarm sends one with no content.
+- **One location.** A post has one location. A `location` sent beside a `checkin` describes the same place: the checkin's words and coordinates win, and the location fills in what the checkin leaves out. The post is then a checkin. A second `checkin` value, or one that is not an h-card naming a place, is refused by name.
+- **Read and update.** `q=source` answers a checkin as `checkin`, an h-card, and no `location`; a create takes that answer back as the same checkin. An update's `replace` of `checkin` replaces the location, and `delete` of it removes the location. An update that replaces `location` on a checkin leaves an ordinary location, and one that deletes `location` removes the checkin too, since they are one value.
+- **The editor.** The Location box has an A check-in box, ticked for a checkin, so an editor save keeps the mark, and unticking it leaves an ordinary location.
+- **Readers.** The mark is for the author's own clients. `shareLocation` never passes it on, so the theme prints a checkin as any other `p-location` and federation as any other `Place`, only as far as Settings > Privacy allows, and with the default nothing of it. The IndieWeb checkin post type ("Checked in at …") was not built. It would put the mark into `SharedLocation`, and so publish one more fact, that the author was at the venue when posting, which no sharing level names, for a sentence the printed place already says.
+- **`q=config`.** `checkin` is not listed in any post type's `properties`: the clients that send it, Swarm bridges and micropub.rocks, do not read the list, and a client that does would offer a field for an h-card.
+
+A checkin kept by TASK-237 before this lands stays in `data/kept-properties.json`, unread. Both ship together, so no site has one.

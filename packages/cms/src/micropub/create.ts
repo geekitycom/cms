@@ -6,7 +6,8 @@ import { BLANK_READ_OF_FORM } from '../admin/read-field.ts';
 import type { ReadOfForm } from '../admin/read-field.ts';
 import { isWebUrl } from '../content/enclosure.ts';
 import type { KeptProperties } from '../content/kept-properties.ts';
-import { locationFromMicropub } from '../content/location.ts';
+import { checkinFromMicropub, locationFromMicropub, postLocation } from '../content/location.ts';
+import type { PostLocation } from '../content/location.ts';
 import { isReadStatus, READ_STATUSES } from '../content/read.ts';
 import { isVisibility } from '../content/visibility.ts';
 import { normalizeBody } from '../content/writer.ts';
@@ -57,6 +58,7 @@ const MAPPED_ON_THEIR_OWN = [
   'category',
   'photo',
   'location',
+  'checkin',
   'post-status',
   'mp-syndicate-to',
   'visibility',
@@ -131,6 +133,7 @@ const PUBLISHABLE: readonly Property[] = [
   'repost-of',
   'bookmark-of',
   'read-of',
+  'checkin',
 ];
 
 /** What `post-status` may say, and whether it makes a draft. */
@@ -279,7 +282,12 @@ export function createForm(
     }
     return photo;
   });
-  form.location = location(properties.get('location') ?? [], errors);
+  form.location = locationForm(
+    oneLocation(
+      parsedLocation('location', properties.get('location') ?? [], locationFromMicropub, errors),
+      parsedLocation('checkin', properties.get('checkin') ?? [], checkinFromMicropub, errors),
+    ),
+  );
   form.readOf = readOf(properties.get('read-of') ?? [], errors);
   form.readStatus = text('read-status');
   if (form.readStatus !== '' && !isReadStatus(form.readStatus)) {
@@ -335,16 +343,34 @@ function photoRow(value: unknown, baseUrl: string): PhotoRow | undefined {
   };
 }
 
-function location(values: readonly unknown[], errors: string[]): EditorForm['location'] {
-  if (values.length > 1) errors.push('location takes one value.');
+function parsedLocation(
+  name: string,
+  values: readonly unknown[],
+  parse: (value: unknown) => PostLocation | { readonly error: string },
+  errors: string[],
+): PostLocation | undefined {
+  if (values.length > 1) errors.push(`${name} takes one value.`);
   const [value] = values;
-  if (value === undefined) return locationForm(undefined);
-  const parsed = locationFromMicropub(value);
+  if (value === undefined) return undefined;
+  const parsed = parse(value);
   if ('error' in parsed) {
     errors.push(parsed.error);
-    return locationForm(undefined);
+    return undefined;
   }
-  return locationForm(parsed);
+  return parsed;
+}
+
+/**
+ * A post has one location, so a `location` sent beside a `checkin`, as a
+ * Swarm client may send one, describes the same place: the checkin's own
+ * words and coordinates win, and the location fills in what it leaves out.
+ */
+function oneLocation(
+  location: PostLocation | undefined,
+  checkin: PostLocation | undefined,
+): PostLocation | undefined {
+  if (location === undefined || checkin === undefined) return checkin ?? location;
+  return postLocation({ ...location, ...checkin, geo: checkin.geo ?? location.geo });
 }
 
 const READ_OF_PROPERTIES = ['name', 'author', 'uid', 'url'] as const;

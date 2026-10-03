@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  checkinFromMicropub,
   geoUri,
   isLocationSharing,
   locationFromMicropub,
@@ -152,6 +153,78 @@ describe('locationToMicropub', () => {
     for (const location of locations) {
       assert.deepEqual(locationFromMicropub(locationToMicropub(location)), location);
     }
+  });
+});
+
+/** micropub.rocks test 204's checkin, as it sends it. */
+const ROCKS_204_CHECKIN = {
+  type: ['h-card'],
+  properties: {
+    name: ['Los Gorditos'],
+    url: ['https://foursquare.com/v/502c4bbde4b06e61e06d1ebf'],
+    latitude: [45.524330801154],
+    longitude: [-122.68068281969],
+    'street-address': ['922 NW Everett St'],
+    locality: ['Portland'],
+    region: ['OR'],
+    'country-name': ['United States'],
+    'postal-code': ['97209'],
+  },
+};
+
+describe('checkinFromMicropub', () => {
+  it('keeps the venue and its coordinates, marked a checkin, and drops the street address, postcode and url', () => {
+    assert.deepEqual(checkinFromMicropub(ROCKS_204_CHECKIN), {
+      geo: { latitude: 45.524330801154, longitude: -122.68068281969 },
+      name: 'Los Gorditos',
+      locality: 'Portland',
+      region: 'OR',
+      country: 'United States',
+      checkin: true,
+    });
+  });
+
+  it('refuses anything but an h-card that names a place, as checkin', () => {
+    const says = (value: unknown, pattern: RegExp): void => {
+      const read = checkinFromMicropub(value);
+      assert.ok('error' in read, JSON.stringify(value));
+      assert.match(read.error, pattern);
+    };
+    says('https://foursquare.com/v/1', /checkin is an h-card/);
+    says({ type: ['h-geo'], properties: { latitude: ['1'], longitude: ['2'] } }, /h-card/);
+    says({ type: ['h-card'], properties: { url: ['https://a.example/'] } }, /^checkin names no/);
+    says(
+      { type: ['h-card'], properties: { latitude: ['95'], longitude: ['2'] } },
+      /^checkin latitude/,
+    );
+  });
+
+  it('answers as an h-card, which it reads back as the same checkin', () => {
+    const checkin = checkinFromMicropub(ROCKS_204_CHECKIN);
+    assert.ok(!('error' in checkin));
+    const answered = locationToMicropub(checkin);
+    assert.deepEqual((answered as { type: string[] }).type, ['h-card']);
+    assert.deepEqual(checkinFromMicropub(answered), checkin);
+    const unnamed = located({ geo: { latitude: 1, longitude: 2 }, checkin: true });
+    assert.deepEqual(locationToMicropub(unnamed), {
+      type: ['h-card'],
+      properties: { geo: ['geo:1,2'] },
+    });
+  });
+
+  it('is no location on its own', () => {
+    assert.equal(postLocation({ checkin: true }), undefined);
+    assert.equal(locationOf({ checkin: true }), undefined);
+    assert.deepEqual(locationOf({ locality: 'Paris', checkin: true }), {
+      locality: 'Paris',
+      checkin: true,
+    });
+  });
+
+  it('shares only what any location shares, never the mark', () => {
+    const checkin = located({ name: 'Cafe', geo: { latitude: 1, longitude: 2 }, checkin: true });
+    assert.deepEqual(shareLocation(checkin, 'place'), { kind: 'place', place: { name: 'Cafe' } });
+    assert.equal(shareLocation(checkin, 'none'), undefined);
   });
 });
 

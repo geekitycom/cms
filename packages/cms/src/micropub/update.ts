@@ -38,6 +38,7 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   visibility: ['visibility'],
   photo: ['photos'],
   location: ['location'],
+  checkin: ['location'],
   'mp-syndicate-to': ['syndicateTo'],
 };
 
@@ -83,7 +84,11 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
   });
   if (photos.length > 0) properties['photo'] = photos;
   const authorLocation = site.locations.read(document.permalink);
-  if (authorLocation !== undefined) properties['location'] = [locationToMicropub(authorLocation)];
+  if (authorLocation !== undefined) {
+    properties[authorLocation.checkin === true ? 'checkin' : 'location'] = [
+      locationToMicropub(authorLocation),
+    ];
+  }
   const declared = new Set(site.targets.map(({ id }) => id));
   const selected = syndicateToOf(document.extra).filter((id) => declared.has(id));
   if (selected.length > 0) properties['mp-syndicate-to'] = selected;

@@ -16,6 +16,8 @@ export interface PlaceWords {
 
 export interface LocationParts extends PlaceWords {
   readonly geo?: GeoPoint | undefined;
+  /** Sent as a Micropub `checkin`, and answered as one; nothing public reads it. */
+  readonly checkin?: true | undefined;
 }
 
 declare const nonEmpty: unique symbol;
@@ -196,9 +198,28 @@ function isLocationType(value: unknown): value is string {
   return typeof value === 'string' && Object.hasOwn(LOCATION_TYPES, value);
 }
 
+/**
+ * A Micropub `checkin`: the h-card of the venue, read as a location. Its
+ * `url`, `street-address` and `postal-code` are not kept: under `place`
+ * sharing they would publish more than a place name.
+ */
+export function checkinFromMicropub(value: unknown): PostLocation | { readonly error: string } {
+  const type = isRecord(value) ? value['type'] : undefined;
+  if (!Array.isArray(type) || !type.includes('h-card')) {
+    return {
+      error: 'checkin is an h-card, { "type": ["h-card"], "properties": { "name": ["…"] } }.',
+    };
+  }
+  const read = locationFromMicropub(value);
+  if ('error' in read) return { error: read.error.replace(/^location/, 'checkin') };
+  return { ...read, checkin: true };
+}
+
 export function locationToMicropub(location: PostLocation): string | Record<string, unknown> {
   const words = placeWordList(location);
-  if (words.length === 0 && location.geo !== undefined) return geoUri(location.geo);
+  if (location.checkin !== true && words.length === 0 && location.geo !== undefined) {
+    return geoUri(location.geo);
+  }
   const properties: Record<string, unknown[]> = {};
   for (const [property, value] of [
     ['name', location.name],
@@ -209,7 +230,8 @@ export function locationToMicropub(location: PostLocation): string | Record<stri
     if (value !== undefined) properties[property] = [value];
   }
   if (location.geo !== undefined) properties['geo'] = [geoUri(location.geo)];
-  return { type: [location.name === undefined ? 'h-adr' : 'h-card'], properties };
+  const card = location.checkin === true || location.name !== undefined;
+  return { type: [card ? 'h-card' : 'h-adr'], properties };
 }
 
 export function locationOf(value: unknown): PostLocation | undefined {
@@ -233,6 +255,7 @@ export function locationOf(value: unknown): PostLocation | undefined {
     locality: text('locality'),
     region: text('region'),
     country: text('country'),
+    checkin: value['checkin'] === true ? true : undefined,
   });
 }
 
@@ -241,7 +264,8 @@ export function postLocation(parts: LocationParts): PostLocation | undefined {
     ...(parts.geo === undefined ? {} : { geo: parts.geo }),
     ...placeWords(parts),
   };
-  return Object.keys(location).length === 0 ? undefined : (location as PostLocation);
+  if (Object.keys(location).length === 0) return undefined;
+  return (parts.checkin === true ? { ...location, checkin: true } : location) as PostLocation;
 }
 
 function placeWords(place: PlaceWords): PlaceWords {

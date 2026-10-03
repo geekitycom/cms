@@ -131,42 +131,36 @@ async function text(cms: Cms, pathname: string, accept?: string): Promise<string
   return await response.text();
 }
 
-/** micropub.rocks test 204, "Create an h-entry post with a nested object", as it sends it. */
-const ROCKS_204 = {
+/** A post with a nested object the site does not understand, as micropub.rocks test 204 nests its checkin. */
+const NESTED = {
   type: ['h-entry'],
   properties: {
     published: ['2017-05-31T12:03:36-07:00'],
     content: ['Lunch meeting'],
-    checkin: [
+    ate: [
       {
-        type: ['h-card'],
+        type: ['h-food'],
         properties: {
-          name: ['Los Gorditos'],
-          url: ['https://foursquare.com/v/502c4bbde4b06e61e06d1ebf'],
-          latitude: [45.524330801154],
-          longitude: [-122.68068281969],
-          'street-address': ['922 NW Everett St'],
-          locality: ['Portland'],
-          region: ['OR'],
-          'country-name': ['United States'],
-          'postal-code': ['97209'],
+          name: ['Carnitas tacos'],
+          url: ['https://menu.example/carnitas'],
+          calories: [41273],
         },
       },
     ],
   },
 };
 
-const CHECKIN = ROCKS_204.properties.checkin;
-const SECRETS = ['checkin', 'Los Gorditos', '45.524330801154', '922 NW Everett', '97209'];
+const ATE = NESTED.properties.ate;
+const SECRETS = ['h-food', 'Carnitas', 'menu.example', '41273'];
 
 describe('a property the site does not understand (AC #1, #5)', () => {
-  it('answers micropub.rocks test 204 with 201, publishes the rest and keeps the checkin under dataDir', async () => {
+  it('answers a nested object it does not understand with 201, publishes the rest and keeps the object under dataDir', async () => {
     const { cms, token } = await site();
-    const url = await created(await postJson(cms, token, ROCKS_204));
+    const url = await created(await postJson(cms, token, NESTED));
     const permalink = new URL(url).pathname;
 
     assert.match(await text(cms, permalink), /Lunch meeting/);
-    assert.deepEqual(await keptFile(cms), { [permalink]: { checkin: CHECKIN } });
+    assert.deepEqual(await keptFile(cms), { [permalink]: { ate: ATE } });
     const mode = (await stat(path.join(cms.config.dataDir, KEPT_PROPERTIES_FILE))).mode & 0o777;
     assert.equal(mode, 0o600);
     for (const [file, contents] of await filesUnder(cms.config.contentDir)) {
@@ -266,7 +260,7 @@ describe('mp-* commands (AC #4)', () => {
     assert.match(await refusal(response), /does not support mp-channel/);
     assert.deepEqual(await postFiles(cms), []);
 
-    const url = await created(await postJson(cms, token, { ...ROCKS_204 }));
+    const url = await created(await postJson(cms, token, { ...NESTED }));
     const update = await postJson(cms, token, {
       action: 'update',
       url,
@@ -279,15 +273,15 @@ describe('mp-* commands (AC #4)', () => {
 describe('reading and changing what is kept (AC #2)', () => {
   it('answers q=source with the kept properties as they were sent', async () => {
     const { cms, token } = await site();
-    const url = await created(await postJson(cms, token, ROCKS_204));
+    const url = await created(await postJson(cms, token, NESTED));
     const properties = await source(cms, token, url);
-    assert.deepEqual(properties['checkin'], CHECKIN);
+    assert.deepEqual(properties['ate'], ATE);
     assert.deepEqual(properties['content'], ['Lunch meeting']);
   });
 
   it('replaces, adds to and deletes a kept property on an update, leaving the post’s file alone', async () => {
     const { cms, token } = await site();
-    const url = await created(await postJson(cms, token, ROCKS_204));
+    const url = await created(await postJson(cms, token, NESTED));
     const permalink = new URL(url).pathname;
     const [file] = await postFiles(cms);
     assert.ok(file !== undefined);
@@ -295,40 +289,40 @@ describe('reading and changing what is kept (AC #2)', () => {
     await updated(cms, token, {
       action: 'update',
       url,
-      replace: { checkin: ['https://a.example/'] },
+      replace: { ate: ['https://a.example/'] },
     });
-    assert.deepEqual((await keptFile(cms))[permalink], { checkin: ['https://a.example/'] });
+    assert.deepEqual((await keptFile(cms))[permalink], { ate: ['https://a.example/'] });
 
     await updated(cms, token, {
       action: 'update',
       url,
-      add: { checkin: ['https://b.example/'], mood: ['fed'] },
+      add: { ate: ['https://b.example/'], mood: ['fed'] },
     });
     assert.deepEqual((await keptFile(cms))[permalink], {
-      checkin: ['https://a.example/', 'https://b.example/'],
+      ate: ['https://a.example/', 'https://b.example/'],
       mood: ['fed'],
     });
 
     await updated(cms, token, {
       action: 'update',
       url,
-      delete: { checkin: ['https://a.example/'] },
+      delete: { ate: ['https://a.example/'] },
     });
     assert.deepEqual((await keptFile(cms))[permalink], {
-      checkin: ['https://b.example/'],
+      ate: ['https://b.example/'],
       mood: ['fed'],
     });
 
     await updated(cms, token, { action: 'update', url, replace: { content: ['Dinner.'] } });
     assert.deepEqual(
       (await keptFile(cms))[permalink],
-      { checkin: ['https://b.example/'], mood: ['fed'] },
+      { ate: ['https://b.example/'], mood: ['fed'] },
       'an update that names none leaves them',
     );
 
-    await updated(cms, token, { action: 'update', url, delete: ['checkin', 'mood'] });
+    await updated(cms, token, { action: 'update', url, delete: ['ate', 'mood'] });
     assert.equal(permalink in (await keptFile(cms)), false);
-    assert.equal('checkin' in (await source(cms, token, url)), false);
+    assert.equal('ate' in (await source(cms, token, url)), false);
     for (const [name, contents] of await filesUnder(cms.config.contentDir)) {
       for (const needle of ['a.example', 'b.example', 'mood']) {
         assert.ok(!contents.includes(needle), `${name} holds ${needle}`);
@@ -338,15 +332,15 @@ describe('reading and changing what is kept (AC #2)', () => {
 
   it('keeps them through a delete and an undelete', async () => {
     const { cms, token } = await site();
-    const url = await created(await postJson(cms, token, ROCKS_204));
+    const url = await created(await postJson(cms, token, NESTED));
 
     const deleted = await postJson(cms, token, { action: 'delete', url });
     assert.equal(deleted.status, 204);
-    assert.deepEqual((await source(cms, token, url))['checkin'], CHECKIN);
+    assert.deepEqual((await source(cms, token, url))['ate'], ATE);
 
     const restored = await postJson(cms, token, { action: 'undelete', url });
     assert.equal(restored.status, 204);
-    assert.deepEqual((await source(cms, token, url))['checkin'], CHECKIN);
+    assert.deepEqual((await source(cms, token, url))['ate'], ATE);
   });
 
   it('moves them with a draft whose re-dating moves it', async () => {
@@ -354,7 +348,7 @@ describe('reading and changing what is kept (AC #2)', () => {
     const url = await created(
       await postJson(cms, token, {
         type: ['h-entry'],
-        properties: { content: ['Later.'], 'post-status': ['draft'], checkin: CHECKIN },
+        properties: { content: ['Later.'], 'post-status': ['draft'], ate: ATE },
       }),
     );
     const response = await postJson(cms, token, {
@@ -364,7 +358,7 @@ describe('reading and changing what is kept (AC #2)', () => {
     });
     const moved = await created(response);
     assert.notEqual(moved, url);
-    assert.deepEqual(await keptFile(cms), { [new URL(moved).pathname]: { checkin: CHECKIN } });
+    assert.deepEqual(await keptFile(cms), { [new URL(moved).pathname]: { ate: ATE } });
   });
 
   it('keeps them through an editor save, and moves them with a slug the editor renames', async () => {
@@ -377,7 +371,7 @@ describe('reading and changing what is kept (AC #2)', () => {
           content: ['Lunch.'],
           'mp-slug': ['at-lunch'],
           'post-status': ['draft'],
-          checkin: CHECKIN,
+          ate: ATE,
         },
       }),
     );
@@ -400,14 +394,14 @@ describe('reading and changing what is kept (AC #2)', () => {
     const renamed = cms.store.getBySlug('out-to-lunch');
     assert.ok(renamed !== undefined);
     assert.notEqual(renamed.permalink, draft.permalink);
-    assert.deepEqual(await keptFile(cms), { [renamed.permalink]: { checkin: CHECKIN } });
+    assert.deepEqual(await keptFile(cms), { [renamed.permalink]: { ate: ATE } });
   });
 });
 
 describe('public surfaces (AC #3)', () => {
   it('no kept property appears on the page, its representations, the feeds, the object, search or llms.txt', async () => {
     const { cms, token } = await site();
-    const url = await created(await postJson(cms, token, ROCKS_204));
+    const url = await created(await postJson(cms, token, NESTED));
     const pathname = new URL(url).pathname;
 
     const surfaces: Record<string, string> = {
