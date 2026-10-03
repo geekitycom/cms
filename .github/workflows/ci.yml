@@ -27,8 +27,10 @@ concurrency:
 jobs:
   # A pull request run tests GitHub's merge of the branch into main as main
   # stood then, so a push whose merge commit has the same tree was already
-  # tested byte for byte. [skip ci] cannot do this: it would skip
-  # release-please too.
+  # tested byte for byte. So was a pull request run whose merge has the same
+  # tree, as when a stacked pull request is rebased onto main after the one
+  # below it merges, or only its title changed. [skip ci] cannot do this: it
+  # would skip release-please too.
   already-tested:
     name: already-tested
     runs-on: ubuntu-24.04-arm
@@ -39,7 +41,6 @@ jobs:
       skip: ${{ steps.look.outputs.skip }}
     steps:
       - id: look
-        if: github.event_name == 'push'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -208,32 +209,6 @@ jobs:
         shell: bash
         run: bash scripts/docker-smoke.sh geekity-smoke:ci
 
-  # Node's own `--experimental-test-coverage`, kept out of the `test` job so a
-  # coverage hiccup never blocks a merge. The summary is uploaded as an
-  # artifact; no third-party coverage service is involved.
-  coverage:
-    name: coverage
-    needs: already-tested
-    if: ${{ !cancelled() && needs.already-tested.outputs.skip != 'true' }}
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-workspace
-      - name: Run the suite with coverage
-        shell: bash
-        run: |
-          set -o pipefail
-          pnpm test:coverage 2>&1 | tee coverage-summary.txt
-      - uses: actions/upload-artifact@v7
-        # Upload the summary even when the run failed; that is when it is most
-        # worth reading.
-        if: always()
-        with:
-          name: coverage-summary
-          path: coverage-summary.txt
-          if-no-files-found: warn
-          retention-days: 14
-
   # Squash merges take the pull request title as the commit message, and
   # release-please reads that message to work out the next version, so the title
   # has to parse as a Conventional Commit. The husky `commit-msg` hook covers
@@ -291,18 +266,7 @@ jobs:
     name: record-tested-tree
     if: github.event_name == 'pull_request'
     needs:
-      [
-        lint,
-        typecheck,
-        test,
-        test-node-26,
-        build,
-        test-11ty,
-        fed-smoke,
-        pack-install,
-        docker-smoke,
-        coverage,
-      ]
+      [lint, typecheck, test, test-node-26, build, test-11ty, fed-smoke, pack-install, docker-smoke]
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7

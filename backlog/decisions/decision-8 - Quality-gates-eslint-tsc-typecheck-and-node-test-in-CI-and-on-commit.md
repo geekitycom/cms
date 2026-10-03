@@ -27,3 +27,7 @@ Where they run:
 - Type-checked lint rules need a tsconfig per package that eslint can find; the workspace uses `tsconfig.base.json` extended by each package.
 - Tests live beside the code as `*.test.ts` and are excluded from the published build.
 - Pre-push hooks are skippable with `--no-verify` for emergencies, but CI is not.
+
+## Amendment (2026-10-03, TASK-248)
+
+CI no longer measures coverage. The `coverage` job ran the whole suite a second time under `--experimental-test-coverage`, the slowest job of every run, with no threshold set and an uploaded summary that nothing read. `pnpm test:coverage` stays for a contributor who wants the numbers locally.
