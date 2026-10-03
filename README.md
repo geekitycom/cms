@@ -1615,10 +1615,10 @@ answer 503 in maintenance mode.
 
    | Scope     | The consent screen says   | What it allows                                       |
    | --------- | ------------------------- | ---------------------------------------------------- |
-   | `create`  | Create posts as you       | A `POST` that creates a post.                        |
+   | `create`  | Create posts as you       | A `POST` that creates a post, and an upload.         |
    | `update`  | Edit your posts           | `action=update`.                                     |
    | `delete`  | Delete your posts         | `action=delete` and `action=undelete`.               |
-   | `media`   | Upload media to your site | An upload to the media endpoint.                     |
+   | `media`   | Upload media to your site | An upload to the media endpoint, but no post.        |
    | `profile` | Your name, URL and photo  | Nothing on the endpoint. The app learns who you are. |
 
    Untick any scope you do not want the app to have. A scope the site does not
@@ -1796,8 +1796,11 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
 
 ### Uploading media
 
-The media endpoint takes a file before an app names it in a post. It needs the
-media scope, and a token without it gets 401 `insufficient_scope`. The body is
+The media endpoint takes a file before an app names it in a post. It takes a
+token with the create scope or the media scope, because a create can already
+carry a photo file part. A token with neither gets 401 `insufficient_scope`,
+whose `WWW-Authenticate` header names `scope="create media"`. A token with media
+and without create can upload but cannot create a post. The body is
 `multipart/form-data` with the file in a part named
 `file`. The file goes into the media library exactly as an admin upload does.
 It is stored under `content/uploads/{yyyy}/{mm}/`, its image variants are
@@ -1815,6 +1818,10 @@ replayed with curl against a local site. Every test passes except these:
 - 805 sends the same token in the header and the body and expects it refused,
   as RFC 6750 says. The site accepts it, because Quill sends its token that way
   and refusing it would refuse every Quill post.
+
+Test 700 uploads a jpg with the token micropub.rocks signs in for, which has
+create, update, delete and undelete and no media. It passes because the media
+endpoint takes a create token.
 
 [Quill](https://quill.p3k.io/) is supported: its note, article, bookmark, like
 and repost editors, the location its note editor attaches, its photo uploads

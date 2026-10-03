@@ -73,16 +73,18 @@ function invalidRequest(c: Context, description: string): Response {
  * {@link storeUpload}, the media library's own rules and directory, so a
  * client's photo is a library file like any other with its variants derived
  * (decision-10). Every refusal is Micropub's 400 `invalid_request` rather
- * than the admin's 413 or 415. `q=source` answers the token's user's last
- * upload as `{ items: [{ url, published }] }`, which Quill offers as the photo
- * of the next note when it is under 15 minutes old; `q=last` answers it as
- * `{ url }`, the micropub-extensions query other clients ask.
+ * than the admin's 413 or 415. A create token may upload as well as a media
+ * one, since a create can already carry a photo file part (TASK-238).
+ * `q=source` answers the token's user's last upload as
+ * `{ items: [{ url, published }] }`, which Quill offers as the photo of the
+ * next note when it is under 15 minutes old; `q=last` answers it as `{ url }`,
+ * the micropub-extensions query other clients ask.
  */
 export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
   app.post(
     MICROPUB_MEDIA_PATH,
     logMediaRequest,
-    requireSiteToken('media'),
+    requireSiteToken(['create', 'media']),
     async (c: Context<BearerEnv>) => {
       const { config, bearer } = c.var;
       let body: Record<string, unknown>;

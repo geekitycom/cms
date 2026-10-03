@@ -211,9 +211,53 @@ describe('a refused upload', () => {
   });
 });
 
-describe('the media scope', () => {
-  it('refuses a token without it with 401 insufficient_scope, and nothing is stored', async () => {
-    const { cms, contentDir, tokens } = await site(['create']);
+describe('the create or media scope (TASK-238)', () => {
+  it('lets a token with create and without media upload, and answers its q=last and q=source', async () => {
+    const { cms, tokens } = await site(['create']);
+    const response = await upload(cms, tokens.ada, {
+      bytes: await photo(),
+      name: 'a.png',
+      type: 'image/png',
+    });
+
+    assert.equal(response.status, 201);
+    const location = response.headers.get('location') ?? '';
+    assert.match(location, /^https:\/\/blog\.example\/uploads\/\d{4}\/\d{2}\/a\.png$/);
+    assert.deepEqual(await (await last(cms, tokens.ada)).json(), { url: location });
+    const source = await cms.app.request(`${MEDIA}?q=source`, {
+      headers: { authorization: `Bearer ${tokens.ada}` },
+    });
+    assert.equal(source.status, 200);
+    const { items } = (await source.json()) as { items: { url: string }[] };
+    assert.deepEqual(
+      items.map((item) => item.url),
+      [location],
+    );
+  });
+
+  it('lets a token with media and without create upload but not create a post', async () => {
+    const { cms, tokens } = await site(['media']);
+    const uploaded = await upload(cms, tokens.ada, {
+      bytes: await photo(),
+      name: 'a.png',
+      type: 'image/png',
+    });
+    assert.equal(uploaded.status, 201);
+
+    const created = await cms.app.request('/_geekity/micropub', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${tokens.ada}`,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: 'h=entry&content=Hello+World',
+    });
+    assert.equal(created.status, 401);
+    assert.equal(((await created.json()) as { error: string }).error, 'insufficient_scope');
+  });
+
+  it('refuses a token with neither with 401 insufficient_scope naming both, and nothing is stored', async () => {
+    const { cms, contentDir, tokens } = await site(['update', 'delete', 'profile']);
     const response = await upload(cms, tokens.ada, {
       bytes: await photo(),
       name: 'a.png',
@@ -221,15 +265,34 @@ describe('the media scope', () => {
     });
 
     assert.equal(response.status, 401);
-    assert.equal(
-      ((await response.json()) as Record<string, string>)['error'],
-      'insufficient_scope',
-    );
+    assert.deepEqual(await response.json(), {
+      error: 'insufficient_scope',
+      error_description: 'The access token was not granted the create or media scope.',
+    });
     assert.match(
       response.headers.get('www-authenticate') ?? '',
-      /^Bearer error="insufficient_scope", scope="media", /,
+      /^Bearer error="insufficient_scope", scope="create media", /,
     );
     assert.deepEqual(await storedFiles(contentDir), []);
+  });
+
+  it('answers micropub.rocks test 700, a jpg from a token it signed in for without media, with 201', async () => {
+    const { cms, tokens } = await site(['create', 'update', 'delete']);
+    const jpg = Uint8Array.from(
+      await sharp({
+        create: { width: 40, height: 20, channels: 3, background: { r: 200, g: 120, b: 40 } },
+      })
+        .jpeg()
+        .toBuffer(),
+    );
+    const response = await upload(cms, tokens.ada, {
+      bytes: jpg,
+      name: 'aaronpk.jpg',
+      type: 'image/jpeg',
+    });
+
+    assert.equal(response.status, 201);
+    assert.match(response.headers.get('location') ?? '', /\/aaronpk\.jpg$/);
   });
 
   it('refuses a request with no token with 401', async () => {

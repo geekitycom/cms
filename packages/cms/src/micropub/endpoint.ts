@@ -23,7 +23,7 @@ import type { ContentStore } from '../content/store.ts';
 import { VISIBILITIES } from '../content/visibility.ts';
 import { logMicropubRequest } from '../indieauth/activity-log.ts';
 import { insufficientScope, requireBearer } from '../indieauth/bearer.ts';
-import type { BearerEnv } from '../indieauth/bearer.ts';
+import type { BearerEnv, Scopes } from '../indieauth/bearer.ts';
 import { MICROPUB_MEDIA_PATH, MICROPUB_PATH, siteBaseUrl } from '../indieauth/discovery.ts';
 import type { GeekityEnv } from '../env.ts';
 import type { Scope } from '../indieauth/request.ts';
@@ -219,10 +219,10 @@ const MICROPUB_INSUFFICIENT_SCOPE_STATUS = 401;
 /**
  * The bearer guard for a token bound to this site, the resource its protected
  * resource metadata names, or bound to none, as Micropub clients' tokens are
- * (decision-24), and granted `scope` when one is named. Built per request
+ * (decision-24), and granted any one of `scopes` when they are named. Built per request
  * because the base URL is a setting.
  */
-export function requireSiteToken(scope?: Scope): MiddlewareHandler<BearerEnv> {
+export function requireSiteToken(scopes?: Scopes): MiddlewareHandler<BearerEnv> {
   return async (c, next) => {
     const declared = Number(c.req.header('content-length') ?? '');
     const limit = largestUploadLimit(c.var.config);
@@ -232,7 +232,7 @@ export function requireSiteToken(scope?: Scope): MiddlewareHandler<BearerEnv> {
     }
     return await requireBearer({
       audience: { resource: siteBaseUrl(c), acceptsUnbound: true },
-      ...(scope === undefined ? {} : { scope }),
+      ...(scopes === undefined ? {} : { scopes }),
       insufficientScopeStatus: MICROPUB_INSUFFICIENT_SCOPE_STATUS,
     })(c, next);
   };
@@ -469,7 +469,7 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
     if (post instanceof Refusal) return post.answer(c);
     const scope = ACTION_SCOPES[post.action];
     if (!c.var.bearer.token.scopes.includes(scope)) {
-      return insufficientScope(c, scope, MICROPUB_INSUFFICIENT_SCOPE_STATUS);
+      return insufficientScope(c, [scope], MICROPUB_INSUFFICIENT_SCOPE_STATUS);
     }
     const handle = ACTIONS[post.action] as (
       c: Context<BearerEnv>,
