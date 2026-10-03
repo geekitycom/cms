@@ -4,7 +4,7 @@ import { clientAddress, createLoginThrottle } from '../admin/throttle.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
-import { isPublicDocument } from '../web/documents.ts';
+import { isServed } from '../web/documents.ts';
 import { sendContactMessage } from './delivery.ts';
 import {
   CONTACT_ANCHOR,
@@ -59,7 +59,7 @@ export function mountContact(app: Hono<GeekityEnv>): void {
     const form = formOf(body);
 
     const document = store.getBySlug(form.page);
-    if (document === undefined || !isPublicDocument(document, store.now())) {
+    if (document === undefined || !isServed(document, store.now())) {
       return c.text('There is no such page to write to.', 404);
     }
 

@@ -1,0 +1,14 @@
+{#
+  An entry includes it with `read` on the context; a listing sets it from the
+  entry it is printing. Nothing is printed for a post that read nothing.
+#}
+{% if read %}
+<p class="read-line">
+  <data class="p-read-status" value="{{ read.status }}">{{ read.statusLabel }}</data>: <span class="p-read-of h-cite">
+    {%- if read.of.url %}<a class="u-url" href="{{ read.of.url }}"><cite class="p-name">{{ read.of.name }}</cite></a>
+    {%- else %}<cite class="p-name">{{ read.of.name }}</cite>{% endif %}
+    {%- if read.of.author %} by <span class="p-author">{{ read.of.author }}</span>{% endif %}
+    {%- if read.of.uid %}, <data class="p-uid" value="{{ read.of.uid }}">{{ read.of.uidLabel }}</data>{% endif -%}
+  </span>
+</p>
+{% endif %}

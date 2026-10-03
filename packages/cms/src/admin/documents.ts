@@ -11,6 +11,15 @@ import { parseDocument } from '../content/parser.ts';
 import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import {
+  isReadStatus,
+  READ_OF_FRONT_MATTER_KEY,
+  READ_STATUS_FRONT_MATTER_KEY,
+  READ_STATUS_LABELS,
+  READ_STATUSES,
+  readWork,
+  readWorkFrontMatter,
+} from '../content/read.ts';
+import {
   ENCLOSURE_FRONT_MATTER_KEY,
   enclosureOf,
   isWebUrl,
@@ -34,13 +43,15 @@ import {
   wallClockIn,
   zoneLabel,
 } from '../content/time.ts';
+import { isVisibility, VISIBILITY_FRONT_MATTER_KEY, visibilityOf } from '../content/visibility.ts';
+import type { StoredVisibility } from '../content/visibility.ts';
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readAltTexts, undescribedImages, undescribedPhotos } from '../images/alt-text.ts';
 import type { UndescribedImage } from '../images/alt-text.ts';
-import { isPublicDocument } from '../web/documents.ts';
+import { isServed } from '../web/documents.ts';
 import { LANG_FRONT_MATTER_KEY } from '../web/locale.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
@@ -83,6 +94,14 @@ import {
   resolvePhotos,
 } from './photo-field.ts';
 import type { PhotoRow } from './photo-field.ts';
+import {
+  BLANK_READ_OF_FORM,
+  READ_FIELDS,
+  readOfForm,
+  resolveRead,
+  submittedReadOfForm,
+} from './read-field.ts';
+import type { ReadOfForm } from './read-field.ts';
 import {
   SYNDICATE_TO_FRONT_MATTER_KEY,
   syndicateToOf,
@@ -156,6 +175,11 @@ function commentSetting(value: string): string {
   return value === COMMENT_SETTINGS.open || value === COMMENT_SETTINGS.closed
     ? value
     : COMMENT_SETTINGS.site;
+}
+
+function formVisibility(value: string): StoredVisibility {
+  if (value === '') return 'public';
+  return isVisibility(value) ? value : { unrecognized: value };
 }
 
 /** What a document's front matter already says about comments. */
@@ -379,8 +403,11 @@ async function saveFromForm(
     author: text(body['author']).trim(),
     inReplyTo: text(body['in-reply-to']).trim(),
     ...citationFields((property) => (kind.type === 'post' ? text(body[property]).trim() : '')),
+    readStatus: kind.type === 'post' ? text(body[READ_FIELDS.status]).trim() : '',
+    readOf: kind.type === 'post' ? submittedReadOfForm(body) : BLANK_READ_OF_FORM,
     lang: text(body['lang']).trim(),
     draft: body['draft'] !== undefined,
+    visibility: formVisibility(text(body['visibility'])),
     exclude: body['exclude'] !== undefined,
     contact: body['contact'] !== undefined,
     pinned: kind.type === 'post' && body['pinned'] !== undefined,
@@ -525,6 +552,8 @@ export async function writeDocument(
         );
       }
     }
+    const read = resolveRead(form.readStatus, form.readOf);
+    if ('error' in read) return refused(read.error);
   }
 
   if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
@@ -597,6 +626,7 @@ export async function writeDocument(
     slugify(form.title) ||
     (document?.slug ?? '') ||
     noteSlug(form.body) ||
+    slugify(form.readOf.name) ||
     'untitled';
   const trashed = document !== undefined && isTrashedPath(document.path);
   // The calendar day the document is filed under: the site zone's day at its
@@ -772,7 +802,7 @@ function documentPath(input: {
 function promisedDocument(document: Document | undefined, now: Date): Document | undefined {
   if (document === undefined) return undefined;
   const announced = document.activitypub?.published !== undefined;
-  return isPublicDocument(document, now) || announced ? document : undefined;
+  return isServed(document, now) || announced ? document : undefined;
 }
 
 /**
@@ -954,6 +984,9 @@ function resolveExtra(
     | 'lang'
     | 'pinned'
     | 'syndicateTo'
+    | 'visibility'
+    | 'readStatus'
+    | 'readOf'
     | (typeof CITATION_FIELDS)[CitationProperty]
   >,
   now: Date,
@@ -971,6 +1004,17 @@ function resolveExtra(
       const cited = form[CITATION_FIELDS[property]];
       if (cited === '') delete extra[property];
       else extra[property] = cited;
+    }
+    const resolved = resolveRead(form.readStatus, form.readOf);
+    if ('read' in resolved) {
+      const { read } = resolved;
+      if (read === undefined) {
+        delete extra[READ_OF_FRONT_MATTER_KEY];
+        delete extra[READ_STATUS_FRONT_MATTER_KEY];
+      } else {
+        extra[READ_OF_FRONT_MATTER_KEY] = readWorkFrontMatter(read.of);
+        extra[READ_STATUS_FRONT_MATTER_KEY] = read.status;
+      }
     }
   }
 
@@ -994,6 +1038,11 @@ function resolveExtra(
     if (!form.pinned) delete extra[PINNED_FRONT_MATTER_KEY];
     else if (pinned === undefined) extra[PINNED_FRONT_MATTER_KEY] = toUtcInstant(now, 'UTC');
   }
+
+  if (form.visibility === 'public') delete extra[VISIBILITY_FRONT_MATTER_KEY];
+  else if (typeof form.visibility === 'string')
+    extra[VISIBILITY_FRONT_MATTER_KEY] = form.visibility;
+  else extra[VISIBILITY_FRONT_MATTER_KEY] = form.visibility.unrecognized;
 
   // Empty is the site's language, which is the key's absence (TASK-154).
   if (form.lang === '') delete extra[LANG_FRONT_MATTER_KEY];
@@ -1430,9 +1479,21 @@ export interface EditorForm {
   likeOf: string;
   /** The page this one bookmarks, the mf2 `bookmark-of` (TASK-169). Posts only. */
   bookmarkOf: string;
+  /**
+   * How far the post's author got with what they read, the mf2 `read-status`
+   * (TASK-229), as the file or the form spells it. Posts only.
+   */
+  readStatus: string;
+  /** What was read, the mf2 `read-of` (TASK-229). Posts only. */
+  readOf: ReadOfForm;
   /** The language it is written in, the `lang` key; empty for the site's. */
   lang: string;
   draft: boolean;
+  /**
+   * Whether the document is listed or only served at its URL (TASK-227), or a
+   * value the site does not recognize, which hides it until one is chosen.
+   */
+  visibility: StoredVisibility;
   /** Whether `eleventyExcludeFromCollections` is set. Pages only. */
   exclude: boolean;
   /** Whether the page offers a contact form. Pages only. */
@@ -1491,8 +1552,11 @@ export function blankForm(
     author: '',
     inReplyTo: '',
     ...citationFields(() => ''),
+    readStatus: '',
+    readOf: BLANK_READ_OF_FORM,
     lang: '',
     draft: false,
+    visibility: 'public',
     exclude: false,
     contact: false,
     pinned: false,
@@ -1537,11 +1601,19 @@ export function formFor(
     ...citationFields((property) =>
       document.type === 'post' ? citationText(document.extra[property]) : '',
     ),
+    readStatus:
+      document.type === 'post' && typeof document.extra[READ_STATUS_FRONT_MATTER_KEY] === 'string'
+        ? document.extra[READ_STATUS_FRONT_MATTER_KEY]
+        : '',
+    readOf: readOfForm(
+      document.type === 'post' ? readWork(document.extra[READ_OF_FRONT_MATTER_KEY]) : undefined,
+    ),
     lang:
       typeof document.extra[LANG_FRONT_MATTER_KEY] === 'string'
         ? document.extra[LANG_FRONT_MATTER_KEY]
         : '',
     draft: document.draft,
+    visibility: visibilityOf(document),
     exclude: document.extra[EXCLUDE_KEY] === true,
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
     pinned: pinnedAt(document) !== undefined,
@@ -1627,6 +1699,11 @@ async function renderEditor(
           photoRows: photoRowViews(form.photos, readAltTexts(c.var.config.contentDir)),
           photoChoices: await photoChoices(c.var.config.contentDir),
           locationFields: LOCATION_FIELDS,
+          readFields: READ_FIELDS,
+          readStatuses: READ_STATUSES.map((value) => ({ value, label: READ_STATUS_LABELS[value] })),
+          ...(form.readStatus === '' || isReadStatus(form.readStatus)
+            ? {}
+            : { unrecognizedReadStatus: form.readStatus }),
           // TASK-155: one checkbox per target the site declares.
           syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
             ...target,
@@ -1647,8 +1724,7 @@ async function renderEditor(
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
     uploadUrl: UPLOADS_PATH,
-    viewUrl:
-      document !== undefined && isPublicDocument(document, now) ? document.permalink : undefined,
+    viewUrl: document !== undefined && isServed(document, now) ? document.permalink : undefined,
     // Named beside the date field, because a wall clock with no zone on it is
     // exactly the ambiguity decision-11 exists to remove.
     ...(kind.dated ? { dateZone: zoneLabel(form.date === '' ? now : form.date, timezone) } : {}),
@@ -1697,6 +1773,8 @@ export interface DocumentRow {
   trashed: boolean;
   /** Whether its date has not arrived, so the public site is holding it back. */
   scheduled: boolean;
+  /** Whether its `visibility` is one the site does not recognize, so it is not served. */
+  hidden: boolean;
   /** Where the editor for it lives. */
   editUrl: string;
   /** Its public URL, or `undefined` when the public site would not serve it. */
@@ -1736,7 +1814,7 @@ function listRow(
   now: Date,
   role: string | undefined,
 ): DocumentRow {
-  const isPublic = isPublicDocument(document, now);
+  const isPublic = isServed(document, now);
   return {
     title: postLabel(document),
     slug: document.slug,
@@ -1751,6 +1829,7 @@ function listRow(
     draft: document.draft,
     trashed: isTrashedPath(document.path),
     scheduled: scheduledFor(document, now) !== undefined,
+    hidden: typeof visibilityOf(document) !== 'string',
     editUrl: editorPath(kind, document.slug),
     viewUrl: isPublic ? document.permalink : undefined,
     role,

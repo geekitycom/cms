@@ -49,7 +49,7 @@
   </header>
   {% else %}
   <h1 class="screen-reader-text">
-    {{- postType | capitalize if postType in ["reply", "like", "repost", "bookmark"] else "Note" }}
+    {{- postType | capitalize if postType in ["reply", "like", "repost", "bookmark", "read"] else "Note" }}
     {%- if bioAuthor.name %} by {{ bioAuthor.name }}{% endif %}
     {%- if date %}, {{ date | date("readable", none, lang) }}{% endif -%}
   </h1>
@@ -67,6 +67,9 @@
   {% endif %}
 
   <section class="e-content">
+    {#- Inside the content, so a parser that reads only the content of a
+        read, as a webmention receiver does, has its sentence. -#}
+    {% include "partials/read.njk" %}
     {{ content | safe }}
     <p class="entry-meta">
       {#- The line opens with a link to each syndication target the post

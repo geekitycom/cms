@@ -26,6 +26,7 @@ themes/default/
     kicker.njk        the line above an entry naming its kind and date
     reply-context.njk the citation of what a reply answers
     citations.njk     the citation of what a like, repost or bookmark cites
+    read.njk          what a read post read, and how far
     bio.njk           who an entry is by, as an h-card
     menu.njk          one named menu, as a nav of links
     feeds.njk         macros for the feed links in <head>
@@ -414,6 +415,16 @@ its header. The same partial cites a reply in a feed.
 Reposted, Liked or Bookmarked and links the target as its `u-url`. Its kicker
 and its hidden `h1` say Repost, Like or Bookmark. A listing cites each entry's
 from the same partial.
+
+**A read says what was read** (TASK-229) with `partials/read.njk`, a
+`p.read-line` at the top of the `e-content` that reads like indiebookclub's
+own: a `data.p-read-status` whose value is `to-read`, `reading` or `finished`
+and whose text is Want to read, Currently reading or Finished reading, then a
+`span.p-read-of.h-cite` with the title as a `cite.p-name` (linked as its
+`u-url` when the post gives one), the author as a `p-author`, and the
+identifier as a `data.p-uid` whose value is the `isbn:` or `doi:` uid. Its
+kicker and its hidden `h1` say Read. A listing prints each entry's from the
+same partial.
 
 The tags are printed under the words and inside the article, so that each link
 is a `p-category` of this entry, as one `p.post-categories` from
@@ -1167,6 +1178,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `enclosure`                                 | The post's recording, parsed, with `player` (`audio` or `video`) and `transcript.captions`. Absent with none.     |
 | `photos`                                    | The post's photos, each `{ url, alt, html }`; `html` is the `img.u-photo`, responsive. Empty with none.           |
 | `citations`                                 | What it reposts, likes or bookmarks, each `{ property, url }` with `property` the mf2 name. Empty with none.      |
+| `read`                                      | A read post's `{ status, statusLabel, of }`, `of` being `{ name, author, uid, uidLabel, url }`.                   |
 | `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                  |
 | `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made. |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
@@ -1177,6 +1189,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `postsPage`                                 | The page carrying the listing, as `{ title, url }`, on the front page only. Absent when the site names none.      |
 | `archiveMonths`                             | Every published post as `{ month, posts }`, newest month first. Only on a page that says `archive: true`.         |
 | `webmention`                                | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.      |
+| `noindex`                                   | `true` on the page of an unlisted document, which the base layout prints as a robots `noindex` meta. Else absent. |
 | `conversation`                              | The replies, likes and boosts under the post. Only when there are any. See [The conversation](#the-conversation). |
 | everything else                             | Any front matter key the CMS does not model is on the context under its own name.                                 |
 

@@ -99,6 +99,8 @@
     <title>{% block title %}{% if pageTitle %}{{ pageTitle }} &middot; {% endif %}{{ site.title }}{% endblock %}</title>
     {% if metaDescription %}
     <meta name="description" content="{{ metaDescription }}">
+    {% endif %}{% if noindex %}
+    <meta name="robots" content="noindex">
     {% endif %}
     <link rel="canonical" href="{{ (page.url or "/") | absoluteUrl }}">
     <link rel="stylesheet" href="{{ "style.css" | asset }}">

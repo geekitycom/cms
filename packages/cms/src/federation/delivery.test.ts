@@ -482,6 +482,75 @@ describe('publishing a post from the admin', () => {
   });
 });
 
+describe('an unlisted post (TASK-227 AC #3)', () => {
+  const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
+  const FOLLOWERS = `${BASE_URL}/author/${ADA}/followers/`;
+
+  it('delivers a Create addressed to the followers, with Public in cc', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+
+    assert.equal((await publishNewPost(agent, { visibility: 'unlisted' })).status, 303);
+    await cms.delivery.settled();
+
+    const [create] = delivered('Create');
+    assert.ok(create !== undefined, `expected a Create, saw ${JSON.stringify(deliveries)}`);
+    assert.equal(create.body['to'], FOLLOWERS, 'the activity is to the followers');
+    assert.equal(create.body['cc'], PUBLIC, 'and copied to Public');
+    const object = create.body['object'] as Record<string, unknown>;
+    assert.equal(object['to'], FOLLOWERS, 'the object is to the followers');
+    assert.equal(object['cc'], PUBLIC, 'and copied to Public');
+  });
+
+  it('delivers an Update with the new addressing when a post is unlisted, and back', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    deliveries.length = 0;
+
+    const unlisted = await submitEditor(agent, '/admin/posts/hello-world', {
+      visibility: 'unlisted',
+    });
+    assert.equal(unlisted.status, 303);
+    await cms.delivery.settled();
+    const [quiet] = delivered('Update');
+    assert.ok(quiet !== undefined, `expected an Update, saw ${JSON.stringify(deliveries)}`);
+    assert.equal(quiet.body['to'], FOLLOWERS, 'unlisting moves Public to cc');
+    assert.equal(quiet.body['cc'], PUBLIC);
+    deliveries.length = 0;
+
+    await submitEditor(agent, '/admin/posts/hello-world', { visibility: 'public' });
+    await cms.delivery.settled();
+    const [loud] = delivered('Update');
+    assert.ok(loud !== undefined, `expected an Update, saw ${JSON.stringify(deliveries)}`);
+    assert.equal(loud.body['to'], PUBLIC, 'listing it again moves Public back to to');
+    assert.equal(loud.body['cc'], FOLLOWERS);
+  });
+});
+
+describe('a post whose visibility the site does not recognize (TASK-227)', () => {
+  it('is withdrawn with a Delete, as a post taken back to a draft is', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    deliveries.length = 0;
+
+    const response = await submitEditor(agent, '/admin/posts/hello-world', {
+      visibility: 'private',
+    });
+    assert.equal(response.status, 303);
+    await cms.delivery.settled();
+
+    const [withdrawal] = delivered('Delete');
+    assert.ok(withdrawal !== undefined, `expected a Delete, saw ${JSON.stringify(deliveries)}`);
+    const object = withdrawal.body['object'] as Record<string, unknown>;
+    assert.equal(object['id'], `${BASE_URL}/2026/03/hello-world/`);
+    assert.deepEqual(delivered('Update'), [], 'and no Update went out');
+  });
+});
+
 describe('a scheduled post', () => {
   it('federates nothing while its date is ahead, then one Create when it arrives', async () => {
     let now = new Date('2026-09-03T12:00:00Z');

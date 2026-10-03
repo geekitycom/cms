@@ -761,6 +761,14 @@ instead.
 Both endpoints are behind the admin's guard and need the session's CSRF token,
 like every other POST in the admin.
 
+The editor's Visibility field chooses Public or Unlisted. An unlisted post or
+page is served at its URL with a `noindex`, federates to the followers with
+Public in `cc`, and is left off the home page, every archive and feed, the
+sitemap, search, `llms.txt` and IndexNow. A value the site does not recognize,
+such as a hand-typed `visibility: private`, hides the post like a draft until
+you choose one. The package README's
+[Unlisted posts](packages/cms/README.md#unlisted-posts) has the whole table.
+
 ### Login hardening and security headers
 
 `/admin/login` counts failed sign-ins per username and per client address.
@@ -1672,16 +1680,23 @@ otherwise.
 | `like-of`              | Makes the post a like of that URL. Needs no content. A like of a fediverse status federates as a `Like` of it (decision-28).                                                                                                                                      |
 | `repost-of`            | Makes the post a repost of that URL. Needs no content. A repost of a fediverse status federates as an `Announce` of it (decision-28).                                                                                                                             |
 | `bookmark-of`          | Makes the post a bookmark of that URL. Needs no content.                                                                                                                                                                                                          |
+| `read-of`              | What was read: an h-cite, `{"type": ["h-cite"], "properties": {"name": ["…"]}}` with `author`, `uid` (`isbn:…` or `doi:…`) and `url` when known. With `read-status`, makes the post a read. Needs no content.                                                     |
+| `read-status`          | `to-read`, `reading` or `finished`. Sent with `read-of`, and refused without it.                                                                                                                                                                                  |
 | `photo`                | A photo on the post. Several values. A value is a URL, `{"value": "…", "alt": "…"}` in JSON, or a file part in a multipart request. A post with a photo and no reply target is a photo post.                                                                      |
 | `location`             | Where the post was written: a `geo:` URI such as `geo:48.85837,2.29448;u=50`, which Quill sends, or an h-geo, h-adr or h-card object. Kept in `data/locations.json`, never in the post's file; [Settings > Privacy](#location-on-posts) decides what readers see. |
 | `mp-syndicate-to`      | Selects a syndication target by its `uid`, as the editor's Syndicate to checkboxes do. Several values. The post is sent to the targets when it is published.                                                                                                      |
 | `slug`, `syndicate-to` | The same as `mp-slug` and `mp-syndicate-to`. Quill accounts created before Quill renamed them still send these names.                                                                                                                                             |
 | `p3k-content-type`     | `text/plain` or `text/markdown`, which Quill sends from its content type selector. Either way the content is kept as Markdown, and nothing else is stored. Any other type is refused.                                                                             |
-| `visibility`           | `public`, which every published post is. Nothing is stored. `unlisted` and `private` are refused, since the site does not publish either yet.                                                                                                                     |
+| `visibility`           | `public` or `unlisted`. Unlisted writes `visibility: unlisted`: the post keeps its page and federates, but is left off every listing, feed, the sitemap and search. `private` is refused, since the site has no private posts.                                    |
 | `access_token`         | The token, when it is not in the header. It is never stored on the post.                                                                                                                                                                                          |
 
 A like, repost or bookmark cites its URL on the post's page and sends that URL
 a webmention when the post is published, as a reply does.
+
+A read prints what was read, such as "Want to read: The Left Hand of Darkness
+by Ursula K. Le Guin, ISBN: 9780441478125", on its page and federates as a
+note that says the same. [indiebookclub](https://indiebookclub.biz/) posts
+reads this way, and a test replays the request its documentation shows.
 
 A photo file part is stored in the media library the way the media endpoint
 stores a file, and must be an image. A photo URL that points at this site's own
@@ -1739,8 +1754,8 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
 
 - `?q=config` lists the media endpoint, the syndication targets under
   `syndicate-to`, the post types the site accepts (note, article, reply, photo,
-  like, repost and bookmark), the queries it answers, and the visibility
-  values a post may take, `"visibility": ["public"]`.
+  like, repost, bookmark and read), the queries it answers, and the visibility
+  values a post may take, `"visibility": ["public", "unlisted"]`.
 - `?q=syndicate-to` lists the syndication targets on their own. Each is the
   `uid` and `name` of a target in `content/_data/syndicationTargets.json`, with
   its `id` as the `uid`. A site that declares none lists `[]`. The file is read

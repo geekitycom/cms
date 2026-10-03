@@ -288,6 +288,8 @@ export interface RepresentationResponseOptions {
   href: string;
   /** Which representations this resource offers, for the `Link` alternates. */
   available: readonly Representation[];
+  /** Ask search engines not to index even the HTML: an unlisted document's (TASK-227). */
+  noindex?: boolean | undefined;
   /**
    * Whole `Link` header values to advertise alongside the alternates — the
    * webmention endpoint is the one that uses it (TASK-51).
@@ -342,7 +344,9 @@ export function representationResponse(options: RepresentationResponseOptions): 
   // than readers. A search engine that indexed them would list the same page
   // two or three times, and the copies would compete with the one a reader
   // should land on (TASK-148).
-  if (options.representation !== 'html') headers.set('x-robots-tag', 'noindex');
+  if (options.representation !== 'html' || options.noindex === true) {
+    headers.set('x-robots-tag', 'noindex');
+  }
 
   const personal = options.private === true;
   if (!personal) {

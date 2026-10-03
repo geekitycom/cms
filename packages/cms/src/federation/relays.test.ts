@@ -416,6 +416,19 @@ describe('delivering to a relay', () => {
     );
   });
 
+  it('sends nothing about an unlisted post to the relay (TASK-227)', async () => {
+    const { cms, agent } = await subscribed();
+
+    assert.equal((await publishNewPost(agent, { visibility: 'unlisted' })).status, 303);
+    await cms.delivery.settled();
+
+    assert.deepEqual(
+      ofType('Create').map((one) => one.url),
+      [],
+      'a relay carries public posts into public timelines',
+    );
+  });
+
   it('records the outcome against the relay, like a follower (AC #3)', async () => {
     const { cms, agent } = await subscribed();
 

@@ -56,3 +56,24 @@ Quill sends two properties that change nothing the site writes. Refusing them re
 Every other unmapped property is still refused by name. `q=config` advertises `visibility: ["public"]`, and adds `unlisted` when it is built.
 
 The same task reads `slug` and `syndicate-to`, the names Quill accounts from before its migrations 0002 and 0004 send, as `mp-slug` and `mp-syndicate-to`, so they are mapped, checked and refused exactly as those are.
+
+## Amendment (TASK-227, 2026-10-03): visibility is stored
+
+`visibility` leaves the accepted-and-not-stored list. Unlisted posts are built (TASK-219's visibility decision), so the property maps onto an editor field like the others, on a create and an update alike:
+
+| Micropub property | Editor field | Front matter |
+| --- | --- | --- |
+| `visibility` `public` / `unlisted` | Visibility | `visibility: unlisted`; public is the key absent |
+
+`private` is still refused, with its own message: the site has no private posts. Any other value is refused by name. `q=source` returns `visibility` for every post, `public` or `unlisted`, and an update that deletes the property makes the post public again. `q=config` advertises `visibility: ["public", "unlisted"]`.
+
+## Amendment (TASK-229, 2026-10-03): read posts
+
+indiebookclub posts reads: `read-status` and an embedded h-cite `read-of`, with a `summary` and no content. Both map onto editor fields, on a create and an update alike:
+
+| Micropub property | Editor field | Front matter |
+| --- | --- | --- |
+| `read-of`, `{ "type": ["h-cite"], "properties": { "name", "author", "uid", "url" } }`, each one text value | Read: Title, Author, Identifier, Address | `read-of`, a map of the same four keys, without the empty ones |
+| `read-status` `to-read` / `reading` / `finished` | Read status | `read-status` |
+
+A `read-of` that is not an h-cite, an h-cite property other than the four, or a `read-status` other than the three is refused by name. The two only mean something together, so the editor's rule refuses one without the other, with the editor's message. `q=source` returns `read-of` as the h-cite a create sends. A read federates as a `Note` that opens with the sentence the page prints; it has no fediverse object, so decision-28's `Like` and `Announce` do not apply.

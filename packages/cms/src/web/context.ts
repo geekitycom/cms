@@ -9,6 +9,8 @@ import { photoAlt, photosOf } from '../content/photo.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { Citation } from '../content/citation.ts';
+import { READ_STATUS_LABELS, readOf, uidLabel } from '../content/read.ts';
+import type { ReadOf, ReadStatus } from '../content/read.ts';
 import { isNamed, postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { DEFAULT_TIMEZONE } from '../content/time.ts';
@@ -151,7 +153,7 @@ export interface DocumentContext {
   /** Display title. Empty for an untitled post. */
   title: string;
   /**
-   * `repost`, `like`, `reply`, `photo`, `bookmark`, `note` or `article`,
+   * `repost`, `like`, `reply`, `photo`, `read`, `bookmark`, `note` or `article`,
    * discovered from the front matter, the title and the body (Post Type
    * Discovery) on every render rather than read from the file.
    */
@@ -170,6 +172,18 @@ export interface DocumentContext {
    * that order. Empty for a post that cites nothing.
    */
   citations: Citation[];
+  /**
+   * What a read post read (TASK-229): its `read-status` and the words for it,
+   * and its `read-of` with the words a page prints for the uid. Present only
+   * on a post whose front matter names both.
+   */
+  read?:
+    | {
+        status: ReadStatus;
+        statusLabel: string;
+        of: ReadOf & { uidLabel?: string | undefined };
+      }
+    | undefined;
   /**
    * The language the document is written in, as a canonical BCP 47 tag, when
    * its front matter names one (TASK-154). A theme marks the article with it
@@ -357,6 +371,7 @@ export function documentContext(
     named: isNamed(document),
     ...optional('inReplyTo', replyTarget(document)),
     citations: citationsOf(document.extra),
+    read: readContext(document),
     // Over the raw front-matter value the spread above put here.
     lang: documentLanguage(document),
     enclosure: enclosureContext(document),
@@ -609,5 +624,16 @@ function enclosureContext(document: Document): EnclosureContext | undefined {
     ...(transcript === undefined
       ? {}
       : { transcript: { ...transcript, captions: isCaptions(transcript) } }),
+  };
+}
+
+function readContext(document: Document): DocumentContext['read'] {
+  const read = readOf(document.extra);
+  if (read === undefined) return undefined;
+  const { uid } = read.of;
+  return {
+    status: read.status,
+    statusLabel: READ_STATUS_LABELS[read.status],
+    of: { ...read.of, uidLabel: uid === undefined ? undefined : uidLabel(uid) },
   };
 }

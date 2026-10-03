@@ -42,6 +42,8 @@
     {#- What it reposts, likes or bookmarks, from the partial an entry uses. -#}
     {% set citations = post.citations %}
     {% include "partials/citations.njk" %}
+    {% set read = post.read %}
+    {% include "partials/read.njk" %}
     {% if post.photos.length %}
     {% set photos = post.photos %}
     {% include "partials/photos.njk" %}

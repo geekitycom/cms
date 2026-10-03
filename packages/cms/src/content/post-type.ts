@@ -2,6 +2,7 @@ import { citationsOf } from './citation.ts';
 import type { CitationProperty } from './citation.ts';
 import type { Document } from './document.ts';
 import { photosOf } from './photo.ts';
+import { isReadStatus, readOf } from './read.ts';
 import { htmlToText } from './search.ts';
 
 /**
@@ -23,7 +24,8 @@ import { htmlToText } from './search.ts';
  * types as something else keeps that type, and a bookmark claims only what
  * the spec would have called a note or an article.
  */
-export type PostType = 'repost' | 'like' | 'reply' | 'photo' | 'bookmark' | 'note' | 'article';
+export type PostType =
+  'repost' | 'like' | 'reply' | 'photo' | 'read' | 'bookmark' | 'note' | 'article';
 
 /** The mf2 properties the algorithm reads, each as its plain-text value. */
 export interface PostProperties {
@@ -36,6 +38,8 @@ export interface PostProperties {
   'repost-of'?: string | undefined;
   'like-of'?: string | undefined;
   'bookmark-of'?: string | undefined;
+  'read-of'?: string | undefined;
+  'read-status'?: string | undefined;
 }
 
 /** The type of a post with these properties. */
@@ -44,6 +48,9 @@ export function discoverPostType(properties: PostProperties): PostType {
   if (validUrl(properties['like-of']) !== undefined) return 'like';
   if (validUrl(properties['in-reply-to']) !== undefined) return 'reply';
   if ((properties.photo ?? []).length > 0) return 'photo';
+  if ((properties['read-of'] ?? '') !== '' && isReadStatus(properties['read-status'])) {
+    return 'read';
+  }
   if (validUrl(properties['bookmark-of']) !== undefined) return 'bookmark';
   return isNamedPost(properties) ? 'article' : 'note';
 }
@@ -77,6 +84,7 @@ export function replyTarget(document: Pick<Document, 'inReplyTo'>): string | und
 type PostDocument = Pick<Document, 'title' | 'html' | 'description' | 'inReplyTo' | 'extra'>;
 
 function propertiesOf(document: PostDocument): PostProperties {
+  const read = readOf(document.extra);
   return {
     name: document.title,
     content: htmlToText(document.html),
@@ -91,6 +99,8 @@ function propertiesOf(document: PostDocument): PostProperties {
         url,
       ]),
     ),
+    'read-of': read?.of.name,
+    'read-status': read?.status,
   };
 }
 

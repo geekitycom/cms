@@ -27,6 +27,7 @@ import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { CitationProperty } from '../content/citation.ts';
+import { READ_STATUS_LABELS, readOf, uidLabel } from '../content/read.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf, isUploadUrl, playsAsVideo } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
@@ -40,8 +41,9 @@ import type { ContentStore } from '../content/store.ts';
 import { postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
+import { visibilityOf } from '../content/visibility.ts';
 import { userForAuthor } from '../web/authors.ts';
-import { isPublicDocument, permalinkOfObjectId, postObjectId } from '../web/documents.ts';
+import { isServed, permalinkOfObjectId, postObjectId } from '../web/documents.ts';
 import { feedExcerpt } from '../web/feed-item.ts';
 import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../web/locale.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
@@ -95,6 +97,18 @@ function attribution(
   return { actor: actorId(context, user), followers: context.getFollowersUri(user.username) };
 }
 
+/**
+ * Who a post, its `Create` and its `Update` are addressed to. A public post is
+ * to Public with its author's followers in `cc`; an unlisted one swaps the
+ * two, which is how Mastodon marks a post anybody may fetch but that stays off
+ * public timelines (TASK-227).
+ */
+function addressing(document: Document, followers: URL): { to: URL; cc: URL } {
+  return visibilityOf(document) === 'unlisted'
+    ? { to: followers, cc: PUBLIC_COLLECTION }
+    : { to: PUBLIC_COLLECTION, cc: followers };
+}
+
 /** The media type an `Article`'s `source` is labelled with. */
 export const SOURCE_MEDIA_TYPE = 'text/markdown';
 
@@ -108,7 +122,7 @@ export const SOURCE_MEDIA_TYPE = 'text/markdown';
  * exists.
  */
 export function isFederatedDocument(document: Document, now: Date = new Date()): boolean {
-  return document.type === 'post' && isPublicDocument(document, now);
+  return document.type === 'post' && isServed(document, now);
 }
 
 /**
@@ -149,6 +163,7 @@ const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = {
   repost: 'Note',
   like: 'Note',
   bookmark: 'Note',
+  read: 'Note',
   reply: 'Note',
   photo: 'Note',
   note: 'Note',
@@ -229,12 +244,9 @@ export function postObject(
     published: toInstant(document.date) ?? null,
     updated: toInstant(document.updated) ?? null,
     attribution: actor,
-    // Public addressing, as a blog post is: anybody may fetch it, and every
-    // follower of its author is told about it.
-    to: PUBLIC_COLLECTION,
-    cc: followers,
+    ...addressing(document, followers),
     // FEP-044f: a post with no policy is one Mastodon lets nobody quote. Every
-    // post that federates is addressed to Public, so anybody may quote it, and
+    // post that federates names Public, so anybody may quote it, and
     // the inbox approves each QuoteRequest on the same rule (TASK-125).
     interactionPolicy: QUOTABLE_BY_ANYONE,
     attachments: [
@@ -262,7 +274,7 @@ export function postObject(
   if (postObjectType(document) === 'Note') {
     return new Note({
       ...common,
-      contents: inLanguage(citing(document) + noteContent(document), language),
+      contents: inLanguage(citing(document) + reading(document) + noteContent(document), language),
     });
   }
 
@@ -271,7 +283,7 @@ export function postObject(
     ...common,
     name: document.title === '' ? null : document.title,
     summaries: summary === '' ? [] : inLanguage(summary, language),
-    contents: inLanguage(citing(document) + document.html, language),
+    contents: inLanguage(citing(document) + reading(document) + document.html, language),
   });
 }
 
@@ -402,6 +414,23 @@ function citing(document: Document): string {
     .join('');
 }
 
+function reading(document: Document): string {
+  const read = readOf(document.extra);
+  if (read === undefined) return '';
+  const { name, author, uid, url } = read.of;
+  const cited = `<cite>${escapeHtml(name)}</cite>`;
+  const work =
+    url === undefined
+      ? cited
+      : `<a href="${escapeHtml(url).replaceAll('"', '&quot;')}">${cited}</a>`;
+  return (
+    `<p>${READ_STATUS_LABELS[read.status]}: ${work}` +
+    (author === undefined ? '' : ` by ${escapeHtml(author)}`) +
+    (uid === undefined ? '' : `, ${escapeHtml(uidLabel(uid))}`) +
+    '</p>\n'
+  );
+}
+
 const CITING_VERBS: Readonly<Record<CitationProperty, string>> = {
   'repost-of': 'Reposted',
   'like-of': 'Liked',
@@ -451,8 +480,7 @@ export function postCreateActivity(
     actor,
     object,
     published: toInstant(document.date) ?? null,
-    to: PUBLIC_COLLECTION,
-    cc: followers,
+    ...addressing(document, followers),
   });
 }
 
@@ -483,8 +511,7 @@ export function postUpdateActivity(
     actor,
     object,
     published: toInstant(document.updated ?? document.date) ?? null,
-    to: PUBLIC_COLLECTION,
-    cc: followers,
+    ...addressing(document, followers),
   });
 }
 

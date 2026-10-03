@@ -250,3 +250,31 @@ describe('postLabel', () => {
     );
   });
 });
+
+describe('a read (TASK-229)', () => {
+  const target = 'https://them.example/2026/09/their-post/';
+
+  it('calls a post with read-of and a known read-status a read', () => {
+    assert.equal(
+      discoverPostType({ 'read-of': 'The Left Hand of Darkness', 'read-status': 'to-read' }),
+      'read',
+    );
+    assert.equal(discoverPostType({ 'read-of': 'A Book', 'read-status': 'abandoned' }), 'note');
+    assert.equal(discoverPostType({ 'read-status': 'finished', content: 'Done.' }), 'note');
+  });
+
+  it('puts read after photo and ahead of bookmark and the tail', () => {
+    const read = { 'read-of': 'A Book', 'read-status': 'reading' } as const;
+    assert.equal(discoverPostType({ ...read, photo: ['/uploads/a.jpg'] }), 'photo');
+    assert.equal(discoverPostType({ ...read, 'in-reply-to': target }), 'reply');
+    assert.equal(discoverPostType({ ...read, 'bookmark-of': target }), 'read');
+    assert.equal(discoverPostType({ ...read, name: 'On books', content: 'Pages.' }), 'read');
+  });
+
+  it('reads both from the front matter', () => {
+    assert.equal(
+      postTypeOf(post('read-of:\n  name: A Book\n  author: Someone\nread-status: finished\n', '')),
+      'read',
+    );
+  });
+});

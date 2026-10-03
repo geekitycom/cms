@@ -6,6 +6,7 @@ import { readSiteSettings, robotsPolicyOf } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
+import { visibilityOf } from '../content/visibility.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { mountAvatars } from '../avatars/routes.ts';
@@ -47,7 +48,7 @@ import {
 } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import { feedComments, spokenIn } from './conversation.ts';
-import { isPublicDocument, permalinkOfObjectId, publicDocumentAt } from './documents.ts';
+import { isListed, isServed, permalinkOfObjectId, publicDocumentAt } from './documents.ts';
 import {
   commentsFeedPath,
   commentsFeedResponse,
@@ -779,6 +780,7 @@ function negotiateDocument(
     representation,
     href: encodePath(href),
     available: DOCUMENT_REPRESENTATIONS,
+    noindex: visibilityOf(document) === 'unlisted',
     // Where a webmention about this page is sent. It is a header rather than
     // only a `<link>` because a sender is allowed to find the endpoint without
     // parsing the page, and because the JSON and Markdown representations of a
@@ -877,7 +879,7 @@ function canonicalTarget(
 
   const document = store.getByPermalink(pathname);
   if (document !== undefined) {
-    if (!isPublicDocument(document)) return undefined;
+    if (!isServed(document)) return undefined;
     // The homepage's own URL leads to `/` rather than to the redirect that
     // leads to `/`: one hop, the way `/page/1` reaches `/` in one.
     return document.path === pages.home?.path ? '/' : encodePath(pathname);
@@ -1042,7 +1044,7 @@ function publicPage(c: Context<GeekityEnv>, slug: string): Document | undefined 
   if (slug === '') return undefined;
   const found = c.var.store.getBySlug(slug);
   if (found?.type !== 'page') return undefined;
-  return isPublicDocument(found, c.var.store.now()) ? found : undefined;
+  return isServed(found, c.var.store.now()) ? found : undefined;
 }
 
 /**
@@ -1480,9 +1482,9 @@ function sitemap(c: Context<GeekityEnv>, page: number | undefined): Response {
  * through — {@link homeHref}, the permalinks, {@link termHref} — and drawn
  * from the same queries the listings use, so a sitemap can never advertise a
  * URL the site does not serve. Nothing hidden reaches it either: the index's
- * public queries already exclude drafts, the trash and posts whose date has
- * not arrived, and {@link isPublicDocument} is asked again with the store's
- * own clock so the two answers cannot drift apart.
+ * listing queries already exclude drafts, the trash, posts whose date has not
+ * arrived and unlisted documents, and {@link isListed} is asked again with the
+ * store's own clock so the two answers cannot drift apart.
  */
 function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   const { store, renderer } = c.var;
@@ -1504,7 +1506,7 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
     }
   };
 
-  const posts = store.listPosts().filter((document) => isPublicDocument(document, now));
+  const posts = store.listPosts().filter((document) => isListed(document, now));
 
   // The listing's pages, wherever it lives: under `/`, under the posts page,
   // or nowhere at all on a site whose homepage is a page and which named no
@@ -1519,7 +1521,7 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
 
   const documents = store
     .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
-    .filter((document) => isPublicDocument(document, now));
+    .filter((document) => isListed(document, now));
 
   for (const document of [...posts, ...documents]) {
     // The homepage answers at `/` and redirects from its own permalink, and
@@ -1568,11 +1570,11 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
 
   const pages = store
     .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
-    .filter((document) => isPublicDocument(document, now))
+    .filter((document) => isListed(document, now))
     .sort((a, b) => postLabel(a).localeCompare(postLabel(b)));
   const posts = store
     .listPosts({ limit: feedSize(site) })
-    .filter((document) => isPublicDocument(document, now));
+    .filter((document) => isListed(document, now));
 
   return {
     title: site.title,

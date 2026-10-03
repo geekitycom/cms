@@ -8,9 +8,9 @@ import type { FSWatcher } from 'chokidar';
 import type { Document, DocumentType } from './document.ts';
 import { parseDocument } from './parser.ts';
 import { replyTarget } from './post-type.ts';
-import { isScheduled } from './schedule.ts';
-import { DuplicatePermalinkError, isTrashedPath, TRASH_DIRECTORY } from './store.ts';
+import { DuplicatePermalinkError, TRASH_DIRECTORY } from './store.ts';
 import type { ContentStore } from './store.ts';
+import { isServed } from '../web/documents.ts';
 
 /** File extensions the sync treats as documents. */
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
@@ -448,17 +448,8 @@ async function emitChange(events: Emitter, now: Date, change: DocumentChange): P
   else if (wasPublic && !isNowPublic) await events.emit('unpublished', change);
 }
 
-/**
- * A document is public when it exists, is not a draft, is not in the trash and
- * its date has arrived.
- *
- * The date is why an edit that pushes a published post into the future reads
- * as an `unpublished`: the post has gone from the site as surely as if it had
- * been drafted, and every subscriber should be told so.
- */
 function isPublic(document: Document | undefined, now: Date): boolean {
-  if (document === undefined) return false;
-  return !document.draft && !isTrashedPath(document.path) && !isScheduled(document, now);
+  return document !== undefined && isServed(document, now);
 }
 
 /** The file's text, or `undefined` when it is not there any more. */

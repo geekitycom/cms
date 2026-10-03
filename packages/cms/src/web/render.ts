@@ -9,6 +9,7 @@ import type { SharedLocation } from '../content/location.ts';
 import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
+import { visibilityOf } from '../content/visibility.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
 import { LLMS_TXT_PATH } from './llms.ts';
@@ -695,6 +696,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         ...(syndicated?.copies ?? []),
       ]),
       ...(shared === undefined ? {} : { location: locationContext(shared) }),
+      ...(visibilityOf(document) === 'unlisted' ? { noindex: true } : {}),
       ...extra,
     });
 

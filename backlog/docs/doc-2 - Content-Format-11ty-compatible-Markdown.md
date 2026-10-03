@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-03 01:24'
+updated_date: '2026-10-03 12:42'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -53,6 +53,7 @@ Keys the CMS reads and writes. Eleventy semantics are preserved.
 | `tags` | no | collections | taxonomy; `post` tag comes from `posts.json`, not from the file |
 | `categories` | no | data | the second taxonomy, archived at `/category/{name}/`; Eleventy reads it as an ordinary data key |
 | `draft` | no | honoured by an 11ty preprocessor | `true` hides from public site and feeds |
+| `visibility` | no | data | `unlisted` keeps the document's page and drops it from every list; absent is public; any other value hides the document like a draft. See Visibility below |
 | `description` | no | data | meta description and excerpt fallback |
 | `layout` | no | template | not written per file; comes from directory data |
 | `eleventyExcludeFromCollections` | no | hides from collections | mirrored for pages that should not list |
@@ -67,6 +68,7 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | `in-reply-to` | the URL of the post this one answers, under its microformats2 name. An http or https URL makes the post a reply (Post Type Discovery, TASK-121): the theme cites it as an embedded `u-in-reply-to h-cite` filled in from `_data/replyContexts.json` (TASK-123, decision-19), the ActivityStreams object carries it as `inReplyTo`, and publishing sends it a webmention. Any other value is kept in the file, logged as a warning when the file is indexed, and ignored; the admin editor refuses to save one |
 | `photo` | the post's photos (TASK-166), a list in Micropub's name. Each entry is `url`, an upload's `/uploads/…` path or an http or https URL, and an optional `alt`; a bare URL string reads as an entry without `alt`. An entry with no `alt` takes the media library's alt text for that upload (TASK-141), so a library image is described once. The theme prints each as an `img.u-photo` in the h-entry, the ActivityStreams object attaches each as an `Image` named by its alt text, and the JSON-LD lists each as an `ImageObject`. A post with a photo is a photo post under Post Type Discovery unless it is a reply, which comes first. An entry whose `url` is neither is dropped when read; the admin editor refuses to save one, and refuses an upload that is not an image in the library |
 | `like-of`, `repost-of`, `bookmark-of` | the URL a post likes, reposts or bookmarks (TASK-169), each under its microformats2 name, one URL each; a list of one reads as that URL. An http or https URL makes the post a like, a repost or a bookmark under Post Type Discovery, in the order repost, like, reply, photo, bookmark: the spec's order, with bookmark, which the spec leaves to note and article, just ahead of them. The theme cites each as an embedded `u-like-of`, `u-repost-of` or `u-bookmark-of` `h-cite`, and publishing sends the URL a webmention. A like or repost of a fediverse object federates as a `Like` or `Announce` of it; anything else federates as the note it is, with a line linking the page (decision-28). Any other value is ignored; the admin editor refuses to save one |
+| `read-of`, `read-status` | what a read post read, and how far its author got (TASK-229), as indiebookclub posts it. `read-of` is a map of `name` and, when known, `author`, `uid` (`isbn:…` or `doi:…`) and `url`; a bare string reads as its `name`. `read-status` is `to-read`, `reading` or `finished`. With both, the post is a read under Post Type Discovery, placed after photo and ahead of bookmark. The theme prints a `p-read-status` and a `p-read-of` `h-cite`, and the post federates as a note opening with the same sentence, such as "Want to read: Title by Author". Either without the other is ignored; the admin editor refuses to save one |
 | `activitypub.published` | timestamp of first delivery, a UTC instant. The only key the CMS writes here: it records that the post has been announced and when, which is what decides `Create` against `Update` |
 | `activitypub.id` | never written by the CMS. A post's ActivityStreams object id is its permalink (decision-13); this key is read, not minted, so a post migrated from elsewhere keeps the id its followers already hold — `https://example.com/?p=813` — and every `Update` and `Delete` names it |
 | `activitypub.type` | never written by the CMS. `Note` or `Article`, overriding the ActivityStreams type Post Type Discovery derives for the post (decision-17). Any other value is kept in the file, logged as a warning, and ignored. The `activitypub` block is everything about how a post federates, whether the author set it or the CMS wrote it back, and a save never rewrites what the author set |
@@ -122,6 +124,14 @@ Feeds, the sitemap and the ActivityStreams objects emit instants and are not aff
 
 `draft: true` is the only status flag. There is no scheduled publishing in phase one; a future date with `draft: false` is simply published with that date, which matches 11ty. Trashing a post moves the file to `content/_trash/` (an underscore directory that Eleventy ignores) so it can be restored.
 
+## Visibility
+
+`visibility: unlisted` (TASK-227, TASK-219's visibility decision) serves a post or page at its permalink and leaves it off every list the site publishes: the home page, the tag, category and author archives, an `archive: true` page, previous and next links, every feed including the site-wide comments feed, the sitemap, search, `llms.txt`, IndexNow, the ActivityPub outbox and the featured collection. Its page answers with `X-Robots-Tag: noindex`, and the default theme prints `<meta name="robots" content="noindex">` from the `noindex` context flag. It still federates: its `Create` and `Update` are addressed `to` the author's followers with Public in `cc`, the swap of a public post's addressing, which Mastodon shows as unlisted, and relays are sent nothing about it. Webmentions still go out.
+
+Public is the key's absence; the editor and Micropub remove the key rather than write `visibility: public`. There are no private posts. A value other than `public` or `unlisted` (a hand-typed `visibility: private`, a misspelling, a number) fails closed further: the document is not served, as if it were a draft. Its URL and its `.md` and `.json` answer 404, it is on no list, and a post the followers hold is withdrawn with a `Delete`. The editor offers the stored value as a third, selected choice and keeps it through a save until Public or Unlisted is chosen; the admin list marks the post Hidden; `q=source` returns the value as stored and a Micropub update that does not name `visibility` keeps it.
+
+In code, `visibilityOf` answers `public`, `unlisted` or `{ unrecognized }`. `isServed` (draft, trash, schedule, a recognized visibility) says whether the site serves a document and `isListed` (served, and public) whether it lists it; the content index answers the same two rules in SQL. An Eleventy build does not know the key and builds an unlisted post into its collections like any other.
+
 ## Micropub
 
 A post created over Micropub (TASK-164) is written by the editor's own write path, so its file is the one the editor would write for the same fields. decision-27 records why. Each property fills one editor field:
@@ -135,13 +145,15 @@ A post created over Micropub (TASK-164) is written by the editor's own write pat
 | `category`, each value | `tags` |
 | `in-reply-to` | `in-reply-to` |
 | `like-of`, `repost-of`, `bookmark-of` | the key of the same name |
+| `read-of` (an h-cite), `read-status` | `read-of` as a map of `name`, `author`, `uid` and `url`, and `read-status` |
 | `published` | `date`, as a UTC instant; now when it is missing |
 | `post-status: draft` | `draft: true`; `published`, or none, is `draft: false` |
 | `mp-slug` | the slug, in the file name and the permalink |
+| `visibility` | `unlisted` writes `visibility: unlisted`; `public` writes nothing. `private` is refused with its own message, and any other value by name |
 | `photo`, each value | an entry in `photo`: a URL, or `{ "value": "…", "alt": "…" }` with its `alt`. A URL into the site's own uploads is written as its `/uploads/…` path. A file part of a multipart create is stored in the media library as the media endpoint stores one, and its path written; it is taken back out if the post is refused |
 | `location` | nothing in the file. A `geo:` URI (`geo:LAT,LNG;u=ACC`, Quill's form), an h-geo, an h-adr or an h-card is parsed at the boundary and kept in `data/locations.json`, keyed by the post's permalink (TASK-223, decision-29). The editor's Location box writes the same entry. The file is private because `content/` may be a public repository; Settings > Privacy decides what a page or the ActivityStreams object shows of it, nothing by default. `q=source` answers it whatever the setting, as a `geo:` URI, an h-adr or an h-card with the coordinates nested as `geo` |
 
-`slug` and `syndicate-to`, which Quill accounts from before its renames send, are read as `mp-slug` and `mp-syndicate-to`. `p3k-content-type` (`text/plain` or `text/markdown`) and `visibility` (`public`) are accepted and write nothing (TASK-222); any other value of either is refused by name.
+`slug` and `syndicate-to`, which Quill accounts from before its renames send, are read as `mp-slug` and `mp-syndicate-to`. `p3k-content-type` (`text/plain` or `text/markdown`) is accepted and writes nothing (TASK-222); any other value is refused by name. `q=config` advertises `visibility: ["public", "unlisted"]`, and `q=source` answers every post's `visibility`.
 
 The token's user is `author`. Only `h-entry` is created. Any other type or property, a second value where one is expected, or a value that is not text is refused by name and nothing is written.
 

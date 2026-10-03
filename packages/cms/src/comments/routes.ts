@@ -6,7 +6,7 @@ import { clientAddress, createLoginThrottle } from '../admin/throttle.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
-import { isPublicDocument } from '../web/documents.ts';
+import { isServed } from '../web/documents.ts';
 import { PRIVATE_CACHE_CONTROL } from '../web/negotiate.ts';
 import {
   COMMENT_NOTICE_PARAM,
@@ -85,7 +85,7 @@ export function mountComments(app: Hono<GeekityEnv>): void {
     }
 
     const document = store.getBySlug(form.post);
-    if (document === undefined || !isPublicDocument(document, store.now())) {
+    if (document === undefined || !isServed(document, store.now())) {
       return c.text('There is no such post to comment on.', 404);
     }
 

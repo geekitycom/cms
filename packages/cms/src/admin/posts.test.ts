@@ -108,7 +108,19 @@ async function submit(
     'like-of': field(html, 'like-of') ?? '',
     'repost-of': field(html, 'repost-of') ?? '',
     'bookmark-of': field(html, 'bookmark-of') ?? '',
+    'read-status':
+      /<select[^>]*name="read-status"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(
+        html,
+      )?.[1] ?? '',
+    'read-of-name': field(html, 'read-of-name') ?? '',
+    'read-of-author': field(html, 'read-of-author') ?? '',
+    'read-of-uid': field(html, 'read-of-uid') ?? '',
+    'read-of-url': field(html, 'read-of-url') ?? '',
     lang: field(html, 'lang') ?? '',
+    visibility:
+      /<select[^>]*name="visibility"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(
+        html,
+      )?.[1] ?? '',
     ...recordingFields(html),
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
     action: 'update',
@@ -549,6 +561,95 @@ describe('likes, reposts and bookmarks in the editor (TASK-169 AC #4)', () => {
   });
 });
 
+describe('a read in the editor (TASK-229 AC #2)', () => {
+  const FILE = ['posts', '2026-01-02-published.md'];
+  const BOOK = {
+    'read-status': 'finished',
+    'read-of-name': 'The Left Hand of Darkness',
+    'read-of-author': 'Ursula K. Le Guin',
+    'read-of-uid': 'isbn:9780441478125',
+    'read-of-url': 'https://books.example/left-hand/',
+  };
+
+  async function published(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  it('sets read-of and read-status, shows them on reload, and clears them again', async () => {
+    const { contentDir, agent } = await published();
+
+    const blank = await (await agent.get('/admin/posts/new')).text();
+    assert.equal(field(blank, 'read-of-name'), '', 'a new post offers read-of empty');
+
+    assert.equal((await submit(agent, '/admin/posts/published', BOOK)).status, 303);
+    const { data } = matter(await readFile(path.join(contentDir, ...FILE), 'utf8'));
+    assert.equal(data['read-status'], 'finished');
+    assert.deepEqual(data['read-of'], {
+      name: 'The Left Hand of Darkness',
+      author: 'Ursula K. Le Guin',
+      uid: 'isbn:9780441478125',
+      url: 'https://books.example/left-hand/',
+    });
+
+    const reloaded = await (await agent.get('/admin/posts/published')).text();
+    assert.equal(field(reloaded, 'read-of-name'), 'The Left Hand of Darkness');
+    assert.equal(field(reloaded, 'read-of-uid'), 'isbn:9780441478125');
+    assert.match(reloaded, /<option value="finished" selected>/);
+
+    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
+    const kept = matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data;
+    assert.equal(kept['read-status'], 'finished', 'another save keeps it');
+    assert.equal((kept['read-of'] as Record<string, string>)['name'], 'The Left Hand of Darkness');
+
+    const cleared = Object.fromEntries(Object.keys(BOOK).map((name) => [name, '']));
+    assert.equal((await submit(agent, '/admin/posts/published', cleared)).status, 303);
+    const written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.doesNotMatch(written, /read-/, 'both keys are gone, not left empty');
+  });
+
+  it('offers a read-status it does not recognize back as the file spells it', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+        extra: ['read-of: A Book', 'read-status: abandoned'],
+      },
+    ]);
+    const agent = await signedIn(await box.site({ contentDir }));
+    const html = await (await agent.get('/admin/posts/published')).text();
+    assert.match(html, /<option value="abandoned" selected>abandoned \(not recognized\)/);
+    assert.equal(field(html, 'read-of-name'), 'A Book');
+  });
+
+  for (const [changes, message] of [
+    [{ 'read-of-name': 'A Book' }, /read status/i],
+    [{ 'read-status': 'reading' }, /title of what was read/],
+    [{ ...BOOK, 'read-of-url': 'a book' }, /has to be a web address/],
+  ] as const) {
+    it(`refuses ${JSON.stringify(changes)}, and writes nothing`, async () => {
+      const { contentDir, agent } = await published();
+      const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+      const response = await submit(agent, '/admin/posts/published', changes);
+
+      assert.equal(response.status, 400);
+      assert.match(await response.text(), message);
+      assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+    });
+  }
+});
+
 describe('the post language in the editor (TASK-154 AC #1)', () => {
   const FILE = ['posts', '2026-01-02-published.md'];
 
@@ -608,6 +709,112 @@ describe('the post language in the editor (TASK-154 AC #1)', () => {
     assert.equal(response.status, 400);
     assert.match(await response.text(), /That is not a language tag, such as en, fr or pt-BR\./);
     assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+  });
+});
+
+describe('unlisting a post in the editor (TASK-227 AC #1)', () => {
+  const FILE = ['posts', '2026-01-01-quiet.md'];
+
+  async function quiet(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: FILE.join('/'),
+        title: 'Quiet',
+        date: '2026-01-01',
+        permalink: '/2026/01/quiet/',
+        author: 'ada',
+      },
+    ]);
+    return { contentDir, agent: await signedIn(await box.site({ contentDir })) };
+  }
+
+  it('offers Public, selected, and Unlisted', async () => {
+    const { agent } = await quiet();
+
+    const html = await (await agent.get('/admin/posts/quiet')).text();
+
+    assert.match(html, /<option value="public" selected>Public<\/option>/);
+    assert.match(html, /<option value="unlisted">Unlisted<\/option>/);
+  });
+
+  it('writes visibility: unlisted, shows it chosen, and takes it out again', async () => {
+    const { contentDir, agent } = await quiet();
+    const file = path.join(contentDir, ...FILE);
+
+    assert.equal(
+      (await submit(agent, '/admin/posts/quiet', { visibility: 'unlisted' })).status,
+      303,
+    );
+    assert.match(await readFile(file, 'utf8'), /^visibility: unlisted$/m);
+    const reloaded = await (await agent.get('/admin/posts/quiet')).text();
+    assert.match(reloaded, /<option value="unlisted" selected>Unlisted<\/option>/);
+
+    assert.equal((await submit(agent, '/admin/posts/quiet', { visibility: 'public' })).status, 303);
+    assert.doesNotMatch(await readFile(file, 'utf8'), /^visibility:/m, 'public is the key absent');
+  });
+});
+
+describe('a post whose visibility the site does not recognize (TASK-227)', () => {
+  const FILE = ['posts', '2026-01-01-quiet.md'];
+
+  async function hidden(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: FILE.join('/'),
+        title: 'Quiet',
+        date: '2026-01-01',
+        permalink: '/2026/01/quiet/',
+        author: 'ada',
+        extra: ['visibility: private'],
+      },
+    ]);
+    return { contentDir, agent: await signedIn(await box.site({ contentDir })) };
+  }
+
+  it('shows the stored value chosen and says the post is hidden until one is chosen', async () => {
+    const { agent } = await hidden();
+
+    const html = await (await agent.get('/admin/posts/quiet')).text();
+
+    assert.match(html, /<option value="private" selected>private \(not recognized\)<\/option>/);
+    assert.match(html, /<option value="public">Public<\/option>/);
+    assert.match(html, /<option value="unlisted">Unlisted<\/option>/);
+    assert.match(html, /hidden until you choose Public or Unlisted/);
+  });
+
+  it('keeps the stored value through a save that leaves it alone', async () => {
+    const { contentDir, agent } = await hidden();
+    const file = path.join(contentDir, ...FILE);
+
+    const response = await submit(agent, '/admin/posts/quiet', { title: 'Quieter' });
+
+    assert.equal(response.status, 303);
+    const saved = await readFile(file, 'utf8');
+    assert.match(saved, /^title: Quieter$/m, 'the save went through');
+    assert.match(saved, /^visibility: private$/m, 'and the stored value is as it was');
+    assert.equal((await agent.get('/2026/01/quiet/')).status, 404, 'so the post is still hidden');
+  });
+
+  it('serves the post once Unlisted is chosen', async () => {
+    const { contentDir, agent } = await hidden();
+    assert.equal((await agent.get('/2026/01/quiet/')).status, 404);
+
+    assert.equal(
+      (await submit(agent, '/admin/posts/quiet', { visibility: 'unlisted' })).status,
+      303,
+    );
+
+    assert.match(await readFile(path.join(contentDir, ...FILE), 'utf8'), /^visibility: unlisted$/m);
+    assert.equal((await agent.get('/2026/01/quiet/')).status, 200);
+  });
+
+  it('is marked Hidden, not Published, in the posts list', async () => {
+    const { agent } = await hidden();
+
+    const html = await (await agent.get('/admin/posts')).text();
+
+    assert.match(html, /admin-status[^"]*">Hidden</);
+    assert.doesNotMatch(html, /<span class="admin-status">Published</);
   });
 });
 

@@ -11,7 +11,7 @@
 
 import type { Context } from 'hono';
 
-import { isPublicDocument } from '../web/documents.ts';
+import { isServed } from '../web/documents.ts';
 import type { GeekityEnv } from '../env.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';
@@ -31,7 +31,7 @@ export function pageChoices(c: Context<GeekityEnv>): PageChoice[] {
 
   return c.var.store
     .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
-    .filter((document) => isPublicDocument(document, now))
+    .filter((document) => isServed(document, now))
     .map((document) => ({ slug: document.slug, title: document.title }))
     .sort((a, b) => a.title.localeCompare(b.title));
 }
