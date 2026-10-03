@@ -9,12 +9,6 @@ import type { Browser } from './__testing__/harness.ts';
 import { blankForm, POST_KIND } from './documents.ts';
 import { openGroups } from './editor-layout.ts';
 
-/**
- * TASK-245: every block of the editor and every group of its side column is a
- * native disclosure, open when something in it is filled in or refused and
- * closed when it is empty, so nothing typed is ever out of sight.
- */
-
 const box = sandbox();
 after(() => box.cleanup());
 
@@ -41,7 +35,6 @@ interface Disclosure {
   end: number;
 }
 
-/** Every `<details>` on the page, in document order, with where it starts and ends. */
 function disclosures(html: string): Disclosure[] {
   const found: Disclosure[] = [];
   const stack: Disclosure[] = [];
@@ -74,8 +67,7 @@ function states(html: string): [string, boolean][] {
   return disclosures(html).map(({ name, open }) => [name, open]);
 }
 
-/** The disclosures around the element with this id, outermost first. */
-function around(html: string, id: string): Disclosure[] {
+function enclosingOutermostFirst(html: string, id: string): Disclosure[] {
   const at = html.indexOf(` id="${id}"`);
   assert.ok(at !== -1, `${id} is on the page`);
   return disclosures(html).filter(({ start, end }) => start < at && at < end);
@@ -217,7 +209,7 @@ describe('the post editor’s disclosures (TASK-245)', () => {
       assert.equal(response.status, 400);
       const html = await response.text();
       assert.deepEqual(tiedErrors(html).links, [refusal.field]);
-      const enclosing = around(html, refusal.field);
+      const enclosing = enclosingOutermostFirst(html, refusal.field);
       assert.ok(enclosing.length > 0, `${refusal.field} is in a disclosure`);
       assert.deepEqual(
         enclosing.filter(({ open }) => !open).map(({ name }) => name),

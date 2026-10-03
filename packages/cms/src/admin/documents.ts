@@ -1718,7 +1718,6 @@ interface RenderEditorOptions {
   /** The document being edited, or `undefined` when it is being written. */
   document: Document | undefined;
   form: EditorForm;
-  /** Why the save that was just made was refused. */
   refusal?: Refusal | undefined;
   /** The status to answer with. Defaults to 200. */
   status?: 200 | 400 | undefined;

@@ -8,11 +8,8 @@
 
 {% import "components/fields.njk" as field %}
 
-{# One block of the editor or group of its side column: a native disclosure,
-   so it folds and unfolds with no script, from the keyboard, and says whether
-   it is open. Which start open is decided in src/admin/editor-layout.ts. The
-   legend repeats the summary so every box in it is still announced with the
-   name of its group. #}
+{# The legend repeats the summary so every box in it is still announced with
+   the name of its group. #}
 {% macro group(name, open, class='admin-editor-group') %}
 <details class="{{ class }}"{% if open %} open{% endif %}>
   <summary>{{ name }}</summary>

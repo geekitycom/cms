@@ -490,10 +490,6 @@ button[type='submit']:hover,
   min-height: 28rem;
 }
 
-/* A block of the editor or a group of its side column (TASK-245): folded
-   when nothing in it is filled in. The fieldset inside only names the group
-   for a screen reader, so it draws nothing of its own. */
-
 .admin-editor-group {
   margin: 1.25rem 0 0;
   border: 1px solid var(--admin-border);
@@ -524,8 +520,6 @@ button[type='submit']:hover,
 .admin-editor-group > fieldset > label:first-of-type {
   margin-top: 0.25rem;
 }
-
-/* One photo or one version: its boxes beside their labels. */
 
 .admin-editor-row {
   margin-top: 0.75rem;
