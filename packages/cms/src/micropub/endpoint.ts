@@ -223,8 +223,8 @@ const MICROPUB_INSUFFICIENT_SCOPE_STATUS = 401;
 /**
  * The bearer guard for a token bound to this site, the resource its protected
  * resource metadata names, or bound to none, as Micropub clients' tokens are
- * (decision-24), and granted any one of `scopes` when they are named. Built per request
- * because the base URL is a setting.
+ * (decision-24), and granted any one of `scopes` when they are named. Built per
+ * request because the base URL is a setting.
  */
 export function requireSiteToken(scopes?: Scopes): MiddlewareHandler<BearerEnv> {
   return async (c, next) => {

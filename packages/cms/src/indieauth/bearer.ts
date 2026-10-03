@@ -21,8 +21,8 @@ export interface Guard {
   /** The scopes the route takes, any one of which will do, when it needs one. */
   readonly scopes?: Scopes;
   /**
-   * The status for a token without any of `scopes`: RFC 6750's 403 unless the route
-   * names another, as Micropub's endpoints name 401 (its section 3.8).
+   * The status for a token without any of `scopes`: RFC 6750's 403 unless the
+   * route names another, as Micropub's endpoints name 401 (its section 3.8).
    */
   readonly insufficientScopeStatus?: InsufficientScopeStatus;
 }

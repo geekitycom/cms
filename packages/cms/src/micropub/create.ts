@@ -109,7 +109,9 @@ const KEPT_PROPERTIES_LIMIT = 16 * 1024;
 /** Why `kept` cannot be kept, naming the properties at fault, or nothing. */
 export function keptRefusal(kept: KeptProperties): string | undefined {
   const names = Object.keys(kept);
-  const files = names.filter((name) => kept[name]?.some((value) => value instanceof File));
+  const files = Object.entries(kept)
+    .filter(([, values]) => values.some((value) => value instanceof File))
+    .map(([name]) => name);
   if (files.length > 0) {
     return `${files.join(', ')} is not understood here and is not a photo, so a file cannot be sent as it.`;
   }
