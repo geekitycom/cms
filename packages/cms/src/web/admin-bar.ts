@@ -9,10 +9,14 @@ import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from '../admin/templa
 import { editUserPath } from '../admin/users.ts';
 import { signedInAccount } from '../comments/viewer.ts';
 import type { SignedInAccount } from '../comments/viewer.ts';
-import type { DocumentType } from '../content/document.ts';
+import type { Document, DocumentType } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
+import { siteLocale, siteTimezone } from './context.ts';
+import { hiddenReason } from './documents.ts';
+import type { HiddenReason } from './documents.ts';
 import { PRIVATE_CACHE_CONTROL } from './negotiate.ts';
 import { requestPath } from './routes.ts';
+import { formatDate } from './templates.ts';
 
 /** The editor screens each kind of document is written in. */
 const KINDS: Readonly<Record<DocumentType, DocumentKind>> = { post: POST_KIND, page: PAGE_KIND };
@@ -90,8 +94,35 @@ function renderBar(c: Context<GeekityEnv>, account: SignedInAccount): string {
       me: { name: user.profile?.displayName ?? user.username, url: editUserPath(user.id) },
       logoutUrl: LOGOUT_PATH,
       csrfToken: account.csrfToken,
+      notice: shown === undefined ? undefined : unpublishedNotice(c, shown),
     })
     .trim();
+}
+
+/**
+ * What the page of a document the public site does not serve tells the
+ * signed-in user reading it (TASK-235), or `undefined` for a served one.
+ */
+function unpublishedNotice(c: Context<GeekityEnv>, document: Document): string | undefined {
+  const reason = hiddenReason(document, c.var.store.now());
+  if (reason === undefined) return undefined;
+  return `${hiddenBecause(c, document, reason)}, so it is not published. Only signed-in users can see it.`;
+}
+
+function hiddenBecause(c: Context<GeekityEnv>, document: Document, reason: HiddenReason): string {
+  const it = `This ${document.type}`;
+  switch (reason.kind) {
+    case 'trashed':
+      return `${it} is in the trash`;
+    case 'draft':
+      return `${it} is a draft`;
+    case 'scheduled': {
+      const site = c.var.renderer.site();
+      return `${it} is scheduled for ${formatDate(reason.at, 'long', siteTimezone(site), siteLocale(site))}`;
+    }
+    case 'unrecognized-visibility':
+      return `${it}’s visibility, “${reason.visibility}”, is not one the site recognizes`;
+  }
 }
 
 /**

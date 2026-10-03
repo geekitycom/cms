@@ -1,17 +1,27 @@
 import type { Document } from '../content/document.ts';
-import { isScheduled } from '../content/schedule.ts';
+import { scheduledFor } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import type { ContentStore } from '../content/store.ts';
 import { absoluteUrl } from './negotiate.ts';
 
 /**
- * Whether the public site serves a document at its URL.
+ * Why the public site does not serve a document at its URL.
  *
- * Four things hide one: `draft: true` in the front matter, living under
- * `_trash/`, a date that has not arrived yet, and a `visibility` the site
- * does not recognize. All four stay indexed so the admin can find them; none
- * is ever served, listed, or fed.
+ * Four things hide one: living under `_trash/`, `draft: true` in the front
+ * matter, a date that has not arrived yet, and a `visibility` the site does
+ * not recognize. All four stay indexed so the admin can find them; none is
+ * ever listed or fed, and only the first is never shown to anybody: the other
+ * three are the author's to read at the permalink while signed in (TASK-235).
+ */
+export type HiddenReason =
+  | { readonly kind: 'trashed' }
+  | { readonly kind: 'draft' }
+  | { readonly kind: 'scheduled'; readonly at: string }
+  | { readonly kind: 'unrecognized-visibility'; readonly visibility: string };
+
+/**
+ * Why a document is hidden, or `undefined` when the public site serves it.
  *
  * The index answers the same rule in SQL, so anything that has to decide
  * about a single document in hand — a permalink, a View link — asks it here
@@ -19,13 +29,21 @@ import { absoluteUrl } from './negotiate.ts';
  * caller with a store should pass {@link ContentStore.now} so the answer
  * matches the listings it came from.
  */
+export function hiddenReason(document: Document, now: Date = new Date()): HiddenReason | undefined {
+  if (isTrashedPath(document.path)) return { kind: 'trashed' };
+  if (document.draft) return { kind: 'draft' };
+  const at = scheduledFor(document, now);
+  if (at !== undefined) return { kind: 'scheduled', at };
+  const visibility = visibilityOf(document);
+  if (typeof visibility !== 'string') {
+    return { kind: 'unrecognized-visibility', visibility: visibility.unrecognized };
+  }
+  return undefined;
+}
+
+/** Whether the public site serves a document at its URL: whether nothing hides it. */
 export function isServed(document: Document, now: Date = new Date()): boolean {
-  return (
-    !document.draft &&
-    !isTrashedPath(document.path) &&
-    !isScheduled(document, now) &&
-    typeof visibilityOf(document) === 'string'
-  );
+  return hiddenReason(document, now) === undefined;
 }
 
 /**
@@ -50,6 +68,19 @@ export function publicDocumentAt(store: ContentStore, permalink: string): Docume
   const document = store.getByPermalink(permalink);
   if (document === undefined || !isServed(document, store.now())) return undefined;
   return document;
+}
+
+/**
+ * The document a signed-in user may read at a permalink the public site does
+ * not serve, or `undefined`: a draft, a scheduled post, or one whose
+ * visibility the site does not recognize (TASK-235). A trashed one is not
+ * anybody's to read.
+ */
+export function previewDocumentAt(store: ContentStore, permalink: string): Document | undefined {
+  const document = store.getByPermalink(permalink);
+  if (document === undefined) return undefined;
+  const reason = hiddenReason(document, store.now());
+  return reason === undefined || reason.kind === 'trashed' ? undefined : document;
 }
 
 /**

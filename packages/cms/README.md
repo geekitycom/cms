@@ -1722,7 +1722,8 @@ visibility: unlisted
 Public is the key's absence, and the editor removes the key when you choose
 Public again. The site has no private posts. A value other than `public` or
 `unlisted`, such as a hand-typed `visibility: private`, hides the post the way
-`draft: true` does: its URL answers 404, it is on no list, and a post the
+`draft: true` does: its URL answers 404 to anybody not signed in, it is on no
+list, and a post the
 followers already hold is withdrawn with a `Delete`. The editor shows the value
 as it is stored, marks the post Hidden in the list, and keeps the value through
 a save until you choose Public or Unlisted.

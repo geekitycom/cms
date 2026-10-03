@@ -5,7 +5,7 @@ import { after, describe, it } from 'node:test';
 
 import matter from 'gray-matter';
 
-import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import { browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import { readSiteSettings, writeSiteJson } from './settings.ts';
 import type { Browser } from './__testing__/harness.ts';
 
@@ -774,7 +774,7 @@ describe('unlisting a post in the editor (TASK-227 AC #1)', () => {
 describe('a post whose visibility the site does not recognize (TASK-227)', () => {
   const FILE = ['posts', '2026-01-01-quiet.md'];
 
-  async function hidden(): Promise<{ contentDir: string; agent: Browser }> {
+  async function hidden(): Promise<{ contentDir: string; agent: Browser; reader: Browser }> {
     const contentDir = await seeded([
       {
         file: FILE.join('/'),
@@ -785,7 +785,8 @@ describe('a post whose visibility the site does not recognize (TASK-227)', () =>
         extra: ['visibility: private'],
       },
     ]);
-    return { contentDir, agent: await signedIn(await box.site({ contentDir })) };
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms), reader: browser(cms) };
   }
 
   it('shows the stored value chosen and says the post is hidden until one is chosen', async () => {
@@ -800,7 +801,7 @@ describe('a post whose visibility the site does not recognize (TASK-227)', () =>
   });
 
   it('keeps the stored value through a save that leaves it alone', async () => {
-    const { contentDir, agent } = await hidden();
+    const { contentDir, agent, reader } = await hidden();
     const file = path.join(contentDir, ...FILE);
 
     const response = await submit(agent, '/admin/posts/quiet', { title: 'Quieter' });
@@ -809,12 +810,12 @@ describe('a post whose visibility the site does not recognize (TASK-227)', () =>
     const saved = await readFile(file, 'utf8');
     assert.match(saved, /^title: Quieter$/m, 'the save went through');
     assert.match(saved, /^visibility: private$/m, 'and the stored value is as it was');
-    assert.equal((await agent.get('/2026/01/quiet/')).status, 404, 'so the post is still hidden');
+    assert.equal((await reader.get('/2026/01/quiet/')).status, 404, 'so the post is still hidden');
   });
 
   it('serves the post once Unlisted is chosen', async () => {
-    const { contentDir, agent } = await hidden();
-    assert.equal((await agent.get('/2026/01/quiet/')).status, 404);
+    const { contentDir, agent, reader } = await hidden();
+    assert.equal((await reader.get('/2026/01/quiet/')).status, 404);
 
     assert.equal(
       (await submit(agent, '/admin/posts/quiet', { visibility: 'unlisted' })).status,
@@ -822,7 +823,7 @@ describe('a post whose visibility the site does not recognize (TASK-227)', () =>
     );
 
     assert.match(await readFile(path.join(contentDir, ...FILE), 'utf8'), /^visibility: unlisted$/m);
-    assert.equal((await agent.get('/2026/01/quiet/')).status, 200);
+    assert.equal((await reader.get('/2026/01/quiet/')).status, 200);
   });
 
   it('is marked Hidden, not Published, in the posts list', async () => {
