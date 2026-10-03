@@ -3,11 +3,6 @@ import { randomBytes } from 'node:crypto';
 import type { Clock } from '../content/store.ts';
 import type { AuthorizationRequest, CodeChallenge, Scope } from './request.ts';
 
-/**
- * What an authorization code stands for: who approved what, for which client,
- * and the PKCE challenge the client must answer to redeem it, or none for an
- * app the owner listed (TASK-159, TASK-160, TASK-225).
- */
 export interface AuthorizationCode {
   readonly clientId: string;
   /** What the client called itself, for the connected apps screen. */

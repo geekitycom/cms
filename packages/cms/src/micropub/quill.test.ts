@@ -1,8 +1,3 @@
-/**
- * Quill (TASK-222): every request its note, article, bookmark, like and repost
- * flows send, replayed as aaronpk/Quill 691cee2 builds them, answers 201, and
- * the properties only Quill sends are treated as the site's own.
- */
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -29,7 +24,6 @@ interface Site {
   token: string;
 }
 
-/** A site with one syndication target whose first admin holds Quill's default token. */
 async function site(): Promise<Site> {
   const contentDir = await box.dir('geekity-micropub-quill-content-');
   await mkdir(path.join(contentDir, '_data'), { recursive: true });

@@ -1,8 +1,3 @@
-/**
- * Apps the owner lets sign in without PKCE (TASK-225): iA Writer's request,
- * from the consent screen through the code it earns, and the rule that a
- * sign-in begun with PKCE can never be finished without it.
- */
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -26,7 +21,6 @@ const REFUSED = 'code_challenge must be an S256 PKCE challenge';
 
 const IA_WRITER = 'https://ia.net/writer';
 const IA_REDIRECT = 'https://ia.net/writer/indieauth/redirect';
-/** Return addresses iA Writer's page publishes, so the consent screen may redirect to them. */
 const ELSEWHERE = 'https://elsewhere.example/cb';
 const PLAIN_HTTP = 'http://ia.net/writer/cb';
 
@@ -62,7 +56,6 @@ async function site(clientsWithoutPkce: string[] = [IA_WRITER]): Promise<Cms & {
   return Object.assign(cms, { agent: await signIn(cms) });
 }
 
-/** iA Writer's request as App activity recorded it (TASK-219), with no PKCE. */
 function iaWriterQuery(changes: Record<string, string | undefined> = {}): string {
   const fields: Record<string, string | undefined> = {
     response_type: 'code',
@@ -80,7 +73,6 @@ function iaWriterQuery(changes: Record<string, string | undefined> = {}): string
   return params.toString();
 }
 
-/** Open the consent screen for `query` and press Approve, answering the code. */
 async function approve(cms: Cms & { agent: Browser }, query: string): Promise<string> {
   const html = await (await cms.agent.get(`${CONSENT}?${query}`)).text();
   const response = await cms.agent.post(CONSENT, [

@@ -34,7 +34,6 @@ function issued(
   return { codes, code: codes.put(grant) };
 }
 
-/** A code issued to an app on the list of apps allowed without PKCE (TASK-225). */
 const UNCHALLENGED: AuthorizationCode = { ...CODE, codeChallenge: { method: 'none' } };
 
 function form(code: string, changes: Record<string, string | undefined> = {}) {

@@ -22,10 +22,6 @@ export function clientIdentifier(value: string): string | undefined {
   return value;
 }
 
-/**
- * Whether two client_ids name the same app: equal once parsed, so a host
- * typed in capitals or a default port written out still matches.
- */
 export function sameClient(a: string, b: string): boolean {
   const left = URL.parse(a);
   return left !== null && left.href === URL.parse(b)?.href;

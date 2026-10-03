@@ -5,11 +5,6 @@
  * Only ever your own connections, because a token acts as the person who
  * approved it. Revoking deletes the connection from `data/indieauth-tokens.json`,
  * so the access token and the refresh token stop working on the next request.
- *
- * Below them, the site's list of apps allowed to sign in without PKCE
- * (TASK-225), kept in `site.json` as `clientsWithoutPkce`. It is the site's,
- * not the signed-in person's, and like the settings pages any admin may
- * change it.
  */
 
 import type { Context, Hono } from 'hono';
@@ -32,16 +27,12 @@ export const REVOKE_CONNECTION_PATH = `${CONNECTED_APPS_PATH}/revoke`;
 /** The field a Revoke button submits: the connection's id. */
 export const CONNECTION_FIELD = 'connection';
 
-/** Where the Add form of the list of apps allowed without PKCE posts. */
 export const ADD_CLIENT_WITHOUT_PKCE_PATH = `${CONNECTED_APPS_PATH}/without-pkce`;
 
-/** Where a Remove button of that list posts. */
 export const REMOVE_CLIENT_WITHOUT_PKCE_PATH = `${ADD_CLIENT_WITHOUT_PKCE_PATH}/remove`;
 
-/** The field the Add form and a Remove button submit. */
 export const CLIENT_FIELD = 'client_id';
 
-/** An Add the form refused, drawn back into it. */
 interface RefusedClient {
   value: string;
   problem: string;
@@ -110,7 +101,6 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
 const NOT_A_CLIENT_ID =
   'Enter the app’s client_id exactly as it sends it: an http or https URL with a domain name, such as https://ia.net/writer.';
 
-/** The screen: your connections, then the site's list of apps allowed without PKCE. */
 function screen(c: Context<GeekityEnv>, refused?: RefusedClient): Record<string, unknown> {
   const { config } = c.var;
   const userId = c.var.session?.userId;

@@ -38,18 +38,11 @@ const SINGLE_VALUED = {
   'mp-slug': 'slug',
 } as const satisfies Record<string, keyof EditorForm>;
 
-/**
- * Properties a post is created with that change nothing it is written with,
- * each with why a value is refused, or `undefined` when the post is the same
- * with that value as without it (decision-27).
- */
-const UNSTORED: Readonly<Record<string, (value: string) => string | undefined>> = {
-  // Quill's: either kind of text is the Markdown body the site stores.
+const ACCEPTED_WITHOUT_EFFECT: Readonly<Record<string, (value: string) => string | undefined>> = {
   'p3k-content-type': (type) =>
     type === 'text/plain' || type === 'text/markdown'
       ? undefined
       : `p3k-content-type is text/plain or text/markdown, not ${type}.`,
-  // Every published post is public; unlisted waits on TASK-219's visibility decision.
   visibility: (visibility) => {
     switch (visibility) {
       case 'public':
@@ -66,7 +59,7 @@ const UNSTORED: Readonly<Record<string, (value: string) => string | undefined>> 
 
 const PROPERTIES = new Set<string>([
   ...Object.keys(SINGLE_VALUED),
-  ...Object.keys(UNSTORED),
+  ...Object.keys(ACCEPTED_WITHOUT_EFFECT),
   'content',
   'category',
   'photo',
@@ -83,7 +76,6 @@ const LEGACY_NAMES: ReadonlyMap<string, string> = new Map([
   ['syndicate-to', 'mp-syndicate-to'],
 ]);
 
-/** A property's name, with a legacy name read as the one it stands for. */
 export function propertyName(name: string): string {
   return LEGACY_NAMES.get(name) ?? name;
 }
@@ -222,7 +214,7 @@ export function createForm(
   for (const [property, field] of Object.entries(SINGLE_VALUED)) {
     form[field] = text(property);
   }
-  for (const [property, refused] of Object.entries(UNSTORED)) {
+  for (const [property, refused] of Object.entries(ACCEPTED_WITHOUT_EFFECT)) {
     const value = text(property);
     const reason = value === '' ? undefined : refused(value);
     if (reason !== undefined) errors.push(reason);

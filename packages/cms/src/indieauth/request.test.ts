@@ -37,7 +37,6 @@ function parse(
 
 const IA_WRITER = 'https://ia.net/writer';
 
-/** iA Writer's request as App activity recorded it (TASK-219), with no PKCE. */
 const IA_WRITER_REQUEST: Record<string, string> = {
   response_type: 'code',
   me: 'https://blog.example/',

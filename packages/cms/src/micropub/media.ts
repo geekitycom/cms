@@ -17,17 +17,12 @@ import { requireSiteToken } from './endpoint.ts';
 /** Each user's most recent upload, relative to `dataDir`. */
 export const LAST_UPLOADS_FILE = 'micropub-media.json';
 
-/** A user's last upload: its site path, `/uploads/…`, and when it was uploaded. */
 interface LastUpload {
   url: string;
   published: string;
 }
 
-/**
- * The file's shape: a user id to their last upload, or to its bare site path
- * when it was recorded before upload times were kept.
- */
-interface LastUploads {
+interface LastUploadsFile {
   last: Record<string, LastUpload | string>;
 }
 
@@ -35,9 +30,25 @@ function lastUploadsFile(dataDir: string): string {
   return path.join(dataDir, LAST_UPLOADS_FILE);
 }
 
-function readLastUploads(dataDir: string): LastUploads {
+/**
+ * The user's last upload while it is still in the library: a file deleted
+ * from the media screen since is no upload to offer.
+ */
+function readLastUpload(
+  contentDir: string,
+  dataDir: string,
+  userId: number,
+): LastUpload | undefined {
   const text = readFileIfPresentSync(lastUploadsFile(dataDir));
-  return text === undefined ? { last: {} } : (JSON.parse(text) as LastUploads);
+  if (text === undefined) return undefined;
+  const recorded = (JSON.parse(text) as LastUploadsFile).last[String(userId)];
+  if (recorded === undefined) return undefined;
+  const url = typeof recorded === 'string' ? recorded : recorded.url;
+  const file = resolveUpload(contentDir, url.slice(UPLOAD_ASSET_PREFIX.length));
+  if (file === undefined || !existsSync(file)) return undefined;
+  return typeof recorded === 'string'
+    ? { url, published: statSync(file).mtime.toISOString() }
+    : recorded;
 }
 
 async function recordLastUpload(
@@ -46,26 +57,10 @@ async function recordLastUpload(
   upload: LastUpload,
 ): Promise<void> {
   await updateFileAtomically(lastUploadsFile(dataDir), (current) => {
-    const uploads: LastUploads =
-      current === undefined ? { last: {} } : (JSON.parse(current) as LastUploads);
+    const uploads: LastUploadsFile =
+      current === undefined ? { last: {} } : (JSON.parse(current) as LastUploadsFile);
     return `${JSON.stringify({ last: { ...uploads.last, [String(userId)]: upload } }, null, 2)}\n`;
   });
-}
-
-/**
- * The user's last upload while it is still in the library: a file deleted
- * from the media screen since is no upload to offer. One recorded without its
- * time is dated by its file.
- */
-function lastUpload(contentDir: string, dataDir: string, userId: number): LastUpload | undefined {
-  const recorded = readLastUploads(dataDir).last[String(userId)];
-  if (recorded === undefined) return undefined;
-  const url = typeof recorded === 'string' ? recorded : recorded.url;
-  const file = resolveUpload(contentDir, url.slice(UPLOAD_ASSET_PREFIX.length));
-  if (file === undefined || !existsSync(file)) return undefined;
-  return typeof recorded === 'string'
-    ? { url, published: statSync(file).mtime.toISOString() }
-    : recorded;
 }
 
 function invalidRequest(c: Context, description: string): Response {
@@ -124,7 +119,7 @@ export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
       return invalidRequest(c, `limit is a whole number, not ${limit}.`);
     }
     const { config, bearer } = c.var;
-    const upload = lastUpload(config.contentDir, config.dataDir, bearer.user.id);
+    const upload = readLastUpload(config.contentDir, config.dataDir, bearer.user.id);
     const item =
       upload === undefined
         ? undefined

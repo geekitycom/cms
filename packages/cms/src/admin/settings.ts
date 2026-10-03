@@ -712,8 +712,6 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(Array.isArray(file['taxonomyRedirects'])
       ? { taxonomyRedirects: taxonomyRedirectsOf(file['taxonomyRedirects']) }
       : {}),
-    // Only what the authorization endpoint would accept as a client_id, so a
-    // hand edit cannot let an app sign in without PKCE by a name no app has.
     ...(Array.isArray(file['clientsWithoutPkce'])
       ? { clientsWithoutPkce: clientsWithoutPkceOf(file['clientsWithoutPkce']) }
       : {}),
@@ -722,7 +720,6 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
   };
 }
 
-/** The client_ids in a file's list that are client_ids, each once. */
 function clientsWithoutPkceOf(entries: readonly unknown[]): string[] {
   const valid = entries.filter(
     (entry): entry is string => typeof entry === 'string' && clientIdentifier(entry) !== undefined,
@@ -841,8 +838,6 @@ export function siteJsonFor(
   if (settings.indexNowKey !== '') file['indexNowKey'] = settings.indexNowKey;
   else delete file['indexNowKey'];
 
-  // Nor does a site where every app needs PKCE, which is every site that has
-  // not chosen otherwise.
   if (settings.clientsWithoutPkce.length > 0) {
     file['clientsWithoutPkce'] = [...settings.clientsWithoutPkce];
   } else delete file['clientsWithoutPkce'];

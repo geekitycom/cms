@@ -1,10 +1,7 @@
 {# /admin/users/apps: the apps that can act as whoever is signed in (TASK-162).
 
    Only your own connections, each with a Revoke button that names the app,
-   so a screen reader moving between buttons hears which one it is on.
-
-   Below them, the site's list of apps allowed to sign in without PKCE
-   (TASK-225): one Remove button per app, and an Add form. #}
+   so a screen reader moving between buttons hears which one it is on. #}
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
 

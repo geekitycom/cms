@@ -30,10 +30,8 @@ export function redemptionForm(body: Readonly<Record<string, unknown>>): Redempt
  * so the two cannot disagree about what makes a code good.
  *
  * The code is taken before it is checked, so a try with the wrong verifier,
- * client or redirect, or with no verifier for a code that has a challenge,
- * spends it: a code somebody is guessing the verifier for is a code that has
- * leaked. A code issued without a challenge, to an app on the owner's list
- * (TASK-225), needs no verifier. `grant_type` may be left out, as clients written
+ * client or redirect spends it: a code somebody is guessing the verifier for
+ * is a code that has leaked. `grant_type` may be left out, as clients written
  * to the IndieAuth spec before 2020 do.
  */
 export function redeemCode(
@@ -58,8 +56,6 @@ export function redeemCode(
   if (grant.clientId !== clientId || grant.redirectUri !== redirectUri) {
     return refuse('invalid_grant', 'The code was issued to another client or redirect_uri.');
   }
-  // Decided by the stored code alone: a code issued with a challenge needs
-  // its verifier whatever the request leaves out.
   if (grant.codeChallenge.method === 'S256') {
     const verifier = form['code_verifier'];
     if (!verifier) {

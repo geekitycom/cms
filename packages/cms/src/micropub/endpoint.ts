@@ -78,7 +78,6 @@ const QUERIES: Readonly<Record<Query, (context: QueryContext) => object>> = {
     'media-endpoint': `${baseUrl}${MICROPUB_MEDIA_PATH}`,
     'syndicate-to': offered(targets),
     'post-types': Object.entries(POST_TYPE_NAMES).map(([type, name]) => ({ type, name })),
-    // A create and an update take visibility=public; unlisted joins it with TASK-219's.
     visibility: ['public'],
     q: QUERY_NAMES,
   }),
