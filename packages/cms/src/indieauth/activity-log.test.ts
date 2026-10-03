@@ -322,6 +322,23 @@ describe('the media endpoint', () => {
     assert.equal(early.status, 400);
     assert.match(early.errorDescription ?? '', /too big/);
   });
+
+  it('logs the bearer guard’s refusal of a token-less body that cannot be read', async () => {
+    const { cms, dataDir } = await site();
+    const response = await cms.app.request(MEDIA, {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=x' },
+      body: 'not really multipart',
+    });
+    assert.equal(response.status, 400);
+
+    const entry = await latest(dataDir);
+    assert.equal(entry.endpoint, 'media');
+    assert.equal(entry.status, 400);
+    assert.equal(entry.error, 'invalid_request');
+    assert.match(entry.errorDescription ?? '', /body could not be read/);
+    assert.deepEqual(entry.carried, []);
+  });
 });
 
 describe('what the log never keeps', () => {

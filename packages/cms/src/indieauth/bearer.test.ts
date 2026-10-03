@@ -137,6 +137,38 @@ describe('a route behind the bearer guard', () => {
     assert.equal(((await response.json()) as { error: string }).error, 'invalid_request');
   });
 
+  it('answers 400 invalid_request when no header token came and the form body cannot be read', async () => {
+    const { cms } = await site();
+    const response = await guarded(cms, { audience: MICROPUB }).request('/thing', {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=x' },
+      body: 'not really multipart',
+    });
+    assert.equal(response.status, 400);
+    assert.equal(
+      response.headers.get('www-authenticate'),
+      `Bearer error="invalid_request", resource_metadata="${RESOURCE_METADATA}"`,
+    );
+    const body = (await response.json()) as Record<string, string>;
+    assert.equal(body['error'], 'invalid_request');
+    assert.match(body['error_description'] ?? '', /body could not be read/);
+  });
+
+  it('leaves an unreadable body to the route when the header carries a good token', async () => {
+    const { cms, grant } = await site();
+    const { accessToken } = await issueTokens(cms.config.dataDir, grant, new Date());
+    const response = await guarded(cms, { audience: MICROPUB }).request('/thing', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'content-type': 'multipart/form-data; boundary=x',
+      },
+      body: 'not really multipart',
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { username: 'ada', scopes: ['create', 'media'] });
+  });
+
   it('lets the route require a scope the token holds', async () => {
     const { cms, grant } = await site();
     const { accessToken } = await issueTokens(cms.config.dataDir, grant, new Date());
