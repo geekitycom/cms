@@ -6,11 +6,40 @@
 
 {% block title %}{{ heading }}{% endblock %}
 
+{% import "components/fields.njk" as field %}
+
+{# One block of the editor or group of its side column: a native disclosure,
+   so it folds and unfolds with no script, from the keyboard, and says whether
+   it is open. Which start open is decided in src/admin/editor-layout.ts. The
+   legend repeats the summary so every box in it is still announced with the
+   name of its group. #}
+{% macro group(name, open, class='admin-editor-group') %}
+<details class="{{ class }}"{% if open %} open{% endif %}>
+  <summary>{{ name }}</summary>
+  <fieldset>
+    <legend class="admin-visually-hidden">{{ name }}</legend>
+{{ caller() }}
+  </fieldset>
+</details>
+{% endmacro %}
+
+{% macro invalid(id, hint='') -%}
+{% if errorField == id %} aria-invalid="true" aria-describedby="{{ id }}-error{% if hint %} {{ hint }}{% endif %}"{% elif hint %} aria-describedby="{{ hint }}"{% endif %}
+{%- endmacro %}
+
+{% macro problem(id) %}
+{% if errorField == id %}<p class="admin-field-error" id="{{ id }}-error">{{ error }}</p>{% endif %}
+{% endmacro %}
+
 {% block content %}
   <h1>{{ heading }}</h1>
 
-  {% if error %}
-    <p class="admin-error">{{ error }}</p>
+  {% if error and errorField %}
+    {% call field.summary('Nothing was saved. Fix the field marked below and try again.') %}
+      {{ field.problem(errorField, error) }}
+    {% endcall %}
+  {% elif error %}
+    {{ field.summary(error) }}
   {% endif %}
 
   {% if trashed %}
@@ -33,7 +62,8 @@
     <div class="admin-editor-main">
       <label for="editor-title">Title</label>
       {#- A post may go without one, and is then a note; a page is always named. -#}
-      <input id="editor-title" name="title" type="text" value="{{ form.title }}"{% if kind.type == "page" %} required{% endif %} autofocus />
+      <input id="editor-title" name="title" type="text" value="{{ form.title }}"{% if kind.type == "page" %} required{% endif %} autofocus{{ invalid('editor-title') }} />
+      {{ problem('editor-title') }}
       {% if kind.type == "post" %}
       <p class="admin-hint">Leave it empty to write a note: the post is then its words, and takes its slug from the first of them.</p>
       {% endif %}
@@ -64,39 +94,40 @@
       </div>
 
       {% if kind.type == "post" %}
-        <fieldset class="admin-editor-enclosure admin-editor-photos">
-          <legend>Photos</legend>
+        {% call group('Photos', open.photos) %}
           <p class="admin-hint">
             Each is an image in the media library or an address starting https://. Leave the alt text
             empty to use the media library’s. Empty an address to remove that photo.
           </p>
           {% for row in photoRows %}
             {% set n = loop.index0 %}
-            <fieldset class="admin-editor-alternate">
-              <legend>{% if row.url %}Photo {{ loop.index }}{% else %}Add a photo{% endif %}</legend>
+            {% call group('Photo ' + loop.index if row.url else 'Add a photo', row.url, 'admin-editor-group admin-editor-row') %}
               <label for="editor-photo-url-{{ n }}">Address</label>
-              <input id="editor-photo-url-{{ n }}" name="{{ photoFields.url }}{{ n }}" type="text" value="{{ row.url }}" list="editor-photo-uploads" autocomplete="off" />
+              <input id="editor-photo-url-{{ n }}" name="{{ photoFields.url }}{{ n }}" type="text" value="{{ row.url }}" list="editor-photo-uploads" autocomplete="off"{{ invalid('editor-photo-url-' + n) }} />
+              {{ problem('editor-photo-url-' + n) }}
               <label for="editor-photo-alt-{{ n }}">Alt text</label>
               <input id="editor-photo-alt-{{ n }}" name="{{ photoFields.alt }}{{ n }}" type="text" value="{{ row.alt }}"{% if row.libraryAlt %} placeholder="{{ row.libraryAlt }}"{% endif %} />
-            </fieldset>
+            {% endcall %}
           {% endfor %}
           <datalist id="editor-photo-uploads">
             {% for url in photoChoices %}
               <option value="{{ url }}"></option>
             {% endfor %}
           </datalist>
-        </fieldset>
-        <fieldset class="admin-editor-enclosure admin-editor-location">
-          <legend>Location</legend>
+        {% endcall %}
+
+        {% call group('Location', open.location) %}
           <p class="admin-hint">
             Kept in <code>data/locations.json</code>, not in the post’s file. What readers see of it
             is chosen on Settings &gt; Privacy. Empty every box to remove it.
           </p>
           <label for="editor-location-geo">Coordinates</label>
-          <input id="editor-location-geo" name="{{ locationFields.geo }}" type="text" value="{{ form.location.geo }}" placeholder="48.85837, 2.29448" autocomplete="off" spellcheck="false" aria-describedby="editor-location-geo-hint" />
+          <input id="editor-location-geo" name="{{ locationFields.geo }}" type="text" value="{{ form.location.geo }}" placeholder="48.85837, 2.29448" autocomplete="off" spellcheck="false"{{ invalid('editor-location-geo', 'editor-location-geo-hint') }} />
+          {{ problem('editor-location-geo') }}
           <p class="admin-hint" id="editor-location-geo-hint">Latitude, longitude, as decimal degrees. A <code>geo:</code> URI works too.</p>
           <label for="editor-location-accuracy">Accuracy</label>
-          <input id="editor-location-accuracy" name="{{ locationFields.accuracy }}" type="text" inputmode="numeric" value="{{ form.location.accuracy }}" autocomplete="off" aria-describedby="editor-location-accuracy-hint" />
+          <input id="editor-location-accuracy" name="{{ locationFields.accuracy }}" type="text" inputmode="numeric" value="{{ form.location.accuracy }}" autocomplete="off"{{ invalid('editor-location-accuracy', 'editor-location-accuracy-hint') }} />
+          {{ problem('editor-location-accuracy') }}
           <p class="admin-hint" id="editor-location-accuracy-hint">Metres. Leave it empty if you do not know.</p>
           <label for="editor-location-name">Place</label>
           <input id="editor-location-name" name="{{ locationFields.name }}" type="text" value="{{ form.location.name }}" />
@@ -111,126 +142,200 @@
             <label for="editor-location-checkin">A check-in</label>
           </p>
           <p class="admin-hint" id="editor-location-checkin-hint">A Micropub app sent it as a checkin, and reads it back as one. Readers see it as any other location.</p>
-        </fieldset>
-        <fieldset class="admin-editor-enclosure">
-          <legend>Recording</legend>
+        {% endcall %}
 
+        {% call group('Recording', open.recording) %}
           <label for="editor-enclosure-url">Audio or video file</label>
-          <select id="editor-enclosure-url" name="{{ enclosureFields.url }}" aria-describedby="editor-enclosure-url-hint">
+          <select id="editor-enclosure-url" name="{{ enclosureFields.url }}"{{ invalid('editor-enclosure-url', 'editor-enclosure-url-hint') }}>
             <option value=""{% if form.enclosure.url == "" %} selected{% endif %}>None</option>
             {% for choice in enclosureChoices.media %}
               <option value="{{ choice.url }}"{% if choice.url == form.enclosure.url %} selected{% endif %}>{{ choice.label }}</option>
             {% endfor %}
           </select>
+          {{ problem('editor-enclosure-url') }}
           <p class="admin-hint" id="editor-enclosure-url-hint">
             Upload the file to the media library first. Feeds carry it as the post’s enclosure and the
             post page plays it. None removes the recording, its transcript and its other versions.
           </p>
 
           <label for="editor-enclosure-duration">Duration</label>
-          <input id="editor-enclosure-duration" name="{{ enclosureFields.duration }}" type="text" inputmode="numeric" value="{{ form.enclosure.duration }}" autocomplete="off" aria-describedby="editor-enclosure-duration-hint" />
+          <input id="editor-enclosure-duration" name="{{ enclosureFields.duration }}" type="text" inputmode="numeric" value="{{ form.enclosure.duration }}" autocomplete="off"{{ invalid('editor-enclosure-duration', 'editor-enclosure-duration-hint') }} />
+          {{ problem('editor-enclosure-duration') }}
           <p class="admin-hint" id="editor-enclosure-duration-hint">Seconds, or 30:34, or 1:02:03. Leave it empty if you do not know.</p>
 
           <label for="editor-enclosure-transcript">Transcript or captions</label>
-          <input id="editor-enclosure-transcript" name="{{ enclosureFields.transcriptUrl }}" type="text" value="{{ form.enclosure.transcriptUrl }}" list="editor-transcript-uploads" autocomplete="off" aria-describedby="editor-enclosure-transcript-hint" />
+          <input id="editor-enclosure-transcript" name="{{ enclosureFields.transcriptUrl }}" type="text" value="{{ form.enclosure.transcriptUrl }}" list="editor-transcript-uploads" autocomplete="off"{{ invalid('editor-enclosure-transcript', 'editor-enclosure-transcript-hint') }} />
+          {{ problem('editor-enclosure-transcript') }}
           <datalist id="editor-transcript-uploads">
             {% for url in enclosureChoices.transcripts %}
               <option value="{{ url }}"></option>
             {% endfor %}
           </datalist>
           <label for="editor-enclosure-transcript-type">Transcript type</label>
-          <select id="editor-enclosure-transcript-type" name="{{ enclosureFields.transcriptType }}" aria-describedby="editor-enclosure-transcript-hint">
+          <select id="editor-enclosure-transcript-type" name="{{ enclosureFields.transcriptType }}"{{ invalid('editor-enclosure-transcript-type', 'editor-enclosure-transcript-hint') }}>
             <option value=""{% if form.enclosure.transcriptType == "" %} selected{% endif %}>From the file</option>
             {% for type in transcriptTypes %}
               <option value="{{ type }}"{% if type == form.enclosure.transcriptType %} selected{% endif %}>{{ type }}</option>
             {% endfor %}
           </select>
+          {{ problem('editor-enclosure-transcript-type') }}
           <p class="admin-hint" id="editor-enclosure-transcript-hint">
             A .vtt, .srt or .txt file in the media library, or an address starting https://. A linked
             transcript needs its type.
           </p>
 
-          <h2 class="admin-editor-enclosure-heading">Other versions</h2>
-          <p class="admin-hint">
-            A video of an audio episode, a smaller file, another language. Each is a file in the media
-            library or an address starting https://, which needs its type. Empty an address to remove
-            that version.
-          </p>
-          {% for row in alternateRows %}
-            {% set n = loop.index0 %}
-            <fieldset class="admin-editor-alternate">
-              <legend>{% if row.url %}Version {{ loop.index }}{% else %}Add a version{% endif %}</legend>
-              <label for="editor-alternate-url-{{ n }}">Address</label>
-              <input id="editor-alternate-url-{{ n }}" name="{{ enclosureFields.alternate.url }}{{ n }}" type="text" value="{{ row.url }}" list="editor-media-uploads" autocomplete="off" />
-              <label for="editor-alternate-type-{{ n }}">Type</label>
-              <input id="editor-alternate-type-{{ n }}" name="{{ enclosureFields.alternate.type }}{{ n }}" type="text" value="{{ row.type }}" placeholder="video/mp4" autocomplete="off" spellcheck="false" />
-              <label for="editor-alternate-title-{{ n }}">Title</label>
-              <input id="editor-alternate-title-{{ n }}" name="{{ enclosureFields.alternate.title }}{{ n }}" type="text" value="{{ row.title }}" maxlength="32" />
-              <label for="editor-alternate-height-{{ n }}">Height</label>
-              <input id="editor-alternate-height-{{ n }}" name="{{ enclosureFields.alternate.height }}{{ n }}" type="text" inputmode="numeric" value="{{ row.height }}" autocomplete="off" />
-              <label for="editor-alternate-lang-{{ n }}">Language</label>
-              <input id="editor-alternate-lang-{{ n }}" name="{{ enclosureFields.alternate.lang }}{{ n }}" type="text" value="{{ row.lang }}" autocomplete="off" spellcheck="false" />
-            </fieldset>
-          {% endfor %}
-          <datalist id="editor-media-uploads">
-            {% for choice in enclosureChoices.media %}
-              <option value="{{ choice.url }}"></option>
+          {% call group('Other versions', open.versions) %}
+            <p class="admin-hint">
+              A video of an audio episode, a smaller file, another language. Each is a file in the media
+              library or an address starting https://, which needs its type. Empty an address to remove
+              that version.
+            </p>
+            {% for row in alternateRows %}
+              {% set n = loop.index0 %}
+              {% call group('Version ' + loop.index if row.url else 'Add a version', row.url, 'admin-editor-group admin-editor-row') %}
+                <label for="editor-alternate-url-{{ n }}">Address</label>
+                <input id="editor-alternate-url-{{ n }}" name="{{ enclosureFields.alternate.url }}{{ n }}" type="text" value="{{ row.url }}" list="editor-media-uploads" autocomplete="off"{{ invalid('editor-alternate-url-' + n) }} />
+                {{ problem('editor-alternate-url-' + n) }}
+                <label for="editor-alternate-type-{{ n }}">Type</label>
+                <input id="editor-alternate-type-{{ n }}" name="{{ enclosureFields.alternate.type }}{{ n }}" type="text" value="{{ row.type }}" placeholder="video/mp4" autocomplete="off" spellcheck="false"{{ invalid('editor-alternate-type-' + n) }} />
+                {{ problem('editor-alternate-type-' + n) }}
+                <label for="editor-alternate-title-{{ n }}">Title</label>
+                <input id="editor-alternate-title-{{ n }}" name="{{ enclosureFields.alternate.title }}{{ n }}" type="text" value="{{ row.title }}" maxlength="32"{{ invalid('editor-alternate-title-' + n) }} />
+                {{ problem('editor-alternate-title-' + n) }}
+                <label for="editor-alternate-height-{{ n }}">Height</label>
+                <input id="editor-alternate-height-{{ n }}" name="{{ enclosureFields.alternate.height }}{{ n }}" type="text" inputmode="numeric" value="{{ row.height }}" autocomplete="off"{{ invalid('editor-alternate-height-' + n) }} />
+                {{ problem('editor-alternate-height-' + n) }}
+                <label for="editor-alternate-lang-{{ n }}">Language</label>
+                <input id="editor-alternate-lang-{{ n }}" name="{{ enclosureFields.alternate.lang }}{{ n }}" type="text" value="{{ row.lang }}" autocomplete="off" spellcheck="false"{{ invalid('editor-alternate-lang-' + n) }} />
+                {{ problem('editor-alternate-lang-' + n) }}
+              {% endcall %}
             {% endfor %}
-          </datalist>
-        </fieldset>
+            <datalist id="editor-media-uploads">
+              {% for choice in enclosureChoices.media %}
+                <option value="{{ choice.url }}"></option>
+              {% endfor %}
+            </datalist>
+          {% endcall %}
+        {% endcall %}
       {% endif %}
     </div>
 
     <div class="admin-editor-side">
-      <label for="editor-slug">Slug</label>
-      <input id="editor-slug" name="slug" type="text" value="{{ form.slug }}" />
+      {% call group('Publishing', open.publishing) %}
+        <p class="admin-check">
+          <input id="editor-draft" name="draft" type="checkbox" value="1"{% if form.draft %} checked{% endif %} />
+          <label for="editor-draft">Draft</label>
+        </p>
 
-      <label for="editor-permalink">Permalink</label>
-      <input id="editor-permalink" name="permalink" type="text" value="{{ form.permalink }}" />
-      <p class="admin-hint">Leave it empty to let the {{ kind.singular }} take the URL its slug implies.</p>
+        {% if kind.dated %}
+          <label for="editor-date">Date</label>
+          <input id="editor-date" name="date" type="text" value="{{ form.date }}"{{ invalid('editor-date') }} />
+          {{ problem('editor-date') }}
+          {# The file holds a UTC instant; this field is that instant as the
+             site's own clock reads it, so the zone has to be on the screen. #}
+          <p class="admin-hint">Wall-clock time in {{ dateZone }}. Stored as UTC.</p>
+        {% endif %}
 
-      {% if kind.dated %}
-        <label for="editor-date">Date</label>
-        <input id="editor-date" name="date" type="text" value="{{ form.date }}" />
-        {# The file holds a UTC instant; this field is that instant as the
-           site's own clock reads it, so the zone has to be on the screen. #}
-        <p class="admin-hint">Wall-clock time in {{ dateZone }}. Stored as UTC.</p>
+        <label for="editor-visibility">Visibility</label>
+        <select id="editor-visibility" name="visibility" aria-describedby="editor-visibility-hint">
+          {% if form.visibility.unrecognized is defined %}
+            <option value="{{ form.visibility.unrecognized }}" selected>{{ form.visibility.unrecognized }} (not recognized)</option>
+          {% endif %}
+          <option value="public"{% if form.visibility == "public" %} selected{% endif %}>Public</option>
+          <option value="unlisted"{% if form.visibility == "unlisted" %} selected{% endif %}>Unlisted</option>
+        </select>
+        <p class="admin-hint" id="editor-visibility-hint">
+          {% if form.visibility.unrecognized is defined %}
+            The front matter says <code>visibility: {{ form.visibility.unrecognized }}</code>, which this
+            site does not recognize. The {{ kind.singular }} is hidden until you choose Public or Unlisted:
+            its page answers 404 and it is not listed or sent to your followers.
+          {% endif %}
+          Unlisted writes <code>visibility: unlisted</code> into the front matter. The {{ kind.singular }}
+          keeps its page and still goes to your followers, but is left off the home page, archives,
+          feeds, the sitemap, search and llms.txt, and asks search engines not to index it.
+        </p>
+
+        {% if kind.type == "post" %}
+          {# TASK-207: shown at the top of the author's fediverse profile, from
+             the featured collection their actor links. #}
+          <p class="admin-check">
+            <input id="editor-pinned" name="pinned" type="checkbox" value="1"{% if form.pinned %} checked{% endif %}{{ invalid('editor-pinned') }} />
+            <label for="editor-pinned">Pinned</label>
+          </p>
+          {{ problem('editor-pinned') }}
+          <p class="admin-hint">
+            Writes <code>pinned:</code> and the moment you pinned it into the front matter. Pinned posts
+            show first on your fediverse profile, newest pin first, up to five.
+          </p>
+        {% endif %}
+
+        {# Who the front matter says wrote this (TASK-67). A select of the site's
+           users rather than a free box, because after decision-14 the value is a
+           person rather than a string: it decides whose archive the post is on
+           and, once the actors land, whose followers hear about it. A file that
+           still names somebody who has no account keeps an option of its own, so
+           opening the editor cannot silently reattribute it. #}
+        <label for="editor-author">Author</label>
+        <select id="editor-author" name="author">
+          {% for choice in authors %}
+            <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
+          {% endfor %}
+        </select>
+      {% endcall %}
+
+      {% if kind.tagged or kind.categorised %}
+        {% call group('Tags and categories', open.taxonomy) %}
+          {% if kind.tagged %}
+            <label for="editor-tags">Tags</label>
+            <input id="editor-tags" name="tags" type="text" value="{{ form.tags }}" />
+            <p class="admin-hint">Separated by commas.</p>
+          {% endif %}
+
+          {% if kind.categorised %}
+            <label for="editor-categories">Categories</label>
+            <input id="editor-categories" name="categories" type="text" value="{{ form.categories }}" />
+            <p class="admin-hint">Separated by commas.</p>
+          {% endif %}
+        {% endcall %}
       {% endif %}
 
-      {% if kind.tagged %}
-        <label for="editor-tags">Tags</label>
-        <input id="editor-tags" name="tags" type="text" value="{{ form.tags }}" />
-        <p class="admin-hint">Separated by commas.</p>
-      {% endif %}
+      {% call group('Address', open.address) %}
+        <label for="editor-slug">Slug</label>
+        <input id="editor-slug" name="slug" type="text" value="{{ form.slug }}"{{ invalid('editor-slug') }} />
+        {{ problem('editor-slug') }}
 
-      {% if kind.categorised %}
-        <label for="editor-categories">Categories</label>
-        <input id="editor-categories" name="categories" type="text" value="{{ form.categories }}" />
-        <p class="admin-hint">Separated by commas.</p>
-      {% endif %}
+        <label for="editor-permalink">Permalink</label>
+        <input id="editor-permalink" name="permalink" type="text" value="{{ form.permalink }}" />
+        <p class="admin-hint">Leave it empty to let the {{ kind.singular }} take the URL its slug implies.</p>
+      {% endcall %}
 
       {% if kind.type == "post" %}
-        {#- The mf2 `in-reply-to`: a URL here makes the post a reply, threads
-            it in the fediverse and sends that page a webmention. -#}
-        <label for="editor-in-reply-to">In reply to</label>
-        <input id="editor-in-reply-to" name="in-reply-to" type="url" value="{{ form.inReplyTo }}" />
-        <p class="admin-hint">The address of the post this one answers. Leave it empty for a post that answers nobody.</p>
+        {% call group('Responding to', open.responding) %}
+          {#- The mf2 `in-reply-to`: a URL here makes the post a reply, threads
+              it in the fediverse and sends that page a webmention. -#}
+          <label for="editor-in-reply-to">In reply to</label>
+          <input id="editor-in-reply-to" name="in-reply-to" type="url" value="{{ form.inReplyTo }}"{{ invalid('editor-in-reply-to') }} />
+          {{ problem('editor-in-reply-to') }}
+          <p class="admin-hint">The address of the post this one answers. Leave it empty for a post that answers nobody.</p>
 
-        {#- The mf2 `like-of`, `repost-of` and `bookmark-of` (TASK-169): each
-            cites a page the way a reply does, and sends it a webmention. -#}
-        <label for="editor-like-of">Like of</label>
-        <input id="editor-like-of" name="like-of" type="url" value="{{ form.likeOf }}" />
-        <label for="editor-repost-of">Repost of</label>
-        <input id="editor-repost-of" name="repost-of" type="url" value="{{ form.repostOf }}" />
-        <label for="editor-bookmark-of">Bookmark of</label>
-        <input id="editor-bookmark-of" name="bookmark-of" type="url" value="{{ form.bookmarkOf }}" />
-        <p class="admin-hint">The address of a post this one likes, reposts or bookmarks. Leave them empty for a post that cites nothing.</p>
+          {#- The mf2 `like-of`, `repost-of` and `bookmark-of` (TASK-169): each
+              cites a page the way a reply does, and sends it a webmention. -#}
+          <label for="editor-like-of">Like of</label>
+          <input id="editor-like-of" name="like-of" type="url" value="{{ form.likeOf }}"{{ invalid('editor-like-of') }} />
+          {{ problem('editor-like-of') }}
+          <label for="editor-repost-of">Repost of</label>
+          <input id="editor-repost-of" name="repost-of" type="url" value="{{ form.repostOf }}"{{ invalid('editor-repost-of') }} />
+          {{ problem('editor-repost-of') }}
+          <label for="editor-bookmark-of">Bookmark of</label>
+          <input id="editor-bookmark-of" name="bookmark-of" type="url" value="{{ form.bookmarkOf }}"{{ invalid('editor-bookmark-of') }} />
+          {{ problem('editor-bookmark-of') }}
+          <p class="admin-hint">The address of a post this one likes, reposts or bookmarks. Leave them empty for a post that cites nothing.</p>
+        {% endcall %}
 
-        <fieldset class="admin-editor-enclosure admin-editor-read">
-          <legend>Read</legend>
+        {% call group('Read', open.read) %}
           <label for="editor-read-status">Read status</label>
-          <select id="editor-read-status" name="{{ readFields.status }}">
-            <option value=""{% if form.readStatus == "" %} selected{% endif %}>Not a read</option>
+          <select id="editor-read-status" name="{{ readFields.status }}"{{ invalid('editor-read-status') }}>
+            <option value=""{% if form.readStatus == "" %} selected{% endif %}>Not a read post</option>
             {% for status in readStatuses %}
               <option value="{{ status.value }}"{% if form.readStatus == status.value %} selected{% endif %}>{{ status.label }}</option>
             {% endfor %}
@@ -238,83 +343,39 @@
               <option value="{{ unrecognizedReadStatus }}" selected>{{ unrecognizedReadStatus }} (not recognized)</option>
             {% endif %}
           </select>
+          {{ problem('editor-read-status') }}
           <label for="editor-read-of-name">Title</label>
-          <input id="editor-read-of-name" name="{{ readFields.name }}" type="text" value="{{ form.readOf.name }}" />
+          <input id="editor-read-of-name" name="{{ readFields.name }}" type="text" value="{{ form.readOf.name }}"{{ invalid('editor-read-of-name') }} />
+          {{ problem('editor-read-of-name') }}
           <label for="editor-read-of-author">Author</label>
           <input id="editor-read-of-author" name="{{ readFields.author }}" type="text" value="{{ form.readOf.author }}" />
           <label for="editor-read-of-uid">Identifier</label>
           <input id="editor-read-of-uid" name="{{ readFields.uid }}" type="text" value="{{ form.readOf.uid }}" placeholder="isbn:9780441478125" autocomplete="off" spellcheck="false" />
           <label for="editor-read-of-url">Address</label>
-          <input id="editor-read-of-url" name="{{ readFields.url }}" type="url" value="{{ form.readOf.url }}" />
-          <p class="admin-hint">A book or paper this post says its author read. An identifier is an ISBN or a DOI, written isbn:… or doi:…. Choose Not a read and empty every box to remove it. A read is described by what it says, so leave its Description empty.</p>
-        </fieldset>
+          <input id="editor-read-of-url" name="{{ readFields.url }}" type="url" value="{{ form.readOf.url }}"{{ invalid('editor-read-of-url') }} />
+          {{ problem('editor-read-of-url') }}
+          <p class="admin-hint">A book or paper this post says its author read. An identifier is an ISBN or a DOI, written isbn:… or doi:…. Choose Not a read post and empty every box to remove it. A read is described by what it says, so leave its Description empty.</p>
+        {% endcall %}
       {% endif %}
 
-      <label for="editor-description">Description</label>
-      <input id="editor-description" name="description" type="text" value="{{ form.description }}" />
+      {% call group('Summary and language', open.summary) %}
+        <label for="editor-description">Description</label>
+        <input id="editor-description" name="description" type="text" value="{{ form.description }}"{{ invalid('editor-description') }} />
+        {{ problem('editor-description') }}
 
-      {#- The `lang` front matter (TASK-154): a post or page written in another
-          language than the site's says so, for screen readers, translation
-          and fediverse language filters. -#}
-      <label for="editor-lang">Language</label>
-      <input id="editor-lang" name="lang" type="text" value="{{ form.lang }}" autocomplete="off" spellcheck="false" aria-describedby="editor-lang-hint" />
-      <p class="admin-hint" id="editor-lang-hint">A language tag, such as fr or pt-BR. Leave it empty for the site’s language, {{ siteLanguage }}.</p>
-
-      {# Who the front matter says wrote this (TASK-67). A select of the site's
-         users rather than a free box, because after decision-14 the value is a
-         person rather than a string: it decides whose archive the post is on
-         and, once the actors land, whose followers hear about it. A file that
-         still names somebody who has no account keeps an option of its own, so
-         opening the editor cannot silently reattribute it. #}
-      <label for="editor-author">Author</label>
-      <select id="editor-author" name="author">
-        {% for choice in authors %}
-          <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
-        {% endfor %}
-      </select>
-
-      <p class="admin-check">
-        <input id="editor-draft" name="draft" type="checkbox" value="1"{% if form.draft %} checked{% endif %} />
-        <label for="editor-draft">Draft</label>
-      </p>
-
-      <label for="editor-visibility">Visibility</label>
-      <select id="editor-visibility" name="visibility" aria-describedby="editor-visibility-hint">
-        {% if form.visibility.unrecognized is defined %}
-          <option value="{{ form.visibility.unrecognized }}" selected>{{ form.visibility.unrecognized }} (not recognized)</option>
-        {% endif %}
-        <option value="public"{% if form.visibility == "public" %} selected{% endif %}>Public</option>
-        <option value="unlisted"{% if form.visibility == "unlisted" %} selected{% endif %}>Unlisted</option>
-      </select>
-      <p class="admin-hint" id="editor-visibility-hint">
-        {% if form.visibility.unrecognized is defined %}
-          The front matter says <code>visibility: {{ form.visibility.unrecognized }}</code>, which this
-          site does not recognize. The {{ kind.singular }} is hidden until you choose Public or Unlisted:
-          its page answers 404 and it is not listed or sent to your followers.
-        {% endif %}
-        Unlisted writes <code>visibility: unlisted</code> into the front matter. The {{ kind.singular }}
-        keeps its page and still goes to your followers, but is left off the home page, archives,
-        feeds, the sitemap, search and llms.txt, and asks search engines not to index it.
-      </p>
-
-      {% if kind.type == "post" %}
-        {# TASK-207: shown at the top of the author's fediverse profile, from
-           the featured collection their actor links. #}
-        <p class="admin-check">
-          <input id="editor-pinned" name="pinned" type="checkbox" value="1"{% if form.pinned %} checked{% endif %} />
-          <label for="editor-pinned">Pinned</label>
-        </p>
-        <p class="admin-hint">
-          Writes <code>pinned:</code> and the moment you pinned it into the front matter. Pinned posts
-          show first on your fediverse profile, newest pin first, up to five.
-        </p>
-      {% endif %}
+        {#- The `lang` front matter (TASK-154): a post or page written in another
+            language than the site's says so, for screen readers, translation
+            and fediverse language filters. -#}
+        <label for="editor-lang">Language</label>
+        <input id="editor-lang" name="lang" type="text" value="{{ form.lang }}" autocomplete="off" spellcheck="false"{{ invalid('editor-lang', 'editor-lang-hint') }} />
+        {{ problem('editor-lang') }}
+        <p class="admin-hint" id="editor-lang-hint">A language tag, such as fr or pt-BR. Leave it empty for the site’s language, {{ siteLanguage }}.</p>
+      {% endcall %}
 
       {% if kind.type == "post" and syndicationTargets.length %}
         {# TASK-155: the targets content/_data/syndicationTargets.json declares.
            A target whose tag the post carries is selected without a tick. #}
-        <fieldset class="admin-editor-syndication">
-          <legend>Syndicate to</legend>
+        {% call group('Syndicate to', open.syndication) %}
           {% for target in syndicationTargets %}
             <p class="admin-check">
               <input id="editor-{{ target.field }}" name="{{ target.field }}" type="checkbox" value="1"{% if target.checked %} checked{% endif %} />
@@ -326,47 +387,49 @@
             sends it a webmention when it is published or updated. A post tagged with a target’s tag is
             sent there without a tick.
           </p>
-        </fieldset>
+        {% endcall %}
       {% endif %}
 
-      {# What this document says about comments, if anything. Three answers
-         rather than two: the site's own rules, always open, always closed. #}
-      <label for="editor-comments">Comments</label>
-      <select id="editor-comments" name="comments">
-        <option value="{{ commentSettings.site }}"{% if form.comments == commentSettings.site %} selected{% endif %}>Follow the site settings</option>
-        <option value="{{ commentSettings.open }}"{% if form.comments == commentSettings.open %} selected{% endif %}>Open</option>
-        <option value="{{ commentSettings.closed }}"{% if form.comments == commentSettings.closed %} selected{% endif %}>Closed</option>
-      </select>
-      <p class="admin-hint">
-        Writes <code>comments: true</code> or <code>comments: false</code> into the front matter,
-        which beats the site's switch and its closing window in both directions. Fediverse replies
-        are shown either way.
-      </p>
-
-      {% if kind.excludable %}
-        {# doc-2's eleventyExcludeFromCollections: still published and still at
-           its URL, but out of every collection a template lists from. #}
-        <p class="admin-check">
-          <input id="editor-exclude" name="exclude" type="checkbox" value="1"{% if form.exclude %} checked{% endif %} />
-          <label for="editor-exclude">Hide from collections</label>
-        </p>
-        <p class="admin-hint">Keeps the {{ kind.singular }} out of listings that gather content, without unpublishing it.</p>
-      {% endif %}
-
-      {% if kind.contactable %}
-        {# The page offers a contact form under its content (TASK-56). Where a
-           message goes is the contact address on the Settings screen; it is
-           never on this page or in its HTML. #}
-        <p class="admin-check">
-          <input id="editor-contact" name="contact" type="checkbox" value="1"{% if form.contact %} checked{% endif %} />
-          <label for="editor-contact">Contact form</label>
-        </p>
+      {% call group('Display and discussion', open.display) %}
+        {# What this document says about comments, if anything. Three answers
+           rather than two: the site's own rules, always open, always closed. #}
+        <label for="editor-comments">Comments</label>
+        <select id="editor-comments" name="comments">
+          <option value="{{ commentSettings.site }}"{% if form.comments == commentSettings.site %} selected{% endif %}>Follow the site settings</option>
+          <option value="{{ commentSettings.open }}"{% if form.comments == commentSettings.open %} selected{% endif %}>Open</option>
+          <option value="{{ commentSettings.closed }}"{% if form.comments == commentSettings.closed %} selected{% endif %}>Closed</option>
+        </select>
         <p class="admin-hint">
-          Writes <code>contact: true</code> into the front matter and puts a name, email, subject
-          and message form under this {{ kind.singular }}. Messages arrive on the Messages screen
-          and are emailed to the contact address on Settings.
+          Writes <code>comments: true</code> or <code>comments: false</code> into the front matter,
+          which beats the site's switch and its closing window in both directions. Fediverse replies
+          are shown either way.
         </p>
-      {% endif %}
+
+        {% if kind.excludable %}
+          {# doc-2's eleventyExcludeFromCollections: still published and still at
+             its URL, but out of every collection a template lists from. #}
+          <p class="admin-check">
+            <input id="editor-exclude" name="exclude" type="checkbox" value="1"{% if form.exclude %} checked{% endif %} />
+            <label for="editor-exclude">Hide from collections</label>
+          </p>
+          <p class="admin-hint">Keeps the {{ kind.singular }} out of listings that gather content, without unpublishing it.</p>
+        {% endif %}
+
+        {% if kind.contactable %}
+          {# The page offers a contact form under its content (TASK-56). Where a
+             message goes is the contact address on the Settings screen; it is
+             never on this page or in its HTML. #}
+          <p class="admin-check">
+            <input id="editor-contact" name="contact" type="checkbox" value="1"{% if form.contact %} checked{% endif %} />
+            <label for="editor-contact">Contact form</label>
+          </p>
+          <p class="admin-hint">
+            Writes <code>contact: true</code> into the front matter and puts a name, email, subject
+            and message form under this {{ kind.singular }}. Messages arrive on the Messages screen
+            and are emailed to the contact address on Settings.
+          </p>
+        {% endif %}
+      {% endcall %}
 
       <p class="admin-editor-buttons">
         {% for button in actions %}

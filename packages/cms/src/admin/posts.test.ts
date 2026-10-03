@@ -1018,14 +1018,14 @@ describe('photos in the post editor (TASK-166 AC #5, #7)', () => {
 
     const html = await (await agent.get('/admin/posts/beach')).text();
 
-    assert.match(html, /<legend>Photos<\/legend>/);
+    assert.match(html, /<summary>Photos<\/summary>/);
     assert.equal(field(html, 'photo-url-0'), '/uploads/2026/10/beach.jpg');
     assert.equal(field(html, 'photo-alt-0'), 'Waves breaking at dusk');
     assert.equal(field(html, 'photo-url-1'), '/uploads/2026/10/dog.jpg');
     assert.equal(field(html, 'photo-alt-1'), '');
     assert.match(html, /name="photo-alt-1"[^>]*placeholder="A dog asleep on a rug"/);
     assert.equal(field(html, 'photo-url-2'), '');
-    assert.match(html, /<legend>Add a photo<\/legend>/);
+    assert.match(html, /<summary>Add a photo<\/summary>/);
     const offered = /<datalist id="editor-photo-uploads">([\s\S]*?)<\/datalist>/.exec(html)?.[1];
     assert.match(offered ?? '', /<option value="\/uploads\/2026\/10\/gull\.png">/);
     assert.doesNotMatch(offered ?? '', /episode\.mp3/, 'only images are offered');
@@ -1153,7 +1153,7 @@ describe('the recording in the post editor (TASK-213 AC #1, #2)', () => {
 
     const html = await (await agent.get('/admin/posts/episode')).text();
 
-    assert.match(html, /<legend>Recording<\/legend>/);
+    assert.match(html, /<summary>Recording<\/summary>/);
     assert.match(html, /<option value="" selected>None<\/option>/);
     assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp3">2026\/10\/episode\.mp3</);
     assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp4">2026\/10\/episode\.mp4</);

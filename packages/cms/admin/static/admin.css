@@ -490,35 +490,64 @@ button[type='submit']:hover,
   min-height: 28rem;
 }
 
-.admin-editor-enclosure {
+/* A block of the editor or a group of its side column (TASK-245): folded
+   when nothing in it is filled in. The fieldset inside only names the group
+   for a screen reader, so it draws nothing of its own. */
+
+.admin-editor-group {
   margin: 1.25rem 0 0;
-  padding: 0.75rem 1rem 1rem;
   border: 1px solid var(--admin-border);
 }
 
-.admin-editor-syndication {
-  margin: 1.25rem 0 0;
-  padding: 0.75rem 1rem 1rem;
-  border: 1px solid var(--admin-border);
+.admin-editor-side > .admin-editor-group:first-child {
+  margin-top: 0;
 }
 
-.admin-editor-enclosure-heading {
-  margin: 1.25rem 0 0;
-  font-size: 1em;
+.admin-editor-group > summary {
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-.admin-editor-alternate {
+.admin-editor-group > summary:focus-visible {
+  outline: 2px solid var(--admin-link);
+  outline-offset: 2px;
+}
+
+.admin-editor-group > fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0 0.75rem 0.75rem;
+  border: 0;
+}
+
+.admin-editor-group > fieldset > label:first-of-type {
+  margin-top: 0.25rem;
+}
+
+/* One photo or one version: its boxes beside their labels. */
+
+.admin-editor-row {
+  margin-top: 0.75rem;
+}
+
+.admin-editor-row > fieldset {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 0.4rem 0.75rem;
   align-items: center;
-  margin: 0.75rem 0 0;
-  padding: 0.5rem 0.75rem 0.75rem;
-  border: 1px solid var(--admin-border);
 }
 
-.admin-editor-alternate label {
+.admin-editor-row > fieldset > label:first-of-type {
+  margin-top: 0;
+}
+
+.admin-editor-row label {
   margin: 0;
+}
+
+.admin-editor-row .admin-field-error {
+  grid-column: 1 / -1;
 }
 
 .admin-hint {

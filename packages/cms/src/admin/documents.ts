@@ -80,6 +80,8 @@ import {
   resolveEnclosure,
 } from './enclosure-field.ts';
 import type { EnclosureForm } from './enclosure-field.ts';
+import { openGroups } from './editor-layout.ts';
+import type { EditorField, FieldError, Refusal } from './editor-layout.ts';
 import {
   BLANK_LOCATION_FORM,
   LOCATION_FIELDS,
@@ -433,13 +435,13 @@ async function saveFromForm(
   // Publish say what they do, and Update leaves the decision to the checkbox.
   const draft = action === 'save-draft' ? true : action === 'publish' ? false : form.draft;
 
-  function refuse(message: string): Promise<Response> {
+  function refuse(refusal: Refusal): Promise<Response> {
     return renderEditor(c, {
       kind,
       render,
       document,
       form: { ...form, draft },
-      error: message,
+      refusal,
       status: 400,
     });
   }
@@ -453,7 +455,7 @@ async function saveFromForm(
     },
     { kind, document, form, draft },
   );
-  if (written.outcome === 'refused') return refuse(written.message);
+  if (written.outcome === 'refused') return refuse(written);
   if (written.outcome === 'conflict') {
     return renderConflict(c, {
       kind,
@@ -499,7 +501,7 @@ export type WriteOutcome =
       /** Images published without alt text, which the editor warns about. */
       readonly undescribed: readonly UndescribedImage[];
     }
-  | { readonly outcome: 'refused'; readonly message: string }
+  | ({ readonly outcome: 'refused' } & Refusal)
   | {
       readonly outcome: 'conflict';
       /** The document as the form loaded it, which only an edit has. */
@@ -532,19 +534,26 @@ export async function writeDocument(
   const { kind, document, form, draft } = write;
   const contentDir = config.contentDir;
 
-  function refused(message: string): WriteOutcome {
-    return { outcome: 'refused', message };
+  function refused(message: string, field?: EditorField): WriteOutcome {
+    return { outcome: 'refused', message, field };
+  }
+
+  function refusedFor({ error, field }: FieldError): WriteOutcome {
+    return refused(error, field);
   }
 
   // A post with no title is a note; a page is always named.
   if (form.title === '' && kind.type === 'page') {
-    return refused(`A ${kind.singular} needs a title.`);
+    return refused(`A ${kind.singular} needs a title.`, 'editor-title');
   }
 
   // A post is a reply only when the target is a URL (Post Type Discovery), so
   // anything else would be saved as a reply that is not one.
   if (kind.type === 'post' && form.inReplyTo !== '' && replyTarget(form) === undefined) {
-    return refused('In reply to has to be a web address, like https://example.com/a-post/.');
+    return refused(
+      'In reply to has to be a web address, like https://example.com/a-post/.',
+      'editor-in-reply-to',
+    );
   }
 
   let read: Read | undefined;
@@ -554,21 +563,23 @@ export async function writeDocument(
       if (cited !== '' && !isWebUrl(cited)) {
         return refused(
           `${CITATION_LABELS[property]} has to be a web address, like https://example.com/a-post/.`,
+          `editor-${property}`,
         );
       }
     }
     const resolved = resolveRead(form.readStatus, form.readOf);
-    if ('error' in resolved) return refused(resolved.error);
+    if ('error' in resolved) return refusedFor(resolved);
     read = resolved.read;
   }
   if (read !== undefined && form.description !== '') {
     return refused(
       'A read is described by what it says, so it keeps no Description. Empty Description to save it.',
+      'editor-description',
     );
   }
 
   if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
-    return refused('That is not a language tag, such as en, fr or pt-BR.');
+    return refused('That is not a language tag, such as en, fr or pt-BR.', 'editor-lang');
   }
 
   let media: ResolvedMedia = { recording: undefined, photos: [] };
@@ -578,16 +589,16 @@ export async function writeDocument(
       document === undefined ? undefined : enclosureOf(document.extra),
       contentDir,
     );
-    if ('error' in resolved) return refused(resolved.error);
+    if ('error' in resolved) return refusedFor(resolved);
     const photos = resolvePhotos(form.photos, contentDir);
-    if ('error' in photos) return refused(photos.error);
+    if ('error' in photos) return refusedFor(photos);
     media = { recording: resolved.enclosure, photos: photos.photos };
   }
 
   let location: PostLocation | undefined;
   if (kind.type === 'post') {
     const resolved = resolveLocation(form.location);
-    if ('error' in resolved) return refused(resolved.error);
+    if ('error' in resolved) return refusedFor(resolved);
     location = resolved.location;
   }
 
@@ -601,7 +612,10 @@ export async function writeDocument(
     );
     const names = author === undefined ? [] : authorNames(users, author);
     if (store.listPinnedByAuthor(names).length >= PINNED_POST_LIMIT) {
-      return refused(`You can pin up to ${String(PINNED_POST_LIMIT)} posts. Unpin one first.`);
+      return refused(
+        `You can pin up to ${String(PINNED_POST_LIMIT)} posts. Unpin one first.`,
+        'editor-pinned',
+      );
     }
   }
 
@@ -625,11 +639,14 @@ export async function writeDocument(
   // is the site's own wall clock rather than the server's.
   const typed = kind.dated ? (form.date === '' ? store.now().toISOString() : form.date) : undefined;
   if (typed !== undefined && !/^\d{4}-\d{2}-\d{2}/.test(typed)) {
-    return refused('A date has to start with a year, a month and a day, like 2026-03-04.');
+    return refused(
+      'A date has to start with a year, a month and a day, like 2026-03-04.',
+      'editor-date',
+    );
   }
   const date = typed === undefined ? undefined : toUtcInstant(typed, timezone);
   if (typed !== undefined && date === undefined) {
-    return refused('That date is not one anybody can read. Try 2026-03-04 09:00.');
+    return refused('That date is not one anybody can read. Try 2026-03-04 09:00.', 'editor-date');
   }
 
   const slug =
@@ -684,7 +701,7 @@ export async function writeDocument(
   }
 
   if (target !== document?.path && store.getByPath(target) !== undefined) {
-    return refused(`Another ${kind.singular} already lives in ${target}.`);
+    return refused(`Another ${kind.singular} already lives in ${target}.`, 'editor-slug');
   }
 
   const content: DocumentContent = {
@@ -1705,8 +1722,8 @@ interface RenderEditorOptions {
   /** The document being edited, or `undefined` when it is being written. */
   document: Document | undefined;
   form: EditorForm;
-  /** A message about the save that was just refused. */
-  error?: string | undefined;
+  /** Why the save that was just made was refused. */
+  refusal?: Refusal | undefined;
   /** The status to answer with. Defaults to 200. */
   status?: 200 | 400 | undefined;
 }
@@ -1794,7 +1811,10 @@ async function renderEditor(
     // exactly the ambiguity decision-11 exists to remove.
     ...(kind.dated ? { dateZone: zoneLabel(form.date === '' ? now : form.date, timezone) } : {}),
     ...(scheduledAt === undefined ? {} : { scheduledFor: formatInTimezone(scheduledAt, timezone) }),
-    ...(options.error === undefined ? {} : { error: options.error }),
+    ...(options.refusal === undefined
+      ? {}
+      : { error: options.refusal.message, errorField: options.refusal.field }),
+    open: openGroups(form, options.refusal?.field),
   });
 }
 

@@ -18,6 +18,7 @@ import type { AltTextLibrary } from '../images/alt-text.ts';
 import { uploadPath } from '../images/markup.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { listUploads } from './media.ts';
+import type { EditorField, FieldError } from './editor-layout.ts';
 
 /** One photo's row, as the form has it. */
 export interface PhotoRow {
@@ -72,18 +73,20 @@ export function readPhotoForm(body: Record<string, unknown>): PhotoRow[] {
 export function resolvePhotos(
   rows: readonly PhotoRow[],
   contentDir: string,
-): { photos: Photo[] } | { error: string } {
+): { photos: Photo[] } | FieldError {
   const photos: Photo[] = [];
-  for (const row of rows) {
+  for (const [index, row] of rows.entries()) {
+    const field: EditorField = `editor-photo-url-${String(index)}`;
     if (isUploadUrl(row.url)) {
       const media = UPLOAD_MEDIA_TYPES.get(path.extname(row.url).toLowerCase());
       const file = findUpload(row.url.slice(UPLOAD_ASSET_PREFIX.length), contentDir);
       if (media?.kind !== 'image' || file === undefined) {
-        return { error: `The photo ${row.url} is not an image in the media library.` };
+        return { error: `The photo ${row.url} is not an image in the media library.`, field };
       }
     } else if (!isWebUrl(row.url)) {
       return {
         error: `A photo is an image in the media library or an address starting https://, not ${row.url}.`,
+        field,
       };
     }
     photos.push(row.alt === '' ? { url: row.url } : { url: row.url, alt: row.alt });

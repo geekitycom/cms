@@ -65,18 +65,19 @@ export function tiedErrors(html: string): TiedErrors {
   const invalid: string[] = [];
   for (const [tag] of html.matchAll(/<(?:input|textarea|select)\b[^>]*>/g)) {
     const attributes = attributesOf(tag);
+    const describedBy = (attributes.get('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
+    const errors = describedBy.filter((id) => id.endsWith('-error'));
     if (!attributes.has('aria-invalid')) {
-      assert.ok(!attributes.has('aria-describedby'), `a valid control points at no error: ${tag}`);
+      assert.deepEqual(errors, [], `a valid control points at no error: ${tag}`);
       continue;
     }
 
     assert.equal(attributes.get('aria-invalid'), 'true', tag);
     const id = attributes.get('id');
     assert.ok(id, `an invalid control has an id to link to: ${tag}`);
-    const describedBy = attributes.get('aria-describedby');
-    assert.ok(describedBy, `an invalid control names its message: ${tag}`);
-    const message = textOfId(html, describedBy);
-    assert.ok(message, `${id}'s message ${describedBy} is on the page and says something`);
+    assert.equal(errors.length, 1, `an invalid control names its message: ${tag}`);
+    const message = textOfId(html, errors[0] ?? '');
+    assert.ok(message, `${id}'s message ${errors[0] ?? ''} is on the page and says something`);
     invalid.push(id);
   }
 
