@@ -2,11 +2,15 @@ import type { User } from '../admin/accounts.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf } from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
+import { photoAlt, photosOf } from '../content/photo.ts';
+import type { Photo } from '../content/photo.ts';
+import type { AltTextLibrary } from '../images/alt-text.ts';
 import { isNamed, replyTarget } from '../content/post-type.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { activityStreamsId } from './documents.ts';
 import { feedLanguage, feedPathUnder } from './feed-source.ts';
+import { escapeXml } from './feed-xml.ts';
 import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
 import { canonicalLocale, documentLanguage } from './locale.ts';
@@ -87,8 +91,19 @@ export interface FeedItem {
    * which is the one case a format leaves the element out.
    */
   summary: string;
-  /** The rendered body. */
+  /**
+   * What every format prints as the content: the post's photos (TASK-166), then
+   * its rendered body, which is the order the page prints them in. Each photo
+   * is a plain `<img>` of the original, absolute on the site's base URL, with
+   * the alt text the page gives it (decision-10: a reader cannot resolve the
+   * site's variants), so a photo-only post does not read empty.
+   */
   html: string;
+  /**
+   * The item's main image, absolute: the post's `image`, else its first photo.
+   * JSON Feed writes it as `image`; the XML formats have no such field.
+   */
+  image?: string | undefined;
   /** The Markdown the body was written from, for `source:markdown`. */
   markdown: string;
   /**
@@ -142,7 +157,8 @@ export interface FeedItem {
  * words, and revision 4 named a reply's target in Atom and JSON Feed, and
  * revision 5 named a post's own language in all three, and revision 6 printed
  * a stored username as the user's display name and credited the site title
- * where nobody was named — would
+ * where nobody was named, and revision 7 printed a post's photos and named its
+ * main image — would
  * leave the validator where it was, and a reader polling with `If-None-Match`
  * would be handed a 304 that hides the new bytes.
  *
@@ -150,7 +166,7 @@ export interface FeedItem {
  * never again until the next such change. The comments feeds do not carry it:
  * a comment is not a {@link FeedItem} and its bytes are untouched.
  */
-export const FEED_ITEM_REVISION = 6;
+export const FEED_ITEM_REVISION = 7;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -172,6 +188,8 @@ export interface FeedItemContext {
   baseUrl: string;
   /** How many replies each document has, by permalink. See {@link FeedItem.comments}. */
   commentCounts?: ReadonlyMap<string, number> | undefined;
+  /** The media library, for a photo's alt text the post does not give. Empty when absent. */
+  altTexts?: AltTextLibrary | undefined;
 }
 
 /**
@@ -186,6 +204,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   const link = absoluteUrl(document.permalink, baseUrl);
   const published = document.date === undefined ? undefined : new Date(document.date);
   const author = authorName(context.users, document.author);
+  const photos = photosOf(document.extra);
 
   const item: FeedItem = {
     // A page or a draft has no ActivityStreams id to advertise, and falls back
@@ -195,7 +214,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     link,
     terms: [...document.categories, ...document.tags],
     summary: feedExcerpt(document),
-    html: document.html,
+    html: photosHtml(photos, context.altTexts ?? new Map(), baseUrl) + document.html,
     markdown: document.body,
     creator: author ?? siteAuthorName(context.users, context.site),
   };
@@ -207,6 +226,9 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   if (updated !== undefined) item.updated = updated;
 
   if (author !== undefined) item.author = author;
+
+  const image = ownImage(document) ?? photos[0]?.url;
+  if (image !== undefined) item.image = absoluteUrl(image, baseUrl);
 
   const inReplyTo = replyTarget(document);
   if (inReplyTo !== undefined) item.inReplyTo = inReplyTo;
@@ -232,6 +254,21 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   }
 
   return item;
+}
+
+function photosHtml(photos: readonly Photo[], library: AltTextLibrary, baseUrl: string): string {
+  return photos
+    .map(
+      (photo) =>
+        `<figure><img src="${escapeXml(absoluteUrl(photo.url, baseUrl))}"` +
+        ` alt="${escapeXml(photoAlt(photo, library) ?? '')}"></figure>`,
+    )
+    .join('');
+}
+
+function ownImage(document: Document): string | undefined {
+  const image = document.extra['image'];
+  return typeof image === 'string' && image.trim() !== '' ? image.trim() : undefined;
 }
 
 function absoluteEnclosure(enclosure: Enclosure, baseUrl: string): Enclosure {

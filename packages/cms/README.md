@@ -3012,6 +3012,16 @@ its own item: RSS as `dc:language`, Atom as `xml:lang` on the `entry` and JSON
 Feed as the item's `language`. A post in the site's language, or whose `lang`
 is not a language tag, adds nothing.
 
+**Photos.** A post's `photo` front matter prints in every format's content,
+before the body, which is where the page prints it too. Each photo is a plain
+`<figure><img src alt></figure>` of the original upload, never the responsive
+variants, which a reader cannot resolve (decision-10). Its `src` is absolute on
+the site's base URL. Its `alt` is the post's own text, else the media library's,
+else empty. So a photo-only post reads in a feed reader as its photos. JSON Feed
+also names the item's main image as `image`: the post's `image` front matter,
+else its first photo. A photo is never an RSS `enclosure`, an Atom
+`rel="enclosure"` link or a JSON Feed attachment. Those carry a recording only.
+
 ### RSS 2.0
 
 The channel carries `title`, `link`, `description` (the tagline), `language`
@@ -3114,7 +3124,7 @@ Feed has no field for a license and says nothing about one.
 [rfc4946]: https://www.rfc-editor.org/rfc/rfc4946
 
 A JSON Feed item carries `id` (the object id), `url` (the permalink), `title`,
-`content_html`, `summary`, `date_published`, `date_modified`, `tags` (the
+`content_html`, `image` (see Photos above), `summary`, `date_published`, `date_modified`, `tags` (the
 terms) and `authors`; the feed carries `version`, `title`, `home_page_url`,
 `feed_url`, `description`, `authors` and `hubs`. Keys with nothing behind them
 are left out rather than sent empty.

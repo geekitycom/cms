@@ -1,3 +1,4 @@
+import { photoAlt, photosOf } from '../content/photo.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { atomFeed } from './feed-atom.ts';
@@ -227,6 +228,9 @@ function feedFingerprint(source: FeedSource): string {
         document.hash,
         String(source.commentCounts?.get(document.permalink) ?? 0),
         authorName(source.users, document.author) ?? '',
+        ...photosOf(document.extra).map(
+          (photo) => photoAlt(photo, source.altTexts ?? new Map()) ?? '',
+        ),
       ].join(' '),
     ),
   ].join('\n');

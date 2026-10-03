@@ -9,6 +9,7 @@ import { postLabel } from '../content/post-type.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { mountAvatars } from '../avatars/routes.ts';
+import { readAltTexts } from '../images/alt-text.ts';
 import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
@@ -1408,6 +1409,7 @@ function feed(c: Context<GeekityEnv>, format: FeedFormat, subject: ListingSubjec
     // vocabulary for them, and counting for a feed that cannot say the number
     // would be a query per item for nothing.
     ...(format === 'rss' ? { commentCounts: c.var.conversation.counts(documents) } : {}),
+    altTexts: readAltTexts(config.contentDir),
   };
 
   return feedResponse({ format, source, conditional: conditionalHeaders(c) });

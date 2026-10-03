@@ -73,8 +73,10 @@ export interface JsonFeedItem {
   url: string;
   /** Display title, absent for a note. */
   title?: string;
-  /** The rendered body. */
+  /** The post's photos, then its rendered body. */
   content_html: string;
+  /** The main image: the post's `image`, else its first photo. */
+  image?: string;
   /** The post's summary, unless there is nothing to summarise. */
   summary?: string;
   /** Publish date, RFC 3339. */
@@ -144,6 +146,7 @@ export function jsonFeedItem(item: FeedItem): JsonFeedItem {
 
   // A key with nothing behind it is left out rather than sent empty: a JSON
   // Feed reader treats absent and empty differently.
+  if (item.image !== undefined) entry.image = item.image;
   if (item.summary !== '') entry.summary = item.summary;
   if (item.published !== undefined) entry.date_published = item.published.toISOString();
   if (item.updated !== undefined) entry.date_modified = item.updated.toISOString();
