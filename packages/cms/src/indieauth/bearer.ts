@@ -92,10 +92,9 @@ export function insufficientScope(c: Context<BearerEnv>, scope: Scope): Response
 }
 
 /**
- * Every access token the request carries, and whether a form body that might
- * have held one could not be read. RFC 6750 section 3.1 says a client sends
- * one, but Quill sends the same token in the header and a form body for
- * servers that drop the header, so only two different tokens are refused.
+ * RFC 6750 section 3.1 says a client sends one token, but Quill sends the same
+ * token in the header and a form body for servers that drop the header, so
+ * only two different tokens are refused.
  */
 async function presentedTokens(
   c: Context,

@@ -12,7 +12,7 @@ import type { BearerEnv } from '../indieauth/bearer.ts';
 import { MICROPUB_MEDIA_PATH, siteBaseUrl } from '../indieauth/discovery.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
-import { refuseOversizedRequest, requireSiteToken } from './endpoint.ts';
+import { requireSiteToken } from './endpoint.ts';
 
 /** Each user's most recent upload, relative to `dataDir`. */
 export const LAST_UPLOADS_FILE = 'micropub-media.json';
@@ -67,7 +67,6 @@ export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
   app.post(
     MICROPUB_MEDIA_PATH,
     logMediaRequest,
-    refuseOversizedRequest,
     requireSiteToken('media'),
     async (c: Context<BearerEnv>) => {
       const { config, bearer } = c.var;

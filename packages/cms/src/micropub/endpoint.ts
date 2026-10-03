@@ -174,30 +174,19 @@ function isQuery(q: string | undefined): q is Query {
  * because the base URL is a setting.
  */
 export function requireSiteToken(scope?: Scope): MiddlewareHandler<BearerEnv> {
-  return async (c, next) =>
-    await requireBearer({
+  return async (c, next) => {
+    const declared = Number(c.req.header('content-length') ?? '');
+    const limit = largestUploadLimit(c.var.config);
+    if (Number.isFinite(declared) && declared > limit + UPLOAD_ENVELOPE_BYTES) {
+      c.header('cache-control', 'no-store');
+      return c.json({ error: 'invalid_request', error_description: tooLargeMessage(limit) }, 400);
+    }
+    return await requireBearer({
       audience: { resource: siteBaseUrl(c), acceptsUnbound: true },
       ...(scope === undefined ? {} : { scope }),
     })(c, next);
+  };
 }
-
-/**
- * Refuse a body whose declared length is over the upload limit before anything
- * reads it, at the media endpoint and the create alike. It runs ahead of the
- * bearer guard because the guard parses a form body for an `access_token`,
- * which reads the whole file, as the admin's `refuseOversizedUpload` explains.
- * A JSON or form-encoded body is held to the same limit: the site names no
- * other, and the proxy in front is told to allow this one.
- */
-export const refuseOversizedRequest: MiddlewareHandler<GeekityEnv> = async (c, next) => {
-  const declared = Number(c.req.header('content-length') ?? '');
-  const limit = largestUploadLimit(c.var.config);
-  if (Number.isFinite(declared) && declared > limit + UPLOAD_ENVELOPE_BYTES) {
-    c.header('cache-control', 'no-store');
-    return c.json({ error: 'invalid_request', error_description: tooLargeMessage(limit) }, 400);
-  }
-  await next();
-};
 
 /** What a POST asks for, by its `action`; a body without one is a create. */
 type MicropubPost =
@@ -419,23 +408,17 @@ async function moved(
  * IndieAuth endpoints beside it.
  */
 export function mountMicropub(app: Hono<GeekityEnv>): void {
-  app.post(
-    MICROPUB_PATH,
-    logMicropubRequest,
-    refuseOversizedRequest,
-    requireSiteToken(),
-    async (c) => {
-      const post = await micropubPost(c);
-      if (post instanceof Refusal) return post.answer(c);
-      const scope = ACTION_SCOPES[post.action];
-      if (!c.var.bearer.token.scopes.includes(scope)) return insufficientScope(c, scope);
-      const handle = ACTIONS[post.action] as (
-        c: Context<BearerEnv>,
-        post: MicropubPost,
-      ) => Promise<Response>;
-      return await handle(c, post);
-    },
-  );
+  app.post(MICROPUB_PATH, logMicropubRequest, requireSiteToken(), async (c) => {
+    const post = await micropubPost(c);
+    if (post instanceof Refusal) return post.answer(c);
+    const scope = ACTION_SCOPES[post.action];
+    if (!c.var.bearer.token.scopes.includes(scope)) return insufficientScope(c, scope);
+    const handle = ACTIONS[post.action] as (
+      c: Context<BearerEnv>,
+      post: MicropubPost,
+    ) => Promise<Response>;
+    return await handle(c, post);
+  });
 
   app.get(MICROPUB_PATH, logMicropubRequest, requireSiteToken(), (c) => {
     const q = c.req.query('q');

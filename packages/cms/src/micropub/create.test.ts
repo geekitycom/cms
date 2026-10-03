@@ -723,7 +723,6 @@ describe('a photo post (TASK-166 AC #1)', () => {
 describe('an oversized create (TASK-216)', () => {
   const LIMITS: GeekityConfig = { uploadMaxBytes: 64, uploadMediaMaxBytes: 64 };
 
-  /** A body that counts how often anything asks it for bytes. */
   function watchedBody(text: string): { body: ReadableStream<Uint8Array>; pulls: () => number } {
     let pulls = 0;
     const body = new ReadableStream<Uint8Array>(
