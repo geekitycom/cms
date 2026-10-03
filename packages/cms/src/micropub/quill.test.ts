@@ -295,14 +295,22 @@ describe('p3k-content-type (AC #3)', () => {
   });
 });
 
-describe('visibility (AC #4)', () => {
-  it('is advertised in q=config as public alone', async () => {
+describe('visibility (AC #4, TASK-227)', () => {
+  async function source(cms: Cms, token: string, url: string): Promise<Record<string, unknown>> {
+    const response = await cms.app.request(`${ENDPOINT}?q=source&url=${encodeURIComponent(url)}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(response.status, 200);
+    return ((await response.json()) as { properties: Record<string, unknown> }).properties;
+  }
+
+  it('is advertised in q=config as public and unlisted', async () => {
     const { cms, token } = await site();
     const response = await cms.app.request(`${ENDPOINT}?q=config`, {
       headers: { authorization: `Bearer ${token}` },
     });
     const config = (await response.json()) as Record<string, unknown>;
-    assert.deepEqual(config['visibility'], ['public']);
+    assert.deepEqual(config['visibility'], ['public', 'unlisted']);
   });
 
   it('takes visibility=public on a create and writes what it writes without it', async () => {
@@ -319,6 +327,7 @@ describe('visibility (AC #4)', () => {
     );
     const without = (await fileOf(cms, plain)).replace(/plain/g, 'SLUG');
     assert.equal((await fileOf(cms, visible)).replace(/visible/g, 'SLUG'), without);
+    assert.deepEqual((await source(cms, token, visible))['visibility'], ['public']);
   });
 
   it('takes visibility=public on an update and leaves the file as it was', async () => {
@@ -330,9 +339,52 @@ describe('visibility (AC #4)', () => {
     assert.equal(await fileOf(cms, location), before);
   });
 
+  it('writes visibility=unlisted on a create, and q=source returns it', async () => {
+    const { cms, token } = await site();
+    const location = await created(
+      await quillPost(cms, token, { content: 'Quiet.', visibility: 'unlisted' }),
+    );
+    assert.equal(matter(await fileOf(cms, location)).data['visibility'], 'unlisted');
+    assert.deepEqual((await source(cms, token, location))['visibility'], ['unlisted']);
+  });
+
+  it('unlists a post on an update, and lists it again on a delete', async () => {
+    const { cms, token } = await site();
+    const location = await created(await quillPost(cms, token, { content: 'Loud.' }));
+
+    const unlisted = await update(cms, token, location, { replace: { visibility: ['unlisted'] } });
+    assert.equal(unlisted.status, 204, await unlisted.clone().text());
+    assert.equal(matter(await fileOf(cms, location)).data['visibility'], 'unlisted');
+
+    const listed = await update(cms, token, location, { delete: ['visibility'] });
+    assert.equal(listed.status, 204, await listed.clone().text());
+    assert.equal(matter(await fileOf(cms, location)).data['visibility'], undefined);
+  });
+
+  it('returns a stored value it does not recognize from q=source, and an update keeps it', async () => {
+    const { cms, token } = await site();
+    const location = await created(await quillPost(cms, token, { content: 'Hand edited.' }));
+    const document = cms.store.getByPermalink(new URL(location).pathname);
+    assert.ok(document !== undefined);
+    const file = path.join(cms.config.contentDir, ...document.path.split('/'));
+    await writeFile(
+      file,
+      (await readFile(file, 'utf8')).replace(/^---\n/, '---\nvisibility: private\n'),
+    );
+    await cms.sync();
+
+    assert.deepEqual((await source(cms, token, location))['visibility'], ['private']);
+
+    const response = await update(cms, token, location, { replace: { content: ['Edited.'] } });
+    assert.equal(response.status, 204, await response.clone().text());
+    const saved = matter(await fileOf(cms, location));
+    assert.equal(saved.content.trim(), 'Edited.');
+    assert.equal(saved.data['visibility'], 'private');
+  });
+
   for (const [value, message] of [
-    ['unlisted', /does not publish unlisted posts yet/],
     ['private', /does not publish private posts/],
+    ['followers', /visibility is public or unlisted, not followers/],
   ] as const) {
     it(`refuses ${value} on a create and an update, saying so`, async () => {
       const { cms, token } = await site();

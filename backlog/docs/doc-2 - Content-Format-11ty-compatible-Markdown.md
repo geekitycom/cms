@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-03 01:24'
+updated_date: '2026-10-03 12:42'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -53,6 +53,7 @@ Keys the CMS reads and writes. Eleventy semantics are preserved.
 | `tags` | no | collections | taxonomy; `post` tag comes from `posts.json`, not from the file |
 | `categories` | no | data | the second taxonomy, archived at `/category/{name}/`; Eleventy reads it as an ordinary data key |
 | `draft` | no | honoured by an 11ty preprocessor | `true` hides from public site and feeds |
+| `visibility` | no | data | `unlisted` keeps the document's page and drops it from every list; absent is public; any other value hides the document like a draft. See Visibility below |
 | `description` | no | data | meta description and excerpt fallback |
 | `layout` | no | template | not written per file; comes from directory data |
 | `eleventyExcludeFromCollections` | no | hides from collections | mirrored for pages that should not list |
@@ -122,6 +123,14 @@ Feeds, the sitemap and the ActivityStreams objects emit instants and are not aff
 
 `draft: true` is the only status flag. There is no scheduled publishing in phase one; a future date with `draft: false` is simply published with that date, which matches 11ty. Trashing a post moves the file to `content/_trash/` (an underscore directory that Eleventy ignores) so it can be restored.
 
+## Visibility
+
+`visibility: unlisted` (TASK-227, TASK-219's visibility decision) serves a post or page at its permalink and leaves it off every list the site publishes: the home page, the tag, category and author archives, an `archive: true` page, previous and next links, every feed including the site-wide comments feed, the sitemap, search, `llms.txt`, IndexNow, the ActivityPub outbox and the featured collection. Its page answers with `X-Robots-Tag: noindex`, and the default theme prints `<meta name="robots" content="noindex">` from the `noindex` context flag. It still federates: its `Create` and `Update` are addressed `to` the author's followers with Public in `cc`, the swap of a public post's addressing, which Mastodon shows as unlisted, and relays are sent nothing about it. Webmentions still go out.
+
+Public is the key's absence; the editor and Micropub remove the key rather than write `visibility: public`. There are no private posts. A value other than `public` or `unlisted` (a hand-typed `visibility: private`, a misspelling, a number) fails closed further: the document is not served, as if it were a draft. Its URL and its `.md` and `.json` answer 404, it is on no list, and a post the followers hold is withdrawn with a `Delete`. The editor offers the stored value as a third, selected choice and keeps it through a save until Public or Unlisted is chosen; the admin list marks the post Hidden; `q=source` returns the value as stored and a Micropub update that does not name `visibility` keeps it.
+
+In code, `visibilityOf` answers `public`, `unlisted` or `{ unrecognized }`. `isServed` (draft, trash, schedule, a recognized visibility) says whether the site serves a document and `isListed` (served, and public) whether it lists it; the content index answers the same two rules in SQL. An Eleventy build does not know the key and builds an unlisted post into its collections like any other.
+
 ## Micropub
 
 A post created over Micropub (TASK-164) is written by the editor's own write path, so its file is the one the editor would write for the same fields. decision-27 records why. Each property fills one editor field:
@@ -138,10 +147,11 @@ A post created over Micropub (TASK-164) is written by the editor's own write pat
 | `published` | `date`, as a UTC instant; now when it is missing |
 | `post-status: draft` | `draft: true`; `published`, or none, is `draft: false` |
 | `mp-slug` | the slug, in the file name and the permalink |
+| `visibility` | `unlisted` writes `visibility: unlisted`; `public` writes nothing. `private` is refused with its own message, and any other value by name |
 | `photo`, each value | an entry in `photo`: a URL, or `{ "value": "…", "alt": "…" }` with its `alt`. A URL into the site's own uploads is written as its `/uploads/…` path. A file part of a multipart create is stored in the media library as the media endpoint stores one, and its path written; it is taken back out if the post is refused |
 | `location` | nothing in the file. A `geo:` URI (`geo:LAT,LNG;u=ACC`, Quill's form), an h-geo, an h-adr or an h-card is parsed at the boundary and kept in `data/locations.json`, keyed by the post's permalink (TASK-223, decision-29). The editor's Location box writes the same entry. The file is private because `content/` may be a public repository; Settings > Privacy decides what a page or the ActivityStreams object shows of it, nothing by default. `q=source` answers it whatever the setting, as a `geo:` URI, an h-adr or an h-card with the coordinates nested as `geo` |
 
-`slug` and `syndicate-to`, which Quill accounts from before its renames send, are read as `mp-slug` and `mp-syndicate-to`. `p3k-content-type` (`text/plain` or `text/markdown`) and `visibility` (`public`) are accepted and write nothing (TASK-222); any other value of either is refused by name.
+`slug` and `syndicate-to`, which Quill accounts from before its renames send, are read as `mp-slug` and `mp-syndicate-to`. `p3k-content-type` (`text/plain` or `text/markdown`) is accepted and writes nothing (TASK-222); any other value is refused by name. `q=config` advertises `visibility: ["public", "unlisted"]`, and `q=source` answers every post's `visibility`.
 
 The token's user is `author`. Only `h-entry` is created. Any other type or property, a second value where one is expected, or a value that is not text is refused by name and nothing is written.
 

@@ -250,6 +250,25 @@
         <label for="editor-draft">Draft</label>
       </p>
 
+      <label for="editor-visibility">Visibility</label>
+      <select id="editor-visibility" name="visibility" aria-describedby="editor-visibility-hint">
+        {% if form.visibility.unrecognized is defined %}
+          <option value="{{ form.visibility.unrecognized }}" selected>{{ form.visibility.unrecognized }} (not recognized)</option>
+        {% endif %}
+        <option value="public"{% if form.visibility == "public" %} selected{% endif %}>Public</option>
+        <option value="unlisted"{% if form.visibility == "unlisted" %} selected{% endif %}>Unlisted</option>
+      </select>
+      <p class="admin-hint" id="editor-visibility-hint">
+        {% if form.visibility.unrecognized is defined %}
+          The front matter says <code>visibility: {{ form.visibility.unrecognized }}</code>, which this
+          site does not recognize. The {{ kind.singular }} is hidden until you choose Public or Unlisted:
+          its page answers 404 and it is not listed or sent to your followers.
+        {% endif %}
+        Unlisted writes <code>visibility: unlisted</code> into the front matter. The {{ kind.singular }}
+        keeps its page and still goes to your followers, but is left off the home page, archives,
+        feeds, the sitemap, search and llms.txt, and asks search engines not to index it.
+      </p>
+
       {% if kind.type == "post" %}
         {# TASK-207: shown at the top of the author's fediverse profile, from
            the featured collection their actor links. #}

@@ -4,6 +4,7 @@ import { locationForm } from '../admin/location-field.ts';
 import type { PhotoRow } from '../admin/photo-field.ts';
 import { isWebUrl } from '../content/enclosure.ts';
 import { locationFromMicropub } from '../content/location.ts';
+import { isVisibility } from '../content/visibility.ts';
 import { normalizeBody } from '../content/writer.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
@@ -45,18 +46,6 @@ const ACCEPTED_WITHOUT_EFFECT: Readonly<Record<string, (value: string) => string
     type === 'text/plain' || type === 'text/markdown'
       ? undefined
       : `p3k-content-type is text/plain or text/markdown, not ${type}.`,
-  visibility: (visibility) => {
-    switch (visibility) {
-      case 'public':
-        return undefined;
-      case 'unlisted':
-        return 'This site does not publish unlisted posts yet; visibility is public.';
-      case 'private':
-        return 'This site does not publish private posts; visibility is public.';
-      default:
-        return `visibility is public, not ${visibility}.`;
-    }
-  },
 };
 
 const PROPERTIES = new Set<string>([
@@ -68,6 +57,7 @@ const PROPERTIES = new Set<string>([
   'location',
   'post-status',
   'mp-syndicate-to',
+  'visibility',
 ]);
 
 /**
@@ -217,6 +207,13 @@ export function createForm(
   form.location = location(properties.get('location') ?? [], errors);
   for (const [property, field] of Object.entries(SINGLE_VALUED)) {
     form[field] = text(property);
+  }
+  const visibility = text('visibility');
+  if (isVisibility(visibility)) form.visibility = visibility;
+  else if (visibility === 'private') {
+    errors.push('This site does not publish private posts; visibility is public or unlisted.');
+  } else if (visibility !== '') {
+    errors.push(`visibility is public or unlisted, not ${visibility}.`);
   }
   for (const [property, refused] of Object.entries(ACCEPTED_WITHOUT_EFFECT)) {
     const value = text(property);

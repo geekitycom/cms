@@ -1708,6 +1708,46 @@ cacheable, and a URL that answered differently for one viewer would be cached
 and served to the rest. Use the editor's Preview button, which renders the post
 through the theme's own layout at an admin URL.
 
+## Unlisted posts
+
+An unlisted post is published at its URL and left off every list. Choose
+Unlisted in the editor's Visibility field, send `visibility=unlisted` from a
+Micropub app, or write it into the front matter:
+
+```yaml
+visibility: unlisted
+```
+
+Public is the key's absence, and the editor removes the key when you choose
+Public again. The site has no private posts. A value other than `public` or
+`unlisted`, such as a hand-typed `visibility: private`, hides the post the way
+`draft: true` does: its URL answers 404, it is on no list, and a post the
+followers already hold is withdrawn with a `Delete`. The editor shows the value
+as it is stored, marks the post Hidden in the list, and keeps the value through
+a save until you choose Public or Unlisted.
+
+The rule works for pages too.
+
+| Where                                                                      | An unlisted post                                                                                                                             |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Its permalink, in every representation                                     | 200, with `X-Robots-Tag: noindex`. The default theme also prints `<meta name="robots" content="noindex">`.                                   |
+| The home page, tag, category and author archives, the `archive: true` page | Absent, and not counted in a pager or a tag count.                                                                                           |
+| Previous and next links under other posts, the front page's recent posts   | Absent.                                                                                                                                      |
+| Every RSS, Atom and JSON feed, and the site-wide comments feed             | Absent. Saving one pings no notify server.                                                                                                   |
+| The sitemap, search (HTML and JSON) and `llms.txt`                         | Absent.                                                                                                                                      |
+| IndexNow                                                                   | Not submitted. A public post that becomes unlisted is submitted once, so a search engine reads the `noindex`.                                |
+| The ActivityPub outbox and featured collection                             | Absent.                                                                                                                                      |
+| Followers                                                                  | Get the `Create` and every `Update`, addressed `to` the followers with Public in `cc`, which Mastodon shows as unlisted. Relays get nothing. |
+| Webmentions                                                                | Sent as for any post: the page is public.                                                                                                    |
+
+Changing a published post between public and unlisted sends its followers an
+`Update` with the new addressing.
+
+In code, `isServed(document)` says whether the site serves a document at its
+URL and `isListed(document)` whether it also lists it. The index answers the
+same two rules in SQL. An Eleventy build does not read the key, so it builds an
+unlisted post into its collections like any other.
+
 ## Hooks
 
 Two hooks let a site do something of its own when content changes. Both are
@@ -3417,9 +3457,10 @@ dates — a page with no date in its front matter — carries no `<lastmod>`
 rather than an invented one.
 
 Nothing hidden reaches it. The sitemap is drawn from the same queries the
-listings are and checked against the same `isPublicDocument`, so drafts, the
-trash and posts whose date has not arrived are absent for the same reason
-their permalinks 404.
+listings are and checked against the same `isListed`, so drafts, the trash and
+posts whose date has not arrived are absent for the same reason their
+permalinks 404, and an [unlisted post](#unlisted-posts) is absent for the same
+reason it is off the home page.
 
 The protocol caps one file at 50,000 URLs. Past that, `/sitemap.xml` becomes a
 `<sitemapindex>` naming `/sitemap-1.xml`, `/sitemap-2.xml` and so on, each

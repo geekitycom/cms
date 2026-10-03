@@ -1177,6 +1177,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `postsPage`                                 | The page carrying the listing, as `{ title, url }`, on the front page only. Absent when the site names none.      |
 | `archiveMonths`                             | Every published post as `{ month, posts }`, newest month first. Only on a page that says `archive: true`.         |
 | `webmention`                                | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.      |
+| `noindex`                                   | `true` on the page of an unlisted document, which the base layout prints as a robots `noindex` meta. Else absent. |
 | `conversation`                              | The replies, likes and boosts under the post. Only when there are any. See [The conversation](#the-conversation). |
 | everything else                             | Any front matter key the CMS does not model is on the context under its own name.                                 |
 

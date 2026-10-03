@@ -12,7 +12,7 @@ import {
   replyFrom,
   REPLY_ACTIVITY_TYPE,
 } from '../federation/replies.ts';
-import { activityStreamsId, isPublicDocument, permalinkOfObjectId } from './documents.ts';
+import { activityStreamsId, isListed, permalinkOfObjectId } from './documents.ts';
 import type { FeedComment } from './feeds.ts';
 import { absoluteUrl } from './negotiate.ts';
 import { sanitizeCommentHtml } from './sanitize.ts';
@@ -343,6 +343,7 @@ function postConversation(context: ConversationContext, document: Document): Con
 function siteConversation(context: ConversationContext, limit: number): SiteInteraction[] {
   const naming = authorNaming(context.admin);
   const posts = new PostsByObjectId(context);
+  const now = context.store.now();
   const said: SiteInteraction[] = [];
 
   for (let offset = 0; said.length < limit;) {
@@ -354,7 +355,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
       const reply = replyFrom(activity);
       if (reply === undefined) continue;
       const post = posts.get(reply.inReplyTo);
-      if (post === undefined) continue;
+      if (post === undefined || !isListed(post, now)) continue;
 
       said.push({ ...federatedInteraction(reply, naming(activity.actorId)), post });
       if (said.length === limit) break;
@@ -365,7 +366,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
   // approval per quote, and a site has few enough to read whole.
   for (const approval of readAllQuoteAuthorizations(context.contentDir)) {
     const post = posts.get(approval.post);
-    if (post === undefined) continue;
+    if (post === undefined || !isListed(post, now)) continue;
     for (const quote of quotesOf(context.admin, [approval], approval.post, naming)) {
       said.push({ ...quote, post });
     }
@@ -376,7 +377,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
     limit: limit * OVERSCAN,
   })) {
     const post = context.store.getBySlug(stored.slug);
-    if (post === undefined || !isPublicDocument(post, context.store.now())) continue;
+    if (post === undefined || !isListed(post, now)) continue;
     said.push({ ...interactionOf(stored, post.permalink), post });
   }
 

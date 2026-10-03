@@ -20,6 +20,7 @@ import type { PostLocations } from '../content/locations.ts';
 import type { PostType } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
+import { VISIBILITIES } from '../content/visibility.ts';
 import { logMicropubRequest } from '../indieauth/activity-log.ts';
 import { insufficientScope, requireBearer } from '../indieauth/bearer.ts';
 import type { BearerEnv } from '../indieauth/bearer.ts';
@@ -81,7 +82,7 @@ const QUERIES: Readonly<Record<Query, (context: QueryContext) => object>> = {
     'media-endpoint': `${baseUrl}${MICROPUB_MEDIA_PATH}`,
     'syndicate-to': offered(targets),
     'post-types': Object.entries(POST_TYPE_NAMES).map(([type, name]) => ({ type, name })),
-    visibility: ['public'],
+    visibility: VISIBILITIES,
     q: QUERY_NAMES,
   }),
   'syndicate-to': ({ targets }) => ({ 'syndicate-to': offered(targets) }),

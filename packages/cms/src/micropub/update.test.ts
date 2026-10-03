@@ -152,6 +152,7 @@ describe('q=source (AC #1)', () => {
         'in-reply-to': ['https://peer.example/a-post/'],
         published: ['2026-09-18T13:30:00Z'],
         'post-status': ['published'],
+        visibility: ['public'],
         photo: [
           { value: 'https://images.example/cat.jpg', alt: 'A cat' },
           'https://images.example/dog.jpg',
@@ -189,6 +190,7 @@ describe('q=source (AC #1)', () => {
         content: ['Just a note.'],
         published: ['2026-09-20T12:00:00Z'],
         'post-status': ['draft'],
+        visibility: ['public'],
       },
     });
   });

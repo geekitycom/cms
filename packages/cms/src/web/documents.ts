@@ -1,24 +1,42 @@
 import type { Document } from '../content/document.ts';
 import { isScheduled } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
+import { visibilityOf } from '../content/visibility.ts';
 import type { ContentStore } from '../content/store.ts';
 import { absoluteUrl } from './negotiate.ts';
 
 /**
- * Whether the public site may show a document.
+ * Whether the public site serves a document at its URL.
  *
- * Three things hide one: `draft: true` in the front matter, living under
- * `_trash/`, and a date that has not arrived yet. All three stay indexed so
- * the admin can find them; none is ever served, listed, or fed.
+ * Four things hide one: `draft: true` in the front matter, living under
+ * `_trash/`, a date that has not arrived yet, and a `visibility` the site
+ * does not recognize. All four stay indexed so the admin can find them; none
+ * is ever served, listed, or fed.
  *
- * This is the predicate the index answers in SQL, so anything that has to
- * decide about a single document in hand — a permalink, a View link, the
- * sitemap — asks it here rather than deriving the rule again. The clock
- * defaults to the system one; a caller with a store should pass
- * {@link ContentStore.now} so the answer matches the listings it came from.
+ * The index answers the same rule in SQL, so anything that has to decide
+ * about a single document in hand — a permalink, a View link — asks it here
+ * rather than deriving the rule again. The clock defaults to the system one; a
+ * caller with a store should pass {@link ContentStore.now} so the answer
+ * matches the listings it came from.
  */
-export function isPublicDocument(document: Document, now: Date = new Date()): boolean {
-  return !document.draft && !isTrashedPath(document.path) && !isScheduled(document, now);
+export function isServed(document: Document, now: Date = new Date()): boolean {
+  return (
+    !document.draft &&
+    !isTrashedPath(document.path) &&
+    !isScheduled(document, now) &&
+    typeof visibilityOf(document) === 'string'
+  );
+}
+
+/**
+ * Whether the site lists a document: served, and not unlisted (TASK-227).
+ *
+ * What every list the site publishes asks — the listings, the feeds, the
+ * sitemap, search, `llms.txt`, IndexNow — about a document in hand. The
+ * index's listing queries answer the same rule in SQL.
+ */
+export function isListed(document: Document, now: Date = new Date()): boolean {
+  return isServed(document, now) && visibilityOf(document) === 'public';
 }
 
 /**
@@ -30,7 +48,7 @@ export function isPublicDocument(document: Document, now: Date = new Date()): bo
  */
 export function publicDocumentAt(store: ContentStore, permalink: string): Document | undefined {
   const document = store.getByPermalink(permalink);
-  if (document === undefined || !isPublicDocument(document, store.now())) return undefined;
+  if (document === undefined || !isServed(document, store.now())) return undefined;
   return document;
 }
 
@@ -78,7 +96,7 @@ export function postObjectId(document: Document, baseUrl: string): string {
  * decision-13 they are the same URL.
  */
 export function activityStreamsId(document: Document, baseUrl: string): string | undefined {
-  if (document.type !== 'post' || !isPublicDocument(document)) return undefined;
+  if (document.type !== 'post' || !isServed(document)) return undefined;
   return postObjectId(document, baseUrl);
 }
 

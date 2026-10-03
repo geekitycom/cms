@@ -317,6 +317,34 @@ describe('pinging the notify server', () => {
     assert.deepEqual(pings, []);
   });
 
+  it('says nothing about an unlisted post, which is in no feed', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+
+    const saved = await publish(agent, { visibility: 'unlisted', tags: 'web' });
+    assert.equal(saved.status, 303);
+    await cms.notifier.settled();
+
+    assert.deepEqual(pings, []);
+  });
+
+  it('tells it when a post is unlisted, using the feeds it was in', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+
+    await publish(agent, { tags: 'web' });
+    await cms.notifier.settled();
+    pings.length = 0;
+
+    const unlisted = await submitEditor(agent, '/admin/posts/hello-world', {
+      visibility: 'unlisted',
+    });
+    assert.equal(unlisted.status, 303);
+    await cms.notifier.settled();
+
+    assert.deepEqual(pingedFeeds(), [...feedsUnder('/'), ...feedsUnder('/tag/web/')].sort());
+  });
+
   it('says nothing at all when the site names no notify server', async () => {
     const { cms } = await site({ notifyServer: '' });
     const agent = await signedIn(cms);

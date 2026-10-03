@@ -761,6 +761,14 @@ instead.
 Both endpoints are behind the admin's guard and need the session's CSRF token,
 like every other POST in the admin.
 
+The editor's Visibility field chooses Public or Unlisted. An unlisted post or
+page is served at its URL with a `noindex`, federates to the followers with
+Public in `cc`, and is left off the home page, every archive and feed, the
+sitemap, search, `llms.txt` and IndexNow. A value the site does not recognize,
+such as a hand-typed `visibility: private`, hides the post like a draft until
+you choose one. The package README's
+[Unlisted posts](packages/cms/README.md#unlisted-posts) has the whole table.
+
 ### Login hardening and security headers
 
 `/admin/login` counts failed sign-ins per username and per client address.
@@ -1677,7 +1685,7 @@ otherwise.
 | `mp-syndicate-to`      | Selects a syndication target by its `uid`, as the editor's Syndicate to checkboxes do. Several values. The post is sent to the targets when it is published.                                                                                                      |
 | `slug`, `syndicate-to` | The same as `mp-slug` and `mp-syndicate-to`. Quill accounts created before Quill renamed them still send these names.                                                                                                                                             |
 | `p3k-content-type`     | `text/plain` or `text/markdown`, which Quill sends from its content type selector. Either way the content is kept as Markdown, and nothing else is stored. Any other type is refused.                                                                             |
-| `visibility`           | `public`, which every published post is. Nothing is stored. `unlisted` and `private` are refused, since the site does not publish either yet.                                                                                                                     |
+| `visibility`           | `public` or `unlisted`. Unlisted writes `visibility: unlisted`: the post keeps its page and federates, but is left off every listing, feed, the sitemap and search. `private` is refused, since the site has no private posts.                                    |
 | `access_token`         | The token, when it is not in the header. It is never stored on the post.                                                                                                                                                                                          |
 
 A like, repost or bookmark cites its URL on the post's page and sends that URL
@@ -1740,7 +1748,7 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
 - `?q=config` lists the media endpoint, the syndication targets under
   `syndicate-to`, the post types the site accepts (note, article, reply, photo,
   like, repost and bookmark), the queries it answers, and the visibility
-  values a post may take, `"visibility": ["public"]`.
+  values a post may take, `"visibility": ["public", "unlisted"]`.
 - `?q=syndicate-to` lists the syndication targets on their own. Each is the
   `uid` and `name` of a target in `content/_data/syndicationTargets.json`, with
   its `id` as the `uid`. A site that declares none lists `[]`. The file is read

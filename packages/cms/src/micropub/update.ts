@@ -5,6 +5,7 @@ import { citationsOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { locationToMicropub } from '../content/location.ts';
 import type { PostLocations } from '../content/locations.ts';
+import { visibilityOf, visibilityText } from '../content/visibility.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { syndicateToOf } from '../webmention/syndication.ts';
 import { createForm, propertyName } from './create.ts';
@@ -28,7 +29,7 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   published: ['date'],
   'post-status': [],
   'p3k-content-type': [],
-  visibility: [],
+  visibility: ['visibility'],
   photo: ['photos'],
   location: ['location'],
   'mp-syndicate-to': ['syndicateTo'],
@@ -60,6 +61,7 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
   for (const { property, url } of citationsOf(document.extra)) text(property, url);
   text('published', document.date);
   properties['post-status'] = [document.draft ? 'draft' : 'published'];
+  properties['visibility'] = [visibilityText(visibilityOf(document))];
   const photos = photoRows(document).map(({ url, alt }) => {
     const value = url.startsWith('/') ? absoluteUrl(url, baseUrl) : url;
     return alt === '' ? value : { value, alt };

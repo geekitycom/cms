@@ -189,6 +189,22 @@ describe('the post object', () => {
     assert.equal(article['cc'], `${BASE_URL}/author/${ADA}/followers/`);
   });
 
+  it('addresses an unlisted post to the followers, with Public in cc (TASK-227)', async () => {
+    const instance = await site({
+      'posts/2026-09-02-hushed.md': post('Hushed', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/hushed/',
+      }).replace('---\n\n', 'visibility: unlisted\n---\n\n'),
+    });
+
+    const response = await get(instance, '/2026/09/hushed/', ACTIVITY_STREAMS);
+
+    assert.equal(response.status, 200, 'the object is served');
+    const article = (await response.json()) as Record<string, unknown>;
+    assert.equal(article['to'], `${BASE_URL}/author/${ADA}/followers/`);
+    assert.equal(article['cc'], 'as:Public');
+  });
+
   it('publishes one Hashtag per tag and per category, pointing at their archives', async () => {
     const instance = await site(HELLO);
 
@@ -969,6 +985,29 @@ describe('the outbox', () => {
         date: '2026-01-01T09:00:00Z',
         permalink: '/about/',
       }),
+    });
+
+    const outbox = (await (
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+    const page = await fetchLink(instance, outbox['first']);
+
+    assert.equal(outbox['totalItems'], 1);
+    assert.deepEqual(
+      (page['orderedItems'] as { object?: { name?: string } }[]).map(
+        (activity) => activity.object?.name,
+      ),
+      ['Hello, World!'],
+    );
+  });
+
+  it('leaves out an unlisted post, whose object is still served (TASK-227)', async () => {
+    const instance = await site({
+      ...HELLO,
+      'posts/2026-09-01-hushed.md': post('Hushed', {
+        date: '2026-09-01T09:00:00Z',
+        permalink: '/2026/09/hushed/',
+      }).replace('---\n\n', 'visibility: unlisted\n---\n\n'),
     });
 
     const outbox = (await (

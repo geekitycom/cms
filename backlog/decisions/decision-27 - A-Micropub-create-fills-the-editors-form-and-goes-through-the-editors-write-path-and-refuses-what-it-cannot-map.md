@@ -56,3 +56,13 @@ Quill sends two properties that change nothing the site writes. Refusing them re
 Every other unmapped property is still refused by name. `q=config` advertises `visibility: ["public"]`, and adds `unlisted` when it is built.
 
 The same task reads `slug` and `syndicate-to`, the names Quill accounts from before its migrations 0002 and 0004 send, as `mp-slug` and `mp-syndicate-to`, so they are mapped, checked and refused exactly as those are.
+
+## Amendment (TASK-227, 2026-10-03): visibility is stored
+
+`visibility` leaves the accepted-and-not-stored list. Unlisted posts are built (TASK-219's visibility decision), so the property maps onto an editor field like the others, on a create and an update alike:
+
+| Micropub property | Editor field | Front matter |
+| --- | --- | --- |
+| `visibility` `public` / `unlisted` | Visibility | `visibility: unlisted`; public is the key absent |
+
+`private` is still refused, with its own message: the site has no private posts. Any other value is refused by name. `q=source` returns `visibility` for every post, `public` or `unlisted`, and an update that deletes the property makes the post public again. `q=config` advertises `visibility: ["public", "unlisted"]`.

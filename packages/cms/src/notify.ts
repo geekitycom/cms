@@ -3,6 +3,7 @@ import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isFederatedDocument } from './federation/article.ts';
+import { isListed } from './web/documents.ts';
 import { FEED_FORMATS, notifyEndpoints } from './web/feeds.ts';
 import type { NotifyServer } from './web/feeds.ts';
 import { absoluteUrl } from './web/negotiate.ts';
@@ -199,13 +200,12 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
 /**
  * The document if it appears in a feed, and `undefined` otherwise.
  *
- * The same predicate delivery uses, because it is the same question: a
- * published post is what goes to the followers and what goes in the feeds, and
- * a draft or a page is in neither.
+ * A post delivery would send, and one the site lists: an unlisted post goes
+ * to the followers but is in no feed (TASK-227).
  */
 function inFeeds(document: Document | undefined, now: Date): Document | undefined {
   if (document === undefined) return undefined;
-  return isFederatedDocument(document, now) ? document : undefined;
+  return isFederatedDocument(document, now) && isListed(document, now) ? document : undefined;
 }
 
 /** Every taxonomy term either version of a post carried, without repeats. */

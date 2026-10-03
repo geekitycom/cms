@@ -6,6 +6,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
+import { isListed, isServed } from '../web/documents.ts';
 import type { Document } from './document.ts';
 import { DuplicatePermalinkError, openContentStore } from './store.ts';
 import type { ContentStore } from './store.ts';
@@ -1434,5 +1435,53 @@ describe('clear (TASK-95)', () => {
       ['After the clear'],
     );
     assert.equal(index.counts().total, 1, 'and nothing was left behind to double it');
+  });
+});
+
+describe('the served and listed clauses (TASK-227)', () => {
+  const VALUES: readonly [label: string, value: unknown, served: boolean, listed: boolean][] = [
+    ['absent', undefined, true, true],
+    ['null', null, true, true],
+    ['public', 'public', true, true],
+    ['unlisted', 'unlisted', true, false],
+    ['private', 'private', false, false],
+    ['Public', 'Public', false, false],
+    ['empty', '', false, false],
+    ['a number', 3, false, false],
+    ['true', true, false, false],
+    ['false', false, false, false],
+    ['a list', ['public'], false, false],
+    ['a map', { value: 'public' }, false, false],
+  ];
+
+  it('answer for every visibility value what isServed and isListed answer in hand', async () => {
+    const index = await store();
+    const documents = VALUES.map(([, value], n) =>
+      post({
+        path: `posts/2026-09-02-p${String(n)}.md`,
+        slug: `p${String(n)}`,
+        permalink: `/p${String(n)}/`,
+        redirectFrom: [`/old-p${String(n)}/`],
+        extra: value === undefined ? {} : { visibility: value },
+      }),
+    );
+    for (const document of documents) index.upsert(document);
+    const listed = new Set(index.listPosts().map((document) => document.path));
+
+    for (const [n, [label, , served, isOnLists]] of VALUES.entries()) {
+      const document = documents[n] as Document;
+      assert.equal(isServed(document), served, `${label} is served: ${String(served)}`);
+      assert.equal(isListed(document), isOnLists, `${label} is listed: ${String(isOnLists)}`);
+      assert.equal(
+        index.getByFormerPermalink(`/old-p${String(n)}/`) !== undefined,
+        served,
+        `the index serves ${label} as isServed does`,
+      );
+      assert.equal(
+        listed.has(document.path),
+        isOnLists,
+        `the index lists ${label} as isListed does`,
+      );
+    }
   });
 });

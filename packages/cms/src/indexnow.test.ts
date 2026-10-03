@@ -224,6 +224,36 @@ describe('submitting URLs (AC #2)', () => {
     assert.deepEqual(submitted(submissions), [`${BASE_URL}/gone/`]);
   });
 
+  it('submits nothing for an unlisted post', async () => {
+    const { fetch, submissions } = recorder();
+    const cms = await site({ fetch });
+    const agent = await signedIn(cms);
+
+    const response = await submit(agent, '/admin/posts/new', {
+      title: 'Hushed',
+      slug: 'hushed',
+      permalink: '/hushed/',
+      date: '2026-03-04T10:00:00.000Z',
+      visibility: 'unlisted',
+    });
+    assert.equal(response.status, 303);
+    await cms.indexNow.settled();
+
+    assert.deepEqual(submitted(submissions), []);
+  });
+
+  it('submits the URL of a post that was unlisted, so its noindex is read', async () => {
+    const { fetch, submissions } = recorder();
+    const cms = await site({ fetch, files: { 'posts/2026-09-02-quiet.md': post('quiet') } });
+    const agent = await signedIn(cms);
+
+    const unlisted = await submit(agent, '/admin/posts/quiet', { visibility: 'unlisted' });
+    assert.equal(unlisted.status, 303);
+    await cms.indexNow.settled();
+
+    assert.deepEqual(submitted(submissions), [`${BASE_URL}/quiet/`]);
+  });
+
   it('sends the changes that come together as one batch', async () => {
     const { fetch, submissions } = recorder();
     const cms = await site({

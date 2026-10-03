@@ -34,13 +34,15 @@ import {
   wallClockIn,
   zoneLabel,
 } from '../content/time.ts';
+import { isVisibility, VISIBILITY_FRONT_MATTER_KEY, visibilityOf } from '../content/visibility.ts';
+import type { StoredVisibility } from '../content/visibility.ts';
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readAltTexts, undescribedImages, undescribedPhotos } from '../images/alt-text.ts';
 import type { UndescribedImage } from '../images/alt-text.ts';
-import { isPublicDocument } from '../web/documents.ts';
+import { isServed } from '../web/documents.ts';
 import { LANG_FRONT_MATTER_KEY } from '../web/locale.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
@@ -156,6 +158,15 @@ function commentSetting(value: string): string {
   return value === COMMENT_SETTINGS.open || value === COMMENT_SETTINGS.closed
     ? value
     : COMMENT_SETTINGS.site;
+}
+
+/**
+ * A submitted Visibility field. Empty is public; any other value is the
+ * unrecognized one the editor offered back as it was stored.
+ */
+function formVisibility(value: string): StoredVisibility {
+  if (value === '') return 'public';
+  return isVisibility(value) ? value : { unrecognized: value };
 }
 
 /** What a document's front matter already says about comments. */
@@ -381,6 +392,7 @@ async function saveFromForm(
     ...citationFields((property) => (kind.type === 'post' ? text(body[property]).trim() : '')),
     lang: text(body['lang']).trim(),
     draft: body['draft'] !== undefined,
+    visibility: formVisibility(text(body['visibility'])),
     exclude: body['exclude'] !== undefined,
     contact: body['contact'] !== undefined,
     pinned: kind.type === 'post' && body['pinned'] !== undefined,
@@ -772,7 +784,7 @@ function documentPath(input: {
 function promisedDocument(document: Document | undefined, now: Date): Document | undefined {
   if (document === undefined) return undefined;
   const announced = document.activitypub?.published !== undefined;
-  return isPublicDocument(document, now) || announced ? document : undefined;
+  return isServed(document, now) || announced ? document : undefined;
 }
 
 /**
@@ -954,6 +966,7 @@ function resolveExtra(
     | 'lang'
     | 'pinned'
     | 'syndicateTo'
+    | 'visibility'
     | (typeof CITATION_FIELDS)[CitationProperty]
   >,
   now: Date,
@@ -993,6 +1006,17 @@ function resolveExtra(
     const pinned = document === undefined ? undefined : pinnedAt(document);
     if (!form.pinned) delete extra[PINNED_FRONT_MATTER_KEY];
     else if (pinned === undefined) extra[PINNED_FRONT_MATTER_KEY] = toUtcInstant(now, 'UTC');
+  }
+
+  // An unrecognized value the form sent back as it was offered stays as the
+  // file spells it, which may be other than text.
+  const stored = document === undefined ? 'public' : visibilityOf(document);
+  if (form.visibility === 'public') {
+    delete extra[VISIBILITY_FRONT_MATTER_KEY];
+  } else if (typeof form.visibility === 'string') {
+    extra[VISIBILITY_FRONT_MATTER_KEY] = form.visibility;
+  } else if (typeof stored === 'string' || stored.unrecognized !== form.visibility.unrecognized) {
+    extra[VISIBILITY_FRONT_MATTER_KEY] = form.visibility.unrecognized;
   }
 
   // Empty is the site's language, which is the key's absence (TASK-154).
@@ -1433,6 +1457,11 @@ export interface EditorForm {
   /** The language it is written in, the `lang` key; empty for the site's. */
   lang: string;
   draft: boolean;
+  /**
+   * Whether the document is listed or only served at its URL (TASK-227), or a
+   * value the site does not recognize, which hides it until one is chosen.
+   */
+  visibility: StoredVisibility;
   /** Whether `eleventyExcludeFromCollections` is set. Pages only. */
   exclude: boolean;
   /** Whether the page offers a contact form. Pages only. */
@@ -1493,6 +1522,7 @@ export function blankForm(
     ...citationFields(() => ''),
     lang: '',
     draft: false,
+    visibility: 'public',
     exclude: false,
     contact: false,
     pinned: false,
@@ -1542,6 +1572,7 @@ export function formFor(
         ? document.extra[LANG_FRONT_MATTER_KEY]
         : '',
     draft: document.draft,
+    visibility: visibilityOf(document),
     exclude: document.extra[EXCLUDE_KEY] === true,
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
     pinned: pinnedAt(document) !== undefined,
@@ -1647,8 +1678,7 @@ async function renderEditor(
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
     uploadUrl: UPLOADS_PATH,
-    viewUrl:
-      document !== undefined && isPublicDocument(document, now) ? document.permalink : undefined,
+    viewUrl: document !== undefined && isServed(document, now) ? document.permalink : undefined,
     // Named beside the date field, because a wall clock with no zone on it is
     // exactly the ambiguity decision-11 exists to remove.
     ...(kind.dated ? { dateZone: zoneLabel(form.date === '' ? now : form.date, timezone) } : {}),
@@ -1697,6 +1727,8 @@ export interface DocumentRow {
   trashed: boolean;
   /** Whether its date has not arrived, so the public site is holding it back. */
   scheduled: boolean;
+  /** Whether its `visibility` is one the site does not recognize, so it is not served. */
+  hidden: boolean;
   /** Where the editor for it lives. */
   editUrl: string;
   /** Its public URL, or `undefined` when the public site would not serve it. */
@@ -1736,7 +1768,7 @@ function listRow(
   now: Date,
   role: string | undefined,
 ): DocumentRow {
-  const isPublic = isPublicDocument(document, now);
+  const isPublic = isServed(document, now);
   return {
     title: postLabel(document),
     slug: document.slug,
@@ -1751,6 +1783,7 @@ function listRow(
     draft: document.draft,
     trashed: isTrashedPath(document.path),
     scheduled: scheduledFor(document, now) !== undefined,
+    hidden: typeof visibilityOf(document) !== 'string',
     editUrl: editorPath(kind, document.slug),
     viewUrl: isPublic ? document.permalink : undefined,
     role,

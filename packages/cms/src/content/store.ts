@@ -5,6 +5,7 @@ import type { Migration } from '../cache.ts';
 import type { ActivityPubMetadata, Document, DocumentType } from './document.ts';
 import { featuredPosts, PINNED_FRONT_MATTER_KEY } from './pinned.ts';
 import { searchExpression, searchText, SNIPPET_CLOSE, SNIPPET_OPEN } from './search.ts';
+import { VISIBILITIES, VISIBILITY_FRONT_MATTER_KEY } from './visibility.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
 
@@ -113,7 +114,7 @@ export interface ContentStore {
    * years, so the newest match wins.
    */
   getBySlug(slug: string): Document | undefined;
-  /** Published, untrashed, already-due posts, newest first. */
+  /** Published, untrashed, already-due, listed posts, newest first. */
   listPosts(options?: ListOptions): Document[];
   /**
    * Published, untrashed, already-due posts dated at or after an instant,
@@ -307,9 +308,9 @@ export interface ListAllOptions extends ListOptions {
 export interface ContentCounts {
   /** Every indexed document, trash included. */
   total: number;
-  /** Published, untrashed, already-due posts: the size of the public archive. */
+  /** Published, untrashed, already-due, listed posts: the size of the public archive. */
   posts: number;
-  /** Published, untrashed, already-due pages. */
+  /** Published, untrashed, already-due, listed pages. */
   pages: number;
   /** Untrashed drafts of either type. */
   drafts: number;
@@ -344,7 +345,7 @@ export type TaxonomyName = 'tag' | 'category';
 export interface TermUsage {
   /** The term itself, as the files spell it. */
   term: string;
-  /** Documents the public site lists under it: published, untrashed, due. */
+  /** Documents the public site lists under it: published, untrashed, due, listed. */
   published: number;
   /** Every file carrying it, drafts, scheduled posts and the trash included. */
   total: number;
@@ -412,6 +413,22 @@ const DUE_CLAUSE = '(date_sort IS NULL OR date_sort <= ?)';
 /** The reverse: a document whose date is still ahead of the clock. */
 const SCHEDULED_CLAUSE = '(date_sort IS NOT NULL AND date_sort > ?)';
 
+/** The document's `visibility`, `public` when the key is absent or null. */
+const VISIBILITY_SQL = `COALESCE(json_extract(extra, '$.${VISIBILITY_FRONT_MATTER_KEY}'), 'public')`;
+
+/**
+ * A document the public site serves at its URL: not a draft, not in the
+ * trash, due, and of a visibility the site recognizes. `web/documents.ts`'s
+ * `isServed` is the same rule in hand.
+ */
+const SERVED_CLAUSE = `(draft = 0 AND trashed = 0 AND ${DUE_CLAUSE} AND ${VISIBILITY_SQL} IN (${VISIBILITIES.map((visibility) => `'${visibility}'`).join(', ')}))`;
+
+/**
+ * A served document the site also lists: every listing, count, feed, search
+ * and sitemap query asks this. `isListed` is the same rule in hand.
+ */
+const LISTED_CLAUSE = `(${SERVED_CLAUSE} AND ${VISIBILITY_SQL} = 'public')`;
+
 /**
  * A document whose front matter carries a `pinned` key that is not `false`.
  * Which moment it was pinned at, and whether it is readable at all, is
@@ -447,8 +464,7 @@ const SEARCH_FROM = `
   FROM documents_fts
   JOIN documents ON documents.path = documents_fts.path
   WHERE documents_fts MATCH ?
-    AND documents.draft = 0 AND documents.trashed = 0
-    AND (documents.date_sort IS NULL OR documents.date_sort <= ?)
+    AND ${LISTED_CLAUSE}
 `;
 
 /**
@@ -521,7 +537,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       SELECT documents.* FROM documents
       JOIN document_redirects ON document_redirects.path = documents.path
       WHERE document_redirects.url = ?
-        AND documents.draft = 0 AND documents.trashed = 0 AND ${DUE_CLAUSE}
+        AND ${SERVED_CLAUSE}
       ORDER BY documents.updated DESC, documents.path DESC
       LIMIT 1
     `),
@@ -539,8 +555,8 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     counts: db.prepare(`
       SELECT
         COUNT(*) AS total,
-        COALESCE(SUM(type = 'post' AND draft = 0 AND trashed = 0 AND ${DUE_CLAUSE}), 0) AS posts,
-        COALESCE(SUM(type = 'page' AND draft = 0 AND trashed = 0 AND ${DUE_CLAUSE}), 0) AS pages,
+        COALESCE(SUM(type = 'post' AND ${LISTED_CLAUSE}), 0) AS posts,
+        COALESCE(SUM(type = 'page' AND ${LISTED_CLAUSE}), 0) AS pages,
         COALESCE(SUM(draft = 1 AND trashed = 0), 0) AS drafts,
         COALESCE(SUM(draft = 0 AND trashed = 0 AND ${SCHEDULED_CLAUSE}), 0) AS scheduled,
         COALESCE(SUM(trashed = 1), 0) AS trashed
@@ -550,8 +566,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       SELECT document_tags.tag AS tag, COUNT(*) AS count
       FROM document_tags
       JOIN documents ON documents.path = document_tags.path
-      WHERE documents.draft = 0 AND documents.trashed = 0
-        AND (documents.date_sort IS NULL OR documents.date_sort <= ?)
+      WHERE ${LISTED_CLAUSE}
       GROUP BY document_tags.tag
       ORDER BY count DESC, tag ASC
     `),
@@ -559,8 +574,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       SELECT document_categories.category AS category, COUNT(*) AS count
       FROM document_categories
       JOIN documents ON documents.path = document_categories.path
-      WHERE documents.draft = 0 AND documents.trashed = 0
-        AND (documents.date_sort IS NULL OR documents.date_sort <= ?)
+      WHERE ${LISTED_CLAUSE}
       GROUP BY document_categories.category
       ORDER BY count DESC, category ASC
     `),
@@ -657,12 +671,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     term: string,
     options: ListByTagOptions,
   ): Document[] {
-    const where = [
-      'draft = 0',
-      'trashed = 0',
-      DUE_CLAUSE,
-      `path IN (SELECT path FROM ${table} WHERE ${column} = ?)`,
-    ];
+    const where = [LISTED_CLAUSE, `path IN (SELECT path FROM ${table} WHERE ${column} = ?)`];
     const params: unknown[] = [nowKey(), term];
     if (options.type !== undefined) {
       where.unshift('type = ?');
@@ -678,12 +687,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     term: string,
     options: ListByTagOptions,
   ): number {
-    const where = [
-      'documents.draft = 0',
-      'documents.trashed = 0',
-      '(documents.date_sort IS NULL OR documents.date_sort <= ?)',
-      `${table}.${column} = ?`,
-    ];
+    const where = [LISTED_CLAUSE, `${table}.${column} = ?`];
     const params: unknown[] = [nowKey(), term];
     if (options.type !== undefined) {
       where.push('documents.type = ?');
@@ -715,7 +719,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     const row = db
       .prepare(
         `SELECT * FROM documents
-         WHERE type = 'post' AND draft = 0 AND trashed = 0 AND ${DUE_CLAUSE}
+         WHERE type = 'post' AND ${LISTED_CLAUSE}
            AND date_sort IS NOT NULL
            AND (date_sort, path) ${direction} (?, ?)
          ORDER BY date_sort ${order}, path ${order}
@@ -809,17 +813,13 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     listPosts(options = {}) {
-      return select(["type = 'post'", 'draft = 0', 'trashed = 0', DUE_CLAUSE], [nowKey()], options);
+      return select(["type = 'post'", LISTED_CLAUSE], [nowKey()], options);
     },
 
     listPostsSince(instant) {
       const since = dateSortKey(instant);
       if (since === null) return [];
-      return select(
-        ["type = 'post'", 'draft = 0', 'trashed = 0', DUE_CLAUSE, 'date_sort >= ?'],
-        [nowKey(), since],
-        {},
-      );
+      return select(["type = 'post'", LISTED_CLAUSE, 'date_sort >= ?'], [nowKey(), since], {});
     },
 
     neighbours(document) {
@@ -864,7 +864,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     listByAuthor(names, options = {}) {
       if (names.length === 0) return [];
       return select(
-        ["type = 'post'", 'draft = 0', 'trashed = 0', DUE_CLAUSE, authorClause(names)],
+        ["type = 'post'", LISTED_CLAUSE, authorClause(names)],
         [nowKey(), ...names],
         options,
       );
@@ -874,14 +874,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       if (names.length === 0) return [];
       return featuredPosts(
         select(
-          [
-            "type = 'post'",
-            'draft = 0',
-            'trashed = 0',
-            DUE_CLAUSE,
-            authorClause(names),
-            PINNED_CLAUSE,
-          ],
+          ["type = 'post'", LISTED_CLAUSE, authorClause(names), PINNED_CLAUSE],
           [nowKey(), ...names],
           {},
         ),
@@ -953,8 +946,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       const row = db
         .prepare(
           `SELECT COUNT(*) AS count FROM documents
-           WHERE type = 'post' AND draft = 0 AND trashed = 0
-             AND ${DUE_CLAUSE} AND ${authorClause(names)}`,
+           WHERE type = 'post' AND ${LISTED_CLAUSE} AND ${authorClause(names)}`,
         )
         .get(...([nowKey(), ...names] as never[])) as Record<string, unknown>;
       return Number(row['count']);
@@ -1021,10 +1013,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 function termUsageSql(table: 'document_tags' | 'document_categories', column: string): string {
   return `
     SELECT ${table}.${column} AS term,
-      COALESCE(SUM(
-        documents.draft = 0 AND documents.trashed = 0
-          AND (documents.date_sort IS NULL OR documents.date_sort <= ?)
-      ), 0) AS published,
+      COALESCE(SUM(${LISTED_CLAUSE}), 0) AS published,
       COUNT(*) AS total
     FROM ${table}
     JOIN documents ON documents.path = ${table}.path

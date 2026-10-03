@@ -12,6 +12,7 @@ import { pinnedAt } from '../content/pinned.ts';
 import { saveDocument } from '../content/save.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
+import { visibilityOf } from '../content/visibility.ts';
 import { documentContent } from '../content/writer.ts';
 import { authorNames } from '../web/authors.ts';
 import { ActorUpdate, actorId, senderKeyPairs, userActor } from './actor.ts';
@@ -238,6 +239,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         slug: about.slug,
       },
       also,
+      // A relay pushes what it is sent into public timelines, which is the
+      // one place an unlisted post must not appear (TASK-227).
+      visibilityOf(about) === 'public',
     );
   }
 
@@ -313,10 +317,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       slug: string | null;
     },
     also: readonly DeliveryTarget[] = [],
+    relays = true,
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
     const keys = await senderKeyPairs(context, sender);
-    const targets = deliveryTargets(admin, sender.username);
+    const targets = deliveryTargets(admin, sender.username, relays);
     // One POST to an inbox the followers already share is enough.
     const reached = new Set(targets.map((target) => target.inboxId));
     targets.push(...also.filter((target) => !reached.has(target.inboxId)));
@@ -593,7 +598,11 @@ export interface DeliveryTarget {
  * pending or rejected relay is not here at all — {@link acceptedRelays} is
  * where that rule lives.
  */
-export function deliveryTargets(admin: AdminStore, username: string): DeliveryTarget[] {
+export function deliveryTargets(
+  admin: AdminStore,
+  username: string,
+  relays = true,
+): DeliveryTarget[] {
   const targets: DeliveryTarget[] = [];
 
   for (const [inboxId, members] of groupByInbox(admin.listFollowers(username))) {
@@ -604,7 +613,7 @@ export function deliveryTargets(admin: AdminStore, username: string): DeliveryTa
     });
   }
 
-  for (const relay of acceptedRelays(admin)) {
+  for (const relay of relays ? acceptedRelays(admin) : []) {
     targets.push({
       inboxId: relay.inboxId,
       recipients: [relayRecipient(relay)],

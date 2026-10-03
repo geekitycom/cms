@@ -109,6 +109,10 @@ async function submit(
     'repost-of': field(html, 'repost-of') ?? '',
     'bookmark-of': field(html, 'bookmark-of') ?? '',
     lang: field(html, 'lang') ?? '',
+    visibility:
+      /<select[^>]*name="visibility"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(
+        html,
+      )?.[1] ?? '',
     ...recordingFields(html),
     body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
     action: 'update',
@@ -608,6 +612,112 @@ describe('the post language in the editor (TASK-154 AC #1)', () => {
     assert.equal(response.status, 400);
     assert.match(await response.text(), /That is not a language tag, such as en, fr or pt-BR\./);
     assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+  });
+});
+
+describe('unlisting a post in the editor (TASK-227 AC #1)', () => {
+  const FILE = ['posts', '2026-01-01-quiet.md'];
+
+  async function quiet(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: FILE.join('/'),
+        title: 'Quiet',
+        date: '2026-01-01',
+        permalink: '/2026/01/quiet/',
+        author: 'ada',
+      },
+    ]);
+    return { contentDir, agent: await signedIn(await box.site({ contentDir })) };
+  }
+
+  it('offers Public, selected, and Unlisted', async () => {
+    const { agent } = await quiet();
+
+    const html = await (await agent.get('/admin/posts/quiet')).text();
+
+    assert.match(html, /<option value="public" selected>Public<\/option>/);
+    assert.match(html, /<option value="unlisted">Unlisted<\/option>/);
+  });
+
+  it('writes visibility: unlisted, shows it chosen, and takes it out again', async () => {
+    const { contentDir, agent } = await quiet();
+    const file = path.join(contentDir, ...FILE);
+
+    assert.equal(
+      (await submit(agent, '/admin/posts/quiet', { visibility: 'unlisted' })).status,
+      303,
+    );
+    assert.match(await readFile(file, 'utf8'), /^visibility: unlisted$/m);
+    const reloaded = await (await agent.get('/admin/posts/quiet')).text();
+    assert.match(reloaded, /<option value="unlisted" selected>Unlisted<\/option>/);
+
+    assert.equal((await submit(agent, '/admin/posts/quiet', { visibility: 'public' })).status, 303);
+    assert.doesNotMatch(await readFile(file, 'utf8'), /^visibility:/m, 'public is the key absent');
+  });
+});
+
+describe('a post whose visibility the site does not recognize (TASK-227)', () => {
+  const FILE = ['posts', '2026-01-01-quiet.md'];
+
+  async function hidden(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: FILE.join('/'),
+        title: 'Quiet',
+        date: '2026-01-01',
+        permalink: '/2026/01/quiet/',
+        author: 'ada',
+        extra: ['visibility: private'],
+      },
+    ]);
+    return { contentDir, agent: await signedIn(await box.site({ contentDir })) };
+  }
+
+  it('shows the stored value chosen and says the post is hidden until one is chosen', async () => {
+    const { agent } = await hidden();
+
+    const html = await (await agent.get('/admin/posts/quiet')).text();
+
+    assert.match(html, /<option value="private" selected>private \(not recognized\)<\/option>/);
+    assert.match(html, /<option value="public">Public<\/option>/);
+    assert.match(html, /<option value="unlisted">Unlisted<\/option>/);
+    assert.match(html, /hidden until you choose Public or Unlisted/);
+  });
+
+  it('keeps the stored value through a save that leaves it alone', async () => {
+    const { contentDir, agent } = await hidden();
+    const file = path.join(contentDir, ...FILE);
+
+    const response = await submit(agent, '/admin/posts/quiet', { title: 'Quieter' });
+
+    assert.equal(response.status, 303);
+    const saved = await readFile(file, 'utf8');
+    assert.match(saved, /^title: Quieter$/m, 'the save went through');
+    assert.match(saved, /^visibility: private$/m, 'and the stored value is as it was');
+    assert.equal((await agent.get('/2026/01/quiet/')).status, 404, 'so the post is still hidden');
+  });
+
+  it('serves the post once Unlisted is chosen', async () => {
+    const { contentDir, agent } = await hidden();
+    assert.equal((await agent.get('/2026/01/quiet/')).status, 404);
+
+    assert.equal(
+      (await submit(agent, '/admin/posts/quiet', { visibility: 'unlisted' })).status,
+      303,
+    );
+
+    assert.match(await readFile(path.join(contentDir, ...FILE), 'utf8'), /^visibility: unlisted$/m);
+    assert.equal((await agent.get('/2026/01/quiet/')).status, 200);
+  });
+
+  it('is marked Hidden, not Published, in the posts list', async () => {
+    const { agent } = await hidden();
+
+    const html = await (await agent.get('/admin/posts')).text();
+
+    assert.match(html, /admin-status[^"]*">Hidden</);
+    assert.doesNotMatch(html, /<span class="admin-status">Published</);
   });
 });
 

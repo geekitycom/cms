@@ -3,7 +3,7 @@ import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isPrivateHost } from './webmention/public-address.ts';
-import { isPublicDocument } from './web/documents.ts';
+import { isListed } from './web/documents.ts';
 import { indexNowKeyPath } from './web/indexnow.ts';
 import { absoluteUrl } from './web/negotiate.ts';
 
@@ -170,7 +170,7 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
 
 /** The document's absolute URL while the public site shows it, and `undefined` otherwise. */
 function publicUrl(document: Document | undefined, now: Date, baseUrl: string): string | undefined {
-  if (document === undefined || !isPublicDocument(document, now)) return undefined;
+  if (document === undefined || !isListed(document, now)) return undefined;
   return absoluteUrl(document.permalink, baseUrl);
 }
 

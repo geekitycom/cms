@@ -67,7 +67,8 @@ export type {
 } from './conversation.ts';
 export {
   activityStreamsId,
-  isPublicDocument,
+  isListed,
+  isServed,
   postObjectId,
   publicDocumentAt,
 } from './documents.ts';
