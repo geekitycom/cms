@@ -18,6 +18,13 @@ import type { ReplyContext } from './reply-context.ts';
  */
 export const REPLY_CONTEXTS_FILE = '_data/replyContexts.json';
 
+/**
+ * How long a save waits for a cited page it names a new post after
+ * (TASK-250). Long enough for a page and its oEmbed answer from a host that is
+ * merely slow; past it the post takes its target's address words instead.
+ */
+export const CITED_SLUG_TIMEOUT_MS = 3_000;
+
 /** Where the service reports a target it could not read. */
 export interface ReplyContextLogger {
   warn(message: string): void;
@@ -55,6 +62,13 @@ export interface ReplyContextService {
    * Queued like {@link ReplyContextService.handle}.
    */
   catchUp(): void;
+  /**
+   * The context a new post can be named after: the stored one, else one fetch
+   * within {@link CITED_SLUG_TIMEOUT_MS} that is stored, so the save's own
+   * {@link ReplyContextService.handle} does not fetch it again (TASK-250).
+   * `undefined` when the target could not be read in time.
+   */
+  describe(target: string): Promise<ReplyContext | undefined>;
   /** The stored context for a target, from the file. Never touches the network. */
   read(target: string): ReplyContext | undefined;
   /** Resolve once everything queued has finished, however it finished. */
@@ -115,6 +129,8 @@ export function createReplyContextService(
     if (!stillCited) await write(target, undefined);
   }
 
+  const describedForSave = new Set<string>();
+
   let chain: Promise<unknown> = Promise.resolve();
   function enqueue(task: () => Promise<void>): void {
     chain = chain.then(task).catch((thrown: unknown) => {
@@ -135,6 +151,7 @@ export function createReplyContextService(
       // target that changed as well.
       for (const target of after) {
         const changed = !before.includes(target) && change.origin !== 'scan';
+        if (describedForSave.delete(target) && target in held) continue;
         if (!(target in held) || changed) enqueue(() => refresh(target));
       }
       for (const target of before) {
@@ -151,6 +168,16 @@ export function createReplyContextService(
         }
       }
       for (const target of missing) enqueue(() => refresh(target));
+    },
+
+    async describe(target) {
+      const held = readAll()[target];
+      if (held !== undefined) return held;
+      const fetched = await fetchReplyContext(target, { lookup, timeoutMs: CITED_SLUG_TIMEOUT_MS });
+      if (!fetched.ok) return undefined;
+      await write(target, fetched.context);
+      describedForSave.add(target);
+      return fetched.context;
     },
 
     read(target) {

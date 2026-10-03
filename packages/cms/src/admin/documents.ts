@@ -10,6 +10,7 @@ import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
 import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
 import { discoverPostType, postLabel, replyTarget } from '../content/post-type.ts';
+import type { PostType } from '../content/post-type.ts';
 import {
   isReadStatus,
   READ_OF_FRONT_MATTER_KEY,
@@ -112,6 +113,7 @@ import {
   syndicateToOf,
   syndicationTargetsReader,
 } from '../webmention/syndication.ts';
+import type { ReplyContext } from '../webmention/reply-context.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 
 /**
@@ -452,6 +454,7 @@ async function saveFromForm(
       config: c.var.config,
       announce: c.var.announce,
       writer: currentUsername(c),
+      citedContext: (target) => c.var.replyContexts.describe(target),
     },
     { kind, document, form, draft },
   );
@@ -480,6 +483,8 @@ export interface DocumentSite {
   readonly announce: (change: DocumentChange) => Promise<void>;
   /** The username of whoever is writing: the author a new document starts on. */
   readonly writer: string | undefined;
+  /** What a cited page says about itself, which an untitled new post is named after. */
+  readonly citedContext: (target: string) => Promise<ReplyContext | undefined>;
 }
 
 /** What {@link writeDocument} is asked to write. */
@@ -651,7 +656,7 @@ export async function writeDocument(
     (document?.slug ?? '') ||
     noteSlug(form.body) ||
     slugify(form.readOf.name) ||
-    typeSlug(kind, form, media.photos) ||
+    (await typeSlug(kind, form, media.photos, site.citedContext)) ||
     'untitled';
   const trashed = document !== undefined && isTrashedPath(document.path);
   // The calendar day the document is filed under: the site zone's day at its
@@ -794,7 +799,24 @@ function noteSlug(body: string): string {
 
 const TARGET_SLUG_WORDS = 4;
 
-function typeSlug(kind: DocumentKind, form: EditorForm, photos: readonly Photo[]): string {
+const CITED_SLUGS: Partial<
+  Record<
+    PostType,
+    { readonly prefix: string; readonly field: 'repostOf' | 'likeOf' | 'inReplyTo' | 'bookmarkOf' }
+  >
+> = {
+  repost: { prefix: 'reposted', field: 'repostOf' },
+  like: { prefix: 'liked', field: 'likeOf' },
+  reply: { prefix: 'reply-to', field: 'inReplyTo' },
+  bookmark: { prefix: 'bookmarked', field: 'bookmarkOf' },
+};
+
+async function typeSlug(
+  kind: DocumentKind,
+  form: EditorForm,
+  photos: readonly Photo[],
+  citedContext: DocumentSite['citedContext'],
+): Promise<string> {
   if (kind.type !== 'post') return '';
   const type = discoverPostType({
     'repost-of': form.repostOf,
@@ -803,29 +825,22 @@ function typeSlug(kind: DocumentKind, form: EditorForm, photos: readonly Photo[]
     'bookmark-of': form.bookmarkOf,
     photo: photos.map((photo) => photo.url),
   });
-  switch (type) {
-    case 'repost':
-      return `reposted-${targetWords(form.repostOf)}`;
-    case 'like':
-      return `liked-${targetWords(form.likeOf)}`;
-    case 'reply':
-      return `reply-to-${targetWords(form.inReplyTo)}`;
-    case 'bookmark':
-      return `bookmarked-${targetWords(form.bookmarkOf)}`;
-    case 'photo':
-      return 'photo';
-    default:
-      return '';
-  }
+  if (type === 'photo') return 'photo';
+  const cited = CITED_SLUGS[type];
+  if (cited === undefined) return '';
+  const target = form[cited.field];
+  const title = slugWords((await citedContext(target))?.name ?? '', NOTE_SLUG_WORDS);
+  return `${cited.prefix}-${title || targetWords(target)}`;
 }
 
 function targetWords(address: string): string {
   const url = new URL(address);
   const segments = url.pathname.split('/').map(decodedSegment).filter(holdsALetter);
-  return slugify([url.hostname.replace(/^www\./, ''), ...segments].join(' '))
-    .split('-')
-    .slice(0, TARGET_SLUG_WORDS)
-    .join('-');
+  return slugWords([url.hostname.replace(/^www\./, ''), ...segments].join(' '), TARGET_SLUG_WORDS);
+}
+
+function slugWords(text: string, cap: number): string {
+  return slugify(text).split('-').slice(0, cap).join('-');
 }
 
 function holdsALetter(segment: string): boolean {
