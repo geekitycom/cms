@@ -321,7 +321,11 @@ async function readBody(
   if (Object.keys(c.req.bodyCache).length === 0) return { kind: 'none' };
   const type = c.req.header('content-type') ?? '';
   if (/^(application\/x-www-form-urlencoded|multipart\/form-data)\b/i.test(type)) {
-    return { kind: 'form', form: await c.req.formData() };
+    try {
+      return { kind: 'form', form: await c.req.formData() };
+    } catch {
+      return { kind: 'none' };
+    }
   }
   if (/^application\/json\b/i.test(type)) {
     try {

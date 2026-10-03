@@ -285,6 +285,27 @@ describe('the Micropub endpoint', () => {
     assert.equal(unscoped.error, 'insufficient_scope');
     assert.equal(unscoped.user, 'ada');
   });
+
+  it('logs a create refused for its declared size, carrying nothing it never read', async () => {
+    const { cms, dataDir, token } = await site();
+    const response = await cms.app.request(MICROPUB, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await token(['create'])}`,
+        'content-length': String(10 * 1024 * 1024 * 1024),
+        'content-type': 'multipart/form-data; boundary=x',
+      },
+      body: 'tiny',
+    });
+    assert.equal(response.status, 400);
+
+    const entry = await latest(dataDir);
+    assert.equal(entry.endpoint, 'micropub');
+    assert.equal(entry.action, 'create');
+    assert.equal(entry.status, 400);
+    assert.match(entry.errorDescription ?? '', /too big/);
+    assert.deepEqual(entry.carried, []);
+  });
 });
 
 describe('the media endpoint', () => {
@@ -321,6 +342,23 @@ describe('the media endpoint', () => {
     assert.equal(early.endpoint, 'media');
     assert.equal(early.status, 400);
     assert.match(early.errorDescription ?? '', /too big/);
+  });
+
+  it('logs the bearer guard’s refusal of a token-less body that cannot be read', async () => {
+    const { cms, dataDir } = await site();
+    const response = await cms.app.request(MEDIA, {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=x' },
+      body: 'not really multipart',
+    });
+    assert.equal(response.status, 400);
+
+    const entry = await latest(dataDir);
+    assert.equal(entry.endpoint, 'media');
+    assert.equal(entry.status, 400);
+    assert.equal(entry.error, 'invalid_request');
+    assert.match(entry.errorDescription ?? '', /body could not be read/);
+    assert.deepEqual(entry.carried, []);
   });
 });
 

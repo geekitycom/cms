@@ -1598,6 +1598,12 @@ uploads is written as the upload's path, so the theme serves its resized
 versions. A photo URL on another site is shown from that site. A photo without
 alt text of its own takes the alt text from the media library.
 
+A request whose `Content-Length` is over the larger of `uploadMaxBytes` and
+`uploadMediaMaxBytes`, plus 8 KiB for the multipart envelope, gets 400
+`invalid_request` before its body is read. The limit covers the whole request,
+so several photo files in one create share it, and it applies to JSON and
+form-encoded bodies too. The media endpoint has the same check.
+
 Anything else gets 400 `invalid_request` with a description that names it, and
 nothing is written. That covers another type such as `h=event`, a property not
 in the table such as `rsvp`, `location` or `checkin`, a second value for a

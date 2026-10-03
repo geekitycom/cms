@@ -719,3 +719,78 @@ describe('a photo post (TASK-166 AC #1)', () => {
     assert.deepEqual(await postFiles(cms), []);
   });
 });
+
+describe('an oversized create (TASK-216)', () => {
+  const LIMITS: GeekityConfig = { uploadMaxBytes: 64, uploadMediaMaxBytes: 64 };
+
+  function watchedBody(text: string): { body: ReadableStream<Uint8Array>; pulls: () => number } {
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          pulls += 1;
+          controller.enqueue(new TextEncoder().encode(text));
+          controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    return { body, pulls: () => pulls };
+  }
+
+  async function postDeclared(
+    cms: Cms,
+    token: string,
+    type: string,
+    body: ReadableStream<Uint8Array>,
+  ): Promise<Response> {
+    return await cms.app.request(
+      new Request(`http://localhost${ENDPOINT}`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': type,
+          'content-length': String(64 * 1024 * 1024),
+        },
+        body,
+        duplex: 'half',
+      } as RequestInit),
+    );
+  }
+
+  it('refuses a multipart create declared over the upload limit with 400 before reading its body', async () => {
+    const { cms, token } = await site(['create'], LIMITS);
+    const { body, pulls } = watchedBody(
+      '--x\r\ncontent-disposition: form-data; name="h"\r\n\r\nentry\r\n--x--\r\n',
+    );
+
+    const response = await postDeclared(cms, token, 'multipart/form-data; boundary=x', body);
+
+    assert.equal(response.status, 400);
+    const answer = (await response.json()) as Record<string, string>;
+    assert.equal(answer['error'], 'invalid_request');
+    assert.match(answer['error_description'] ?? '', /too big/);
+    assert.equal(pulls(), 0, 'nothing read the body');
+    assert.deepEqual(await postFiles(cms), []);
+  });
+
+  it('holds a JSON create to the same limit', async () => {
+    const { cms, token } = await site(['create'], LIMITS);
+    const { body, pulls } = watchedBody('{"type":["h-entry"],"properties":{"content":["Hi"]}}');
+
+    const response = await postDeclared(cms, token, 'application/json', body);
+
+    assert.equal(response.status, 400);
+    assert.equal(pulls(), 0, 'nothing read the body');
+    assert.deepEqual(await postFiles(cms), []);
+  });
+
+  it('still takes a create within the limit and its envelope', async () => {
+    const { cms, token } = await site(['create'], LIMITS);
+    const response = await postJson(cms, token, {
+      type: ['h-entry'],
+      properties: { content: ['Small enough.'] },
+    });
+    assert.equal(response.status, 201);
+  });
+});

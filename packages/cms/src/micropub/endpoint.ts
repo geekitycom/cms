@@ -5,7 +5,13 @@ import type { User } from '../admin/accounts.ts';
 import { moveDocumentFile, POST_KIND, writeDocument } from '../admin/documents.ts';
 import type { EditorForm } from '../admin/documents.ts';
 import { deleteUpload } from '../admin/media.ts';
-import { refusedUpload, storeUpload } from '../admin/uploads.ts';
+import {
+  largestUploadLimit,
+  refusedUpload,
+  storeUpload,
+  tooLargeMessage,
+  UPLOAD_ENVELOPE_BYTES,
+} from '../admin/uploads.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 
 import type { Document } from '../content/document.ts';
@@ -168,11 +174,18 @@ function isQuery(q: string | undefined): q is Query {
  * because the base URL is a setting.
  */
 export function requireSiteToken(scope?: Scope): MiddlewareHandler<BearerEnv> {
-  return async (c, next) =>
-    await requireBearer({
+  return async (c, next) => {
+    const declared = Number(c.req.header('content-length') ?? '');
+    const limit = largestUploadLimit(c.var.config);
+    if (Number.isFinite(declared) && declared > limit + UPLOAD_ENVELOPE_BYTES) {
+      c.header('cache-control', 'no-store');
+      return c.json({ error: 'invalid_request', error_description: tooLargeMessage(limit) }, 400);
+    }
+    return await requireBearer({
       audience: { resource: siteBaseUrl(c), acceptsUnbound: true },
       ...(scope === undefined ? {} : { scope }),
     })(c, next);
+  };
 }
 
 /** What a POST asks for, by its `action`; a body without one is a create. */

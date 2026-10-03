@@ -1,17 +1,10 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-import type { Context, Hono, MiddlewareHandler } from 'hono';
+import type { Context, Hono } from 'hono';
 
 import { resolveUpload } from '../admin/media.ts';
-import {
-  largestUploadLimit,
-  refusedUpload,
-  storeUpload,
-  tooLargeMessage,
-  UPLOAD_ENVELOPE_BYTES,
-  UPLOAD_FIELD,
-} from '../admin/uploads.ts';
+import { refusedUpload, storeUpload, UPLOAD_FIELD } from '../admin/uploads.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { logMediaRequest } from '../indieauth/activity-log.ts';
@@ -63,21 +56,6 @@ function invalidRequest(c: Context, description: string): Response {
 }
 
 /**
- * Refuse a body whose declared length is over the upload limit before anything
- * reads it. It runs ahead of the bearer guard because the guard parses a form
- * body for an `access_token`, which reads the whole file, as the admin's
- * `refuseOversizedUpload` explains.
- */
-const refuseOversizedMedia: MiddlewareHandler<GeekityEnv> = async (c, next) => {
-  const declared = Number(c.req.header('content-length') ?? '');
-  const limit = largestUploadLimit(c.var.config);
-  if (Number.isFinite(declared) && declared > limit + UPLOAD_ENVELOPE_BYTES) {
-    return invalidRequest(c, tooLargeMessage(limit));
-  }
-  await next();
-};
-
-/**
  * The Micropub media endpoint (TASK-165). A `file` part is stored through
  * {@link storeUpload}, the media library's own rules and directory, so a
  * client's photo is a library file like any other with its variants derived
@@ -89,7 +67,6 @@ export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
   app.post(
     MICROPUB_MEDIA_PATH,
     logMediaRequest,
-    refuseOversizedMedia,
     requireSiteToken('media'),
     async (c: Context<BearerEnv>) => {
       const { config, bearer } = c.var;

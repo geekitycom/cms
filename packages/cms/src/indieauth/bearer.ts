@@ -44,12 +44,16 @@ export interface BearerEnv {
 export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
   return async (c, next) => {
     const { config } = c.var;
-    const tokens = new Set(await presentedTokens(c));
+    const { tokens, unreadableBody } = await presentedTokens(c);
     if (tokens.size > 1) {
       const description = 'The header and the body carry different access tokens.';
       return refuse(c, 400, 'invalid_request', description, { error: 'invalid_request' });
     }
     const [presented] = tokens;
+    if (presented === undefined && unreadableBody) {
+      const description = 'The form body could not be read, so no access token was found.';
+      return refuse(c, 400, 'invalid_request', description, { error: 'invalid_request' });
+    }
     if (presented === undefined) {
       return refuse(c, 401, 'unauthorized', 'An access token is required.', {});
     }
@@ -88,28 +92,26 @@ export function insufficientScope(c: Context<BearerEnv>, scope: Scope): Response
 }
 
 /**
- * Every access token the request carries. RFC 6750 section 3.1 says a client
- * sends one, but Quill sends the same token in the header and a form body for
- * servers that drop the header, so only two different tokens are refused.
+ * RFC 6750 section 3.1 says a client sends one token, but Quill sends the same
+ * token in the header and a form body for servers that drop the header, so
+ * only two different tokens are refused.
  */
-async function presentedTokens(c: Context): Promise<string[]> {
-  const tokens: string[] = [];
+async function presentedTokens(
+  c: Context,
+): Promise<{ tokens: Set<string>; unreadableBody: boolean }> {
+  const tokens = new Set<string>();
   const header = /^Bearer +(\S+)$/i.exec(c.req.header('authorization') ?? '');
-  if (header?.[1] !== undefined) tokens.push(header[1]);
+  if (header?.[1] !== undefined) tokens.add(header[1]);
   const type = c.req.header('content-type') ?? '';
-  if (/^(application\/x-www-form-urlencoded|multipart\/form-data)\b/i.test(type)) {
-    const field = (await readBody(c))?.['access_token'];
-    if (typeof field === 'string' && field !== '') tokens.push(field);
+  if (!/^(application\/x-www-form-urlencoded|multipart\/form-data)\b/i.test(type)) {
+    return { tokens, unreadableBody: false };
   }
-  return tokens;
-}
-
-/** The parsed form body, or undefined when it cannot be read, which is the route's to refuse. */
-async function readBody(c: Context): Promise<Record<string, unknown> | undefined> {
   try {
-    return await c.req.parseBody();
+    const field = (await c.req.parseBody())['access_token'];
+    if (typeof field === 'string' && field !== '') tokens.add(field);
+    return { tokens, unreadableBody: false };
   } catch {
-    return undefined;
+    return { tokens, unreadableBody: true };
   }
 }
 
