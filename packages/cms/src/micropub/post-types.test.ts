@@ -211,7 +211,7 @@ describe('q=config post-types properties (AC #1, AC #2)', () => {
     }
   });
 
-  it('lists no property a create refuses as not understood', async () => {
+  it('lists no property a create refuses by name as one it does not take', async () => {
     const made = await site();
     const listed = new Set((await postTypes(made)).flatMap((entry) => entry.properties));
     const refused: string[] = [];
@@ -225,17 +225,9 @@ describe('q=config post-types properties (AC #1, AC #2)', () => {
       const { error_description: description } = (await response.json()) as {
         error_description: string;
       };
-      if (description.includes(`does not understand ${name}`)) refused.push(name);
+      if (description.includes(`does not support ${name}`)) refused.push(name);
     }
-    assert.deepEqual(refused, [
-      'rsvp',
-      'syndication',
-      'checkin',
-      'mp-channel',
-      'listen-of',
-      'ate',
-      'drank',
-    ]);
+    assert.deepEqual(refused, ['mp-channel']);
     assert.deepEqual(
       refused.filter((name) => listed.has(name)),
       [],

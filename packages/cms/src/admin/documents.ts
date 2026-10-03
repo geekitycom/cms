@@ -30,6 +30,8 @@ import type { Enclosure } from '../content/enclosure.ts';
 import { PHOTO_FRONT_MATTER_KEY, photoFrontMatter } from '../content/photo.ts';
 import type { Photo } from '../content/photo.ts';
 import type { PostLocation } from '../content/location.ts';
+import { keptProperties } from '../content/kept-properties.ts';
+import type { KeptProperties } from '../content/kept-properties.ts';
 import { postLocations } from '../content/locations.ts';
 import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
 import { scheduledFor } from '../content/schedule.ts';
@@ -486,6 +488,12 @@ export interface DocumentWrite {
   readonly form: EditorForm;
   /** Whether it is saved as a draft, which the editor's buttons decide. */
   readonly draft: boolean;
+  /**
+   * The Micropub properties the site does not understand, kept privately
+   * under the saved permalink (decision-27). Left out, as the editor leaves
+   * it, what the post already keeps stays.
+   */
+  readonly keptProperties?: KeptProperties | undefined;
 }
 
 /** What came of a {@link writeDocument}. */
@@ -728,10 +736,15 @@ export async function writeDocument(
 
   if (kind.type === 'post') {
     const locations = postLocations(config.dataDir);
+    const kept = keptProperties(config.dataDir);
     if (document !== undefined && document.permalink !== saved.permalink) {
       await locations.move(document.permalink, saved.permalink);
+      await kept.move(document.permalink, saved.permalink);
     }
     await locations.set(saved.permalink, location);
+    if (write.keptProperties !== undefined) {
+      await kept.set(saved.permalink, write.keptProperties);
+    }
   }
 
   // Announced rather than left to the watcher: the index already holds what

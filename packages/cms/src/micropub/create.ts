@@ -5,6 +5,7 @@ import type { PhotoRow } from '../admin/photo-field.ts';
 import { BLANK_READ_OF_FORM } from '../admin/read-field.ts';
 import type { ReadOfForm } from '../admin/read-field.ts';
 import { isWebUrl } from '../content/enclosure.ts';
+import type { KeptProperties } from '../content/kept-properties.ts';
 import { locationFromMicropub } from '../content/location.ts';
 import { isReadStatus, READ_STATUSES } from '../content/read.ts';
 import { isVisibility } from '../content/visibility.ts';
@@ -30,8 +31,8 @@ interface HtmlContent {
 
 /**
  * The properties a post can be created with, and the editor field each one
- * fills (decision-27). Anything else is refused by name rather than dropped,
- * so a client can tell its user what did not land.
+ * fills (decision-27). Anything else is kept privately, as it was sent, except
+ * an `mp-*` command the site does not carry out, which is refused by name.
  */
 const SINGLE_VALUED = {
   name: 'title',
@@ -86,6 +87,51 @@ const LEGACY_NAMES: ReadonlyMap<string, string> = new Map([
 export function propertyName(name: string): string {
   return LEGACY_NAMES.get(name) ?? name;
 }
+
+/**
+ * Whether `name` is a property the site keeps privately rather than maps: one
+ * it does not understand and that is not an `mp-*` command, which is an
+ * instruction to carry out rather than data to keep.
+ */
+export function keptPrivately(name: string): boolean {
+  return !PROPERTIES.has(name) && !name.startsWith('mp-');
+}
+
+/**
+ * The most a post keeps of properties the site does not understand, as JSON.
+ * The file holding them is read whole on each `q=source` and rewritten on each
+ * save; a checkin's h-card is well under a kilobyte.
+ */
+const KEPT_PROPERTIES_LIMIT = 16 * 1024;
+
+/** Why `kept` cannot be kept, naming the properties at fault, or nothing. */
+export function keptRefusal(kept: KeptProperties): string | undefined {
+  const names = Object.keys(kept);
+  const files = names.filter((name) => kept[name]?.some((value) => value instanceof File));
+  if (files.length > 0) {
+    return `${files.join(', ')} is not understood here and is not a photo, so a file cannot be sent as it.`;
+  }
+  const size = Buffer.byteLength(JSON.stringify(kept));
+  if (size > KEPT_PROPERTIES_LIMIT) {
+    return `This endpoint keeps up to ${String(KEPT_PROPERTIES_LIMIT / 1024)} KiB of properties it does not understand on a post, and ${names.join(', ')} come to ${String(Math.ceil(size / 1024))} KiB.`;
+  }
+  return undefined;
+}
+
+/**
+ * The properties that give a post something to publish. A create that keeps
+ * properties privately and sends none of these would publish an empty post.
+ */
+const PUBLISHABLE: readonly Property[] = [
+  'content',
+  'name',
+  'photo',
+  'in-reply-to',
+  'like-of',
+  'repost-of',
+  'bookmark-of',
+  'read-of',
+];
 
 /** What `post-status` may say, and whether it makes a draft. */
 const POST_STATUSES: Readonly<Record<string, boolean>> = { published: false, draft: true };
@@ -154,6 +200,8 @@ export interface CreatedForm {
   readonly form: EditorForm;
   readonly draft: boolean;
   readonly uploads: readonly PhotoUpload[];
+  /** The properties the site does not understand, kept as they were sent. */
+  readonly keptProperties: KeptProperties;
 }
 
 /**
@@ -180,9 +228,22 @@ export function createForm(
   }
 
   const errors: string[] = [];
-  const unknown = [...properties.keys()].filter((name) => !PROPERTIES.has(name));
-  if (unknown.length > 0) {
-    errors.push(`This endpoint does not understand ${unknown.join(', ')}.`);
+  const commands = [...properties.keys()].filter(
+    (name) => name.startsWith('mp-') && !PROPERTIES.has(name),
+  );
+  if (commands.length > 0) {
+    errors.push(`This endpoint does not support ${commands.join(', ')}.`);
+  }
+  const keptProperties = Object.fromEntries(
+    [...properties].filter(([name, values]) => keptPrivately(name) && values.length > 0),
+  );
+  const kept = Object.keys(keptProperties);
+  const refused = keptRefusal(keptProperties);
+  if (refused !== undefined) errors.push(refused);
+  if (kept.length > 0 && !PUBLISHABLE.some((name) => (properties.get(name) ?? []).length > 0)) {
+    errors.push(
+      `This endpoint does not understand ${kept.join(', ')}, and the post has nothing else to publish.`,
+    );
   }
 
   const text = (name: string): string => {
@@ -247,7 +308,9 @@ export function createForm(
     errors.push(`post-status is published or draft, not ${status}.`);
   }
 
-  return errors.length > 0 || draft === undefined ? { errors } : { form, draft, uploads };
+  return errors.length > 0 || draft === undefined
+    ? { errors }
+    : { form, draft, uploads, keptProperties };
 }
 
 /**

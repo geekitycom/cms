@@ -155,7 +155,7 @@ directory; absolute ones are used as given.
 | ------------------ | ----------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `port`             | `3000`                                    | `GEEKITY_PORT`, then `PORT`  | Port the HTTP server listens on.                                                                                                                                                                                                                                                                                                                                                           |
 | `contentDir`       | `<cwd>/content`                           | `GEEKITY_CONTENT_DIR`        | Markdown content.                                                                                                                                                                                                                                                                                                                                                                          |
-| `dataDir`          | `<cwd>/data`                              | `GEEKITY_DATA_DIR`           | Derived state — the SQLite index, the image variants — and the files that are not derived and must be backed up, such as `users.json`, the actor key pairs under `keys/` and `locations.json`. [Two directories](#two-directories-content-and-data) lists them.                                                                                                                            |
+| `dataDir`          | `<cwd>/data`                              | `GEEKITY_DATA_DIR`           | Derived state — the SQLite index, the image variants — and the files that are not derived and must be backed up, such as `users.json`, the actor key pairs under `keys/`, `locations.json` and `kept-properties.json`. [Two directories](#two-directories-content-and-data) lists them.                                                                                                    |
 | `themesDir`        | `<cwd>/themes`                            | `GEEKITY_THEMES_DIR`         | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                                                                                                                                                                                                                        |
 | `baseUrl`          | `http://localhost:<port>`                 | `GEEKITY_BASE_URL`           | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                                                                                                                                                                                                                 |
 | `watch`            | `true`                                    | `GEEKITY_WATCH`              | Watch `contentDir` while serving and keep the index in step.                                                                                                                                                                                                                                                                                                                               |
@@ -302,11 +302,12 @@ reads the same directory, and everything in it is meant to be public:
 `data/` is private. It is never in git, and it is the half that has to be
 copied somewhere safe:
 
-| Path                  | What it holds                                                                                                                           |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `data/users.json`     | Usernames and argon2id password hashes, mode 0600.                                                                                      |
-| `data/keys/`          | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.**                                                      |
-| `data/locations.json` | Where each post was written, keyed by permalink, mode 0600. Never in `content/`, so a public repository never carries it (decision-29). |
+| Path                        | What it holds                                                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/users.json`           | Usernames and argon2id password hashes, mode 0600.                                                                                           |
+| `data/keys/`                | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.**                                                           |
+| `data/locations.json`       | Where each post was written, keyed by permalink, mode 0600. Never in `content/`, so a public repository never carries it (decision-29).      |
+| `data/kept-properties.json` | The Micropub properties a post was sent that the site does not understand, such as a `checkin`, keyed by permalink, mode 0600 (decision-27). |
 
 And three things under `data/` may be deleted at any time the site is stopped:
 
@@ -341,6 +342,8 @@ The author's own location on a post is personal data too. A Micropub app or
 the editor may attach where a post was written; the site keeps it in
 `data/locations.json` and publishes nothing of it until **Settings > Privacy**
 says otherwise. [Location on posts](#location-on-posts) describes the choice.
+A Micropub property the site does not understand, such as a checkin, is kept
+the same way in `data/kept-properties.json` and published nowhere.
 
 ### What is in the database, and what a rebuild loses
 
@@ -1717,12 +1720,22 @@ A request whose `Content-Length` is over the larger of `uploadMaxBytes` and
 so several photo files in one create share it, and it applies to JSON and
 form-encoded bodies too. The media endpoint has the same check.
 
+A property not in the table, such as `rsvp` or `checkin`, is kept as it was
+sent and the rest of the post is published. The site keeps it in
+`data/kept-properties.json`, keyed by the post's URL and mode 0600, never in
+the post's file, and shows it nowhere: not on the page, its Markdown or JSON,
+the feeds, the fediverse, search or `llms.txt`. `q=source` gives it back, an
+update changes it, and it moves with the post. A post keeps up to 16 KiB of
+them. decision-27 records the rule.
+
 Anything else gets 400 `invalid_request` with a description that names it, and
-nothing is written. That covers another type such as `h=event`, a property not
-in the table such as `rsvp` or `checkin`, a `location` that is not a `geo:`
-URI or an h-geo, h-adr or h-card, a second value for a
-property that takes one, a `uid` the site does not declare, and anything the
-editor itself refuses, such as an `in-reply-to` that is not a URL.
+nothing is written. That covers another type such as `h=event`, an `mp-`
+command the site does not carry out such as `mp-channel`, a create whose only
+properties are ones the site does not understand (Quill's weight post, which
+would publish an empty post), a file sent as a property other than `photo`, a
+`location` that is not a `geo:` URI or an h-geo, h-adr or h-card, a second
+value for a property that takes one, a `uid` the site does not declare, and
+anything the editor itself refuses, such as an `in-reply-to` that is not a URL.
 
 ### Changing and deleting a post
 
@@ -1738,7 +1751,8 @@ post's URL on this site. A URL that is not a post here gets 400
     names, the whole properties.
 
   Only the properties it names change. It accepts the properties a create
-  accepts, except `mp-slug` and `slug`. A `p3k-content-type` or `visibility` is
+  accepts, except `mp-slug` and `slug`, and changes a kept property the site
+  does not understand as it changes the others. A `p3k-content-type` or `visibility` is
   checked as a create checks it and changes nothing. Adding or deleting an `mp-syndicate-to` value
   selects or deselects that target, and a deselected target is told the post no
   longer links to it. An update is saved exactly as an editor save. The post
@@ -1781,7 +1795,8 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
   answered whatever Settings > Privacy shares, because the token's user is the
   author who sent it: a `geo:` URI for coordinates alone, an h-adr for a
   place's words, an h-card for a named place, each with the coordinates and
-  their accuracy nested as `geo`. Add `&properties[]=content`, once
+  their accuracy nested as `geo`. A property the site does not understand is
+  answered as it was sent. Add `&properties[]=content`, once
   per property, to get only those properties, without the type. The same
   ownership rules as an update apply.
 - `?q=source` on the media endpoint answers
@@ -1812,12 +1827,14 @@ not accept, or whose bytes do not match its extension gets 400
 ### Clients and conformance
 
 Each [micropub.rocks](https://micropub.rocks/) server test request has been
-replayed with curl against a local site. Every test passes except these:
+replayed with curl against a local site. Every test passes except this one:
 
-- 204 sends a `checkin`, which the site refuses rather than drop (decision-27).
 - 805 sends the same token in the header and the body and expects it refused,
   as RFC 6750 says. The site accepts it, because Quill sends its token that way
   and refusing it would refuse every Quill post.
+
+Test 204 sends a `checkin` h-card. The site publishes the post and keeps the
+checkin privately, as it keeps any property it does not understand.
 
 Test 700 uploads a jpg with the token micropub.rocks signs in for, which has
 create, update, delete and undelete and no media. It passes because the media

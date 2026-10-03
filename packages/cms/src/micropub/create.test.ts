@@ -403,20 +403,19 @@ describe('a refused create', () => {
     names: string[];
   }[] = [
     {
-      label: 'an rsvp, a type the site does not have',
+      label: 'an mp- command the site does not carry out',
       send: (cms, token) =>
         postJson(cms, token, {
           type: ['h-entry'],
-          properties: { rsvp: ['yes'], 'in-reply-to': ['https://peer.example/an-event/'] },
+          properties: { content: ['Hi'], 'mp-channel': ['notes'] },
         }),
-      names: ['rsvp'],
+      names: ['mp-channel'],
     },
     {
-      label: 'form properties the site does not understand',
+      label: 'form properties the site does not understand and nothing to publish',
       send: (cms, token) =>
         postForm(cms, token, [
           ['h', 'entry'],
-          ['content', 'With a place'],
           ['checkin', 'https://places.example/cafe'],
           ['weight', '70kg'],
         ]),

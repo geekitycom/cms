@@ -6,11 +6,13 @@ import type { Document } from '../content/document.ts';
 import { locationToMicropub } from '../content/location.ts';
 import { readOf } from '../content/read.ts';
 import type { ReadOf } from '../content/read.ts';
+import type { KeptProperties } from '../content/kept-properties.ts';
 import type { PostLocations } from '../content/locations.ts';
+import type { PermalinkFile } from '../content/permalink-file.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { syndicateToOf } from '../webmention/syndication.ts';
-import { createForm, propertyName } from './create.ts';
+import { createForm, keptPrivately, keptRefusal, propertyName } from './create.ts';
 import type { CreateSite } from './create.ts';
 
 /**
@@ -41,6 +43,7 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
 
 export interface SourceSite extends Pick<CreateSite, 'baseUrl' | 'targets'> {
   readonly locations: PostLocations;
+  readonly kept: PermalinkFile<KeptProperties>;
 }
 
 /**
@@ -84,6 +87,10 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
   const declared = new Set(site.targets.map(({ id }) => id));
   const selected = syndicateToOf(document.extra).filter((id) => declared.has(id));
   if (selected.length > 0) properties['mp-syndicate-to'] = selected;
+  // One the site has since learnt to map is answered from where it is mapped.
+  for (const [name, values] of Object.entries(site.kept.read(document.permalink) ?? {})) {
+    if (keptPrivately(name)) properties[name] = [...values];
+  }
   return properties;
 }
 
@@ -143,16 +150,26 @@ export function parseChanges(
 /**
  * The editor form an update leaves the post with: the form the editor would
  * load, with only the fields the changed properties own taken from the create
- * mapping (decision-27), so whatever Micropub cannot see stays as it is.
+ * mapping (decision-27), so whatever Micropub cannot see stays as it is. A
+ * change to a property the site does not understand changes what it keeps of
+ * the post, and an update that names none leaves that alone.
  */
 export function updateForm(
   document: Document,
   given: readonly Change[],
   site: Omit<CreateSite, 'author'> & SourceSite,
-): { readonly form: EditorForm; readonly draft: boolean } | { readonly errors: string[] } {
+):
+  | {
+      readonly form: EditorForm;
+      readonly draft: boolean;
+      readonly keptProperties: KeptProperties | undefined;
+    }
+  | { readonly errors: string[] } {
   const changes = given.map((change) => ({ ...change, property: propertyName(change.property) }));
   const touched = [...new Set(changes.map(({ property }) => property))];
-  const unknown = touched.filter((property) => !(property in UPDATABLE));
+  const unknown = touched.filter(
+    (property) => !(property in UPDATABLE) && !keptPrivately(property),
+  );
   if (unknown.length > 0) return { errors: [`This endpoint cannot update ${unknown.join(', ')}.`] };
 
   const source = sourceProperties(document, site);
@@ -162,11 +179,22 @@ export function updateForm(
     properties.set(change.property, changed(current, change));
   }
 
+  const mapped = new Map([...properties].filter(([name]) => !keptPrivately(name)));
   const created = createForm(
-    { type: 'h-entry', properties },
+    { type: 'h-entry', properties: mapped },
     { ...site, author: document.author ?? '' },
   );
   if ('errors' in created) return created;
+
+  let keptProperties: KeptProperties | undefined;
+  if (touched.some(keptPrivately)) {
+    const all = { ...source, ...Object.fromEntries(properties) };
+    keptProperties = Object.fromEntries(
+      Object.entries(all).filter(([name, values]) => keptPrivately(name) && values.length > 0),
+    );
+    const refused = keptRefusal(keptProperties);
+    if (refused !== undefined) return { errors: [refused] };
+  }
 
   const form = formFor(document, site.timezone, site.locations.read(document.permalink));
   for (const property of touched) {
@@ -174,7 +202,11 @@ export function updateForm(
       Object.assign(form, { [field]: created.form[field] });
     }
   }
-  return { form, draft: properties.has('post-status') ? created.draft : document.draft };
+  return {
+    form,
+    draft: properties.has('post-status') ? created.draft : document.draft,
+    keptProperties,
+  };
 }
 
 function changed(current: readonly unknown[], change: Change): unknown[] {

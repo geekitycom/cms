@@ -15,8 +15,11 @@ import {
 import { readSiteSettings } from '../admin/settings.ts';
 
 import type { Document } from '../content/document.ts';
+import { keptProperties } from '../content/kept-properties.ts';
+import type { KeptProperties } from '../content/kept-properties.ts';
 import { postLocations } from '../content/locations.ts';
 import type { PostLocations } from '../content/locations.ts';
+import type { PermalinkFile } from '../content/permalink-file.ts';
 import type { PostType } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
@@ -101,6 +104,7 @@ interface QueryContext {
   /** The syndication targets the site declares (TASK-155). */
   readonly targets: readonly SyndicationTarget[];
   readonly locations: PostLocations;
+  readonly kept: PermalinkFile<KeptProperties>;
   /** The `filter` parameter, which narrows `q=category`. */
   readonly filter: string | undefined;
   /** The `properties[]` parameters, which narrow `q=source`. */
@@ -128,10 +132,10 @@ const QUERIES: Readonly<Record<Query, (context: QueryContext) => object>> = {
   }),
   'syndicate-to': ({ targets }) => ({ 'syndicate-to': offered(targets) }),
   category: ({ store, filter }) => ({ categories: categories(store, filter) }),
-  source: ({ baseUrl, targets, locations, properties, post }) => {
+  source: ({ baseUrl, targets, locations, kept, properties, post }) => {
     const document = post();
     if (document instanceof Refusal) return document;
-    const all = sourceProperties(document, { baseUrl, targets, locations });
+    const all = sourceProperties(document, { baseUrl, targets, locations, kept });
     // Asked for by name, the answer is the properties alone, as the spec has it.
     if (properties.length === 0) return { type: ['h-entry'], properties: all };
     return {
@@ -398,6 +402,7 @@ const ACTIONS: {
       baseUrl: siteBaseUrl(c),
       targets: syndicationTargetsReader(config.contentDir)(),
       locations: postLocations(config.dataDir),
+      kept: keptProperties(config.dataDir),
     });
     if ('errors' in updated) return invalid(updated.errors.join(' ')).answer(c);
 
@@ -492,6 +497,7 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
       store: c.var.store,
       targets: syndicationTargetsReader(c.var.config.contentDir)(),
       locations: postLocations(c.var.config.dataDir),
+      kept: keptProperties(c.var.config.dataDir),
       filter: c.req.query('filter'),
       properties: c.req.queries('properties[]') ?? c.req.queries('properties') ?? [],
       post: () => postFor(c, c.req.query('url')),
