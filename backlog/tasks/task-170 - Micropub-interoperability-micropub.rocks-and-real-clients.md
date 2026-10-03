@@ -5,17 +5,16 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-29 01:55'
-updated_date: '2026-10-03 16:45'
+updated_date: '2026-10-03 16:46'
 labels:
   - micropub
   - indieweb
   - docs
 milestone: m-25
 dependencies:
-  - TASK-164
-  - TASK-165
-  - TASK-166
-  - TASK-167
+  - TASK-237
+  - TASK-238
+  - TASK-239
 references:
   - 'https://micropub.rocks/'
   - 'https://quill.p3k.io/'
@@ -101,6 +100,14 @@ AC#3: README.md ## Micropub rewritten as one section (it was ### Micropub under 
 Still open for AC#2: a Quill note and an article, recorded as published.
 
 2026-10-03: Quill note https://shll.me/2026/10/quill-1/ (200, typed Note) and article https://shll.me/2026/10/quill-title/ (200, typed Article, p-name 'Quill Title') published. With the reply and the photo (greg-photo-quill) and iA Writer on iPadOS, AC#2 holds. AC#1 waits on the rest of the micropub.rocks run.
+
+2026-10-03, micropub.rocks against shll.me on 0.18.0, full run: every server test passed except
+- 204 nested checkin: 400 'does not understand checkin'. Fix: TASK-237 (keep unknown properties privately); TASK-236 then maps checkin onto the location.
+- 700 media upload: 403 insufficient_scope, because micropub.rocks requests 'create update delete undelete' without media. Fix: TASK-238. 701 and 702 not run; they need the same scope.
+- 804 token without create: 403 insufficient_scope; the Micropub spec's table gives 401. Fix: TASK-239.
+- 805 token in header and body: 201 by design (Quill sends that shape); stays.
+802 passed, as expected since PR #95.
+AC#1 closes after TASK-237, TASK-238 and TASK-239 ship and 204, 700, 701, 702 and 804 are re-run.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
