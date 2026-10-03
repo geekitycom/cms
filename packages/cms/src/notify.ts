@@ -199,9 +199,6 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
 
 /**
  * The document if it appears in a feed, and `undefined` otherwise.
- *
- * A post delivery would send, and one the site lists: an unlisted post goes
- * to the followers but is in no feed (TASK-227).
  */
 function inFeeds(document: Document | undefined, now: Date): Document | undefined {
   if (document === undefined) return undefined;

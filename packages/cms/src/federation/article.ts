@@ -163,7 +163,6 @@ const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = {
   repost: 'Note',
   like: 'Note',
   bookmark: 'Note',
-  // A read has no fediverse object to act on, so it is a note that says it.
   read: 'Note',
   reply: 'Note',
   photo: 'Note',
@@ -415,10 +414,6 @@ function citing(document: Document): string {
     .join('');
 }
 
-/**
- * What a read post read, as the sentence its page prints (TASK-229), with the
- * work's name linked when the post gives its address.
- */
 function reading(document: Document): string {
   const read = readOf(document.extra);
   if (read === undefined) return '';

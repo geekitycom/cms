@@ -448,7 +448,6 @@ async function emitChange(events: Emitter, now: Date, change: DocumentChange): P
   else if (wasPublic && !isNowPublic) await events.emit('unpublished', change);
 }
 
-/** A document is public when it exists and the site serves it. */
 function isPublic(document: Document | undefined, now: Date): boolean {
   return document !== undefined && isServed(document, now);
 }

@@ -87,7 +87,6 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
   return properties;
 }
 
-/** What was read as the embedded h-cite a create sends. */
 function readCite(of: ReadOf): object {
   const fields = Object.entries(of).filter(([, value]) => value !== undefined);
   return {

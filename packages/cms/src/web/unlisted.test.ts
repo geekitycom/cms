@@ -7,11 +7,6 @@ import { createUser } from '../admin/accounts.ts';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 
-/**
- * TASK-227: an unlisted post is served at its URL and left out of every list
- * the site publishes.
- */
-
 const BASE_URL = 'https://blog.example';
 
 const box = sandbox();

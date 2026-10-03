@@ -2,7 +2,6 @@ import { isWebUrl } from '../content/enclosure.ts';
 import { isReadStatus, READ_STATUSES } from '../content/read.ts';
 import type { Read, ReadOf } from '../content/read.ts';
 
-/** The editor's fields for the work a read post read (TASK-229). */
 export interface ReadOfForm {
   name: string;
   author: string;
@@ -10,7 +9,6 @@ export interface ReadOfForm {
   url: string;
 }
 
-/** The name each field submits under. */
 export const READ_FIELDS = {
   status: 'read-status',
   name: 'read-of-name',
@@ -40,11 +38,6 @@ export function submittedReadOfForm(body: Record<string, unknown>): ReadOfForm {
   };
 }
 
-/**
- * The read a form's fields make, `undefined` when they are all empty, or why
- * they make none: a read-status and the title of what was read only mean
- * something together.
- */
 export function resolveRead(
   status: string,
   of: ReadOfForm,

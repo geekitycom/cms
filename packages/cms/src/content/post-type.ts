@@ -23,10 +23,6 @@ import { htmlToText } from './search.ts';
  * sits after photo, just ahead of the tail (TASK-169): every post the spec
  * types as something else keeps that type, and a bookmark claims only what
  * the spec would have called a note or an article.
- *
- * Read is the same kind of extension (TASK-229), and sits just ahead of
- * bookmark: a post that says what its author read is a read whatever page it
- * also bookmarks.
  */
 export type PostType =
   'repost' | 'like' | 'reply' | 'photo' | 'read' | 'bookmark' | 'note' | 'article';
@@ -42,7 +38,6 @@ export interface PostProperties {
   'repost-of'?: string | undefined;
   'like-of'?: string | undefined;
   'bookmark-of'?: string | undefined;
-  /** The name of the work read. */
   'read-of'?: string | undefined;
   'read-status'?: string | undefined;
 }

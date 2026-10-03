@@ -274,14 +274,8 @@ function location(values: readonly unknown[], errors: string[]): EditorForm['loc
   return locationForm(parsed);
 }
 
-/** The h-cite fields `read-of` may carry, each one text value. */
 const READ_OF_PROPERTIES = ['name', 'author', 'uid', 'url'] as const;
 
-/**
- * What was read, sent as an embedded h-cite, as the editor's fields. Whether
- * they make a read with the `read-status` beside them is the editor's rule,
- * which the write applies.
- */
 function readOf(values: readonly unknown[], errors: string[]): ReadOfForm {
   if (values.length > 1) errors.push('read-of takes one value.');
   const [value] = values;

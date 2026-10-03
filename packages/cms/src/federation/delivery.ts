@@ -239,9 +239,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         slug: about.slug,
       },
       also,
-      // A relay pushes what it is sent into public timelines, which is the
-      // one place an unlisted post must not appear (TASK-227).
-      visibilityOf(about) === 'public',
+      { relays: visibilityOf(about) === 'public' },
     );
   }
 
@@ -317,11 +315,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       slug: string | null;
     },
     also: readonly DeliveryTarget[] = [],
-    relays = true,
+    { relays = true }: { relays?: boolean } = {},
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
     const keys = await senderKeyPairs(context, sender);
-    const targets = deliveryTargets(admin, sender.username, relays);
+    const targets = deliveryTargets(admin, sender.username, { relays });
     // One POST to an inbox the followers already share is enough.
     const reached = new Set(targets.map((target) => target.inboxId));
     targets.push(...also.filter((target) => !reached.has(target.inboxId)));
@@ -601,7 +599,7 @@ export interface DeliveryTarget {
 export function deliveryTargets(
   admin: AdminStore,
   username: string,
-  relays = true,
+  { relays = true }: { relays?: boolean } = {},
 ): DeliveryTarget[] {
   const targets: DeliveryTarget[] = [];
 

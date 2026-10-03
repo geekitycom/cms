@@ -95,7 +95,6 @@ function previewDocument(
     ...(text(body['in-reply-to']).trim() === ''
       ? {}
       : { inReplyTo: text(body['in-reply-to']).trim() }),
-    // What the post likes, reposts, bookmarks or read, as the editor would write it.
     extra: {
       ...Object.fromEntries(
         CITATION_PROPERTIES.flatMap((property) => {

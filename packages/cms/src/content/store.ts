@@ -413,20 +413,10 @@ const DUE_CLAUSE = '(date_sort IS NULL OR date_sort <= ?)';
 /** The reverse: a document whose date is still ahead of the clock. */
 const SCHEDULED_CLAUSE = '(date_sort IS NOT NULL AND date_sort > ?)';
 
-/** The document's `visibility`, `public` when the key is absent or null. */
 const VISIBILITY_SQL = `COALESCE(json_extract(extra, '$.${VISIBILITY_FRONT_MATTER_KEY}'), 'public')`;
 
-/**
- * A document the public site serves at its URL: not a draft, not in the
- * trash, due, and of a visibility the site recognizes. `web/documents.ts`'s
- * `isServed` is the same rule in hand.
- */
 const SERVED_CLAUSE = `(draft = 0 AND trashed = 0 AND ${DUE_CLAUSE} AND ${VISIBILITY_SQL} IN (${VISIBILITIES.map((visibility) => `'${visibility}'`).join(', ')}))`;
 
-/**
- * A served document the site also lists: every listing, count, feed, search
- * and sitemap query asks this. `isListed` is the same rule in hand.
- */
 const LISTED_CLAUSE = `(${SERVED_CLAUSE} AND ${VISIBILITY_SQL} = 'public')`;
 
 /**

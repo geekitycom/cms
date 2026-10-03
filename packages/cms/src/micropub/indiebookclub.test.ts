@@ -87,8 +87,7 @@ async function source(cms: Cms, token: string, url: string): Promise<Record<stri
   return ((await response.json()) as { properties: Record<string, unknown[]> }).properties;
 }
 
-/** The example on indiebookclub's documentation page, with a real book in it. */
-const DOCUMENTED = {
+const INDIEBOOKCLUB_DOCS_EXAMPLE = {
   type: ['h-entry'],
   properties: {
     summary: ['Want to read: The Left Hand of Darkness by Ursula K. Le Guin, ISBN: 9780441478125'],
@@ -108,7 +107,7 @@ const DOCUMENTED = {
   },
 };
 
-const READ_OF = DOCUMENTED.properties['read-of'][0];
+const READ_OF = INDIEBOOKCLUB_DOCS_EXAMPLE.properties['read-of'][0];
 
 const STORED = {
   name: 'The Left Hand of Darkness',
@@ -119,13 +118,13 @@ const STORED = {
 describe("indiebookclub's read posts (TASK-229)", () => {
   it('answers its documented request with 201 and writes read-of and read-status', async () => {
     const { cms, token } = await site();
-    const location = await created(await post(cms, token, DOCUMENTED));
+    const location = await created(await post(cms, token, INDIEBOOKCLUB_DOCS_EXAMPLE));
     assert.match(location, /\/the-left-hand-of-darkness\/$/, 'its URL names what was read');
 
     const { data, content } = matter(await fileOf(cms, location));
     assert.equal(data['read-status'], 'to-read');
     assert.deepEqual(data['read-of'], STORED);
-    assert.equal(data['description'], DOCUMENTED.properties.summary[0]);
+    assert.equal(data['description'], INDIEBOOKCLUB_DOCS_EXAMPLE.properties.summary[0]);
     assert.equal(content.trim(), '');
   });
 
@@ -156,7 +155,7 @@ describe("indiebookclub's read posts (TASK-229)", () => {
 
   it('round-trips both through q=source and an update', async () => {
     const { cms, token } = await site();
-    const location = await created(await post(cms, token, DOCUMENTED));
+    const location = await created(await post(cms, token, INDIEBOOKCLUB_DOCS_EXAMPLE));
 
     const properties = await source(cms, token, location);
     assert.deepEqual(properties['read-status'], ['to-read']);
@@ -186,9 +185,12 @@ describe("indiebookclub's read posts (TASK-229)", () => {
   it('refuses a read-status it does not know and a read-of that is no h-cite', async () => {
     const { cms, token } = await site();
     for (const [properties, message] of [
-      [{ ...DOCUMENTED.properties, 'read-status': ['abandoned'] }, /read-status/],
-      [{ ...DOCUMENTED.properties, 'read-of': ['The Left Hand of Darkness'] }, /read-of/],
-      [{ ...DOCUMENTED.properties, 'read-of': [] }, /read/i],
+      [{ ...INDIEBOOKCLUB_DOCS_EXAMPLE.properties, 'read-status': ['abandoned'] }, /read-status/],
+      [
+        { ...INDIEBOOKCLUB_DOCS_EXAMPLE.properties, 'read-of': ['The Left Hand of Darkness'] },
+        /read-of/,
+      ],
+      [{ ...INDIEBOOKCLUB_DOCS_EXAMPLE.properties, 'read-of': [] }, /read/i],
     ] as const) {
       const response = await post(cms, token, { type: ['h-entry'], properties });
       assert.equal(response.status, 400);
@@ -209,7 +211,7 @@ describe("indiebookclub's read posts (TASK-229)", () => {
 
   it('prints p-read-status and a p-read-of h-cite on its page', async () => {
     const { cms, token } = await site();
-    const location = await created(await post(cms, token, DOCUMENTED));
+    const location = await created(await post(cms, token, INDIEBOOKCLUB_DOCS_EXAMPLE));
     const html = await (await cms.app.request(new URL(location).pathname)).text();
 
     const entry = mf2(html, { baseUrl: location }).items.find((item) =>
@@ -238,7 +240,7 @@ describe("indiebookclub's read posts (TASK-229)", () => {
 
   it('federates as a Note whose content says what was read', async () => {
     const { cms, token } = await site();
-    const location = await created(await post(cms, token, DOCUMENTED));
+    const location = await created(await post(cms, token, INDIEBOOKCLUB_DOCS_EXAMPLE));
     const object = (await (
       await cms.app.request(new URL(location).pathname, {
         headers: { accept: 'application/activity+json' },

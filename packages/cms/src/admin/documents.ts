@@ -177,10 +177,6 @@ function commentSetting(value: string): string {
     : COMMENT_SETTINGS.site;
 }
 
-/**
- * A submitted Visibility field. Empty is public; any other value is the
- * unrecognized one the editor offered back as it was stored.
- */
 function formVisibility(value: string): StoredVisibility {
   if (value === '') return 'public';
   return isVisibility(value) ? value : { unrecognized: value };
@@ -1043,16 +1039,10 @@ function resolveExtra(
     else if (pinned === undefined) extra[PINNED_FRONT_MATTER_KEY] = toUtcInstant(now, 'UTC');
   }
 
-  // An unrecognized value the form sent back as it was offered stays as the
-  // file spells it, which may be other than text.
-  const stored = document === undefined ? 'public' : visibilityOf(document);
-  if (form.visibility === 'public') {
-    delete extra[VISIBILITY_FRONT_MATTER_KEY];
-  } else if (typeof form.visibility === 'string') {
+  if (form.visibility === 'public') delete extra[VISIBILITY_FRONT_MATTER_KEY];
+  else if (typeof form.visibility === 'string')
     extra[VISIBILITY_FRONT_MATTER_KEY] = form.visibility;
-  } else if (typeof stored === 'string' || stored.unrecognized !== form.visibility.unrecognized) {
-    extra[VISIBILITY_FRONT_MATTER_KEY] = form.visibility.unrecognized;
-  }
+  else extra[VISIBILITY_FRONT_MATTER_KEY] = form.visibility.unrecognized;
 
   // Empty is the site's language, which is the key's absence (TASK-154).
   if (form.lang === '') delete extra[LANG_FRONT_MATTER_KEY];
@@ -1711,8 +1701,6 @@ async function renderEditor(
           locationFields: LOCATION_FIELDS,
           readFields: READ_FIELDS,
           readStatuses: READ_STATUSES.map((value) => ({ value, label: READ_STATUS_LABELS[value] })),
-          // Offered back as the file spells it, so the select never silently
-          // changes a value somebody typed by hand.
           ...(form.readStatus === '' || isReadStatus(form.readStatus)
             ? {}
             : { unrecognizedReadStatus: form.readStatus }),
