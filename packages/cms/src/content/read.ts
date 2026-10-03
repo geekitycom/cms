@@ -61,3 +61,30 @@ export function readWorkFrontMatter({ name, author, uid, url }: ReadOf): ReadOf 
     ...(url ? { url } : {}),
   };
 }
+
+/**
+ * The sentence a read post says, as the HTML every surface prints: the page,
+ * the federated Note and the feeds. It carries the page's microformats, so a
+ * parser reading any of them finds p-read-status and the p-read-of h-cite.
+ */
+export function readLine({ status, of }: Read): string {
+  const cited = `<cite class="p-name">${escapeHtml(of.name)}</cite>`;
+  return (
+    `<p class="read-line"><data class="p-read-status" value="${status}">` +
+    `${READ_STATUS_LABELS[status]}</data>: <span class="p-read-of h-cite">` +
+    (of.url === undefined ? cited : `<a class="u-url" href="${escapeHtml(of.url)}">${cited}</a>`) +
+    (of.author === undefined ? '' : ` by <span class="p-author">${escapeHtml(of.author)}</span>`) +
+    (of.uid === undefined
+      ? ''
+      : `, <data class="p-uid" value="${escapeHtml(of.uid)}">${escapeHtml(uidLabel(of.uid))}</data>`) +
+    '</span></p>\n'
+  );
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}

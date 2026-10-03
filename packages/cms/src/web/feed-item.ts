@@ -3,6 +3,7 @@ import type { Document } from '../content/document.ts';
 import { enclosureOf } from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
+import { readLine, readOf } from '../content/read.ts';
 import type { Photo } from '../content/photo.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
 import { isNamed, replyTarget } from '../content/post-type.ts';
@@ -93,9 +94,9 @@ export interface FeedItem {
    */
   summary: string;
   /**
-   * What every format prints as the content: the post's photos (TASK-166), then
-   * its rendered body with every relative URL in it made absolute,
-   * which is the order the page prints them in. Each photo
+   * What every format prints as the content: a read post's read line
+   * (TASK-233), the post's photos (TASK-166), then its rendered body with every
+   * relative URL in it made absolute. Each photo
    * is a plain `<img>` of the original, absolute on the site's base URL, with
    * the alt text the page gives it (decision-10: a reader cannot resolve the
    * site's variants), so a photo-only post does not read empty.
@@ -160,7 +161,9 @@ export interface FeedItem {
  * revision 5 named a post's own language in all three, and revision 6 printed
  * a stored username as the user's display name and credited the site title
  * where nobody was named, and revision 7 printed a post's photos and named its
- * main image, and revision 8 made the relative URLs in a post's body absolute —
+ * main image, and revision 8 made the relative URLs in a post's body absolute,
+ * and revision 9 opened a read post with its read line and summarised it by
+ * that line —
  * would leave the validator where it was, and a reader polling with
  * `If-None-Match` would be handed a 304 that hides the new bytes.
  *
@@ -168,7 +171,7 @@ export interface FeedItem {
  * never again until the next such change. The comments feeds do not carry it:
  * a comment is not a {@link FeedItem} and its bytes are untouched.
  */
-export const FEED_ITEM_REVISION = 8;
+export const FEED_ITEM_REVISION = 9;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -217,6 +220,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     terms: [...document.categories, ...document.tags],
     summary: feedExcerpt(document),
     html:
+      readLineOf(document) +
       photosHtml(photos, context.altTexts ?? new Map(), baseUrl) +
       absoluteHtmlUrls(document.html, link, baseUrl),
     markdown: document.body,
@@ -310,13 +314,19 @@ export const EXCERPT_WORDS = 55;
  *
  * The `description` front matter when the post has one — it is what the author
  * wrote for exactly this — and otherwise the first paragraph of the rendered
- * body, stripped to text and cut where WordPress cuts an excerpt. Never the
+ * body, stripped to text and cut where WordPress cuts an excerpt. A read post's
+ * first paragraph is its read line, so its summary says the current status. Never the
  * whole post: the content element is where the whole post goes, and a reader
  * that shows both should have something to choose between.
  */
 export function feedExcerpt(document: Document): string {
   if (document.description !== undefined) return document.description;
-  return excerptFromHtml(document.html);
+  return excerptFromHtml(readLineOf(document) + document.html);
+}
+
+function readLineOf(document: Document): string {
+  const read = readOf(document.extra);
+  return read === undefined ? '' : readLine(read);
 }
 
 /**

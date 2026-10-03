@@ -9,7 +9,7 @@ import { photoAlt, photosOf } from '../content/photo.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { Citation } from '../content/citation.ts';
-import { READ_STATUS_LABELS, readOf, uidLabel } from '../content/read.ts';
+import { READ_STATUS_LABELS, readLine, readOf, uidLabel } from '../content/read.ts';
 import type { ReadOf, ReadStatus } from '../content/read.ts';
 import { isNamed, postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
@@ -174,14 +174,16 @@ export interface DocumentContext {
   citations: Citation[];
   /**
    * What a read post read (TASK-229): its `read-status` and the words for it,
-   * and its `read-of` with the words a page prints for the uid. Present only
-   * on a post whose front matter names both.
+   * its `read-of` with the words a page prints for the uid, and `line`, the
+   * sentence as the HTML the feeds and the federated Note carry (TASK-233).
+   * Present only on a post whose front matter names both.
    */
   read?:
     | {
         status: ReadStatus;
         statusLabel: string;
         of: ReadOf & { uidLabel?: string | undefined };
+        line: string;
       }
     | undefined;
   /**
@@ -635,5 +637,6 @@ function readContext(document: Document): DocumentContext['read'] {
     status: read.status,
     statusLabel: READ_STATUS_LABELS[read.status],
     of: { ...read.of, uidLabel: uid === undefined ? undefined : uidLabel(uid) },
+    line: readLine(read),
   };
 }

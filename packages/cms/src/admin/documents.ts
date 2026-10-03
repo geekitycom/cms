@@ -19,6 +19,7 @@ import {
   readWork,
   readWorkFrontMatter,
 } from '../content/read.ts';
+import type { Read } from '../content/read.ts';
 import {
   ENCLOSURE_FRONT_MATTER_KEY,
   enclosureOf,
@@ -441,6 +442,12 @@ async function saveFromForm(
     });
   }
 
+  if (form.readStatus !== '' && form.description !== '') {
+    return refuse(
+      'A read is described by what it says, so it keeps no Description. Empty Description to save it.',
+    );
+  }
+
   const written = await writeDocument(
     {
       store,
@@ -543,6 +550,7 @@ export async function writeDocument(
     return refused('In reply to has to be a web address, like https://example.com/a-post/.');
   }
 
+  let read: Read | undefined;
   if (kind.type === 'post') {
     for (const property of CITATION_PROPERTIES) {
       const cited = form[CITATION_FIELDS[property]];
@@ -552,8 +560,9 @@ export async function writeDocument(
         );
       }
     }
-    const read = resolveRead(form.readStatus, form.readOf);
-    if ('error' in read) return refused(read.error);
+    const resolved = resolveRead(form.readStatus, form.readOf);
+    if ('error' in resolved) return refused(resolved.error);
+    read = resolved.read;
   }
 
   if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
@@ -684,7 +693,9 @@ export async function writeDocument(
     tags: kind.tagged ? splitTags(form.tags) : [],
     categories: kind.categorised ? splitTags(form.categories) : [],
     draft,
-    ...(form.description === '' ? {} : { description: form.description }),
+    // A read post's summary is its read line (decision-27), so a stored one
+    // would only go stale when the read status changes.
+    ...(form.description === '' || read !== undefined ? {} : { description: form.description }),
     ...optional('author', chosenAuthor(config.dataDir, form.author, document, writer)),
     ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', keptIdentity(document, promised, permalink, config.baseUrl)),

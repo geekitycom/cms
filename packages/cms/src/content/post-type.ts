@@ -2,7 +2,7 @@ import { citationsOf } from './citation.ts';
 import type { CitationProperty } from './citation.ts';
 import type { Document } from './document.ts';
 import { photosOf } from './photo.ts';
-import { isReadStatus, readOf } from './read.ts';
+import { isReadStatus, readLine, readOf } from './read.ts';
 import { htmlToText } from './search.ts';
 
 /**
@@ -109,12 +109,17 @@ const LABEL_WORDS = 10;
 
 /**
  * The words a link to a document says: its title, or for an untitled post the
- * first words of its text, so a note is never an empty link.
+ * first words of its text, so a note is never an empty link. A read post's
+ * text opens with its read line, as its page does.
  */
-export function postLabel(document: Pick<Document, 'title' | 'html' | 'description'>): string {
+export function postLabel(
+  document: Pick<Document, 'title' | 'html' | 'description' | 'extra'>,
+): string {
   if (document.title !== '') return document.title;
 
-  const text = normalize(htmlToText(document.html)) || normalize(document.description ?? '');
+  const read = readOf(document.extra);
+  const html = (read === undefined ? '' : readLine(read)) + document.html;
+  const text = normalize(htmlToText(html)) || normalize(document.description ?? '');
   if (text === '') return 'Untitled';
 
   const words = text.split(' ');

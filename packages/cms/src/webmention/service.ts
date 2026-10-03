@@ -4,6 +4,7 @@ import type { CommentNotices, CommentRecords } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { citationsOf } from '../content/citation.ts';
+import { readOf } from '../content/read.ts';
 import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
@@ -367,7 +368,11 @@ function targetsOf(
     if (document === undefined) continue;
     const reply = externalTarget(replyTarget(document), baseUrl);
     if (reply !== undefined) targets.add(reply);
-    for (const { url } of citationsOf(document.extra)) {
+    const cites = [
+      ...citationsOf(document.extra).map(({ url }) => url),
+      readOf(document.extra)?.of.url,
+    ];
+    for (const url of cites) {
       const cited = externalTarget(url, baseUrl);
       if (cited !== undefined) targets.add(cited);
     }

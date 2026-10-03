@@ -27,7 +27,7 @@ import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { CitationProperty } from '../content/citation.ts';
-import { READ_STATUS_LABELS, readOf, uidLabel } from '../content/read.ts';
+import { readLine, readOf } from '../content/read.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf, isUploadUrl, playsAsVideo } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
@@ -416,19 +416,7 @@ function citing(document: Document): string {
 
 function reading(document: Document): string {
   const read = readOf(document.extra);
-  if (read === undefined) return '';
-  const { name, author, uid, url } = read.of;
-  const cited = `<cite>${escapeHtml(name)}</cite>`;
-  const work =
-    url === undefined
-      ? cited
-      : `<a href="${escapeHtml(url).replaceAll('"', '&quot;')}">${cited}</a>`;
-  return (
-    `<p>${READ_STATUS_LABELS[read.status]}: ${work}` +
-    (author === undefined ? '' : ` by ${escapeHtml(author)}`) +
-    (uid === undefined ? '' : `, ${escapeHtml(uidLabel(uid))}`) +
-    '</p>\n'
-  );
+  return read === undefined ? '' : readLine(read);
 }
 
 const CITING_VERBS: Readonly<Record<CitationProperty, string>> = {
