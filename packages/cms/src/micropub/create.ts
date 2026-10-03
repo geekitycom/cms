@@ -227,12 +227,13 @@ export function createForm(
   for (const [property, field] of Object.entries(SINGLE_VALUED)) {
     form[field] = text(property);
   }
-  const visibility = text('visibility');
+  const sentVisibility = text('visibility');
+  const visibility = sentVisibility.toLowerCase();
   if (isVisibility(visibility)) form.visibility = visibility;
   else if (visibility === 'private') {
     errors.push('This site does not publish private posts; visibility is public or unlisted.');
   } else if (visibility !== '') {
-    errors.push(`visibility is public or unlisted, not ${visibility}.`);
+    errors.push(`visibility is public or unlisted, not ${sentVisibility}.`);
   }
   for (const [property, refused] of Object.entries(ACCEPTED_WITHOUT_EFFECT)) {
     const value = text(property);
