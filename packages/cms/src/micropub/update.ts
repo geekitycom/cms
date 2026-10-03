@@ -34,11 +34,6 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   'mp-syndicate-to': ['syndicateTo'],
 };
 
-/**
- * What answering a post's properties needs from the site beyond the create's
- * own: the stored locations, since a location is in `data/locations.json`
- * rather than the file (decision-29).
- */
 export interface SourceSite extends Pick<CreateSite, 'baseUrl' | 'targets'> {
   readonly locations: PostLocations;
 }
@@ -49,8 +44,7 @@ export interface SourceSite extends Pick<CreateSite, 'baseUrl' | 'targets'> {
  * A property the post does not have is left out. `mp-syndicate-to` holds
  * only the targets the site declares, the ones a client can offer; an id the
  * file lists that names none stays in the file, as it does through an editor
- * save. `location` is answered whatever Settings > Privacy says: the setting
- * is about readers, and the token's user is the author who sent it.
+ * save.
  */
 export function sourceProperties(document: Document, site: SourceSite): Record<string, unknown[]> {
   const { baseUrl } = site;
@@ -71,8 +65,8 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
     return alt === '' ? value : { value, alt };
   });
   if (photos.length > 0) properties['photo'] = photos;
-  const location = site.locations.read(document.permalink);
-  if (location !== undefined) properties['location'] = [locationToMicropub(location)];
+  const authorLocation = site.locations.read(document.permalink);
+  if (authorLocation !== undefined) properties['location'] = [locationToMicropub(authorLocation)];
   const declared = new Set(site.targets.map(({ id }) => id));
   const selected = syndicateToOf(document.extra).filter((id) => declared.has(id));
   if (selected.length > 0) properties['mp-syndicate-to'] = selected;

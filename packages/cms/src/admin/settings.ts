@@ -713,8 +713,6 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(typeof file['wordpressActivityPub'] === 'boolean'
       ? { wordpressActivityPub: file['wordpressActivityPub'] }
       : {}),
-    // Read the way the form checks it, so a hand edit naming a level this
-    // version does not know shares nothing rather than something nobody chose.
     ...(isLocationSharing(file['locationSharing'])
       ? { locationSharing: file['locationSharing'] }
       : {}),

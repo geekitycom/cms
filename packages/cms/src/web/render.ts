@@ -662,9 +662,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // (TASK-155): the links a target verifies sit inside the h-entry, so they
     // are on the post's own page, which is the page a target fetches.
     const syndicated = options.syndication?.(document);
-    // Where it was written, as much as the site shares (TASK-223). On the
-    // context only when there is something to print, so a theme asks
-    // `{% if location %}`.
     const shared = options.location?.(document);
 
     const drawn = render(template, {

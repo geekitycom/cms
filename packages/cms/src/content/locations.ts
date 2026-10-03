@@ -4,37 +4,18 @@ import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '..
 import { locationOf } from './location.ts';
 import type { PostLocation } from './location.ts';
 
-/**
- * Where every post's location is kept (decision-29): one JSON object under
- * `dataDir`, keyed by the post's permalink, mode 0600.
- *
- * It is under `data/` and not `content/` because a location is personal data
- * and `content/` may be a public git repository. It is keyed by permalink
- * because that is a post's identity (decision-13) and what the syndication
- * copies are keyed by (decision-26). The editor's write path is the one
- * writer: it sets the entry on a save, removes it on a save with the fields
- * cleared, and moves it when a save moves the permalink.
- */
-
-/** The file, relative to `dataDir`. */
 export const LOCATIONS_FILE = 'locations.json';
 
-/** Private to the process's user, like `users.json`. */
 const LOCATIONS_FILE_MODE = 0o600;
 
-/** The stored locations, by permalink. */
 export interface PostLocations {
-  /** The location one post has, if any. Never touches the network. */
   read(permalink: string): PostLocation | undefined;
-  /** Set one post's location, or with `undefined` remove it. */
   set(permalink: string, location: PostLocation | undefined): Promise<void>;
-  /** Carry a post's location to its new permalink. Nothing stored moves nothing. */
   move(from: string, to: string): Promise<void>;
 }
 
 type Stored = Record<string, PostLocation>;
 
-/** The locations file of one data directory. */
 export function postLocations(dataDir: string): PostLocations {
   const file = path.join(dataDir, LOCATIONS_FILE);
   let cachedText: string | undefined;
@@ -52,11 +33,7 @@ export function postLocations(dataDir: string): PostLocations {
     return cached;
   }
 
-  /**
-   * Change the file under its lock, and write it only when something changed:
-   * a save that leaves the location as it was must not rewrite the file.
-   */
-  function update(change: (all: Stored) => boolean): Promise<void> {
+  function writeIfChanged(change: (all: Stored) => boolean): Promise<void> {
     return withFileLock(file, () => {
       const current = readFileIfPresentSync(file);
       const all = current === undefined ? {} : parseLocations(current);
@@ -74,11 +51,9 @@ export function postLocations(dataDir: string): PostLocations {
     },
 
     set(permalink, location) {
-      // Spelled the one way the file spells every entry, so a location that
-      // came back in another key order is the same location.
       const stored = location === undefined ? undefined : locationOf(location);
-      return update((all) => {
-        if (JSON.stringify(all[permalink]) === JSON.stringify(stored)) return false;
+      return writeIfChanged((all) => {
+        if (sameLocation(all[permalink], stored)) return false;
         if (stored === undefined) delete all[permalink];
         else all[permalink] = stored;
         return true;
@@ -86,7 +61,7 @@ export function postLocations(dataDir: string): PostLocations {
     },
 
     move(from, to) {
-      return update((all) => {
+      return writeIfChanged((all) => {
         const location = all[from];
         if (location === undefined || from === to) return false;
         delete all[from];
@@ -97,7 +72,6 @@ export function postLocations(dataDir: string): PostLocations {
   };
 }
 
-/** The file's entries, each checked, since a person may edit it by hand. */
 function parseLocations(text: string): Stored {
   let parsed: unknown;
   try {
@@ -113,4 +87,8 @@ function parseLocations(text: string): Stored {
     if (location !== undefined) all[permalink] = location;
   }
   return all;
+}
+
+function sameLocation(a: PostLocation | undefined, b: PostLocation | undefined): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }

@@ -1701,8 +1701,6 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // with, both files in the content directory (TASK-155, decision-26).
   const syndicationTargets = syndicationTargetsReader(resolved.contentDir);
   const copies = syndicationCopies(resolved.contentDir);
-  // Where each post was written, in the private file under `data/`
-  // (TASK-223, decision-29).
   const locations = postLocations(resolved.dataDir);
 
   const replyContexts = createReplyContextService({
@@ -1735,8 +1733,6 @@ export function createCms(config: GeekityConfig = {}): Cms {
       ),
       copies: Object.values(copies.read(document.permalink)),
     }),
-    // What the site shares of a post's location, under the setting as it
-    // stands at this render (TASK-223).
     location: (document) =>
       shareLocation(
         locations.read(document.permalink),

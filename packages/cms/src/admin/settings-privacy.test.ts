@@ -8,11 +8,6 @@ import { saveSettings } from './__testing__/settings.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
 import { readSiteSettings } from './settings.ts';
 
-/**
- * Settings > Privacy (TASK-223): the home of the site's privacy choices, the
- * first of which is what it shares of a post's location.
- */
-
 const box = sandbox();
 after(() => box.cleanup());
 

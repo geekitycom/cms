@@ -63,7 +63,6 @@ interface QueryContext {
   readonly store: ContentStore;
   /** The syndication targets the site declares (TASK-155). */
   readonly targets: readonly SyndicationTarget[];
-  /** Where each post was written (TASK-223), which `q=source` answers. */
   readonly locations: PostLocations;
   /** The `filter` parameter, which narrows `q=category`. */
   readonly filter: string | undefined;

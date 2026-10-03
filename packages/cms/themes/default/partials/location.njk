@@ -1,13 +1,3 @@
-{#
-  Where the post was written (TASK-223), as much of it as Settings > Privacy
-  shares (decision-29): a `p-location` inside the h-entry, an h-card when the
-  place is named, an h-adr for its words, an h-geo for coordinates alone.
-
-  `location.geo` is on the context only when the site shares exact
-  coordinates, so this partial cannot print one the site chose to keep. The
-  words are printed as text; the coordinates ride on `data` elements, visibly
-  when they are all there is.
-#}
 <span class="p-location {{ location.type }}">
   {%- for word in location.words -%}
     <span class="{{ word.property }}">{{ word.text }}</span>{% if not loop.last %}, {% endif %}

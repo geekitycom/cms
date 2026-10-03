@@ -1,8 +1,3 @@
-/**
- * The editor's location fields (TASK-223 AC #4): a post's location is shown,
- * edited, moved with the post and removed when the boxes are cleared, and it
- * never reaches the post's file (decision-29).
- */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -27,7 +22,6 @@ async function token(agent: Browser, url: string): Promise<string> {
   return found;
 }
 
-/** The value of a form field in the rendered page. */
 function field(html: string, name: string): string | undefined {
   return new RegExp(`name="${name}"[^>]*value="([^"]*)"`).exec(html)?.[1];
 }

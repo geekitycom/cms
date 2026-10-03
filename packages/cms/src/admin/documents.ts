@@ -544,7 +544,6 @@ export async function writeDocument(
     media = { recording: resolved.enclosure, photos: photos.photos };
   }
 
-  // decision-29: the location goes to its own private file, never the post's.
   let location: PostLocation | undefined;
   if (kind.type === 'post') {
     const resolved = resolveLocation(form.location);
@@ -689,8 +688,6 @@ export async function writeDocument(
     await rm(path.join(contentDir, ...renamedFrom.path.split('/')), { force: true });
   }
 
-  // The location follows the post to its permalink, and a form with the
-  // fields cleared takes it away (decision-29). A page has none.
   if (kind.type === 'post') {
     const locations = postLocations(config.dataDir);
     if (document !== undefined && document.permalink !== saved.permalink) {

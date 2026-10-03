@@ -23,7 +23,6 @@ after(async () => {
   await Promise.all(directories.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-/** Store one file through storeUpload and read back the bytes that landed. */
 async function upload(name: string, bytes: Uint8Array, type = ''): Promise<Uint8Array> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'geekity-strip-'));
   directories.push(root);

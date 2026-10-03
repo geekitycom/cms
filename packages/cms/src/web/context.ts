@@ -230,24 +230,12 @@ export interface DocumentContext {
   [key: string]: unknown;
 }
 
-/**
- * Where a post was written, as much of it as Settings > Privacy shares
- * (TASK-223, decision-29), as the theme prints it inside the h-entry.
- *
- * Built from a {@link SharedLocation} and never from the stored location, so
- * `geo` is here only under the `exact` setting: a theme cannot print a
- * coordinate the site did not choose to share.
- */
 export interface LocationContext {
-  /** The microformats2 root the `p-location` carries: an h-card when the place is named, an h-adr for words, an h-geo for coordinates alone. */
   type: 'h-card' | 'h-adr' | 'h-geo';
-  /** The words of the place, each under its mf2 property, in reading order. */
   words: readonly { property: string; text: string }[];
-  /** The coordinates as text, under `exact` only. */
   geo?: { latitude: string; longitude: string } | undefined;
 }
 
-/** The shared part of a location as a theme prints it. See {@link LocationContext}. */
 export function locationContext(shared: SharedLocation): LocationContext {
   const { place } = shared;
   const words = [

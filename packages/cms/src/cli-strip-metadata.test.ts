@@ -14,7 +14,6 @@ import {
 after(cleanupTemporaryDirs);
 
 describe('geekity strip-metadata', () => {
-  /** A site whose content/uploads holds these files, with their mtimes set to a known day. */
   async function site(files: Record<string, Uint8Array>): Promise<string> {
     const directory = await temporaryDir('geekity-strip-');
     for (const [relative, bytes] of Object.entries(files)) {

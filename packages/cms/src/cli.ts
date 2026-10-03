@@ -546,15 +546,6 @@ function forcedLine(forced: boolean): string {
     : '';
 }
 
-/**
- * `geekity strip-metadata` (TASK-224): take location and camera metadata out
- * of the uploads that were stored before uploads were stripped on arrival.
- *
- * It touches only `content/uploads`, so it is safe with the site running. The
- * derived variants under `data/images` never carried metadata and are left
- * alone. A site that keeps `content/` in git still has the old bytes in its
- * history; the README says how to rewrite it.
- */
 async function stripMetadataCommand(configPath: string | undefined): Promise<number> {
   const config = resolveConfig(await loadConfig(process.cwd(), configPath));
   const results = await stripStoredUploads(path.join(config.contentDir, UPLOAD_DIRECTORY));

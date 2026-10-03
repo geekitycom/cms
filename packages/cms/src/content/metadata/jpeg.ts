@@ -43,12 +43,6 @@ function segmentLabel(marker: number, body: Uint8Array): string | undefined {
   return `APP${String(marker - APP0)}`;
 }
 
-/**
- * A JPEG with every metadata segment cut out and the entropy-coded data left
- * byte for byte, so nothing is re-encoded. A turned photo keeps an EXIF
- * segment holding its orientation and nothing else. Whatever follows the end
- * of the image — a phone's appended depth map or preview — goes too.
- */
 export function stripJpeg(bytes: Uint8Array): Stripped {
   function fail(problem: string): never {
     throw new UnreadableMetadataError('JPEG', problem);

@@ -5,7 +5,13 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { LOCATIONS_FILE, postLocations } from './locations.ts';
-import type { PostLocation } from './location.ts';
+import { postLocation } from './location.ts';
+import type { LocationParts, PostLocation } from './location.ts';
+function located(parts: LocationParts): PostLocation {
+  const location = postLocation(parts);
+  assert.ok(location !== undefined, 'the parts name a location');
+  return location;
+}
 
 const dirs: string[] = [];
 after(() => Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true }))));
@@ -16,10 +22,10 @@ async function dataDir(): Promise<string> {
   return dir;
 }
 
-const PARIS: PostLocation = {
+const PARIS = located({
   locality: 'Paris',
   geo: { latitude: 48.85837, longitude: 2.29448, accuracy: 50 },
-};
+});
 
 describe('the post locations file (decision-29)', () => {
   it('is under dataDir at mode 0600, and reads back what was set', async () => {
@@ -40,7 +46,7 @@ describe('the post locations file (decision-29)', () => {
     const dir = await dataDir();
     const locations = postLocations(dir);
     await locations.set('/a/', PARIS);
-    await locations.set('/b/', { name: 'Home' });
+    await locations.set('/b/', located({ name: 'Home' }));
 
     await locations.set('/a/', undefined);
 

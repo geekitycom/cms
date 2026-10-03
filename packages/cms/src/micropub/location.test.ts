@@ -1,8 +1,3 @@
-/**
- * Location on posts (TASK-223): Micropub accepts it, the site keeps it in
- * `data/locations.json` and never in `content/` (decision-29), and Settings >
- * Privacy decides what of it any public surface shows.
- */
 import assert from 'node:assert/strict';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -28,7 +23,6 @@ const BASE = 'https://blog.example';
 const ENDPOINT = '/_geekity/micropub';
 const NOW = new Date('2026-09-20T12:00:00.000Z');
 
-/** Quill's own spelling: five decimals and an accuracy in metres. */
 const QUILL_GEO = 'geo:48.85837,2.29448;u=50';
 const COORDINATES = ['48.85837', '2.29448'];
 
@@ -74,7 +68,6 @@ async function postJson(cms: Cms, token: string, body: unknown): Promise<Respons
   });
 }
 
-/** Quill's note form: h=entry, the token in the body too, and location as a geo: URI. */
 async function quillNote(
   cms: Cms,
   token: string,
@@ -125,7 +118,6 @@ async function storedLocations(cms: Cms): Promise<Record<string, unknown>> {
   ) as Record<string, unknown>;
 }
 
-/** Every file under a directory, as path and text. */
 async function filesUnder(root: string): Promise<[string, string][]> {
   const entries = await readdir(root, { withFileTypes: true, recursive: true });
   const files = entries.filter((entry) => entry.isFile());
@@ -154,7 +146,6 @@ function entryOf(html: string, url: string): Record<string, unknown[]> {
   return entry.properties as Record<string, unknown[]>;
 }
 
-/** Every public surface a post has, by name, as text. */
 async function publicSurfaces(cms: Cms, url: string): Promise<Record<string, string>> {
   const pathname = new URL(url).pathname;
   const files = await filesUnder(cms.config.contentDir);

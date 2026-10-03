@@ -149,8 +149,6 @@ export async function storeUpload(
     return { status: 415, error: `That file does not look like a ${extension} inside.` };
   }
 
-  // Where a photo was taken, and with what, is not the site's to publish: the
-  // original is served as it is stored, so the metadata goes before it lands.
   let clean: Uint8Array;
   try {
     clean = stripMetadata(extension, bytes).bytes;

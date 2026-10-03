@@ -2,19 +2,11 @@ import { ascii, concat, fourcc, sameBytes, startsWith, stripped, view } from './
 import type { Stripped } from './shared.ts';
 import { keptExif } from './tiff.ts';
 
-/** The chunks that make up the picture: its bitstream, alpha, animation and colour profile. */
 const PICTURE = new Set(['VP8 ', 'VP8L', 'VP8X', 'ALPH', 'ANIM', 'ANMF', 'ICCP']);
 
-/** VP8X's flag bits for the two metadata chunks. */
 const HAS_EXIF = 0x08;
 const HAS_XMP = 0x04;
 
-/**
- * A WebP with its EXIF and XMP chunks, and any chunk the format does not
- * define, removed losslessly. A turned picture keeps an EXIF chunk holding
- * only its orientation. The VP8X flags and the RIFF size are rewritten to say
- * what is left.
- */
 export function stripWebp(bytes: Uint8Array): Stripped {
   const data = view(bytes);
   const chunks: Uint8Array[] = [];

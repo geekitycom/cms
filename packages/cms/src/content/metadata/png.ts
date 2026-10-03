@@ -4,12 +4,7 @@ import { ascii, concat, fourcc, sameBytes, stripped, view } from './shared.ts';
 import type { Stripped } from './shared.ts';
 import { keptExif } from './tiff.ts';
 
-/**
- * The ancillary chunks that change how a PNG looks or animates. Every critical
- * chunk is kept as well, since a decoder must refuse a file missing one.
- * Anything else ancillary is about the file rather than the picture — text,
- * EXIF, a timestamp, a private chunk somebody's app wrote — and goes.
- */
+/** Critical chunks are kept too, outside this set: a decoder must refuse a file missing one. */
 const RENDERING = new Set([
   'tRNS',
   'cHRM',
@@ -37,12 +32,6 @@ const LABELS: Readonly<Record<string, string>> = {
   tIME: 'timestamp',
 };
 
-/**
- * A PNG with its metadata chunks dropped and every image chunk copied as it
- * was, so nothing is re-encoded. A turned picture keeps an eXIf holding only
- * its orientation. A chunk cut short by the end of the file is judged by its
- * type like any other; bytes after IEND go.
- */
 export function stripPng(bytes: Uint8Array): Stripped {
   const data = view(bytes);
   const parts: Uint8Array[] = [bytes.subarray(0, 8)];

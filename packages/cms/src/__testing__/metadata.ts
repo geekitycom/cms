@@ -3,13 +3,6 @@ import { crc32 } from 'node:zlib';
 import sharp from 'sharp';
 import type { Sharp } from 'sharp';
 
-/**
- * Files carrying the metadata a phone or an editor leaves in them, built with
- * sharp and by hand rather than committed as binaries.
- *
- * Every secret is a distinctive string, so a test can look for it in the raw
- * bytes a site stored: no decoder in between to forgive what is still there.
- */
 const SECRETS = {
   camera: 'AcmeCamCo',
   datum: 'SECRETDATUM',
@@ -19,7 +12,6 @@ const SECRETS = {
   location: '+51.5007-000.1246/',
 } as const;
 
-/** Whether any of {@link SECRETS} is still somewhere in these bytes. */
 export function leakedSecrets(bytes: Uint8Array): string[] {
   const text = Buffer.from(bytes).toString('latin1');
   return Object.values(SECRETS).filter((secret) => text.includes(secret));
@@ -45,8 +37,7 @@ const XMP =
   `<rdf:Description xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" photoshop:City="${SECRETS.xmpCity}"/>` +
   '</rdf:RDF></x:xmpmeta>';
 
-/** A noisy picture, so a re-encode could not come back pixel for pixel. */
-function picture(): Sharp {
+function noisyPicture(): Sharp {
   return sharp({
     create: {
       width: 40,
@@ -58,9 +49,8 @@ function picture(): Sharp {
   });
 }
 
-/** A JPEG with EXIF (camera and GPS), XMP, an IPTC block and a comment. */
 export async function jpegWithMetadata(orientation = 1): Promise<Uint8Array> {
-  let image = picture().jpeg().withExif(EXIF).withXmp(XMP);
+  let image = noisyPicture().jpeg().withExif(EXIF).withXmp(XMP);
   if (orientation !== 1) image = image.withMetadata({ orientation });
   const encoded = new Uint8Array(await image.toBuffer());
   const iptc = [
@@ -92,9 +82,8 @@ export async function jpegWithMetadata(orientation = 1): Promise<Uint8Array> {
   ]);
 }
 
-/** A PNG with an eXIf chunk (camera and GPS), XMP in iTXt and IPTC in tEXt. */
 export async function pngWithMetadata(orientation = 1): Promise<Uint8Array> {
-  let image = picture().png().withExif(EXIF);
+  let image = noisyPicture().png().withExif(EXIF);
   if (orientation !== 1) image = image.withMetadata({ orientation });
   const encoded = new Uint8Array(await image.toBuffer());
   const iend = encoded.length - 12;
@@ -107,21 +96,18 @@ export async function pngWithMetadata(orientation = 1): Promise<Uint8Array> {
   ]);
 }
 
-/** A WebP with EXIF (camera and GPS) and XMP chunks. */
 export async function webpWithMetadata(orientation = 1): Promise<Uint8Array> {
-  let image = picture().webp().withExif(EXIF).withXmp(XMP);
+  let image = noisyPicture().webp().withExif(EXIF).withXmp(XMP);
   if (orientation !== 1) image = image.withMetadata({ orientation });
   return new Uint8Array(await image.toBuffer());
 }
 
-/** An AVIF with Exif (camera and GPS) and XMP items. */
 export async function avifWithMetadata(): Promise<Uint8Array> {
-  return new Uint8Array(await picture().avif().withExif(EXIF).withXmp(XMP).toBuffer());
+  return new Uint8Array(await noisyPicture().avif().withExif(EXIF).withXmp(XMP).toBuffer());
 }
 
-/** A GIF with a comment extension and an XMP application extension. */
 export async function gifWithMetadata(): Promise<Uint8Array> {
-  const encoded = new Uint8Array(await picture().gif().toBuffer());
+  const encoded = new Uint8Array(await noisyPicture().gif().toBuffer());
   const trailer = encoded.length - 1;
   const xmp = ascii(`<x:xmpmeta city="${SECRETS.xmpCity}"/>`);
   return new Uint8Array([
@@ -142,11 +128,6 @@ export async function gifWithMetadata(): Promise<Uint8Array> {
   ]);
 }
 
-/**
- * A minimal MP4 the way a phone writes its location: ©xyz in moov/udta,
- * the QuickTime location key in moov/meta, a track-level udta and an XMP uuid
- * box at the top level. The media data is a stand-in; nothing here decodes it.
- */
 export function mp4WithLocation(brand = 'isom'): Uint8Array {
   const location = ascii(SECRETS.location);
   const xyz = box('©xyz', [...u16(location.length), 0x15, 0xc7, ...location]);
@@ -180,7 +161,6 @@ export function mp4WithLocation(brand = 'isom'): Uint8Array {
   ]);
 }
 
-/** The four-character type and size of every box at the top of an ISO file. */
 export function topLevelBoxes(bytes: Uint8Array): { type: string; size: number }[] {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const found: { type: string; size: number }[] = [];

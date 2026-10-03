@@ -1,19 +1,10 @@
-/** A file with its metadata taken out, and what was taken. */
 export interface Stripped {
-  /** The file as it should be stored. The same array when nothing changed. */
   bytes: Uint8Array;
-  /** What went, in words for a report: "EXIF", "XMP", "IPTC". Empty when nothing did. */
   removed: readonly string[];
 }
 
-/** Takes one container format's metadata out of a file of that format. */
 export type Stripper = (bytes: Uint8Array) => Stripped;
 
-/**
- * A file whose structure could not be walked far enough to know where its
- * metadata is. Storing it as it came would publish whatever it carries, so
- * the caller refuses it instead.
- */
 export class UnreadableMetadataError extends Error {
   constructor(format: string, problem: string) {
     super(`This ${format} could not be read: ${problem}.`);
@@ -52,12 +43,10 @@ export function view(bytes: Uint8Array): DataView {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
 
-/** The labels in the order they were first met, each once. */
 export function unique(labels: readonly string[]): string[] {
   return [...new Set(labels)];
 }
 
-/** The answer for a file a stripper walked: the input itself when nothing went. */
 export function stripped(
   original: Uint8Array,
   parts: readonly Uint8Array[],

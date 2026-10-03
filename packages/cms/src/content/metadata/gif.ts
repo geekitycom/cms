@@ -4,11 +4,6 @@ import type { Stripped } from './shared.ts';
 /** The application extensions that change how a GIF plays or looks: looping and colour. */
 const PLAYBACK = new Set(['NETSCAPE2.0', 'ANIMEXTS1.0', 'ICCRGBG1012']);
 
-/**
- * A GIF with its comments and every application extension but looping and
- * colour removed. XMP lives in one of those, so it goes with them. Frames and
- * graphic controls are copied as they were.
- */
 export function stripGif(bytes: Uint8Array): Stripped {
   function fail(problem: string): never {
     throw new UnreadableMetadataError('GIF', problem);
@@ -16,7 +11,6 @@ export function stripGif(bytes: Uint8Array): Stripped {
   const parts: Uint8Array[] = [];
   const removed: string[] = [];
 
-  /** Where the data sub-blocks starting here end, after their zero terminator. */
   const subBlocksEnd = (start: number): number => {
     let at = start;
     for (;;) {

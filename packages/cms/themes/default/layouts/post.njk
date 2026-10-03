@@ -89,8 +89,6 @@
       {%- if syndication.length %}
       {% if date or updated %} <span aria-hidden="true">·</span> {% endif %}<span class="small">Also on {% for copy in syndication %}<a class="u-syndication" href="{{ copy.url }}">{{ copy.label }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
       {%- endif -%}
-      {#- Where it was written, as much as Settings > Privacy shares
-          (TASK-223): on the context only when there is something to print. -#}
       {%- if location %}
       {% if date or updated or syndication.length %} <span aria-hidden="true">·</span> {% endif %}<span class="small">{% include "partials/location.njk" %}</span>
       {%- endif -%}

@@ -8,9 +8,16 @@ import {
   locationOf,
   locationToMicropub,
   parseGeoUri,
+  postLocation,
   shareLocation,
 } from './location.ts';
-import type { PostLocation } from './location.ts';
+import type { LocationParts, PostLocation } from './location.ts';
+
+function located(parts: LocationParts): PostLocation {
+  const location = postLocation(parts);
+  assert.ok(location !== undefined, 'the parts name a location');
+  return location;
+}
 
 /** Quill's own spelling: five decimals and an accuracy in metres (views/new-post.php:591). */
 const QUILL = 'geo:48.85837,2.29448;u=50';
@@ -118,27 +125,29 @@ describe('locationFromMicropub', () => {
 describe('locationToMicropub', () => {
   it('answers coordinates alone as the geo: URI they came as', () => {
     assert.equal(
-      locationToMicropub({ geo: { latitude: 48.85837, longitude: 2.29448, accuracy: 50 } }),
+      locationToMicropub(
+        located({ geo: { latitude: 48.85837, longitude: 2.29448, accuracy: 50 } }),
+      ),
       QUILL,
     );
   });
 
   it('answers words as an h-adr, a named place as an h-card, coordinates nested as geo', () => {
-    assert.deepEqual(locationToMicropub({ locality: 'Paris', country: 'France' }), {
+    assert.deepEqual(locationToMicropub(located({ locality: 'Paris', country: 'France' })), {
       type: ['h-adr'],
       properties: { locality: ['Paris'], 'country-name': ['France'] },
     });
     assert.deepEqual(
-      locationToMicropub({ name: 'Eiffel Tower', geo: { latitude: 1, longitude: 2 } }),
+      locationToMicropub(located({ name: 'Eiffel Tower', geo: { latitude: 1, longitude: 2 } })),
       { type: ['h-card'], properties: { name: ['Eiffel Tower'], geo: ['geo:1,2'] } },
     );
   });
 
   it('round-trips through its own reading', () => {
-    const locations: PostLocation[] = [
-      { geo: { latitude: 48.85837, longitude: 2.29448, accuracy: 50 } },
-      { name: 'Eiffel Tower', locality: 'Paris', region: 'IDF', country: 'France' },
-      { locality: 'Paris', geo: { latitude: 1, longitude: 2, altitude: 3, accuracy: 4 } },
+    const locations = [
+      located({ geo: { latitude: 48.85837, longitude: 2.29448, accuracy: 50 } }),
+      located({ name: 'Eiffel Tower', locality: 'Paris', region: 'IDF', country: 'France' }),
+      located({ locality: 'Paris', geo: { latitude: 1, longitude: 2, altitude: 3, accuracy: 4 } }),
     ];
     for (const location of locations) {
       assert.deepEqual(locationFromMicropub(locationToMicropub(location)), location);
@@ -169,12 +178,12 @@ describe('isLocationSharing', () => {
 });
 
 describe('shareLocation', () => {
-  const full: PostLocation = {
+  const full = located({
     name: 'Eiffel Tower',
     locality: 'Paris',
     country: 'France',
     geo: { latitude: 48.85837, longitude: 2.29448, accuracy: 50 },
-  };
+  });
 
   it('shares nothing under none, whatever is stored', () => {
     assert.equal(shareLocation(full, 'none'), undefined);
@@ -186,7 +195,7 @@ describe('shareLocation', () => {
       kind: 'place',
       place: { name: 'Eiffel Tower', locality: 'Paris', country: 'France' },
     });
-    assert.equal(shareLocation({ geo: full.geo }, 'place'), undefined);
+    assert.equal(shareLocation(located({ geo: full.geo }), 'place'), undefined);
   });
 
   it('shares the coordinates too under exact, and only the words when there are none', () => {
@@ -195,7 +204,7 @@ describe('shareLocation', () => {
       place: { name: 'Eiffel Tower', locality: 'Paris', country: 'France' },
       geo: { latitude: 48.85837, longitude: 2.29448, accuracy: 50 },
     });
-    assert.deepEqual(shareLocation({ locality: 'Paris' }, 'exact'), {
+    assert.deepEqual(shareLocation(located({ locality: 'Paris' }), 'exact'), {
       kind: 'place',
       place: { locality: 'Paris' },
     });

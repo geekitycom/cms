@@ -242,7 +242,6 @@ export function postObject(
       ...photoAttachments(document, context.data.config),
       ...imageAttachments(document, context.data.config),
     ],
-    // Where it was written, as much as Settings > Privacy shares (TASK-223).
     location: place(
       shareLocation(
         postLocations(context.data.config.dataDir).read(document.permalink),
@@ -285,12 +284,6 @@ function inLanguage(text: string, language: string): (string | LanguageString)[]
   return [text, new LanguageString(text, language)];
 }
 
-/**
- * The shared part of a post's location as an ActivityStreams `Place`
- * (decision-29): named by the words of the place, and carrying the
- * coordinates and their accuracy only when the site shares them exactly. A
- * post with nothing shared has no `location` at all.
- */
 function place(shared: SharedLocation | undefined): Place | null {
   if (shared === undefined) return null;
   const words = placeWordList(shared.place);

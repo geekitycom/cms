@@ -1,7 +1,6 @@
 import { ascii, fourcc, sameBytes, unique, UnreadableMetadataError, view } from './shared.ts';
 import type { Stripped } from './shared.ts';
 
-/** One box of an ISO base media file: where it starts, where its body starts, where it ends. */
 interface Box {
   type: string;
   start: number;
@@ -35,7 +34,6 @@ function boxes(bytes: Uint8Array, start: number, end: number): Box[] {
   return found;
 }
 
-/** Boxes a movie keeps its tracks and their media in, which metadata can sit inside. */
 const MOVIE_CONTAINERS = new Set(['moov', 'trak', 'mdia', 'minf']);
 
 const MOVIE_LABELS: Readonly<Record<string, string>> = {
@@ -86,7 +84,6 @@ const EMPTY_XMP_HEAD = ascii(
 );
 const EMPTY_XMP_TAIL = ascii('<?xpacket end="w"?>');
 
-/** The bytes an item of this length is overwritten with, so it holds nothing and still parses. */
 function blankPayload(kind: 'EXIF' | 'XMP', length: number): Uint8Array {
   const out = new Uint8Array(length);
   if (kind === 'EXIF') {

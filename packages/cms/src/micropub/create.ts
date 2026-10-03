@@ -255,12 +255,6 @@ function photoRow(value: unknown, baseUrl: string): PhotoRow | undefined {
   };
 }
 
-/**
- * Where the post was written (TASK-223), as the editor's fields: a `geo:` URI,
- * which is what Quill sends, or an h-geo, h-adr or h-card. It is not written
- * into the file; the write path keeps it in `data/locations.json`
- * (decision-29).
- */
 function location(values: readonly unknown[], errors: string[]): EditorForm['location'] {
   if (values.length > 1) errors.push('location takes one value.');
   const [value] = values;
