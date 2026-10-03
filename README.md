@@ -1847,7 +1847,8 @@ not accept, or whose bytes do not match its extension gets 400
 ### Clients and conformance
 
 Each [micropub.rocks](https://micropub.rocks/) server test request has been
-replayed with curl against a local site. Every test passes except this one:
+replayed with curl against a local site, and the full suite was run against
+shll.me on 0.19.0 (2026-10-03). Every test passes except this one:
 
 - 805 sends the same token in the header and the body and expects it refused,
   as RFC 6750 says. The site accepts it, because Quill sends its token that way

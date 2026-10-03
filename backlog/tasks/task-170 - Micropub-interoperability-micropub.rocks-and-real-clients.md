@@ -1,11 +1,11 @@
 ---
 id: TASK-170
 title: 'Micropub interoperability: micropub.rocks and real clients'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-09-29 01:55'
-updated_date: '2026-10-03 16:46'
+updated_date: '2026-10-03 23:34'
 labels:
   - micropub
   - indieweb
@@ -31,7 +31,7 @@ Tests prove the endpoint against the spec as we read it; real clients prove it a
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every micropub.rocks server test that applies to the implemented features passes, and the results are noted on the task with any skipped tests explained
+- [x] #1 Every micropub.rocks server test that applies to the implemented features passes, and the results are noted on the task with any skipped tests explained
 - [x] #2 A note, an article, a reply and a photo post from Quill publish correctly, and a post from one mobile client (Indigenous or similar) publishes
 - [x] #3 README documents Micropub support, the supported properties, and connecting and revoking a client
 <!-- AC:END -->
@@ -108,10 +108,12 @@ Still open for AC#2: a Quill note and an article, recorded as published.
 - 805 token in header and body: 201 by design (Quill sends that shape); stays.
 802 passed, as expected since PR #95.
 AC#1 closes after TASK-237, TASK-238 and TASK-239 ship and 204, 700, 701, 702 and 804 are re-run.
+
+2026-10-03: full micropub.rocks server run against shll.me on 0.19.0 (after TASK-236..239): every test passes except 805, which accepts a token in both the header and the body by design (Quill sends that shape). Reported by the site owner.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Pre-flighted every micropub.rocks server test against a local site with curl and recorded each result. Fixed the one genuine spec failure (805): the bearer guard now answers 400 invalid_request when the token arrives in both the header and the body, per RFC 6750 section 3.1, test first in bearer.test.ts. Rewrote the README's Micropub documentation as one coherent section with a property table, connecting and disconnecting an app, and the conformance results. Verified with the curl pre-flight and pnpm build/test/typecheck/lint/format:check. Still open: AC#1 (micropub.rocks against a deployed site) and AC#2 (Quill and a mobile app); the notes carry the runbook and the predicted Quill alt-text gap.
+Micropub interoperates with micropub.rocks and real clients: on 0.19.0 at shll.me every micropub.rocks server test passes except 805 (kept by design for Quill); Quill, iA Writer and indiebookclub publish. README documents support, properties, clients and revoking.
 <!-- SECTION:FINAL_SUMMARY:END -->
