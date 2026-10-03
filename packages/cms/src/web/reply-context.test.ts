@@ -22,6 +22,7 @@ const PRIVATE = 'http://127.0.0.1:8080/secret';
 const HOSTILE = 'https://hostile.example/post';
 const MOVED = 'https://other.example/2026/09/beans/';
 const SLOW = 'https://slow.example/post';
+const BYLINE = 'https://sound.example/forss/flickermood';
 
 const PAGES: Record<string, string> = {
   [ENTRY]: `<article class="h-entry">
@@ -35,6 +36,11 @@ const PAGES: Record<string, string> = {
     <h1 class="p-name">&lt;script&gt;alert(1)&lt;/script&gt;</h1>
     <a class="p-author h-card" href="javascript:alert(2)">&quot;&gt;&lt;img src=x onerror=alert(3)&gt;</a>
     <div class="e-content"><p>Hi <img src=x onerror="alert(4)"></p></div>
+  </article>`,
+  [BYLINE]: `<article class="h-entry">
+    <h1 class="p-name">Flickermood by Forss</h1>
+    <a class="p-author h-card" href="https://sound.example/forss">Forss</a>
+    <div class="e-content"><p>A track.</p></div>
   </article>`,
   [MOVED]: `<article class="h-entry"><h1 class="p-name">Growing beans</h1>
     <div class="e-content">Beans climb.</div></article>`,
@@ -399,5 +405,27 @@ describe('a reply’s preview in a site theme’s own post layout', () => {
       new RegExp(`<a class="u-url p-name" href="${ENTRY}">Growing tomatoes</a>`),
     );
     assert.match(citation, /Pat Them/);
+  });
+});
+
+describe('a reply to a post whose title already names its author', () => {
+  it('names the author once, as the h-card at the end of the title', async () => {
+    const { cms } = await site({ 'posts/2026-09-10-byline.md': post('byline', BYLINE) });
+    const citation = cite(await get(cms, '/2026/09/byline/')) ?? '';
+    const line = /<p class="cite-line small">[\s\S]*?<\/p>/.exec(citation)?.[0] ?? '';
+
+    assert.equal(
+      line
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim(),
+      'In reply to Flickermood by Forss',
+    );
+    assert.match(
+      line,
+      new RegExp(
+        `<span class="p-name"><a class="u-url" href="${BYLINE}">Flickermood</a> by <span class="p-author h-card"><a class="u-url p-name" href="https://sound.example/forss">Forss</a></span></span>`,
+      ),
+    );
   });
 });

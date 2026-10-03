@@ -14,20 +14,13 @@
   printed through autoescaping like a reply's context. With a name, the name
   is the link; with only an author, "a post" is; with neither, the bare URL.
 #}
+{% import "partials/cited-page.njk" as cited %}
 {% set citationVerbs = { "repost-of": "Reposted", "like-of": "Liked", "bookmark-of": "Bookmarked" } %}
 {% for citation in citations %}
 {% set citedPage = citation.context %}
 <div class="reply-context cite u-{{ citation.property }} h-cite">
   <p class="cite-line small">{{ citationVerbs[citation.property] }}
-    {%- if citedPage.name %} <a class="u-url p-name" href="{{ citation.url }}">{{ citedPage.name }}</a>
-    {%- elif citedPage.author %} <a class="u-url" href="{{ citation.url }}">a post</a>
-    {%- else %} <a class="u-url" href="{{ citation.url }}">{{ citation.url }}</a>
-    {%- endif %}
-    {%- if citedPage.author %} by <span class="p-author h-card">
-      {%- if citedPage.author.url %}<a class="u-url p-name" href="{{ citedPage.author.url }}">{{ citedPage.author.name }}</a>
-      {%- else %}<span class="p-name">{{ citedPage.author.name }}</span>{% endif -%}
-    </span>
-    {%- endif -%}
+    {{- cited.page(citation.url, citedPage) -}}
   </p>
 </div>
 {% endfor %}

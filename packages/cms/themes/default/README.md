@@ -26,6 +26,7 @@ themes/default/
     kicker.njk        the line above an entry naming its kind and date
     reply-context.njk the citation of what a reply answers
     citations.njk     the citation of what a like, repost or bookmark cites
+    cited-page.njk    the name and author both citations print
     read.njk          what a read post read, and how far
     bio.njk           who an entry is by, as an h-card
     menu.njk          one named menu, as a nav of links
@@ -426,6 +427,16 @@ an author it says "a post", and with neither the bare URL. Its kicker
 and its hidden `h1` say Repost, Like or Bookmark. It is placed as the reply
 context is: at the top of an untitled post, after the header of a titled one.
 A listing cites each entry's from the same partial, by the same rule.
+
+**Both citations name the cited page** through `partials/cited-page.njk`, so
+they print its name and author by one rule. A name that already ends in " by "
+and the author's name, in any case, does not print the author again
+(TASK-247): SoundCloud titles a track "Flickermood by Forss" and names Forss
+as its author. The title link stops before " by ", and the words after it
+become the `p-author h-card`, so the line reads "Liked Flickermood by Forss"
+and a parser still reads the whole title as the `p-name`. A name that mentions
+its author anywhere else, such as "Rick Astley - Never Gonna Give You Up" by
+Rick Astley, keeps the author after it.
 
 **A read says what was read** (TASK-229) with `partials/read.njk`, a
 `p.read-line` at the top of the `e-content` that reads like indiebookclub's

@@ -16,18 +16,11 @@
   written in `lang`, the language of the entry it sits in (TASK-189), so a
   listing sets `lang` from each entry as it sets `replyContext`.
 #}
+{% import "partials/cited-page.njk" as cited %}
 {% if inReplyTo %}
 <div class="reply-context cite u-in-reply-to h-cite">
   <p class="cite-line small">In reply to
-    {%- if replyContext.name %} <a class="u-url p-name" href="{{ inReplyTo }}">{{ replyContext.name }}</a>
-    {%- elif replyContext.author %} <a class="u-url" href="{{ inReplyTo }}">a post</a>
-    {%- else %} <a class="u-url" href="{{ inReplyTo }}">{{ inReplyTo }}</a>
-    {%- endif %}
-    {%- if replyContext.author %} by <span class="p-author h-card">
-      {%- if replyContext.author.url %}<a class="u-url p-name" href="{{ replyContext.author.url }}">{{ replyContext.author.name }}</a>
-      {%- else %}<span class="p-name">{{ replyContext.author.name }}</span>{% endif -%}
-    </span>
-    {%- endif %}
+    {{- cited.page(inReplyTo, replyContext) }}
     {%- if replyContext.published %}, <time class="dt-published" datetime="{{ replyContext.published | date("iso") }}">{{ replyContext.published | date("readable", none, lang) }}</time>
     {%- endif -%}
   </p>

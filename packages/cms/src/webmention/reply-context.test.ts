@@ -557,6 +557,93 @@ describe('fetchReplyContext with oEmbed', () => {
   });
 });
 
+describe('fetchReplyContext and direction controls', () => {
+  const CONTROLS = [...'\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069\u200E\u200F\u061C'];
+  const wrap = (text: string): string => `${CONTROLS.join('')}${text}\u202E`;
+  const entity = (text: string): string =>
+    [...wrap(text)]
+      .map((character) =>
+        CONTROLS.includes(character)
+          ? `&#x${character.codePointAt(0)?.toString(16) ?? ''};`
+          : character,
+      )
+      .join('');
+
+  function fetched(body: string, oembed?: unknown): Promise<unknown> {
+    answer = (request) =>
+      request.url === TARGET
+        ? html(body)
+        : new Response(JSON.stringify(oembed), { headers: { 'content-type': 'application/json' } });
+    return fetchReplyContext(TARGET, { lookup });
+  }
+
+  it('drops them from an oEmbed title and author name', async () => {
+    const page = `<link rel="alternate" type="application/json+oembed" href="/oembed">
+      <meta name="description" content="${entity('Words')}">`;
+
+    const result = await fetched(page, {
+      title: wrap('Flickermood'),
+      author_name: wrap('Forss'),
+      author_url: 'https://them.example/forss',
+    });
+
+    assert.deepEqual(result, {
+      ok: true,
+      context: {
+        url: TARGET,
+        name: 'Flickermood',
+        text: 'Words',
+        author: { name: 'Forss', url: 'https://them.example/forss' },
+      },
+    });
+  });
+
+  it('drops them from an h-entry name, author and words', async () => {
+    const page = `<article class="h-entry">
+      <h1 class="p-name">${entity('Growing tomatoes')}</h1>
+      <a class="p-author h-card" href="https://them.example/">${entity('Pat Them')}</a>
+      <div class="e-content"><p>${entity('Tomatoes want sun.')}</p></div>
+    </article>`;
+
+    assert.deepEqual(await fetched(page), {
+      ok: true,
+      context: {
+        url: TARGET,
+        name: 'Growing tomatoes',
+        text: 'Tomatoes want sun.',
+        author: { name: 'Pat Them', url: 'https://them.example/' },
+      },
+    });
+  });
+
+  it('drops them from a page title and og:title', async () => {
+    assert.deepEqual(await fetched(`<title>${entity('A plain page')}</title>`), {
+      ok: true,
+      context: { url: TARGET, name: 'A plain page' },
+    });
+    assert.deepEqual(
+      await fetched(`<meta property="og:title" content="${entity('Shared title')}">`),
+      { ok: true, context: { url: TARGET, name: 'Shared title' } },
+    );
+  });
+
+  it('treats a name made only of them as no name', async () => {
+    const page = `<title>${CONTROLS.join('')}</title>
+      <link rel="alternate" type="application/json+oembed" href="/oembed">`;
+
+    assert.deepEqual(await fetched(page, { author_name: CONTROLS.join('') }), {
+      ok: false,
+      reason: 'nothing to show',
+    });
+  });
+
+  it('keeps every other character of the text', async () => {
+    const result = await fetched('<title>Ελληνικά — עברית ✓</title>');
+
+    assert.deepEqual(result, { ok: true, context: { url: TARGET, name: 'Ελληνικά — עברית ✓' } });
+  });
+});
+
 describe('the address guard', () => {
   it('knows the spellings of this network', () => {
     for (const host of [

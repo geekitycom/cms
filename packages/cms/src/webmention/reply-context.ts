@@ -133,18 +133,21 @@ function describe(
   oembed: Oembed | undefined,
 ): ReplyContext | undefined {
   if (entry !== undefined) {
-    const named = discoverPostType({ name: entry.name, content: entry.text }) === 'article';
-    const text = excerpt(entry.text);
+    const entryName = visible(entry.name);
+    const entryText = visible(entry.text);
+    const named = discoverPostType({ name: entryName, content: entryText }) === 'article';
+    const text = excerpt(entryText);
+    const authorName = visible(entry.author?.name);
     const authorUrl = entry.author?.url === null ? undefined : webUrl(entry.author?.url ?? '');
     return {
       url: target,
-      ...(named ? { name: entry.name } : {}),
+      ...(named ? { name: entryName } : {}),
       ...(text === '' ? {} : { text }),
-      ...(entry.author === undefined
+      ...(authorName === ''
         ? {}
         : {
             author: {
-              name: entry.author.name,
+              name: authorName,
               ...(authorUrl === undefined ? {} : { url: authorUrl.href }),
             },
           }),
@@ -154,9 +157,13 @@ function describe(
 
   // A page that offers oEmbed is often one whose <title> is generic or written
   // by script, so the endpoint's own title goes first.
-  const name = oembed?.title ?? (titleOf(root) || metaOf(root, 'og:title'));
-  const text = excerpt(metaOf(root, 'description') || metaOf(root, 'og:description'));
-  const author = oembed?.author;
+  const name =
+    visible(oembed?.title) || visible(titleOf(root)) || visible(metaOf(root, 'og:title'));
+  const text = excerpt(
+    visible(metaOf(root, 'description')) || visible(metaOf(root, 'og:description')),
+  );
+  const authorName = visible(oembed?.author?.name);
+  const author = authorName === '' ? undefined : { ...oembed?.author, name: authorName };
   if (name === '' && text === '' && author === undefined) return undefined;
 
   return {
@@ -165,6 +172,17 @@ function describe(
     ...(text === '' ? {} : { text }),
     ...(author === undefined ? {} : { author }),
   };
+}
+
+/**
+ * A stranger's text as one line without direction controls, which are
+ * invisible but reorder what is printed around them.
+ */
+function visible(text: string | undefined): string {
+  return (text ?? '')
+    .replace(/\p{Bidi_Control}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** The JSON oEmbed endpoint a page names in its `<link rel="alternate">`, if any. */

@@ -9,6 +9,8 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, beforeEach, describe, it } from 'node:test';
 
+import { mf2 } from 'microformats-parser';
+
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../webmention/public-address.ts';
@@ -23,8 +25,37 @@ const VIDEO_OEMBED = 'https://video.example/oembed?url=1';
 const DOWN = 'https://down.example/post';
 const MOVED = 'https://other.example/beans/';
 const HOSTILE = 'https://hostile.example/post';
+const SOUND = 'https://sound.example/forss/flickermood';
+const SOUND_LOWER = 'https://sound.example/forss/lower';
+const RICK = 'https://video.example/watch?v=dQw4w9WgXcQ';
+
+/** A page named only by its oEmbed endpoint, which answers `oembed`. */
+function oembedPage(
+  page: string,
+  oembed: Record<string, string>,
+): Record<string, { type: string; body: string }> {
+  const endpoint = `${page}/oembed`;
+  return {
+    [page]: {
+      type: 'text/html',
+      body: `<link rel="alternate" type="application/json+oembed" href="${endpoint}">`,
+    },
+    [endpoint]: { type: 'application/json', body: JSON.stringify(oembed) },
+  };
+}
 
 const PAGES: Record<string, { type: string; body: string }> = {
+  ...oembedPage(SOUND, {
+    title: 'Flickermood by Forss',
+    author_name: 'Forss',
+    author_url: 'https://sound.example/forss',
+  }),
+  ...oembedPage(SOUND_LOWER, { title: 'Flickermood By Forss ', author_name: 'forss' }),
+  ...oembedPage(RICK, {
+    title: 'Rick Astley - Never Gonna Give You Up',
+    author_name: 'Rick Astley',
+    author_url: 'https://video.example/@rick',
+  }),
   [ENTRY]: {
     type: 'text/html',
     body: `<article class="h-entry">
@@ -336,5 +367,81 @@ describe('a citation whose target changes', () => {
     await rebuilt.replyContexts.settled();
 
     assert.deepEqual(fetched, []);
+  });
+});
+
+describe('a citation whose title already names its author', () => {
+  let page: (name: string) => Promise<string>;
+
+  before(async () => {
+    const { cms } = await site({
+      'posts/2026-09-10-sound.md': post('sound', 'like-of', SOUND),
+      'posts/2026-09-10-lower.md': post('lower', 'like-of', SOUND_LOWER),
+      'posts/2026-09-10-rick.md': post('rick', 'like-of', RICK),
+    });
+    page = (name) => get(cms, `/2026/09/${name}/`);
+  });
+
+  /** What a reader sees of a citation: its text without the markup. */
+  const seen = (citation: string): string =>
+    citation
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  /** The h-cite a post likes, as a microformats parser reads it. */
+  function likeOf(html: string, url: string): { name: unknown; url: unknown; author: unknown } {
+    const entry = mf2(html, { baseUrl: url }).items.find((item) => item.type?.includes('h-entry'));
+    const cite = entry?.properties['like-of']?.[0] as
+      { properties: Record<string, unknown[]> } | undefined;
+    assert.ok(cite !== undefined, 'the post has a like-of h-cite');
+    const author = cite.properties['author']?.[0] as
+      { type: string[]; properties: Record<string, unknown[]> } | undefined;
+    return {
+      name: cite.properties['name'],
+      url: cite.properties['url'],
+      author: author === undefined ? undefined : { type: author.type, ...author.properties },
+    };
+  }
+
+  it('does not print the author again after a title ending in “by” them', async () => {
+    const html = await page('sound');
+    const citation = cite(html, 'like-of') ?? '';
+
+    assert.equal(seen(citation), 'Liked Flickermood by Forss');
+    assert.match(
+      citation,
+      /<a class="u-url p-name" href="https:\/\/sound.example\/forss">Forss<\/a>/,
+    );
+    assert.deepEqual(likeOf(html, 'https://example.com/2026/09/sound/'), {
+      name: ['Flickermood by Forss'],
+      url: [SOUND],
+      author: { type: ['h-card'], name: ['Forss'], url: ['https://sound.example/forss'] },
+    });
+  });
+
+  it('matches the author whatever the case, and prints the title’s own words', async () => {
+    const html = await page('lower');
+
+    assert.equal(seen(cite(html, 'like-of') ?? ''), 'Liked Flickermood By Forss');
+    assert.deepEqual(likeOf(html, 'https://example.com/2026/09/lower/').author, {
+      type: ['h-card'],
+      name: ['Forss'],
+    });
+  });
+
+  it('keeps the author of a title that names them anywhere but its end', async () => {
+    const citation = cite(await page('rick'), 'like-of') ?? '';
+
+    assert.equal(seen(citation), 'Liked Rick Astley - Never Gonna Give You Up by Rick Astley');
+  });
+
+  it('names the author once in a listing too', async () => {
+    const { cms } = await site({ 'posts/2026-09-10-sound.md': post('sound', 'like-of', SOUND) });
+
+    assert.equal(
+      seen(cite(entry(await get(cms, '/'), 'sound'), 'like-of') ?? ''),
+      'Liked Flickermood by Forss',
+    );
   });
 });
