@@ -10,9 +10,9 @@ import type { GeekityEnv } from '../env.ts';
 import { authorHref, parseAuthorPath } from '../web/authors.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { absoluteUrl, prefersActivityStreams } from '../web/negotiate.ts';
-import { requestPath } from '../web/routes.ts';
+import { notFound, requestPath } from '../web/routes.ts';
 import { actorAliases, actorId, userActor } from './actor.ts';
-import { isFederatedDocument, postObject } from './article.ts';
+import { documentAuthor, isFederatedDocument, postObject } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { accountOf, handleHref } from './paths.ts';
 import {
@@ -341,6 +341,9 @@ async function article(
   document: Document,
 ): Promise<Response> {
   const context = federation.createContext(c.req.raw, contextData(c));
+  // A site with no accounts has no actor to attribute a post to (decision-14),
+  // so no post of it is an object.
+  if (documentAuthor(context, document) === undefined) return notFound(c);
   return await respondWithObject(postObject(context, document), {
     contextLoader: context.contextLoader,
   });

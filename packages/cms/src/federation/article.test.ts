@@ -57,6 +57,9 @@ async function site(
   files: Record<string, string>,
   settings: Partial<SiteSettings> = {},
   config: GeekityConfig = {},
+  users: Parameters<typeof writeUsers>[1] = [
+    { username: ADA, profile: { displayName: 'Ada Lovelace' } },
+  ],
 ): Promise<Cms> {
   const dataDir = await temporaryDir('geekity-article-data-');
   const contentDir = await temporaryDir('geekity-article-content-');
@@ -77,7 +80,7 @@ async function site(
   });
   // decision-14: a post is announced by the actor of its author, so the site
   // needs an account before it can federate anything at all.
-  writeUsers(dataDir, [{ username: ADA, profile: { displayName: 'Ada Lovelace' } }]);
+  writeUsers(dataDir, users);
 
   const instance = createCms({
     dataDir,
@@ -283,6 +286,47 @@ describe('the post object', () => {
     // The published post next to them still is, so the refusals are the filter
     // rather than a middleware that answers nothing.
     assert.equal((await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS)).status, 200);
+  });
+
+  it('serves nothing on a site with no accounts, which has no actor to attribute a post to (TASK-232)', async () => {
+    const instance = await site(
+      {
+        ...HELLO,
+        'posts/2026-09-02-hushed.md': post('Hushed', {
+          date: '2026-09-02T09:00:00Z',
+          permalink: '/2026/09/hushed/',
+        }).replace('---\n\n', 'visibility: unlisted\n---\n\n'),
+        'posts/2026-09-01-moved.md': post('Moved', {
+          date: '2026-09-01T09:00:00Z',
+          permalink: '/2026/09/moved/',
+        }).replace('---\n\n', `activitypub:\n  id: ${BASE_URL}/?p=7\n---\n\n`),
+      },
+      {},
+      {},
+      [],
+    );
+
+    for (const pathname of ['/2026/09/hello/', '/2026/09/hushed/', '/?p=7']) {
+      const response = await get(instance, pathname, ACTIVITY_STREAMS);
+      assert.equal(response.status, 404, `${pathname} is not an object`);
+    }
+    assert.equal((await get(instance, '/2026/09/hello/')).status, 200, 'the page is still served');
+  });
+
+  it('attributes a post whose author names nobody to the first account (TASK-232)', async () => {
+    const instance = await site({
+      'posts/2026-09-02-orphan.md': post('Orphan', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/orphan/',
+        author: 'grace',
+      }),
+    });
+
+    const response = await get(instance, '/2026/09/orphan/', ACTIVITY_STREAMS);
+
+    assert.equal(response.status, 200, 'the object is served');
+    const article = (await response.json()) as Record<string, unknown>;
+    assert.equal(article['attributedTo'], `${BASE_URL}/author/${ADA}/`);
   });
 });
 
