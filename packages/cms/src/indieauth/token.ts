@@ -109,7 +109,7 @@ export function mountTokenInfoEndpoints(app: Hono<GeekityEnv>): void {
     return c.json({
       active: true,
       me: token.me,
-      client_id: token.clientId,
+      ...(token.kind === 'created' ? {} : { client_id: token.clientId }),
       scope: token.scopes.join(' '),
       exp: Math.floor(Date.parse(token.expiresAt) / 1000),
     });

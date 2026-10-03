@@ -41,16 +41,13 @@ export const REFRESH_TOKEN_LIFETIME_MS = 60 * 24 * 60 * 60 * 1000;
  */
 export const LAST_USE_RESOLUTION_MS = 60 * 60 * 1000;
 
-/** One connection as the file keeps it. */
-export interface StoredToken {
+/** What every token in the file has, however it was issued. */
+interface Connection {
   /** Stable for the life of the connection, so a screen can name it. */
   readonly id: string;
   readonly userId: number;
-  /** The canonical me URL the client was handed. */
+  /** The canonical me URL the token speaks for. */
   readonly me: string;
-  readonly clientId: string;
-  /** What the client called itself on the consent screen, when it said. */
-  readonly clientName?: string;
   readonly scopes: readonly Scope[];
   /** The RFC 8707 resource the token is good at, or absent when the client named none. */
   readonly resource?: string;
@@ -61,16 +58,48 @@ export interface StoredToken {
   readonly accessTokenHash: string;
   /** When the current access token stops working. */
   readonly expiresAt: string;
+}
+
+/** One approval of a client at the consent screen, which renews its token by refreshing. */
+export interface AppConnection extends Connection {
+  readonly kind?: undefined;
+  readonly clientId: string;
+  /** What the client called itself on the consent screen, when it said. */
+  readonly clientName?: string;
   readonly refreshTokenHash: string;
   /** When the current refresh token stops working. */
   readonly refreshExpiresAt: string;
+}
+
+/**
+ * A token the person made on the connected apps screen to paste into a script
+ * or a test tool (TASK-230). No client asked for it, so it has a name in place
+ * of one, and nothing could present a refresh token, so it has none: it works
+ * until its access token expires.
+ */
+export interface CreatedToken extends Connection {
+  readonly kind: 'created';
+  readonly name: string;
+}
+
+/** One connection as the file keeps it. */
+export type StoredToken = AppConnection | CreatedToken;
+
+/** What the connected apps screen asks a token to be made with. */
+export interface TokenRequest {
+  readonly userId: number;
+  readonly me: string;
+  readonly name: string;
+  readonly scopes: readonly Scope[];
+  readonly resource: string;
+  readonly lifetimeMs: number;
 }
 
 /** Tokens just issued: the only time the tokens themselves exist anywhere. */
 export interface IssuedTokens {
   readonly accessToken: string;
   readonly refreshToken: string;
-  readonly token: StoredToken;
+  readonly token: AppConnection;
 }
 
 /**
@@ -117,7 +146,7 @@ export async function issueTokens(
   now: Date,
 ): Promise<IssuedTokens> {
   const minted = mint(now);
-  const token: StoredToken = {
+  const token: AppConnection = {
     id: randomBytes(16).toString('base64url'),
     userId: grant.userId,
     me: grant.me,
@@ -130,6 +159,41 @@ export async function issueTokens(
   };
   await update(dataDir, now, (tokens) => [...tokens, token]);
   return { accessToken: minted.accessToken, refreshToken: minted.refreshToken, token };
+}
+
+/**
+ * Make a token for `request.userId`, answering it alongside its record: the
+ * only time the token exists anywhere.
+ */
+export async function createToken(
+  dataDir: string,
+  request: TokenRequest,
+  now: Date,
+): Promise<{ readonly accessToken: string; readonly token: CreatedToken }> {
+  const accessToken = randomBytes(32).toString('base64url');
+  const token: CreatedToken = {
+    kind: 'created',
+    id: randomBytes(16).toString('base64url'),
+    userId: request.userId,
+    me: request.me,
+    name: request.name,
+    scopes: request.scopes,
+    resource: request.resource,
+    issuedAt: now.toISOString(),
+    accessTokenHash: hashToken(accessToken),
+    expiresAt: new Date(now.getTime() + request.lifetimeMs).toISOString(),
+  };
+  await update(dataDir, now, (tokens) => [...tokens, token]);
+  return { accessToken, token };
+}
+
+/**
+ * When `token` can no longer be used at all: an app's when its refresh token
+ * expires, since it can renew its access token until then, and a created
+ * token's when its access token does.
+ */
+export function lapsesAt(token: StoredToken): string {
+  return token.kind === 'created' ? token.expiresAt : token.refreshExpiresAt;
 }
 
 /**
@@ -163,7 +227,8 @@ export async function refreshTokens(
   };
   // Looked for before the write, so a client guessing tokens cannot make the
   // site rewrite the file; the write below checks again under its lock.
-  const matches = (token: StoredToken) =>
+  const matches = (token: StoredToken): token is AppConnection =>
+    token.kind !== 'created' &&
     token.refreshTokenHash === hash &&
     token.clientId === clientId &&
     Date.parse(token.refreshExpiresAt) > now.getTime();
@@ -229,7 +294,7 @@ export function verifyAccessToken(
 export async function revokeToken(dataDir: string, presented: string, now: Date): Promise<boolean> {
   const hash = hashToken(presented);
   const matches = (token: StoredToken) =>
-    token.accessTokenHash === hash || token.refreshTokenHash === hash;
+    token.accessTokenHash === hash || (token.kind !== 'created' && token.refreshTokenHash === hash);
   // Looked for first, so a guessed token cannot make the site rewrite the file.
   if (!listTokens(dataDir).some(matches)) return false;
   await update(dataDir, now, (tokens) => tokens.filter((token) => !matches(token)));
@@ -275,8 +340,8 @@ export async function revokeTokensForUser(dataDir: string, userId: number): Prom
 }
 
 /**
- * Rewrite the file through `change`, dropping every connection whose refresh
- * token has expired first: such a connection can never be used again, and
+ * Rewrite the file through `change`, dropping every connection that has
+ * lapsed first: such a connection can never be used again, and
  * sweeping on write keeps the file to the ones that can.
  */
 async function update(
@@ -288,7 +353,7 @@ async function update(
     tokensFile(dataDir),
     (current) => {
       const tokens = current === undefined ? [] : (JSON.parse(current) as TokensFile).tokens;
-      const live = tokens.filter((token) => Date.parse(token.refreshExpiresAt) > now.getTime());
+      const live = tokens.filter((token) => Date.parse(lapsesAt(token)) > now.getTime());
       return `${JSON.stringify({ tokens: change(live) } satisfies TokensFile, null, 2)}\n`;
     },
     { mode: TOKENS_FILE_MODE },

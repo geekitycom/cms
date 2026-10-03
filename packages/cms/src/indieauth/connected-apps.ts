@@ -5,6 +5,13 @@
  * Only ever your own connections, because a token acts as the person who
  * approved it. Revoking deletes the connection from `data/indieauth-tokens.json`,
  * so the access token and the refresh token stop working on the next request.
+ *
+ * A token can also be created here for a script or a test tool that takes a
+ * pasted token (TASK-230). It is bound to the site, as a Micropub client's is
+ * in effect, and has no refresh token because nothing could present one, so
+ * it lives as long as the person chooses, never more than a year: long enough
+ * for a script not to need a new one every week, short enough that a leaked
+ * one stops working on its own.
  */
 
 import type { Context, Hono } from 'hono';
@@ -12,13 +19,17 @@ import type { Context, Hono } from 'hono';
 import type { AdminRender } from '../admin/documents.ts';
 import { flash } from '../admin/flash.ts';
 import { formatInTimezone } from '../admin/formatting.ts';
+import { findUserById, listUsers } from '../admin/accounts.ts';
 import { readSiteSettings, updateSiteSettings } from '../admin/settings.ts';
 import { ADMIN_TEMPLATES } from '../admin/templates.ts';
 import { CONNECTED_APPS_CHILD, CONNECTED_APPS_PATH } from '../admin/users.ts';
 import type { GeekityEnv } from '../env.ts';
 import { clientIdentifier, sameClient } from './client-id.ts';
 import { SCOPE_LABELS } from './consent.ts';
-import { listTokens, revokeConnection } from './tokens.ts';
+import { SCOPES, siteBaseUrl } from './discovery.ts';
+import { meForSignIn } from './identity.ts';
+import type { Scope } from './request.ts';
+import { createToken, lapsesAt, listTokens, revokeConnection } from './tokens.ts';
 import type { StoredToken } from './tokens.ts';
 
 /** Where a Revoke button posts. */
@@ -32,6 +43,30 @@ export const ADD_CLIENT_WITHOUT_PKCE_PATH = `${CONNECTED_APPS_PATH}/without-pkce
 export const REMOVE_CLIENT_WITHOUT_PKCE_PATH = `${ADD_CLIENT_WITHOUT_PKCE_PATH}/remove`;
 
 export const CLIENT_FIELD = 'client_id';
+
+export const CREATE_TOKEN_PATH = `${CONNECTED_APPS_PATH}/tokens`;
+
+/** The lifetimes a created token may be given, in days. */
+const TOKEN_LIFETIME_DAYS = [7, 30, 90, 365] as const;
+
+const DEFAULT_TOKEN_LIFETIME_DAYS = 30;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const NAME_LIMIT = 100;
+
+interface TokenForm {
+  name: string;
+  scopes: readonly string[];
+  expires: string;
+}
+
+type TokenProblems = Partial<Record<keyof TokenForm, string>>;
+
+/** What the screen shows of the Create a token form: refused, or just created. */
+type TokenOutcome =
+  | { readonly refused: TokenForm; readonly problems: TokenProblems }
+  | { readonly created: { readonly name: string; readonly token: string } };
 
 interface RefusedClient {
   value: string;
@@ -85,6 +120,68 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
     return c.redirect(CONNECTED_APPS_PATH, 303);
   });
 
+  app.post(CREATE_TOKEN_PATH, async (c) => {
+    const { config } = c.var;
+    const body = await c.req.parseBody({ all: true });
+    const form: TokenForm = {
+      name: text(body['name']).trim(),
+      scopes: [body['scope'] ?? []].flat().map(text),
+      expires: text(body['expires']),
+    };
+    const user =
+      c.var.session?.userId == null
+        ? undefined
+        : findUserById(config.dataDir, c.var.session.userId);
+    const scopes = form.scopes.filter((scope): scope is Scope =>
+      (SCOPES as readonly string[]).includes(scope),
+    );
+    const days = TOKEN_LIFETIME_DAYS.find((choice) => String(choice) === form.expires);
+    const problems: TokenProblems = {
+      ...(form.name === '' ? { name: 'Give the token a name, so you can tell it apart.' } : {}),
+      ...(form.name.length > NAME_LIMIT
+        ? { name: `Keep the name to ${NAME_LIMIT} characters.` }
+        : {}),
+      ...(scopes.length === 0 || scopes.length < form.scopes.length
+        ? { scopes: 'Choose at least one thing the token may do.' }
+        : {}),
+      ...(days === undefined ? { expires: 'Choose when the token expires.' } : {}),
+    };
+    if (user === undefined || days === undefined || Object.keys(problems).length > 0) {
+      c.status(400);
+      return render(
+        c,
+        ADMIN_TEMPLATES.connectedApps,
+        screen(c, undefined, { refused: form, problems }),
+      );
+    }
+
+    const baseUrl = siteBaseUrl(c);
+    const { accessToken } = await createToken(
+      config.dataDir,
+      {
+        userId: user.id,
+        me: meForSignIn(`${baseUrl}/`, user, {
+          baseUrl,
+          users: listUsers(config.dataDir),
+          settings: readSiteSettings(config.contentDir),
+        }),
+        name: form.name,
+        scopes,
+        resource: baseUrl,
+        lifetimeMs: days * DAY_MS,
+      },
+      config.now(),
+    );
+    // Shown on this response rather than through a flash, which would keep it
+    // on the session row until the next page.
+    c.header('cache-control', 'no-store');
+    return render(
+      c,
+      ADMIN_TEMPLATES.connectedApps,
+      screen(c, undefined, { created: { name: form.name, token: accessToken } }),
+    );
+  });
+
   app.post(REVOKE_CONNECTION_PATH, async (c) => {
     const { config, session } = c.var;
     const id = (await c.req.parseBody())[CONNECTION_FIELD];
@@ -101,15 +198,21 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
 const NOT_A_CLIENT_ID =
   'Enter the app’s client_id exactly as it sends it: an http or https URL with a domain name, such as https://ia.net/writer.';
 
-function screen(c: Context<GeekityEnv>, refused?: RefusedClient): Record<string, unknown> {
+function screen(
+  c: Context<GeekityEnv>,
+  refused?: RefusedClient,
+  token?: TokenOutcome,
+): Record<string, unknown> {
   const { config } = c.var;
   const userId = c.var.session?.userId;
   const settings = readSiteSettings(config.contentDir);
   const now = config.now().getTime();
   const connections = listTokens(config.dataDir)
-    .filter((token) => token.userId === userId && Date.parse(token.refreshExpiresAt) > now)
+    .filter((stored) => stored.userId === userId && Date.parse(lapsesAt(stored)) > now)
     .sort((a, b) => b.issuedAt.localeCompare(a.issuedAt))
-    .map((token) => row(token, settings.timezone));
+    .map((stored) => row(stored, settings.timezone));
+  const form = token !== undefined && 'refused' in token ? token.refused : undefined;
+  const chosen = new Set(form?.scopes ?? []);
   return {
     section: 'users',
     child: CONNECTED_APPS_CHILD,
@@ -124,6 +227,21 @@ function screen(c: Context<GeekityEnv>, refused?: RefusedClient): Record<string,
       value: refused?.value ?? '',
       problem: refused?.problem ?? '',
     },
+    createToken: {
+      url: CREATE_TOKEN_PATH,
+      name: form?.name ?? '',
+      scopes: SCOPES.map((scope) => ({
+        name: scope,
+        label: SCOPE_LABELS[scope],
+        checked: chosen.has(scope),
+      })),
+      expiries: TOKEN_LIFETIME_DAYS.map((days) => ({
+        days,
+        selected: String(days) === (form?.expires ?? String(DEFAULT_TOKEN_LIFETIME_DAYS)),
+      })),
+      problems: token !== undefined && 'problems' in token ? token.problems : {},
+      created: token !== undefined && 'created' in token ? token.created : undefined,
+    },
   };
 }
 
@@ -137,15 +255,16 @@ function row(token: StoredToken, timezone: string) {
   return {
     id: token.id,
     name: clientLabel(token),
-    url: token.clientId,
+    url: token.kind === 'created' ? undefined : token.clientId,
     scopes: token.scopes.map((scope) => SCOPE_LABELS[scope]),
     issued: when(token.issuedAt),
     lastUsed: token.lastUsedAt === undefined ? undefined : when(token.lastUsedAt),
-    expires: when(token.refreshExpiresAt),
+    expires: when(lapsesAt(token)),
   };
 }
 
-/** What to call a client: its own name, or its URL when it gave none. */
+/** What to call a connection: the name it was created with, the client's own, or its URL. */
 function clientLabel(token: StoredToken): string {
+  if (token.kind === 'created') return token.name;
   return token.clientName ?? token.clientId;
 }

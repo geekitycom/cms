@@ -397,7 +397,11 @@ export const logTokenRequest = recordActivity(async (c) => {
 /** Who a Micropub request acted as, once the bearer guard let it in. */
 function bearerFacts(c: Context<ActivityEnv>): Pick<Facts, 'clientId' | 'user'> {
   const { bearer } = c.var;
-  return { clientId: bearer?.token.clientId, user: bearer?.user.username };
+  const token = bearer?.token;
+  return {
+    clientId: token?.kind === 'created' ? undefined : token?.clientId,
+    user: bearer?.user.username,
+  };
 }
 
 /** A query, or a create, update, delete or undelete, at the Micropub endpoint. */

@@ -14,8 +14,9 @@
     <p class="admin-hint">
       These apps signed in as you and can act as you, within the permissions
       listed. An app that keeps using its connection stays connected; one left
-      unused is disconnected on the date shown. Revoking disconnects it now:
-      its next request is refused, and it has to ask you again.
+      unused is disconnected on the date shown. A token you created works
+      until the date shown. Revoking disconnects it now: its next request is
+      refused, and it has to ask you again.
     </p>
 
     <table class="admin-list">
@@ -33,7 +34,13 @@
       <tbody>
         {% for connection in connections %}
           <tr>
-            <td><a href="{{ connection.url }}">{{ connection.name }}</a></td>
+            <td>
+              {% if connection.url %}
+                <a href="{{ connection.url }}">{{ connection.name }}</a>
+              {% else %}
+                {{ connection.name }} <span class="admin-status">Token you created</span>
+              {% endif %}
+            </td>
             <td>
               <ul>
                 {% for scope in connection.scopes %}
@@ -72,6 +79,51 @@
       is listed here, with a button to disconnect it.
     </p>
   {% endif %}
+
+  <h2 id="create-token">Create a token</h2>
+
+  {% if createToken.created %}
+    <div class="admin-flash" role="status">
+      {{ field.text('created-token', 'created-token', 'Token for ' ~ createToken.created.name, createToken.created.token,
+           readonly=true, spellcheck='false',
+           hint='Copy it now. It will not be shown again: the site keeps only a fingerprint of it.') }}
+    </div>
+  {% endif %}
+
+  {% if createToken.problems.name or createToken.problems.scopes or createToken.problems.expires %}
+    {% call field.summary('Nothing was saved. Fix the fields marked below and try again.') %}
+      {{ field.problem('create-token-name', createToken.problems.name) }}
+      {{ field.problem('create-token-scope-profile', createToken.problems.scopes) }}
+      {{ field.problem('create-token-expires', createToken.problems.expires) }}
+    {% endcall %}
+  {% endif %}
+
+  <p class="admin-hint">
+    Some tools and scripts cannot sign in, but accept a token you paste in,
+    such as the Manual tab of micropub.rocks. A token acts as you on this
+    site's Micropub endpoint, with only the permissions you tick, until it
+    expires or you revoke it above.
+  </p>
+
+  <form method="post" action="{{ createToken.url }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    {{ field.text('create-token-name', 'name', 'Name', createToken.name,
+         error=createToken.problems.name, required=true,
+         hint='What will use it, such as Publishing script.') }}
+    <fieldset>
+      <legend>It may</legend>
+      {% for scope in createToken.scopes %}
+        {{ field.checkbox('create-token-scope-' ~ scope.name, 'scope', scope.label, checked=scope.checked, value=scope.name,
+             error=(createToken.problems.scopes if loop.first else '')) }}
+      {% endfor %}
+    </fieldset>
+    {% call field.select('create-token-expires', 'expires', 'Expires after', error=createToken.problems.expires) %}
+      {% for expiry in createToken.expiries %}
+        <option value="{{ expiry.days }}"{% if expiry.selected %} selected{% endif %}>{% if expiry.days == 365 %}1 year{% else %}{{ expiry.days }} days{% endif %}</option>
+      {% endfor %}
+    {% endcall %}
+    <button type="submit">Create token</button>
+  </form>
 
   <h2 id="without-pkce">Apps allowed without PKCE</h2>
 
