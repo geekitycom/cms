@@ -1,5 +1,6 @@
 import { geoPoint, geoProblem, parseGeoUri, postLocation } from '../content/location.ts';
 import type { GeoPoint, PostLocation } from '../content/location.ts';
+import type { FieldError } from './editor-layout.ts';
 
 export interface LocationForm {
   geo: string;
@@ -65,13 +66,16 @@ export function readLocationForm(body: Record<string, unknown>): LocationForm {
 
 export function resolveLocation(
   form: LocationForm,
-): { location: PostLocation | undefined } | { error: string } {
+): { location: PostLocation | undefined } | FieldError {
   const accuracy = form.accuracy === '' ? undefined : Number(form.accuracy);
   if (accuracy !== undefined && (!Number.isFinite(accuracy) || accuracy < 0)) {
-    return { error: 'Accuracy has to be a number of metres, 0 or more.' };
+    return {
+      error: 'Accuracy has to be a number of metres, 0 or more.',
+      field: 'editor-location-accuracy',
+    };
   }
   const geo = coordinates(form.geo, accuracy);
-  if ('error' in geo) return geo;
+  if ('error' in geo) return { error: geo.error, field: 'editor-location-geo' };
   const word = (value: string): string | undefined => (value === '' ? undefined : value);
   return {
     location: postLocation({
