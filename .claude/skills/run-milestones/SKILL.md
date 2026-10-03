@@ -63,15 +63,15 @@ or spawn a new one with the state described; commit only when the checks pass.
   milestone's branch from this tip.
 - Do not push and do not open a PR unless the user asked for it in this run. When
   asked, push each milestone branch, then open its PR with `gh pr create`, base
-  set to the branch below it (`main` for the first), and a title in the form
-  `CLAUDE.md` demands, for example `feat(cms)!: milestone M14 named themes`, with
-  `!` if any commit on the branch is breaking. Then link them into a GitHub stack,
+  set to the branch below it (`main` for the first), and a plain prose title as
+  `CLAUDE.md` demands, for example `M14 Named themes`. Then link them into a
+  GitHub stack,
   bottom to top, by PR number:
   ```
   gh stack link 30 31 32
   ```
   Create the PRs yourself first: `gh stack link` can open PRs for bare branches,
-  but it invents their titles and the `pr-title` CI job rejects those. The
+  but it invents their titles. The
   extension is `github/gh-stack`; `gh stack view` shows the stack and
   `gh stack merge --rebase` lands it, but merging is the user's call.
 

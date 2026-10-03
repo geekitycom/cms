@@ -66,12 +66,13 @@ else is rejected.
 
 ## Pull request titles
 
-A pull request title follows the same Conventional Commits format as a commit
-subject: `<type>(<scope>): <subject>`, lower case, imperative, no trailing full
-stop, with `!` after the scope when any commit on the branch is breaking. The
-`pr-title` job in `.github/workflows/ci.yml` rejects anything else, because a
-squash merge lands the title as the commit message release-please reads.
+Pull requests land as merge commits, so release-please reads every commit on
+the branch, and those commits carry the version bump and the changelog. A
+pull request title is plain prose that says what the branch delivers, for
+example `Micropub interop: indiebookclub, checkins and kept properties` or
+`M7 Comments: replies on the page`.
 
-A milestone branch is titled after its milestone, for example
-`feat(cms)!: milestone M6 file-first state`. Never use a bare prose title
-such as `M7 Comments: replies on the page`.
+Never start a pull request title with a Conventional Commits type. GitHub puts
+the title in the merge commit's body, and release-please reads any line there
+that parses as a Conventional Commit. A title such as `feat(cms): …` adds a
+second changelog entry for work its commits already list.
