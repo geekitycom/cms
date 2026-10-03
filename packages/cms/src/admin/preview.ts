@@ -1,6 +1,7 @@
 import type { Context, Hono } from 'hono';
 
 import { CITATION_PROPERTIES } from '../content/citation.ts';
+import { READ_OF_FRONT_MATTER_KEY, READ_STATUS_FRONT_MATTER_KEY } from '../content/read.ts';
 import type { Document, DocumentType } from '../content/document.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { defaultPermalink, slugify } from '../content/slug.ts';
@@ -10,6 +11,7 @@ import type { GeekityEnv } from '../env.ts';
 import { authorContext } from '../web/authors.ts';
 import { documentContext } from '../web/context.ts';
 import { findUserById, listUsers } from './accounts.ts';
+import { READ_FIELDS, resolveRead, submittedReadOfForm } from './read-field.ts';
 import { TEMPLATES } from '../web/render.ts';
 import { splitTags } from './documents.ts';
 import { readSiteSettings } from './settings.ts';
@@ -93,18 +95,30 @@ function previewDocument(
     ...(text(body['in-reply-to']).trim() === ''
       ? {}
       : { inReplyTo: text(body['in-reply-to']).trim() }),
-    // What the post likes, reposts or bookmarks, as the editor would write it.
-    extra: Object.fromEntries(
-      CITATION_PROPERTIES.flatMap((property) => {
-        const cited = text(body[property]).trim();
-        return cited === '' ? [] : [[property, cited]];
-      }),
-    ),
+    // What the post likes, reposts, bookmarks or read, as the editor would write it.
+    extra: {
+      ...Object.fromEntries(
+        CITATION_PROPERTIES.flatMap((property) => {
+          const cited = text(body[property]).trim();
+          return cited === '' ? [] : [[property, cited]];
+        }),
+      ),
+      ...previewRead(body),
+    },
     body: markdown,
     html: renderMarkdown(markdown),
     // A preview is not a version of anything, so it has no hash to be
     // mistaken for one.
     hash: '',
+  };
+}
+
+function previewRead(body: Record<string, unknown>): Record<string, unknown> {
+  const resolved = resolveRead(text(body[READ_FIELDS.status]).trim(), submittedReadOfForm(body));
+  if (!('read' in resolved) || resolved.read === undefined) return {};
+  return {
+    [READ_OF_FRONT_MATTER_KEY]: resolved.read.of,
+    [READ_STATUS_FRONT_MATTER_KEY]: resolved.read.status,
   };
 }
 

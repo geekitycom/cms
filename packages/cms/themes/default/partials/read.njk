@@ -1,0 +1,21 @@
+{#
+  What a read post read (TASK-229), in the markup indiebookclub prints for
+  one: the status as a `p-read-status` whose value is the mf2 word and whose
+  text is the words for it, then the work as a `p-read-of` `h-cite` with its
+  `p-name`, its `p-author` and its `p-uid`, whose value keeps the `isbn:` or
+  `doi:` a parser reads. Together they say the sentence the post federates
+  with.
+
+  An entry includes it with `read` on the context; a listing sets it from the
+  entry it is printing. Nothing is printed for a post that read nothing.
+#}
+{% if read %}
+<p class="read-line">
+  <data class="p-read-status" value="{{ read.status }}">{{ read.statusLabel }}</data>: <span class="p-read-of h-cite">
+    {%- if read.of.url %}<a class="u-url" href="{{ read.of.url }}"><cite class="p-name">{{ read.of.name }}</cite></a>
+    {%- else %}<cite class="p-name">{{ read.of.name }}</cite>{% endif %}
+    {%- if read.of.author %} by <span class="p-author">{{ read.of.author }}</span>{% endif %}
+    {%- if read.of.uid %}, <data class="p-uid" value="{{ read.of.uid }}">{{ read.of.uidLabel }}</data>{% endif -%}
+  </span>
+</p>
+{% endif %}

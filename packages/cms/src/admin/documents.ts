@@ -11,6 +11,15 @@ import { parseDocument } from '../content/parser.ts';
 import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import {
+  isReadStatus,
+  READ_OF_FRONT_MATTER_KEY,
+  READ_STATUS_FRONT_MATTER_KEY,
+  READ_STATUS_LABELS,
+  READ_STATUSES,
+  readWork,
+  readWorkFrontMatter,
+} from '../content/read.ts';
+import {
   ENCLOSURE_FRONT_MATTER_KEY,
   enclosureOf,
   isWebUrl,
@@ -85,6 +94,14 @@ import {
   resolvePhotos,
 } from './photo-field.ts';
 import type { PhotoRow } from './photo-field.ts';
+import {
+  BLANK_READ_OF_FORM,
+  READ_FIELDS,
+  readOfForm,
+  resolveRead,
+  submittedReadOfForm,
+} from './read-field.ts';
+import type { ReadOfForm } from './read-field.ts';
 import {
   SYNDICATE_TO_FRONT_MATTER_KEY,
   syndicateToOf,
@@ -390,6 +407,8 @@ async function saveFromForm(
     author: text(body['author']).trim(),
     inReplyTo: text(body['in-reply-to']).trim(),
     ...citationFields((property) => (kind.type === 'post' ? text(body[property]).trim() : '')),
+    readStatus: kind.type === 'post' ? text(body[READ_FIELDS.status]).trim() : '',
+    readOf: kind.type === 'post' ? submittedReadOfForm(body) : BLANK_READ_OF_FORM,
     lang: text(body['lang']).trim(),
     draft: body['draft'] !== undefined,
     visibility: formVisibility(text(body['visibility'])),
@@ -537,6 +556,8 @@ export async function writeDocument(
         );
       }
     }
+    const read = resolveRead(form.readStatus, form.readOf);
+    if ('error' in read) return refused(read.error);
   }
 
   if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
@@ -609,6 +630,7 @@ export async function writeDocument(
     slugify(form.title) ||
     (document?.slug ?? '') ||
     noteSlug(form.body) ||
+    slugify(form.readOf.name) ||
     'untitled';
   const trashed = document !== undefined && isTrashedPath(document.path);
   // The calendar day the document is filed under: the site zone's day at its
@@ -967,6 +989,8 @@ function resolveExtra(
     | 'pinned'
     | 'syndicateTo'
     | 'visibility'
+    | 'readStatus'
+    | 'readOf'
     | (typeof CITATION_FIELDS)[CitationProperty]
   >,
   now: Date,
@@ -984,6 +1008,17 @@ function resolveExtra(
       const cited = form[CITATION_FIELDS[property]];
       if (cited === '') delete extra[property];
       else extra[property] = cited;
+    }
+    const resolved = resolveRead(form.readStatus, form.readOf);
+    if ('read' in resolved) {
+      const { read } = resolved;
+      if (read === undefined) {
+        delete extra[READ_OF_FRONT_MATTER_KEY];
+        delete extra[READ_STATUS_FRONT_MATTER_KEY];
+      } else {
+        extra[READ_OF_FRONT_MATTER_KEY] = readWorkFrontMatter(read.of);
+        extra[READ_STATUS_FRONT_MATTER_KEY] = read.status;
+      }
     }
   }
 
@@ -1454,6 +1489,13 @@ export interface EditorForm {
   likeOf: string;
   /** The page this one bookmarks, the mf2 `bookmark-of` (TASK-169). Posts only. */
   bookmarkOf: string;
+  /**
+   * How far the post's author got with what they read, the mf2 `read-status`
+   * (TASK-229), as the file or the form spells it. Posts only.
+   */
+  readStatus: string;
+  /** What was read, the mf2 `read-of` (TASK-229). Posts only. */
+  readOf: ReadOfForm;
   /** The language it is written in, the `lang` key; empty for the site's. */
   lang: string;
   draft: boolean;
@@ -1520,6 +1562,8 @@ export function blankForm(
     author: '',
     inReplyTo: '',
     ...citationFields(() => ''),
+    readStatus: '',
+    readOf: BLANK_READ_OF_FORM,
     lang: '',
     draft: false,
     visibility: 'public',
@@ -1566,6 +1610,13 @@ export function formFor(
     // As the file spells it, so a save writes back what it read.
     ...citationFields((property) =>
       document.type === 'post' ? citationText(document.extra[property]) : '',
+    ),
+    readStatus:
+      document.type === 'post' && typeof document.extra[READ_STATUS_FRONT_MATTER_KEY] === 'string'
+        ? document.extra[READ_STATUS_FRONT_MATTER_KEY]
+        : '',
+    readOf: readOfForm(
+      document.type === 'post' ? readWork(document.extra[READ_OF_FRONT_MATTER_KEY]) : undefined,
     ),
     lang:
       typeof document.extra[LANG_FRONT_MATTER_KEY] === 'string'
@@ -1658,6 +1709,13 @@ async function renderEditor(
           photoRows: photoRowViews(form.photos, readAltTexts(c.var.config.contentDir)),
           photoChoices: await photoChoices(c.var.config.contentDir),
           locationFields: LOCATION_FIELDS,
+          readFields: READ_FIELDS,
+          readStatuses: READ_STATUSES.map((value) => ({ value, label: READ_STATUS_LABELS[value] })),
+          // Offered back as the file spells it, so the select never silently
+          // changes a value somebody typed by hand.
+          ...(form.readStatus === '' || isReadStatus(form.readStatus)
+            ? {}
+            : { unrecognizedReadStatus: form.readStatus }),
           // TASK-155: one checkbox per target the site declares.
           syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
             ...target,

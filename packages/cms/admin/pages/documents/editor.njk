@@ -220,6 +220,32 @@
         <label for="editor-bookmark-of">Bookmark of</label>
         <input id="editor-bookmark-of" name="bookmark-of" type="url" value="{{ form.bookmarkOf }}" />
         <p class="admin-hint">The address of a post this one likes, reposts or bookmarks. Leave them empty for a post that cites nothing.</p>
+
+        {#- The mf2 `read-status` and `read-of` (TASK-229): a read post says
+            what its author read and how far they got, as indiebookclub
+            writes it. -#}
+        <fieldset class="admin-editor-enclosure admin-editor-read">
+          <legend>Read</legend>
+          <label for="editor-read-status">Read status</label>
+          <select id="editor-read-status" name="{{ readFields.status }}">
+            <option value=""{% if form.readStatus == "" %} selected{% endif %}>Not a read</option>
+            {% for status in readStatuses %}
+              <option value="{{ status.value }}"{% if form.readStatus == status.value %} selected{% endif %}>{{ status.label }}</option>
+            {% endfor %}
+            {% if unrecognizedReadStatus %}
+              <option value="{{ unrecognizedReadStatus }}" selected>{{ unrecognizedReadStatus }} (not recognized)</option>
+            {% endif %}
+          </select>
+          <label for="editor-read-of-name">Title</label>
+          <input id="editor-read-of-name" name="{{ readFields.name }}" type="text" value="{{ form.readOf.name }}" />
+          <label for="editor-read-of-author">Author</label>
+          <input id="editor-read-of-author" name="{{ readFields.author }}" type="text" value="{{ form.readOf.author }}" />
+          <label for="editor-read-of-uid">Identifier</label>
+          <input id="editor-read-of-uid" name="{{ readFields.uid }}" type="text" value="{{ form.readOf.uid }}" placeholder="isbn:9780441478125" autocomplete="off" spellcheck="false" />
+          <label for="editor-read-of-url">Address</label>
+          <input id="editor-read-of-url" name="{{ readFields.url }}" type="url" value="{{ form.readOf.url }}" />
+          <p class="admin-hint">A book or paper this post says its author read. An identifier is an ISBN or a DOI, written isbn:… or doi:…. Choose Not a read and empty every box to remove it.</p>
+        </fieldset>
       {% endif %}
 
       <label for="editor-description">Description</label>

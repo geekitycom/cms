@@ -2,8 +2,11 @@ import { blankForm, POST_KIND } from '../admin/documents.ts';
 import type { EditorForm } from '../admin/documents.ts';
 import { locationForm } from '../admin/location-field.ts';
 import type { PhotoRow } from '../admin/photo-field.ts';
+import { BLANK_READ_OF_FORM } from '../admin/read-field.ts';
+import type { ReadOfForm } from '../admin/read-field.ts';
 import { isWebUrl } from '../content/enclosure.ts';
 import { locationFromMicropub } from '../content/location.ts';
+import { isReadStatus, READ_STATUSES } from '../content/read.ts';
 import { isVisibility } from '../content/visibility.ts';
 import { normalizeBody } from '../content/writer.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
@@ -58,6 +61,8 @@ const PROPERTIES = new Set<string>([
   'post-status',
   'mp-syndicate-to',
   'visibility',
+  'read-of',
+  'read-status',
 ]);
 
 /**
@@ -205,6 +210,11 @@ export function createForm(
     return photo;
   });
   form.location = location(properties.get('location') ?? [], errors);
+  form.readOf = readOf(properties.get('read-of') ?? [], errors);
+  form.readStatus = text('read-status');
+  if (form.readStatus !== '' && !isReadStatus(form.readStatus)) {
+    errors.push(`read-status is ${READ_STATUSES.join(', ')}, not ${form.readStatus}.`);
+  }
   for (const [property, field] of Object.entries(SINGLE_VALUED)) {
     form[field] = text(property);
   }
@@ -262,6 +272,49 @@ function location(values: readonly unknown[], errors: string[]): EditorForm['loc
     return locationForm(undefined);
   }
   return locationForm(parsed);
+}
+
+/** The h-cite fields `read-of` may carry, each one text value. */
+const READ_OF_PROPERTIES = ['name', 'author', 'uid', 'url'] as const;
+
+/**
+ * What was read, sent as an embedded h-cite, as the editor's fields. Whether
+ * they make a read with the `read-status` beside them is the editor's rule,
+ * which the write applies.
+ */
+function readOf(values: readonly unknown[], errors: string[]): ReadOfForm {
+  if (values.length > 1) errors.push('read-of takes one value.');
+  const [value] = values;
+  if (value === undefined) return BLANK_READ_OF_FORM;
+  const { type, properties } =
+    typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  if (
+    !Array.isArray(type) ||
+    !type.includes('h-cite') ||
+    typeof properties !== 'object' ||
+    properties === null
+  ) {
+    errors.push('read-of is an h-cite, { "type": ["h-cite"], "properties": { "name": ["…"] } }.');
+    return BLANK_READ_OF_FORM;
+  }
+  const given = properties as Record<string, unknown>;
+  const unknown = Object.keys(given).filter(
+    (name) => !(READ_OF_PROPERTIES as readonly string[]).includes(name),
+  );
+  if (unknown.length > 0) errors.push(`read-of does not understand ${unknown.join(', ')}.`);
+  const field = (name: (typeof READ_OF_PROPERTIES)[number]): string => {
+    const values = given[name] ?? [];
+    if (
+      !Array.isArray(values) ||
+      values.length > 1 ||
+      !values.every((v) => typeof v === 'string')
+    ) {
+      errors.push(`read-of ${name} takes one text value.`);
+      return '';
+    }
+    return (values[0] ?? '').trim();
+  };
+  return { name: field('name'), author: field('author'), uid: field('uid'), url: field('url') };
 }
 
 /** The body: plain text as the Markdown it is written in, or HTML as it came. */

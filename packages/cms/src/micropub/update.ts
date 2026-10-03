@@ -4,6 +4,8 @@ import { photoRows } from '../admin/photo-field.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { locationToMicropub } from '../content/location.ts';
+import { readOf } from '../content/read.ts';
+import type { ReadOf } from '../content/read.ts';
 import type { PostLocations } from '../content/locations.ts';
 import { visibilityOf, visibilityText } from '../content/visibility.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
@@ -26,6 +28,8 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   'repost-of': ['repostOf'],
   'like-of': ['likeOf'],
   'bookmark-of': ['bookmarkOf'],
+  'read-of': ['readOf'],
+  'read-status': ['readStatus'],
   published: ['date'],
   'post-status': [],
   'p3k-content-type': [],
@@ -59,6 +63,11 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
   if (document.tags.length > 0) properties['category'] = [...document.tags];
   text('in-reply-to', document.inReplyTo);
   for (const { property, url } of citationsOf(document.extra)) text(property, url);
+  const read = readOf(document.extra);
+  if (read !== undefined) {
+    properties['read-of'] = [readCite(read.of)];
+    properties['read-status'] = [read.status];
+  }
   text('published', document.date);
   properties['post-status'] = [document.draft ? 'draft' : 'published'];
   properties['visibility'] = [visibilityText(visibilityOf(document))];
@@ -73,6 +82,15 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
   const selected = syndicateToOf(document.extra).filter((id) => declared.has(id));
   if (selected.length > 0) properties['mp-syndicate-to'] = selected;
   return properties;
+}
+
+/** What was read as the embedded h-cite a create sends. */
+function readCite(of: ReadOf): object {
+  const fields = Object.entries(of).filter(([, value]) => value !== undefined);
+  return {
+    type: ['h-cite'],
+    properties: Object.fromEntries(fields.map(([name, value]) => [name, [value]])),
+  };
 }
 
 /**

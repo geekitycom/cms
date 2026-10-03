@@ -108,6 +108,14 @@ async function submit(
     'like-of': field(html, 'like-of') ?? '',
     'repost-of': field(html, 'repost-of') ?? '',
     'bookmark-of': field(html, 'bookmark-of') ?? '',
+    'read-status':
+      /<select[^>]*name="read-status"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(
+        html,
+      )?.[1] ?? '',
+    'read-of-name': field(html, 'read-of-name') ?? '',
+    'read-of-author': field(html, 'read-of-author') ?? '',
+    'read-of-uid': field(html, 'read-of-uid') ?? '',
+    'read-of-url': field(html, 'read-of-url') ?? '',
     lang: field(html, 'lang') ?? '',
     visibility:
       /<select[^>]*name="visibility"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(
@@ -551,6 +559,95 @@ describe('likes, reposts and bookmarks in the editor (TASK-169 AC #4)', () => {
     assert.match(await response.text(), /Like of has to be a web address/);
     assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
   });
+});
+
+describe('a read in the editor (TASK-229 AC #2)', () => {
+  const FILE = ['posts', '2026-01-02-published.md'];
+  const BOOK = {
+    'read-status': 'finished',
+    'read-of-name': 'The Left Hand of Darkness',
+    'read-of-author': 'Ursula K. Le Guin',
+    'read-of-uid': 'isbn:9780441478125',
+    'read-of-url': 'https://books.example/left-hand/',
+  };
+
+  async function published(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  it('sets read-of and read-status, shows them on reload, and clears them again', async () => {
+    const { contentDir, agent } = await published();
+
+    const blank = await (await agent.get('/admin/posts/new')).text();
+    assert.equal(field(blank, 'read-of-name'), '', 'a new post offers read-of empty');
+
+    assert.equal((await submit(agent, '/admin/posts/published', BOOK)).status, 303);
+    const { data } = matter(await readFile(path.join(contentDir, ...FILE), 'utf8'));
+    assert.equal(data['read-status'], 'finished');
+    assert.deepEqual(data['read-of'], {
+      name: 'The Left Hand of Darkness',
+      author: 'Ursula K. Le Guin',
+      uid: 'isbn:9780441478125',
+      url: 'https://books.example/left-hand/',
+    });
+
+    const reloaded = await (await agent.get('/admin/posts/published')).text();
+    assert.equal(field(reloaded, 'read-of-name'), 'The Left Hand of Darkness');
+    assert.equal(field(reloaded, 'read-of-uid'), 'isbn:9780441478125');
+    assert.match(reloaded, /<option value="finished" selected>/);
+
+    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
+    const kept = matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data;
+    assert.equal(kept['read-status'], 'finished', 'another save keeps it');
+    assert.equal((kept['read-of'] as Record<string, string>)['name'], 'The Left Hand of Darkness');
+
+    const cleared = Object.fromEntries(Object.keys(BOOK).map((name) => [name, '']));
+    assert.equal((await submit(agent, '/admin/posts/published', cleared)).status, 303);
+    const written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.doesNotMatch(written, /read-/, 'both keys are gone, not left empty');
+  });
+
+  it('offers a read-status it does not recognize back as the file spells it', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+        extra: ['read-of: A Book', 'read-status: abandoned'],
+      },
+    ]);
+    const agent = await signedIn(await box.site({ contentDir }));
+    const html = await (await agent.get('/admin/posts/published')).text();
+    assert.match(html, /<option value="abandoned" selected>abandoned \(not recognized\)/);
+    assert.equal(field(html, 'read-of-name'), 'A Book');
+  });
+
+  for (const [changes, message] of [
+    [{ 'read-of-name': 'A Book' }, /read status/i],
+    [{ 'read-status': 'reading' }, /title of what was read/],
+    [{ ...BOOK, 'read-of-url': 'a book' }, /has to be a web address/],
+  ] as const) {
+    it(`refuses ${JSON.stringify(changes)}, and writes nothing`, async () => {
+      const { contentDir, agent } = await published();
+      const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+      const response = await submit(agent, '/admin/posts/published', changes);
+
+      assert.equal(response.status, 400);
+      assert.match(await response.text(), message);
+      assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+    });
+  }
 });
 
 describe('the post language in the editor (TASK-154 AC #1)', () => {
