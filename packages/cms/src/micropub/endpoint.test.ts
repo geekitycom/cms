@@ -77,16 +77,20 @@ describe('q=config', () => {
     const config = (await response.json()) as Record<string, unknown>;
     assert.equal(config['media-endpoint'], `${BASE}/_geekity/micropub/media`);
     assert.deepEqual(config['syndicate-to'], []);
-    assert.deepEqual(config['post-types'], [
-      { type: 'note', name: 'Note' },
-      { type: 'article', name: 'Article' },
-      { type: 'reply', name: 'Reply' },
-      { type: 'photo', name: 'Photo' },
-      { type: 'like', name: 'Like' },
-      { type: 'repost', name: 'Repost' },
-      { type: 'bookmark', name: 'Bookmark' },
-      { type: 'read', name: 'Read' },
-    ]);
+    const postTypes = config['post-types'] as { type: string; name: string }[];
+    assert.deepEqual(
+      postTypes.map(({ type, name }) => ({ type, name })),
+      [
+        { type: 'note', name: 'Note' },
+        { type: 'article', name: 'Article' },
+        { type: 'reply', name: 'Reply' },
+        { type: 'photo', name: 'Photo' },
+        { type: 'like', name: 'Like' },
+        { type: 'repost', name: 'Repost' },
+        { type: 'bookmark', name: 'Bookmark' },
+        { type: 'read', name: 'Read' },
+      ],
+    );
     assert.deepEqual(config['q'], ['config', 'syndicate-to', 'category', 'source']);
   });
 

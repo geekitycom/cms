@@ -1755,7 +1755,10 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
 - `?q=config` lists the media endpoint, the syndication targets under
   `syndicate-to`, the post types the site accepts (note, article, reply, photo,
   like, repost, bookmark and read), the queries it answers, and the visibility
-  values a post may take, `"visibility": ["public", "unlisted"]`.
+  values a post may take, `"visibility": ["public", "unlisted"]`. Each post
+  type lists the `properties` a client should offer for it and the
+  `required-properties` that make a post that type, so a client that reads
+  the list, such as Micropublish, offers no field the site refuses.
 - `?q=syndicate-to` lists the syndication targets on their own. Each is the
   `uid` and `name` of a target in `content/_data/syndicationTargets.json`, with
   its `id` as the `uid`. A site that declares none lists `[]`. The file is read

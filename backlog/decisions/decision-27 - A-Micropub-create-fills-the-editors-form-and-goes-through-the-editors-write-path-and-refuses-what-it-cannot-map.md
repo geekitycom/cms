@@ -77,3 +77,12 @@ indiebookclub posts reads: `read-status` and an embedded h-cite `read-of`, with 
 | `read-status` `to-read` / `reading` / `finished` | Read status | `read-status` |
 
 A `read-of` that is not an h-cite, an h-cite property other than the four, or a `read-status` other than the three is refused by name. The two only mean something together, so the editor's rule refuses one without the other, with the editor's message. `q=source` returns `read-of` as the h-cite a create sends. A read federates as a `Note` that opens with the sentence the page prints; it has no fediverse object, so decision-28's `Like` and `Announce` do not apply.
+
+## Amendment (TASK-228, 2026-10-03): q=config lists each type's properties
+
+Micropublish, and any client that follows the micropub-extensions post-types convention, shows its own default fields for a type unless `q=config` says which properties that type takes. Each `post-types` entry now carries `properties` and `required-properties`, from `POST_TYPES` in `src/micropub/endpoint.ts`, whose names are typed by `Property`, the union of the names `createForm` accepts, so a name it would refuse cannot be listed.
+
+- `required-properties` are what Post Type Discovery needs to call a post that type: `like-of`, `repost-of`, `in-reply-to`, `photo`, `bookmark-of`, `read-of` with `read-status`; `content` for a note, `name` and `content` for an article.
+- `properties` are those, then the properties that never change a post's type: `content`, `summary`, `category`, `location`, `published`, `post-status`, `visibility`, `mp-slug`, `mp-syndicate-to`, and `name` on every type but a note, where it would make an article.
+- Another type's own property is not listed, though a create accepts it, since it makes the post that type instead: a like with `in-reply-to` is still accepted, as a like, but the reply form is where that property is offered.
+- `slug`, `syndicate-to` and `p3k-content-type` are accepted and not listed: the first two are legacy names for listed properties, and the third changes nothing the site writes.
