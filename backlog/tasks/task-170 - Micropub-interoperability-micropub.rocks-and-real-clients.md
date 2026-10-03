@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-29 01:55'
-updated_date: '2026-10-03 16:02'
+updated_date: '2026-10-03 16:12'
 labels:
   - micropub
   - indieweb
@@ -86,6 +86,8 @@ AC#3: README.md ## Micropub rewritten as one section (it was ### Micropub under 
 2026-10-02: micropub.rocks cannot sign in to the site (2017 IndieAuth client, no PKCE, no metadata discovery), and legacy IndieAuth will not be supported (TASK-219). Running its server tests needs its Manual tab: endpoint https://shll.me/_geekity/micropub plus an access token obtained some other way. See TASK-219 for the Create token proposal.
 
 2026-10-03, micropub.rocks against shll.me on 0.18.0 (signed in via a created token or the PKCE allowlist): test 204 answers 400 'does not understand checkin', as expected by design until TASK-236 maps checkin onto the post's location.
+
+2026-10-03: micropub.rocks test 700 answers 403 insufficient_scope, because micropub.rocks requests 'create update delete undelete' and the media endpoint requires media. Filed as TASK-238 (accept create or media there).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
