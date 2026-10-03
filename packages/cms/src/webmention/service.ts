@@ -353,7 +353,7 @@ interface Told {
 
 /**
  * Every external page any of these versions of a post links to, in order: the
- * post it replies to first, then what it reposts, likes or bookmarks, then the links in its body, then the syndication
+ * post it replies to first, then what it reposts, likes, bookmarks or reads, then the links in its body, then the syndication
  * targets it selects, which the theme links to inside its h-entry.
  */
 function targetsOf(

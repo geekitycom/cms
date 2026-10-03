@@ -220,7 +220,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     terms: [...document.categories, ...document.tags],
     summary: feedExcerpt(document),
     html:
-      readLineOf(document) +
+      readLine(readOf(document.extra)) +
       photosHtml(photos, context.altTexts ?? new Map(), baseUrl) +
       absoluteHtmlUrls(document.html, link, baseUrl),
     markdown: document.body,
@@ -321,12 +321,7 @@ export const EXCERPT_WORDS = 55;
  */
 export function feedExcerpt(document: Document): string {
   if (document.description !== undefined) return document.description;
-  return excerptFromHtml(readLineOf(document) + document.html);
-}
-
-function readLineOf(document: Document): string {
-  const read = readOf(document.extra);
-  return read === undefined ? '' : readLine(read);
+  return excerptFromHtml(readLine(readOf(document.extra)) + document.html);
 }
 
 /**

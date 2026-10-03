@@ -274,7 +274,10 @@ export function postObject(
   if (postObjectType(document) === 'Note') {
     return new Note({
       ...common,
-      contents: inLanguage(citing(document) + reading(document) + noteContent(document), language),
+      contents: inLanguage(
+        citing(document) + readLine(readOf(document.extra)) + noteContent(document),
+        language,
+      ),
     });
   }
 
@@ -283,7 +286,10 @@ export function postObject(
     ...common,
     name: document.title === '' ? null : document.title,
     summaries: summary === '' ? [] : inLanguage(summary, language),
-    contents: inLanguage(citing(document) + reading(document) + document.html, language),
+    contents: inLanguage(
+      citing(document) + readLine(readOf(document.extra)) + document.html,
+      language,
+    ),
   });
 }
 
@@ -412,11 +418,6 @@ function citing(document: Document): string {
       return `<p>${CITING_VERBS[property]} <a href="${href}">${escapeHtml(url)}</a></p>\n`;
     })
     .join('');
-}
-
-function reading(document: Document): string {
-  const read = readOf(document.extra);
-  return read === undefined ? '' : readLine(read);
 }
 
 const CITING_VERBS: Readonly<Record<CitationProperty, string>> = {

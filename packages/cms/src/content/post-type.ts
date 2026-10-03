@@ -117,8 +117,7 @@ export function postLabel(
 ): string {
   if (document.title !== '') return document.title;
 
-  const read = readOf(document.extra);
-  const html = (read === undefined ? '' : readLine(read)) + document.html;
+  const html = readLine(readOf(document.extra)) + document.html;
   const text = normalize(htmlToText(html)) || normalize(document.description ?? '');
   if (text === '') return 'Untitled';
 
