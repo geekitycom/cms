@@ -3,6 +3,8 @@ import type { EditorForm } from '../admin/documents.ts';
 import { photoRows } from '../admin/photo-field.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
+import { locationToMicropub } from '../content/location.ts';
+import type { PostLocations } from '../content/locations.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { syndicateToOf } from '../webmention/syndication.ts';
 import { createForm, propertyName } from './create.ts';
@@ -28,8 +30,18 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   'p3k-content-type': [],
   visibility: [],
   photo: ['photos'],
+  location: ['location'],
   'mp-syndicate-to': ['syndicateTo'],
 };
+
+/**
+ * What answering a post's properties needs from the site beyond the create's
+ * own: the stored locations, since a location is in `data/locations.json`
+ * rather than the file (decision-29).
+ */
+export interface SourceSite extends Pick<CreateSite, 'baseUrl' | 'targets'> {
+  readonly locations: PostLocations;
+}
 
 /**
  * A post's properties as `q=source` answers them: the create mapping
@@ -37,12 +49,10 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
  * A property the post does not have is left out. `mp-syndicate-to` holds
  * only the targets the site declares, the ones a client can offer; an id the
  * file lists that names none stays in the file, as it does through an editor
- * save.
+ * save. `location` is answered whatever Settings > Privacy says: the setting
+ * is about readers, and the token's user is the author who sent it.
  */
-export function sourceProperties(
-  document: Document,
-  site: Pick<CreateSite, 'baseUrl' | 'targets'>,
-): Record<string, unknown[]> {
+export function sourceProperties(document: Document, site: SourceSite): Record<string, unknown[]> {
   const { baseUrl } = site;
   const properties: Record<string, unknown[]> = {};
   const text = (name: string, value: string | undefined): void => {
@@ -61,6 +71,8 @@ export function sourceProperties(
     return alt === '' ? value : { value, alt };
   });
   if (photos.length > 0) properties['photo'] = photos;
+  const location = site.locations.read(document.permalink);
+  if (location !== undefined) properties['location'] = [locationToMicropub(location)];
   const declared = new Set(site.targets.map(({ id }) => id));
   const selected = syndicateToOf(document.extra).filter((id) => declared.has(id));
   if (selected.length > 0) properties['mp-syndicate-to'] = selected;
@@ -120,7 +132,7 @@ export function parseChanges(
 export function updateForm(
   document: Document,
   given: readonly Change[],
-  site: Omit<CreateSite, 'author'>,
+  site: Omit<CreateSite, 'author'> & SourceSite,
 ): { readonly form: EditorForm; readonly draft: boolean } | { readonly errors: string[] } {
   const changes = given.map((change) => ({ ...change, property: propertyName(change.property) }));
   const touched = [...new Set(changes.map(({ property }) => property))];
@@ -140,7 +152,7 @@ export function updateForm(
   );
   if ('errors' in created) return created;
 
-  const form = formFor(document, site.timezone);
+  const form = formFor(document, site.timezone, site.locations.read(document.permalink));
   for (const property of touched) {
     for (const field of UPDATABLE[property] ?? []) {
       Object.assign(form, { [field]: created.form[field] });

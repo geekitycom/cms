@@ -19,6 +19,8 @@ import {
 import type { Enclosure } from '../content/enclosure.ts';
 import { PHOTO_FRONT_MATTER_KEY, photoFrontMatter } from '../content/photo.ts';
 import type { Photo } from '../content/photo.ts';
+import type { PostLocation } from '../content/location.ts';
+import { postLocations } from '../content/locations.ts';
 import { contentFilePath, freeSlug, saveDocument } from '../content/save.ts';
 import { scheduledFor } from '../content/schedule.ts';
 import { htmlToText } from '../content/search.ts';
@@ -64,6 +66,14 @@ import {
   resolveEnclosure,
 } from './enclosure-field.ts';
 import type { EnclosureForm } from './enclosure-field.ts';
+import {
+  BLANK_LOCATION_FORM,
+  LOCATION_FIELDS,
+  locationForm,
+  readLocationForm,
+  resolveLocation,
+} from './location-field.ts';
+import type { LocationForm } from './location-field.ts';
 import {
   PHOTO_FIELDS,
   photoChoices,
@@ -313,7 +323,13 @@ export function mountDocumentScreens(
   app.get(`${kind.basePath}/:slug`, (c) => {
     const document = findBySlug(c.var.store, kind, c.req.param('slug'));
     if (document === undefined) return c.notFound();
-    return renderEditor(c, { kind, render, document, form: formFor(document, siteTimezone(c)) });
+    const location = postLocations(c.var.config.dataDir).read(document.permalink);
+    return renderEditor(c, {
+      kind,
+      render,
+      document,
+      form: formFor(document, siteTimezone(c), location),
+    });
   });
 
   app.post(`${kind.basePath}/:slug`, async (c) => {
@@ -371,6 +387,7 @@ async function saveFromForm(
     comments: commentSetting(text(body['comments'])),
     enclosure: kind.type === 'post' ? readEnclosureForm(body) : BLANK_ENCLOSURE_FORM,
     photos: kind.type === 'post' ? readPhotoForm(body) : [],
+    location: kind.type === 'post' ? readLocationForm(body) : BLANK_LOCATION_FORM,
     syndicateTo:
       kind.type === 'post'
         ? syndicationTargetsReader(contentDir)()
@@ -527,6 +544,14 @@ export async function writeDocument(
     media = { recording: resolved.enclosure, photos: photos.photos };
   }
 
+  // decision-29: the location goes to its own private file, never the post's.
+  let location: PostLocation | undefined;
+  if (kind.type === 'post') {
+    const resolved = resolveLocation(form.location);
+    if ('error' in resolved) return refused(resolved.error);
+    location = resolved.location;
+  }
+
   // TASK-207: a pin is new when the file does not carry one yet, and only a
   // new one can take an author past Mastodon's limit.
   if (form.pinned && (document === undefined || pinnedAt(document) === undefined)) {
@@ -662,6 +687,16 @@ export async function writeDocument(
 
   if (renamedFrom !== undefined) {
     await rm(path.join(contentDir, ...renamedFrom.path.split('/')), { force: true });
+  }
+
+  // The location follows the post to its permalink, and a form with the
+  // fields cleared takes it away (decision-29). A page has none.
+  if (kind.type === 'post') {
+    const locations = postLocations(config.dataDir);
+    if (document !== undefined && document.permalink !== saved.permalink) {
+      await locations.move(document.permalink, saved.permalink);
+    }
+    await locations.set(saved.permalink, location);
   }
 
   // Announced rather than left to the watcher: the index already holds what
@@ -1420,6 +1455,12 @@ export interface EditorForm {
   enclosure: EnclosureForm;
   /** The post's photos (TASK-166), without the blank row the editor adds. Posts only. */
   photos: PhotoRow[];
+  /**
+   * Where the post was written (TASK-223). Posts only; blank on a page. It is
+   * the one field that is not written into the file: the save puts it in
+   * `data/locations.json` under the post's permalink (decision-29).
+   */
+  location: LocationForm;
   /** The ids of the declared syndication targets it selects (TASK-155). Posts only. */
   syndicateTo: string[];
   body: string;
@@ -1461,6 +1502,7 @@ export function blankForm(
     comments: COMMENT_SETTINGS.site,
     enclosure: BLANK_ENCLOSURE_FORM,
     photos: [],
+    location: BLANK_LOCATION_FORM,
     syndicateTo: [],
     body: '',
     hash: '',
@@ -1474,8 +1516,16 @@ export function blankForm(
  * {@link wallClockIn} keeps whatever precision the instant has, so a form
  * submitted with the field untouched writes back the very instant it was
  * filled in from.
+ *
+ * `location` is what `data/locations.json` holds for the post (decision-29),
+ * which a document does not carry. It is required because a form loaded
+ * without it would remove the stored location on save.
  */
-export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE): EditorForm {
+export function formFor(
+  document: Document,
+  timezone: string,
+  location: PostLocation | undefined,
+): EditorForm {
   return {
     title: document.title,
     slug: document.slug,
@@ -1501,6 +1551,7 @@ export function formFor(document: Document, timezone: string = DEFAULT_TIMEZONE)
     comments: commentSettingOf(document),
     enclosure: document.type === 'post' ? enclosureForm(document) : BLANK_ENCLOSURE_FORM,
     photos: document.type === 'post' ? photoRows(document) : [],
+    location: document.type === 'post' ? locationForm(location) : BLANK_LOCATION_FORM,
     syndicateTo: document.type === 'post' ? syndicateToOf(document.extra) : [],
     body: document.body,
     hash: document.hash,
@@ -1578,6 +1629,7 @@ async function renderEditor(
           photoFields: PHOTO_FIELDS,
           photoRows: photoRowViews(form.photos, readAltTexts(c.var.config.contentDir)),
           photoChoices: await photoChoices(c.var.config.contentDir),
+          locationFields: LOCATION_FIELDS,
           // TASK-155: one checkbox per target the site declares.
           syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
             ...target,

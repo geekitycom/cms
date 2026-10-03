@@ -149,6 +149,8 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     { child: 'permalinks', label: 'Permalinks', url: settingsPagePath('permalinks') },
     { child: 'discussion', label: 'Discussion', url: settingsPagePath('discussion') },
     { child: 'email', label: 'Email', url: settingsPagePath('email') },
+    // Last, as the newest: where every privacy choice goes (TASK-223).
+    { child: 'privacy', label: 'Privacy', url: settingsPagePath('privacy') },
   ]),
   // Everything about federation, in the order somebody comes to it: the
   // heading lands on Followers, which is what the section is opened to look

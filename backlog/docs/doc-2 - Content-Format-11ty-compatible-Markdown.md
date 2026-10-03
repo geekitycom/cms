@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-03 00:14'
+updated_date: '2026-10-03 01:24'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -36,6 +36,8 @@ the setting follows the page rather than the permalink it happens to have, and
 a slug naming no published page is a site back on its latest posts. An Eleventy
 build reads the same two keys: `docs/eleventy.config.example.js` puts the
 homepage at `/` and flags the posts page on the context as `isPostsPage`.
+
+One thing about a post is deliberately not in `content/`: where it was written. It lives in `data/locations.json`, keyed by permalink (decision-29), so a public repository never carries it; the Micropub section below says how it gets there. An Eleventy build therefore prints no location.
 
 Post filenames carry a date prefix so they sort on disk. Pages do not. The CMS never depends on filename parsing for URLs; it always reads `permalink` from front matter.
 
@@ -137,6 +139,7 @@ A post created over Micropub (TASK-164) is written by the editor's own write pat
 | `post-status: draft` | `draft: true`; `published`, or none, is `draft: false` |
 | `mp-slug` | the slug, in the file name and the permalink |
 | `photo`, each value | an entry in `photo`: a URL, or `{ "value": "…", "alt": "…" }` with its `alt`. A URL into the site's own uploads is written as its `/uploads/…` path. A file part of a multipart create is stored in the media library as the media endpoint stores one, and its path written; it is taken back out if the post is refused |
+| `location` | nothing in the file. A `geo:` URI (`geo:LAT,LNG;u=ACC`, Quill's form), an h-geo, an h-adr or an h-card is parsed at the boundary and kept in `data/locations.json`, keyed by the post's permalink (TASK-223, decision-29). The editor's Location box writes the same entry. The file is private because `content/` may be a public repository; Settings > Privacy decides what a page or the ActivityStreams object shows of it, nothing by default. `q=source` answers it whatever the setting, as a `geo:` URI, an h-adr or an h-card with the coordinates nested as `geo` |
 
 `slug` and `syndicate-to`, which Quill accounts from before its renames send, are read as `mp-slug` and `mp-syndicate-to`. `p3k-content-type` (`text/plain` or `text/markdown`) and `visibility` (`public`) are accepted and write nothing (TASK-222); any other value of either is refused by name.
 

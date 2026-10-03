@@ -11,6 +11,7 @@ import {
   InteractionRule,
   LanguageString,
   Note,
+  Place,
   PUBLIC_COLLECTION,
   Remove,
   Source,
@@ -29,6 +30,9 @@ import type { CitationProperty } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf, isUploadUrl, playsAsVideo } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
+import { placeWordList, shareLocation } from '../content/location.ts';
+import type { SharedLocation } from '../content/location.ts';
+import { postLocations } from '../content/locations.ts';
 import { canonicalType, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import { readAltTexts } from '../images/alt-text.ts';
 import { imagesIn } from '../images/markup.ts';
@@ -238,6 +242,13 @@ export function postObject(
       ...photoAttachments(document, context.data.config),
       ...imageAttachments(document, context.data.config),
     ],
+    // Where it was written, as much as Settings > Privacy shares (TASK-223).
+    location: place(
+      shareLocation(
+        postLocations(context.data.config.dataDir).read(document.permalink),
+        settings.locationSharing,
+      ),
+    ),
     // Both taxonomies become hashtags: a relay or a search that keys on a
     // hashtag has no reason to care which of the two a term came from, and
     // each one points at the archive the site serves for it.
@@ -272,6 +283,26 @@ export function postObject(
  */
 function inLanguage(text: string, language: string): (string | LanguageString)[] {
   return [text, new LanguageString(text, language)];
+}
+
+/**
+ * The shared part of a post's location as an ActivityStreams `Place`
+ * (decision-29): named by the words of the place, and carrying the
+ * coordinates and their accuracy only when the site shares them exactly. A
+ * post with nothing shared has no `location` at all.
+ */
+function place(shared: SharedLocation | undefined): Place | null {
+  if (shared === undefined) return null;
+  const words = placeWordList(shared.place);
+  const name = words.length === 0 ? null : words.join(', ');
+  if (shared.kind === 'place') return new Place({ name });
+  const { latitude, longitude, accuracy } = shared.geo;
+  return new Place({
+    name,
+    latitude,
+    longitude,
+    ...(accuracy === undefined ? {} : { accuracy, units: 'm' }),
+  });
 }
 
 /**

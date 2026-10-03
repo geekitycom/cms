@@ -10,6 +10,8 @@ import {
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
 import { parseIconSetting } from '../images/icons.ts';
+import { isLocationSharing, LOCATION_SHARING } from '../content/location.ts';
+import type { LocationSharing } from '../content/location.ts';
 import { sourceFile } from '../images/paths.ts';
 import { clientIdentifier } from '../indieauth/client-id.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
@@ -373,6 +375,13 @@ export interface SiteSettings {
    */
   taxonomyRedirects: readonly TaxonomyRedirect[];
   /**
+   * What the site publishes of a post's location (TASK-223, decision-29):
+   * nothing, the place's words, or the coordinates too. `none` by default,
+   * because the location is personal data and the author chooses to share it.
+   * Chosen on Settings > Privacy.
+   */
+  locationSharing: LocationSharing;
+  /**
    * The IndieAuth apps the owner lets sign in without PKCE (TASK-225), each a
    * client_id. Empty, the default, means every app needs PKCE, as the
    * IndieAuth spec says. Not a field of the settings form: Users > Connected
@@ -492,6 +501,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   securityLanguages: '',
   relays: [],
   wordpressActivityPub: false,
+  locationSharing: 'none',
   menus: {},
   taxonomyRedirects: [],
   clientsWithoutPkce: [],
@@ -543,6 +553,7 @@ export const SETTINGS_FIELDS = {
   securityLanguages: 'security_languages',
   relays: 'relays',
   wordpressActivityPub: 'wordpress_activitypub',
+  locationSharing: 'location_sharing',
 } as const satisfies Record<SettingsField, string>;
 
 /** A submitted settings form, before it is known to be valid. */
@@ -702,6 +713,11 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(typeof file['wordpressActivityPub'] === 'boolean'
       ? { wordpressActivityPub: file['wordpressActivityPub'] }
       : {}),
+    // Read the way the form checks it, so a hand edit naming a level this
+    // version does not know shares nothing rather than something nobody chose.
+    ...(isLocationSharing(file['locationSharing'])
+      ? { locationSharing: file['locationSharing'] }
+      : {}),
     // Every menu the site holds, whether or not the theme in use renders it.
     // The `navigation` key the one menu used to live under is not read at all:
     // menus were renamed rather than migrated (TASK-107).
@@ -786,6 +802,7 @@ export function siteJsonFor(
     securityPolicy: settings.securityPolicy,
     securityLanguages: settings.securityLanguages,
     relays: [...settings.relays],
+    locationSharing: settings.locationSharing,
     // Every menu the site holds, written whole. A settings page never has
     // them off its own form — it reads them out of the file inside the write
     // and hands them straight back — so the one screen that models them is the
@@ -1231,6 +1248,11 @@ const FIELD_CHECKS: Record<
   // get wrong about it.
   wordpressActivityPub: () => undefined,
 
+  locationSharing: (form) =>
+    isLocationSharing(form.locationSharing)
+      ? undefined
+      : `Location sharing is one of ${LOCATION_SHARING.join(', ')}.`,
+
   // The two archive bases are checked as a pair, because two of the rules —
   // that they differ, and that neither takes a path the site already answers
   // on — are about the pair rather than either one. They are on one page for
@@ -1394,6 +1416,7 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     securityLanguages: normalizeLanguageList(form.securityLanguages) ?? '',
     relays: relayList(form.relays),
     wordpressActivityPub: form.wordpressActivityPub !== '',
+    locationSharing: isLocationSharing(form.locationSharing) ? form.locationSharing : 'none',
   };
 }
 
@@ -1458,6 +1481,7 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     securityLanguages: settings.securityLanguages,
     relays: settings.relays.join('\n'),
     wordpressActivityPub: settings.wordpressActivityPub ? '1' : '',
+    locationSharing: settings.locationSharing,
   };
 }
 /**
