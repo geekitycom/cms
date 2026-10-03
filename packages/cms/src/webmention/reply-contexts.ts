@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import type { Document } from '../content/document.ts';
+import { citationsOf } from '../content/citation.ts';
 import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
@@ -11,9 +12,9 @@ import { fetchReplyContext } from './reply-context.ts';
 import type { ReplyContext } from './reply-context.ts';
 
 /**
- * Where the fetched reply contexts are kept, relative to the content directory:
- * one JSON object keyed by the URL replied to (decision-19). Eleventy reads it
- * as the `replyContexts` global.
+ * Where the fetched contexts are kept, relative to the content directory: one
+ * JSON object keyed by the URL a post replies to, likes, reposts or bookmarks
+ * (decision-19). Eleventy reads it as the `replyContexts` global.
  */
 export const REPLY_CONTEXTS_FILE = '_data/replyContexts.json';
 
@@ -24,7 +25,7 @@ export interface ReplyContextLogger {
 
 /** What {@link createReplyContextService} needs. */
 export interface CreateReplyContextServiceOptions {
-  /** The index, asked which targets are still replied to. */
+  /** The index, asked which targets are still cited. */
   readonly store: ContentStore;
   /** Where the file lives. */
   readonly contentDir: string;
@@ -34,18 +35,20 @@ export interface CreateReplyContextServiceOptions {
   readonly logger?: ReplyContextLogger | undefined;
 }
 
-/** Keeps the stored reply contexts in step with the posts that reply. */
+/**
+ * Keeps the stored contexts in step with the posts that cite: a reply's
+ * `in-reply-to`, and a like's, repost's or bookmark's target (TASK-244).
+ */
 export interface ReplyContextService {
   /**
-   * Consider one index change. A reply whose target is new, or has nothing
-   * stored, has its target fetched; a target no post replies to any more is
-   * forgotten. Returns at once: the work is queued, so a save never waits on
-   * a stranger's server.
+   * Consider one index change. A target that is new to the post, or has
+   * nothing stored, is fetched; a target no post cites any more is forgotten.
+   * Returns at once: the work is queued, so a save never waits on a
+   * stranger's server.
    */
   handle(change: DocumentChange): void;
   /**
-   * Fetch every target a live post replies to that the file holds nothing
-   * for. Run when the site starts serving, because a scan of an index that is
+   * Fetch every target a live post cites that the file holds nothing for. Run when the site starts serving, because a scan of an index that is
    * already up to date reports no change: a site upgraded to reply contexts,
    * or one whose file was removed, would otherwise wait for each reply to be
    * edited. Queued like {@link ReplyContextService.handle}.
@@ -98,17 +101,17 @@ export function createReplyContextService(
   async function refresh(target: string): Promise<void> {
     const fetched = await fetchReplyContext(target, { lookup });
     if (!fetched.ok) {
-      logger.warn(`Could not read ${target} for a reply's context: ${fetched.reason}`);
+      logger.warn(`Could not read ${target} for a citation's context: ${fetched.reason}`);
       return;
     }
     await write(target, fetched.context);
   }
 
-  /** Forget a target, unless a post still replies to it. */
+  /** Forget a target, unless a post still cites it. */
   async function forget(target: string): Promise<void> {
     if (!(target in readAll())) return;
-    const stillAnswered = store.listAll().some((document) => replyTarget(document) === target);
-    if (!stillAnswered) await write(target, undefined);
+    const stillCited = store.listAll().some((document) => targetsOf(document).includes(target));
+    if (!stillCited) await write(target, undefined);
   }
 
   let chain: Promise<unknown> = Promise.resolve();
@@ -122,26 +125,29 @@ export function createReplyContextService(
 
   return {
     handle(change) {
-      const before = targetOf(change.previous);
-      const after = targetOf(change.next);
+      const before = targetsOf(change.previous);
+      const after = targetsOf(change.next);
+      const held = readAll();
 
       // A scan rebuilds the index from files the contexts file sits beside, so
       // it only fetches what that file has never held; an edit fetches a
       // target that changed as well.
-      if (after !== undefined) {
-        const stored = after in readAll();
-        const changed = after !== before && change.origin !== 'scan';
-        if (!stored || changed) enqueue(() => refresh(after));
+      for (const target of after) {
+        const changed = !before.includes(target) && change.origin !== 'scan';
+        if (!(target in held) || changed) enqueue(() => refresh(target));
       }
-      if (before !== undefined && before !== after) enqueue(() => forget(before));
+      for (const target of before) {
+        if (!after.includes(target)) enqueue(() => forget(target));
+      }
     },
 
     catchUp() {
       const held = readAll();
       const missing = new Set<string>();
       for (const document of store.listAll()) {
-        const target = replyTarget(document);
-        if (target !== undefined && !(target in held)) missing.add(target);
+        for (const target of targetsOf(document)) {
+          if (!(target in held)) missing.add(target);
+        }
       }
       for (const target of missing) enqueue(() => refresh(target));
     },
@@ -156,8 +162,15 @@ export function createReplyContextService(
   };
 }
 
-function targetOf(document: Document | undefined): string | undefined {
-  return document === undefined ? undefined : replyTarget(document);
+/** Every URL a post cites: what it answers, then what it reposts, likes or bookmarks. */
+function targetsOf(document: Document | undefined): string[] {
+  if (document === undefined) return [];
+  const answered = replyTarget(document);
+  const targets = [
+    ...(answered === undefined ? [] : [answered]),
+    ...citationsOf(document.extra).map((citation) => citation.url),
+  ];
+  return [...new Set(targets)];
 }
 
 /**

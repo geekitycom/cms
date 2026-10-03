@@ -299,6 +299,198 @@ describe('fetchReplyContext', () => {
   });
 });
 
+describe('fetchReplyContext with oEmbed', () => {
+  const PAGE = 'https://plain.example/watch?v=1';
+  const OEMBED = 'https://plain.example/oembed?url=watch';
+
+  function json(body: unknown, type = 'application/json'): Response {
+    return new Response(JSON.stringify(body), { headers: { 'content-type': type } });
+  }
+
+  function pageWith(head: string, body = ''): string {
+    return `<html><head>${head}
+      <link rel="alternate" type="application/json+oembed" href="/oembed?url=watch">
+    </head><body>${body}</body></html>`;
+  }
+
+  const GENERIC = pageWith(
+    `<title>- YouTube</title>
+     <meta property="og:title" content="Filled by script">
+     <meta name="description" content="What the video is about.">`,
+  );
+
+  it('reads the oEmbed title and author ahead of the page title and og:title', async () => {
+    answer = (request) =>
+      request.url === PAGE
+        ? html(GENERIC)
+        : json({
+            version: '1.0',
+            type: 'video',
+            title: 'How to grow tomatoes',
+            author_name: 'Pat Them',
+            author_url: 'https://plain.example/@pat',
+            html: '<iframe src="https://plain.example/embed"></iframe><script>alert(1)</script>',
+          });
+
+    const fetched = await fetchReplyContext(PAGE, { lookup });
+
+    assert.deepEqual(fetched, {
+      ok: true,
+      context: {
+        url: PAGE,
+        name: 'How to grow tomatoes',
+        text: 'What the video is about.',
+        author: { name: 'Pat Them', url: 'https://plain.example/@pat' },
+      },
+    });
+    assert.deepEqual(requested, [PAGE, OEMBED]);
+  });
+
+  it('keeps an author with no page when author_url is not a web address', async () => {
+    answer = (request) =>
+      request.url === PAGE
+        ? html(GENERIC)
+        : json({ title: 'A video', author_name: 'Pat', author_url: 'javascript:alert(1)' });
+
+    const fetched = await fetchReplyContext(PAGE, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.deepEqual(fetched.context.author, { name: 'Pat' });
+  });
+
+  it('takes the oEmbed author alongside the page title when oEmbed has no title', async () => {
+    answer = (request) =>
+      request.url === PAGE
+        ? html(pageWith('<title>A toot</title>'))
+        : json({ author_name: 'Pat', author_url: 'https://plain.example/@pat' });
+
+    const fetched = await fetchReplyContext(PAGE, { lookup });
+
+    assert.deepEqual(fetched, {
+      ok: true,
+      context: {
+        url: PAGE,
+        name: 'A toot',
+        author: { name: 'Pat', url: 'https://plain.example/@pat' },
+      },
+    });
+  });
+
+  it('describes a page that has nothing but its oEmbed', async () => {
+    answer = (request) =>
+      request.url === PAGE ? html(pageWith('')) : json({ title: 'Only oEmbed' });
+
+    assert.deepEqual(await fetchReplyContext(PAGE, { lookup }), {
+      ok: true,
+      context: { url: PAGE, name: 'Only oEmbed' },
+    });
+  });
+
+  it('falls back to the page title when the oEmbed endpoint fails', async () => {
+    for (const failure of [
+      () => new Response('gone', { status: 404 }),
+      () => Promise.reject(new TypeError('fetch failed')),
+      () => json('not an object'),
+      () => new Response('{not json', { headers: { 'content-type': 'application/json' } }),
+      () => html('<title>Not JSON</title>'),
+    ]) {
+      answer = (request) =>
+        request.url === PAGE ? html(pageWith('<title>The page title</title>')) : failure();
+
+      assert.deepEqual(await fetchReplyContext(PAGE, { lookup }), {
+        ok: true,
+        context: { url: PAGE, name: 'The page title' },
+      });
+    }
+  });
+
+  it('does not read an oEmbed endpoint bigger than the byte limit', async () => {
+    const page = pageWith('<title>Small page</title>');
+    answer = (request) =>
+      request.url === PAGE ? html(page) : json({ title: 'x'.repeat(page.length * 2) });
+
+    assert.deepEqual(await fetchReplyContext(PAGE, { lookup, maxBytes: page.length + 10 }), {
+      ok: true,
+      context: { url: PAGE, name: 'Small page' },
+    });
+  });
+
+  it('gives the oEmbed endpoint only what is left of the one timeout', async () => {
+    answer = (request) =>
+      request.url === PAGE
+        ? html(pageWith('<title>Patient page</title>'))
+        : new Promise((_, reject) => {
+            request.signal.addEventListener('abort', () => {
+              reject(request.signal.reason as Error);
+            });
+          });
+
+    const started = Date.now();
+    const fetched = await fetchReplyContext(PAGE, { lookup, timeoutMs: 100 });
+
+    assert.deepEqual(fetched, { ok: true, context: { url: PAGE, name: 'Patient page' } });
+    assert.ok(Date.now() - started < 2_000, 'it did not wait on the endpoint');
+  });
+
+  it('never fetches an oEmbed endpoint on a private address', async () => {
+    answer = () =>
+      html(`<title>Sneaky</title>
+        <link rel="alternate" type="application/json+oembed" href="http://10.0.0.5/oembed">`);
+
+    assert.deepEqual(await fetchReplyContext(PAGE, { lookup }), {
+      ok: true,
+      context: { url: PAGE, name: 'Sneaky' },
+    });
+    assert.deepEqual(requested, [PAGE]);
+  });
+
+  it('finds the endpoint under the spellings providers use', async () => {
+    for (const link of [
+      '<link rel="alternate" type="text/json+oembed" href="/oembed?url=watch">',
+      '<link rel="alternative" type="application/json+oembed" href="/oembed?url=watch">',
+    ]) {
+      answer = (request) =>
+        request.url === PAGE
+          ? html(`<title>Generic</title>${link}`)
+          : json({ title: 'Named by oEmbed' });
+
+      assert.deepEqual(await fetchReplyContext(PAGE, { lookup }), {
+        ok: true,
+        context: { url: PAGE, name: 'Named by oEmbed' },
+      });
+    }
+  });
+
+  it('ignores an XML oEmbed endpoint, reading only JSON', async () => {
+    answer = () =>
+      html(`<title>XML only</title>
+        <link rel="alternate" type="text/xml+oembed" href="/oembed.xml">`);
+
+    assert.deepEqual(await fetchReplyContext(PAGE, { lookup }), {
+      ok: true,
+      context: { url: PAGE, name: 'XML only' },
+    });
+    assert.deepEqual(requested, [PAGE]);
+  });
+
+  it('does not ask oEmbed about a page with an h-entry', async () => {
+    answer = (request) =>
+      request.url === TARGET
+        ? html(
+            H_ENTRY.replace(
+              '</head>',
+              '<link rel="alternate" type="application/json+oembed" href="/oembed"></head>',
+            ),
+          )
+        : json({ title: 'Not this' });
+
+    const fetched = await fetchReplyContext(TARGET, { lookup });
+
+    assert.deepEqual(fetched, { ok: true, context: readReplyContext(H_ENTRY, TARGET) });
+    assert.deepEqual(requested, [TARGET]);
+  });
+});
+
 describe('the address guard', () => {
   it('knows the spellings of this network', () => {
     for (const host of [

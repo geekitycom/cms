@@ -418,7 +418,11 @@ inside the `h-entry` wherever it is printed.
 `partials/citations.njk`, beside the reply context and drawn the same way: one
 `div.reply-context.cite.h-cite` per entry of `citations`, classed
 `u-repost-of`, `u-like-of` or `u-bookmark-of`, whose `p.cite-line` says
-Reposted, Liked or Bookmarked and links the target as its `u-url`. Its kicker
+Reposted, Liked or Bookmarked and links the target as its `u-url`. The link
+says the target's name, as the reply context does, with its author after it as
+a `p-author h-card`, when the target was read when the post was saved
+(TASK-244): its `h-entry` name, its oEmbed title, or its `<title>`. With only
+an author it says "a post", and with neither the bare URL. Its kicker
 and its hidden `h1` say Repost, Like or Bookmark. It is placed as the reply
 context is: at the top of an untitled post, after the header of a titled one.
 A listing cites each entry's from the same partial, by the same rule.
@@ -1187,7 +1191,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `lang`                                      | The `lang` front matter as a canonical tag, such as `fr-CA`. Absent when it names none or no tag.                 |
 | `enclosure`                                 | The post's recording, parsed, with `player` (`audio` or `video`) and `transcript.captions`. Absent with none.     |
 | `photos`                                    | The post's photos, each `{ url, alt, html }`; `html` is the `img.u-photo`, responsive. Empty with none.           |
-| `citations`                                 | What it reposts, likes or bookmarks, each `{ property, url }` with `property` the mf2 name. Empty with none.      |
+| `citations`                                 | What it reposts, likes or bookmarks, each `{ property, url, context }`; `context` as `replyContext`, when known.  |
 | `read`                                      | A read post's `{ status, statusLabel, of, line }`; `of` is `{ name, author, uid, uidLabel, url }`.                |
 | `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                  |
 | `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made. |

@@ -34,3 +34,9 @@ The fetched contexts live in `content/_data/replyContexts.json`: one object whos
 - A person can correct or remove an entry by hand. The reader drops an entry that is not a context rather than failing a render.
 - A target that could not be read leaves no entry. The reply shows a link-only preview and the next save or boot tries again.
 - A preview is as fresh as its last fetch. Nothing refetches a target that has not changed. If previews ever need refreshing on a schedule, that is a job over this file, not a change to where it lives.
+
+## Amendment (2026-10-03, TASK-244)
+
+The file also holds the contexts of what a post likes, reposts or bookmarks. Its keys are every absolute URL a live post cites under `in-reply-to`, `like-of`, `repost-of` or `bookmark-of`, and an entry has the same shape whichever property cites it. Two posts that cite one page share one entry, whatever their kinds. The rules above apply to each cited URL: a save or sync fetches a target that is new to the post or that the file lacks, a scan fetches only what the file has never held, starting to serve catches up on what is missing, and an entry no live post cites any more is removed. The file keeps its name, because a site's theme and its Eleventy build read it as `replyContexts`.
+
+A page with no `h-entry` is also asked for its oEmbed description, when it names a JSON endpoint in a `<link rel="alternate" type="application/json+oembed">`. Only the endpoint's `title`, `author_name` and `author_url` are kept, and they are preferred over the page's `<title>` and `og:title`. Its `html` is never kept or printed. The endpoint is fetched with the same guards as the page and within what is left of the page's one timeout. A failed or absent endpoint leaves the page described as before.

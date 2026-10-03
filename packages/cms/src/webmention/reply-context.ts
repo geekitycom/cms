@@ -1,8 +1,9 @@
 import { discoverPostType } from '../content/post-type.ts';
 import { fetchPublic, webUrl } from './fetch-public.ts';
-import { elementsIn, parseHtml, textOf } from './html.ts';
+import { elementsIn, hasRel, parseHtml, textOf } from './html.ts';
 import type { HtmlElement } from './html.ts';
 import { citedEntry } from './microformats.ts';
+import type { CitedEntry } from './microformats.ts';
 import type { HostLookup } from './public-address.ts';
 
 /**
@@ -57,27 +58,45 @@ export interface FetchReplyContextOptions {
 }
 
 /**
- * Fetch a reply's target and read what it says about itself.
+ * Fetch a page a post cites and read what it says about itself, asking its
+ * oEmbed endpoint as well when it has no `h-entry`.
  *
  * Only http and https, only public hosts (every redirect hop is checked, and a
  * name is refused when any address it resolves to is private), one timeout
- * over the whole exchange, and no page over the byte limit. Nothing throws.
+ * over the whole exchange, the oEmbed request included, and no page or oEmbed
+ * answer over the byte limit. Nothing throws.
  */
 export async function fetchReplyContext(
   target: string,
   options: FetchReplyContextOptions,
 ): Promise<ReplyContextFetch> {
+  const deadline = Date.now() + (options.timeoutMs ?? REPLY_CONTEXT_TIMEOUT_MS);
+  const maxBytes = options.maxBytes ?? REPLY_CONTEXT_MAX_BYTES;
   const fetched = await fetchPublic(target, {
     lookup: options.lookup,
-    timeoutMs: options.timeoutMs ?? REPLY_CONTEXT_TIMEOUT_MS,
-    maxBytes: options.maxBytes ?? REPLY_CONTEXT_MAX_BYTES,
+    timeoutMs: deadline - Date.now(),
+    maxBytes,
     accept: 'text/html, */*;q=0.8',
     contentType: { pattern: /^\s*(text\/html|application\/xhtml\+xml)/i, name: 'an HTML page' },
   });
   if (!fetched.ok) return fetched;
 
-  const context = readReplyContext(new TextDecoder().decode(fetched.body), target, fetched.url);
+  const root = parseHtml(new TextDecoder().decode(fetched.body));
+  const entry = citedEntry(root, fetched.url);
+  const endpoint = entry === undefined ? oembedEndpoint(root, fetched.url) : undefined;
+  const oembed =
+    endpoint === undefined
+      ? undefined
+      : await fetchOembed(endpoint, { lookup: options.lookup, deadline, maxBytes });
+
+  const context = describe(root, entry, target, oembed);
   return context === undefined ? refuse('nothing to show') : { ok: true, context };
+}
+
+/** What an oEmbed endpoint says of a page: never its `html`, which is not shown. */
+export interface Oembed {
+  readonly title?: string;
+  readonly author?: { readonly name: string; readonly url?: string };
 }
 
 /**
@@ -86,7 +105,8 @@ export async function fetchReplyContext(
  *
  * The first `h-entry` when there is one: its name when it has one of its own
  * (the test Post Type Discovery uses), an excerpt of its text, its author and
- * its date. A page with no `h-entry` is described by its `<title>` and its
+ * its date. A page with no `h-entry` is described by its oEmbed title and
+ * author when `oembed` holds them, then its `<title>`, `og:title` and
  * description metadata. Everything comes out as plain text; the theme escapes
  * it like any other string.
  */
@@ -94,10 +114,18 @@ export function readReplyContext(
   html: string,
   target: string,
   base: string = target,
+  oembed?: Oembed,
 ): ReplyContext | undefined {
   const root = parseHtml(html);
-  const entry = citedEntry(root, base);
+  return describe(root, citedEntry(root, base), target, oembed);
+}
 
+function describe(
+  root: HtmlElement,
+  entry: CitedEntry | undefined,
+  target: string,
+  oembed: Oembed | undefined,
+): ReplyContext | undefined {
   if (entry !== undefined) {
     const named = discoverPostType({ name: entry.name, content: entry.text }) === 'article';
     const text = excerpt(entry.text);
@@ -118,11 +146,89 @@ export function readReplyContext(
     };
   }
 
-  const name = titleOf(root) || metaOf(root, 'og:title');
+  // A page that offers oEmbed is often one whose <title> is generic or written
+  // by script, so the endpoint's own title goes first.
+  const name = oembed?.title ?? (titleOf(root) || metaOf(root, 'og:title'));
   const text = excerpt(metaOf(root, 'description') || metaOf(root, 'og:description'));
-  if (name === '' && text === '') return undefined;
+  const author = oembed?.author;
+  if (name === '' && text === '' && author === undefined) return undefined;
 
-  return { url: target, ...(name === '' ? {} : { name }), ...(text === '' ? {} : { text }) };
+  return {
+    url: target,
+    ...(name === '' ? {} : { name }),
+    ...(text === '' ? {} : { text }),
+    ...(author === undefined ? {} : { author }),
+  };
+}
+
+/** The JSON oEmbed endpoint a page names in its `<link rel="alternate">`, if any. */
+function oembedEndpoint(root: HtmlElement, base: string): string | undefined {
+  for (const element of elementsIn(root)) {
+    if (element.name !== 'link') continue;
+    // Flickr writes "alternative" and SoundCloud "text/json+oembed".
+    if (!hasRel(element, 'alternate') && !hasRel(element, 'alternative')) continue;
+    const type = element.attributes['type']?.trim().toLowerCase();
+    if (type !== 'application/json+oembed' && type !== 'text/json+oembed') continue;
+    try {
+      return new URL(element.attributes['href'] ?? '', base).href;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Ask a page's oEmbed endpoint for its title and author, through the same
+ * guards as the page and within what is left of the page's timeout. Any
+ * failure is `undefined`: the page is then described without it.
+ */
+async function fetchOembed(
+  endpoint: string,
+  limits: { readonly lookup: HostLookup; readonly deadline: number; readonly maxBytes: number },
+): Promise<Oembed | undefined> {
+  const timeoutMs = limits.deadline - Date.now();
+  if (timeoutMs <= 0) return undefined;
+
+  const fetched = await fetchPublic(endpoint, {
+    lookup: limits.lookup,
+    timeoutMs,
+    maxBytes: limits.maxBytes,
+    accept: 'application/json+oembed, application/json;q=0.9',
+    contentType: {
+      pattern: /^\s*(application\/(json|json\+oembed)|text\/(json|javascript))\b/i,
+      name: 'oEmbed JSON',
+    },
+  });
+  if (!fetched.ok) return undefined;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(fetched.body));
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined;
+  const fields = parsed as Record<string, unknown>;
+
+  const title = plainText(fields['title']);
+  const authorName = plainText(fields['author_name']);
+  const authorUrl = webUrl(plainText(fields['author_url']) ?? '');
+  return {
+    ...(title === undefined ? {} : { title }),
+    ...(authorName === undefined
+      ? {}
+      : {
+          author: { name: authorName, ...(authorUrl === undefined ? {} : { url: authorUrl.href }) },
+        }),
+  };
+}
+
+/** A JSON value as one line of text, or `undefined` when it is no text or empty. */
+function plainText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const text = value.replace(/\s+/g, ' ').trim();
+  return text === '' ? undefined : text;
 }
 
 /** The page's `<title>`, or empty. */
