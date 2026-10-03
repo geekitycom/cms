@@ -1466,7 +1466,9 @@ other, but Quill sends the same token both ways for servers that drop the
 header, so the same token in both is accepted. Two different tokens get 400
 `invalid_request`. A request with no token, or
 with one that is unknown, expired or revoked, gets 401. A token without the scope a
-route needs gets 403 `insufficient_scope`. Each refusal carries a
+route needs gets `insufficient_scope`, with 401 on the Micropub and media endpoints,
+as the [Micropub spec's error table](https://www.w3.org/TR/micropub/#error-response)
+says, and 403 on every other route, as RFC 6750 section 3.1 says. Each refusal carries a
 `WWW-Authenticate: Bearer` header whose `resource_metadata` points at
 `/.well-known/oauth-protected-resource`. That RFC 9728 document names the site
 as its own authorization server and lists the scopes, so an MCP client can find
@@ -1629,7 +1631,9 @@ answer 503 in maintenance mode.
    refresh token, so it stays connected while you use it.
 
 A query works with a token of any scope. A request without the scope its
-action needs gets 403 `insufficient_scope`.
+action needs gets 401 `insufficient_scope`, as the
+[Micropub spec's error table](https://www.w3.org/TR/micropub/#error-response)
+says, with a `WWW-Authenticate: Bearer` header naming the scope.
 
 When an app cannot sign in or its post is refused, open Users > App activity.
 It lists the request, the properties it sent and the reason the site gave.
@@ -1793,7 +1797,8 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
 ### Uploading media
 
 The media endpoint takes a file before an app names it in a post. It needs the
-media scope. The body is `multipart/form-data` with the file in a part named
+media scope, and a token without it gets 401 `insufficient_scope`. The body is
+`multipart/form-data` with the file in a part named
 `file`. The file goes into the media library exactly as an admin upload does.
 It is stored under `content/uploads/{yyyy}/{mm}/`, its image variants are
 derived, and it is listed on the media screen. The site answers 201 with a `Location` header
@@ -1807,9 +1812,6 @@ Each [micropub.rocks](https://micropub.rocks/) server test request has been
 replayed with curl against a local site. Every test passes except these:
 
 - 204 sends a `checkin`, which the site refuses rather than drop (decision-27).
-- 804 expects 401 for a token without the create scope. The site answers 403
-  `insufficient_scope`, as the Micropub spec says
-  ([micropub.rocks#101](https://github.com/aaronpk/micropub.rocks/issues/101)).
 - 805 sends the same token in the header and the body and expects it refused,
   as RFC 6750 says. The site accepts it, because Quill sends its token that way
   and refusing it would refuse every Quill post.

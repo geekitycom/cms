@@ -213,6 +213,9 @@ function isQuery(q: string | undefined): q is Query {
   return (QUERY_NAMES as readonly (string | undefined)[]).includes(q);
 }
 
+/** Micropub's error table (section 3.8) answers insufficient_scope with 401. */
+const MICROPUB_INSUFFICIENT_SCOPE_STATUS = 401;
+
 /**
  * The bearer guard for a token bound to this site, the resource its protected
  * resource metadata names, or bound to none, as Micropub clients' tokens are
@@ -230,6 +233,7 @@ export function requireSiteToken(scope?: Scope): MiddlewareHandler<BearerEnv> {
     return await requireBearer({
       audience: { resource: siteBaseUrl(c), acceptsUnbound: true },
       ...(scope === undefined ? {} : { scope }),
+      insufficientScopeStatus: MICROPUB_INSUFFICIENT_SCOPE_STATUS,
     })(c, next);
   };
 }
@@ -464,7 +468,9 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
     const post = await micropubPost(c);
     if (post instanceof Refusal) return post.answer(c);
     const scope = ACTION_SCOPES[post.action];
-    if (!c.var.bearer.token.scopes.includes(scope)) return insufficientScope(c, scope);
+    if (!c.var.bearer.token.scopes.includes(scope)) {
+      return insufficientScope(c, scope, MICROPUB_INSUFFICIENT_SCOPE_STATUS);
+    }
     const handle = ACTIONS[post.action] as (
       c: Context<BearerEnv>,
       post: MicropubPost,

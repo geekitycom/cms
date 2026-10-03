@@ -359,15 +359,33 @@ describe('who wrote it and who hears about it (AC #3, AC #4)', () => {
 });
 
 describe('a refused create', () => {
-  it('answers 403 insufficient_scope to a token without create (AC #5)', async () => {
+  it('answers 401 insufficient_scope to a token without create, as Micropub section 3.8 says', async () => {
     const { cms, token } = await site(['profile', 'update']);
     const response = await postForm(cms, token, [
       ['h', 'entry'],
       ['content', 'Should not land.'],
     ]);
-    assert.equal(response.status, 403);
+    assert.equal(response.status, 401);
     assert.equal(((await response.json()) as { error: string }).error, 'insufficient_scope');
-    assert.match(response.headers.get('www-authenticate') ?? '', /scope="create"/);
+    assert.equal(
+      response.headers.get('www-authenticate'),
+      `Bearer error="insufficient_scope", scope="create", resource_metadata="${BASE}/.well-known/oauth-protected-resource"`,
+    );
+    assert.deepEqual(await postFiles(cms), []);
+  });
+
+  it('answers micropub.rocks test 804, a note from a token without create, with 401', async () => {
+    const { cms, token } = await site(['update']);
+    const response = await cms.app.request(ENDPOINT, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: 'h=entry&content=Hello+World',
+    });
+    assert.equal(response.status, 401);
+    assert.equal(((await response.json()) as { error: string }).error, 'insufficient_scope');
     assert.deepEqual(await postFiles(cms), []);
   });
 

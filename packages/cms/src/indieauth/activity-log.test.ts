@@ -281,7 +281,7 @@ describe('the Micropub endpoint', () => {
 
     await micropubJson(cms, live, { type: ['h-entry'], properties: { content: ['Hi'] } });
     const unscoped = await latest(dataDir);
-    assert.equal(unscoped.status, 403);
+    assert.equal(unscoped.status, 401);
     assert.equal(unscoped.error, 'insufficient_scope');
     assert.equal(unscoped.user, 'ada');
   });

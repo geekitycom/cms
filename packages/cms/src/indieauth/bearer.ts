@@ -20,7 +20,14 @@ export interface Guard {
   readonly audience: Audience | 'authorization-server';
   /** The scope the route needs, when it needs one. */
   readonly scope?: Scope;
+  /**
+   * The status for a token without `scope`: RFC 6750's 403 unless the route
+   * names another, as Micropub's endpoints name 401 (its section 3.8).
+   */
+  readonly insufficientScopeStatus?: InsufficientScopeStatus;
 }
+
+export type InsufficientScopeStatus = 401 | 403;
 
 /** What a guarded route is handed: the connection and the person behind it. */
 export interface Bearer {
@@ -70,7 +77,7 @@ export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
     }
 
     if (guard.scope !== undefined && !token.scopes.includes(guard.scope)) {
-      return insufficientScope(c, guard.scope);
+      return insufficientScope(c, guard.scope, guard.insufficientScopeStatus ?? 403);
     }
 
     await recordUse(config.dataDir, token, now);
@@ -80,12 +87,17 @@ export function requireBearer(guard: Guard): MiddlewareHandler<BearerEnv> {
 }
 
 /**
- * The 403 for a token that lacks `scope`, for a route that only learns which
- * scope it needs from the request, as a Micropub POST does from its action.
+ * The refusal of a token that lacks `scope`, for a route that only learns
+ * which scope it needs from the request, as a Micropub POST does from its
+ * action.
  */
-export function insufficientScope(c: Context<BearerEnv>, scope: Scope): Response {
+export function insufficientScope(
+  c: Context<BearerEnv>,
+  scope: Scope,
+  status: InsufficientScopeStatus,
+): Response {
   const description = `The access token was not granted the ${scope} scope.`;
-  return refuse(c, 403, 'insufficient_scope', description, {
+  return refuse(c, status, 'insufficient_scope', description, {
     error: 'insufficient_scope',
     scope,
   });

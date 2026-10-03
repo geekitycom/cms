@@ -346,7 +346,7 @@ describe('creating a token (TASK-230)', () => {
     assert.equal(created.status, 201, await created.clone().text());
     const url = created.headers.get('location') ?? '';
     const deleted = await micropub(cms, token, { action: 'delete', url });
-    assert.equal(deleted.status, 403);
+    assert.equal(deleted.status, 401);
     assert.match(deleted.headers.get('www-authenticate') ?? '', /insufficient_scope/);
 
     assert.deepEqual(await filesHolding(cms.config.dataDir, token), []);

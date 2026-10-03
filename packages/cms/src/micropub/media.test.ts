@@ -212,7 +212,7 @@ describe('a refused upload', () => {
 });
 
 describe('the media scope', () => {
-  it('refuses a token without it with 403 insufficient_scope, and nothing is stored', async () => {
+  it('refuses a token without it with 401 insufficient_scope, and nothing is stored', async () => {
     const { cms, contentDir, tokens } = await site(['create']);
     const response = await upload(cms, tokens.ada, {
       bytes: await photo(),
@@ -220,12 +220,15 @@ describe('the media scope', () => {
       type: 'image/png',
     });
 
-    assert.equal(response.status, 403);
+    assert.equal(response.status, 401);
     assert.equal(
       ((await response.json()) as Record<string, string>)['error'],
       'insufficient_scope',
     );
-    assert.match(response.headers.get('www-authenticate') ?? '', /scope="media"/);
+    assert.match(
+      response.headers.get('www-authenticate') ?? '',
+      /^Bearer error="insufficient_scope", scope="media", /,
+    );
     assert.deepEqual(await storedFiles(contentDir), []);
   });
 
