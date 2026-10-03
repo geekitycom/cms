@@ -9,7 +9,7 @@ import type { Document, DocumentContent, DocumentType } from '../content/documen
 import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
 import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
-import { postLabel, replyTarget } from '../content/post-type.ts';
+import { discoverPostType, postLabel, replyTarget } from '../content/post-type.ts';
 import {
   isReadStatus,
   READ_OF_FRONT_MATTER_KEY,
@@ -643,6 +643,7 @@ export async function writeDocument(
     (document?.slug ?? '') ||
     noteSlug(form.body) ||
     slugify(form.readOf.name) ||
+    typeSlug(kind, form, media.photos) ||
     'untitled';
   const trashed = document !== undefined && isTrashedPath(document.path);
   // The calendar day the document is filed under: the site zone's day at its
@@ -781,6 +782,63 @@ const NOTE_SLUG_WORDS = 5;
 function noteSlug(body: string): string {
   const words = htmlToText(renderMarkdown(body)).split(' ').slice(0, NOTE_SLUG_WORDS);
   return slugify(words.join(' '));
+}
+
+/** How many of a cited page's words a post with nothing else to go on is named after. */
+const TARGET_SLUG_WORDS = 4;
+
+/**
+ * The slug of a post with no title and no text, from what it is (TASK-242):
+ * a like, repost, bookmark or reply is named after the page it cites, and a
+ * photo post is `photo`. Empty for anything else.
+ */
+function typeSlug(kind: DocumentKind, form: EditorForm, photos: readonly Photo[]): string {
+  if (kind.type !== 'post') return '';
+  const type = discoverPostType({
+    'repost-of': form.repostOf,
+    'like-of': form.likeOf,
+    'in-reply-to': form.inReplyTo,
+    'bookmark-of': form.bookmarkOf,
+    photo: photos.map((photo) => photo.url),
+  });
+  switch (type) {
+    case 'repost':
+      return `reposted-${targetWords(form.repostOf)}`;
+    case 'like':
+      return `liked-${targetWords(form.likeOf)}`;
+    case 'reply':
+      return `reply-to-${targetWords(form.inReplyTo)}`;
+    case 'bookmark':
+      return `bookmarked-${targetWords(form.bookmarkOf)}`;
+    case 'photo':
+      return 'photo';
+    default:
+      return '';
+  }
+}
+
+/**
+ * A cited page's address as slug words: its host without `www.`, then the
+ * path segments that hold a letter, since a status id or a date says nothing.
+ */
+function targetWords(address: string): string {
+  const url = new URL(address);
+  const segments = url.pathname
+    .split('/')
+    .map(decodedSegment)
+    .filter((segment) => /\p{L}/u.test(segment));
+  return slugify([url.hostname.replace(/^www\./, ''), ...segments].join(' '))
+    .split('-')
+    .slice(0, TARGET_SLUG_WORDS)
+    .join('-');
+}
+
+function decodedSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }
 
 /** What the flash says after a save, which depends on what the save did. */

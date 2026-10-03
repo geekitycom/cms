@@ -530,6 +530,20 @@ describe('a like, a repost and a bookmark (TASK-169 AC #5)', () => {
     assert.equal(postTypeOf(document), 'like');
   });
 
+  it('files a like with no content under what it likes (TASK-242)', async () => {
+    const { cms, token } = await site();
+    const response = await postForm(cms, token, [
+      ['h', 'entry'],
+      ['like-of', 'https://indieweb.social/@andrewshell/117249870148068466'],
+    ]);
+    assert.equal(response.status, 201, await response.clone().text());
+    assert.equal(
+      response.headers.get('location'),
+      `${BASE}/2026/09/liked-indieweb-social-andrewshell/`,
+    );
+    assert.deepEqual(await postFiles(cms), ['2026-09-20-liked-indieweb-social-andrewshell.md']);
+  });
+
   it('writes the same like the editor writes for the same post', async () => {
     const editorSite = await site();
     const html = await (await editorSite.agent.get('/admin/posts/new')).text();
