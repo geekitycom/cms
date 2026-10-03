@@ -26,6 +26,10 @@
     {% endif %}
   </dl>
 
+  {% if withoutPkce %}
+    <p class="admin-hint">This app does not use PKCE, which protects a sign-in if the code it is handed is intercepted. It is let in only because it is on your list of apps allowed without PKCE, under Users &gt; Connected apps.</p>
+  {% endif %}
+
   {% if loopback %}
     <p class="admin-hint">This app runs on your own computer or network. Approve only if you started this sign-in yourself.</p>
   {% endif %}

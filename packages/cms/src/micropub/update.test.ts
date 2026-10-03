@@ -62,7 +62,7 @@ async function tokenFor(cms: Cms, username: string, scopes: Scope[]): Promise<st
     {
       clientId: 'https://app.example/',
       redirectUri: 'https://app.example/callback',
-      codeChallenge: 'unused',
+      codeChallenge: { method: 'S256', value: 'unused' },
       userId: user.id,
       me: `${BASE}/author/${user.username}/`,
       scopes,

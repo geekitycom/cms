@@ -32,7 +32,34 @@ function parse(
     if (value !== undefined) params.append(name, value);
   }
   for (const [name, value] of extra) params.append(name, value);
-  return parseAuthorizationRequest(params, BASE);
+  return parseAuthorizationRequest(params, BASE, []);
+}
+
+const IA_WRITER = 'https://ia.net/writer';
+
+const IA_WRITER_REQUEST: Record<string, string> = {
+  response_type: 'code',
+  me: 'https://blog.example/',
+  client_id: IA_WRITER,
+  redirect_uri: 'https://ia.net/writer/indieauth/redirect',
+  state: '6f1c0a52-8d0e-4c4e-9f43-1d6f2b7a9e10',
+  scope: 'create media',
+};
+
+function parseWithoutPkce(
+  changes: Record<string, string | undefined> = {},
+  listed: readonly string[] = [IA_WRITER],
+): ParsedAuthorizationRequest {
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries({ ...IA_WRITER_REQUEST, ...changes })) {
+    if (value !== undefined) params.append(name, value);
+  }
+  return parseAuthorizationRequest(params, BASE, listed);
+}
+
+function pkceRefusal(parsed: ParsedAuthorizationRequest): string {
+  assert.equal(parsed.kind, 'refused', JSON.stringify(parsed));
+  return parsed.kind === 'refused' ? parsed.description : '';
 }
 
 function refusal(parsed: ParsedAuthorizationRequest): string {
@@ -53,11 +80,23 @@ describe('parseAuthorizationRequest', () => {
       clientId: 'https://app.example/',
       redirectUri: 'https://app.example/callback',
       state: 'xyz',
-      codeChallenge: CHALLENGE,
+      codeChallenge: { method: 'S256', value: CHALLENGE },
       scopes: ['profile', 'email'],
       me: 'https://blog.example/',
       resource: 'https://blog.example/mcp',
     });
+  });
+
+  it('reads the legacy post scope, which Quill still offers, as create and update', () => {
+    const parsed = parse({ scope: 'post' });
+    assert.equal(parsed.kind, 'valid');
+    if (parsed.kind !== 'valid') return;
+    assert.deepEqual(parsed.request.scopes, ['create', 'update']);
+
+    const mixed = parse({ scope: 'profile update post' });
+    assert.equal(mixed.kind, 'valid');
+    if (mixed.kind !== 'valid') return;
+    assert.deepEqual(mixed.request.scopes, ['profile', 'update', 'create']);
   });
 
   it('refuses a request with no code_challenge', () => {
@@ -148,5 +187,66 @@ describe('parseAuthorizationRequest', () => {
         String(redirectUri),
       );
     }
+  });
+});
+
+describe('a request without PKCE from an app on the list (TASK-225)', () => {
+  const REFUSED = 'code_challenge must be an S256 PKCE challenge';
+
+  it('accepts iA Writer’s request once it is listed, marked as issued with no challenge', () => {
+    const parsed = parseWithoutPkce();
+    assert.equal(parsed.kind, 'valid', JSON.stringify(parsed));
+    if (parsed.kind !== 'valid') return;
+    assert.deepEqual(parsed.request.codeChallenge, { method: 'none' });
+    assert.deepEqual(parsed.request.scopes, ['create', 'media']);
+  });
+
+  it('matches a listed client_id however its host is cased', () => {
+    assert.equal(parseWithoutPkce({}, ['https://IA.net/writer']).kind, 'valid');
+  });
+
+  it('refuses the same request from an app that is not listed', () => {
+    assert.equal(pkceRefusal(parseWithoutPkce({}, [])), REFUSED);
+    assert.equal(pkceRefusal(parseWithoutPkce({}, ['https://ia.net/'])), REFUSED);
+    assert.equal(
+      pkceRefusal(parse({ code_challenge: undefined, code_challenge_method: undefined })),
+      REFUSED,
+    );
+  });
+
+  it('refuses a listed app whose redirect_uri is on another host, or not https', () => {
+    for (const redirectUri of [
+      'https://evil.example/indieauth/redirect',
+      'https://sub.ia.net/writer/indieauth/redirect',
+      'https://ia.net:8443/writer/indieauth/redirect',
+      'http://ia.net/writer/indieauth/redirect',
+      'iawriter://indieauth/redirect',
+    ]) {
+      assert.equal(
+        pkceRefusal(parseWithoutPkce({ redirect_uri: redirectUri })),
+        REFUSED,
+        redirectUri,
+      );
+    }
+  });
+
+  it('refuses a listed app that sends a broken challenge rather than none', () => {
+    assert.equal(
+      pkceRefusal(parseWithoutPkce({ code_challenge: 'short', code_challenge_method: 'S256' })),
+      REFUSED,
+    );
+    assert.equal(pkceRefusal(parseWithoutPkce({ code_challenge: '' })), REFUSED);
+    assert.equal(
+      pkceRefusal(parseWithoutPkce({ code_challenge_method: 'S256' })),
+      REFUSED,
+      'a method with no challenge is a broken PKCE request, not one without PKCE',
+    );
+  });
+
+  it('keeps PKCE for a listed app that sends a challenge', () => {
+    const parsed = parseWithoutPkce({ code_challenge: CHALLENGE, code_challenge_method: 'S256' });
+    assert.equal(parsed.kind, 'valid');
+    if (parsed.kind !== 'valid') return;
+    assert.deepEqual(parsed.request.codeChallenge, { method: 'S256', value: CHALLENGE });
   });
 });

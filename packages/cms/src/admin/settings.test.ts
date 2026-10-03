@@ -360,6 +360,42 @@ describe('the recorded archive renames', () => {
   });
 });
 
+describe('the apps allowed without PKCE (TASK-225)', () => {
+  async function siteWith(file: Record<string, unknown>): Promise<string> {
+    const contentDir = await box.dir('geekity-without-pkce-');
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(path.join(contentDir, '_data', 'site.json'), JSON.stringify(file), 'utf8');
+    return contentDir;
+  }
+
+  it('are none by default, and a site with none writes no key', async () => {
+    const contentDir = await siteWith({ title: 'A Site' });
+    assert.deepEqual(readSiteSettings(contentDir).clientsWithoutPkce, []);
+    await updateSiteSettings({ contentDir, change: (current) => current });
+    const written = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.equal('clientsWithoutPkce' in written, false);
+  });
+
+  it('keep only the hand-edited entries that are client_ids, each once', async () => {
+    const contentDir = await siteWith({
+      clientsWithoutPkce: [
+        'https://ia.net/writer',
+        'ia.net',
+        42,
+        'https://10.0.0.1/',
+        'https://ia.net/writer',
+        'https://inklings.io/inkstone/',
+      ],
+    });
+    assert.deepEqual(readSiteSettings(contentDir).clientsWithoutPkce, [
+      'https://ia.net/writer',
+      'https://inklings.io/inkstone/',
+    ]);
+  });
+});
+
 describe('the theme setting', () => {
   /** A themes directory holding one theme with a manifest. */
   async function themesDir(...names: string[]): Promise<string> {

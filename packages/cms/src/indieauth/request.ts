@@ -1,9 +1,11 @@
-import { isIP } from 'node:net';
-
+import { clientIdentifier, sameClient } from './client-id.ts';
 import { SCOPES } from './discovery.ts';
 
 /** A scope this site can grant. */
 export type Scope = (typeof SCOPES)[number];
+
+export type CodeChallenge =
+  { readonly method: 'S256'; readonly value: string } | { readonly method: 'none' };
 
 /** A sign-in a client asked for, every field checked. */
 export interface AuthorizationRequest {
@@ -13,8 +15,7 @@ export interface AuthorizationRequest {
   readonly redirectUri: string;
   /** Handed back untouched, so the client can match the answer to its request. */
   readonly state: string;
-  /** The S256 PKCE challenge the code will be bound to. */
-  readonly codeChallenge: string;
+  readonly codeChallenge: CodeChallenge;
   /** The scopes asked for that this site offers, in the order asked. */
   readonly scopes: readonly Scope[];
   /** The URL the person typed into the client, when the client passed it on. */
@@ -59,10 +60,19 @@ const SCRIPTING_SCHEMES: ReadonlySet<string> = new Set([
   'about:',
 ]);
 
-/** Read an authorization request off its query string, for a site at `baseUrl`. */
+/**
+ * Scopes from before the IndieAuth spec named create and update, as the
+ * scopes they stand for, so the consent screen and the grant show those.
+ * Quill still offers `post` at sign-in.
+ */
+const LEGACY_SCOPES: ReadonlyMap<string, readonly Scope[]> = new Map([
+  ['post', ['create', 'update']],
+]);
+
 export function parseAuthorizationRequest(
   params: URLSearchParams,
   baseUrl: string,
+  clientsWithoutPkce: readonly string[],
 ): ParsedAuthorizationRequest {
   const clientId = clientIdentifier(params.get('client_id') ?? '');
   if (clientId === undefined) {
@@ -87,11 +97,11 @@ export function parseAuthorizationRequest(
     return refuse('unsupported_response_type', 'response_type must be code');
   }
   if (state === undefined || state === '') return refuse('invalid_request', 'state is required');
-  const codeChallenge = params.get('code_challenge') ?? '';
-  if (!S256_CHALLENGE.test(codeChallenge)) {
+  const codeChallenge = challengeOf(params, clientId, redirectUri, clientsWithoutPkce);
+  if (codeChallenge === undefined) {
     return refuse('invalid_request', 'code_challenge must be an S256 PKCE challenge');
   }
-  if (params.get('code_challenge_method') !== 'S256') {
+  if (codeChallenge.method === 'S256' && params.get('code_challenge_method') !== 'S256') {
     return refuse('invalid_request', 'code_challenge_method must be S256');
   }
 
@@ -103,9 +113,10 @@ export function parseAuthorizationRequest(
   }
 
   const offered: ReadonlySet<string> = new Set(SCOPES);
-  const scopes = [...new Set((params.get('scope') ?? '').split(' '))].filter(
-    (scope): scope is Scope => offered.has(scope),
-  );
+  const asked = (params.get('scope') ?? '')
+    .split(' ')
+    .flatMap((scope) => LEGACY_SCOPES.get(scope) ?? scope);
+  const scopes = [...new Set(asked)].filter((scope): scope is Scope => offered.has(scope));
   const me = params.get('me') ?? '';
 
   return {
@@ -122,26 +133,24 @@ export function parseAuthorizationRequest(
   };
 }
 
-/**
- * A client_id the IndieAuth spec allows, as given, or `undefined`.
- *
- * http or https, with no fragment, credentials or dot segments, and a domain
- * name for a host: an IP address only when it is the loopback one a client
- * in development runs on.
- */
-function clientIdentifier(value: string): string | undefined {
-  const url = URL.parse(value);
-  if (url === null || (url.protocol !== 'https:' && url.protocol !== 'http:')) return undefined;
-  if (url.username !== '' || url.password !== '' || value.includes('#')) return undefined;
-  const path =
-    value
-      .slice(url.protocol.length + 2)
-      .replace(/^[^/?]*/, '')
-      .split('?')[0] ?? '';
-  if (path.split('/').some((segment) => segment === '.' || segment === '..')) return undefined;
-  const host = url.hostname.replace(/^\[|\]$/g, '');
-  if (isIP(host) !== 0 && host !== '127.0.0.1' && host !== '::1') return undefined;
-  return value;
+function challengeOf(
+  params: URLSearchParams,
+  clientId: string,
+  redirectUri: string,
+  clientsWithoutPkce: readonly string[],
+): CodeChallenge | undefined {
+  const value = params.get('code_challenge');
+  if (value !== null) return S256_CHALLENGE.test(value) ? { method: 'S256', value } : undefined;
+  const unchallenged =
+    !params.has('code_challenge_method') &&
+    clientsWithoutPkce.some((listed) => sameClient(listed, clientId)) &&
+    returnsToOwnHttpsHost(redirectUri, clientId);
+  return unchallenged ? { method: 'none' } : undefined;
+}
+
+function returnsToOwnHttpsHost(redirectUri: string, clientId: string): boolean {
+  const redirect = new URL(redirectUri);
+  return redirect.protocol === 'https:' && redirect.host === new URL(clientId).host;
 }
 
 /** An absolute redirect_uri with no fragment and no scripting scheme, or `undefined`. */

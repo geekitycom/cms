@@ -3,7 +3,7 @@
  * media library and gets back the URL to name it by in a post.
  */
 import assert from 'node:assert/strict';
-import { readdir } from 'node:fs/promises';
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
@@ -42,7 +42,7 @@ async function site(scopes: Scope[] = ['media'], config: GeekityConfig = {}): Pr
       {
         clientId: 'https://app.example/',
         redirectUri: 'https://app.example/callback',
-        codeChallenge: 'unused',
+        codeChallenge: { method: 'S256', value: 'unused' },
         userId: user.id,
         me: `${BASE}/author/${username}/`,
         scopes,
@@ -262,10 +262,81 @@ describe('q=last', () => {
 
   it('answers 400 to a query it does not answer', async () => {
     const { cms, tokens } = await site();
-    const response = await cms.app.request(`${MEDIA}?q=source`, {
+    const response = await cms.app.request(`${MEDIA}?q=everything`, {
       headers: { authorization: `Bearer ${tokens.ada}` },
     });
     assert.equal(response.status, 400);
+  });
+});
+
+describe('q=source, as Quill asks for its last photo (TASK-222)', () => {
+  const NOW = new Date('2026-09-20T12:00:00.000Z');
+
+  async function source(cms: Cms, token: string, search = '&limit=1'): Promise<Response> {
+    return await cms.app.request(`${MEDIA}?q=source${search}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+  }
+
+  it('answers the token user’s last upload with when it was uploaded, and records that time', async () => {
+    const { cms, tokens } = await site(['media'], { now: () => NOW });
+    const bytes = await photo();
+    await upload(cms, tokens.ada, { bytes, name: 'first.png', type: 'image/png' });
+    const second = await upload(cms, tokens.ada, { bytes, name: 'second.png', type: 'image/png' });
+    await upload(cms, tokens.grace, { bytes, name: 'grace.png', type: 'image/png' });
+
+    const response = await source(cms, tokens.ada);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const location = second.headers.get('location') ?? '';
+    assert.deepEqual(await response.json(), {
+      items: [{ url: location, published: NOW.toISOString() }],
+    });
+    assert.deepEqual(await source(cms, tokens.ada, '').then(async (r) => await r.json()), {
+      items: [{ url: location, published: NOW.toISOString() }],
+    });
+
+    const recorded = JSON.parse(
+      await readFile(path.join(cms.config.dataDir, 'micropub-media.json'), 'utf8'),
+    ) as { last: Record<string, unknown> };
+    assert.deepEqual(recorded.last['1'], {
+      url: new URL(location).pathname,
+      published: NOW.toISOString(),
+    });
+  });
+
+  it('answers no items to a user who has uploaded nothing, or for limit=0', async () => {
+    const { cms, tokens } = await site();
+    await upload(cms, tokens.ada, { bytes: await photo(), name: 'a.png', type: 'image/png' });
+    assert.deepEqual(await (await source(cms, tokens.grace)).json(), { items: [] });
+    assert.deepEqual(await (await source(cms, tokens.ada, '&limit=0')).json(), { items: [] });
+  });
+
+  it('answers 400 to a limit that is not a whole number', async () => {
+    const { cms, tokens } = await site();
+    assert.equal((await source(cms, tokens.ada, '&limit=many')).status, 400);
+    assert.equal((await source(cms, tokens.ada, '&limit=-1')).status, 400);
+  });
+
+  it('dates an upload recorded before upload times were kept by its file', async () => {
+    const { cms, contentDir, tokens } = await site();
+    const response = await upload(cms, tokens.ada, {
+      bytes: await photo(),
+      name: 'old.png',
+      type: 'image/png',
+    });
+    const location = response.headers.get('location') ?? '';
+    const sitePath = new URL(location).pathname;
+    await writeFile(
+      path.join(cms.config.dataDir, 'micropub-media.json'),
+      JSON.stringify({ last: { '1': sitePath } }),
+    );
+    const modified = (await stat(path.join(contentDir, ...sitePath.split('/')))).mtime;
+
+    assert.deepEqual(await (await source(cms, tokens.ada)).json(), {
+      items: [{ url: location, published: modified.toISOString() }],
+    });
+    assert.deepEqual(await (await last(cms, tokens.ada)).json(), { url: location });
   });
 });
 

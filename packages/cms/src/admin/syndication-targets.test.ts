@@ -130,7 +130,7 @@ async function micropubOffers(cms: Cms): Promise<string[]> {
     {
       clientId: 'https://app.example/',
       redirectUri: 'https://app.example/callback',
-      codeChallenge: 'unused',
+      codeChallenge: { method: 'S256', value: 'unused' },
       userId: ada.id,
       me: `${BASE}/author/${ada.username}/`,
       scopes: ['create'],

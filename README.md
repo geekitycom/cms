@@ -1371,7 +1371,8 @@ two URLs as the metadata document. Some Micropub apps, such as iA Writer, look
 only for these older links and do not read the metadata, and the IndieAuth spec
 asks clients to check them for compatibility with earlier versions. The links
 relax nothing: the site still refuses a sign-in request that has no S256 PKCE
-`code_challenge`, so an app that sends none still cannot sign in.
+`code_challenge`, so an app that sends none still cannot sign in unless you list
+it under [Apps allowed without PKCE](#apps-allowed-without-pkce).
 
 When a client sends you to the site, you sign in to the admin if you are not
 signed in already, and then see a consent screen. It names the app (or its
@@ -1462,6 +1463,47 @@ app's next request gets 401 `invalid_token`, and the screen confirms with a
 message. The app has to ask you again through the consent screen to reconnect.
 With no apps connected, the screen says what kinds of app connect here.
 
+### Apps allowed without PKCE
+
+The IndieAuth spec requires PKCE, and the site refuses every sign-in request
+without an S256 `code_challenge`. Some apps send none. iA Writer is one. It
+finds the site's endpoints and is then refused with `code_challenge must be an
+S256 PKCE challenge`. The bottom of Users > Connected apps holds a list of apps
+that may sign in without PKCE anyway. The list starts empty. Any signed-in
+admin can add or remove an app, and the list is kept in
+`content/_data/site.json` as `clientsWithoutPkce`.
+
+To let iA Writer sign in, add `https://ia.net/writer`. Enter the `client_id`
+the app sends, as App activity shows it. The screen refuses anything that is
+not a valid `client_id` URL, and an app already on the list.
+
+A listed app is let in without PKCE only when all of these hold:
+
+- The request carries neither `code_challenge` nor `code_challenge_method`.
+  A request that sends a malformed challenge is still refused.
+- Its `client_id` is on the list.
+- Its `redirect_uri` is `https://` on the same host as the `client_id`. For
+  iA Writer that is `https://ia.net/writer/indieauth/redirect`.
+
+Any other request without PKCE is refused as before. The consent screen tells
+you when an app does not use PKCE and is let in only because it is on the
+list, and App activity records the sign-in as allowed without PKCE.
+
+The code such a sign-in earns is marked as issued without a challenge, and the
+token endpoint and profile redemption redeem it without a `code_verifier`. A
+code issued with a challenge still needs its verifier at both, whatever the
+app is and whatever its redemption leaves out, so a sign-in that began with
+PKCE cannot finish without it. A redemption that leaves out the verifier for
+such a code is refused with `invalid_request` and spends the code.
+
+Listing an app gives up the protection PKCE gives. Without it, somebody who
+intercepts the one-time code on its way back to the app can exchange it for a
+token, because the app kept no verifier to stop them. The same-host
+`https` rule narrows that to return addresses a native app normally claims as
+a verified universal link or app link, so another app on the device should not
+receive the code. The risk is not zero. List only an app you trust that cannot
+sign in otherwise, and remove it once it supports PKCE.
+
 ### App activity
 
 Users > App activity, at `/admin/users/activity`, shows the last requests apps
@@ -1473,7 +1515,9 @@ The site records one entry for each request to these endpoints:
 
 - The authorization endpoint. The sign-in request is recorded when it reaches
   the consent screen, before you approve it, with whether it carried an S256
-  PKCE `code_challenge` and the scopes it asked for. An app's redemption of
+  PKCE `code_challenge` and the scopes it asked for. A request let in without
+  one because the app is on the list of
+  [apps allowed without PKCE](#apps-allowed-without-pkce) is marked as such. An app's redemption of
   its code for your profile is recorded too.
 - The token endpoint, with the `grant_type` and, on success, the scopes the
   token was issued with.
@@ -1528,7 +1572,9 @@ answer 503 in maintenance mode.
    | `profile` | Your name, URL and photo  | Nothing on the endpoint. The app learns who you are. |
 
    Untick any scope you do not want the app to have. A scope the site does not
-   offer, such as `draft`, is left off the screen and is not granted.
+   offer, such as `draft`, is left off the screen and is not granted. The
+   legacy `post` scope, which Quill still offers at sign-in, is shown and
+   granted as `create` and `update`.
 
 4. Choose Approve. The app gets an access token for the scopes you left
    ticked. The token works for seven days, and the app renews it with its
@@ -1553,8 +1599,9 @@ Deleting a user also disconnects every app that user connected.
 ### Sending the token
 
 An app sends its token in an `Authorization: Bearer` header, or in an
-`access_token` field of a form-encoded or multipart body. A request that sends
-it both ways gets 400 `invalid_request`, as RFC 6750 requires. A request with no
+`access_token` field of a form-encoded or multipart body. Quill sends the same
+token both ways, which the site accepts. A request that sends two different
+tokens gets 400 `invalid_request`. A request with no
 token gets 401 `unauthorized`. An unknown, expired or revoked token, or one
 issued for another resource such as an MCP endpoint, gets 401 `invalid_token`.
 
@@ -1571,23 +1618,26 @@ The endpoint maps these properties onto the editor's fields, and decision-27
 records the mapping. Each property takes one value unless the table says
 otherwise.
 
-| Property          | Becomes                                                                                                                                                                                      |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `h=entry`         | The only type accepted. In JSON, `"type": ["h-entry"]`.                                                                                                                                      |
-| `content`         | The body. Plain text is kept as Markdown. `{"html": "…"}` is kept as HTML.                                                                                                                   |
-| `name`            | The title. A post without one is a note.                                                                                                                                                     |
-| `summary`         | The description.                                                                                                                                                                             |
-| `category`        | The tags, one tag per value. Several values.                                                                                                                                                 |
-| `published`       | The date. A date without an offset is in the site's time zone. Without it, the post is dated now.                                                                                            |
-| `post-status`     | `published` or `draft`. A draft is not published, federated or sent webmentions.                                                                                                             |
-| `mp-slug`         | The slug in the file name and the URL.                                                                                                                                                       |
-| `in-reply-to`     | Makes the post a reply to that URL.                                                                                                                                                          |
-| `like-of`         | Makes the post a like of that URL. Needs no content. A like of a fediverse status federates as a `Like` of it (decision-28).                                                                 |
-| `repost-of`       | Makes the post a repost of that URL. Needs no content. A repost of a fediverse status federates as an `Announce` of it (decision-28).                                                        |
-| `bookmark-of`     | Makes the post a bookmark of that URL. Needs no content.                                                                                                                                     |
-| `photo`           | A photo on the post. Several values. A value is a URL, `{"value": "…", "alt": "…"}` in JSON, or a file part in a multipart request. A post with a photo and no reply target is a photo post. |
-| `mp-syndicate-to` | Selects a syndication target by its `uid`, as the editor's Syndicate to checkboxes do. Several values. The post is sent to the targets when it is published.                                 |
-| `access_token`    | The token, when it is not in the header. It is never stored on the post.                                                                                                                     |
+| Property               | Becomes                                                                                                                                                                                      |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `h=entry`              | The only type accepted. In JSON, `"type": ["h-entry"]`.                                                                                                                                      |
+| `content`              | The body. Plain text is kept as Markdown. `{"html": "…"}` is kept as HTML.                                                                                                                   |
+| `name`                 | The title. A post without one is a note.                                                                                                                                                     |
+| `summary`              | The description.                                                                                                                                                                             |
+| `category`             | The tags, one tag per value. Several values.                                                                                                                                                 |
+| `published`            | The date. A date without an offset is in the site's time zone. Without it, the post is dated now.                                                                                            |
+| `post-status`          | `published` or `draft`. A draft is not published, federated or sent webmentions.                                                                                                             |
+| `mp-slug`              | The slug in the file name and the URL.                                                                                                                                                       |
+| `in-reply-to`          | Makes the post a reply to that URL.                                                                                                                                                          |
+| `like-of`              | Makes the post a like of that URL. Needs no content. A like of a fediverse status federates as a `Like` of it (decision-28).                                                                 |
+| `repost-of`            | Makes the post a repost of that URL. Needs no content. A repost of a fediverse status federates as an `Announce` of it (decision-28).                                                        |
+| `bookmark-of`          | Makes the post a bookmark of that URL. Needs no content.                                                                                                                                     |
+| `photo`                | A photo on the post. Several values. A value is a URL, `{"value": "…", "alt": "…"}` in JSON, or a file part in a multipart request. A post with a photo and no reply target is a photo post. |
+| `mp-syndicate-to`      | Selects a syndication target by its `uid`, as the editor's Syndicate to checkboxes do. Several values. The post is sent to the targets when it is published.                                 |
+| `slug`, `syndicate-to` | The same as `mp-slug` and `mp-syndicate-to`. Quill accounts created before Quill renamed them still send these names.                                                                        |
+| `p3k-content-type`     | `text/plain` or `text/markdown`, which Quill sends from its content type selector. Either way the content is kept as Markdown, and nothing else is stored. Any other type is refused.        |
+| `visibility`           | `public`, which every published post is. Nothing is stored. `unlisted` and `private` are refused, since the site does not publish either yet.                                                |
+| `access_token`         | The token, when it is not in the header. It is never stored on the post.                                                                                                                     |
 
 A like, repost or bookmark cites its URL on the post's page and sends that URL
 a webmention when the post is published, as a reply does.
@@ -1624,7 +1674,8 @@ post's URL on this site. A URL that is not a post here gets 400
     names, the whole properties.
 
   Only the properties it names change. It accepts the properties a create
-  accepts, except `mp-slug`. Adding or deleting an `mp-syndicate-to` value
+  accepts, except `mp-slug` and `slug`. A `p3k-content-type` or `visibility` is
+  checked as a create checks it and changes nothing. Adding or deleting an `mp-syndicate-to` value
   selects or deselects that target, and a deselected target is told the post no
   longer links to it. An update is saved exactly as an editor save. The post
   is stamped updated, federates an `Update` and sends webmentions. If the post
@@ -1646,7 +1697,8 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
 
 - `?q=config` lists the media endpoint, the syndication targets under
   `syndicate-to`, the post types the site accepts (note, article, reply, photo,
-  like, repost and bookmark) and the queries it answers.
+  like, repost and bookmark), the queries it answers, and the visibility
+  values a post may take, `"visibility": ["public"]`.
 - `?q=syndicate-to` lists the syndication targets on their own. Each is the
   `uid` and `name` of a target in `content/_data/syndicationTargets.json`, with
   its `id` as the `uid`. A site that declares none lists `[]`. The file is read
@@ -1661,10 +1713,15 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
   media library is given as its absolute URL. Add `&properties[]=content`, once
   per property, to get only those properties, without the type. The same
   ownership rules as an update apply.
-- `?q=last` on the media endpoint answers `{"url": "…"}`, the most recent file
-  the token's user uploaded through it, or `{}` when there is none or the file
-  has since been deleted. Each user's last upload is kept in
-  `micropub-media.json` in the data directory.
+- `?q=source` on the media endpoint answers
+  `{"items": [{"url": "…", "published": "…"}]}`, the most recent file the
+  token's user uploaded through it and when, or `{"items": []}` when there is
+  none or the file has since been deleted. `&limit=…` caps the list; the site
+  keeps only the last upload, so the list never holds more than one. Quill asks
+  this to offer a photo uploaded in the last 15 minutes for the next note.
+- `?q=last` on the media endpoint answers the same upload as `{"url": "…"}`, or
+  `{}`. Each user's last upload and its time are kept in `micropub-media.json`
+  in the data directory.
 
 ### Uploading media
 
@@ -1690,8 +1747,13 @@ replayed with curl against a local site. Every test passes except these:
   as RFC 6750 says. The site accepts it, because Quill sends its token that way
   and refusing it would refuse every Quill post.
 
-No app has been tried against a deployed site yet. TASK-170 lists the runs to
-make with Quill and a mobile app.
+[Quill](https://quill.p3k.io/) is supported: its note, article, bookmark, like
+and repost editors, its photo uploads through the media endpoint, and its last
+photo offer. Tests replay the requests its source builds. On a site with
+`requireAltText` on, a photo needs alt text: type it in Quill's photo dialog,
+which then sends `{"value": "…", "alt": "…"}`, or the post is refused. Quill's
+location, RSVP, code, event, review, itinerary, exercise and weight posts are
+not supported yet.
 
 ## The theme
 

@@ -5,7 +5,7 @@ import { citationsOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { syndicateToOf } from '../webmention/syndication.ts';
-import { createForm } from './create.ts';
+import { createForm, propertyName } from './create.ts';
 import type { CreateSite } from './create.ts';
 
 /**
@@ -25,6 +25,8 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   'bookmark-of': ['bookmarkOf'],
   published: ['date'],
   'post-status': [],
+  'p3k-content-type': [],
+  visibility: [],
   photo: ['photos'],
   'mp-syndicate-to': ['syndicateTo'],
 };
@@ -117,9 +119,10 @@ export function parseChanges(
  */
 export function updateForm(
   document: Document,
-  changes: readonly Change[],
+  given: readonly Change[],
   site: Omit<CreateSite, 'author'>,
 ): { readonly form: EditorForm; readonly draft: boolean } | { readonly errors: string[] } {
+  const changes = given.map((change) => ({ ...change, property: propertyName(change.property) }));
   const touched = [...new Set(changes.map(({ property }) => property))];
   const unknown = touched.filter((property) => !(property in UPDATABLE));
   if (unknown.length > 0) return { errors: [`This endpoint cannot update ${unknown.join(', ')}.`] };

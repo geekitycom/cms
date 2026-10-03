@@ -45,12 +45,8 @@ export function redeemCode(
   const code = form['code'];
   const clientId = form['client_id'];
   const redirectUri = form['redirect_uri'];
-  const verifier = form['code_verifier'];
-  if (!code || !clientId || !redirectUri || !verifier) {
-    return refuse(
-      'invalid_request',
-      'code, client_id, redirect_uri and code_verifier are all required.',
-    );
+  if (!code || !clientId || !redirectUri) {
+    return refuse('invalid_request', 'code, client_id and redirect_uri are all required.');
   }
 
   const grant = codes.take(code);
@@ -60,8 +56,14 @@ export function redeemCode(
   if (grant.clientId !== clientId || grant.redirectUri !== redirectUri) {
     return refuse('invalid_grant', 'The code was issued to another client or redirect_uri.');
   }
-  if (createHash('sha256').update(verifier).digest('base64url') !== grant.codeChallenge) {
-    return refuse('invalid_grant', 'The code_verifier does not match the code_challenge.');
+  if (grant.codeChallenge.method === 'S256') {
+    const verifier = form['code_verifier'];
+    if (!verifier) {
+      return refuse('invalid_request', 'code_verifier is required: the code has a code_challenge.');
+    }
+    if (createHash('sha256').update(verifier).digest('base64url') !== grant.codeChallenge.value) {
+      return refuse('invalid_grant', 'The code_verifier does not match the code_challenge.');
+    }
   }
   return { ok: true, grant };
 }

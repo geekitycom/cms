@@ -49,7 +49,7 @@ async function site(grant: Partial<AuthorizationCode> = {}): Promise<Site> {
     {
       clientId: 'https://app.example/',
       redirectUri: 'https://app.example/callback',
-      codeChallenge: 'unused',
+      codeChallenge: { method: 'S256', value: 'unused' },
       userId: ada.id,
       me: `${BASE}/author/ada/`,
       scopes: ['create'],

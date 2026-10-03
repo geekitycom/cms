@@ -78,6 +78,7 @@ const QUERIES: Readonly<Record<Query, (context: QueryContext) => object>> = {
     'media-endpoint': `${baseUrl}${MICROPUB_MEDIA_PATH}`,
     'syndicate-to': offered(targets),
     'post-types': Object.entries(POST_TYPE_NAMES).map(([type, name]) => ({ type, name })),
+    visibility: ['public'],
     q: QUERY_NAMES,
   }),
   'syndicate-to': ({ targets }) => ({ 'syndicate-to': offered(targets) }),

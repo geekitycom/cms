@@ -38,14 +38,47 @@ const SINGLE_VALUED = {
   'mp-slug': 'slug',
 } as const satisfies Record<string, keyof EditorForm>;
 
+const ACCEPTED_WITHOUT_EFFECT: Readonly<Record<string, (value: string) => string | undefined>> = {
+  'p3k-content-type': (type) =>
+    type === 'text/plain' || type === 'text/markdown'
+      ? undefined
+      : `p3k-content-type is text/plain or text/markdown, not ${type}.`,
+  visibility: (visibility) => {
+    switch (visibility) {
+      case 'public':
+        return undefined;
+      case 'unlisted':
+        return 'This site does not publish unlisted posts yet; visibility is public.';
+      case 'private':
+        return 'This site does not publish private posts; visibility is public.';
+      default:
+        return `visibility is public, not ${visibility}.`;
+    }
+  },
+};
+
 const PROPERTIES = new Set<string>([
   ...Object.keys(SINGLE_VALUED),
+  ...Object.keys(ACCEPTED_WITHOUT_EFFECT),
   'content',
   'category',
   'photo',
   'post-status',
   'mp-syndicate-to',
 ]);
+
+/**
+ * The names Quill accounts created before its migrations 0002 and 0004 send,
+ * and the property each one is.
+ */
+const LEGACY_NAMES: ReadonlyMap<string, string> = new Map([
+  ['slug', 'mp-slug'],
+  ['syndicate-to', 'mp-syndicate-to'],
+]);
+
+export function propertyName(name: string): string {
+  return LEGACY_NAMES.get(name) ?? name;
+}
 
 /** What `post-status` may say, and whether it makes a draft. */
 const POST_STATUSES: Readonly<Record<string, boolean>> = { published: false, draft: true };
@@ -133,14 +166,20 @@ export function createForm(
     return { errors: [`This endpoint creates h-entry posts, not ${named}.`] };
   }
 
+  const properties = new Map<string, readonly unknown[]>();
+  for (const [name, values] of request.properties) {
+    const property = propertyName(name);
+    properties.set(property, [...(properties.get(property) ?? []), ...values]);
+  }
+
   const errors: string[] = [];
-  const unknown = [...request.properties.keys()].filter((name) => !PROPERTIES.has(name));
+  const unknown = [...properties.keys()].filter((name) => !PROPERTIES.has(name));
   if (unknown.length > 0) {
     errors.push(`This endpoint does not understand ${unknown.join(', ')}.`);
   }
 
   const text = (name: string): string => {
-    const values = request.properties.get(name) ?? [];
+    const values = properties.get(name) ?? [];
     if (values.length > 1) errors.push(`${name} takes one value.`);
     const [value] = values;
     if (value === undefined) return '';
@@ -155,12 +194,12 @@ export function createForm(
     ...blankForm(POST_KIND, timezone, now),
     date: '',
     author,
-    body: normalizeBody(content(request.properties.get('content') ?? [], errors)),
-    tags: categories(request.properties.get('category') ?? [], errors),
-    syndicateTo: syndicateTo(request.properties.get('mp-syndicate-to') ?? [], site.targets, errors),
+    body: normalizeBody(content(properties.get('content') ?? [], errors)),
+    tags: categories(properties.get('category') ?? [], errors),
+    syndicateTo: syndicateTo(properties.get('mp-syndicate-to') ?? [], site.targets, errors),
   };
   const uploads: PhotoUpload[] = [];
-  form.photos = (request.properties.get('photo') ?? []).map((value, row) => {
+  form.photos = (properties.get('photo') ?? []).map((value, row) => {
     if (value instanceof File) {
       uploads.push({ row, file: value });
       return { url: '', alt: '' };
@@ -174,6 +213,11 @@ export function createForm(
   });
   for (const [property, field] of Object.entries(SINGLE_VALUED)) {
     form[field] = text(property);
+  }
+  for (const [property, refused] of Object.entries(ACCEPTED_WITHOUT_EFFECT)) {
+    const value = text(property);
+    const reason = value === '' ? undefined : refused(value);
+    if (reason !== undefined) errors.push(reason);
   }
 
   const status = text('post-status');

@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-02 16:54'
+updated_date: '2026-10-03 00:14'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -137,6 +137,8 @@ A post created over Micropub (TASK-164) is written by the editor's own write pat
 | `post-status: draft` | `draft: true`; `published`, or none, is `draft: false` |
 | `mp-slug` | the slug, in the file name and the permalink |
 | `photo`, each value | an entry in `photo`: a URL, or `{ "value": "…", "alt": "…" }` with its `alt`. A URL into the site's own uploads is written as its `/uploads/…` path. A file part of a multipart create is stored in the media library as the media endpoint stores one, and its path written; it is taken back out if the post is refused |
+
+`slug` and `syndicate-to`, which Quill accounts from before its renames send, are read as `mp-slug` and `mp-syndicate-to`. `p3k-content-type` (`text/plain` or `text/markdown`) and `visibility` (`public`) are accepted and write nothing (TASK-222); any other value of either is refused by name.
 
 The token's user is `author`. Only `h-entry` is created. Any other type or property, a second value where one is expected, or a value that is not text is refused by name and nothing is written.
 

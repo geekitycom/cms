@@ -335,13 +335,25 @@ describe('approving and denying', () => {
       clientId: APP,
       clientName: 'Quill',
       redirectUri: `${APP}callback`,
-      codeChallenge: CHALLENGE,
+      codeChallenge: { method: 'S256', value: CHALLENGE },
       userId: 1,
       me: `${BASE}/`,
       scopes: ['profile'],
       resource: `${BASE}/mcp`,
     });
     assert.equal(await grant(cms, code), null, 'a code is taken once');
+  });
+
+  it('shows the legacy post scope as create and update, and grants those', async () => {
+    const cms = await site();
+    const agent = await signIn(cms);
+    const form = await consent(agent, { scope: 'post' });
+    assert.match(form.html, /<input[^>]*name="scope"[^>]*value="create"[^>]*checked/);
+    assert.match(form.html, /<input[^>]*name="scope"[^>]*value="update"[^>]*checked/);
+    assert.doesNotMatch(form.html, /value="post"/);
+    const back = await decide(agent, form, 'approve', ['create', 'update']);
+    const issued = await grant(cms, back.searchParams.get('code') ?? '');
+    assert.deepEqual(issued?.['scopes'], ['create', 'update']);
   });
 
   it('grants no scope that was not asked for, even when the form says so', async () => {

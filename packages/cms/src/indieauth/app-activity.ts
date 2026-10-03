@@ -97,7 +97,11 @@ function details(entry: ActivityEntry): { label: string; value: string }[] {
     lines.push(
       {
         label: 'PKCE',
-        value: entry.pkce ? 'An S256 code_challenge was sent' : 'No S256 code_challenge was sent',
+        value: entry.pkce
+          ? 'An S256 code_challenge was sent'
+          : entry.allowedWithoutPkce === true
+            ? 'Allowed without PKCE: the app is on your list of apps allowed without PKCE'
+            : 'No S256 code_challenge was sent',
       },
       { label: 'Scopes asked for', value: listed(entry.scopes) },
     );

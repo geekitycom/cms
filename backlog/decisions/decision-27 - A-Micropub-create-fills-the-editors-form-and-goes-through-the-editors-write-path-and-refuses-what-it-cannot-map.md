@@ -43,3 +43,16 @@ TASK-164 lets a Micropub client create a post. The post has to come out as the a
 - Each later Micropub task (photos, likes and reposts, syndication, update, delete) widens the mapping here and in doc-2 instead of adding a path of its own.
 - HTML content is stored as HTML inside the Markdown body. markdown-it passes it through (`html: true`), and Eleventy does the same, but HTML that holds a blank line inside one element may be split at it.
 - Categories become tags only. The site's second taxonomy, `categories`, is not reachable from Micropub.
+
+## Amendment (TASK-222, 2026-10-02): properties accepted and not stored
+
+Quill sends two properties that change nothing the site writes. Refusing them refused Quill's posts; mapping them would store a key nothing reads. They are accepted, checked, and not stored, on a create and an update alike (`UNSTORED` in `src/micropub/create.ts`):
+
+| Micropub property | Accepted | Refused |
+| --- | --- | --- |
+| `p3k-content-type` | `text/plain`, `text/markdown`: both are the Markdown body the site already stores | any other type, `text/html` and Quill's `code/*` included, by name |
+| `visibility` | `public`, which every published post is | `unlisted` (not yet: TASK-219's visibility decision builds it) and `private` (not published), each with its own message |
+
+Every other unmapped property is still refused by name. `q=config` advertises `visibility: ["public"]`, and adds `unlisted` when it is built.
+
+The same task reads `slug` and `syndicate-to`, the names Quill accounts from before its migrations 0002 and 0004 send, as `mp-slug` and `mp-syndicate-to`, so they are mapped, checked and refused exactly as those are.

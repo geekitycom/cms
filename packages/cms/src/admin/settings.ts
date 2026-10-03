@@ -11,6 +11,7 @@ import {
 } from '../files/atomic.ts';
 import { parseIconSetting } from '../images/icons.ts';
 import { sourceFile } from '../images/paths.ts';
+import { clientIdentifier } from '../indieauth/client-id.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
@@ -371,6 +372,13 @@ export interface SiteSettings {
    * recorded, so the list answers every old URL in one hop.
    */
   taxonomyRedirects: readonly TaxonomyRedirect[];
+  /**
+   * The IndieAuth apps the owner lets sign in without PKCE (TASK-225), each a
+   * client_id. Empty, the default, means every app needs PKCE, as the
+   * IndieAuth spec says. Not a field of the settings form: Users > Connected
+   * apps edits it, and a settings save carries it, like the menus.
+   */
+  clientsWithoutPkce: readonly string[];
 }
 
 /** What a site says about one Content-Signal: yes, no, or nothing. */
@@ -415,7 +423,7 @@ export function robotsPolicyOf(settings: SiteSettings): RobotsPolicy {
  */
 export type SettingsField = Exclude<
   keyof SiteSettings,
-  'taxonomyRedirects' | 'menus' | 'indexNowKey'
+  'taxonomyRedirects' | 'menus' | 'indexNowKey' | 'clientsWithoutPkce'
 >;
 
 /**
@@ -427,7 +435,7 @@ export type SettingsField = Exclude<
  * edited while the settings page was open survive the save.
  */
 export type CarriedSettings = Partial<
-  Pick<SiteSettings, 'taxonomyRedirects' | 'menus' | 'indexNowKey'>
+  Pick<SiteSettings, 'taxonomyRedirects' | 'menus' | 'indexNowKey' | 'clientsWithoutPkce'>
 >;
 
 /**
@@ -486,6 +494,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   wordpressActivityPub: false,
   menus: {},
   taxonomyRedirects: [],
+  clientsWithoutPkce: [],
 };
 
 /** The form field each setting is submitted under. */
@@ -703,9 +712,19 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
     ...(Array.isArray(file['taxonomyRedirects'])
       ? { taxonomyRedirects: taxonomyRedirectsOf(file['taxonomyRedirects']) }
       : {}),
+    ...(Array.isArray(file['clientsWithoutPkce'])
+      ? { clientsWithoutPkce: clientsWithoutPkceOf(file['clientsWithoutPkce']) }
+      : {}),
     ...(Number.isInteger(postsPerPage) && postsPerPage > 0 ? { postsPerPage } : {}),
     ...(typeof file['url'] === 'string' ? { baseUrl: file['url'] } : {}),
   };
+}
+
+function clientsWithoutPkceOf(entries: readonly unknown[]): string[] {
+  const valid = entries.filter(
+    (entry): entry is string => typeof entry === 'string' && clientIdentifier(entry) !== undefined,
+  );
+  return [...new Set(valid)];
 }
 
 /** The two archive bases the settings hold, as the URL builders want them. */
@@ -818,6 +837,10 @@ export function siteJsonFor(
   // A site that has never turned IndexNow on has no key to write down.
   if (settings.indexNowKey !== '') file['indexNowKey'] = settings.indexNowKey;
   else delete file['indexNowKey'];
+
+  if (settings.clientsWithoutPkce.length > 0) {
+    file['clientsWithoutPkce'] = [...settings.clientsWithoutPkce];
+  } else delete file['clientsWithoutPkce'];
 
   return file;
 }
@@ -1305,6 +1328,7 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
   return {
     taxonomyRedirects: carried.taxonomyRedirects ?? DEFAULT_SITE_SETTINGS.taxonomyRedirects,
     menus: carried.menus ?? DEFAULT_SITE_SETTINGS.menus,
+    clientsWithoutPkce: carried.clientsWithoutPkce ?? DEFAULT_SITE_SETTINGS.clientsWithoutPkce,
     title: form.title.trim(),
     tagline: form.tagline.trim(),
     baseUrl: normalizeBaseUrl(form.baseUrl) ?? '',
