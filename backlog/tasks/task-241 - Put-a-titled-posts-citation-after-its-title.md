@@ -4,6 +4,7 @@ title: Put a titled post's citation after its title
 status: To Do
 assignee: []
 created_date: '2026-10-03 16:30'
+updated_date: '2026-10-03 16:31'
 labels:
   - theme
 dependencies: []
@@ -30,3 +31,9 @@ Place the citation and the reply context by whether the post shows a title: afte
 - [ ] #3 Parsing the page with microformats-parser gives the same h-entry properties as before
 - [ ] #4 Theme README describes the placement
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Current layout (themes/default/layouts/post.njk:38-59): the {% if named %} branch includes reply-context.njk and citations.njk deliberately before the header, under the comment 'A reply cites the post it answers'; the untitled branch prints them after the kicker. This task reverses the titled branch's order on the site owner's call (2026-10-03): move the two includes below </header>. post-list.njk includes them at lines 40 and 44 and needs the same named/untitled split.
+<!-- SECTION:NOTES:END -->
