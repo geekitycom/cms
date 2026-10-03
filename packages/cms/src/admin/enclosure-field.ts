@@ -26,6 +26,7 @@ import type { AlternateEnclosure, Enclosure, Transcript } from '../content/enclo
 import { canonicalType, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import type { UploadMediaType } from '../content/media.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
+import type { EditorField, FieldError } from './editor-layout.ts';
 import { listUploads } from './media.ts';
 import { LANGUAGE_TAG_PATTERN } from './settings.ts';
 
@@ -149,7 +150,7 @@ export function readEnclosureForm(body: Record<string, unknown>): EnclosureForm 
 }
 
 /** A recording the form described, or why it cannot be saved. */
-export type ResolvedEnclosure = { enclosure: Enclosure | undefined } | { error: string };
+export type ResolvedEnclosure = { enclosure: Enclosure | undefined } | FieldError;
 
 /**
  * The recording to write, from what the author chose and what is on disk.
@@ -168,7 +169,10 @@ export function resolveEnclosure(
 
   const main = measuredUpload(form.url, contentDir, ['audio', 'video']);
   if (main === undefined) {
-    return { error: 'The recording has to be an audio or video file in the media library.' };
+    return {
+      error: 'The recording has to be an audio or video file in the media library.',
+      field: 'editor-enclosure-url',
+    };
   }
 
   let duration: number | undefined;
@@ -177,6 +181,7 @@ export function resolveEnclosure(
     if (duration === undefined) {
       return {
         error: 'A duration is seconds, or minutes and seconds like 30:34, or hours like 1:02:03.',
+        field: 'editor-enclosure-duration',
       };
     }
   }
@@ -185,8 +190,8 @@ export function resolveEnclosure(
   if (transcript !== undefined && 'error' in transcript) return transcript;
 
   const alternates: AlternateEnclosure[] = [];
-  for (const row of form.alternates) {
-    const alternate = resolveAlternate(row, previous, contentDir);
+  for (const [index, row] of form.alternates.entries()) {
+    const alternate = resolveAlternate(row, index, previous, contentDir);
     if ('error' in alternate) return alternate;
     alternates.push(alternate);
   }
@@ -246,7 +251,7 @@ export async function enclosureChoices(
 function resolveTranscript(
   form: EnclosureForm,
   contentDir: string,
-): Transcript | { error: string } | undefined {
+): Transcript | FieldError | undefined {
   if (form.transcriptUrl === '') return undefined;
 
   if (isUploadUrl(form.transcriptUrl)) {
@@ -256,6 +261,7 @@ function resolveTranscript(
       return {
         error:
           'A transcript in the media library has to be a .vtt, .srt or .txt file that is there.',
+        field: 'editor-enclosure-transcript',
       };
     }
     return { url: form.transcriptUrl, type };
@@ -264,31 +270,45 @@ function resolveTranscript(
   if (!isWebUrl(form.transcriptUrl)) {
     return {
       error: 'A transcript is a file in the media library or an address starting https://.',
+      field: 'editor-enclosure-transcript',
     };
   }
   const type = TRANSCRIPT_TYPES.find((known) => known === form.transcriptType);
   if (type === undefined) {
-    return { error: 'Say what kind of file a linked transcript is.' };
+    return {
+      error: 'Say what kind of file a linked transcript is.',
+      field: 'editor-enclosure-transcript-type',
+    };
   }
   return { url: form.transcriptUrl, type };
 }
 
 function resolveAlternate(
   row: AlternateRow,
+  index: number,
   previous: Enclosure | undefined,
   contentDir: string,
-): AlternateEnclosure | { error: string } {
+): AlternateEnclosure | FieldError {
+  const field = (box: keyof AlternateRow): EditorField =>
+    `editor-alternate-${box}-${String(index)}`;
   if (row.title.length > ALTERNATE_TITLE_MAX_LENGTH) {
     return {
       error: `An alternate version’s title is at most ${String(ALTERNATE_TITLE_MAX_LENGTH)} characters.`,
+      field: field('title'),
     };
   }
   const height = row.height === '' ? undefined : Number(row.height);
   if (height !== undefined && !(Number.isSafeInteger(height) && height > 0)) {
-    return { error: 'An alternate version’s height is a number of pixels, like 720.' };
+    return {
+      error: 'An alternate version’s height is a number of pixels, like 720.',
+      field: field('height'),
+    };
   }
   if (row.lang !== '' && !LANGUAGE_TAG_PATTERN.test(row.lang)) {
-    return { error: 'An alternate version’s language is a language tag, such as en or pt-BR.' };
+    return {
+      error: 'An alternate version’s language is a language tag, such as en or pt-BR.',
+      field: field('lang'),
+    };
   }
   const described = {
     ...(row.title === '' ? {} : { title: row.title }),
@@ -301,6 +321,7 @@ function resolveAlternate(
     if (file === undefined) {
       return {
         error: `${row.url} is not an audio or video file in the media library.`,
+        field: field('url'),
       };
     }
     return { url: row.url, type: file.type, length: file.length, ...described };
@@ -309,12 +330,14 @@ function resolveAlternate(
   if (!isWebUrl(row.url)) {
     return {
       error: `An alternate version is a file in the media library or an address starting https://, not ${row.url}.`,
+      field: field('url'),
     };
   }
   const type = row.type.toLowerCase();
   if (!isMediaType(type)) {
     return {
       error: `Say what type of file ${row.url} is, such as video/mp4 or audio/mpeg.`,
+      field: field('type'),
     };
   }
   const length = previous?.alternates.find((known) => known.url === row.url)?.length;

@@ -1,6 +1,7 @@
 import { isWebUrl } from '../content/enclosure.ts';
 import { isReadStatus, READ_STATUSES } from '../content/read.ts';
 import type { Read, ReadOf } from '../content/read.ts';
+import type { FieldError } from './editor-layout.ts';
 
 export interface ReadOfForm {
   name: string;
@@ -41,20 +42,29 @@ export function submittedReadOfForm(body: Record<string, unknown>): ReadOfForm {
 export function resolveRead(
   status: string,
   of: ReadOfForm,
-): { read: Read | undefined } | { error: string } {
+): { read: Read | undefined } | FieldError {
   const filled = Object.values(of).some((value) => value !== '');
   if (status === '' && !filled) return { read: undefined };
   if (status !== '' && !isReadStatus(status)) {
-    return { error: `A read status is ${READ_STATUSES.join(', ')}, not ${status}.` };
+    return {
+      error: `A read status is ${READ_STATUSES.join(', ')}, not ${status}.`,
+      field: 'editor-read-status',
+    };
   }
-  if (of.name === '') return { error: 'A read needs the title of what was read.' };
+  if (of.name === '') {
+    return { error: 'A read needs the title of what was read.', field: 'editor-read-of-name' };
+  }
   if (!isReadStatus(status)) {
-    return { error: 'A read needs a read status: want to read, currently reading or finished.' };
+    return {
+      error: 'A read needs a read status: want to read, currently reading or finished.',
+      field: 'editor-read-status',
+    };
   }
   if (of.url !== '' && !isWebUrl(of.url)) {
     return {
       error:
         'The address of what was read has to be a web address, like https://example.com/a-book/.',
+      field: 'editor-read-of-url',
     };
   }
   const word = (value: string): string | undefined => (value === '' ? undefined : value);

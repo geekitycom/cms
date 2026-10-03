@@ -33,6 +33,7 @@ const SCREENS = [
   // Users > App activity and one request in full (TASK-221).
   'pages/users/activity.njk',
   'pages/users/activity-entry.njk',
+  'pages/documents/editor.njk',
 ];
 
 /** Marks where a `{{ … }}` stood, so an interpolated name is not mistaken
