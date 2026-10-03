@@ -1,11 +1,11 @@
 ---
 id: TASK-240
 title: Federate a reply to the author it answers
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-03 16:28'
-updated_date: '2026-10-03 18:23'
+updated_date: '2026-10-03 23:17'
 labels:
   - federation
   - micropub
@@ -33,7 +33,7 @@ Fix it the way likes and reposts work: when a reply's target resolves as a fediv
 - [x] #2 The Create, and later Update and Delete of the reply, are delivered to the status author's inbox as well as the followers, once per shared inbox
 - [x] #3 A reply to a page that is not a fediverse object federates exactly as today
 - [x] #4 Tests use the stubbed remote host in delivery.test.ts (carol's status) and check the JSON-LD sent to her inbox
-- [ ] #5 A real reply from shll.me to a Mastodon post notifies the Mastodon account, or the notes say why it could not be checked
+- [x] #5 A real reply from shll.me to a Mastodon post notifies the Mastodon account, or the notes say why it could not be checked
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -57,4 +57,12 @@ Known limits: only delivery resolves the target. The Note the object dispatcher 
 Tests (delivery.test.ts, stubbed remote host): Create to carol's inbox and the shared inbox with inReplyTo = STATUS_ID, Mention and carol in cc; one POST when the author (dora) shares the followers' inbox; Update on edit and on resend, and Delete on draft, reach carol; unlisted addressing plus carol; a reply to PLAIN_PAGE and to the site's own post federate as before. Failing first: the new tests failed with only https://remote.example/inbox delivered and inReplyTo = https://remote.example/@dora/2. Removing the own-origin guard makes the self-reply test fail with three fetches of https://blog.example/2026/03/earlier/.
 Validation: pnpm build, pnpm test (3791 + 30 pass), pnpm typecheck, pnpm lint, pnpm format:check all clean.
 AC #5 not checked: it needs a real reply published from shll.me to a Mastodon post after this ships, which could not be done from here. To check it, deploy, reply from shll.me to a status of an account that does not follow the site, and confirm the mention notification arrives.
+
+2026-10-03: on 0.19.0 at shll.me, a new reply to a status on indieweb.social notified that account (reported by the site owner).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+A reply whose target resolves as a fediverse status federates with inReplyTo set to the status's ActivityPub id, a Mention of its author with them in cc, and delivery to the author's inbox (once per shared inbox) for Create, Update and Delete. Verified by delivery.test.ts against the stubbed remote host and live: a reply from shll.me on 0.19.0 notified the indieweb.social account.
+<!-- SECTION:FINAL_SUMMARY:END -->
