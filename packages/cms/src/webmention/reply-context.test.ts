@@ -197,12 +197,7 @@ describe('fetchReplyContext', () => {
   });
 
   it('gives up on a target that is too slow', async () => {
-    answer = (request) =>
-      new Promise((_, reject) => {
-        request.signal.addEventListener('abort', () => {
-          reject(request.signal.reason as Error);
-        });
-      });
+    answer = (request) => untilAborted(request);
 
     const started = Date.now();
     const fetched = await fetchReplyContext(TARGET, { lookup, timeoutMs: 50 });
@@ -483,13 +478,7 @@ describe('fetchReplyContext with oEmbed', () => {
 
   it('gives the oEmbed endpoint only what is left of the one timeout', async () => {
     answer = (request) =>
-      request.url === PAGE
-        ? html(pageWith('<title>Patient page</title>'))
-        : new Promise((_, reject) => {
-            request.signal.addEventListener('abort', () => {
-              reject(request.signal.reason as Error);
-            });
-          });
+      request.url === PAGE ? html(pageWith('<title>Patient page</title>')) : untilAborted(request);
 
     const started = Date.now();
     const fetched = await fetchReplyContext(PAGE, { lookup, timeoutMs: 100 });
@@ -677,3 +666,18 @@ describe('the address guard', () => {
     assert.equal(await publicHost('nowhere.example', lookup), false);
   });
 });
+
+/**
+ * A server that never answers. The interval stands in for the socket a real
+ * request holds open: AbortSignal.timeout's timer does not keep the event
+ * loop alive, so without it the loop can drain before the abort fires.
+ */
+function untilAborted(request: Request): Promise<Response> {
+  return new Promise((_, reject) => {
+    const socket = setInterval(() => undefined, 1_000);
+    request.signal.addEventListener('abort', () => {
+      clearInterval(socket);
+      reject(request.signal.reason as Error);
+    });
+  });
+}
