@@ -115,7 +115,10 @@ describe('image optimization end to end', () => {
     const permalink = await postEmbedding(cms, contentDir, url);
 
     const feed = await fetched(cms, '/feed/');
-    assert.match(feed, /<!\[CDATA\[<p><img src="\/uploads\/2[^"]*\.png" alt="A photo">/);
+    assert.match(
+      feed,
+      /<!\[CDATA\[<p><img src="http:\/\/localhost:3000\/uploads\/2[^"]*\.png" alt="A photo">/,
+    );
     assert.doesNotMatch(feed, /picture|srcset/);
 
     const json = await (

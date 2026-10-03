@@ -8,6 +8,7 @@ import type { AltTextLibrary } from '../images/alt-text.ts';
 import { isNamed, replyTarget } from '../content/post-type.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
+import { absoluteHtmlUrls } from './absolute-urls.ts';
 import { activityStreamsId } from './documents.ts';
 import { feedLanguage, feedPathUnder } from './feed-source.ts';
 import { escapeXml } from './feed-xml.ts';
@@ -93,7 +94,8 @@ export interface FeedItem {
   summary: string;
   /**
    * What every format prints as the content: the post's photos (TASK-166), then
-   * its rendered body, which is the order the page prints them in. Each photo
+   * its rendered body with every relative URL in it made absolute,
+   * which is the order the page prints them in. Each photo
    * is a plain `<img>` of the original, absolute on the site's base URL, with
    * the alt text the page gives it (decision-10: a reader cannot resolve the
    * site's variants), so a photo-only post does not read empty.
@@ -158,15 +160,15 @@ export interface FeedItem {
  * revision 5 named a post's own language in all three, and revision 6 printed
  * a stored username as the user's display name and credited the site title
  * where nobody was named, and revision 7 printed a post's photos and named its
- * main image — would
- * leave the validator where it was, and a reader polling with `If-None-Match`
- * would be handed a 304 that hides the new bytes.
+ * main image, and revision 8 made the relative URLs in a post's body absolute —
+ * would leave the validator where it was, and a reader polling with
+ * `If-None-Match` would be handed a 304 that hides the new bytes.
  *
  * Bumping this moves every post feed's ETag exactly once, at the upgrade, and
  * never again until the next such change. The comments feeds do not carry it:
  * a comment is not a {@link FeedItem} and its bytes are untouched.
  */
-export const FEED_ITEM_REVISION = 7;
+export const FEED_ITEM_REVISION = 8;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -214,7 +216,9 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     link,
     terms: [...document.categories, ...document.tags],
     summary: feedExcerpt(document),
-    html: photosHtml(photos, context.altTexts ?? new Map(), baseUrl) + document.html,
+    html:
+      photosHtml(photos, context.altTexts ?? new Map(), baseUrl) +
+      absoluteHtmlUrls(document.html, link, baseUrl),
     markdown: document.body,
     creator: author ?? siteAuthorName(context.users, context.site),
   };
