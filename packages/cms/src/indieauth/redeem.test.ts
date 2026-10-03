@@ -20,16 +20,22 @@ const BASE = 'https://blog.example';
 const CODE: AuthorizationCode = {
   clientId: 'https://app.example/',
   redirectUri: 'https://app.example/callback',
-  codeChallenge: CHALLENGE,
+  codeChallenge: { method: 'S256', value: CHALLENGE },
   userId: 1,
   me: 'https://blog.example/',
   scopes: ['profile'],
 };
 
-function issued(clock: () => Date = () => new Date('2026-10-01T00:00:00Z')) {
+function issued(
+  clock: () => Date = () => new Date('2026-10-01T00:00:00Z'),
+  grant: AuthorizationCode = CODE,
+) {
   const { codes } = createIndieAuthState(clock);
-  return { codes, code: codes.put(CODE) };
+  return { codes, code: codes.put(grant) };
 }
+
+/** A code issued to an app on the list of apps allowed without PKCE (TASK-225). */
+const UNCHALLENGED: AuthorizationCode = { ...CODE, codeChallenge: { method: 'none' } };
 
 function form(code: string, changes: Record<string, string | undefined> = {}) {
   return {
@@ -96,11 +102,46 @@ describe('redeeming a code', () => {
     assert.equal(redeemCode(codes, form(code)).ok, true);
   });
 
-  for (const field of ['code', 'client_id', 'redirect_uri', 'code_verifier'] as const) {
+  for (const field of ['code', 'client_id', 'redirect_uri'] as const) {
     it(`refuses a request with no ${field} as invalid_request`, () => {
       const { codes, code } = issued();
       const refused = redeemCode(codes, form(code, { [field]: undefined }));
       assert.equal(!refused.ok && refused.error, 'invalid_request');
+    });
+  }
+});
+
+describe('redeeming a code issued without a challenge (TASK-225)', () => {
+  const NOW = () => new Date('2026-10-01T00:00:00Z');
+
+  it('needs no code_verifier', () => {
+    const { codes, code } = issued(NOW, UNCHALLENGED);
+    assert.deepEqual(redeemCode(codes, form(code, { code_verifier: undefined })), {
+      ok: true,
+      grant: UNCHALLENGED,
+    });
+  });
+
+  it('still checks the client_id and redirect_uri', () => {
+    const { codes, code } = issued(NOW, UNCHALLENGED);
+    const refused = redeemCode(
+      codes,
+      form(code, { code_verifier: undefined, redirect_uri: 'https://app.example/elsewhere' }),
+    );
+    assert.equal(!refused.ok && refused.error, 'invalid_grant');
+  });
+});
+
+describe('a redemption that tries to drop PKCE from a code issued with a challenge', () => {
+  for (const [what, verifier] of [
+    ['no code_verifier', undefined],
+    ['an empty code_verifier', ''],
+  ] as const) {
+    it(`is refused when it sends ${what}, and the code is spent`, () => {
+      const { codes, code } = issued();
+      const refused = redeemCode(codes, form(code, { code_verifier: verifier }));
+      assert.equal(!refused.ok && refused.error, 'invalid_request');
+      assert.equal(redeemCode(codes, form(code)).ok, false, 'a downgrade attempt burns the code');
     });
   }
 });

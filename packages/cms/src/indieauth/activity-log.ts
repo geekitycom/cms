@@ -88,6 +88,8 @@ export type EndpointFacts = Facts &
         readonly action: 'request';
         /** Whether the request carried an S256 `code_challenge`. */
         readonly pkce: boolean;
+        /** Set when it had none and was let through because the app is listed (TASK-225). */
+        readonly allowedWithoutPkce?: true;
         /** The scopes asked for, as asked, offered or not. */
         readonly scopes: readonly string[];
       }
@@ -126,6 +128,8 @@ export interface ActivityNote {
   readonly user?: string;
   readonly scopes?: readonly string[];
   readonly refusal?: { readonly error: string; readonly description: string };
+  /** The sign-in went ahead without PKCE because the app is on the owner's list. */
+  readonly allowedWithoutPkce?: true;
 }
 
 /** Add to what this request's entry will say. */
@@ -356,6 +360,7 @@ export const logAuthorizationRequest = recordActivity((c) => {
     user: user?.username,
     pkce:
       (params.get('code_challenge') ?? '') !== '' && params.get('code_challenge_method') === 'S256',
+    ...(c.var.activityNote?.allowedWithoutPkce === true ? { allowedWithoutPkce: true } : {}),
     scopes: (params.get('scope') ?? '')
       .split(' ')
       .filter((scope) => scope !== '')

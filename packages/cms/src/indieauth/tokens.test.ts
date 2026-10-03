@@ -36,7 +36,7 @@ const T0 = new Date('2026-10-01T00:00:00Z');
 const GRANT: AuthorizationCode = {
   clientId: 'https://app.example/',
   redirectUri: 'https://app.example/callback',
-  codeChallenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+  codeChallenge: { method: 'S256', value: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM' },
   userId: 1,
   me: `${BASE}/`,
   scopes: ['create', 'media', 'profile'],

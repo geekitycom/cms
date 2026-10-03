@@ -42,7 +42,7 @@ async function site(scopes: Scope[] = ['media'], config: GeekityConfig = {}): Pr
       {
         clientId: 'https://app.example/',
         redirectUri: 'https://app.example/callback',
-        codeChallenge: 'unused',
+        codeChallenge: { method: 'S256', value: 'unused' },
         userId: user.id,
         me: `${BASE}/author/${username}/`,
         scopes,

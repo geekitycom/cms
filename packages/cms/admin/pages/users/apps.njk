@@ -1,8 +1,12 @@
 {# /admin/users/apps: the apps that can act as whoever is signed in (TASK-162).
 
    Only your own connections, each with a Revoke button that names the app,
-   so a screen reader moving between buttons hears which one it is on. #}
+   so a screen reader moving between buttons hears which one it is on.
+
+   Below them, the site's list of apps allowed to sign in without PKCE
+   (TASK-225): one Remove button per app, and an Add form. #}
 {% extends "layouts/shell.njk" %}
+{% import "components/fields.njk" as field %}
 
 {% block title %}Connected apps{% endblock %}
 
@@ -71,4 +75,57 @@
       is listed here, with a button to disconnect it.
     </p>
   {% endif %}
+
+  <h2 id="without-pkce">Apps allowed without PKCE</h2>
+
+  {% if withoutPkce.problem %}
+    {% call field.summary('Nothing was saved. Fix the field marked below and try again.') %}
+      {{ field.problem('without-pkce-client', withoutPkce.problem) }}
+    {% endcall %}
+  {% endif %}
+
+  <p class="admin-hint">
+    PKCE protects a sign-in when somebody intercepts the one-time code an app
+    is handed: without the secret the app kept, the code is useless. Every app
+    must use it, unless you list it here. List only an app you trust that
+    cannot sign in otherwise, such as iA Writer. A listed app is let in without
+    PKCE only when it sends you back to an https address on its own host, and
+    the consent screen tells you when it is.
+  </p>
+
+  {% if withoutPkce.clients | length %}
+    <table class="admin-list">
+      <caption class="admin-visually-hidden">Apps allowed without PKCE</caption>
+      <thead>
+        <tr>
+          <th scope="col">client_id</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for client in withoutPkce.clients %}
+          <tr>
+            <td><code>{{ client }}</code></td>
+            <td class="admin-actions">
+              <form method="post" action="{{ withoutPkce.removeUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ withoutPkce.field }}" value="{{ client }}" />
+                <button type="submit">Remove {{ client }}</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No apps are listed. Every app must use PKCE to sign in.</p>
+  {% endif %}
+
+  <form method="post" action="{{ withoutPkce.addUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    {{ field.text('without-pkce-client', withoutPkce.field, 'App&rsquo;s client_id', withoutPkce.value,
+         error=withoutPkce.problem, inputmode='url', spellcheck='false', required=true,
+         hint='The URL the app names itself by when it signs in, as App activity shows it, such as <code>https://ia.net/writer</code>.') }}
+    <button type="submit">Allow without PKCE</button>
+  </form>
 {% endblock %}

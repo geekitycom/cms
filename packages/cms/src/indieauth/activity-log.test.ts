@@ -94,7 +94,7 @@ async function site(): Promise<Site> {
         {
           clientId: APP,
           redirectUri: CALLBACK,
-          codeChallenge: 'unused',
+          codeChallenge: { method: 'S256', value: 'unused' },
           userId: ada.id,
           me: `${BASE}/`,
           scopes,

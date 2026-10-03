@@ -5,17 +5,23 @@
  * Only ever your own connections, because a token acts as the person who
  * approved it. Revoking deletes the connection from `data/indieauth-tokens.json`,
  * so the access token and the refresh token stop working on the next request.
+ *
+ * Below them, the site's list of apps allowed to sign in without PKCE
+ * (TASK-225), kept in `site.json` as `clientsWithoutPkce`. It is the site's,
+ * not the signed-in person's, and like the settings pages any admin may
+ * change it.
  */
 
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 
 import type { AdminRender } from '../admin/documents.ts';
 import { flash } from '../admin/flash.ts';
 import { formatInTimezone } from '../admin/formatting.ts';
-import { readSiteSettings } from '../admin/settings.ts';
+import { readSiteSettings, updateSiteSettings } from '../admin/settings.ts';
 import { ADMIN_TEMPLATES } from '../admin/templates.ts';
 import { CONNECTED_APPS_CHILD, CONNECTED_APPS_PATH } from '../admin/users.ts';
 import type { GeekityEnv } from '../env.ts';
+import { clientIdentifier, sameClient } from './client-id.ts';
 import { SCOPE_LABELS } from './consent.ts';
 import { listTokens, revokeConnection } from './tokens.ts';
 import type { StoredToken } from './tokens.ts';
@@ -26,6 +32,21 @@ export const REVOKE_CONNECTION_PATH = `${CONNECTED_APPS_PATH}/revoke`;
 /** The field a Revoke button submits: the connection's id. */
 export const CONNECTION_FIELD = 'connection';
 
+/** Where the Add form of the list of apps allowed without PKCE posts. */
+export const ADD_CLIENT_WITHOUT_PKCE_PATH = `${CONNECTED_APPS_PATH}/without-pkce`;
+
+/** Where a Remove button of that list posts. */
+export const REMOVE_CLIENT_WITHOUT_PKCE_PATH = `${ADD_CLIENT_WITHOUT_PKCE_PATH}/remove`;
+
+/** The field the Add form and a Remove button submit. */
+export const CLIENT_FIELD = 'client_id';
+
+/** An Add the form refused, drawn back into it. */
+interface RefusedClient {
+  value: string;
+  problem: string;
+}
+
 /**
  * Register the screen and its Revoke button. Mounted before the users
  * screens, whose `/admin/users/:id` would otherwise answer `apps` with a 404.
@@ -33,22 +54,44 @@ export const CONNECTION_FIELD = 'connection';
 export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: AdminRender }): void {
   const { render } = options;
 
-  app.get(CONNECTED_APPS_PATH, (c) => {
-    const { config } = c.var;
-    const userId = c.var.session?.userId;
-    const timezone = readSiteSettings(config.contentDir).timezone;
-    const now = config.now().getTime();
-    const connections = listTokens(config.dataDir)
-      .filter((token) => token.userId === userId && Date.parse(token.refreshExpiresAt) > now)
-      .sort((a, b) => b.issuedAt.localeCompare(a.issuedAt))
-      .map((token) => row(token, timezone));
-    return render(c, ADMIN_TEMPLATES.connectedApps, {
-      section: 'users',
-      child: CONNECTED_APPS_CHILD,
-      revokeUrl: REVOKE_CONNECTION_PATH,
-      connectionField: CONNECTION_FIELD,
-      connections,
+  app.get(CONNECTED_APPS_PATH, (c) => render(c, ADMIN_TEMPLATES.connectedApps, screen(c)));
+
+  app.post(ADD_CLIENT_WITHOUT_PKCE_PATH, async (c) => {
+    const value = text((await c.req.parseBody())[CLIENT_FIELD]).trim();
+    const refuse = (problem: string): Response => {
+      c.status(400);
+      return render(c, ADMIN_TEMPLATES.connectedApps, screen(c, { value, problem }));
+    };
+    if (clientIdentifier(value) === undefined) return refuse(NOT_A_CLIENT_ID);
+    let listed = false;
+    await updateSiteSettings({
+      contentDir: c.var.config.contentDir,
+      change: (current) => {
+        listed = current.clientsWithoutPkce.some((id) => sameClient(id, value));
+        return listed
+          ? current
+          : { ...current, clientsWithoutPkce: [...current.clientsWithoutPkce, value] };
+      },
     });
+    if (listed) return refuse(`${value} is already on the list.`);
+    flash(c, 'notice', `${value} may now sign in without PKCE.`);
+    return c.redirect(CONNECTED_APPS_PATH, 303);
+  });
+
+  app.post(REMOVE_CLIENT_WITHOUT_PKCE_PATH, async (c) => {
+    const value = text((await c.req.parseBody())[CLIENT_FIELD]);
+    let removed = false;
+    await updateSiteSettings({
+      contentDir: c.var.config.contentDir,
+      change: (current) => {
+        const kept = current.clientsWithoutPkce.filter((id) => id !== value);
+        removed = kept.length < current.clientsWithoutPkce.length;
+        return { ...current, clientsWithoutPkce: kept };
+      },
+    });
+    if (removed) flash(c, 'notice', `${value} must use PKCE again.`);
+    else flash(c, 'warning', 'That app was already off the list.');
+    return c.redirect(CONNECTED_APPS_PATH, 303);
   });
 
   app.post(REVOKE_CONNECTION_PATH, async (c) => {
@@ -62,6 +105,40 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
     else flash(c, 'notice', `${clientLabel(revoked)} can no longer act as you.`);
     return c.redirect(CONNECTED_APPS_PATH, 303);
   });
+}
+
+const NOT_A_CLIENT_ID =
+  'Enter the app’s client_id exactly as it sends it: an http or https URL with a domain name, such as https://ia.net/writer.';
+
+/** The screen: your connections, then the site's list of apps allowed without PKCE. */
+function screen(c: Context<GeekityEnv>, refused?: RefusedClient): Record<string, unknown> {
+  const { config } = c.var;
+  const userId = c.var.session?.userId;
+  const settings = readSiteSettings(config.contentDir);
+  const now = config.now().getTime();
+  const connections = listTokens(config.dataDir)
+    .filter((token) => token.userId === userId && Date.parse(token.refreshExpiresAt) > now)
+    .sort((a, b) => b.issuedAt.localeCompare(a.issuedAt))
+    .map((token) => row(token, settings.timezone));
+  return {
+    section: 'users',
+    child: CONNECTED_APPS_CHILD,
+    revokeUrl: REVOKE_CONNECTION_PATH,
+    connectionField: CONNECTION_FIELD,
+    connections,
+    withoutPkce: {
+      clients: settings.clientsWithoutPkce,
+      addUrl: ADD_CLIENT_WITHOUT_PKCE_PATH,
+      removeUrl: REMOVE_CLIENT_WITHOUT_PKCE_PATH,
+      field: CLIENT_FIELD,
+      value: refused?.value ?? '',
+      problem: refused?.problem ?? '',
+    },
+  };
+}
+
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }
 
 /** One connection as the table shows it. */

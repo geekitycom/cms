@@ -1371,7 +1371,8 @@ two URLs as the metadata document. Some Micropub apps, such as iA Writer, look
 only for these older links and do not read the metadata, and the IndieAuth spec
 asks clients to check them for compatibility with earlier versions. The links
 relax nothing: the site still refuses a sign-in request that has no S256 PKCE
-`code_challenge`, so an app that sends none still cannot sign in.
+`code_challenge`, so an app that sends none still cannot sign in unless you list
+it under [Apps allowed without PKCE](#apps-allowed-without-pkce).
 
 When a client sends you to the site, you sign in to the admin if you are not
 signed in already, and then see a consent screen. It names the app (or its
@@ -1462,6 +1463,47 @@ app's next request gets 401 `invalid_token`, and the screen confirms with a
 message. The app has to ask you again through the consent screen to reconnect.
 With no apps connected, the screen says what kinds of app connect here.
 
+### Apps allowed without PKCE
+
+The IndieAuth spec requires PKCE, and the site refuses every sign-in request
+without an S256 `code_challenge`. Some apps send none. iA Writer is one. It
+finds the site's endpoints and is then refused with `code_challenge must be an
+S256 PKCE challenge`. The bottom of Users > Connected apps holds a list of apps
+that may sign in without PKCE anyway. The list starts empty. Any signed-in
+admin can add or remove an app, and the list is kept in
+`content/_data/site.json` as `clientsWithoutPkce`.
+
+To let iA Writer sign in, add `https://ia.net/writer`. Enter the `client_id`
+the app sends, as App activity shows it. The screen refuses anything that is
+not a valid `client_id` URL, and an app already on the list.
+
+A listed app is let in without PKCE only when all of these hold:
+
+- The request carries neither `code_challenge` nor `code_challenge_method`.
+  A request that sends a malformed challenge is still refused.
+- Its `client_id` is on the list.
+- Its `redirect_uri` is `https://` on the same host as the `client_id`. For
+  iA Writer that is `https://ia.net/writer/indieauth/redirect`.
+
+Any other request without PKCE is refused as before. The consent screen tells
+you when an app does not use PKCE and is let in only because it is on the
+list, and App activity records the sign-in as allowed without PKCE.
+
+The code such a sign-in earns is marked as issued without a challenge, and the
+token endpoint and profile redemption redeem it without a `code_verifier`. A
+code issued with a challenge still needs its verifier at both, whatever the
+app is and whatever its redemption leaves out, so a sign-in that began with
+PKCE cannot finish without it. A redemption that leaves out the verifier for
+such a code is refused with `invalid_request` and spends the code.
+
+Listing an app gives up the protection PKCE gives. Without it, somebody who
+intercepts the one-time code on its way back to the app can exchange it for a
+token, because the app kept no verifier to stop them. The same-host
+`https` rule narrows that to return addresses a native app normally claims as
+a verified universal link or app link, so another app on the device should not
+receive the code. The risk is not zero. List only an app you trust that cannot
+sign in otherwise, and remove it once it supports PKCE.
+
 ### App activity
 
 Users > App activity, at `/admin/users/activity`, shows the last requests apps
@@ -1473,7 +1515,9 @@ The site records one entry for each request to these endpoints:
 
 - The authorization endpoint. The sign-in request is recorded when it reaches
   the consent screen, before you approve it, with whether it carried an S256
-  PKCE `code_challenge` and the scopes it asked for. An app's redemption of
+  PKCE `code_challenge` and the scopes it asked for. A request let in without
+  one because the app is on the list of
+  [apps allowed without PKCE](#apps-allowed-without-pkce) is marked as such. An app's redemption of
   its code for your profile is recorded too.
 - The token endpoint, with the `grant_type` and, on success, the scopes the
   token was issued with.

@@ -11,7 +11,7 @@ import type { AuthorizationCode } from './grants.ts';
 const CODE: AuthorizationCode = {
   clientId: 'https://app.example/',
   redirectUri: 'https://app.example/callback',
-  codeChallenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+  codeChallenge: { method: 'S256', value: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM' },
   userId: 1,
   me: 'https://blog.example/',
   scopes: ['profile'],

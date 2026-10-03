@@ -92,7 +92,11 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
     const settings = readSiteSettings(config.contentDir);
     const baseUrl = effectiveBaseUrl(config, settings);
 
-    const parsed = parseAuthorizationRequest(new URL(c.req.url).searchParams, baseUrl);
+    const parsed = parseAuthorizationRequest(
+      new URL(c.req.url).searchParams,
+      baseUrl,
+      settings.clientsWithoutPkce,
+    );
     if (parsed.kind === 'unredirectable') return refuse(c, parsed.message);
     const { clientId, redirectUri } = parsed.kind === 'valid' ? parsed.request : parsed;
     const client = await clientInformation(c, clientId);
@@ -115,6 +119,8 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
     }
 
     const { request } = parsed;
+    const withoutPkce = request.codeChallenge.method === 'none';
+    if (withoutPkce) noteActivity(c, { allowedWithoutPkce: true });
     const me = meForSignIn(request.me, user, {
       baseUrl,
       users: listUsers(config.dataDir),
@@ -145,6 +151,7 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
       redirectHost: redirect.host === '' ? redirect.protocol : redirect.host,
       loopback: redirect.hostname !== '' && isPrivateHost(redirect.hostname),
       identity: me,
+      withoutPkce,
       resource: request.resource,
       scopes: request.scopes.map((scope) => ({ name: scope, label: SCOPE_LABELS[scope] })),
     });

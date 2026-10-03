@@ -1,9 +1,18 @@
-import { isIP } from 'node:net';
-
+import { clientIdentifier, sameClient } from './client-id.ts';
 import { SCOPES } from './discovery.ts';
 
 /** A scope this site can grant. */
 export type Scope = (typeof SCOPES)[number];
+
+/**
+ * What a code is bound to: the S256 PKCE challenge the client must answer to
+ * redeem it, or nothing, for an app on the site's list of apps allowed to
+ * sign in without PKCE (TASK-225). Redemption reads it off the stored code,
+ * never off the redeeming request, so a request cannot drop PKCE from a
+ * sign-in that began with it.
+ */
+export type CodeChallenge =
+  { readonly method: 'S256'; readonly value: string } | { readonly method: 'none' };
 
 /** A sign-in a client asked for, every field checked. */
 export interface AuthorizationRequest {
@@ -13,8 +22,8 @@ export interface AuthorizationRequest {
   readonly redirectUri: string;
   /** Handed back untouched, so the client can match the answer to its request. */
   readonly state: string;
-  /** The S256 PKCE challenge the code will be bound to. */
-  readonly codeChallenge: string;
+  /** The PKCE challenge the code will be bound to, or none for a listed app. */
+  readonly codeChallenge: CodeChallenge;
   /** The scopes asked for that this site offers, in the order asked. */
   readonly scopes: readonly Scope[];
   /** The URL the person typed into the client, when the client passed it on. */
@@ -68,10 +77,14 @@ const LEGACY_SCOPES: Readonly<Record<string, readonly Scope[]>> = {
   post: ['create', 'update'],
 };
 
-/** Read an authorization request off its query string, for a site at `baseUrl`. */
+/**
+ * Read an authorization request off its query string, for a site at `baseUrl`
+ * whose owner lets the apps in `clientsWithoutPkce` sign in without PKCE.
+ */
 export function parseAuthorizationRequest(
   params: URLSearchParams,
   baseUrl: string,
+  clientsWithoutPkce: readonly string[],
 ): ParsedAuthorizationRequest {
   const clientId = clientIdentifier(params.get('client_id') ?? '');
   if (clientId === undefined) {
@@ -96,11 +109,11 @@ export function parseAuthorizationRequest(
     return refuse('unsupported_response_type', 'response_type must be code');
   }
   if (state === undefined || state === '') return refuse('invalid_request', 'state is required');
-  const codeChallenge = params.get('code_challenge') ?? '';
-  if (!S256_CHALLENGE.test(codeChallenge)) {
+  const codeChallenge = challengeOf(params, clientId, redirectUri, clientsWithoutPkce);
+  if (codeChallenge === undefined) {
     return refuse('invalid_request', 'code_challenge must be an S256 PKCE challenge');
   }
-  if (params.get('code_challenge_method') !== 'S256') {
+  if (codeChallenge.method === 'S256' && params.get('code_challenge_method') !== 'S256') {
     return refuse('invalid_request', 'code_challenge_method must be S256');
   }
 
@@ -135,25 +148,29 @@ export function parseAuthorizationRequest(
 }
 
 /**
- * A client_id the IndieAuth spec allows, as given, or `undefined`.
+ * The challenge a request binds its code to, or `undefined` when it has none
+ * it may sign in with.
  *
- * http or https, with no fragment, credentials or dot segments, and a domain
- * name for a host: an IP address only when it is the loopback one a client
- * in development runs on.
+ * Without PKCE only when the request sends neither PKCE field, its client_id
+ * is listed, and its redirect_uri is https on the client_id's own host: a
+ * return address a native app claims as a verified universal link or app
+ * link, so an intercepted code is harder to come by.
  */
-function clientIdentifier(value: string): string | undefined {
-  const url = URL.parse(value);
-  if (url === null || (url.protocol !== 'https:' && url.protocol !== 'http:')) return undefined;
-  if (url.username !== '' || url.password !== '' || value.includes('#')) return undefined;
-  const path =
-    value
-      .slice(url.protocol.length + 2)
-      .replace(/^[^/?]*/, '')
-      .split('?')[0] ?? '';
-  if (path.split('/').some((segment) => segment === '.' || segment === '..')) return undefined;
-  const host = url.hostname.replace(/^\[|\]$/g, '');
-  if (isIP(host) !== 0 && host !== '127.0.0.1' && host !== '::1') return undefined;
-  return value;
+function challengeOf(
+  params: URLSearchParams,
+  clientId: string,
+  redirectUri: string,
+  clientsWithoutPkce: readonly string[],
+): CodeChallenge | undefined {
+  const value = params.get('code_challenge');
+  if (value !== null) return S256_CHALLENGE.test(value) ? { method: 'S256', value } : undefined;
+  const redirect = new URL(redirectUri);
+  const unchallenged =
+    !params.has('code_challenge_method') &&
+    clientsWithoutPkce.some((listed) => sameClient(listed, clientId)) &&
+    redirect.protocol === 'https:' &&
+    redirect.host === new URL(clientId).host;
+  return unchallenged ? { method: 'none' } : undefined;
 }
 
 /** An absolute redirect_uri with no fragment and no scripting scheme, or `undefined`. */

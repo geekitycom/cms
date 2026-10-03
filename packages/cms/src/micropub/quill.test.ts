@@ -48,7 +48,7 @@ async function site(): Promise<Site> {
     {
       clientId: 'https://quill.p3k.io/',
       redirectUri: 'https://quill.p3k.io/auth/callback',
-      codeChallenge: 'unused',
+      codeChallenge: { method: 'S256', value: 'unused' },
       userId: ada.id,
       me: `${BASE}/author/${ada.username}/`,
       scopes: ['create', 'update', 'media', 'profile'],

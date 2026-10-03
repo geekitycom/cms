@@ -335,7 +335,7 @@ describe('approving and denying', () => {
       clientId: APP,
       clientName: 'Quill',
       redirectUri: `${APP}callback`,
-      codeChallenge: CHALLENGE,
+      codeChallenge: { method: 'S256', value: CHALLENGE },
       userId: 1,
       me: `${BASE}/`,
       scopes: ['profile'],

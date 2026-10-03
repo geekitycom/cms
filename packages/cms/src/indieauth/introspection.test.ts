@@ -51,7 +51,7 @@ async function site(config: { maintenance?: boolean } = {}): Promise<Site> {
       const grant: AuthorizationCode = {
         clientId: 'https://app.example/',
         redirectUri: 'https://app.example/callback',
-        codeChallenge: 'unused',
+        codeChallenge: { method: 'S256', value: 'unused' },
         userId: who === 'ada' ? ada.id : bob.id,
         me: `${BASE}/author/${who}/`,
         scopes,
