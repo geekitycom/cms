@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.19.0](https://github.com/geekitycom/cms/compare/v0.18.0...v0.19.0) (2026-10-03)
+
+
+### Features
+
+* **cms:** accept more micropub clients and requests ([6b67cf0](https://github.com/geekitycom/cms/commit/6b67cf02d51e150d799c7b4f5a09123067798f73))
+* **cms:** fold the post editor's unused blocks and group its side column ([33be4a4](https://github.com/geekitycom/cms/commit/33be4a483ae6687f5431328274c31cefe08ffce6))
+* **cms:** fold the post editor's unused blocks and group its side column ([8205685](https://github.com/geekitycom/cms/commit/8205685d44dc1382baaacba9bfe861d9499dd5f0))
+* **cms:** keep micropub properties the site does not understand, privately ([ae62dd8](https://github.com/geekitycom/cms/commit/ae62dd808b67e3f20889b216a22a16f8aaac4509))
+* **cms:** map a micropub checkin onto the post's location ([baa2e64](https://github.com/geekitycom/cms/commit/baa2e6415bbb6c7bf8b594f7e250f54502e8f180))
+* **cms:** name an untitled like, repost, bookmark, reply or photo after what it is ([b5035f2](https://github.com/geekitycom/cms/commit/b5035f292713287e717f971672a530fb00478619))
+* **cms:** name cited pages, show drafts to their author, reach replied-to authors ([2efffc1](https://github.com/geekitycom/cms/commit/2efffc16d9de6be3e0fd725196cee83d33da1867))
+* **cms:** name what a like, repost or bookmark cites, reading oembed where offered ([ee923cb](https://github.com/geekitycom/cms/commit/ee923cb6e6d1b5551f7ea2bd0127261add34b925))
+* **cms:** serve a hidden post's page to a signed-in user at its permalink ([a045812](https://github.com/geekitycom/cms/commit/a0458121f81aca816d1b02995e56cd43e724c1d3))
+
+
+### Bug Fixes
+
+* **cms:** accept a create token at the micropub media endpoint ([37e5752](https://github.com/geekitycom/cms/commit/37e57523dbcc439e6ae115a696413b30328f9581))
+* **cms:** accept a micropub visibility value in any case ([7b8cb7c](https://github.com/geekitycom/cms/commit/7b8cb7cf2597794157c495768ebf166500732b9a))
+* **cms:** answer insufficient_scope with 401 on the micropub and media endpoints ([ab76d72](https://github.com/geekitycom/cms/commit/ab76d72d4edf542c475f5b2d2d059a7d668388ee))
+* **cms:** federate a reply to the author of the status it answers ([d49f5b5](https://github.com/geekitycom/cms/commit/d49f5b50e9307256e2116763b22b9702b736c78c))
+* **cms:** put a titled post's citation after its title ([12cf713](https://github.com/geekitycom/cms/commit/12cf71304c05b12a1e22c7c8548e665814181a7a))
+* **cms:** read a cited page's title and oembed link from the head of a page over the size limit ([fcdd2d9](https://github.com/geekitycom/cms/commit/fcdd2d9765989e48497804cd6d9de2267e2b8c6a))
+* **cms:** strip direction controls from cited names and name a title's author once ([18cc11a](https://github.com/geekitycom/cms/commit/18cc11a2b1682446fa0430690b313cbf987643ea))
+
 ## [0.18.0](https://github.com/geekitycom/cms/compare/v0.17.0...v0.18.0) (2026-10-03)
 
 
