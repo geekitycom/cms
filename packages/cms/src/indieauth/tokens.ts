@@ -86,7 +86,7 @@ export interface CreatedToken extends Connection {
 export type StoredToken = AppConnection | CreatedToken;
 
 /** What the connected apps screen asks a token to be made with. */
-export interface TokenRequest {
+interface TokenRequest {
   readonly userId: number;
   readonly me: string;
   readonly name: string;
