@@ -46,8 +46,9 @@ interface GroupRule {
   readonly fields: readonly EditorField[];
 }
 
-const filledIn = (...values: (string | boolean)[]): boolean =>
-  values.some((value) => value !== '' && value !== false);
+function filledIn(...values: (string | boolean)[]): boolean {
+  return values.some((value) => value !== '' && value !== false);
+}
 
 const GROUPS: Readonly<Record<EditorGroup, GroupRule>> = {
   photos: { filled: (form) => form.photos.length > 0, fields: ['editor-photo-'] },
@@ -100,12 +101,12 @@ const GROUPS: Readonly<Record<EditorGroup, GroupRule>> = {
 export function openGroups(
   form: EditorForm,
   refused: EditorField | undefined,
-): Record<EditorGroup, boolean> {
-  const open = {} as Record<EditorGroup, boolean>;
-  for (const [group, rule] of Object.entries(GROUPS) as [EditorGroup, GroupRule][]) {
-    open[group] =
+): Record<string, boolean> {
+  return Object.fromEntries(
+    Object.entries(GROUPS).map(([group, rule]) => [
+      group,
       rule.filled(form) ||
-      (refused !== undefined && rule.fields.some((prefix) => refused.startsWith(prefix)));
-  }
-  return open;
+        (refused !== undefined && rule.fields.some((prefix) => refused.startsWith(prefix))),
+    ]),
+  );
 }

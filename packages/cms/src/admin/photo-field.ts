@@ -17,8 +17,8 @@ import type { Photo } from '../content/photo.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
 import { uploadPath } from '../images/markup.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
-import { listUploads } from './media.ts';
 import type { EditorField, FieldError } from './editor-layout.ts';
+import { listUploads } from './media.ts';
 
 /** One photo's row, as the form has it. */
 export interface PhotoRow {

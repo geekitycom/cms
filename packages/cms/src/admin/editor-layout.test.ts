@@ -56,10 +56,7 @@ function disclosures(html: string): Disclosure[] {
     const summary = /^\s*<summary\b[^>]*>([\s\S]*?)<\/summary>/.exec(
       html.slice(at + match[0].length),
     );
-    assert.ok(
-      summary !== undefined && summary !== null,
-      `a summary leads each details: ${match[0]}`,
-    );
+    assert.ok(summary !== null, `a summary leads each details: ${match[0]}`);
     const disclosure = {
       name: (summary[1] ?? '').replaceAll(/<[^>]*>/g, '').trim(),
       open: /\sopen\b/.test(match[1] ?? ''),

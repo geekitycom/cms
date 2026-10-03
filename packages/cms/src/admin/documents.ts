@@ -81,7 +81,7 @@ import {
 } from './enclosure-field.ts';
 import type { EnclosureForm } from './enclosure-field.ts';
 import { openGroups } from './editor-layout.ts';
-import type { EditorField, FieldError, Refusal } from './editor-layout.ts';
+import type { EditorField, Refusal } from './editor-layout.ts';
 import {
   BLANK_LOCATION_FORM,
   LOCATION_FIELDS,
@@ -538,10 +538,6 @@ export async function writeDocument(
     return { outcome: 'refused', message, field };
   }
 
-  function refusedFor({ error, field }: FieldError): WriteOutcome {
-    return refused(error, field);
-  }
-
   // A post with no title is a note; a page is always named.
   if (form.title === '' && kind.type === 'page') {
     return refused(`A ${kind.singular} needs a title.`, 'editor-title');
@@ -568,7 +564,7 @@ export async function writeDocument(
       }
     }
     const resolved = resolveRead(form.readStatus, form.readOf);
-    if ('error' in resolved) return refusedFor(resolved);
+    if ('error' in resolved) return refused(resolved.error, resolved.field);
     read = resolved.read;
   }
   if (read !== undefined && form.description !== '') {
@@ -589,16 +585,16 @@ export async function writeDocument(
       document === undefined ? undefined : enclosureOf(document.extra),
       contentDir,
     );
-    if ('error' in resolved) return refusedFor(resolved);
+    if ('error' in resolved) return refused(resolved.error, resolved.field);
     const photos = resolvePhotos(form.photos, contentDir);
-    if ('error' in photos) return refusedFor(photos);
+    if ('error' in photos) return refused(photos.error, photos.field);
     media = { recording: resolved.enclosure, photos: photos.photos };
   }
 
   let location: PostLocation | undefined;
   if (kind.type === 'post') {
     const resolved = resolveLocation(form.location);
-    if ('error' in resolved) return refusedFor(resolved);
+    if ('error' in resolved) return refused(resolved.error, resolved.field);
     location = resolved.location;
   }
 
