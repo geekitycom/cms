@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-09-29 01:55'
-updated_date: '2026-10-03 16:17'
+updated_date: '2026-10-03 16:43'
 labels:
   - micropub
   - indieweb
@@ -92,6 +92,13 @@ AC#3: README.md ## Micropub rewritten as one section (it was ### Micropub under 
 2026-10-03 correction: micropub.rocks test 804 answers 403 insufficient_scope. Earlier notes and the README said 403 is what the Micropub spec says; it is not. The Micropub spec's error table (section 3.8) gives insufficient_scope as 401; RFC 6750 gives 403. Filed as TASK-239 (401 on the Micropub endpoints).
 
 2026-10-03: micropub.rocks test 805 answers 201 and creates the post, by design since PR #95: Quill sends the same token in the header and the form body on every form post, the same shape 805 sends, so refusing it would refuse every Quill post. Only two different tokens are refused. No change planned; README lists 805.
+
+2026-10-03, real clients against shll.me on 0.18.0:
+- Mobile: iA Writer on iPadOS signs in (listed on the PKCE allowlist, TASK-225) and publishes. It submits drafts and then opens the draft's URL, which 404s; TASK-235 covers that. This meets the mobile-client half of AC#2.
+- Quill: a reply with a photo (https://shll.me/2026/10/greg-photo-quill/), a like and a bookmark published. Gaps filed: TASK-240 (a reply is not delivered to the author it answers), TASK-241 (citation above a titled post's title), TASK-242 (untitled likes get the slug 'untitled'). Its weight editor is refused by design (TASK-237 keeps refusing a post with nothing publishable).
+- Inkstone: signs in through the PKCE allowlist but is flaky. Not supported: unmaintained since 2017; no task.
+- indiebookclub: refused for visibility 'Public' (it sends ucfirst labels); TASK-243.
+Still open for AC#2: a Quill note and an article, recorded as published.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
