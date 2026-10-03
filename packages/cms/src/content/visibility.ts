@@ -44,8 +44,3 @@ export function visibilityOf(document: Pick<Document, 'extra'>): StoredVisibilit
   if (isVisibility(value)) return value;
   return { unrecognized: typeof value === 'string' ? value : JSON.stringify(value) };
 }
-
-/** The value as the file spells it, which is what a form or `q=source` shows. */
-export function visibilityText(visibility: StoredVisibility): string {
-  return typeof visibility === 'string' ? visibility : visibility.unrecognized;
-}

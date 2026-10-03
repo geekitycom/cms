@@ -7,7 +7,7 @@ import { locationToMicropub } from '../content/location.ts';
 import { readOf } from '../content/read.ts';
 import type { ReadOf } from '../content/read.ts';
 import type { PostLocations } from '../content/locations.ts';
-import { visibilityOf, visibilityText } from '../content/visibility.ts';
+import { visibilityOf } from '../content/visibility.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { syndicateToOf } from '../webmention/syndication.ts';
 import { createForm, propertyName } from './create.ts';
@@ -70,7 +70,10 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
   }
   text('published', document.date);
   properties['post-status'] = [document.draft ? 'draft' : 'published'];
-  properties['visibility'] = [visibilityText(visibilityOf(document))];
+  const visibility = visibilityOf(document);
+  properties['visibility'] = [
+    typeof visibility === 'string' ? visibility : visibility.unrecognized,
+  ];
   const photos = photoRows(document).map(({ url, alt }) => {
     const value = url.startsWith('/') ? absoluteUrl(url, baseUrl) : url;
     return alt === '' ? value : { value, alt };
