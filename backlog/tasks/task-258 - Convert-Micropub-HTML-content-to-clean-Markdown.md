@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-04 00:30'
-updated_date: '2026-10-04 00:47'
+updated_date: '2026-10-04 01:01'
 labels:
   - micropub
   - security
@@ -53,6 +53,11 @@ Scope addition from the site owner (AC #6): Markdown/text content has each html_
 Found while testing: turndown does not escape '<' in text, so HTML text '&lt;script&gt;' became a live <script> in Markdown; escape override fixed, tested. Double-encoded 'javascript&amp;#58;' guarded by a non-decoding attribute escape, tested.
 iA Writer body: reconstructed (no capture available), tested in content.test.ts AC #5.
 Validation: pnpm build, pnpm test (3868 + 30 pass), typecheck, lint, format:check all pass. Live: local site on :48731, curl JSON {html} create with pretty-printed div/table, onerror, javascript: link, script -> 201, file holds Markdown with unindented <table> block, q=source returns it, page has 0 'alert('; form Markdown create with <img onerror> and <script> -> stored 'Markdown *kept* <img src="x">'.
+
+Red-team follow-up (two reviewers, commit 7e8fbb1). Found: the string cleaned was not the string stored. (1) normalizeBody trimmed after cleaning, so '    <script>…', '\t<img onerror>', '    <svg onload>', '    <base href=javascript:>' passed as indented code blocks and became live HTML once stored. (2) A lone \r: markdown-it breaks a line on it but dirtyHtml's lineStarts used \n only, so html_block maps pointed past the source and the cleaned region was empty.
+Fix: cleanMarkdown normalises first (normalizeBody: \r\n? -> \n, trim; NUL -> U+FFFD as markdown-it does), cleans that, normalises the result and refuses unless re-cleaning it changes nothing. createForm's content() repeats that fixed-point guard on the exact body it stores, for HTML and Markdown alike (400 'content has HTML the site cannot clean.'). Payloads added as failing tests first: content.test.ts (Markdown and HTML paths) and html-content.test.ts (endpoint create, page rendered). decision-27 amendment updated.
+Sweeps after the fix: redteam-a/probe.ts 110 payloads, 1 flag (abbr title="javascript:…", inert tooltip text, agreed non-finding), 0 refused; redteam-a/confirm.ts every indented payload stores as <img src="x"> or empty, mid-body indented code stays escaped code; redteam-b/run.mts 239 payloads, 0 flagged, 4 refused fail-closed (multi-line tag in a quote, list or footnote, inline footnote with dirty HTML); redteam-b/x.mts all inert.
+Gate: pnpm build, test (3884 + 30 pass), typecheck, lint, format:check all pass.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

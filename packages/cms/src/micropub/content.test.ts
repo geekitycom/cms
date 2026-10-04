@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { renderMarkdown } from '../content/markdown.ts';
+import { normalizeBody } from '../content/writer.ts';
 import { cleanMarkdown, markdownFromHtml } from './content.ts';
 
 function fromHtml(html: string): string {
@@ -207,10 +208,10 @@ describe('what an attacker sends as HTML content (AC #3)', () => {
 });
 
 describe('Markdown content keeps its text (AC #6)', () => {
-  it('leaves Markdown without HTML exactly as sent', () => {
+  it('leaves Markdown without HTML exactly as sent, edges trimmed', () => {
     const markdown =
       '# Title\n\nSome *text* with `<script>` in code, a < b, and **more**.\n\n' +
-      '    indented <script>code</script>\n\n- one\n- two\n';
+      '    indented <script>code</script>\n\n- one\n- two';
 
     assert.equal(cleaned(markdown), markdown);
   });
@@ -218,7 +219,7 @@ describe('Markdown content keeps its text (AC #6)', () => {
   it('leaves allowed HTML exactly as sent', () => {
     const markdown =
       '<details>\n<summary>More</summary>\n\nHidden *markdown*.\n\n</details>\n\n' +
-      'H<sub>2</sub>O and <kbd>Ctrl</kbd>.\n';
+      'H<sub>2</sub>O and <kbd>Ctrl</kbd>.';
 
     assert.equal(cleaned(markdown), markdown);
   });
@@ -226,13 +227,13 @@ describe('Markdown content keeps its text (AC #6)', () => {
   it('removes a script block and keeps the Markdown around it', () => {
     const markdown = cleaned('Hello *there*.\n\n<script>\nalert(1)\n</script>\n\nAnd _after_.\n');
 
-    assert.equal(markdown, 'Hello *there*.\n\nAnd _after_.\n');
+    assert.equal(markdown, 'Hello *there*.\n\nAnd _after_.');
   });
 
   it('cleans an inline tag and nothing else on its line', () => {
     assert.equal(
       cleaned('Text `<img src=x onerror=alert(1)>` and <img src=x onerror=alert(1)> *more*.\n'),
-      'Text `<img src=x onerror=alert(1)>` and <img src="x"> *more*.\n',
+      'Text `<img src=x onerror=alert(1)>` and <img src="x"> *more*.',
     );
   });
 
@@ -273,10 +274,53 @@ describe('Markdown content keeps its text (AC #6)', () => {
 
   it('relies on markdown-it to refuse a script URL in a Markdown link', () => {
     const markdown =
-      '[x](javascript:alert(1)) ![y](javascript:alert(1)) <javascript:alert(1)> [z](data:text/html,x)\n';
+      '[x](javascript:alert(1)) ![y](javascript:alert(1)) <javascript:alert(1)> [z](data:text/html,x)';
 
     assert.equal(cleaned(markdown), markdown);
     assertInert(renderMarkdown(markdown));
+  });
+});
+
+describe('the body the site stores is the body that was cleaned', () => {
+  // Found by red-team review: the edges of a body are trimmed and its line
+  // endings made \n before it is stored, so an indent that made HTML a code
+  // block, or a lone \r markdown-it breaks a line on, must not survive cleaning
+  // only to change what the stored body means.
+  const payloads = [
+    '    <script>alert(1)</script>',
+    '\t<img src=x onerror=alert(1)>',
+    '    <svg onload=alert(1)></svg>',
+    '    <base href="javascript:x//">',
+    '\r<script>alert(1)</script>',
+    'a\r<script>alert(1)</script>',
+    '\r<div onclick=alert(1)>x</div>',
+  ];
+
+  for (const payload of payloads) {
+    it(`stores ${JSON.stringify(payload)} inert`, () => {
+      const markdown = cleanMarkdown(payload);
+      if (markdown === undefined) return;
+      assert.equal(normalizeBody(markdown), markdown, 'the cleaned body is the stored body');
+      assertInert(renderMarkdown(markdown));
+      assert.doesNotMatch(renderMarkdown(markdown), /<base\b/i);
+    });
+
+    it(`stores ${JSON.stringify(payload)} sent as HTML inert`, () => {
+      const markdown = markdownFromHtml(payload);
+      if (markdown === undefined) return;
+      assert.equal(normalizeBody(markdown), markdown);
+      assertInert(renderMarkdown(markdown));
+      assert.doesNotMatch(renderMarkdown(markdown), /<base\b/i);
+    });
+  }
+
+  it('answers a body that is already clean and stored unchanged', () => {
+    for (const body of [
+      'Some *text*.',
+      'H<sub>2</sub>O\n\n<details>\n<summary>s</summary>\n\nx\n\n</details>',
+    ]) {
+      assert.equal(cleanMarkdown(body), body);
+    }
   });
 });
 

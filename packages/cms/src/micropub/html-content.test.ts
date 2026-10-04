@@ -160,6 +160,34 @@ describe('Markdown content over Micropub (AC #4, #6)', () => {
   });
 });
 
+describe('a body that only becomes HTML once it is stored', () => {
+  const payloads = [
+    '    <script>alert(1)</script>',
+    '\t<img src=x onerror=alert(1)>',
+    '    <svg onload=alert(1)></svg>',
+    '    <base href="javascript:x//">',
+    '\r<script>alert(1)</script>',
+    'a\r<script>alert(1)</script>',
+    '\r<div onclick=alert(1)>x</div>',
+  ];
+
+  it('never reaches the page', async () => {
+    const { cms, token } = await site();
+    for (const [index, payload] of payloads.entries()) {
+      const response = await post(cms, token, {
+        type: ['h-entry'],
+        properties: { name: [`Payload ${String(index)}`], content: [payload] },
+      });
+      if (response.status === 400) continue;
+      assert.equal(response.status, 201, await response.clone().text());
+      const location = response.headers.get('location');
+      assert.ok(location !== null);
+      const html = await page(cms, location);
+      assert.doesNotMatch(html, /alert\(1\)|javascript:x/, `${JSON.stringify(payload)} is inert`);
+    }
+  });
+});
+
 describe('the owner’s own files (AC #6)', () => {
   it('still render raw HTML as written', async () => {
     const { cms } = await site({

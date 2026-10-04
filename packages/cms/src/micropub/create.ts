@@ -252,7 +252,7 @@ export function createForm(
     ...blankForm(POST_KIND, timezone, now),
     date: '',
     author,
-    body: normalizeBody(content(properties.get('content') ?? [], errors)),
+    body: content(properties.get('content') ?? [], errors),
     tags: categories(properties.get('category') ?? [], errors),
     syndicateTo: syndicateTo(properties.get('mp-syndicate-to') ?? [], site.targets, errors),
   };
@@ -404,9 +404,13 @@ function content(values: readonly unknown[], errors: string[]): string {
     errors.push('content has to be text or { "html": "…" }.');
     return '';
   }
-  const body = typeof value === 'string' ? cleanMarkdown(value) : markdownFromHtml(value.html);
-  if (body === undefined) errors.push('content has HTML the site cannot clean.');
-  return body ?? '';
+  const cleaned = typeof value === 'string' ? cleanMarkdown(value) : markdownFromHtml(value.html);
+  const body = cleaned === undefined ? undefined : normalizeBody(cleaned);
+  if (body === undefined || cleanMarkdown(body) !== body) {
+    errors.push('content has HTML the site cannot clean.');
+    return '';
+  }
+  return body;
 }
 
 function isHtmlContent(value: unknown): value is HtmlContent {

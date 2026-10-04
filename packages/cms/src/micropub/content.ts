@@ -2,6 +2,7 @@ import TurndownService from 'turndown';
 import type { TurndownNode } from 'turndown';
 
 import { htmlInlineOffset, markdownTokens } from '../content/markdown.ts';
+import { normalizeBody } from '../content/writer.ts';
 import { cleanPostHtml } from '../web/sanitize.ts';
 
 /**
@@ -90,17 +91,39 @@ export function markdownFromHtml(html: string): string | undefined {
 /**
  * Markdown content with each raw HTML block and inline tag, as the site's
  * renderer reads them, put through the post allow-list. Text that is not HTML
- * stays exactly as it was sent. `undefined` when a piece of HTML cannot be
+ * stays as it was sent, once its edges are trimmed and its line endings made
+ * `\n` as every stored body's are. `undefined` when a piece of HTML cannot be
  * found in the source to be cleaned.
+ *
+ * The body is normalised before it is cleaned and checked again after, so the
+ * string cleaned is the string stored: trimming an indent after cleaning once
+ * turned an ignored code block into a live HTML block, and a lone `\r`, which
+ * markdown-it breaks a line on, once hid a block from the cleaner.
  */
 export function cleanMarkdown(markdown: string): string | undefined {
-  let source = markdown;
+  const cleaned = settled(stored(markdown));
+  if (cleaned === undefined) return undefined;
+  const body = stored(cleaned);
+  return settled(body) === body ? body : undefined;
+}
+
+/**
+ * A body as the site stores it. A NUL is also replaced as markdown-it
+ * replaces it, so the cleaner reads the characters the renderer does.
+ */
+function stored(body: string): string {
+  return normalizeBody(body).replaceAll('\0', '\uFFFD');
+}
+
+/** `source` cleaned and read again until nothing changes. */
+function settled(source: string): string | undefined {
+  let current = source;
   for (let round = 0; round < ROUNDS; round += 1) {
-    const edits = dirtyHtml(source);
+    const edits = dirtyHtml(current);
     if (edits === undefined) return undefined;
-    if (edits.length === 0) return source;
+    if (edits.length === 0) return current;
     for (const { start, end, text } of edits.toSorted((a, b) => b.start - a.start)) {
-      source = source.slice(0, start) + text + source.slice(end);
+      current = current.slice(0, start) + text + current.slice(end);
     }
   }
   return undefined;
