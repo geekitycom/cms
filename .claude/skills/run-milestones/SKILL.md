@@ -46,7 +46,11 @@ Commit that release-please can read.
    Skim the diff with `git diff --stat` and `git diff` on anything surprising.
    `backlog task view <id> --plain` must show the task Done with every criterion
    checked, or In Progress with the unchecked ones explained in its notes.
-3. Kill anything left listening on port 3000 (`lsof -ti :3000 | xargs kill`).
+3. Stop any server the agent left running, and only that server. Run
+   `lsof -nP -iTCP:3000 -sTCP:LISTEN` and check that the process's working
+   directory (`lsof -a -d cwd -p <pid>`) is inside this repository before you
+   kill it. Port 3000 is a common default, and the user may have an unrelated
+   server there.
 4. Commit everything but the federation scratch directory, following the commit
    rules in `CLAUDE.md`: `feat(cms):` for a feature, `fix(cms):`, `docs:`,
    `chore:`, and `feat(cms)!:` with a `BREAKING CHANGE:` footer when the task says
