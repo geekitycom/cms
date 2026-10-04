@@ -310,7 +310,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       child: 'home',
       counts: store.counts(),
       recent: store.listAll({ type: 'post', limit: DASHBOARD_RECENT_POSTS }).map((document) => ({
-        title: postLabel(document),
+        title: postLabel(document, (url) => c.var.replyContexts.read(url)),
         slug: document.slug,
         date: document.date,
         draft: document.draft,

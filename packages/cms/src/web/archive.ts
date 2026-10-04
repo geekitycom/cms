@@ -1,5 +1,6 @@
 import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
 import type { Document } from '../content/document.ts';
+import type { CitedPageReader } from '../content/citation.ts';
 import { postLabel } from '../content/post-type.ts';
 import { DEFAULT_LOCALE } from './locale.ts';
 import { formatDate } from './templates.ts';
@@ -61,6 +62,7 @@ export function archiveMonths(
   posts: readonly Document[],
   timezone: string = DEFAULT_TIMEZONE,
   locale: string = DEFAULT_LOCALE,
+  cited?: CitedPageReader,
 ): ArchiveMonth[] {
   const months: ArchiveMonth[] = [];
   let current: string | undefined;
@@ -82,7 +84,7 @@ export function archiveMonths(
       months.push({ month: formatDate(date, 'month', timezone, locale), posts: [] });
     }
 
-    months.at(-1)?.posts.push({ title: postLabel(document), url: document.permalink, date });
+    months.at(-1)?.posts.push({ title: postLabel(document, cited), url: document.permalink, date });
   }
 
   return months;

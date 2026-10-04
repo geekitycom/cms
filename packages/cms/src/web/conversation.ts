@@ -2,6 +2,7 @@ import { avatarHref } from '../avatars/avatars.ts';
 import type { ActorProfile, AdminStore, InboxActivity, PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
+import type { CitedPageReader } from '../content/citation.ts';
 import type { ContentStore } from '../content/store.ts';
 import { readAllQuoteAuthorizations } from '../federation/quotes.ts';
 import type { QuoteAuthorizationRecord } from '../federation/quotes.ts';
@@ -572,7 +573,7 @@ export function spokenIn(conversation: Conversation): Interaction[] {
  */
 export function feedComments(
   said: readonly (Interaction & { post?: Document | undefined })[],
-  options: { baseUrl: string; limit: number },
+  options: { baseUrl: string; limit: number; cited?: CitedPageReader | undefined },
 ): FeedComment[] {
   return newestFirst([...said], options.limit).map((entry) => ({
     id: entry.id,
@@ -582,7 +583,7 @@ export function feedComments(
     html: entry.content,
     ...(entry.post === undefined
       ? {}
-      : { post: { title: postLabel(entry.post), permalink: entry.post.permalink } }),
+      : { post: { title: postLabel(entry.post, options.cited), permalink: entry.post.permalink } }),
   }));
 }
 

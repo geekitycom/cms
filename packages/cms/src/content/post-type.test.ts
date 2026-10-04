@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import type { CitedPage } from './citation.ts';
 import type { Document } from './document.ts';
 import { parseDocument } from './parser.ts';
 import { discoverPostType, postLabel, postTypeOf, replyTarget, showsTitle } from './post-type.ts';
@@ -286,6 +287,51 @@ describe('postLabel', () => {
       postLabel(post('', 'One two three four five six seven eight nine ten eleven twelve.')),
       'One two three four five six seven eight nine ten …',
     );
+  });
+});
+
+describe('postLabel of a post with no title and no words (TASK-261)', () => {
+  const target = 'https://www.youtube.com/watch?v=abc';
+  const named = { name: 'RuneScape: 4th MMO teaser' };
+  const stored =
+    (context: CitedPage) =>
+    (url: string): CitedPage | undefined =>
+      url === target ? context : undefined;
+
+  it('is the verb and the cited title of a like, repost, bookmark or reply', () => {
+    const cases: [string, string][] = [
+      [`like-of: ${target}\n`, 'Liked RuneScape: 4th MMO teaser'],
+      [`repost-of: ${target}\n`, 'Reposted RuneScape: 4th MMO teaser'],
+      [`bookmark-of: ${target}\n`, 'Bookmarked RuneScape: 4th MMO teaser'],
+      [`in-reply-to: ${target}\n`, 'Reply to RuneScape: 4th MMO teaser'],
+    ];
+    for (const [frontMatter, label] of cases) {
+      assert.equal(postLabel(post(frontMatter, ''), stored(named)), label);
+    }
+  });
+
+  it('names the host the way the citation line does when nothing was fetched', () => {
+    assert.equal(postLabel(post(`like-of: ${target}\n`, '')), 'Liked a page on www.youtube.com');
+    assert.equal(
+      postLabel(post(`repost-of: ${target}\n`, ''), stored({ picture: { kind: 'photo' } })),
+      'Reposted an image from www.youtube.com',
+    );
+    assert.equal(
+      postLabel(post(`bookmark-of: ${target}\n`, ''), stored({ author: { name: 'Jagex' } })),
+      'Bookmarked a post by Jagex',
+    );
+  });
+
+  it('labels a photo post with no words Photo', () => {
+    assert.equal(postLabel(post('photo: /uploads/2026/10/a.jpg\n', '')), 'Photo');
+  });
+
+  it('keeps the first words of a like that has them', () => {
+    assert.equal(postLabel(post(`like-of: ${target}\n`, 'So good.'), stored(named)), 'So good.');
+  });
+
+  it('keeps Untitled for a post with nothing to name it by', () => {
+    assert.equal(postLabel(post('', '')), 'Untitled');
   });
 });
 

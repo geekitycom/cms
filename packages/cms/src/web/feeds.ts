@@ -13,7 +13,7 @@ import { absoluteUrl, contentEtag, isNotModified, latestModified } from './negot
 import type { ConditionalHeaders } from './negotiate.ts';
 import { resolveLicense } from './license.ts';
 
-const COMMENTS_FEED_REVISION = 2;
+const COMMENTS_FEED_REVISION = 3;
 
 /**
  * How a feed is served: its validator, its headers, and which serialiser
@@ -212,7 +212,13 @@ function commentsFingerprint(source: CommentFeedSource): string {
     cadenceFingerprint(source.site),
     source.baseUrl,
     ...source.comments.map((comment) =>
-      [comment.id, comment.author, comment.published.toISOString(), comment.html].join('\0'),
+      [
+        comment.id,
+        comment.author,
+        comment.published.toISOString(),
+        comment.html,
+        comment.post?.title ?? '',
+      ].join('\0'),
     ),
   ].join('\n');
 }

@@ -312,7 +312,10 @@ function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
     // one place, which is the only question the hash is there to answer.
     address: comment.addressHash === null ? null : comment.addressHash.slice(0, 8),
     removed: removedNote(comment.redacted),
-    post: document === undefined ? comment.slug : postLabel(document),
+    post:
+      document === undefined
+        ? comment.slug
+        : postLabel(document, (url) => c.var.replyContexts.read(url)),
     postUrl: comment.permalink === '' ? null : comment.permalink,
     editUrl:
       document === undefined

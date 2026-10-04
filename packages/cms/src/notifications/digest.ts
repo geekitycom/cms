@@ -7,6 +7,7 @@ import type { AdminStore, PostComment } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { ContentStore } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
+import type { CitedPageReader } from '../content/citation.ts';
 import type { MailService } from '../mail/service.ts';
 import { COMMENTS_NOTIFICATION } from './comments.ts';
 import { moderationLink } from './links.ts';
@@ -158,6 +159,8 @@ export interface CreateCommentDigestOptions {
   admin: AdminStore;
   /** The content index, for the posts the items are on. */
   store: ContentStore;
+  /** The stored contexts of the pages a post cites, which name an untitled post (TASK-261). */
+  cited?: CitedPageReader | undefined;
   /** The one door out for email. */
   mail: MailService;
   /**
@@ -205,7 +208,7 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
   function postOf(comment: PostComment): { title: string; url: string } {
     const document = store.getBySlug(comment.slug);
     return {
-      title: document === undefined ? comment.slug : postLabel(document),
+      title: document === undefined ? comment.slug : postLabel(document, options.cited),
       url: absolute(comment.permalink, config.baseUrl),
     };
   }

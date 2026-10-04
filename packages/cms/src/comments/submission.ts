@@ -2,6 +2,7 @@ import { CSRF_FIELD } from '../admin/session.ts';
 import type { CommentAuthor, PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
+import type { CitedPageReader } from '../content/citation.ts';
 import {
   ADDRESS_SALT_FILE,
   FORM_LOADED_FIELD,
@@ -277,6 +278,8 @@ export interface SubmitCommentOptions {
   records: CommentRecords;
   /** The post being commented on. */
   document: Document;
+  /** The stored contexts of the pages it cites, which name an untitled post (TASK-261). */
+  cited?: CitedPageReader | undefined;
   /** What was submitted. */
   form: CommentForm;
   /** Where the site keeps the address salt. */
@@ -410,7 +413,7 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     origin: signedIn === undefined ? 'form' : 'moderator',
     comment: proposed,
     post: {
-      title: postLabel(document),
+      title: postLabel(document, options.cited),
       url: absolute(document.permalink, options.baseUrl),
     },
     dataDir: options.dataDir,

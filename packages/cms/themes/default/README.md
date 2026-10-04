@@ -958,6 +958,10 @@ IndieWeb. The graph holds:
   `author`, and the site's `publisher`: the site author's Person, or the
   Organization. A post with no title is headed by the words its `<title>`
   names it by, its `label`, cut on a word boundary to at most 110 characters.
+  A post with no words either is labelled by what it is (TASK-261): "Liked",
+  "Reposted", "Bookmarked" or "Reply to" and the cited page's stored title,
+  else the host its citation line names ("Liked a page on www.youtube.com"), and
+  "Photo" for a photo post. "Untitled" is the last fallback.
   Its `image` is the picture the Open Graph tags print, so the two always
   agree (see [The head](#the-head)). Its `license` is the page's license URL,
   the front matter's over the site's, and absent with none.
