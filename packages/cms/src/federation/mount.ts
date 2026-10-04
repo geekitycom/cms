@@ -427,5 +427,6 @@ function contextData(c: Context<GeekityEnv>): FederationContextData {
     store: c.var.store,
     config: c.var.config,
     actorProfiles: c.var.actorProfiles,
+    cited: (url) => c.var.replyContexts.read(url),
   };
 }

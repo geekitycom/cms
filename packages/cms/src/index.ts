@@ -1837,6 +1837,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
         store,
         config: resolved,
         actorProfiles,
+        cited: (url) => replyContexts.read(url),
       }),
     ),
   });
@@ -1847,6 +1848,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     store,
     config: resolved,
     actorProfiles,
+    cited: (url) => replyContexts.read(url),
   });
   content.events.on('change', (change) => delivery.handle(change));
 
@@ -1926,6 +1928,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     store,
     config: resolved,
     actorProfiles,
+    cited: (url) => replyContexts.read(url),
   });
   relays.sync();
 

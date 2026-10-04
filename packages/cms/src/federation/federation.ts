@@ -20,6 +20,7 @@ import { countUsers, listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import type { AdminStore } from '../admin/store.ts';
 import type { FederationOverrides, ResolvedConfig } from '../config.ts';
+import type { CitedPageReader } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import { authorNames } from '../web/authors.ts';
@@ -78,6 +79,8 @@ export interface FederationContextData {
   readonly config: ResolvedConfig;
   /** Where the inbox asks for the profile of an actor it has just heard from (TASK-184). */
   readonly actorProfiles: Pick<ActorProfileService, 'capture'>;
+  /** The stored contexts a note names the pages it cites by (TASK-262). */
+  readonly cited: CitedPageReader;
 }
 
 /** A CMS federation object, with the context data its dispatchers expect. */

@@ -67,6 +67,8 @@ export interface CreateDeliveryServiceOptions {
   config: ResolvedConfig;
   /** What the federation context carries for the inbox; nothing here calls it. */
   actorProfiles: FederationContextData['actorProfiles'];
+  /** What the federation context carries for the post objects. */
+  cited: FederationContextData['cited'];
   /** Where failures are reported. Defaults to `console`. */
   logger?: DeliveryLogger | undefined;
 }
@@ -164,6 +166,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       store,
       config,
       actorProfiles: options.actorProfiles,
+      cited: options.cited,
     });
   }
 

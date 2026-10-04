@@ -1777,3 +1777,54 @@ describe('a user’s own profile', () => {
     assert.equal(delivered('Update').length, 0);
   });
 });
+
+describe('a cited page in a delivered note (TASK-262)', () => {
+  const GIF = `${REMOTE_ORIGIN}/gifs/no-nope/`;
+  const UNFETCHED = `${REMOTE_ORIGIN}/gifs/never-read/`;
+  const CONTEXTS = JSON.stringify({ [GIF]: { url: GIF, name: 'No No No GIF' } });
+
+  async function bookmark(target: string): Promise<Site & { agent: Browser }> {
+    const published = await site({ files: { '_data/replyContexts.json': CONTEXTS } });
+    const agent = await signedIn(published.cms);
+    const response = await publishNewPost(agent, {
+      title: '',
+      slug: 'cited',
+      body: '',
+      'bookmark-of': target,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await published.cms.delivery.settled();
+    return { ...published, agent };
+  }
+
+  function contentOf(delivery: Delivery | undefined): string {
+    assert.ok(delivery !== undefined, `expected a delivery, saw ${JSON.stringify(deliveries)}`);
+    return String((delivery.body['object'] as Record<string, unknown>)['content']);
+  }
+
+  it('names the page by its stored title in the Create and the Update', async () => {
+    const { cms, agent } = await bookmark(GIF);
+    const line = `<p>Bookmarked <a href="${GIF}">No No No GIF</a></p>\n`;
+
+    assert.equal(contentOf(delivered('Create')[0]), line);
+
+    deliveries.length = 0;
+    const response = await submitEditor(agent, '/admin/posts/cited', {
+      'bookmark-of': GIF,
+      body: 'Worth a look.',
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    assert.equal(contentOf(delivered('Update')[0]), `${line}<p>Worth a look.</p>\n`);
+  });
+
+  it('uses the host form in the Create when nothing was fetched', async () => {
+    await bookmark(UNFETCHED);
+
+    assert.equal(
+      contentOf(delivered('Create')[0]),
+      `<p>Bookmarked <a href="${UNFETCHED}">a page on remote.example</a></p>\n`,
+    );
+  });
+});
