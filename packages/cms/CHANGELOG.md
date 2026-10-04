@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.20.0](https://github.com/geekitycom/cms/compare/v0.19.0...v0.20.0) (2026-10-04)
+
+
+### Features
+
+* **cms:** fill a post's location from the browser in the editor ([a2c664c](https://github.com/geekitycom/cms/commit/a2c664c0e4d00bc5642735bd81fa533a16ff3cc0))
+* **cms:** lead the public admin bar's title home, with a view admin link ([19df2c1](https://github.com/geekitycom/cms/commit/19df2c13466045e6129f853a5ff7add05e766235))
+* **cms:** name an untitled like, repost, bookmark or reply after the page it cites ([c3f8580](https://github.com/geekitycom/cms/commit/c3f8580fa3484da6b0975749d7698041f0edd51d))
+* **cms:** show a cited image url as the image, credited to its host ([c48c91c](https://github.com/geekitycom/cms/commit/c48c91ca4d565505470badedbef2727baa6189a3))
+* **cms:** show a cited page's picture in its citation, with a per-post remove control ([c65c4fe](https://github.com/geekitycom/cms/commit/c65c4feb61858acc9f689efabe568a7d5aa1a7a7))
+
+
+### Bug Fixes
+
+* **cms:** ask a known oembed provider before reading its page, and add giphy ([fe479ae](https://github.com/geekitycom/cms/commit/fe479ae5e7441f10d5f6de01f05319b47ffacced))
+* **cms:** ask a known provider's oembed endpoint when its page names none ([0e2ecd5](https://github.com/geekitycom/cms/commit/0e2ecd557b7168efd879ff646c2430f53ca760d9))
+* **cms:** clean the micropub body as it is stored ([cf9027d](https://github.com/geekitycom/cms/commit/cf9027d61bf7529c000be07087b53af75d020040))
+* **cms:** convert micropub html content to clean markdown ([d63a0a1](https://github.com/geekitycom/cms/commit/d63a0a11bf0e192e93f45095686ede2b1b36f7ad))
+* **cms:** escape feed excerpts and keep feeds serving past a bad url ([59b88e6](https://github.com/geekitycom/cms/commit/59b88e65c635ceabddb8503df26431c631ff3ca1))
+* **cms:** head a titled post that has no body with its title ([424a3fb](https://github.com/geekitycom/cms/commit/424a3fb038542417219e5bbaeb280fe52ea04202))
+* **cms:** keep a word whole across an apostrophe in a slug ([b105959](https://github.com/geekitycom/cms/commit/b105959daa3cb51c6895d97814adbaa18a2ace90))
+
 ## [0.19.0](https://github.com/geekitycom/cms/compare/v0.18.0...v0.19.0) (2026-10-03)
 
 
