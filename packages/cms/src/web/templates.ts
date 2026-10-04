@@ -1,5 +1,6 @@
 import { Environment, FileSystemLoader } from 'nunjucks';
 
+import { citedHost } from '../content/citation.ts';
 import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
 import { accountOf } from '../federation/paths.ts';
 import { themeAssetUrl } from './assets.ts';
@@ -191,6 +192,10 @@ function addFilters(
   // (TASK-202), so a theme never spells the host.
   environment.addFilter('fediverseHandle', (value: unknown) =>
     typeof value === 'string' && value !== '' ? `@${accountOf(value, baseUrl)}` : '',
+  );
+
+  environment.addFilter('host', (value: unknown) =>
+    typeof value === 'string' ? citedHost(value) : '',
   );
 
   return environment;

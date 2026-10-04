@@ -306,6 +306,8 @@ export interface GeekityConfig {
    *
    * The admin keeps its own `Content-Security-Policy`, `Referrer-Policy` and
    * `X-Frame-Options` whatever this says, so nothing here can loosen them.
+   * The post editor sends this `Permissions-Policy` with `geolocation=()`
+   * changed to `geolocation=(self)`, for its Use my location button.
    * The embed view at `/_geekity/embed` (TASK-208) keeps its own
    * `Content-Security-Policy`, whose `frame-ancestors *` lets any site frame
    * it, and never carries `X-Frame-Options`, even one configured here, so

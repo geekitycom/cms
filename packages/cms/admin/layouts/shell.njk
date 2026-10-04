@@ -6,6 +6,7 @@
   {# View site, because in here you are not looking at it; + New, as on the
      public site; and, on the editor of something readers can see, the way to
      go and look at it. #}
+  {% set siteHref = adminUrl %}
   {% set barLinks = [{ label: "View site", url: siteUrl }, { label: "+ New", url: newPostUrl }] %}
   {% if viewUrl and kind %}
     {% set barLinks = barLinks.concat([{ label: "View " + (kind.singular | capitalize), url: viewUrl }]) %}

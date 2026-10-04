@@ -2424,6 +2424,9 @@ what is in it. Each header does something else:
   leaves alone what an embedded video player asks for: autoplay, fullscreen,
   `encrypted-media`, picture-in-picture, and the motion sensors behind a
   360-degree video.
+  The post editor is the one response that allows more: it sends the site's
+  policy with `geolocation=()` changed to `geolocation=(self)`, so its Use my
+  location button can ask the browser where it is.
 - `Cross-Origin-Opener-Policy: same-origin` keeps a window the site opens, or a
   window that opens the site, from reaching into it through `window.opener`.
 

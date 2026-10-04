@@ -1,4 +1,5 @@
 import { discoverPostType } from '../content/post-type.ts';
+import type { CitedPicture, PictureSource } from './cited-picture.ts';
 import { fetchPublic, webUrl } from './fetch-public.ts';
 import { elementsIn, hasRel, parseHtml, textOf } from './html.ts';
 import type { HtmlElement } from './html.ts';
@@ -25,6 +26,8 @@ export const REPLY_CONTEXT_TIMEOUT_MS = 10_000;
  */
 export const REPLY_CONTEXT_MAX_BYTES = 1_000_000;
 
+const IMAGE_TYPE = /^\s*image\//i;
+
 /** How many words of a target's text a preview keeps. */
 const EXCERPT_WORDS = 40;
 
@@ -43,11 +46,14 @@ export interface ReplyContext {
   readonly author?: { readonly name: string; readonly url?: string };
   /** When it says it was published, as an ISO 8601 instant. */
   readonly published?: string;
+  /** The site it is on, its `og:site_name`, kept only when it names no author. */
+  readonly site?: string;
+  /** Its picture, copied into the site's uploads (TASK-252). */
+  readonly picture?: CitedPicture;
 }
 
-/** What fetching one target came to. */
 export type ReplyContextFetch =
-  | { readonly ok: true; readonly context: ReplyContext }
+  | { readonly ok: true; readonly context: ReplyContext; readonly picture?: PictureSource }
   | { readonly ok: false; readonly reason: string };
 
 /** What {@link fetchReplyContext} needs. */
@@ -61,45 +67,156 @@ export interface FetchReplyContextOptions {
 }
 
 /**
- * Fetch a page a post cites and read what it says about itself, asking its
- * oEmbed endpoint as well when it has no `h-entry`.
+ * Fetch a page a post cites and read what it says about itself. A known
+ * provider's oEmbed endpoint is asked first, and the page is read only when
+ * that names nothing. Any other page is read, and asked about through the
+ * oEmbed endpoint it links when it has no `h-entry`.
  *
  * Only http and https, only public hosts (every redirect hop is checked, and a
  * name is refused when any address it resolves to is private), one timeout
- * over the whole exchange, the oEmbed request included, no more of a page than
- * the byte limit, and no oEmbed answer over it. Nothing throws.
+ * over the whole exchange, every oEmbed request included, no more of a page
+ * than the byte limit, and no oEmbed answer over it. Nothing throws.
  */
 export async function fetchReplyContext(
   target: string,
   options: FetchReplyContextOptions,
 ): Promise<ReplyContextFetch> {
-  const deadline = Date.now() + (options.timeoutMs ?? REPLY_CONTEXT_TIMEOUT_MS);
-  const maxBytes = options.maxBytes ?? REPLY_CONTEXT_MAX_BYTES;
-  const fetched = await fetchPublic(target, {
+  const limits = {
     lookup: options.lookup,
-    timeoutMs: deadline - Date.now(),
-    maxBytes,
-    overflow: 'truncate',
-    accept: 'text/html, */*;q=0.8',
-    contentType: { pattern: /^\s*(text\/html|application\/xhtml\+xml)/i, name: 'an HTML page' },
-  });
-  if (!fetched.ok) return fetched;
+    deadline: Date.now() + (options.timeoutMs ?? REPLY_CONTEXT_TIMEOUT_MS),
+    maxBytes: options.maxBytes ?? REPLY_CONTEXT_MAX_BYTES,
+  };
 
-  const root = parseHtml(new TextDecoder().decode(fetched.body));
-  const entry = fetched.truncated ? undefined : citedEntry(root, fetched.url);
-  const endpoint = entry === undefined ? oembedEndpoint(root, fetched.url) : undefined;
-  const oembed =
-    endpoint === undefined
-      ? undefined
-      : await fetchOembed(endpoint, { lookup: options.lookup, deadline, maxBytes });
+  const known = knownEndpoint(target);
+  if (known !== undefined) {
+    const oembed = withoutSuffix(await fetchOembed(known.endpoint, limits), known.titleSuffix);
+    const context = describe(parseHtml(''), undefined, target, oembed);
+    if (context !== undefined) return described(context, oembed?.picture);
+  }
+
+  const timeoutMs = limits.deadline - Date.now();
+  const fetched =
+    timeoutMs <= 0
+      ? ({ ok: false, reason: 'timed out' } as const)
+      : await fetchPublic(target, {
+          lookup: limits.lookup,
+          timeoutMs,
+          maxBytes: limits.maxBytes,
+          overflow: 'truncate',
+          accept: 'text/html, */*;q=0.8',
+          contentType: {
+            pattern: /^\s*(text\/html|application\/xhtml\+xml)/i,
+            name: 'an HTML page',
+          },
+          headersOnly: IMAGE_TYPE,
+        });
+
+  if (fetched.ok && fetched.read === 'headers') {
+    return described({ url: target }, { url: fetched.url, kind: 'photo' });
+  }
+
+  const root = parseHtml(fetched.ok ? new TextDecoder().decode(fetched.body) : '');
+  const entry = fetched.ok && !fetched.truncated ? citedEntry(root, fetched.url) : undefined;
+  const endpoint =
+    fetched.ok && entry === undefined && known === undefined
+      ? oembedEndpoint(root, fetched.url)
+      : undefined;
+  const oembed = endpoint === undefined ? undefined : await fetchOembed(endpoint, limits);
 
   const context = describe(root, entry, target, oembed);
-  return context === undefined ? refuse('nothing to show') : { ok: true, context };
+  if (context !== undefined) {
+    return described(
+      context,
+      oembed?.picture ?? (fetched.ok ? pagePicture(root, fetched.url) : undefined),
+    );
+  }
+  return fetched.ok ? refuse('nothing to show') : fetched;
+}
+
+function described(context: ReplyContext, picture: PictureSource | undefined): ReplyContextFetch {
+  return { ok: true, context, ...(picture === undefined ? {} : { picture }) };
+}
+
+function pagePicture(root: HtmlElement, base: string): PictureSource | undefined {
+  const image =
+    metaOf(root, 'og:image') || metaOf(root, 'twitter:image') || metaOf(root, 'twitter:image:src');
+  if (image === '') return undefined;
+  let url: URL | undefined;
+  try {
+    url = webUrl(new URL(image, base).href);
+  } catch {
+    return undefined;
+  }
+  if (url === undefined) return undefined;
+  const video =
+    metaOf(root, 'og:type').toLowerCase().startsWith('video') ||
+    metaOf(root, 'twitter:card').toLowerCase() === 'player';
+  return { url: url.href, kind: 'thumbnail', ...(video ? { video: true } : {}) };
+}
+
+/**
+ * Providers whose JSON oEmbed endpoint is known, asked before their page:
+ * YouTube, TikTok, Reddit and Giphy serve a server a generic or slow page, or
+ * refuse it, while their endpoints answer (decision-19).
+ */
+const KNOWN_OEMBED_PROVIDERS: readonly {
+  readonly hosts: readonly string[];
+  readonly path: RegExp;
+  readonly endpoint: string;
+  readonly titleSuffix?: string;
+}[] = [
+  {
+    hosts: ['youtube.com', 'www.youtube.com', 'm.youtube.com'],
+    path: /^\/(watch\?(.*&)?v=[\w-]+|shorts\/[\w-]+\/?(\?|$))/,
+    endpoint: 'https://www.youtube.com/oembed',
+  },
+  { hosts: ['youtu.be'], path: /^\/[\w-]+\/?(\?|$)/, endpoint: 'https://www.youtube.com/oembed' },
+  {
+    hosts: ['tiktok.com', 'www.tiktok.com'],
+    path: /^\/@[^/]+\/video\/\d+/,
+    endpoint: 'https://www.tiktok.com/oembed',
+  },
+  {
+    hosts: ['reddit.com', 'www.reddit.com'],
+    path: /^\/r\/[^/]+\/comments\//,
+    endpoint: 'https://www.reddit.com/oembed',
+  },
+  {
+    hosts: ['giphy.com', 'www.giphy.com'],
+    path: /^\/gifs\/[^/?]+/,
+    endpoint: 'https://giphy.com/services/oembed',
+    titleSuffix: ' - Find & Share on GIPHY',
+  },
+];
+
+function knownEndpoint(
+  target: string,
+): { readonly endpoint: string; readonly titleSuffix?: string | undefined } | undefined {
+  const url = webUrl(target);
+  if (url === undefined) return undefined;
+  const provider = KNOWN_OEMBED_PROVIDERS.find(
+    ({ hosts, path }) => hosts.includes(url.hostname) && path.test(url.pathname + url.search),
+  );
+  if (provider === undefined) return undefined;
+  const endpoint = new URL(provider.endpoint);
+  endpoint.searchParams.set('format', 'json');
+  endpoint.searchParams.set('url', target);
+  return { endpoint: endpoint.href, titleSuffix: provider.titleSuffix };
+}
+
+function withoutSuffix(oembed: Oembed | undefined, suffix: string | undefined): Oembed | undefined {
+  if (oembed?.title === undefined || suffix === undefined || !oembed.title.endsWith(suffix)) {
+    return oembed;
+  }
+  const title = oembed.title.slice(0, -suffix.length).trim();
+  const { title: _title, ...rest } = oembed;
+  return title === '' ? rest : { ...rest, title };
 }
 
 export interface Oembed {
   readonly title?: string;
   readonly author?: { readonly name: string; readonly url?: string };
+  readonly picture?: PictureSource;
 }
 
 /**
@@ -109,9 +226,10 @@ export interface Oembed {
  * The first `h-entry` when there is one: its name when it has one of its own
  * (the test Post Type Discovery uses), an excerpt of its text, its author and
  * its date. A page with no `h-entry` is described by its oEmbed title and
- * author when `oembed` holds them, then its `<title>`, `og:title` and
- * description metadata. Everything comes out as plain text; the theme escapes
- * it like any other string.
+ * author when `oembed` holds them, then its `og:title`, `<title>` and
+ * description metadata, where a title that is only a site suffix is none.
+ * Everything comes out as plain text; the theme escapes it like any other
+ * string.
  */
 export function readReplyContext(
   html: string,
@@ -149,13 +267,14 @@ function describe(
             },
           }),
       ...(entry.published === null ? {} : { published: entry.published }),
+      ...(authorName === '' ? siteOf(root) : {}),
     };
   }
 
   const name =
     withoutDirectionControls(oembed?.title) ||
-    withoutDirectionControls(titleOf(root)) ||
-    withoutDirectionControls(metaOf(root, 'og:title'));
+    pageTitle(metaOf(root, 'og:title')) ||
+    pageTitle(titleOf(root));
   const text = excerpt(
     withoutDirectionControls(metaOf(root, 'description')) ||
       withoutDirectionControls(metaOf(root, 'og:description')),
@@ -168,8 +287,13 @@ function describe(
     url: target,
     ...(name === '' ? {} : { name }),
     ...(text === '' ? {} : { text }),
-    ...(author === undefined ? {} : { author }),
+    ...(author === undefined ? siteOf(root) : { author }),
   };
+}
+
+function siteOf(root: HtmlElement): { site?: string } {
+  const site = withoutDirectionControls(metaOf(root, 'og:site_name'));
+  return site === '' ? {} : { site };
 }
 
 function withoutDirectionControls(text: string | undefined): string {
@@ -177,6 +301,11 @@ function withoutDirectionControls(text: string | undefined): string {
     .replace(/\p{Bidi_Control}/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function pageTitle(text: string): string {
+  const title = withoutDirectionControls(text);
+  return /^[-–—|·•:]\s/u.test(title) ? '' : title;
 }
 
 function oembedEndpoint(root: HtmlElement, base: string): string | undefined {
@@ -226,8 +355,18 @@ async function fetchOembed(
   const title = plainText(fields['title']);
   const authorName = plainText(fields['author_name']);
   const authorUrl = webUrl(plainText(fields['author_url']) ?? '');
+  const type = plainText(fields['type']);
+  const photo = type === 'photo' ? webUrl(plainText(fields['url']) ?? '') : undefined;
+  const thumbnail = webUrl(plainText(fields['thumbnail_url']) ?? '');
+  const picture: PictureSource | undefined =
+    photo !== undefined
+      ? { url: photo.href, kind: 'photo' }
+      : thumbnail !== undefined
+        ? { url: thumbnail.href, kind: 'thumbnail', ...(type === 'video' ? { video: true } : {}) }
+        : undefined;
   return {
     ...(title === undefined ? {} : { title }),
+    ...(picture === undefined ? {} : { picture }),
     ...(authorName === undefined
       ? {}
       : {

@@ -812,7 +812,9 @@ is a bare `'self'`. The public site gets none of that. It gets a
 `Referrer-Policy` of `strict-origin-when-cross-origin`, framing by the site
 itself only (`frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`), a
 `Permissions-Policy` that turns off the camera, microphone, geolocation,
-payments, USB and similar, and `Cross-Origin-Opener-Policy: same-origin`. None
+payments, USB and similar, and `Cross-Origin-Opener-Policy: same-origin`. The
+post editor alone allows geolocation to the site itself, for its Use my
+location button. None
 of them limits what a page loads, so a theme is still free to reference whatever
 it likes, and a site can change or remove each one with `securityHeaders`. The
 package README has
@@ -1003,6 +1005,12 @@ keyed by the post's permalink, at mode 0600. It is never written into the
 post's file, so `content/` and its git history never carry it, whatever the
 setting says (decision-29). An Eleventy build of the same `content/` prints no
 location for the same reason.
+
+Where the browser can share its position, the Location box has a **Use my
+location** button. It fills Coordinates and Accuracy, and says in the box when
+the browser refused, timed out or could not find a position. It does not fill
+in the place's name: turning coordinates into a name means sending them to a
+geocoding service somebody else runs, so those boxes stay typed by hand.
 
 A Micropub `checkin`, which Swarm-style apps send, is kept the same way, with
 the editor's A check-in box ticked. Only its venue's name, locality, region,
@@ -1699,7 +1707,7 @@ otherwise.
 | `category`             | The tags, one tag per value. Several values.                                                                                                                                                                                                                                                                                                                    |
 | `published`            | The date. A date without an offset is in the site's time zone. Without it, the post is dated now.                                                                                                                                                                                                                                                               |
 | `post-status`          | `published` or `draft`. A draft is not published, federated or sent webmentions.                                                                                                                                                                                                                                                                                |
-| `mp-slug`              | The slug in the file name and the URL. Without it the slug comes from `name`, then the content's first five words. A like, repost, bookmark or reply with neither is named after what it cites, as `liked-scripting-com`, and a photo post with neither is `photo`.                                                                                             |
+| `mp-slug`              | The slug in the file name and the URL. Without it the slug comes from `name`, then the content's first five words. A like, repost, bookmark or reply with neither is named after the cited page's title, as `liked-scripting-news`, else its address, as `liked-scripting-com`. A photo post with neither is `photo`.                                           |
 | `in-reply-to`          | Makes the post a reply to that URL.                                                                                                                                                                                                                                                                                                                             |
 | `like-of`              | Makes the post a like of that URL. Needs no content. A like of a fediverse status federates as a `Like` of it (decision-28).                                                                                                                                                                                                                                    |
 | `repost-of`            | Makes the post a repost of that URL. Needs no content. A repost of a fediverse status federates as an `Announce` of it (decision-28).                                                                                                                                                                                                                           |

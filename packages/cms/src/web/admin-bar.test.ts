@@ -236,7 +236,7 @@ const HTML_PAGES = {
 } as const;
 
 describe('the admin bar for a signed-in user', () => {
-  it('is at the top of every public HTML page, with no View site (AC #1)', async () => {
+  it('is at the top of every public HTML page, its title leading home and View admin first, with no View site (AC #1)', async () => {
     const cms = await site();
     const agent = await signedInTo(cms);
 
@@ -253,15 +253,14 @@ describe('the admin bar for a signed-in user', () => {
       assert.match(bar, /aria-label="Admin bar"/, `${kind}: the bar is labelled`);
       assert.match(bar, /Hoopla! Ada Lovelace/, `${kind}: the account menu greets her`);
 
-      const links = barLinks(html);
       assert.deepEqual(
-        links[0],
-        { label: 'A Site', href: '/admin' },
-        `${kind}: title to dashboard`,
-      );
-      assert.ok(
-        links.some((link) => link.label === '+ New' && link.href === '/admin/posts/new'),
-        `${kind}: + New opens the new-post editor (AC #4)`,
+        barLinks(html).slice(0, 3),
+        [
+          { label: 'A Site', href: '/' },
+          { label: 'View admin', href: '/admin' },
+          { label: '+ New', href: '/admin/posts/new' },
+        ],
+        `${kind}: the title leads home, then View admin and + New (TASK-257)`,
       );
       assert.ok(!bar.includes('View site'), `${kind}: no View site`);
     }
@@ -279,6 +278,16 @@ describe('the admin bar for a signed-in user', () => {
     assert.deepEqual(await edits(POST_URL), [
       { label: 'Edit Post', href: '/admin/posts/hello-world' },
     ]);
+    assert.deepEqual(
+      barLinks(await (await agent.get(POST_URL)).text()).slice(0, 4),
+      [
+        { label: 'A Site', href: '/' },
+        { label: 'View admin', href: '/admin' },
+        { label: '+ New', href: '/admin/posts/new' },
+        { label: 'Edit Post', href: '/admin/posts/hello-world' },
+      ],
+      'Edit Post follows + New',
+    );
     assert.deepEqual(await edits(PAGE_URL), [{ label: 'Edit Page', href: '/admin/pages/about' }]);
     for (const url of ['/', '/tag/engines/', '/author/ada/', '/search/?q=engines', '/nope/']) {
       assert.deepEqual(await edits(url), [], `${url} offers no Edit link`);

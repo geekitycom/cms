@@ -79,8 +79,9 @@ function renderBar(c: Context<GeekityEnv>, account: SignedInAccount): string {
   return environment
     .render(ADMIN_TEMPLATES.publicAdminBar, {
       site: c.var.renderer.site(),
-      adminUrl: ADMIN_PREFIX,
+      siteHref: '/',
       barLinks: [
+        { label: 'View admin', url: ADMIN_PREFIX },
         { label: '+ New', url: newEditorPath(POST_KIND) },
         ...(shown === undefined
           ? []

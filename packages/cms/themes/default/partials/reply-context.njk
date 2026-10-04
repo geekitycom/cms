@@ -12,13 +12,18 @@
   or synced: its name, a short excerpt, its author and its date, each only when
   it said so. It is somebody else's words, so every piece is printed through
   autoescaping and none of it with `safe`. With a name, the name is the link;
-  with only an author, "a post" is; with neither, the bare URL. Its date is
+  with only an author, "a post" is; with neither, "a page on" its host. Its date is
   written in `lang`, the language of the entry it sits in (TASK-189), so a
   listing sets `lang` from each entry as it sets `replyContext`.
+
+  `replyContext.picture`, when the target has one and the reply shows it, is
+  drawn as a thumbnail beside the line, as `citations.njk` draws it (TASK-252).
 #}
 {% import "partials/cited-page.njk" as cited %}
 {% if inReplyTo %}
-<div class="reply-context cite u-in-reply-to h-cite">
+{% set picture = replyContext.picture %}
+<div class="reply-context cite u-in-reply-to h-cite{% if picture %} cite-with-thumb{% endif %}">
+  {%- if picture %}{{ cited.thumb(inReplyTo, picture) }}{% endif %}
   <p class="cite-line small">In reply to
     {{- cited.page(inReplyTo, replyContext) }}
     {%- if replyContext.published %}, <time class="dt-published" datetime="{{ replyContext.published | date("iso") }}">{{ replyContext.published | date("readable", none, lang) }}</time>

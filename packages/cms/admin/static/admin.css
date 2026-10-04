@@ -544,6 +544,93 @@ button[type='submit']:hover,
   grid-column: 1 / -1;
 }
 
+.admin-cited-card {
+  position: relative;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-surface);
+}
+
+.admin-cited-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 8rem;
+  object-fit: cover;
+}
+
+.admin-cited-title {
+  margin: 0.375rem 0 0;
+  overflow-wrap: break-word;
+}
+
+.admin-cited-card input[type='checkbox'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.admin-editor-group .admin-cited-remove {
+  position: absolute;
+  top: 0.75rem;
+  inset-inline-end: 0.75rem;
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0;
+  border: 1px solid var(--admin-border);
+  border-radius: 50%;
+  background: var(--admin-field);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.admin-cited-card input:focus-visible + .admin-cited-remove {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+.admin-cited-card input:checked + .admin-cited-remove {
+  background: var(--admin-text);
+  color: var(--admin-surface);
+}
+
+.admin-cited-removed {
+  display: none;
+  margin: 0.25rem 0 0;
+  color: var(--admin-muted);
+  font-size: 0.9em;
+}
+
+.admin-cited-card:has(input:checked) img,
+.admin-cited-card:has(input:checked) .admin-cited-title {
+  opacity: 0.4;
+}
+
+.admin-cited-card:has(input:checked) .admin-cited-removed {
+  display: block;
+}
+
+.admin-location-here {
+  margin-top: 0.75rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--admin-link);
+  border-radius: 3px;
+  background: var(--admin-surface);
+  color: var(--admin-link);
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-location-here:hover {
+  background: var(--admin-field);
+}
+
 .admin-hint {
   margin: 0.25rem 0 0;
   color: var(--admin-muted);

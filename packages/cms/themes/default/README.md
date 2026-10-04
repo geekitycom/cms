@@ -386,7 +386,10 @@ copies elsewhere (`syndication`) after **Also on**. A page never prints either,
 and its line is a `p.page-meta` rather than a `p.entry-meta`.
 
 **Every post's page has one `h1`.** A post with a name of its own is headed by
-it, as above. A note, or a reply without a title, opens on its words instead,
+it, as above. So is a post with a title and no words, such as a titled like,
+repost or bookmark (TASK-256): its header comes first and its citation after
+it. A title that only repeats a post's opening words is no name. A note, or a
+reply without a title, opens on its words instead,
 set larger, so it has no `header`; in its place is an `h1` a screen reader and
 a crawler navigate by and a sighted reader never sees, saying what the post is,
 who wrote it and when, and then the kicker:
@@ -422,8 +425,14 @@ inside the `h-entry` wherever it is printed.
 Reposted, Liked or Bookmarked and links the target as its `u-url`. The link
 says the target's name, as the reply context does, with its author after it as
 a `p-author h-card`, when the target was read when the post was saved
-(TASK-244): its `h-entry` name, its oEmbed title, or its `<title>`. With only
-an author it says "a post", and with neither the bare URL. Its kicker
+(TASK-244): its `h-entry` name, its oEmbed title, or its `og:title` or
+`<title>`. A YouTube, TikTok, Reddit or Giphy target is named by that
+provider's known oEmbed endpoint, asked before its page, which is read only
+when the endpoint names nothing (TASK-251, TASK-253). Any other target's oEmbed
+title comes from the endpoint its page links. A title that is only a site suffix such as "- YouTube" is
+no title. With only an author it says "a post", and with neither "a page on"
+the target's host, never the bare URL, which can run to hundreds of
+characters: "Bookmarked a page on example.com" (TASK-255). Its kicker
 and its hidden `h1` say Repost, Like or Bookmark. It is placed as the reply
 context is: at the top of an untitled post, after the header of a titled one.
 A listing cites each entry's from the same partial, by the same rule.
@@ -436,7 +445,48 @@ as its author. The title link stops before " by ", and the words after it
 become the `p-author h-card`, so the line reads "Liked Flickermood by Forss"
 and a parser still reads the whole title as the `p-name`. A name that mentions
 its author anywhere else, such as "Rick Astley - Never Gonna Give You Up" by
-Rick Astley, keeps the author after it.
+Rick Astley, keeps the author after it. A page that names no author but names
+its site, its `og:site_name`, is followed by a middle dot and the site as a
+plain `span.cite-site`, never an `h-card`, because a site is not an author: a
+bookmark of a Scripting News post reads "Bookmarked RSS tip #2 · Scripting
+News". A like's, a repost's or a bookmark's citation never prints the page's
+description, which on many sites describes the site rather than the post.
+
+**A citation shows the cited page's picture** (TASK-252) when the page named
+one and the post has not removed its preview. The picture is the page's
+oEmbed photo, else its oEmbed thumbnail, else its `og:image`, else its
+`twitter:image`, copied into the site's uploads when the post was saved, so
+a reader's browser never asks the cited site or its CDN for anything. It is
+`context.picture`: `{ src, width, height, kind, video, shownInFull, imgHtml }`, where
+`imgHtml` is an `img.u-photo` inside the `h-cite`, responsive when the copy has
+variants. A repost of a photo (`shownInFull`, such as a Giphy GIF) prints it in full
+under the line, as `a.cite-photo` linking to the target, with the target's
+name as its alt text. Every other citation with a picture (a like, a bookmark,
+a reply, a repost of a video or a page) is classed `cite-with-thumb` and
+prints it as `a.cite-thumb` beside the line: a 6rem thumbnail linking to the
+target, out of the tab order and hidden from assistive technology because the
+title beside it is the same link, with an empty alt text. A video's thumbnail
+is also classed `cite-video`, which the stylesheet draws a play mark on. A
+picture that could not be copied, was bigger than the site's upload limit or
+was never named leaves the citation as it was, with no picture. A post whose
+front matter says `preview: false`, which the editor's remove control writes,
+prints the plain citation, and so do its listing entry and its feed items.
+There is never an iframe or a script from the cited page.
+
+**A cited URL that is itself an image** (TASK-255), one that answers with an
+`image/*` type rather than a page, is copied as its own picture of kind
+`photo` and has no name, so `context.image` is true and the line says "an
+image from" its host as the link: "Reposted an image from edu.casio.com". A
+repost shows it in full like a reposted GIF, a like or a bookmark as a
+thumbnail beside "Liked an image from edu.casio.com", and a post that hid its
+preview still says it reposted an image. Its alt text is the post's
+`cited-alt`, which the editor's card writes, else the post's title, else
+empty. An image that could not be copied, or was bigger than the site's
+upload limit, keeps no context, so its citation says "a page on" its host.
+
+The feeds open each
+citing post's HTML with the same citation as a `p.cite-line`, the picture
+after it with an absolute `src`.
 
 **A read says what was read** (TASK-229) with `partials/read.njk`, a
 `p.read-line` at the top of the `e-content` that reads like indiebookclub's
@@ -625,7 +675,8 @@ its kicker:
 whole as its `e-content`, and the date in its kicker is its `u-url`. A reply is
 a note that first cites what it answers with `partials/reply-context.njk`, and
 a reply with a title is an article that cites it after its title and summary.
-A like, a repost and a bookmark place `partials/citations.njk` the same way. An article's categories are in
+A like, a repost and a bookmark place `partials/citations.njk` the same way,
+and one with a title and no words is listed by its title too. An article's categories are in
 its kicker; a note's are on its own page.
 
 The excerpt is the entry's `summary`, the very line the feeds publish, so a

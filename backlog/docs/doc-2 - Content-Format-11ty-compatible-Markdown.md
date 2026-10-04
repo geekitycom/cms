@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-03 17:37'
+updated_date: '2026-10-03 23:50'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -117,7 +117,7 @@ Feeds, the sitemap and the ActivityStreams objects emit instants and are not aff
 ## Permalink rules
 
 - Posts default to `/{yyyy}/{mm}/{slug}/`. Pages default to `/{slug}/`. Both are just defaults the admin form fills in; the stored value is what counts.
-- Slug is derived on creation, lowercased, ASCII, hyphenated, and unique within the index (a repeat gets `-2`). It comes from the title, or for a post with no title from its first five words, or a read's title. A post with no title and no text is named after what it is (TASK-242): `liked-`, `reposted-`, `bookmarked-` or `reply-to-` and up to four words of the cited page's address (its host without `www.`, then the path segments that hold a letter), or `photo`. `untitled` is the last fallback. A checkin's venue never names it, since the slug is public and the location is private. Only a new post is named this way: an existing one keeps its slug. Editing the slug later rewrites `permalink` but does not rename the file.
+- Slug is derived on creation, lowercased, ASCII, hyphenated, and unique within the index (a repeat gets `-2`). It comes from the title, or for a post with no title from its first five words, or a read's title. A post with no title and no text is named after what it is (TASK-242): `liked-`, `reposted-`, `bookmarked-` or `reply-to-` and up to five words of the cited page's title (TASK-250), or, when that page could not be read within three seconds or has no title, up to four words of its address (its host without `www.`, then the path segments that hold a letter); or `photo`. `untitled` is the last fallback. A checkin's venue never names it, since the slug is public and the location is private. Only a new post is named this way: an existing one keeps its slug. Editing the slug later rewrites `permalink` but does not rename the file.
 - Trailing slash is canonical. Requests without it redirect.
 
 ## Drafts and status

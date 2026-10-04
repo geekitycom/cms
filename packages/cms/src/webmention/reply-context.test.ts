@@ -13,6 +13,15 @@ const ADDRESSES: Record<string, string[]> = {
   'plain.example': ['203.0.113.11'],
   'inside.example': ['10.0.0.5'],
   'sneaky.example': ['203.0.113.12', '127.0.0.1'],
+  'youtube.com': ['203.0.113.20'],
+  'www.youtube.com': ['203.0.113.20'],
+  'm.youtube.com': ['203.0.113.20'],
+  'youtu.be': ['203.0.113.21'],
+  'www.tiktok.com': ['203.0.113.22'],
+  'www.reddit.com': ['203.0.113.23'],
+  'giphy.com': ['203.0.113.24'],
+  'www.giphy.com': ['203.0.113.24'],
+  'scripting.com': ['203.0.113.25'],
 };
 
 const lookup: HostLookup = (hostname) => {
@@ -129,6 +138,37 @@ describe('readReplyContext', () => {
       url: TARGET,
       name: 'Shared title',
       text: 'Shared words.',
+    });
+  });
+
+  it('prefers og:title to the page title', () => {
+    const page = `<html><head>
+      <title>Shared title - Their site</title>
+      <meta property="og:title" content="Shared title">
+    </head></html>`;
+
+    assert.deepEqual(readReplyContext(page, TARGET), { url: TARGET, name: 'Shared title' });
+  });
+
+  it('treats a title that is only a site suffix as no title', () => {
+    for (const title of ['- YouTube', '| Their site', ' – Their site', '· Site']) {
+      assert.equal(readReplyContext(`<title>${title}</title>`, TARGET), undefined, title);
+      assert.equal(
+        readReplyContext(`<meta property="og:title" content="${title}">`, TARGET),
+        undefined,
+        title,
+      );
+    }
+    assert.deepEqual(
+      readReplyContext('<meta property="og:title" content="- YouTube"><title>Real</title>', TARGET),
+      { url: TARGET, name: 'Real' },
+    );
+  });
+
+  it('keeps a title that only contains a separator', () => {
+    assert.deepEqual(readReplyContext('<title>Tomatoes - a guide</title>', TARGET), {
+      url: TARGET,
+      name: 'Tomatoes - a guide',
     });
   });
 
@@ -546,6 +586,546 @@ describe('fetchReplyContext with oEmbed', () => {
   });
 });
 
+describe('fetchReplyContext with a known oEmbed provider', () => {
+  const BOT_CHECK = `<html><head><title> - YouTube</title></head>
+    <body><p>Sign in to confirm you’re not a bot</p></body></html>`;
+
+  const VIDEO = {
+    title: 'How to grow tomatoes',
+    author_name: 'Matt Talks Tech',
+    author_url: 'https://www.youtube.com/@MattTalksTech',
+    html: '<iframe src="https://www.youtube.com/embed/abc"></iframe>',
+  };
+
+  function json(body: unknown): Response {
+    return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+  }
+
+  function endpointFor(endpoint: string, target: string): string {
+    const url = new URL(endpoint);
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('url', target);
+    return url.href;
+  }
+
+  function serve(page: () => Response, oembed: unknown, endpoint: string): void {
+    answer = (request) =>
+      new URL(request.url).pathname === new URL(endpoint).pathname &&
+      new URL(request.url).host === new URL(endpoint).host
+        ? json(oembed)
+        : page();
+  }
+
+  it('asks YouTube’s endpoint for a watch, shorts or youtu.be URL, and not the page', async () => {
+    for (const target of [
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      'https://youtube.com/watch?v=dQw4w9WgXcQ&t=42',
+      'https://m.youtube.com/watch?feature=share&v=dQw4w9WgXcQ',
+      'https://www.youtube.com/shorts/abc_DEF-123',
+      'https://youtu.be/dQw4w9WgXcQ',
+      'https://youtu.be/dQw4w9WgXcQ?si=share',
+    ]) {
+      requested.length = 0;
+      serve(() => html(BOT_CHECK), VIDEO, 'https://www.youtube.com/oembed');
+
+      assert.deepEqual(
+        await fetchReplyContext(target, { lookup }),
+        {
+          ok: true,
+          context: {
+            url: target,
+            name: 'How to grow tomatoes',
+            author: { name: 'Matt Talks Tech', url: 'https://www.youtube.com/@MattTalksTech' },
+          },
+        },
+        target,
+      );
+      assert.deepEqual(requested, [endpointFor('https://www.youtube.com/oembed', target)], target);
+    }
+  });
+
+  it('asks TikTok’s, Reddit’s and Giphy’s endpoints, and not their pages', async () => {
+    for (const [target, endpoint, generic] of [
+      [
+        'https://www.tiktok.com/@someone/video/7312345678901234567',
+        'https://www.tiktok.com/oembed',
+        '<title>TikTok - Make Your Day</title>',
+      ],
+      [
+        'https://www.reddit.com/r/selfhosted/comments/1abcde/my_little_server/',
+        'https://www.reddit.com/oembed',
+        '<title>Reddit</title>',
+      ],
+      [
+        'https://giphy.com/gifs/cat-kitten-3o7TKSjRrfIPjeiVyM',
+        'https://giphy.com/services/oembed',
+        '<title>Cat Kitten GIF - Find &amp; Share on GIPHY</title>',
+      ],
+      [
+        'https://www.giphy.com/gifs/3o7TKSjRrfIPjeiVyM',
+        'https://giphy.com/services/oembed',
+        '<title>GIF - Find &amp; Share on GIPHY</title>',
+      ],
+    ] as const) {
+      requested.length = 0;
+      serve(() => html(generic), { title: 'The real title', author_name: 'someone' }, endpoint);
+
+      assert.deepEqual(
+        await fetchReplyContext(target, { lookup }),
+        { ok: true, context: { url: target, name: 'The real title', author: { name: 'someone' } } },
+        target,
+      );
+      assert.deepEqual(requested, [endpointFor(endpoint, target)], target);
+    }
+  });
+
+  it('names a Giphy GIF from the endpoint’s photo answer', async () => {
+    const target = 'https://giphy.com/gifs/cat-kitten-3o7TKSjRrfIPjeiVyM';
+    serve(
+      () => html('<title>Cat Kitten GIF - Find &amp; Share on GIPHY</title>'),
+      {
+        type: 'photo',
+        version: '1.0',
+        title: 'Cat Kitten GIF',
+        author_name: 'Pat Them',
+        author_url: 'https://giphy.com/pat',
+        url: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif',
+        width: 480,
+        height: 270,
+      },
+      'https://giphy.com/services/oembed',
+    );
+
+    assert.deepEqual(await fetchReplyContext(target, { lookup }), {
+      ok: true,
+      context: {
+        url: target,
+        name: 'Cat Kitten GIF',
+        author: { name: 'Pat Them', url: 'https://giphy.com/pat' },
+      },
+      picture: { url: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', kind: 'photo' },
+    });
+  });
+
+  it('names a known provider’s URL from its endpoint even when the page would be refused', async () => {
+    const target = 'https://www.reddit.com/r/selfhosted/comments/1abcde/my_little_server/';
+    serve(
+      () => new Response('blocked', { status: 403 }),
+      { title: 'My little server', author_name: 'someone' },
+      'https://www.reddit.com/oembed',
+    );
+
+    assert.deepEqual(await fetchReplyContext(target, { lookup }), {
+      ok: true,
+      context: { url: target, name: 'My little server', author: { name: 'someone' } },
+    });
+    assert.deepEqual(requested, [endpointFor('https://www.reddit.com/oembed', target)]);
+  });
+
+  it('reads the page when the known endpoint fails or names nothing', async () => {
+    const target = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    const endpoint = endpointFor('https://www.youtube.com/oembed', target);
+    for (const failure of [
+      () => new Response('gone', { status: 404 }),
+      () => Promise.reject(new TypeError('fetch failed')),
+      () => json({ type: 'video', html: '<iframe></iframe>' }),
+      () => json({ title: '‮', author_name: ' ' }),
+    ]) {
+      requested.length = 0;
+      answer = (request) =>
+        request.url === target
+          ? html(`<title>- YouTube</title>
+              <meta property="og:title" content="From the page">
+              <link rel="alternate" type="application/json+oembed" href="${endpoint}">`)
+          : failure();
+
+      assert.deepEqual(await fetchReplyContext(target, { lookup }), {
+        ok: true,
+        context: { url: target, name: 'From the page' },
+      });
+      assert.deepEqual(requested, [endpoint, target], 'the page’s own link is not asked again');
+    }
+  });
+
+  it('keeps the page’s refusal when the known endpoint fails too', async () => {
+    const target = 'https://www.reddit.com/r/selfhosted/comments/1abcde/my_little_server/';
+    answer = () => new Response('blocked', { status: 403 });
+
+    assert.deepEqual(await fetchReplyContext(target, { lookup }), {
+      ok: false,
+      reason: 'answered 403',
+    });
+    assert.deepEqual(requested, [endpointFor('https://www.reddit.com/oembed', target), target]);
+  });
+
+  it('reads an h-entry on the page when the known endpoint names nothing', async () => {
+    const target = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    answer = (request) =>
+      request.url === target ? html(H_ENTRY) : new Response('gone', { status: 404 });
+
+    assert.deepEqual(await fetchReplyContext(target, { lookup }), {
+      ok: true,
+      context: readReplyContext(H_ENTRY, target),
+    });
+  });
+
+  it('asks nothing more of a provider or a page the table does not know', async () => {
+    for (const target of [
+      'https://plain.example/watch?v=dQw4w9WgXcQ',
+      'https://www.youtube.com/@MattTalksTech',
+      'https://www.youtube.com/watch',
+      'https://www.tiktok.com/@someone',
+      'https://www.reddit.com/r/selfhosted/',
+      'https://giphy.com/someone',
+      'https://giphy.com/gifs/',
+    ]) {
+      requested.length = 0;
+      answer = () => html('<title>Just the page</title>');
+
+      assert.deepEqual(
+        await fetchReplyContext(target, { lookup }),
+        { ok: true, context: { url: target, name: 'Just the page' } },
+        target,
+      );
+      assert.deepEqual(requested, [target], target);
+    }
+  });
+
+  it('holds the known endpoint and the page to the one timeout', async () => {
+    const target = 'https://youtu.be/dQw4w9WgXcQ';
+    for (const slow of ['endpoint', 'page']) {
+      answer = (request) =>
+        (request.url === target) === (slow === 'page')
+          ? untilAborted(request)
+          : request.url === target
+            ? html('<title>Patient page</title>')
+            : new Response('gone', { status: 404 });
+
+      const started = Date.now();
+      const fetched = await fetchReplyContext(target, { lookup, timeoutMs: 100 });
+
+      assert.equal(fetched.ok, false, slow);
+      assert.ok(Date.now() - started < 2_000, `it did not wait on the ${slow}`);
+    }
+  });
+});
+
+describe('fetchReplyContext and the cited page’s picture', () => {
+  const GIF = 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif';
+  const THUMBNAIL = 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg';
+
+  function json(body: unknown): Response {
+    return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+  }
+
+  function endpointAnswers(oembed: unknown, page = '<title>The page</title>'): void {
+    answer = (request) =>
+      /oembed/.test(new URL(request.url).pathname) ? json(oembed) : html(page);
+  }
+
+  it('keeps a photo answer’s image as the picture itself', async () => {
+    const target = 'https://giphy.com/gifs/cat-kitten-3o7TKSjRrfIPjeiVyM';
+    endpointAnswers({ type: 'photo', title: 'Cat Kitten GIF', url: GIF, width: 480, height: 270 });
+
+    assert.deepEqual(await fetchReplyContext(target, { lookup }), {
+      ok: true,
+      context: { url: target, name: 'Cat Kitten GIF' },
+      picture: { url: GIF, kind: 'photo' },
+    });
+  });
+
+  it('keeps a video answer’s thumbnail, marked as a video', async () => {
+    const target = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    endpointAnswers({
+      type: 'video',
+      title: 'Never Gonna Give You Up',
+      thumbnail_url: THUMBNAIL,
+      thumbnail_width: 480,
+      thumbnail_height: 360,
+      html: '<iframe></iframe>',
+    });
+
+    const fetched = await fetchReplyContext(target, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.deepEqual(fetched.picture, { url: THUMBNAIL, kind: 'thumbnail', video: true });
+  });
+
+  it('takes a thumbnail when a photo answer has no image of its own', async () => {
+    const target = 'https://giphy.com/gifs/cat-kitten-3o7TKSjRrfIPjeiVyM';
+    endpointAnswers({ type: 'photo', title: 'Cat', thumbnail_url: THUMBNAIL });
+
+    const fetched = await fetchReplyContext(target, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.deepEqual(fetched.picture, { url: THUMBNAIL, kind: 'thumbnail' });
+  });
+
+  it('falls back to the page’s og:image, resolved against the page', async () => {
+    const target = 'https://plain.example/articles/beans';
+    answer = () =>
+      html(`<title>Beans</title>
+        <meta property="og:image" content="/images/beans.jpg">`);
+
+    const fetched = await fetchReplyContext(target, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.deepEqual(fetched.picture, {
+      url: 'https://plain.example/images/beans.jpg',
+      kind: 'thumbnail',
+    });
+  });
+
+  it('marks an og:image a video’s when the page says it is a video', async () => {
+    const target = 'https://plain.example/watch/9';
+    answer = () =>
+      html(`<title>A clip</title>
+        <meta property="og:type" content="video.other">
+        <meta property="og:image" content="https://cdn.plain.example/9.jpg">`);
+
+    const fetched = await fetchReplyContext(target, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.deepEqual(fetched.picture, {
+      url: 'https://cdn.plain.example/9.jpg',
+      kind: 'thumbnail',
+      video: true,
+    });
+  });
+
+  it('keeps an og:image beside an h-entry', async () => {
+    answer = () =>
+      html(H_ENTRY.replace('<title>', '<meta property="og:image" content="/tomato.png"><title>'));
+
+    const fetched = await fetchReplyContext(TARGET, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.equal(fetched.context.name, 'Growing tomatoes');
+    assert.deepEqual(fetched.picture, {
+      url: 'https://them.example/tomato.png',
+      kind: 'thumbnail',
+    });
+  });
+
+  it('prefers oEmbed’s thumbnail to the page’s og:image', async () => {
+    const target = 'https://plain.example/watch?v=1';
+    answer = (request) =>
+      request.url === target
+        ? html(`<meta property="og:image" content="/og.jpg">
+            <link rel="alternate" type="application/json+oembed" href="/oembed">`)
+        : json({ type: 'video', title: 'Clip', thumbnail_url: THUMBNAIL });
+
+    const fetched = await fetchReplyContext(target, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.deepEqual(fetched.picture, { url: THUMBNAIL, kind: 'thumbnail', video: true });
+  });
+
+  it('keeps no picture that is not an http or https address', async () => {
+    const target = 'https://plain.example/page';
+    for (const image of ['javascript:alert(1)', 'data:image/gif;base64,R0lGODlh', '']) {
+      answer = () => html(`<title>Page</title><meta property="og:image" content="${image}">`);
+
+      const fetched = await fetchReplyContext(target, { lookup });
+
+      assert.ok(fetched.ok, image);
+      assert.equal(fetched.picture, undefined, image);
+    }
+  });
+
+  it('has no picture when nothing names one', async () => {
+    answer = () => html('<title>Words only</title>');
+
+    const fetched = await fetchReplyContext('https://plain.example/words', { lookup });
+
+    assert.ok(fetched.ok);
+    assert.equal('picture' in fetched, false);
+  });
+});
+
+describe('fetchReplyContext and Twitter card pictures', () => {
+  it('takes twitter:image when the page has no og:image', async () => {
+    for (const name of ['twitter:image', 'twitter:image:src']) {
+      answer = () =>
+        html(
+          `<title>Card only</title><meta name="${name}" content="https://cdn.plain.example/card.png">`,
+        );
+
+      const fetched = await fetchReplyContext('https://plain.example/card', { lookup });
+
+      assert.ok(fetched.ok, name);
+      assert.deepEqual(
+        fetched.picture,
+        { url: 'https://cdn.plain.example/card.png', kind: 'thumbnail' },
+        name,
+      );
+    }
+  });
+
+  it('prefers og:image to twitter:image', async () => {
+    answer = () =>
+      html(`<title>Both</title>
+        <meta name="twitter:image" content="https://cdn.plain.example/card.png">
+        <meta property="og:image" content="https://cdn.plain.example/og.png">`);
+
+    const fetched = await fetchReplyContext('https://plain.example/both', { lookup });
+
+    assert.ok(fetched.ok);
+    assert.deepEqual(fetched.picture, {
+      url: 'https://cdn.plain.example/og.png',
+      kind: 'thumbnail',
+    });
+  });
+
+  it('prefers oEmbed’s thumbnail to twitter:image', async () => {
+    const target = 'https://plain.example/watch?v=2';
+    answer = (request) =>
+      request.url === target
+        ? html(`<meta name="twitter:image" content="/card.png">
+            <link rel="alternate" type="application/json+oembed" href="/oembed">`)
+        : new Response(
+            JSON.stringify({
+              type: 'rich',
+              title: 'Rich',
+              thumbnail_url: 'https://cdn.plain.example/t.jpg',
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          );
+
+    const fetched = await fetchReplyContext(target, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.deepEqual(fetched.picture, {
+      url: 'https://cdn.plain.example/t.jpg',
+      kind: 'thumbnail',
+    });
+  });
+
+  it('marks a player card’s image a video’s', async () => {
+    answer = () =>
+      html(`<title>Clip</title>
+        <meta name="twitter:card" content="player">
+        <meta name="twitter:image" content="https://cdn.plain.example/clip.jpg">`);
+
+    const fetched = await fetchReplyContext('https://plain.example/clip', { lookup });
+
+    assert.ok(fetched.ok);
+    assert.deepEqual(fetched.picture, {
+      url: 'https://cdn.plain.example/clip.jpg',
+      kind: 'thumbnail',
+      video: true,
+    });
+  });
+});
+
+describe('fetchReplyContext and the site a page belongs to', () => {
+  const SCRIPTING = 'http://scripting.com/2026/10/03/225649.html';
+  const SCRIPTING_PAGE = `<html><head>
+    <title>Scripting News: RSS tip #2</title>
+    <meta property="og:title" content="RSS tip #2">
+    <meta property="og:site_name" content="Scripting News">
+    <meta property="og:description" content="It's even worse than it appears.">
+    <meta name="description" content="It's even worse than it appears.">
+    <meta name="twitter:card" content="summary_large_image">
+  </head><body><p>RSS tip #2</p></body></html>`;
+
+  it('labels a page with no author by its og:site_name', async () => {
+    answer = () => html(SCRIPTING_PAGE);
+
+    assert.deepEqual(await fetchReplyContext(SCRIPTING, { lookup }), {
+      ok: true,
+      context: {
+        url: SCRIPTING,
+        name: 'RSS tip #2',
+        text: "It's even worse than it appears.",
+        site: 'Scripting News',
+      },
+    });
+  });
+
+  it('labels an h-entry with no author by its og:site_name', async () => {
+    answer = () =>
+      html(`<meta property="og:site_name" content="Their Site">
+        <article class="h-entry"><h1 class="p-name">Growing tomatoes</h1>
+        <div class="e-content"><p>Sun.</p></div></article>`);
+
+    const fetched = await fetchReplyContext(TARGET, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.equal(fetched.context.site, 'Their Site');
+  });
+
+  it('leaves the site out when the page names an author', async () => {
+    answer = () =>
+      html(
+        H_ENTRY.replace('<title>', '<meta property="og:site_name" content="Their Site"><title>'),
+      );
+
+    const fetched = await fetchReplyContext(TARGET, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.equal(fetched.context.author?.name, 'Pat Them');
+    assert.equal('site' in fetched.context, false);
+  });
+
+  it('leaves the site out when oEmbed names an author', async () => {
+    const target = 'https://plain.example/watch?v=3';
+    answer = (request) =>
+      request.url === target
+        ? html(`<meta property="og:site_name" content="Plain">
+            <link rel="alternate" type="application/json+oembed" href="/oembed">`)
+        : new Response(JSON.stringify({ title: 'Clip', author_name: 'Sam' }), {
+            headers: { 'content-type': 'application/json' },
+          });
+
+    const fetched = await fetchReplyContext(target, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.equal('site' in fetched.context, false);
+  });
+});
+
+describe('fetchReplyContext and a provider’s title suffix', () => {
+  function json(body: unknown): Response {
+    return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+  }
+
+  it('cuts Giphy’s " - Find & Share on GIPHY" from its endpoint’s title', async () => {
+    const target = 'https://giphy.com/gifs/newyorkcomiccon-wow-3o7TKSjRrfIPjeiVyM';
+    answer = () =>
+      json({
+        type: 'photo',
+        title: 'Neil Degrasse Tyson Wow GIF by New York Comic Con - Find & Share on GIPHY',
+        author_name: 'New York Comic Con',
+      });
+
+    const fetched = await fetchReplyContext(target, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.equal(fetched.context.name, 'Neil Degrasse Tyson Wow GIF by New York Comic Con');
+  });
+
+  it('keeps a Giphy title that does not end in the suffix', async () => {
+    const target = 'https://giphy.com/gifs/3o7TKSjRrfIPjeiVyM';
+    answer = () => json({ title: 'Find & Share on GIPHY is a fine name' });
+
+    const fetched = await fetchReplyContext(target, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.equal(fetched.context.name, 'Find & Share on GIPHY is a fine name');
+  });
+
+  it('leaves another provider’s title as its endpoint wrote it', async () => {
+    const target = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    answer = () => json({ title: 'My GIF - Find & Share on GIPHY' });
+
+    const fetched = await fetchReplyContext(target, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.equal(fetched.context.name, 'My GIF - Find & Share on GIPHY');
+  });
+});
+
 describe('fetchReplyContext and direction controls', () => {
   const CONTROLS = [...'\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069\u200E\u200F\u061C'];
   const wrap = (text: string): string => `${CONTROLS.join('')}${text}\u202E`;
@@ -681,3 +1261,56 @@ function untilAborted(request: Request): Promise<Response> {
     });
   });
 }
+
+describe('fetchReplyContext and a cited URL that is an image', () => {
+  const IMAGE = 'https://plain.example/photos/calculator.png?w=1200&sig=abc';
+
+  it('answers with the image as a photo picture and no name, without reading its bytes', async () => {
+    let read = false;
+    answer = () =>
+      new Response(
+        new ReadableStream(
+          {
+            pull(controller) {
+              read = true;
+              controller.enqueue(new Uint8Array(1024));
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+        { headers: { 'content-type': 'image/png' } },
+      );
+
+    const fetched = await fetchReplyContext(IMAGE, { lookup });
+
+    assert.deepEqual(fetched, {
+      ok: true,
+      context: { url: IMAGE },
+      picture: { url: IMAGE, kind: 'photo' },
+    });
+    assert.equal(read, false);
+    assert.deepEqual(requested, [IMAGE]);
+  });
+
+  it('names the picture by the address the image came from after a redirect', async () => {
+    const moved = 'https://plain.example/cdn/calculator.png';
+    answer = (request) =>
+      request.url === IMAGE
+        ? new Response(null, { status: 302, headers: { location: moved } })
+        : new Response(new Uint8Array(8), { headers: { 'content-type': 'image/jpeg' } });
+
+    const fetched = await fetchReplyContext(IMAGE, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.deepEqual(fetched.context, { url: IMAGE });
+    assert.deepEqual(fetched.picture, { url: moved, kind: 'photo' });
+  });
+
+  it('still refuses a type that is neither a page nor an image', async () => {
+    answer = () => new Response('%PDF', { headers: { 'content-type': 'application/pdf' } });
+
+    const fetched = await fetchReplyContext(IMAGE, { lookup });
+
+    assert.equal(fetched.ok, false);
+  });
+});
