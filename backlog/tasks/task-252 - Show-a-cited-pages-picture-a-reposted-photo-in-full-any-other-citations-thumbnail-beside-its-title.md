@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-03 23:56'
-updated_date: '2026-10-03 23:59'
+updated_date: '2026-10-04 00:04'
 labels:
   - theme
   - webmention
@@ -36,6 +36,7 @@ Rendering (theme partials for citations and reply context, page and listings): a
 - [ ] #4 A picture that fails, is too big or is absent leaves the citation as it is today; tests use stubbed hosts
 - [ ] #5 decision-19 records where pictures are kept and when they are forgotten; theme README describes the rendering
 - [ ] #6 The editor shows a cited page's preview card with a remove control (keyboard operable, named, works without JavaScript); removing it is saved in front matter and the page, listings and feeds show the plain citation; it can be shown again
+- [ ] #7 A provider row in KNOWN_OEMBED_PROVIDERS can name a title suffix its endpoint appends, and Giphy's ' - Find & Share on GIPHY' is stripped (TASK-253 found the endpoint keeps it)
 <!-- AC:END -->
 
 ## Implementation Notes
