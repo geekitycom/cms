@@ -24,6 +24,15 @@ describe('slugify', () => {
     assert.equal(slugify('  --Hello___there--  '), 'hello-there');
   });
 
+  it('drops an apostrophe rather than splitting the word at it', () => {
+    assert.equal(
+      slugify("Miss Peregrine's Home for Peculiar Children"),
+      'miss-peregrines-home-for-peculiar-children',
+    );
+    assert.equal(slugify('Let’s see if this notifies'), 'lets-see-if-this-notifies');
+    assert.equal(slugify('Rock ʼn‘ roll'), 'rock-n-roll');
+  });
+
   it('drops characters with no ASCII form', () => {
     assert.equal(slugify('こんにちは world'), 'world');
   });

@@ -1386,6 +1386,19 @@ describe('writing a post', () => {
     assert.match(await live.text(), /Written in a textarea\./);
   });
 
+  it('keeps a word whole across an apostrophe in a new slug', async () => {
+    const cms = await box.site({ contentDir: await seeded([]) });
+    const agent = await signedIn(cms);
+
+    const response = await submit(agent, '/admin/posts/new', {
+      title: "Miss Peregrine's Home",
+      slug: '',
+      action: 'save-draft',
+    });
+
+    assert.equal(response.headers.get('location'), '/admin/posts/miss-peregrines-home');
+  });
+
   it('derives the slug from the title when the form leaves it empty', async () => {
     const cms = await box.site({ contentDir: await seeded([]) });
     const agent = await signedIn(cms);

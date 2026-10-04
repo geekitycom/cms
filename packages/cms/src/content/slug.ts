@@ -22,7 +22,8 @@ const TRANSLITERATIONS: ReadonlyArray<readonly [RegExp, string]> = [
  * Turn a title into a URL slug: lowercase ASCII letters, digits and hyphens.
  *
  * Accented letters lose their accents, a few letters that do not decompose are
- * transliterated, and everything else becomes a separator. Returns an empty
+ * transliterated, apostrophes are dropped so a word stays whole, and everything
+ * else becomes a separator. Returns an empty
  * string when nothing survives, so callers can fall back to something else.
  */
 export function slugify(title: string): string {
@@ -34,6 +35,7 @@ export function slugify(title: string): string {
 
   return value
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/['‘’ʼ]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 }
