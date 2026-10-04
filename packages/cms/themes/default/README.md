@@ -386,7 +386,10 @@ copies elsewhere (`syndication`) after **Also on**. A page never prints either,
 and its line is a `p.page-meta` rather than a `p.entry-meta`.
 
 **Every post's page has one `h1`.** A post with a name of its own is headed by
-it, as above. A note, or a reply without a title, opens on its words instead,
+it, as above. So is a post with a title and no words, such as a titled like,
+repost or bookmark (TASK-256): its header comes first and its citation after
+it. A title that only repeats a post's opening words is no name. A note, or a
+reply without a title, opens on its words instead,
 set larger, so it has no `header`; in its place is an `h1` a screen reader and
 a crawler navigate by and a sighted reader never sees, saying what the post is,
 who wrote it and when, and then the kicker:
@@ -672,7 +675,8 @@ its kicker:
 whole as its `e-content`, and the date in its kicker is its `u-url`. A reply is
 a note that first cites what it answers with `partials/reply-context.njk`, and
 a reply with a title is an article that cites it after its title and summary.
-A like, a repost and a bookmark place `partials/citations.njk` the same way. An article's categories are in
+A like, a repost and a bookmark place `partials/citations.njk` the same way,
+and one with a title and no words is listed by its title too. An article's categories are in
 its kicker; a note's are on its own page.
 
 The excerpt is the entry's `summary`, the very line the feeds publish, so a

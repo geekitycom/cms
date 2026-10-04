@@ -64,12 +64,15 @@ export function postTypeOf(document: PostDocument): PostType {
 }
 
 /**
- * Whether a post has a name of its own: a title its text does not open with.
- * The note/article tail's test, asked on its own because a reply can be
- * either, and a theme heads a named post with its title whatever its type.
+ * Whether a page, a listing or a feed heads the post with its title: one the
+ * author typed that is not just the opening words of its text. Unlike the
+ * note/article tail of {@link discoverPostType}, a post with no text shows its
+ * title (TASK-256), so a titled like, repost or bookmark is headed by it while
+ * Post Type Discovery still types it by its citation.
  */
-export function isNamed(document: PostDocument): boolean {
-  return isNamedPost(propertiesOf(document));
+export function showsTitle(document: Pick<Document, 'title' | 'html' | 'description'>): boolean {
+  const name = normalize(document.title);
+  return name !== '' && !textOf(htmlToText(document.html), document.description).startsWith(name);
 }
 
 /**
@@ -125,13 +128,18 @@ export function postLabel(
 }
 
 function isNamedPost(properties: PostProperties): boolean {
-  const content = normalize(properties.content ?? '') || normalize(properties.summary ?? '');
+  const content = textOf(properties.content, properties.summary);
   if (content === '') return false;
 
   const name = normalize(properties.name ?? '');
   if (name === '') return false;
 
   return !content.startsWith(name);
+}
+
+/** A post's text for comparing with its name: its content, else its summary. */
+function textOf(content: string | undefined, summary: string | undefined): string {
+  return normalize(content ?? '') || normalize(summary ?? '');
 }
 
 /** The spec's "valid URL", as a web page can be one: absolute, http or https. */

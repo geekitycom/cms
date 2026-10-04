@@ -13,7 +13,7 @@ import type { CitedPicture } from '../webmention/cited-picture.ts';
 import type { Citation } from '../content/citation.ts';
 import { READ_STATUS_LABELS, readLine, readOf, uidLabel } from '../content/read.ts';
 import type { ReadOf, ReadStatus } from '../content/read.ts';
-import { isNamed, postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
+import { postLabel, postTypeOf, replyTarget, showsTitle } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { DEFAULT_TIMEZONE } from '../content/time.ts';
 import { readAltTexts } from '../images/alt-text.ts';
@@ -161,9 +161,10 @@ export interface DocumentContext {
    */
   postType: PostType;
   /**
-   * Whether the post has a name of its own, a title its text does not open
-   * with. A theme heads a named post with its title and draws any other by its
-   * content, whatever its type: a reply can be either.
+   * Whether the post shows its title: one the author gave that its text does
+   * not open with, including on a post with no text at all (TASK-256). A theme
+   * heads such a post with its title and draws any other by its content,
+   * whatever its type: a reply or a like can be either.
    */
   named: boolean;
   /** The URL a reply answers, present only on a reply. */
@@ -372,7 +373,7 @@ export function documentContext(
 
     title: document.title,
     postType: postTypeOf(document),
-    named: isNamed(document),
+    named: showsTitle(document),
     ...optional('inReplyTo', replyTarget(document)),
     citations: citationsOf(document.extra),
     read: readContext(document),

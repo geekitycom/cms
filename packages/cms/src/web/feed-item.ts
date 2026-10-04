@@ -7,7 +7,7 @@ import { photoAlt, photosOf } from '../content/photo.ts';
 import { readLine, readOf } from '../content/read.ts';
 import type { Photo } from '../content/photo.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
-import { isNamed, replyTarget } from '../content/post-type.ts';
+import { replyTarget, showsTitle } from '../content/post-type.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { absoluteHtmlUrls } from './absolute-urls.ts';
@@ -168,7 +168,8 @@ export interface FeedItem {
  * and revision 9 opened a read post with its read line and summarised it by
  * that line, and revision 10 opened a post that cites a page with a line
  * naming it and that page's copied picture, and revision 11 named a page
- * nothing was read from by its host and a cited image as one —
+ * nothing was read from by its host and a cited image as one, and revision 12
+ * kept the title of a titled post with no words —
  * would leave the validator where it was, and a reader polling with
  * `If-None-Match` would be handed a 304 that hides the new bytes.
  *
@@ -176,7 +177,7 @@ export interface FeedItem {
  * never again until the next such change. The comments feeds do not carry it:
  * a comment is not a {@link FeedItem} and its bytes are untouched.
  */
-export const FEED_ITEM_REVISION = 11;
+export const FEED_ITEM_REVISION = 12;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -238,7 +239,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     creator: author ?? siteAuthorName(context.users, context.site),
   };
 
-  if (isNamed(document)) item.title = document.title;
+  if (showsTitle(document)) item.title = document.title;
   if (published !== undefined && !Number.isNaN(published.getTime())) item.published = published;
 
   const updated = lastModifiedOf(document);

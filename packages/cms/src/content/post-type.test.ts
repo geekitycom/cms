@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { Document } from './document.ts';
 import { parseDocument } from './parser.ts';
-import { discoverPostType, isNamed, postLabel, postTypeOf, replyTarget } from './post-type.ts';
+import { discoverPostType, postLabel, postTypeOf, replyTarget, showsTitle } from './post-type.ts';
 
 function post(frontMatter: string, body: string): Document {
   return parseDocument(`---\n${frontMatter}date: 2026-09-20T09:00:00Z\n---\n\n${body}\n`, {
@@ -115,12 +115,12 @@ describe('a reply', () => {
       '![Tomatoes](/uploads/2026/09/tomatoes.jpg)\n\nThe tomatoes came in late.',
     );
     assert.equal(postTypeOf(document), 'reply');
-    assert.equal(isNamed(document), true);
+    assert.equal(showsTitle(document), true);
   });
 
-  it('is named only when its title is its own, as a note/article would be', () => {
-    assert.equal(isNamed(post(`in-reply-to: ${target}\n`, 'Agreed.')), false);
-    assert.equal(isNamed(post(`title: Agreed\nin-reply-to: ${target}\n`, 'Agreed.')), false);
+  it('shows its title only when the title is its own, as a note/article would', () => {
+    assert.equal(showsTitle(post(`in-reply-to: ${target}\n`, 'Agreed.')), false);
+    assert.equal(showsTitle(post(`title: Agreed\nin-reply-to: ${target}\n`, 'Agreed.')), false);
   });
 
   it('names its target only when the target is a valid URL', () => {
@@ -231,6 +231,44 @@ describe('postTypeOf', () => {
 
   it('falls back to the description when the body is empty', () => {
     assert.equal(postTypeOf(post('title: Short\ndescription: Short and sweet.\n', '')), 'note');
+  });
+});
+
+describe('showsTitle (TASK-256)', () => {
+  const target = 'https://example.com/post';
+
+  for (const [kind, key] of [
+    ['repost', 'repost-of'],
+    ['like', 'like-of'],
+    ['bookmark', 'bookmark-of'],
+  ] as const) {
+    it(`shows the title of a titled ${kind} with no words, and keeps its type`, () => {
+      const document = post(`title: Scientific Calculator\n${key}: ${target}\n`, '');
+      assert.equal(showsTitle(document), true);
+      assert.equal(postTypeOf(document), kind);
+    });
+  }
+
+  it('shows the title of a titled note with no words, still typed a note', () => {
+    const document = post('title: Scientific Calculator\n', '');
+    assert.equal(showsTitle(document), true);
+    assert.equal(postTypeOf(document), 'note');
+  });
+
+  it('shows no title a post does not have', () => {
+    assert.equal(showsTitle(post(`repost-of: ${target}\n`, '')), false);
+    assert.equal(showsTitle(post('title: "  "\n', 'Coffee first.')), false);
+  });
+
+  it('shows no title that only repeats the opening words', () => {
+    const document = post('title: Coffee first\n', '**Coffee** _first_. Then the inbox.');
+    assert.equal(showsTitle(document), false);
+    assert.equal(postTypeOf(document), 'note');
+    assert.equal(showsTitle(post('title: Short\ndescription: Short and sweet.\n', '')), false);
+  });
+
+  it('shows a title of its own over words', () => {
+    assert.equal(showsTitle(post('title: On gardens\n', 'The tomatoes came in late.')), true);
   });
 });
 
