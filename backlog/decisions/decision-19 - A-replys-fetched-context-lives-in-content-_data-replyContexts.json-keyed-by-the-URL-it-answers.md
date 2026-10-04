@@ -63,3 +63,17 @@ Some providers name no oEmbed endpoint on the page they serve a server, or refus
 The endpoint is asked with `format=json` and the cited URL. A page's own oEmbed link still wins; the table is asked when the page names none, and also when the page itself could not be fetched, so a refused page still gets a title. An `h-entry` still wins over either. The table's endpoint is fetched with the same guards, byte limit and one deadline as a discovered one, and only its `title`, `author_name` and `author_url` are kept. When the page failed and the endpoint gives nothing, the fetch fails with the page's own reason, as before.
 
 Without oEmbed, a page's `og:title` is now preferred over its `<title>`, which often carries a " - Site" suffix, and a title that is nothing but such a suffix (it starts with a separator such as "-", "|" or "·" and a space) counts as no title. Instagram is left out of the table: its endpoint needs a Facebook app token.
+
+## Amendment (2026-10-03, TASK-253)
+
+The table is now asked before the page, not after it. For a provider in the table the page's own oEmbed link is the same endpoint, so reading the page first bought nothing, and at TASK-250's 3 s save-time deadline a youtu.be link (a redirect to a ~1 MB watch page) could spend the whole deadline on the page and leave none for the endpoint. Giphy joins the table: its page names no oEmbed endpoint and its title ends in " - Find & Share on GIPHY", while its endpoint answers with the clean title, the author and the GIF.
+
+| Provider | Cited URLs                                                                     | Endpoint                            |
+| -------- | ------------------------------------------------------------------------------ | ----------------------------------- |
+| YouTube  | `youtube.com`, `www.youtube.com`, `m.youtube.com`: `/watch?v=…`, `/shorts/…`   | `https://www.youtube.com/oembed`    |
+| YouTube  | `youtu.be/…`                                                                   | `https://www.youtube.com/oembed`    |
+| TikTok   | `tiktok.com`, `www.tiktok.com`: `/@user/video/…`                               | `https://www.tiktok.com/oembed`     |
+| Reddit   | `reddit.com`, `www.reddit.com`: `/r/…/comments/…`                              | `https://www.reddit.com/oembed`     |
+| Giphy    | `giphy.com`, `www.giphy.com`: `/gifs/…`                                        | `https://giphy.com/services/oembed` |
+
+A cited URL in the table is first asked of its endpoint. When the answer names a title or an author, that is the context and the page is not read, so its description is not kept either. When the endpoint fails or names nothing, the page is read with what is left of the one deadline: an `h-entry` wins, then `og:title` and `<title>`, and the page's own oEmbed link is not asked, since it is the endpoint that just failed. When no time is left the page is not fetched. When both fail, the fetch fails with the page's own reason, as before. A URL not in the table is unchanged: its page first, then the oEmbed endpoint the page links when it has no `h-entry`.

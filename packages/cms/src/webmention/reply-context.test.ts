@@ -19,6 +19,8 @@ const ADDRESSES: Record<string, string[]> = {
   'youtu.be': ['203.0.113.21'],
   'www.tiktok.com': ['203.0.113.22'],
   'www.reddit.com': ['203.0.113.23'],
+  'giphy.com': ['203.0.113.24'],
+  'www.giphy.com': ['203.0.113.24'],
 };
 
 const lookup: HostLookup = (hostname) => {
@@ -613,7 +615,7 @@ describe('fetchReplyContext with a known oEmbed provider', () => {
         : page();
   }
 
-  it('asks YouTube’s endpoint when a watch, shorts or youtu.be page is a bot check', async () => {
+  it('asks YouTube’s endpoint for a watch, shorts or youtu.be URL, and not the page', async () => {
     for (const target of [
       'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       'https://youtube.com/watch?v=dQw4w9WgXcQ&t=42',
@@ -637,15 +639,11 @@ describe('fetchReplyContext with a known oEmbed provider', () => {
         },
         target,
       );
-      assert.deepEqual(
-        requested,
-        [target, endpointFor('https://www.youtube.com/oembed', target)],
-        target,
-      );
+      assert.deepEqual(requested, [endpointFor('https://www.youtube.com/oembed', target)], target);
     }
   });
 
-  it('asks TikTok’s and Reddit’s endpoints when their pages are generic', async () => {
+  it('asks TikTok’s, Reddit’s and Giphy’s endpoints, and not their pages', async () => {
     for (const [target, endpoint, generic] of [
       [
         'https://www.tiktok.com/@someone/video/7312345678901234567',
@@ -657,6 +655,16 @@ describe('fetchReplyContext with a known oEmbed provider', () => {
         'https://www.reddit.com/oembed',
         '<title>Reddit</title>',
       ],
+      [
+        'https://giphy.com/gifs/cat-kitten-3o7TKSjRrfIPjeiVyM',
+        'https://giphy.com/services/oembed',
+        '<title>Cat Kitten GIF - Find &amp; Share on GIPHY</title>',
+      ],
+      [
+        'https://www.giphy.com/gifs/3o7TKSjRrfIPjeiVyM',
+        'https://giphy.com/services/oembed',
+        '<title>GIF - Find &amp; Share on GIPHY</title>',
+      ],
     ] as const) {
       requested.length = 0;
       serve(() => html(generic), { title: 'The real title', author_name: 'someone' }, endpoint);
@@ -666,11 +674,38 @@ describe('fetchReplyContext with a known oEmbed provider', () => {
         { ok: true, context: { url: target, name: 'The real title', author: { name: 'someone' } } },
         target,
       );
-      assert.deepEqual(requested, [target, endpointFor(endpoint, target)], target);
+      assert.deepEqual(requested, [endpointFor(endpoint, target)], target);
     }
   });
 
-  it('asks a known provider’s endpoint even when the page is refused', async () => {
+  it('names a Giphy GIF from the endpoint’s photo answer', async () => {
+    const target = 'https://giphy.com/gifs/cat-kitten-3o7TKSjRrfIPjeiVyM';
+    serve(
+      () => html('<title>Cat Kitten GIF - Find &amp; Share on GIPHY</title>'),
+      {
+        type: 'photo',
+        version: '1.0',
+        title: 'Cat Kitten GIF',
+        author_name: 'Pat Them',
+        author_url: 'https://giphy.com/pat',
+        url: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif',
+        width: 480,
+        height: 270,
+      },
+      'https://giphy.com/services/oembed',
+    );
+
+    assert.deepEqual(await fetchReplyContext(target, { lookup }), {
+      ok: true,
+      context: {
+        url: target,
+        name: 'Cat Kitten GIF',
+        author: { name: 'Pat Them', url: 'https://giphy.com/pat' },
+      },
+    });
+  });
+
+  it('names a known provider’s URL from its endpoint even when the page would be refused', async () => {
     const target = 'https://www.reddit.com/r/selfhosted/comments/1abcde/my_little_server/';
     serve(
       () => new Response('blocked', { status: 403 }),
@@ -682,7 +717,32 @@ describe('fetchReplyContext with a known oEmbed provider', () => {
       ok: true,
       context: { url: target, name: 'My little server', author: { name: 'someone' } },
     });
-    assert.deepEqual(requested, [target, endpointFor('https://www.reddit.com/oembed', target)]);
+    assert.deepEqual(requested, [endpointFor('https://www.reddit.com/oembed', target)]);
+  });
+
+  it('reads the page when the known endpoint fails or names nothing', async () => {
+    const target = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    const endpoint = endpointFor('https://www.youtube.com/oembed', target);
+    for (const failure of [
+      () => new Response('gone', { status: 404 }),
+      () => Promise.reject(new TypeError('fetch failed')),
+      () => json({ type: 'video', html: '<iframe></iframe>' }),
+      () => json({ title: '‮', author_name: ' ' }),
+    ]) {
+      requested.length = 0;
+      answer = (request) =>
+        request.url === target
+          ? html(`<title>- YouTube</title>
+              <meta property="og:title" content="From the page">
+              <link rel="alternate" type="application/json+oembed" href="${endpoint}">`)
+          : failure();
+
+      assert.deepEqual(await fetchReplyContext(target, { lookup }), {
+        ok: true,
+        context: { url: target, name: 'From the page' },
+      });
+      assert.deepEqual(requested, [endpoint, target], 'the page’s own link is not asked again');
+    }
   });
 
   it('keeps the page’s refusal when the known endpoint fails too', async () => {
@@ -693,36 +753,18 @@ describe('fetchReplyContext with a known oEmbed provider', () => {
       ok: false,
       reason: 'answered 403',
     });
+    assert.deepEqual(requested, [endpointFor('https://www.reddit.com/oembed', target), target]);
   });
 
-  it('uses the page’s own oEmbed link ahead of the table', async () => {
-    const target = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-    const own = 'https://www.youtube.com/own-oembed?id=1';
-    answer = (request) =>
-      request.url === target
-        ? html(`<title>- YouTube</title>
-            <link rel="alternate" type="application/json+oembed" href="${own}">`)
-        : request.url === own
-          ? json({ title: 'From the page’s link' })
-          : json({ title: 'From the table' });
-
-    assert.deepEqual(await fetchReplyContext(target, { lookup }), {
-      ok: true,
-      context: { url: target, name: 'From the page’s link' },
-    });
-    assert.deepEqual(requested, [target, own]);
-  });
-
-  it('does not ask the table about a page with an h-entry', async () => {
+  it('reads an h-entry on the page when the known endpoint names nothing', async () => {
     const target = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
     answer = (request) =>
-      request.url === target ? html(H_ENTRY) : json({ title: 'From the table' });
+      request.url === target ? html(H_ENTRY) : new Response('gone', { status: 404 });
 
     assert.deepEqual(await fetchReplyContext(target, { lookup }), {
       ok: true,
       context: readReplyContext(H_ENTRY, target),
     });
-    assert.deepEqual(requested, [target]);
   });
 
   it('asks nothing more of a provider or a page the table does not know', async () => {
@@ -732,6 +774,8 @@ describe('fetchReplyContext with a known oEmbed provider', () => {
       'https://www.youtube.com/watch',
       'https://www.tiktok.com/@someone',
       'https://www.reddit.com/r/selfhosted/',
+      'https://giphy.com/someone',
+      'https://giphy.com/gifs/',
     ]) {
       requested.length = 0;
       answer = () => html('<title>Just the page</title>');
@@ -745,16 +789,22 @@ describe('fetchReplyContext with a known oEmbed provider', () => {
     }
   });
 
-  it('gives the known endpoint only what is left of the one timeout', async () => {
+  it('holds the known endpoint and the page to the one timeout', async () => {
     const target = 'https://youtu.be/dQw4w9WgXcQ';
-    answer = (request) =>
-      request.url === target ? html('<title>Patient page</title>') : untilAborted(request);
+    for (const slow of ['endpoint', 'page']) {
+      answer = (request) =>
+        (request.url === target) === (slow === 'page')
+          ? untilAborted(request)
+          : request.url === target
+            ? html('<title>Patient page</title>')
+            : new Response('gone', { status: 404 });
 
-    const started = Date.now();
-    const fetched = await fetchReplyContext(target, { lookup, timeoutMs: 100 });
+      const started = Date.now();
+      const fetched = await fetchReplyContext(target, { lookup, timeoutMs: 100 });
 
-    assert.deepEqual(fetched, { ok: true, context: { url: target, name: 'Patient page' } });
-    assert.ok(Date.now() - started < 2_000, 'it did not wait on the endpoint');
+      assert.equal(fetched.ok, false, slow);
+      assert.ok(Date.now() - started < 2_000, `it did not wait on the ${slow}`);
+    }
   });
 });
 

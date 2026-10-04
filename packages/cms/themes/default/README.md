@@ -423,9 +423,10 @@ Reposted, Liked or Bookmarked and links the target as its `u-url`. The link
 says the target's name, as the reply context does, with its author after it as
 a `p-author h-card`, when the target was read when the post was saved
 (TASK-244): its `h-entry` name, its oEmbed title, or its `og:title` or
-`<title>`. The oEmbed title comes from the endpoint the page links, or, when it
-links none or refuses the server, from YouTube's, TikTok's or Reddit's known
-endpoint (TASK-251). A title that is only a site suffix such as "- YouTube" is
+`<title>`. A YouTube, TikTok, Reddit or Giphy target is named by that
+provider's known oEmbed endpoint, asked before its page, which is read only
+when the endpoint names nothing (TASK-251, TASK-253). Any other target's oEmbed
+title comes from the endpoint its page links. A title that is only a site suffix such as "- YouTube" is
 no title. With only an author it says "a post", and with neither the bare URL. Its kicker
 and its hidden `h1` say Repost, Like or Bookmark. It is placed as the reply
 context is: at the top of an untitled post, after the header of a titled one.

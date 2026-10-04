@@ -61,40 +61,55 @@ export interface FetchReplyContextOptions {
 }
 
 /**
- * Fetch a page a post cites and read what it says about itself, asking its
- * oEmbed endpoint as well when it has no `h-entry`: the one the page links,
- * or else a known provider's, which is asked even when the page is refused.
+ * Fetch a page a post cites and read what it says about itself. A known
+ * provider's oEmbed endpoint is asked first, and the page is read only when
+ * that names nothing. Any other page is read, and asked about through the
+ * oEmbed endpoint it links when it has no `h-entry`.
  *
  * Only http and https, only public hosts (every redirect hop is checked, and a
  * name is refused when any address it resolves to is private), one timeout
- * over the whole exchange, the oEmbed request included, no more of a page than
- * the byte limit, and no oEmbed answer over it. Nothing throws.
+ * over the whole exchange, every oEmbed request included, no more of a page
+ * than the byte limit, and no oEmbed answer over it. Nothing throws.
  */
 export async function fetchReplyContext(
   target: string,
   options: FetchReplyContextOptions,
 ): Promise<ReplyContextFetch> {
-  const deadline = Date.now() + (options.timeoutMs ?? REPLY_CONTEXT_TIMEOUT_MS);
-  const maxBytes = options.maxBytes ?? REPLY_CONTEXT_MAX_BYTES;
-  const fetched = await fetchPublic(target, {
+  const limits = {
     lookup: options.lookup,
-    timeoutMs: deadline - Date.now(),
-    maxBytes,
-    overflow: 'truncate',
-    accept: 'text/html, */*;q=0.8',
-    contentType: { pattern: /^\s*(text\/html|application\/xhtml\+xml)/i, name: 'an HTML page' },
-  });
+    deadline: Date.now() + (options.timeoutMs ?? REPLY_CONTEXT_TIMEOUT_MS),
+    maxBytes: options.maxBytes ?? REPLY_CONTEXT_MAX_BYTES,
+  };
+
+  const known = knownEndpoint(target);
+  if (known !== undefined) {
+    const context = describe(parseHtml(''), undefined, target, await fetchOembed(known, limits));
+    if (context !== undefined) return { ok: true, context };
+  }
+
+  const timeoutMs = limits.deadline - Date.now();
+  const fetched =
+    timeoutMs <= 0
+      ? ({ ok: false, reason: 'timed out' } as const)
+      : await fetchPublic(target, {
+          lookup: limits.lookup,
+          timeoutMs,
+          maxBytes: limits.maxBytes,
+          overflow: 'truncate',
+          accept: 'text/html, */*;q=0.8',
+          contentType: {
+            pattern: /^\s*(text\/html|application\/xhtml\+xml)/i,
+            name: 'an HTML page',
+          },
+        });
 
   const root = parseHtml(fetched.ok ? new TextDecoder().decode(fetched.body) : '');
   const entry = fetched.ok && !fetched.truncated ? citedEntry(root, fetched.url) : undefined;
   const endpoint =
-    entry === undefined
-      ? ((fetched.ok ? oembedEndpoint(root, fetched.url) : undefined) ?? knownEndpoint(target))
+    fetched.ok && entry === undefined && known === undefined
+      ? oembedEndpoint(root, fetched.url)
       : undefined;
-  const oembed =
-    endpoint === undefined
-      ? undefined
-      : await fetchOembed(endpoint, { lookup: options.lookup, deadline, maxBytes });
+  const oembed = endpoint === undefined ? undefined : await fetchOembed(endpoint, limits);
 
   const context = describe(root, entry, target, oembed);
   if (context !== undefined) return { ok: true, context };
@@ -102,9 +117,9 @@ export async function fetchReplyContext(
 }
 
 /**
- * Providers whose JSON oEmbed endpoint is known, for when their page names
- * none: YouTube, TikTok and Reddit serve a server a generic page, or refuse
- * it, while their endpoints answer (decision-19).
+ * Providers whose JSON oEmbed endpoint is known, asked before their page:
+ * YouTube, TikTok, Reddit and Giphy serve a server a generic or slow page, or
+ * refuse it, while their endpoints answer (decision-19).
  */
 const KNOWN_OEMBED_PROVIDERS: readonly {
   readonly hosts: readonly string[];
@@ -127,6 +142,11 @@ const KNOWN_OEMBED_PROVIDERS: readonly {
     hosts: ['reddit.com', 'www.reddit.com'],
     path: /^\/r\/[^/]+\/comments\//,
     endpoint: 'https://www.reddit.com/oembed',
+  },
+  {
+    hosts: ['giphy.com', 'www.giphy.com'],
+    path: /^\/gifs\/[^/?]+/,
+    endpoint: 'https://giphy.com/services/oembed',
   },
 ];
 
