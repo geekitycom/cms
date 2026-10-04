@@ -1,0 +1,39 @@
+---
+id: decision-30
+title: >-
+  The admin is DaisyUI on Tailwind compiled at build time, in DaisyUI's own
+  themes chosen per user, drawn from Nunjucks component macros, under one
+  shadow-rooted admin bar on both sides
+date: '2026-10-04 10:25'
+status: accepted
+---
+## Context
+
+The admin (doc-5) is server-rendered Nunjucks styled by one hand-written stylesheet, `admin/static/admin.css`, about 1500 lines over 126 `admin-*` classes and 57 element-selector rules, drawn to borrow the shape of WordPress classic. It has no dark mode. The admin bar is a second stylesheet, `admin-bar.css`, included in the light DOM on admin pages and inlined into a shadow root on public pages for a signed-in user (TASK-183).
+
+decision-22 already put Tailwind v4 in the build for the default theme, compiled once at build time to a plain CSS file. The admin can take the same pipeline. DaisyUI 5 is a Tailwind v4 plugin with a fixed vocabulary of components and thirty-five built-in themes, each declaring every semantic colour and its own `color-scheme`, and the `daisyui-blueprint` MCP server hands a worker the canonical markup for each component and audits what it wrote.
+
+On 2026-10-04 the owner chose DaisyUI for the admin and set the terms: lean into DaisyUI's own look rather than redraw the WordPress one; code every component once, reusably, as plain Nunjucks rather than any framework; keep the admin theme-agnostic so any built-in theme works; and keep the admin bar one thing on both sides of the site, with light and dark palettes of its own, told by the page which it is drawn on.
+
+Two shapes were weighed for how the stylesheet relates to the templates. The theme's shape (decision-22) keeps semantic class names in the templates and applies utilities in the stylesheet, so a site theme with CSS for those names keeps working. The admin has no such consumer: its directory is outside the theme search path and nothing can override its stylesheet. DaisyUI's own shape, and what its MCP server enforces, is the component vocabulary in the markup and almost no authored CSS, which is also what makes the built-in themes work unmodified. The second was chosen.
+
+## Decision
+
+- **The admin stylesheet is Tailwind v4 with the DaisyUI 5 plugin, compiled at build time.** The source is `admin/src/admin.css`; `pnpm build` compiles it to `admin/static/admin.css`, gitignored like the editor bundle and shipped by the `admin` entry in `files`; `pretest` recompiles it. Tailwind scans the admin templates and `editor/main.ts`, whose runtime-built markup names its classes as string literals. The source stays small: the imports, the plugin with every built-in theme enabled and a light and dark pair named as the system defaults, and the few authored exceptions below.
+- **Templates carry DaisyUI classes and Tailwind utilities, never a palette colour.** Colours are the semantic tokens DaisyUI defines (`base-100`, `base-content`, `primary`, `neutral`, `error` and the rest), so every built-in theme renders the admin as its author drew it. A test over the templates refuses a hex value, an arbitrary colour or a Tailwind palette colour such as `gray-200`. A second test holds that every class token a template emits has a rule in the compiled stylesheet, which is how a misspelled DaisyUI class is caught: Tailwind emits nothing for a class it does not know.
+- **Components are Nunjucks macros, written once.** `admin/components/fields.njk` already does this for form fields. The library grows to the components the admin uses: button, alert, card, stat, badge, table, tabs, pagination, menu, navbar, dropdown, each emitting the canonical DaisyUI markup, taking modifiers such as colour and size as arguments, and taking a body through `{% call %}`. A screen composes macros; it does not spell out component markup of its own.
+- **The theme is the user's choice.** Each user may pick any built-in DaisyUI theme, or follow the system, on their own screen under Users; the choice lives in `data/users.json` beside their notification preferences. The server renders it as `data-theme` on `<html>` on every admin page for that user, and renders nothing when they follow the system, where the configured light and dark defaults follow `prefers-color-scheme`. The screens shown to nobody in particular, login and setup, follow the system. There is no client-side theme switch.
+- **The admin bar is one shadow-rooted component on both sides.** The admin draws the bar the way the public site already does: one template, in a declarative shadow root, its own plain stylesheet inlined (with the per-response nonce on the admin, whose CSP refuses an unnonced style), its script a static file rather than inline, fixed to the top with the page pushed down by its measured height. The stylesheet carries a light palette and a dark one. The host carries `data-scheme`, `light` or `dark`, derived from the signed-in user's theme choice by one table of which built-in theme is which, and nothing when they follow the system, where the bar follows `prefers-color-scheme`. The code that renders the bar sets the attribute, so an admin page and a public page agree. The bar cannot use DaisyUI classes, since the theme stops at the shadow boundary; its colours are its own, and its focus ring and text are held to WCAG contrast in both palettes by test, because DaisyUI vouches for its themes and nobody vouches for this file but us.
+- **Authored CSS is the exception and is listed.** The bar's stylesheet; the CodeMirror surface, whose `.cm-*` classes are third-party and which reads the theme's base tokens so it follows the theme; and whatever the DaisyUI rules require as a custom property. Anything else is a utility in the markup, and the quality inspector flags what is not.
+- **The look is DaisyUI's.** The sections, their children, the menu registry, every route and every behaviour in doc-5 stay. The shell, the forms, the tables and the panels are drawn with DaisyUI's components in a layout chosen for them, not fitted to the WordPress one. doc-5 is updated to say so.
+- **The migration is incremental behind Preflight.** Tailwind's base layer resets every bare element at once, which would unstyle screens not yet converted. The build starts with the theme and utilities layers and DaisyUI, no Preflight, and the legacy rules kept in the same file; screens are converted one task at a time; the last task turns Preflight on, deletes the legacy rules, and retargets the tests that read the old stylesheet as text.
+
+## Consequences
+
+- A fresh clone has no `admin/static/admin.css` until `pnpm install` or `pnpm build` runs, as for the theme and the editor bundle. The Docker build already runs `pnpm build`.
+- `daisyui` joins `tailwindcss` as a devDependency of `@geekity/cms`. Nothing reaches a browser but one compiled stylesheet and the admin's existing scripts; no CDN, no runtime.
+- Enabling every built-in theme adds roughly fifty kilobytes to the admin stylesheet, cached for an hour. A site cannot add a theme of its own; the choice is DaisyUI's list.
+- The focus-ring contrast test over `admin.css` goes: DaisyUI's themes carry their own contrast. The bar keeps its contrast test and gains a second palette to hold.
+- `styles.test.ts`, which proved every `admin-*` class had a rule, becomes the general class test over the compiled output. The At a glance tests that read `grid-row` declarations out of the sheet go with the stat component that replaces the counts.
+- The bar's inline script moves to `admin/static/`, so the public page gains one `<script src>`; the admin's assets test, which asserted the admin has no inline `<style>`, narrows to allow the bar's nonced one.
+- The DaisyUI MCP server is the worker's reference, not a gate: a worker takes the canonical markup from it and runs its inspector over changed lines, and accepts the listed authored exceptions as known findings.
