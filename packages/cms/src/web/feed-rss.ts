@@ -1,5 +1,5 @@
 import type { SiteData } from './context.ts';
-import { excerptFromHtml, feedItems } from './feed-item.ts';
+import { excerptFromHtml, excerptHtml, feedItems } from './feed-item.ts';
 import type { FeedItem } from './feed-item.ts';
 import {
   contentTypeOf,
@@ -171,7 +171,7 @@ export function rssItem(item: FeedItem): string[] {
     ...commentPointers(item),
     ...optionalElement('creativeCommons:license', item.license?.url, 3),
     ...(item.enclosure === undefined ? [] : recordingElements(item.enclosure)),
-    element('description', item.summary, 3),
+    element('description', excerptHtml(item.summary), 3),
     `      <content:encoded>${cdata(item.html)}</content:encoded>`,
     // The source of the item, per the namespace: a reader that understands
     // Markdown should render from this rather than from the HTML above. It is
@@ -311,7 +311,7 @@ function commentItem(comment: FeedComment): string[] {
     element('dc:creator', comment.author, 3),
     // A comment never carries a description, so its summary is always an
     // excerpt of what it says.
-    element('description', excerptFromHtml(html), 3),
+    element('description', excerptHtml(excerptFromHtml(html)), 3),
     `      <content:encoded>${cdata(html)}</content:encoded>`,
     '    </item>',
   ];

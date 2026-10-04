@@ -143,7 +143,9 @@ export function commentsFeedResponse(
   source: CommentFeedSource,
   conditional?: ConditionalHeaders,
 ): Response {
-  const etag = contentEtag('comments:rss', commentsFingerprint(source));
+  // The suffix moved when descriptions began to be escaped (TASK-259), so a
+  // reader holding the old bytes is not handed a 304 for them.
+  const etag = contentEtag('comments:rss:2', commentsFingerprint(source));
   const lastModified = source.comments[0]?.published;
   const headers = feedHeaders(source, etag, lastModified);
 

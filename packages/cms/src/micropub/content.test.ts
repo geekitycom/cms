@@ -207,6 +207,41 @@ describe('what an attacker sends as HTML content (AC #3)', () => {
   });
 });
 
+// A browser reads `/\host` and `//host` as another site's address, and a
+// feed cannot resolve `/\[` at all (TASK-260).
+describe('an address that starts with two slashes, either way round', () => {
+  const addresses = [
+    '/\\javascript:alert(1)',
+    '/\\[',
+    '/\\x y',
+    '//evil.example/',
+    '\\\\evil.example',
+    '\\/evil.example',
+    '/&#92;evil.example',
+    '/\t\\evil.example',
+    '  //evil.example',
+  ];
+
+  function addressesIn(page: string): string[] {
+    return [...page.matchAll(/\b(?:href|src)="([^"]+)"/g)].map(([, address]) => address ?? '');
+  }
+
+  for (const address of addresses) {
+    it(`is dropped from a link and an image: ${JSON.stringify(address)}`, () => {
+      const html = `<p><a href="${address}">x</a> <img src="${address}" alt="i"></p>`;
+
+      assert.deepEqual(addressesIn(renderMarkdown(fromHtml(html))), [], 'HTML content');
+      assert.deepEqual(addressesIn(renderMarkdown(cleaned(`A ${html}`))), [], 'HTML in Markdown');
+    });
+  }
+
+  it('leaves a root-relative path and a path relative to the page', () => {
+    const html = '<p><a href="/2026/09/post/">a</a> <a href="notes/">b</a></p>';
+
+    assert.deepEqual(addressesIn(renderMarkdown(fromHtml(html))), ['/2026/09/post/', 'notes/']);
+  });
+});
+
 describe('Markdown content keeps its text (AC #6)', () => {
   it('leaves Markdown without HTML exactly as sent, edges trimmed', () => {
     const markdown =

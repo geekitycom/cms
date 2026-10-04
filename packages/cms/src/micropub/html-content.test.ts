@@ -202,3 +202,46 @@ describe('the owner’s own files (AC #6)', () => {
     );
   });
 });
+
+// The feeds and the ActivityStreams object read a summary as HTML, so what a
+// client sent as text stays text there (TASK-259).
+describe('a Micropub post’s summary', () => {
+  const ESCAPED = '&lt;img src=x onerror=alert(1)&gt;';
+
+  async function summaries(cms: Cms, url: string): Promise<string[]> {
+    const feed = await (await cms.app.request('/feed/')).text();
+    const description = /<item>[\s\S]*?<description>([^<]*)<\/description>/.exec(feed)?.[1];
+    const response = await cms.app.request(new URL(url).pathname, {
+      headers: { accept: 'application/activity+json' },
+    });
+    const object = (await response.json()) as Record<string, unknown>;
+    return [description ?? '', String(object['summary'])];
+  }
+
+  it('is escaped text when the HTML content holds escaped markup', async () => {
+    const { cms, token } = await site();
+    const url = await created(cms, token, {
+      name: ['Escaped'],
+      content: [{ html: `<p>${ESCAPED}</p>` }],
+    });
+
+    assert.deepEqual(await summaries(cms, url), [
+      '&amp;lt;img src=x onerror=alert(1)&amp;gt;',
+      ESCAPED,
+    ]);
+  });
+
+  it('is escaped text when the summary property carries markup', async () => {
+    const { cms, token } = await site();
+    const url = await created(cms, token, {
+      name: ['Summarised'],
+      summary: ['<img src=x onerror=alert(1)>'],
+      content: ['Body.'],
+    });
+
+    assert.deepEqual(await summaries(cms, url), [
+      '&amp;lt;img src=x onerror=alert(1)&amp;gt;',
+      ESCAPED,
+    ]);
+  });
+});

@@ -331,13 +331,16 @@ function escapeAttribute(value: string): string {
 
 /**
  * A post's link or image address, or `undefined` when it names a scheme the
- * post may not use. A relative address has no scheme and is kept.
+ * post may not use. A relative address has no scheme and is kept, unless it
+ * opens with two slashes either way round: a browser reads `//host`, `/\host`
+ * and `\\host` as another site's address, and `/\[` is no address at all.
  */
 function postUrl(value: string, schemes: readonly string[]): string | undefined {
   const url = [...value]
     .filter((character) => !isControl(character))
     .join('')
     .trim();
+  if (/^[/\\]{2}/.test(url)) return undefined;
   const scheme = /^([^/?#]*?):/.exec(url)?.[1];
   if (scheme === undefined) return url;
   return schemes.includes(`${scheme.toLowerCase()}:`) ? url : undefined;

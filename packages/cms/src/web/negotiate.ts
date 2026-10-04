@@ -255,12 +255,16 @@ export function documentJson(document: Document, options: DocumentJsonOptions): 
  * A base URL carrying a path — a site served from a subdirectory — puts that
  * path in front of a root-relative one, exactly as the theme's `absoluteUrl`
  * filter does, so a document's id is the same string wherever it is built.
+ *
+ * An address no URL parser can resolve, such as `/\[` in a post, comes back as
+ * given rather than throwing: a reader fails on it exactly as the page's
+ * browser does, and one post's broken link must not fail a whole feed.
  */
 export function absoluteUrl(pathname: string, baseUrl: string): string {
   const base = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
   const basePath = base.pathname === '/' ? '' : base.pathname.replace(/\/$/, '');
   const resolved = pathname.startsWith('/') ? `${basePath}${pathname}` : pathname;
-  return new URL(resolved, base).toString();
+  return URL.parse(resolved, base)?.toString() ?? pathname;
 }
 
 /** What each representation is labelled with on the wire. */
