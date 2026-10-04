@@ -185,11 +185,8 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     });
   }
 
-  // The object a post's followers last received, by object id, as a
-  // fingerprint: what tells a cited page's new context that changes nothing
-  // they were shown from one that does. In memory, so a post sent before this
-  // process started is compared against its object rendered with the
-  // context it replaced instead.
+  // In memory, so a post sent before this process started is compared
+  // against its object rendered with the context the new one replaced.
   const lastSent = new Map<string, string>();
 
   /**
@@ -350,10 +347,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     document: Document,
     shape: Shape & { kind: 'object' },
   ): Promise<DeliveryReport> {
-    const object = await activity.getObject();
-    const sent = object === null ? undefined : await fingerprint(object);
     const report = await send(context, activity, document, citedAuthor(shape.replyTo?.author));
-    if (sent !== undefined) lastSent.set(shape.id, sent);
+    const object = await activity.getObject();
+    if (object !== null) lastSent.set(shape.id, await fingerprint(object));
     return report;
   }
 

@@ -266,6 +266,8 @@ async function site(
     actorId?: string;
   } = {},
 ): Promise<Site> {
+  slowPage = Promise.resolve();
+  inboxes = Promise.resolve();
   const dataDir = await temporaryDir('geekity-delivery-data-');
   const contentDir = await temporaryDir('geekity-delivery-content-');
   // Before the site boots, so nothing here spends a quarter of a second
@@ -407,6 +409,12 @@ async function submitEditor(
 /** Every delivery whose activity is of this type. */
 function delivered(type: string): Delivery[] {
   return deliveries.filter((delivery) => delivery.body['type'] === type);
+}
+
+/** The `content` of a delivered activity's object. */
+function contentOf(delivery: Delivery | undefined): string {
+  assert.ok(delivery !== undefined, `expected a delivery, saw ${JSON.stringify(deliveries)}`);
+  return String((delivery.body['object'] as Record<string, unknown>)['content']);
 }
 
 /**
@@ -1813,11 +1821,6 @@ describe('a cited page in a delivered note (TASK-262)', () => {
     return { ...published, agent };
   }
 
-  function contentOf(delivery: Delivery | undefined): string {
-    assert.ok(delivery !== undefined, `expected a delivery, saw ${JSON.stringify(deliveries)}`);
-    return String((delivery.body['object'] as Record<string, unknown>)['content']);
-  }
-
   it('names the page by its stored title in the Create and the Update', async () => {
     const { cms, agent } = await bookmark(GIF);
     const line = `<p>Bookmarked <a href="${GIF}">No No No GIF</a></p>\n`;
@@ -1846,8 +1849,8 @@ describe('a cited page in a delivered note (TASK-262)', () => {
 });
 
 describe('a cited page whose context is stored after the Create (TASK-263)', () => {
-  const line = (name: string, title = 'Worth keeping'): string =>
-    `<p>Bookmarked <a href="${SLOW_PAGE}">${name}</a></p>\n<p>${title}</p>`;
+  const line = (name: string): string =>
+    `<p>Bookmarked <a href="${SLOW_PAGE}">${name}</a></p>\n<p>Worth keeping</p>`;
 
   function holdSlowPage(): () => void {
     let open = (): void => undefined;
@@ -1873,11 +1876,6 @@ describe('a cited page whose context is stored after the Create (TASK-263)', () 
       'bookmark-of': SLOW_PAGE,
     });
     assert.equal(response.status, 303, await response.text());
-  }
-
-  function contentOf(delivery: Delivery | undefined): string {
-    assert.ok(delivery !== undefined, `expected a delivery, saw ${JSON.stringify(deliveries)}`);
-    return String((delivery.body['object'] as Record<string, unknown>)['content']);
   }
 
   async function storeContext(cms: Cms, open: () => void): Promise<void> {

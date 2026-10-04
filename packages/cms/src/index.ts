@@ -1709,8 +1709,8 @@ export function createCms(config: GeekityConfig = {}): Cms {
     store,
     config: resolved,
     lookup: resolved.hostLookup,
-    // A context that lands after a post's Create changes what its followers
-    // were shown (TASK-263); the delivery service is built further down.
+    // The delivery service is built further down because it reads the
+    // contexts this service stores.
     onStored: (target, previous) => {
       delivery.citedPageStored(target, previous);
     },
