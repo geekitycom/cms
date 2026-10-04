@@ -354,9 +354,7 @@ function place(shared: SharedLocation | undefined): Place | null {
  * could be shown as a broken tile or dropped. Only the main file goes: it is
  * always an upload, while an alternate version may be a link to another host
  * whose type this site cannot check, and a remote server fetches and
- * re-encodes whatever it is given. Its `name` is the post's label, its title
- * or first words or what it cites, since a player with no label says nothing
- * about what it plays.
+ * re-encodes whatever it is given.
  */
 function recordingAttachment(
   document: Document,
@@ -442,8 +440,8 @@ const QUOTABLE_BY_ANYONE = new InteractionPolicy({
 /**
  * What a like, a repost or a bookmark cites, as a line linking each page
  * (decision-28): the words a peer shows, since a `Note` has no field for it.
- * The anchor stays plain: Mastodon builds no link card from one with a class
- * or a `rel=tag`.
+ * The anchor stays plain: Mastodon builds no link card from one with a
+ * `u-url` or `h-card` class or a `rel=tag`.
  */
 function citing(document: Document, cited: CitedPageReader): string {
   return citationsOf(document.extra)

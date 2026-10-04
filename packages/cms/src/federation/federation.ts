@@ -79,7 +79,7 @@ export interface FederationContextData {
   readonly config: ResolvedConfig;
   /** Where the inbox asks for the profile of an actor it has just heard from (TASK-184). */
   readonly actorProfiles: Pick<ActorProfileService, 'capture'>;
-  /** The stored contexts a note names the pages it cites by (TASK-262). */
+  /** The stored contexts a note names the pages it cites by. */
   readonly cited: CitedPageReader;
 }
 
