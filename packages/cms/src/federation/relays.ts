@@ -30,6 +30,8 @@ export interface CreateRelayServiceOptions {
   config: ResolvedConfig;
   /** What the federation context carries for the inbox; nothing here calls it. */
   actorProfiles: FederationContextData['actorProfiles'];
+  /** What the federation context carries for the post objects. */
+  cited: FederationContextData['cited'];
   /** Where failures are reported. Defaults to `console`. */
   logger?: RelayLogger | undefined;
 }
@@ -132,6 +134,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
       store,
       config,
       actorProfiles: options.actorProfiles,
+      cited: options.cited,
     });
   }
 

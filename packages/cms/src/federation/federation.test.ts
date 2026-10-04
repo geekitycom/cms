@@ -692,6 +692,7 @@ describe('the followers collection', () => {
       store: instance.store,
       config: instance.config,
       actorProfiles: instance.actorProfiles,
+      cited: () => undefined,
     });
 
     const everybody = followersPage(context, ADA, null);

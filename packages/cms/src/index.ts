@@ -1709,6 +1709,9 @@ export function createCms(config: GeekityConfig = {}): Cms {
     store,
     config: resolved,
     lookup: resolved.hostLookup,
+    onStored: (target, previous) => {
+      delivery.citedPageStored(target, previous);
+    },
   });
 
   // The faces in a conversation, fetched here and served from here so a
@@ -1837,6 +1840,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
         store,
         config: resolved,
         actorProfiles,
+        cited: (url) => replyContexts.read(url),
       }),
     ),
   });
@@ -1847,6 +1851,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     store,
     config: resolved,
     actorProfiles,
+    cited: (url) => replyContexts.read(url),
   });
   content.events.on('change', (change) => delivery.handle(change));
 
@@ -1926,6 +1931,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     store,
     config: resolved,
     actorProfiles,
+    cited: (url) => replyContexts.read(url),
   });
   relays.sync();
 

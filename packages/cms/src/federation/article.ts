@@ -26,7 +26,8 @@ import path from 'node:path';
 import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
-import { CITATION_VERBS, citationsOf } from '../content/citation.ts';
+import { CITATION_VERBS, citationsOf, citedPageName } from '../content/citation.ts';
+import type { CitedPageReader } from '../content/citation.ts';
 import { readLine, readOf } from '../content/read.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf, isUploadUrl, playsAsVideo } from '../content/enclosure.ts';
@@ -274,7 +275,7 @@ export function postObject(
     // the inbox approves each QuoteRequest on the same rule (TASK-125).
     interactionPolicy: QUOTABLE_BY_ANYONE,
     attachments: [
-      ...recordingAttachment(document, baseUrl),
+      ...recordingAttachment(document, baseUrl, context.data.cited),
       ...photoAttachments(document, context.data.config),
       ...imageAttachments(document, context.data.config),
     ],
@@ -300,7 +301,9 @@ export function postObject(
     return new Note({
       ...common,
       contents: inLanguage(
-        citing(document) + readLine(readOf(document.extra)) + noteContent(document),
+        citing(document, context.data.cited) +
+          readLine(readOf(document.extra)) +
+          noteContent(document),
         language,
       ),
     });
@@ -312,7 +315,7 @@ export function postObject(
     name: document.title === '' ? null : document.title,
     summaries: summary === '' ? [] : inLanguage(escapeHtml(summary), language),
     contents: inLanguage(
-      citing(document) + readLine(readOf(document.extra)) + document.html,
+      citing(document, context.data.cited) + readLine(readOf(document.extra)) + document.html,
       language,
     ),
   });
@@ -351,17 +354,19 @@ function place(shared: SharedLocation | undefined): Place | null {
  * could be shown as a broken tile or dropped. Only the main file goes: it is
  * always an upload, while an alternate version may be a link to another host
  * whose type this site cannot check, and a remote server fetches and
- * re-encodes whatever it is given. Its `name` is the post's title, or a
- * note's first words, since a player with no label says nothing about what
- * it plays.
+ * re-encodes whatever it is given.
  */
-function recordingAttachment(document: Document, baseUrl: string): (Audio | Video)[] {
+function recordingAttachment(
+  document: Document,
+  baseUrl: string,
+  cited: CitedPageReader,
+): (Audio | Video)[] {
   const enclosure = enclosureOf(document.extra);
   if (enclosure === undefined) return [];
   const values = {
     url: new URL(absoluteUrl(enclosure.url, baseUrl)),
     mediaType: enclosure.type,
-    name: postLabel(document),
+    name: postLabel(document, cited),
   };
   return [playsAsVideo(enclosure.type) ? new Video(values) : new Audio(values)];
 }
@@ -435,12 +440,15 @@ const QUOTABLE_BY_ANYONE = new InteractionPolicy({
 /**
  * What a like, a repost or a bookmark cites, as a line linking each page
  * (decision-28): the words a peer shows, since a `Note` has no field for it.
+ * The anchor stays plain: Mastodon builds no link card from one with a
+ * `u-url` or `h-card` class or a `rel=tag`.
  */
-function citing(document: Document): string {
+function citing(document: Document, cited: CitedPageReader): string {
   return citationsOf(document.extra)
     .map(({ property, url }) => {
       const href = escapeHtml(url).replaceAll('"', '&quot;');
-      return `<p>${CITATION_VERBS[property]} <a href="${href}">${escapeHtml(url)}</a></p>\n`;
+      const name = escapeHtml(citedPageName(url, cited(url)));
+      return `<p>${CITATION_VERBS[property]} <a href="${href}">${name}</a></p>\n`;
     })
     .join('');
 }

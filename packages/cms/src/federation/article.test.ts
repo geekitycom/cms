@@ -1394,3 +1394,92 @@ describe('a site in a subdirectory', () => {
     assert.equal(article['url'], 'https://example.com/blog/2026/09/hello/');
   });
 });
+
+describe('a cited page in a note (TASK-262)', () => {
+  const GIF = 'https://giphy.com/gifs/no-nope-tracy-morgan-spfi6nabVuq5y';
+  const UNFETCHED = 'https://unread.example/2026/10/post/';
+  const PICTURE = 'https://pics.example/cat.jpg';
+  const CONTEXTS = {
+    [GIF]: { url: GIF, name: 'No No No <GIF> & more' },
+    [PICTURE]: {
+      url: PICTURE,
+      picture: { src: '/uploads/cited/cat.jpg', width: 10, height: 10, kind: 'photo' },
+    },
+  };
+
+  async function noteAt(lines: string[], body = ''): Promise<Record<string, unknown>> {
+    const instance = await site({
+      '_data/replyContexts.json': JSON.stringify(CONTEXTS),
+      'posts/2026-10-01-cited.md': rawPost(
+        ["date: '2026-10-01T09:00:00Z'", 'permalink: /2026/10/cited/', ...lines],
+        body,
+      ),
+    });
+    return (await (await get(instance, '/2026/10/cited/', ACTIVITY_STREAMS)).json()) as Record<
+      string,
+      unknown
+    >;
+  }
+
+  it('names a reposted page by its stored title, linking the cited URL', async () => {
+    const note = await noteAt([`repost-of: ${GIF}`]);
+
+    assert.equal(
+      note['content'],
+      `<p>Reposted <a href="${GIF}">No No No &lt;GIF&gt; &amp; more</a></p>\n`,
+    );
+  });
+
+  it('says Liked and Bookmarked with the same name', async () => {
+    const liked = await noteAt([`like-of: ${GIF}`], 'So good.');
+    const bookmarked = await noteAt([`bookmark-of: ${GIF}`]);
+
+    assert.match(
+      String(liked['content']),
+      new RegExp(`^<p>Liked <a href="${GIF}">No No No &lt;GIF&gt; &amp; more</a></p>`),
+    );
+    assert.match(
+      String(bookmarked['content']),
+      new RegExp(`^<p>Bookmarked <a href="${GIF}">No No No &lt;GIF&gt; &amp; more</a></p>`),
+    );
+  });
+
+  it('uses the host form when nothing was fetched, never the bare URL', async () => {
+    const page = await noteAt([`like-of: ${UNFETCHED}`]);
+    const image = await noteAt([`like-of: ${PICTURE}`]);
+
+    assert.equal(
+      page['content'],
+      `<p>Liked <a href="${UNFETCHED}">a page on unread.example</a></p>\n`,
+    );
+    assert.equal(
+      image['content'],
+      `<p>Liked <a href="${PICTURE}">an image from pics.example</a></p>\n`,
+    );
+  });
+
+  it('keeps the anchor plain, so Mastodon still builds a card from it', async () => {
+    const note = await noteAt([`repost-of: ${GIF}`]);
+    const anchors = String(note['content']).match(/<a\b[^>]*>/g) ?? [];
+
+    assert.deepEqual(anchors, [`<a href="${GIF}">`]);
+    assert.equal('tag' in note, false, 'no Mention or Hashtag points at the cited page');
+  });
+
+  it('names a recording on a wordless like by the cited page', async () => {
+    const note = await noteAt([
+      `like-of: ${GIF}`,
+      'enclosure:',
+      '  url: /uploads/2026/10/clip.mp3',
+      '  type: audio/mpeg',
+      '  length: 4096',
+    ]);
+
+    assert.deepEqual(note['attachment'], {
+      type: 'Audio',
+      mediaType: 'audio/mpeg',
+      url: `${BASE_URL}/uploads/2026/10/clip.mp3`,
+      name: 'Liked No No No <GIF> & more',
+    });
+  });
+});
