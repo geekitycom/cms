@@ -573,7 +573,7 @@ export function spokenIn(conversation: Conversation): Interaction[] {
  */
 export function feedComments(
   said: readonly (Interaction & { post?: Document | undefined })[],
-  options: { baseUrl: string; limit: number; cited?: CitedPageReader | undefined },
+  options: { baseUrl: string; limit: number; cited: CitedPageReader },
 ): FeedComment[] {
   return newestFirst([...said], options.limit).map((entry) => ({
     id: entry.id,

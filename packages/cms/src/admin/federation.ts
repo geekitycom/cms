@@ -349,7 +349,7 @@ export interface DeliveryRowsContext {
   /** The site's public origin, which a post's object id is built on. */
   readonly baseUrl: string;
   /** The stored contexts of the pages a post cites, which name an untitled post (TASK-261). */
-  readonly cited?: CitedPageReader | undefined;
+  readonly cited: CitedPageReader;
   /** Whose actor announced one post, or `null` when its `author` names nobody. */
   readonly author: (document: Document) => string | null;
   /** The newest outcome recorded about one object id, or `undefined`. */
@@ -613,7 +613,7 @@ function replyObject(
 export function localPosts(
   store: ContentStore,
   baseUrl: string,
-  cited?: CitedPageReader,
+  cited: CitedPageReader,
 ): (objectId: string | null) => LocalPost | null {
   const site = baseUrl === '' ? 'http://localhost' : baseUrl;
   const origin = new URL(site).origin;

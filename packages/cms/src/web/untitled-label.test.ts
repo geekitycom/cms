@@ -14,6 +14,7 @@ const VIDEO = 'https://www.youtube.com/watch?v=teaser';
 const THREAD = 'https://them.example/2026/10/thread/';
 const UNREAD = 'https://unread.example/2026/10/post/';
 const CITED_NAME = 'RuneScape <Official> & "4th" MMO teaser';
+const CITED_ESCAPED = 'RuneScape &lt;Official&gt; &amp; &quot;4th&quot; MMO teaser';
 
 const STORED = {
   [VIDEO]: { url: VIDEO, name: CITED_NAME },
@@ -153,7 +154,7 @@ describe('an untitled post is labelled by what it is (TASK-261)', () => {
 
   it('names the post the same way in the admin list and the editor heading (AC #3)', async () => {
     const list = await (await agent.get('/admin/posts')).text();
-    const escaped = 'Liked RuneScape &lt;Official&gt; &amp; &quot;4th&quot; MMO teaser';
+    const escaped = `Liked ${CITED_ESCAPED}`;
     assert.ok(list.includes(escaped), 'the list labels the like');
     assert.ok(list.includes('Bookmarked a page on unread.example'));
     assert.ok(list.includes('Reply to A thread'));
@@ -178,7 +179,7 @@ describe('an untitled post is labelled by what it is (TASK-261)', () => {
 
     const html = await (await agent.get(editor)).text();
     assert.ok(
-      html.includes('Published: Liked RuneScape &lt;Official&gt; &amp; &quot;4th&quot; MMO teaser'),
+      html.includes(`Published: Liked ${CITED_ESCAPED}`),
       'the flash labels the like it saved',
     );
   });
@@ -194,9 +195,7 @@ describe('an untitled post is labelled by what it is (TASK-261)', () => {
 
     const listing = await (await agent.get('/admin/posts?status=trash')).text();
     assert.ok(
-      listing.includes(
-        'Moved to the trash: Reposted RuneScape &lt;Official&gt; &amp; &quot;4th&quot; MMO teaser',
-      ),
+      listing.includes(`Moved to the trash: Reposted ${CITED_ESCAPED}`),
       'the flash labels the repost',
     );
   });
