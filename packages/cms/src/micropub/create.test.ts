@@ -544,6 +544,31 @@ describe('a like, a repost and a bookmark (TASK-169 AC #5)', () => {
     assert.deepEqual(await postFiles(cms), ['2026-09-20-liked-indieweb-social-andrewshell.md']);
   });
 
+  it('files a photo with no content under its first photo’s alt text (TASK-264)', async () => {
+    const { cms, token } = await site();
+    const response = await postJson(cms, token, {
+      type: ['h-entry'],
+      properties: {
+        photo: [
+          { value: 'https://peer.example/a.jpg', alt: 'Greg' },
+          { value: 'https://peer.example/b.jpg', alt: 'The second photo' },
+        ],
+      },
+    });
+    assert.equal(response.status, 201, await response.clone().text());
+    assert.equal(response.headers.get('location'), `${BASE}/2026/09/greg/`);
+  });
+
+  it('files a photo with no content and no alt text under photo (TASK-264)', async () => {
+    const { cms, token } = await site();
+    const response = await postJson(cms, token, {
+      type: ['h-entry'],
+      properties: { photo: ['https://peer.example/a.jpg'] },
+    });
+    assert.equal(response.status, 201, await response.clone().text());
+    assert.equal(response.headers.get('location'), `${BASE}/2026/09/photo/`);
+  });
+
   it('writes the same like the editor writes for the same post', async () => {
     const editorSite = await site();
     const html = await (await editorSite.agent.get('/admin/posts/new')).text();

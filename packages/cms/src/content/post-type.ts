@@ -114,13 +114,20 @@ export function postLabel(document: PostDocument, cited?: CitedPageReader): stri
   const text = normalize(htmlToText(html)) || normalize(document.description ?? '');
   if (text === '') return wordlessLabel(document, cited);
 
+  return firstWords(text);
+}
+
+function firstWords(text: string): string {
   const words = text.split(' ');
   return words.length <= LABEL_WORDS ? text : `${words.slice(0, LABEL_WORDS).join(' ')} …`;
 }
 
 function wordlessLabel(document: PostDocument, cited: CitedPageReader | undefined): string {
   const type = postTypeOf(document);
-  if (type === 'photo') return 'Photo';
+  if (type === 'photo') {
+    const alt = normalize(photosOf(document.extra)[0]?.alt ?? '');
+    return alt === '' ? 'Photo' : firstWords(alt);
+  }
   const citing = (verb: string, url: string): string => {
     const context = cited?.(url);
     const name = citedPageName(url, context);

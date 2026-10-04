@@ -322,8 +322,27 @@ describe('postLabel of a post with no title and no words (TASK-261)', () => {
     );
   });
 
-  it('labels a photo post with no words Photo', () => {
+  it('labels a photo post with no words and no alt text Photo', () => {
     assert.equal(postLabel(post('photo: /uploads/2026/10/a.jpg\n', '')), 'Photo');
+  });
+
+  it('labels a photo post with no words by its first photo’s alt text (TASK-264)', () => {
+    const photos = (first: string): string =>
+      `photo:\n  - ${first}\n  - url: /uploads/2026/10/b.jpg\n    alt: The second one\n`;
+    assert.equal(postLabel(post(photos('url: /uploads/2026/10/a.jpg\n    alt: Greg'), '')), 'Greg');
+    assert.equal(
+      postLabel(
+        post(
+          photos(
+            'url: /uploads/2026/10/a.jpg\n    alt: One two three four five six seven eight nine ten eleven',
+          ),
+          '',
+        ),
+      ),
+      'One two three four five six seven eight nine ten …',
+    );
+    assert.equal(postLabel(post(photos('/uploads/2026/10/a.jpg'), '')), 'Photo');
+    assert.equal(postLabel(post(photos("url: /uploads/2026/10/a.jpg\n    alt: ' '"), '')), 'Photo');
   });
 
   it('keeps the first words of a like that has them', () => {

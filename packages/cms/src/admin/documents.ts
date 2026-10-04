@@ -871,7 +871,7 @@ async function typeSlug(
     'bookmark-of': form.bookmarkOf,
     photo: photos.map((photo) => photo.url),
   });
-  if (type === 'photo') return 'photo';
+  if (type === 'photo') return slugWords(photos[0]?.alt ?? '', NOTE_SLUG_WORDS) || 'photo';
   const cited = CITED_SLUGS[type];
   if (cited === undefined) return '';
   const target = form[cited.field];
