@@ -13,6 +13,8 @@ import { absoluteUrl, contentEtag, isNotModified, latestModified } from './negot
 import type { ConditionalHeaders } from './negotiate.ts';
 import { resolveLicense } from './license.ts';
 
+const COMMENTS_FEED_REVISION = 2;
+
 /**
  * How a feed is served: its validator, its headers, and which serialiser
  * writes its body.
@@ -145,7 +147,10 @@ export function commentsFeedResponse(
   source: CommentFeedSource,
   conditional?: ConditionalHeaders,
 ): Response {
-  const etag = contentEtag('comments:rss', commentsFingerprint(source));
+  const etag = contentEtag(
+    `comments:rss:${String(COMMENTS_FEED_REVISION)}`,
+    commentsFingerprint(source),
+  );
   const lastModified = source.comments[0]?.published;
   const headers = feedHeaders(source, etag, lastModified);
 

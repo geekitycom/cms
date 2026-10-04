@@ -231,10 +231,10 @@ function postObjectType(document: Document): PostObjectType {
  * The two types are not one object with two labels, because Mastodon reads
  * them differently. An `Article`'s status is built from `name`, `summary` and
  * `url`, and `content` is dropped, so it carries the excerpt the feeds print
- * ({@link feedExcerpt}) as its `summary`. A `Note`'s status is its `content`,
- * `name` is never read and `summary` is shown as a content warning, so a note
- * sends neither and carries its title, when its text does not already start
- * with it, at the top of its `content`.
+ * ({@link feedExcerpt}), escaped, as its `summary`, which is HTML. A `Note`'s
+ * status is its `content`, `name` is never read and `summary` is shown as a
+ * content warning, so a note sends neither and carries its title, when its
+ * text does not already start with it, at the top of its `content`.
  *
  * `source` carries the Markdown the file holds, so a peer that wants to quote
  * or re-render the post has the text rather than only the rendering of it.
@@ -311,7 +311,7 @@ export function postObject(
   return new Article({
     ...common,
     name: document.title === '' ? null : document.title,
-    summaries: summary === '' ? [] : inLanguage(summary, language),
+    summaries: summary === '' ? [] : inLanguage(escapeHtml(summary), language),
     contents: inLanguage(
       citing(document) + readLine(readOf(document.extra)) + document.html,
       language,

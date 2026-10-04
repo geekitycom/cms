@@ -175,7 +175,7 @@ describe("Quill's own requests (AC #6)", () => {
     const { data, content } = matter(await fileOf(cms, location));
     assert.equal(data['title'], 'A long read');
     assert.equal(data['draft'], true);
-    assert.equal(content.trim(), '<p>First paragraph.</p>');
+    assert.equal(content.trim(), 'First paragraph.');
   });
 
   for (const [label, params, property] of [

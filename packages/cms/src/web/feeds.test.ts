@@ -155,6 +155,12 @@ async function rss(
   return { response, body, rss: document, channel };
 }
 
+function htmlText(html: string): string {
+  assert.ok(!html.includes('<'), `no markup in ${JSON.stringify(html)}`);
+  assert.ok(!/&(?!amp;|lt;|gt;)/.test(html), `no bare ampersand in ${JSON.stringify(html)}`);
+  return html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+}
+
 describe('the RSS feed', () => {
   it('serves a well-formed RSS 2.0 channel describing the site', async () => {
     const { cms } = await site({
@@ -285,7 +291,10 @@ describe('the RSS feed', () => {
 
     assert.equal(child(item, 'title').text, '"Angle < brackets" & ampersands');
     assert.equal(child(item, 'category').text, '<script>');
-    assert.equal(child(item, 'description').text, 'Fish & chips now, and a stray ]]> in the text.');
+    assert.equal(
+      htmlText(child(item, 'description').text),
+      'Fish & chips now, and a stray ]]> in the text.',
+    );
     assert.ok(
       child(item, 'source:markdown').text.includes('a stray ]]> in the text'),
       'the Markdown survives the CDATA split',
@@ -672,7 +681,7 @@ describe('the three formats over one post', () => {
       {
         id: child(item, 'guid').text,
         terms: childrenNamed(item, 'category').map((category) => category.text),
-        summary: child(item, 'description').text,
+        summary: htmlText(child(item, 'description').text),
       },
       {
         id: child(entry, 'id').text,
@@ -1404,7 +1413,7 @@ describe('a post’s comments feed', () => {
 
     assert.equal(child(oldest, 'title').text, '@ada@remote.example');
     assert.equal(child(oldest, 'link').text, 'https://remote.example/@ada/1');
-    assert.equal(child(oldest, 'description').text, 'Good post.');
+    assert.equal(htmlText(child(oldest, 'description').text), 'Good post.');
     assert.equal(child(oldest, 'content:encoded').text, '<p>Good post.</p>');
   });
 
@@ -2201,5 +2210,123 @@ describe('the license a feed declares (TASK-206)', () => {
     });
     const after = (await cms.app.request('/feed/atom/')).headers.get('etag');
     assert.notEqual(after, before);
+  });
+});
+
+// RSS readers render a description as HTML, so text that is inert on the page
+// (escaped markup, a backslash-escaped tag, a code span) must stay escaped text
+// there, and a description the author wrote is text too (TASK-259).
+describe('a summary that reads like markup', () => {
+  const PAYLOAD = '<img src=x onerror=alert(1)>';
+  const files = {
+    'posts/2026-09-04-escaped.md': post('Escaped', {
+      date: '2026-09-04T09:00:00Z',
+      permalink: '/2026/09/escaped/',
+      body: '&lt;img src=x onerror=alert(1)&gt;',
+    }),
+    'posts/2026-09-03-backslash.md': post('Backslash', {
+      date: '2026-09-03T09:00:00Z',
+      permalink: '/2026/09/backslash/',
+      body: '\\<img src=x onerror=alert(1)>',
+    }),
+    'posts/2026-09-02-code.md': post('Code', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/2026/09/code/',
+      body: '`<img src=x onerror=alert(1)>`',
+    }),
+    'posts/2026-09-01-described.md': post('Described', {
+      date: '2026-09-01T09:00:00Z',
+      permalink: '/2026/09/described/',
+      description: PAYLOAD,
+    }),
+  };
+
+  it('is escaped text in every RSS description', async () => {
+    const { cms } = await site(files);
+    const { channel } = await rss(cms, '/feed/');
+
+    const descriptions = childrenNamed(channel, 'item').map(
+      (item) => child(item, 'description').text,
+    );
+
+    assert.equal(descriptions.length, 4);
+    for (const description of descriptions) assert.equal(htmlText(description), PAYLOAD);
+  });
+
+  it('is the text itself in the plain-text Atom and JSON Feed summaries', async () => {
+    const { cms } = await site(files);
+    const { feed } = await atom(cms, '/feed/atom/');
+    const { items } = await jsonFeedAt(cms, '/feed/json/');
+
+    assert.deepEqual(
+      childrenNamed(feed, 'entry').map((entry) => child(entry, 'summary').text),
+      [PAYLOAD, PAYLOAD, PAYLOAD, PAYLOAD],
+    );
+    assert.deepEqual(
+      items.map((item) => item['summary']),
+      [PAYLOAD, PAYLOAD, PAYLOAD, PAYLOAD],
+    );
+  });
+
+  it('is escaped text in a comment feed description', async () => {
+    const { cms } = await site({
+      'posts/2026-09-02-hello.md': post('Hello, World!', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/hello/',
+      }),
+    });
+    reply(cms, {
+      inReplyTo: 'https://example.com/2026/09/hello/',
+      content: '<p>&lt;img src=x onerror=alert(1)&gt;</p>',
+      published: '2026-09-02T10:00:00Z',
+    });
+
+    const { channel } = await rss(cms, '/2026/09/hello/feed/');
+
+    assert.equal(htmlText(child(child(channel, 'item'), 'description').text), PAYLOAD);
+  });
+});
+
+describe('a post whose body holds an address nothing can resolve (TASK-260)', () => {
+  it('leaves every feed serving the other posts', async () => {
+    const { cms } = await site({
+      'posts/2026-09-03-bad.md': post('Bad', {
+        date: '2026-09-03T09:00:00Z',
+        permalink: '/2026/09/bad/',
+        body: '<a href="/\\javascript:alert(1)">a</a> <img src="/\\["> <a href="/\\x y">b</a>',
+      }),
+      'posts/2026-09-02-good.md': post('Good', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: '/2026/09/good/',
+        body: 'Good words.',
+      }),
+    });
+
+    const { response: rssResponse, channel } = await rss(cms, '/feed/');
+    const { response: atomResponse, feed } = await atom(cms, '/feed/atom/');
+    const { response: jsonResponse, items } = await jsonFeedAt(cms, '/feed/json/');
+
+    assert.deepEqual(
+      [rssResponse.status, atomResponse.status, jsonResponse.status],
+      [200, 200, 200],
+    );
+    const links = ['https://example.com/2026/09/bad/', 'https://example.com/2026/09/good/'];
+    assert.deepEqual(
+      childrenNamed(channel, 'item').map((item) => child(item, 'link').text),
+      links,
+    );
+    assert.deepEqual(
+      childrenNamed(feed, 'entry').map(
+        (entry) => linkWithRel(entry, 'alternate').attributes['href'],
+      ),
+      links,
+    );
+    assert.deepEqual(
+      items.map((item) => item['content_html']),
+      [
+        '<p><a href="/\\javascript:alert(1)">a</a> <img src="/\\["> <a href="/\\x y">b</a></p>\n',
+        '<p>Good words.</p>\n',
+      ],
+    );
   });
 });

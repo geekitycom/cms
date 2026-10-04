@@ -14,6 +14,7 @@ import { normalizeBody } from '../content/writer.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
+import { cleanMarkdown, markdownFromHtml } from './content.ts';
 
 /**
  * A Micropub create (TASK-164), whichever way it was encoded: the one
@@ -251,7 +252,7 @@ export function createForm(
     ...blankForm(POST_KIND, timezone, now),
     date: '',
     author,
-    body: normalizeBody(content(properties.get('content') ?? [], errors)),
+    body: content(properties.get('content') ?? [], errors),
     tags: categories(properties.get('category') ?? [], errors),
     syndicateTo: syndicateTo(properties.get('mp-syndicate-to') ?? [], site.targets, errors),
   };
@@ -391,15 +392,21 @@ function readOf(values: readonly unknown[], errors: string[]): ReadOfForm {
   return { name: field('name'), author: field('author'), uid: field('uid'), url: field('url') };
 }
 
-/** The body: plain text as the Markdown it is written in, or HTML as it came. */
 function content(values: readonly unknown[], errors: string[]): string {
   if (values.length > 1) errors.push('content takes one value.');
   const [value] = values;
   if (value === undefined) return '';
-  if (typeof value === 'string') return value;
-  if (isHtmlContent(value)) return value.html;
-  errors.push('content has to be text or { "html": "…" }.');
-  return '';
+  if (typeof value !== 'string' && !isHtmlContent(value)) {
+    errors.push('content has to be text or { "html": "…" }.');
+    return '';
+  }
+  const cleaned = typeof value === 'string' ? cleanMarkdown(value) : markdownFromHtml(value.html);
+  const body = cleaned === undefined ? undefined : normalizeBody(cleaned);
+  if (body === undefined || cleanMarkdown(body) !== body) {
+    errors.push('content has HTML the site cannot clean.');
+    return '';
+  }
+  return body;
 }
 
 function isHtmlContent(value: unknown): value is HtmlContent {

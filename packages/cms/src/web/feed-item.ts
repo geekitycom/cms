@@ -94,6 +94,9 @@ export interface FeedItem {
    * else an excerpt of the rendered body. Never the whole post — the content is
    * where that goes — and empty only for a post with nothing to summarise,
    * which is the one case a format leaves the element out.
+   *
+   * Plain text, never markup: a format that reads its summary as HTML prints
+   * {@link excerptHtml} of it.
    */
   summary: string;
   /**
@@ -169,15 +172,17 @@ export interface FeedItem {
  * that line, and revision 10 opened a post that cites a page with a line
  * naming it and that page's copied picture, and revision 11 named a page
  * nothing was read from by its host and a cited image as one, and revision 12
- * kept the title of a titled post with no words —
+ * kept the title of a titled post with no words,
+ * and revision 13 escaped the RSS description as HTML text —
  * would leave the validator where it was, and a reader polling with
  * `If-None-Match` would be handed a 304 that hides the new bytes.
  *
  * Bumping this moves every post feed's ETag exactly once, at the upgrade, and
  * never again until the next such change. The comments feeds do not carry it:
- * a comment is not a {@link FeedItem} and its bytes are untouched.
+ * a comment is not a {@link FeedItem}, and their validator has a label of its
+ * own in `commentsFeedResponse`.
  */
-export const FEED_ITEM_REVISION = 12;
+export const FEED_ITEM_REVISION = 13;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -401,6 +406,18 @@ export function excerptFromHtml(html: string): string {
 
   const words = text.split(' ');
   return words.length <= EXCERPT_WORDS ? text : `${words.slice(0, EXCERPT_WORDS).join(' ')} …`;
+}
+
+/**
+ * An excerpt as HTML that shows exactly its text, for the RSS description,
+ * which readers render as markup.
+ *
+ * The excerpt has had its entities resolved, so text that was inert on the
+ * page (`&lt;img&gt;`, a code span) is a tag again until this escapes it. Only
+ * `&`, `<` and `>`: a text node needs no more, and `&apos;` is not HTML 4.
+ */
+export function excerptHtml(text: string): string {
+  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
 /**

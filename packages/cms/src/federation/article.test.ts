@@ -625,7 +625,7 @@ describe('the post summary', () => {
     assert.equal(article['summary'], 'What this post is about, in a sentence.');
   });
 
-  it('is the plain text of the first paragraph when there is no description', async () => {
+  it('is the first paragraph as escaped text when there is no description', async () => {
     const instance = await site({
       'posts/2026-09-02-hello.md': post('Hello', {
         date: '2026-09-02T09:00:00Z',
@@ -636,7 +636,7 @@ describe('the post summary', () => {
 
     const article = await articleAt(instance, '/2026/09/hello/');
 
-    assert.equal(article['summary'], 'Fish & chips, with a link.');
+    assert.equal(article['summary'], 'Fish &amp; chips, with a link.');
   });
 
   it('cuts a long first paragraph where the feeds do, with no Read more link', async () => {
@@ -652,6 +652,40 @@ describe('the post summary', () => {
     const article = await articleAt(instance, '/2026/09/hello/');
 
     assert.equal(article['summary'], `${words.slice(0, 55).join(' ')} …`);
+  });
+
+  // `summary` is HTML by the ActivityStreams vocabulary, and text that is inert
+  // on the page has to stay inert there (TASK-259).
+  it('keeps escaped markup, a backslash-escaped tag, a code span and a description as text', async () => {
+    const files: Record<string, string> = {};
+    const bodies = {
+      escaped: '&lt;img src=x onerror=alert(1)&gt;',
+      backslash: '\\<img src=x onerror=alert(1)>',
+      code: '`<img src=x onerror=alert(1)>`',
+    };
+    for (const [slug, body] of Object.entries(bodies)) {
+      files[`posts/2026-09-02-${slug}.md`] = post('Hello', {
+        date: '2026-09-02T09:00:00Z',
+        permalink: `/2026/09/${slug}/`,
+        body,
+      });
+    }
+    files['posts/2026-09-02-described.md'] = post('Hello', {
+      date: '2026-09-02T09:00:00Z',
+      permalink: '/2026/09/described/',
+      description: '<img src=x onerror=alert(1)>',
+    });
+    const instance = await site(files);
+
+    for (const slug of [...Object.keys(bodies), 'described']) {
+      const article = await articleAt(instance, `/2026/09/${slug}/`);
+      assert.equal(article['summary'], '&lt;img src=x onerror=alert(1)&gt;', slug);
+      assert.deepEqual(
+        Object.values(article['summaryMap'] as Record<string, string>),
+        ['&lt;img src=x onerror=alert(1)&gt;'],
+        slug,
+      );
+    }
   });
 
   it('is left out, not empty, for a post with nothing to summarise', async () => {

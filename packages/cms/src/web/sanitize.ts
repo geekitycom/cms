@@ -153,6 +153,198 @@ export function sanitizeCommentHtml(html: string): string {
   return out.join('');
 }
 
+type AttributeRule = (value: string) => string | undefined;
+
+const anyText: AttributeRule = (value) => value;
+const wholeNumber: AttributeRule = (value) =>
+  /^\d{1,4}$/.test(value.trim()) ? value.trim() : undefined;
+const codeLanguage: AttributeRule = (value) =>
+  /^language-[\w+#-]+$/.test(value.trim()) ? value.trim() : undefined;
+const linkTarget: AttributeRule = (value) => postUrl(value, POST_LINK_SCHEMES);
+const imageSource: AttributeRule = (value) => postUrl(value, POST_IMAGE_SCHEMES);
+
+/**
+ * The elements a post written by a Micropub client may carry, and what each
+ * attribute may hold (TASK-258). It is wider than a comment's: a post has
+ * headings, images, tables, figures and details. Nothing on it styles, scripts
+ * or embeds another document.
+ */
+const POST_ALLOWED: Readonly<Record<string, Readonly<Record<string, AttributeRule>>>> = {
+  a: { href: linkTarget, title: anyText },
+  abbr: { title: anyText },
+  article: {},
+  aside: {},
+  b: {},
+  blockquote: {},
+  br: {},
+  caption: {},
+  cite: {},
+  code: { class: codeLanguage },
+  dd: {},
+  del: {},
+  details: { open: () => '' },
+  div: {},
+  dl: {},
+  dt: {},
+  em: {},
+  figcaption: {},
+  figure: {},
+  footer: {},
+  h1: {},
+  h2: {},
+  h3: {},
+  h4: {},
+  h5: {},
+  h6: {},
+  header: {},
+  hr: {},
+  i: {},
+  img: { src: imageSource, alt: anyText, title: anyText, width: wholeNumber, height: wholeNumber },
+  ins: {},
+  kbd: {},
+  li: {},
+  mark: {},
+  ol: { start: wholeNumber },
+  p: {},
+  pre: {},
+  q: {},
+  s: {},
+  section: {},
+  small: {},
+  span: {},
+  strong: {},
+  sub: {},
+  summary: {},
+  sup: {},
+  table: {},
+  tbody: {},
+  td: { colspan: wholeNumber, rowspan: wholeNumber },
+  tfoot: {},
+  th: { colspan: wholeNumber, rowspan: wholeNumber },
+  thead: {},
+  tr: {},
+  u: {},
+  ul: {},
+};
+
+const POST_VOID_ELEMENTS: readonly string[] = ['br', 'hr', 'img'];
+
+/**
+ * Elements a post loses along with everything inside them: programs,
+ * stylesheets, other documents, and the elements whose content a browser
+ * reads as text rather than markup, which this scanner would otherwise read
+ * as tags.
+ */
+const POST_DROPPED_WHOLE: readonly string[] = [
+  'iframe',
+  'math',
+  'noembed',
+  'noframes',
+  'noscript',
+  'object',
+  'script',
+  'select',
+  'style',
+  'svg',
+  'template',
+  'textarea',
+  'title',
+  'xmp',
+];
+
+const POST_LINK_SCHEMES: readonly string[] = ['http:', 'https:', 'mailto:'];
+const POST_IMAGE_SCHEMES: readonly string[] = ['http:', 'https:'];
+
+/**
+ * A Micropub client's HTML with every tag the post allow-list does not name
+ * taken out, and every kept tag rebuilt from the attributes it may keep.
+ *
+ * Unlike {@link sanitizeCommentHtml} it filters tags without balancing them,
+ * so it can clean a fragment: one tag Markdown carries inline, or an HTML
+ * block that opens a `<details>` whose Markdown body follows. Text keeps its
+ * layout, which is what Markdown reads, with only a stray `<` escaped.
+ */
+export function cleanPostHtml(html: string): string {
+  const out: string[] = [];
+  let at = 0;
+
+  while (at < html.length) {
+    const next = html.indexOf('<', at);
+    if (next < 0) {
+      out.push(html.slice(at));
+      break;
+    }
+    if (next > at) out.push(html.slice(at, next));
+    at = next;
+
+    if (html.startsWith('<!--', at)) {
+      at = after(html, '-->', at);
+      continue;
+    }
+    if (html.startsWith('<!', at) || html.startsWith('<?', at)) {
+      at = after(html, '>', at);
+      continue;
+    }
+
+    const tag = readTag(html, at);
+    if (tag === undefined) {
+      out.push('&lt;');
+      at += 1;
+      continue;
+    }
+    at = tag.end;
+
+    if (!tag.closing && POST_DROPPED_WHOLE.includes(tag.name)) {
+      at = afterElement(html, tag.name, at);
+      continue;
+    }
+    const rules = POST_ALLOWED[tag.name];
+    if (rules === undefined) continue;
+    if (tag.closing) {
+      if (!POST_VOID_ELEMENTS.includes(tag.name)) out.push(`</${tag.name}>`);
+      continue;
+    }
+    const attributes = Object.entries(rules).flatMap(([name, rule]) => {
+      const given = tag.attributes[name];
+      const value = given === undefined ? undefined : rule(decodeEntities(given));
+      return value === undefined ? [] : [` ${name}="${escapeAttribute(value)}"`];
+    });
+    out.push(`<${tag.name}${attributes.join('')}>`);
+  }
+
+  return out.join('');
+}
+
+/**
+ * A decoded attribute value as markup. Unlike {@link escapeText} it does not
+ * decode again, so an address that only reads as a scheme after a second
+ * decoding is written as the text it is.
+ */
+function escapeAttribute(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+/**
+ * A post's link or image address, or `undefined` when it names a scheme the
+ * post may not use. A relative address has no scheme and is kept, unless it
+ * opens with two slashes either way round: a browser reads `//host`, `/\host`
+ * and `\\host` as another site's address, and `/\[` is no address at all.
+ */
+function postUrl(value: string, schemes: readonly string[]): string | undefined {
+  const url = [...value]
+    .filter((character) => !isControl(character))
+    .join('')
+    .trim();
+  if (/^[/\\]{2}/.test(url)) return undefined;
+  const scheme = /^([^/?#]*?):/.exec(url)?.[1];
+  if (scheme === undefined) return url;
+  return schemes.includes(`${scheme.toLowerCase()}:`) ? url : undefined;
+}
+
 /**
  * The attributes an element keeps, already spelled as markup, or `undefined`
  * when the element is not one to keep at all.

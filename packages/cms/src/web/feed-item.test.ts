@@ -160,8 +160,8 @@ describe('a feed item', () => {
     }
   });
 
-  it('is at revision 12, so feeds cached before a titled post with no words kept its title are refetched', () => {
-    assert.equal(FEED_ITEM_REVISION, 12);
+  it('is at revision 13, so feeds cached before RSS descriptions were escaped are refetched', () => {
+    assert.equal(FEED_ITEM_REVISION, 13);
   });
 
   it('titles a titled repost, like or bookmark with no words (TASK-256)', () => {
@@ -259,5 +259,40 @@ describe('a feed item', () => {
       ['Newer', 'Older'],
     );
     assert.equal(items[1]?.link, 'https://example.com/2026/08/older/');
+  });
+});
+
+// A URL no parser can resolve is a broken link in one post, never a failed
+// feed for every reader (TASK-260).
+describe('a post with an address nothing can resolve', () => {
+  const BAD_HTML =
+    '<p><a href="/\\javascript:alert(1)">a</a> <img src="/\\["> <a href="/\\x y">b</a>' +
+    ' <img srcset="/\\[ 2x"></p>\n';
+  const bad = post({
+    path: 'posts/2026-09-03-bad.md',
+    permalink: '/2026/09/bad/',
+    html: BAD_HTML,
+    extra: { image: '/\\[' },
+  });
+
+  it('does not stop feedItems listing the posts around it', () => {
+    const items = feedItems([post(), bad, post({ permalink: '/2026/09/after/' })], CONTEXT);
+
+    assert.deepEqual(
+      items.map((item) => item.link),
+      [
+        'https://example.com/2026/09/hello/',
+        'https://example.com/2026/09/bad/',
+        'https://example.com/2026/09/after/',
+      ],
+    );
+    assert.equal(items[0]?.html, '<p>A <em>file-first</em> CMS.</p>\n');
+  });
+
+  it('keeps each address it cannot resolve as the post wrote it', () => {
+    const item = feedItem(bad, CONTEXT);
+
+    assert.equal(item.html, BAD_HTML);
+    assert.equal(item.image, '/\\[');
   });
 });
