@@ -53,7 +53,6 @@ export interface CreateCommentNotifierOptions {
   admin: AdminStore;
   /** The content index, for the post's title. */
   store: ContentStore;
-  /** The stored contexts of the pages a post cites, which name an untitled post (TASK-261). */
   cited?: CitedPageReader | undefined;
   /** The one door out for email. */
   mail: MailService;

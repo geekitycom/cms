@@ -278,7 +278,6 @@ export interface SubmitCommentOptions {
   records: CommentRecords;
   /** The post being commented on. */
   document: Document;
-  /** The stored contexts of the pages it cites, which name an untitled post (TASK-261). */
   cited: CitedPageReader;
   /** What was submitted. */
   form: CommentForm;

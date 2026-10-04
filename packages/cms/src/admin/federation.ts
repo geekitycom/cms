@@ -348,7 +348,6 @@ export interface SyndicationRow {
 export interface DeliveryRowsContext {
   /** The site's public origin, which a post's object id is built on. */
   readonly baseUrl: string;
-  /** The stored contexts of the pages a post cites, which name an untitled post (TASK-261). */
   readonly cited: CitedPageReader;
   /** Whose actor announced one post, or `null` when its `author` names nobody. */
   readonly author: (document: Document) => string | null;

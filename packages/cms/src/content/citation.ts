@@ -34,28 +34,20 @@ export function citedHost(url: string): string {
   }
 }
 
-/** What is stored about a cited page, as far as naming it goes (TASK-244). */
 export interface CitedPage {
   readonly name?: string;
   readonly author?: { readonly name: string };
   readonly picture?: { readonly kind: string };
 }
 
-/** Reads the stored context of a cited page by its URL, never fetching. */
 export type CitedPageReader = (url: string) => CitedPage | undefined;
 
-/** A URL that is itself an image: a photo stored for it, and no title or author (TASK-255). */
 export function citesAnImage(context: CitedPage): boolean {
   return (
     context.picture?.kind === 'photo' && context.name === undefined && context.author === undefined
   );
 }
 
-/**
- * The words a citation says for the page it cites: its title, else "a post"
- * when only its author is known, else "an image from" or "a page on" its host,
- * never the bare URL.
- */
 export function citedPageName(url: string, context: CitedPage | undefined): string {
   if (context?.name !== undefined) return context.name;
   if (context?.author !== undefined) return 'a post';
@@ -63,7 +55,6 @@ export function citedPageName(url: string, context: CitedPage | undefined): stri
   return `${image ? 'an image from' : 'a page on'} ${citedHost(url)}`;
 }
 
-/** What a post does to the page under each citing property. */
 export const CITATION_VERBS: Readonly<Record<CitationProperty, string>> = {
   'repost-of': 'Reposted',
   'like-of': 'Liked',

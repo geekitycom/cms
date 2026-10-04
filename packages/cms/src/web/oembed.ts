@@ -91,7 +91,6 @@ export function oEmbedRequest(query: (name: string) => string | undefined): OEmb
 /** One published document, served at `href`, and what its card names beside it. */
 export interface EmbedSubject {
   document: Document;
-  /** What the card and the page call the document, as a link to it is labelled. */
   label: string;
   href: string;
   author: AuthorContext | undefined;

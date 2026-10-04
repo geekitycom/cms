@@ -198,7 +198,7 @@ export interface DocumentContext {
   lang?: string | undefined;
   /**
    * The words a link to the document says: its title, or an untitled post's
-   * first words, or what a post with neither is (TASK-261).
+   * first words, or what a post with neither is.
    */
   label: string;
   /** Publish date, absent for a document that has none. */
@@ -351,10 +351,6 @@ export interface NeighbourContext {
  *
  * `loading` says whether this document opens the page it is printed on, and
  * so whether its first image is fetched at once rather than lazily.
- *
- * `cited` reads the stored contexts of the pages a post cites, which is what
- * labels an untitled post with no words by the page it likes or answers
- * (TASK-261).
  */
 export function documentContext(
   document: Document,

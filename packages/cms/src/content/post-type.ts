@@ -105,10 +105,7 @@ const LABEL_WORDS = 10;
 
 /**
  * The words a link to a document says: its title, or for an untitled post the
- * first words of its text, so a note is never an empty link. A post with
- * neither is named by what it is (TASK-261): a like, repost, bookmark or reply
- * by the page it cites, as its citation line names it from `cited`, the
- * stored contexts, and a photo post as a photo.
+ * first words of its text, so a note is never an empty link.
  */
 export function postLabel(document: PostDocument, cited?: CitedPageReader): string {
   if (document.title !== '') return document.title;

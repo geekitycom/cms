@@ -159,7 +159,6 @@ export interface CreateCommentDigestOptions {
   admin: AdminStore;
   /** The content index, for the posts the items are on. */
   store: ContentStore;
-  /** The stored contexts of the pages a post cites, which name an untitled post (TASK-261). */
   cited?: CitedPageReader | undefined;
   /** The one door out for email. */
   mail: MailService;
