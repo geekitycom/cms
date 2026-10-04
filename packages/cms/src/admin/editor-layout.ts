@@ -74,6 +74,7 @@ const GROUPS: Readonly<Record<EditorGroup, GroupRule>> = {
       'editor-like-of',
       'editor-repost-of',
       'editor-bookmark-of',
+      'editor-cited-alt',
     ],
   },
   read: {

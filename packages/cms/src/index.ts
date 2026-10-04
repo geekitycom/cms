@@ -1707,7 +1707,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
 
   const replyContexts = createReplyContextService({
     store,
-    contentDir: resolved.contentDir,
+    config: resolved,
     lookup: resolved.hostLookup,
   });
 
@@ -1963,6 +1963,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('delivery', delivery);
     c.set('relays', relays);
     c.set('webmentions', webmentions);
+    c.set('replyContexts', replyContexts);
     c.set('mail', mail);
     c.set('notifications', notifications);
     c.set('redirects', redirects);

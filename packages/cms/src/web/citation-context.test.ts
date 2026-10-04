@@ -22,6 +22,7 @@ const HOSTILE = 'https://hostile.example/post';
 const SOUND = 'https://sound.example/forss/flickermood';
 const SOUND_LOWER = 'https://sound.example/forss/lower';
 const RICK = 'https://video.example/watch?v=dQw4w9WgXcQ';
+const SCRIPTING = 'http://scripting.example/2026/10/03/225649.html';
 
 function oembedPage(
   page: string,
@@ -75,6 +76,15 @@ const PAGES: Record<string, { type: string; body: string }> = {
     }),
   },
   [MOVED]: { type: 'text/html', body: '<title>Growing beans</title>' },
+  [SCRIPTING]: {
+    type: 'text/html',
+    body: `<title>Scripting News: RSS tip #2</title>
+      <meta property="og:title" content="RSS tip #2">
+      <meta property="og:site_name" content="Scripting News">
+      <meta property="og:description" content="A site-wide bio, not the post.">
+      <meta name="description" content="A site-wide bio, not the post.">
+      <meta name="twitter:card" content="summary_large_image">`,
+  },
   [HOSTILE]: {
     type: 'text/html',
     body: `<article class="h-entry">
@@ -244,10 +254,13 @@ describe('a like, a repost or a bookmark names what it cites', () => {
       assert.doesNotMatch(citation, /- Video/);
     });
 
-    it(`prints the bare URL only when no title was found, in the ${where}`, async () => {
+    it(`names the host, never the bare URL, when no title was found, in the ${where}`, async () => {
       const citation = await read('bookmarked-down', 'bookmark-of');
 
-      assert.match(citation, new RegExp(`Bookmarked <a class="u-url" href="${DOWN}">${DOWN}</a>`));
+      assert.match(
+        citation,
+        new RegExp(`Bookmarked <a class="u-url" href="${DOWN}">a page on down\\.example</a>`),
+      );
       assert.doesNotMatch(citation, /p-name|p-author/);
     });
   }
@@ -432,5 +445,64 @@ describe('a citation whose title already names its author', () => {
       seen(cite(entry(await get(cms, '/'), 'sound'), 'like-of') ?? ''),
       'Liked Flickermood by Forss',
     );
+  });
+});
+
+describe('a citation of a page that names its site but no author', () => {
+  let cms: Cms;
+
+  before(async () => {
+    ({ cms } = await site({
+      'posts/2026-09-10-tip.md': post('tip', 'bookmark-of', SCRIPTING),
+      'posts/2026-09-10-liked-tip.md': post('liked-tip', 'like-of', SCRIPTING),
+    }));
+  });
+
+  const seen = (citation: string): string =>
+    citation
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  it('reads as the title and the site, on the page and in the listing', async () => {
+    const front = await get(cms, '/');
+    for (const [name, property, verb] of [
+      ['tip', 'bookmark-of', 'Bookmarked'],
+      ['liked-tip', 'like-of', 'Liked'],
+    ] as const) {
+      for (const html of [await get(cms, `/2026/09/${name}/`), entry(front, name)]) {
+        const citation = cite(html, property) ?? '';
+
+        assert.equal(seen(citation), `${verb} RSS tip #2 · Scripting News`);
+        assert.match(citation, / · <span class="cite-site">Scripting News<\/span>/);
+        assert.doesNotMatch(citation, /h-card|p-author|bio/);
+      }
+    }
+  });
+
+  it('marks the site up as no author', async () => {
+    const html = await get(cms, '/2026/09/tip/');
+    const entryItem = mf2(html, { baseUrl: 'https://example.com/2026/09/tip/' }).items.find(
+      (item) => item.type?.includes('h-entry'),
+    );
+    const bookmark = entryItem?.properties['bookmark-of']?.[0] as
+      { properties: Record<string, unknown[]> } | undefined;
+
+    assert.ok(bookmark !== undefined);
+    assert.deepEqual(bookmark.properties['name'], ['RSS tip #2']);
+    assert.equal(bookmark.properties['author'], undefined);
+  });
+
+  it('reads the same in the feeds, without the description', async () => {
+    const feed = (await (await cms.app.request('/feed/json/')).json()) as {
+      items: { url: string; content_html: string }[];
+    };
+    const tip = feed.items.find((item) => item.url.endsWith('/2026/09/tip/'));
+
+    assert.match(
+      tip?.content_html ?? '',
+      /^<p class="cite-line">Bookmarked <a href="http:\/\/scripting\.example\/2026\/10\/03\/225649\.html">RSS tip #2<\/a> · Scripting News<\/p>/,
+    );
+    assert.doesNotMatch(tip?.content_html ?? '', /bio/);
   });
 });

@@ -63,13 +63,9 @@ export function postTypeOf(document: PostDocument): PostType {
   return discoverPostType(propertiesOf(document));
 }
 
-/**
- * Whether a post has a name of its own: a title its text does not open with.
- * The note/article tail's test, asked on its own because a reply can be
- * either, and a theme heads a named post with its title whatever its type.
- */
-export function isNamed(document: PostDocument): boolean {
-  return isNamedPost(propertiesOf(document));
+export function showsTitle(document: Pick<Document, 'title' | 'html' | 'description'>): boolean {
+  const text = textOf(htmlToText(document.html), document.description);
+  return titleIsMoreThanOpeningWords(document.title, text);
 }
 
 /**
@@ -125,13 +121,18 @@ export function postLabel(
 }
 
 function isNamedPost(properties: PostProperties): boolean {
-  const content = normalize(properties.content ?? '') || normalize(properties.summary ?? '');
-  if (content === '') return false;
+  const text = textOf(properties.content, properties.summary);
+  const hasText = text !== '';
+  return hasText && titleIsMoreThanOpeningWords(properties.name ?? '', text);
+}
 
-  const name = normalize(properties.name ?? '');
-  if (name === '') return false;
+function titleIsMoreThanOpeningWords(title: string, text: string): boolean {
+  const name = normalize(title);
+  return name !== '' && !text.startsWith(name);
+}
 
-  return !content.startsWith(name);
+function textOf(content: string | undefined, summary: string | undefined): string {
+  return normalize(content ?? '') || normalize(summary ?? '');
 }
 
 /** The spec's "valid URL", as a web page can be one: absolute, http or https. */

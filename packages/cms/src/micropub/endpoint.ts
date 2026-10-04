@@ -355,7 +355,7 @@ const ACTIONS: {
   ) => Promise<Response>;
 } = {
   create: async (c, { request }) => {
-    const { store, config, announce, bearer } = c.var;
+    const { store, config, announce, bearer, replyContexts } = c.var;
     const timezone = readSiteSettings(config.contentDir).timezone;
     const created = createForm(request, {
       author: bearer.user.username,
@@ -370,7 +370,14 @@ const ACTIONS: {
     if ('error' in photos) return invalid(photos.error).answer(c);
 
     const written = await writeDocument(
-      { store, config, announce, writer: bearer.user.username },
+      {
+        store,
+        config,
+        announce,
+        writer: bearer.user.username,
+        citedContext: (target) => replyContexts.describe(target),
+        storedContext: (target) => replyContexts.read(target),
+      },
       {
         kind: POST_KIND,
         document: undefined,
@@ -395,7 +402,7 @@ const ACTIONS: {
   update: async (c, { url, changes }) => {
     const document = postFor(c, url);
     if (document instanceof Refusal) return document.answer(c);
-    const { store, config, announce, bearer } = c.var;
+    const { store, config, announce, bearer, replyContexts } = c.var;
     const updated = updateForm(document, changes, {
       timezone: readSiteSettings(config.contentDir).timezone,
       now: store.now(),
@@ -407,7 +414,14 @@ const ACTIONS: {
     if ('errors' in updated) return invalid(updated.errors.join(' ')).answer(c);
 
     const written = await writeDocument(
-      { store, config, announce, writer: bearer.user.username },
+      {
+        store,
+        config,
+        announce,
+        writer: bearer.user.username,
+        citedContext: (target) => replyContexts.describe(target),
+        storedContext: (target) => replyContexts.read(target),
+      },
       { kind: POST_KIND, document, ...updated, form: withoutClientReadSummary(updated.form) },
     );
     if (written.outcome === 'refused') return invalid(written.message).answer(c);

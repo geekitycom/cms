@@ -3,13 +3,21 @@ import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
 
-import { CITATION_PROPERTIES, citationText } from '../content/citation.ts';
+import {
+  CITATION_PROPERTIES,
+  citationText,
+  CITED_ALT_FRONT_MATTER_KEY,
+  citedHost,
+  PREVIEW_FRONT_MATTER_KEY,
+  previewShown,
+} from '../content/citation.ts';
 import type { CitationProperty } from '../content/citation.ts';
 import type { Document, DocumentContent, DocumentType } from '../content/document.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
 import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
 import { discoverPostType, postLabel, replyTarget } from '../content/post-type.ts';
+import type { PostType } from '../content/post-type.ts';
 import {
   isReadStatus,
   READ_OF_FRONT_MATTER_KEY,
@@ -82,6 +90,7 @@ import {
 import type { EnclosureForm } from './enclosure-field.ts';
 import { openGroups } from './editor-layout.ts';
 import type { EditorField, Refusal } from './editor-layout.ts';
+import { allowGeolocation } from './headers.ts';
 import {
   BLANK_LOCATION_FORM,
   LOCATION_FIELDS,
@@ -112,6 +121,9 @@ import {
   syndicateToOf,
   syndicationTargetsReader,
 } from '../webmention/syndication.ts';
+import { citesAnImage, shownInFull } from '../webmention/cited-picture.ts';
+import type { CitedPicture } from '../webmention/cited-picture.ts';
+import type { ReplyContext } from '../webmention/reply-context.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 
 /**
@@ -416,6 +428,8 @@ async function saveFromForm(
     exclude: body['exclude'] !== undefined,
     contact: body['contact'] !== undefined,
     pinned: kind.type === 'post' && body['pinned'] !== undefined,
+    previewHidden: kind.type === 'post' && body[PREVIEW_FRONT_MATTER_KEY] !== undefined,
+    citedAlt: kind.type === 'post' ? text(body[CITED_ALT_FRONT_MATTER_KEY]).trim() : '',
     comments: commentSetting(text(body['comments'])),
     enclosure: kind.type === 'post' ? readEnclosureForm(body) : BLANK_ENCLOSURE_FORM,
     photos: kind.type === 'post' ? readPhotoForm(body) : [],
@@ -452,6 +466,8 @@ async function saveFromForm(
       config: c.var.config,
       announce: c.var.announce,
       writer: currentUsername(c),
+      citedContext: (target) => c.var.replyContexts.describe(target),
+      storedContext: (target) => c.var.replyContexts.read(target),
     },
     { kind, document, form, draft },
   );
@@ -480,6 +496,8 @@ export interface DocumentSite {
   readonly announce: (change: DocumentChange) => Promise<void>;
   /** The username of whoever is writing: the author a new document starts on. */
   readonly writer: string | undefined;
+  readonly citedContext: (target: string) => Promise<ReplyContext | undefined>;
+  readonly storedContext: (target: string) => ReplyContext | undefined;
 }
 
 /** What {@link writeDocument} is asked to write. */
@@ -628,6 +646,17 @@ export async function writeDocument(
   if (undescribed.length > 0 && config.requireAltText) {
     return refused(`This site publishes no image without alt text. ${missingAltText(undescribed)}`);
   }
+  if (
+    !draft &&
+    config.requireAltText &&
+    kind.type === 'post' &&
+    (await citesUndescribedImage(site, document, form))
+  ) {
+    return refused(
+      'This site publishes no image without alt text. Describe the image this post reposts in its alt text field.',
+      'editor-cited-alt',
+    );
+  }
 
   const timezone = readSiteSettings(contentDir).timezone;
 
@@ -651,7 +680,7 @@ export async function writeDocument(
     (document?.slug ?? '') ||
     noteSlug(form.body) ||
     slugify(form.readOf.name) ||
-    typeSlug(kind, form, media.photos) ||
+    (await typeSlug(kind, form, media.photos, site.citedContext)) ||
     'untitled';
   const trashed = document !== undefined && isTrashedPath(document.path);
   // The calendar day the document is filed under: the site zone's day at its
@@ -773,6 +802,21 @@ export async function writeDocument(
   return { outcome: 'saved', saved, undescribed };
 }
 
+async function citesUndescribedImage(
+  site: DocumentSite,
+  document: Document | undefined,
+  form: EditorForm,
+): Promise<boolean> {
+  if (form.previewHidden || form.citedAlt !== '' || form.title !== '') return false;
+  for (const property of CITATION_PROPERTIES) {
+    const url = form[CITATION_FIELDS[property]];
+    if (url === '' || !shownInFull(property, { kind: 'photo' })) continue;
+    const context = document === undefined ? await site.citedContext(url) : site.storedContext(url);
+    if (context !== undefined && citesAnImage(context)) return true;
+  }
+  return false;
+}
+
 /** What a save says about the images it found with no alt text, naming each. */
 function missingAltText(images: readonly UndescribedImage[]): string {
   const names = images.map((image) => image.name).join(', ');
@@ -794,7 +838,24 @@ function noteSlug(body: string): string {
 
 const TARGET_SLUG_WORDS = 4;
 
-function typeSlug(kind: DocumentKind, form: EditorForm, photos: readonly Photo[]): string {
+const CITED_SLUGS: Partial<
+  Record<
+    PostType,
+    { readonly prefix: string; readonly field: 'repostOf' | 'likeOf' | 'inReplyTo' | 'bookmarkOf' }
+  >
+> = {
+  repost: { prefix: 'reposted', field: 'repostOf' },
+  like: { prefix: 'liked', field: 'likeOf' },
+  reply: { prefix: 'reply-to', field: 'inReplyTo' },
+  bookmark: { prefix: 'bookmarked', field: 'bookmarkOf' },
+};
+
+async function typeSlug(
+  kind: DocumentKind,
+  form: EditorForm,
+  photos: readonly Photo[],
+  citedContext: DocumentSite['citedContext'],
+): Promise<string> {
   if (kind.type !== 'post') return '';
   const type = discoverPostType({
     'repost-of': form.repostOf,
@@ -803,29 +864,22 @@ function typeSlug(kind: DocumentKind, form: EditorForm, photos: readonly Photo[]
     'bookmark-of': form.bookmarkOf,
     photo: photos.map((photo) => photo.url),
   });
-  switch (type) {
-    case 'repost':
-      return `reposted-${targetWords(form.repostOf)}`;
-    case 'like':
-      return `liked-${targetWords(form.likeOf)}`;
-    case 'reply':
-      return `reply-to-${targetWords(form.inReplyTo)}`;
-    case 'bookmark':
-      return `bookmarked-${targetWords(form.bookmarkOf)}`;
-    case 'photo':
-      return 'photo';
-    default:
-      return '';
-  }
+  if (type === 'photo') return 'photo';
+  const cited = CITED_SLUGS[type];
+  if (cited === undefined) return '';
+  const target = form[cited.field];
+  const title = slugWords((await citedContext(target))?.name ?? '', NOTE_SLUG_WORDS);
+  return `${cited.prefix}-${title || targetWords(target)}`;
 }
 
 function targetWords(address: string): string {
   const url = new URL(address);
   const segments = url.pathname.split('/').map(decodedSegment).filter(holdsALetter);
-  return slugify([url.hostname.replace(/^www\./, ''), ...segments].join(' '))
-    .split('-')
-    .slice(0, TARGET_SLUG_WORDS)
-    .join('-');
+  return slugWords([url.hostname.replace(/^www\./, ''), ...segments].join(' '), TARGET_SLUG_WORDS);
+}
+
+function slugWords(text: string, cap: number): string {
+  return slugify(text).split('-').slice(0, cap).join('-');
 }
 
 function holdsALetter(segment: string): boolean {
@@ -1061,6 +1115,8 @@ function resolveExtra(
     | 'contact'
     | 'lang'
     | 'pinned'
+    | 'previewHidden'
+    | 'citedAlt'
     | 'syndicateTo'
     | 'visibility'
     | 'readStatus'
@@ -1083,6 +1139,10 @@ function resolveExtra(
       if (cited === '') delete extra[property];
       else extra[property] = cited;
     }
+    if (form.previewHidden) extra[PREVIEW_FRONT_MATTER_KEY] = false;
+    else delete extra[PREVIEW_FRONT_MATTER_KEY];
+    if (form.citedAlt === '') delete extra[CITED_ALT_FRONT_MATTER_KEY];
+    else extra[CITED_ALT_FRONT_MATTER_KEY] = form.citedAlt;
     const resolved = resolveRead(form.readStatus, form.readOf);
     if ('read' in resolved) {
       const { read } = resolved;
@@ -1579,6 +1639,16 @@ export interface EditorForm {
   /** Whether the post is pinned to its author's profile (TASK-207). Posts only. */
   pinned: boolean;
   /**
+   * Whether the post hides the previews of the pages it cites, `preview:
+   * false` (TASK-252). Posts only.
+   */
+  previewHidden: boolean;
+  /**
+   * The alt text of an image the post cites, `cited-alt` (TASK-255). Posts
+   * only; empty for none, when the post's title describes it.
+   */
+  citedAlt: string;
+  /**
    * What the document says about comments: one of {@link COMMENT_SETTINGS}.
    *
    * Three values rather than a checkbox, because there are three answers: the
@@ -1638,6 +1708,8 @@ export function blankForm(
     exclude: false,
     contact: false,
     pinned: false,
+    previewHidden: false,
+    citedAlt: '',
     comments: COMMENT_SETTINGS.site,
     enclosure: BLANK_ENCLOSURE_FORM,
     photos: [],
@@ -1695,6 +1767,11 @@ export function formFor(
     exclude: document.extra[EXCLUDE_KEY] === true,
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
     pinned: pinnedAt(document) !== undefined,
+    previewHidden: document.type === 'post' && !previewShown(document.extra),
+    citedAlt:
+      document.type === 'post' && typeof document.extra[CITED_ALT_FRONT_MATTER_KEY] === 'string'
+        ? document.extra[CITED_ALT_FRONT_MATTER_KEY]
+        : '',
     comments: commentSettingOf(document),
     enclosure: document.type === 'post' ? enclosureForm(document) : BLANK_ENCLOSURE_FORM,
     photos: document.type === 'post' ? photoRows(document) : [],
@@ -1755,6 +1832,10 @@ async function renderEditor(
   else if (document !== undefined) actions.push({ value: 'trash', label: 'Move to trash' });
 
   if (options.status !== undefined) c.status(options.status);
+  const permissions = c.var.config.securityHeaders['permissions-policy'];
+  if (kind.type === 'post' && permissions !== undefined) {
+    c.header('Permissions-Policy', allowGeolocation(permissions));
+  }
 
   return options.render(c, ADMIN_TEMPLATES.documentEditor, {
     section: kind.section,
@@ -1776,6 +1857,7 @@ async function renderEditor(
           photoRows: photoRowViews(form.photos, readAltTexts(c.var.config.contentDir)),
           photoChoices: await photoChoices(c.var.config.contentDir),
           locationFields: LOCATION_FIELDS,
+          ...citedPreviews(c, form),
           readFields: READ_FIELDS,
           readStatuses: READ_STATUSES.map((value) => ({ value, label: READ_STATUS_LABELS[value] })),
           ...(form.readStatus === '' || isReadStatus(form.readStatus)
@@ -1811,6 +1893,41 @@ async function renderEditor(
       : { error: options.refusal.message, errorField: options.refusal.field }),
     open: openGroups(form, options.refusal?.field),
   });
+}
+
+function citedPreviews(
+  c: Context<GeekityEnv>,
+  form: EditorForm,
+): {
+  citedPreviews: Record<string, { name: string; picture: CitedPicture; described: boolean }>;
+  describesCitedImage: boolean;
+} {
+  const cited: [string, string][] = [
+    ['in-reply-to', form.inReplyTo],
+    ...CITATION_PROPERTIES.map((property): [string, string] => [
+      property,
+      form[CITATION_FIELDS[property]],
+    ]),
+  ];
+  const cards: Record<string, { name: string; picture: CitedPicture; described: boolean }> = {};
+  for (const [property, url] of cited) {
+    if (url === '') continue;
+    const context = c.var.replyContexts.read(url);
+    if (context?.picture === undefined) continue;
+    const image = citesAnImage(context);
+    cards[property] = {
+      name:
+        context.name ??
+        context.author?.name ??
+        `${image ? 'An image from' : 'A page on'} ${citedHost(url)}`,
+      picture: context.picture,
+      described: image && shownInFull(property, context.picture),
+    };
+  }
+  return {
+    citedPreviews: cards,
+    describesCitedImage: Object.values(cards).some((card) => card.described),
+  };
 }
 
 /**

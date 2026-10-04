@@ -13,6 +13,27 @@
 import type { Document } from './document.ts';
 import { isWebUrl } from './enclosure.ts';
 
+export const PREVIEW_FRONT_MATTER_KEY = 'preview';
+
+export function previewShown(extra: Readonly<Record<string, unknown>>): boolean {
+  return extra[PREVIEW_FRONT_MATTER_KEY] !== false;
+}
+
+export const CITED_ALT_FRONT_MATTER_KEY = 'cited-alt';
+
+export function citedImageAlt(document: Pick<Document, 'extra' | 'title'>): string {
+  const alt = document.extra[CITED_ALT_FRONT_MATTER_KEY];
+  return (typeof alt === 'string' ? alt.trim() : '') || document.title.trim();
+}
+
+export function citedHost(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
 /** The citing properties, each a front matter key, in Post Type Discovery's order. */
 export const CITATION_PROPERTIES = ['repost-of', 'like-of', 'bookmark-of'] as const;
 

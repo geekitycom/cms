@@ -422,7 +422,7 @@
       "content-security-policy": "frame-ancestors 'self'",
       "content-type": "application/rss+xml; charset=utf-8",
       "cross-origin-opener-policy": "same-origin",
-      "etag": "\"0f30e43d1f75826c28780c51fcfa2570\"",
+      "etag": "\"68154c51bead368d82596c2d62c2c1b6\"",
       "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
       "link": "<https://rpc.rsscloud.io/websub>; rel=\"hub\", <https://blog.example/feed/>; rel=\"self\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",

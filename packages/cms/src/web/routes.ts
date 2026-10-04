@@ -1431,6 +1431,7 @@ function feed(c: Context<GeekityEnv>, format: FeedFormat, subject: ListingSubjec
     // would be a query per item for nothing.
     ...(format === 'rss' ? { commentCounts: c.var.conversation.counts(documents) } : {}),
     altTexts: readAltTexts(config.contentDir),
+    replyContext: (target) => c.var.replyContexts.read(target),
   };
 
   return feedResponse({ format, source, conditional: conditionalHeaders(c) });

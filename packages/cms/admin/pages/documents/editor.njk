@@ -28,6 +28,25 @@
 {% if errorField == id %}<p class="admin-field-error" id="{{ id }}-error">{{ error }}</p>{% endif %}
 {% endmacro %}
 
+{% macro citedCard(property) %}
+{% set card = citedPreviews[property] %}
+{% if card %}
+<div class="admin-cited-card">
+  <img src="{{ card.picture.src }}" alt="" width="{{ card.picture.width }}" height="{{ card.picture.height }}" loading="lazy">
+  <p class="admin-cited-title">{{ card.name }}</p>
+  <input type="checkbox" id="editor-preview-{{ property }}" name="preview" value="hide"{% if form.previewHidden %} checked{% endif %}>
+  <label class="admin-cited-remove" for="editor-preview-{{ property }}"><span aria-hidden="true">×</span><span class="admin-visually-hidden">Remove the preview of {{ card.name }}</span></label>
+  <p class="admin-cited-removed">Removed. The post shows the plain citation until you select the X again.</p>
+  {%- if card.described %}
+  <label for="editor-cited-alt">Alt text of the reposted image</label>
+  <input id="editor-cited-alt" name="cited-alt" type="text" value="{{ form.citedAlt or form.title }}"{{ invalid('editor-cited-alt', 'editor-cited-alt-hint') }} />
+  {{ problem('editor-cited-alt') }}
+  <p class="admin-hint" id="editor-cited-alt-hint">What the image shows, for readers who cannot see it. It starts as the post’s title.</p>
+  {%- endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
 {% block content %}
   <h1>{{ heading }}</h1>
 
@@ -118,6 +137,8 @@
             Kept in <code>data/locations.json</code>, not in the post’s file. What readers see of it
             is chosen on Settings &gt; Privacy. Empty every box to remove it.
           </p>
+          <button type="button" id="editor-location-here" class="admin-location-here" hidden>Use my location</button>
+          <p id="editor-location-status" class="admin-hint" role="status"></p>
           <label for="editor-location-geo">Coordinates</label>
           <input id="editor-location-geo" name="{{ locationFields.geo }}" type="text" value="{{ form.location.geo }}" placeholder="48.85837, 2.29448" autocomplete="off" spellcheck="false"{{ invalid('editor-location-geo', 'editor-location-geo-hint') }} />
           {{ problem('editor-location-geo') }}
@@ -313,6 +334,7 @@
           <label for="editor-in-reply-to">In reply to</label>
           <input id="editor-in-reply-to" name="in-reply-to" type="url" value="{{ form.inReplyTo }}"{{ invalid('editor-in-reply-to') }} />
           {{ problem('editor-in-reply-to') }}
+          {{ citedCard('in-reply-to') }}
           <p class="admin-hint">The address of the post this one answers. Leave it empty for a post that answers nobody.</p>
 
           {#- The mf2 `like-of`, `repost-of` and `bookmark-of` (TASK-169): each
@@ -320,13 +342,22 @@
           <label for="editor-like-of">Like of</label>
           <input id="editor-like-of" name="like-of" type="url" value="{{ form.likeOf }}"{{ invalid('editor-like-of') }} />
           {{ problem('editor-like-of') }}
+          {{ citedCard('like-of') }}
           <label for="editor-repost-of">Repost of</label>
           <input id="editor-repost-of" name="repost-of" type="url" value="{{ form.repostOf }}"{{ invalid('editor-repost-of') }} />
           {{ problem('editor-repost-of') }}
+          {{ citedCard('repost-of') }}
           <label for="editor-bookmark-of">Bookmark of</label>
           <input id="editor-bookmark-of" name="bookmark-of" type="url" value="{{ form.bookmarkOf }}"{{ invalid('editor-bookmark-of') }} />
           {{ problem('editor-bookmark-of') }}
+          {{ citedCard('bookmark-of') }}
           <p class="admin-hint">The address of a post this one likes, reposts or bookmarks. Leave them empty for a post that cites nothing.</p>
+          {% if form.previewHidden and not (citedPreviews | length) %}
+          <input type="hidden" name="preview" value="hide">
+          {% endif %}
+          {% if form.citedAlt and not describesCitedImage %}
+          <input type="hidden" name="cited-alt" value="{{ form.citedAlt }}">
+          {% endif %}
         {% endcall %}
 
         {% call group('Read', open.read) %}
@@ -460,4 +491,7 @@
   {# The slug and permalink auto-fill, in a file of its own so the policy never
      has to allow an inline script. #}
   <script defer src="{{ assetPrefix }}slug.js"></script>
+  {% if kind.type == 'post' %}
+    <script defer src="{{ assetPrefix }}location.js"></script>
+  {% endif %}
 {% endblock %}

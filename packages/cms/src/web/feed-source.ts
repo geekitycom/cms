@@ -2,6 +2,7 @@ import type { User } from '../admin/accounts.ts';
 import type { Document } from '../content/document.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
 import type { SiteData } from './context.ts';
+import type { ReplyContext } from '../webmention/reply-context.ts';
 
 /**
  * What a feed is, before anything has been written: which formats the site
@@ -364,6 +365,12 @@ export interface FeedSource {
    * itself. Part of the validator, like the counts, for the same reason.
    */
   altTexts?: AltTextLibrary | undefined;
+  /**
+   * What is stored about the pages the posts cite (decision-19). Part of the
+   * validator, like the counts: a context fetched after a save changes the
+   * feed though no post moved.
+   */
+  replyContext?: ((target: string) => ReplyContext | undefined) | undefined;
 }
 
 /** Everything one comments feed is built from. */

@@ -1,4 +1,5 @@
 import type { User } from '../admin/accounts.ts';
+import { citationsOf, citedHost, previewShown } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf } from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
@@ -6,7 +7,7 @@ import { photoAlt, photosOf } from '../content/photo.ts';
 import { readLine, readOf } from '../content/read.ts';
 import type { Photo } from '../content/photo.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
-import { isNamed, replyTarget } from '../content/post-type.ts';
+import { replyTarget, showsTitle } from '../content/post-type.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { absoluteHtmlUrls } from './absolute-urls.ts';
@@ -17,6 +18,8 @@ import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
 import { canonicalLocale, documentLanguage } from './locale.ts';
 import { absoluteUrl, lastModifiedOf } from './negotiate.ts';
+import { citedPictureAlt, citesAnImage } from '../webmention/cited-picture.ts';
+import type { ReplyContext } from '../webmention/reply-context.ts';
 
 /**
  * One post as a feed shows it, in one shape whatever format the feed is.
@@ -163,7 +166,10 @@ export interface FeedItem {
  * where nobody was named, and revision 7 printed a post's photos and named its
  * main image, and revision 8 made the relative URLs in a post's body absolute,
  * and revision 9 opened a read post with its read line and summarised it by
- * that line —
+ * that line, and revision 10 opened a post that cites a page with a line
+ * naming it and that page's copied picture, and revision 11 named a page
+ * nothing was read from by its host and a cited image as one, and revision 12
+ * kept the title of a titled post with no words —
  * would leave the validator where it was, and a reader polling with
  * `If-None-Match` would be handed a 304 that hides the new bytes.
  *
@@ -171,7 +177,7 @@ export interface FeedItem {
  * never again until the next such change. The comments feeds do not carry it:
  * a comment is not a {@link FeedItem} and its bytes are untouched.
  */
-export const FEED_ITEM_REVISION = 9;
+export const FEED_ITEM_REVISION = 12;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -195,6 +201,11 @@ export interface FeedItemContext {
   commentCounts?: ReadonlyMap<string, number> | undefined;
   /** The media library, for a photo's alt text the post does not give. Empty when absent. */
   altTexts?: AltTextLibrary | undefined;
+  /**
+   * What is stored about a page a post cites (decision-19), by its URL. A
+   * citation with nothing stored names the page by its host.
+   */
+  replyContext?: ((target: string) => ReplyContext | undefined) | undefined;
 }
 
 /**
@@ -220,6 +231,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     terms: [...document.categories, ...document.tags],
     summary: feedExcerpt(document),
     html:
+      citationLines(document, context.replyContext, baseUrl) +
       readLine(readOf(document.extra)) +
       photosHtml(photos, context.altTexts ?? new Map(), baseUrl) +
       absoluteHtmlUrls(document.html, link, baseUrl),
@@ -227,7 +239,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     creator: author ?? siteAuthorName(context.users, context.site),
   };
 
-  if (isNamed(document)) item.title = document.title;
+  if (showsTitle(document)) item.title = document.title;
   if (published !== undefined && !Number.isNaN(published.getTime())) item.published = published;
 
   const updated = lastModifiedOf(document);
@@ -262,6 +274,53 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   }
 
   return item;
+}
+
+const CITATION_VERBS: Readonly<Record<string, string>> = {
+  'in-reply-to': 'In reply to',
+  'repost-of': 'Reposted',
+  'like-of': 'Liked',
+  'bookmark-of': 'Bookmarked',
+};
+
+function citationLines(
+  document: Document,
+  replyContext: FeedItemContext['replyContext'],
+  baseUrl: string,
+): string {
+  const answered = replyTarget(document);
+  const cited = [
+    ...(answered === undefined ? [] : [{ property: 'in-reply-to', url: answered }]),
+    ...citationsOf(document.extra),
+  ];
+  return cited
+    .map(({ property, url }) => {
+      const context = replyContext?.(url);
+      const href = escapeXml(url);
+      const image = context !== undefined && citesAnImage(context);
+      const name =
+        context?.name ??
+        (context?.author !== undefined
+          ? 'a post'
+          : `${image ? 'an image from' : 'a page on'} ${citedHost(url)}`);
+      const author = context?.author?.name;
+      const credit =
+        author !== undefined && !name.toLowerCase().endsWith(` by ${author.toLowerCase()}`)
+          ? ` by ${escapeXml(author)}`
+          : author === undefined && context?.site !== undefined
+            ? ` · ${escapeXml(context.site)}`
+            : '';
+      const line = `<p class="cite-line">${CITATION_VERBS[property] ?? ''} <a href="${href}">${escapeXml(name)}</a>${credit}</p>\n`;
+      if (context?.picture === undefined || !previewShown(document.extra)) return line;
+      const { picture } = context;
+      const alt = citedPictureAlt(property, context, document);
+      return (
+        line +
+        `<p><a href="${href}"><img src="${escapeXml(absoluteUrl(picture.src, baseUrl))}"` +
+        ` alt="${escapeXml(alt)}" width="${String(picture.width)}" height="${String(picture.height)}"></a></p>\n`
+      );
+    })
+    .join('');
 }
 
 function photosHtml(photos: readonly Photo[], library: AltTextLibrary, baseUrl: string): string {

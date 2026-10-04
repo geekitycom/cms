@@ -8,14 +8,25 @@
 
   `url` is the cited page, always its `u-url`. `context` is what the page said
   about itself, from the reply contexts file. With a name, the name is the
-  link; with only an author, "a post" is; with neither, the bare URL. The
-  author follows as an `h-card`.
+  link; with only an author, "a post" is; a URL that is itself an image
+  (`context.image`, TASK-255) is "an image from" its host; anything else is "a
+  page on" its host, never the bare URL, which can run to hundreds of
+  characters. The author follows as an `h-card`.
 
   A name that already ends in " by " and the author's name, matched without
   regard to case (SoundCloud's oEmbed gives "Flickermood by Forss" by Forss),
   is not followed by the author again. Its last words become the `h-card`,
   printed as the title wrote them, and the whole name stays the `p-name`, so a
   parser reads the same name and author either way.
+
+  A page that names no author may name its site, `context.site` (its
+  `og:site_name`), printed after a middle dot as plain text: a site is not an
+  author, so it is no `h-card`.
+
+  `thumb(url, picture)` is a cited page's thumbnail (TASK-252): a link to the
+  page around `picture.imgHtml`, out of the tab order and hidden from assistive
+  technology because the title beside it is the same link. A video's carries
+  `cite-video`, which the stylesheet draws a play mark on.
 #}
 {% macro page(url, context) %}
 {%- set title = (context.name or "") | trim -%}
@@ -27,10 +38,16 @@
 {%- else %}
   {%- if context.name %} <a class="u-url p-name" href="{{ url }}">{{ context.name }}</a>
   {%- elif context.author %} <a class="u-url" href="{{ url }}">a post</a>
-  {%- else %} <a class="u-url" href="{{ url }}">{{ url }}</a>
+  {%- elif context.image %} <a class="u-url" href="{{ url }}">an image from {{ url | host }}</a>
+  {%- else %} <a class="u-url" href="{{ url }}">a page on {{ url | host }}</a>
   {%- endif %}
-  {%- if context.author %} by {{ card(context.author, context.author.name) }}{% endif %}
+  {%- if context.author %} by {{ card(context.author, context.author.name) }}
+  {%- elif context.site %} · <span class="cite-site">{{ context.site }}</span>{% endif %}
 {%- endif %}
+{%- endmacro %}
+
+{% macro thumb(url, picture) -%}
+<a class="cite-thumb{% if picture.video %} cite-video{% endif %}" href="{{ url }}" tabindex="-1" aria-hidden="true">{{ picture.imgHtml | safe }}</a>
 {%- endmacro %}
 
 {% macro card(author, name) -%}

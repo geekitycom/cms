@@ -28,7 +28,11 @@ interface Post {
   day: string;
   title?: string;
   property?: string;
+  noDescriptionOrBody?: boolean;
+  titleRepeatsOpeningWords?: boolean;
 }
+
+const BARE_KINDS = KINDS.filter(({ kind }) => kind !== 'reply');
 
 const POSTS: Post[] = [
   ...KINDS.map(({ kind, property }, index) => ({
@@ -43,19 +47,36 @@ const POSTS: Post[] = [
     property,
   })),
   { slug: 'untitled-note', day: '25' },
+  ...BARE_KINDS.map(({ kind, property }, index) => ({
+    slug: `bare-${kind}`,
+    day: String(27 + index),
+    title: `A bare ${kind}`,
+    property,
+    noDescriptionOrBody: true,
+  })),
+  { slug: 'echo-note', day: '26', title: 'The words of echo-note', titleRepeatsOpeningWords: true },
 ];
 
-function file({ slug, day, title, property }: Post): string {
+function file({
+  slug,
+  day,
+  title,
+  property,
+  noDescriptionOrBody,
+  titleRepeatsOpeningWords,
+}: Post): string {
+  const described =
+    title !== undefined && noDescriptionOrBody !== true && titleRepeatsOpeningWords !== true;
   return [
     '---',
     ...(title === undefined ? [] : [`title: ${title}`]),
-    ...(title === undefined ? [] : [`description: Why ${slug} is worth it.`]),
+    ...(described ? [`description: Why ${slug} is worth it.`] : []),
     `date: '2026-09-${day}T09:00:00Z'`,
     `permalink: /2026/09/${slug}/`,
     ...(property === undefined ? [] : [`${property}: ${TARGET}`]),
     '---',
     '',
-    `The words of ${slug}.`,
+    ...(noDescriptionOrBody === true ? [] : [`The words of ${slug}.`]),
     '',
   ].join('\n');
 }
@@ -66,7 +87,7 @@ before(async () => {
   const contentDir = await box.dir('geekity-citation-placement-content-');
   const dataDir = await box.dir('geekity-citation-placement-data-');
   const files: Record<string, string> = {
-    '_data/site.json': JSON.stringify({ title: 'A Site', paginate: 20 }),
+    '_data/site.json': JSON.stringify({ title: 'A Site', postsPerPage: 20 }),
     ...Object.fromEntries(POSTS.map((post) => [`posts/${post.slug}.md`, file(post)])),
   };
   for (const [relative, contents] of Object.entries(files)) {
@@ -141,6 +162,88 @@ describe('an untitled post’s citation on its page', () => {
   });
 });
 
+describe('a titled post with no words (TASK-256)', () => {
+  for (const { kind } of BARE_KINDS) {
+    it(`heads a titled ${kind} with no words by its title, then its citation`, async () => {
+      const html = article(await get(`/2026/09/bare-${kind}/`));
+      ascending(
+        at(
+          html,
+          /<header class="post-header">/,
+          new RegExp(`<h1 class="p-name">A bare ${kind}</h1>`),
+          /<\/header>/,
+          CITE,
+          /class="e-content"/,
+        ),
+        `bare ${kind}`,
+      );
+      assert.doesNotMatch(html, /screen-reader-text/);
+    });
+
+    it(`lists a titled ${kind} with no words by its title, then its citation`, async () => {
+      const html = article(await get('/'), `bare-${kind}`);
+      ascending(
+        at(
+          html,
+          /class="kicker"/,
+          new RegExp(`class="feed-title p-name">\\s*<a [^>]*>A bare ${kind}</a>`),
+          CITE,
+          /class="feed-more"/,
+        ),
+        `listed bare ${kind}`,
+      );
+    });
+  }
+
+  it('gives a note whose title only repeats its words no heading', async () => {
+    const page = article(await get('/2026/09/echo-note/'));
+    assert.doesNotMatch(page, /<header class="post-header">/);
+    assert.match(page, /<h1 class="screen-reader-text">\s*Note/);
+    const listed = article(await get('/'), 'echo-note');
+    assert.doesNotMatch(listed, /class="feed-title/);
+    assert.match(listed, /class="feed-excerpt e-content"/);
+  });
+});
+
+describe('a titled post with no words in the feeds (TASK-256)', () => {
+  function block(xml: string, tag: string, slug: string): string {
+    const found = [...xml.matchAll(new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, 'g'))]
+      .map((match) => match[0])
+      .find((one) => one.includes(`/2026/09/${slug}/`));
+    assert.ok(found !== undefined, `the feed has ${slug}`);
+    return found;
+  }
+
+  for (const { kind } of BARE_KINDS) {
+    it(`titles a titled ${kind} with no words in RSS, Atom and JSON Feed`, async () => {
+      assert.match(
+        block(await get('/feed/'), 'item', `bare-${kind}`),
+        new RegExp(`<title>A bare ${kind}</title>`),
+      );
+      assert.match(
+        block(await get('/feed/atom/'), 'entry', `bare-${kind}`),
+        new RegExp(`<title>A bare ${kind}</title>`),
+      );
+      const feed = JSON.parse(await get('/feed/json/')) as {
+        items: { url: string; title?: string }[];
+      };
+      const item = feed.items.find((one) => one.url.endsWith(`/2026/09/bare-${kind}/`));
+      assert.equal(item?.title, `A bare ${kind}`);
+    });
+  }
+
+  it('gives a note whose title only repeats its words no feed title', async () => {
+    assert.doesNotMatch(block(await get('/feed/'), 'item', 'echo-note'), /<title>/);
+    assert.match(block(await get('/feed/atom/'), 'entry', 'echo-note'), /<title><\/title>/);
+    const feed = JSON.parse(await get('/feed/json/')) as {
+      items: { url: string; title?: string }[];
+    };
+    const item = feed.items.find((one) => one.url.endsWith('/2026/09/echo-note/'));
+    assert.ok(item !== undefined);
+    assert.equal('title' in item, false);
+  });
+});
+
 describe('citations in a listing', () => {
   for (const { kind } of KINDS) {
     it(`lists a titled ${kind} by its title and summary, then its citation`, async () => {
@@ -184,15 +287,20 @@ function entries(html: string, url: string): Item[] {
   return found;
 }
 
-function expected({ slug, title, property }: Post, listed: boolean): Record<string, unknown> {
+function expected(
+  { slug, title, property, noDescriptionOrBody, titleRepeatsOpeningWords }: Post,
+  listed: boolean,
+): Record<string, unknown> {
+  const heading = title !== undefined && titleRepeatsOpeningWords !== true;
   const keys = ['published', 'url'];
-  if (title !== undefined) keys.push('name', 'summary');
+  if (heading) keys.push('name');
+  if (heading && noDescriptionOrBody !== true) keys.push('summary');
   if (property !== undefined) keys.push(property);
-  if (!listed || title === undefined) keys.push('content');
+  if (!listed || !heading) keys.push('content');
   return {
     keys: keys.sort(),
     url: `${BASE}/2026/09/${slug}/`,
-    name: title === undefined ? undefined : [title],
+    name: heading ? [title] : undefined,
     cited: property === undefined ? undefined : [TARGET],
   };
 }

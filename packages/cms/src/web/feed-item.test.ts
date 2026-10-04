@@ -160,8 +160,28 @@ describe('a feed item', () => {
     }
   });
 
-  it('is at revision 9, so feeds cached before a read post printed its read line are refetched', () => {
-    assert.equal(FEED_ITEM_REVISION, 9);
+  it('is at revision 12, so feeds cached before a titled post with no words kept its title are refetched', () => {
+    assert.equal(FEED_ITEM_REVISION, 12);
+  });
+
+  it('titles a titled repost, like or bookmark with no words (TASK-256)', () => {
+    for (const key of ['repost-of', 'like-of', 'bookmark-of']) {
+      const item = feedItem(
+        post({
+          title: 'Scientific Calculator',
+          body: '',
+          html: '',
+          extra: { [key]: 'https://them.example/calculator/' },
+        }),
+        CONTEXT,
+      );
+      assert.equal(item.title, 'Scientific Calculator', key);
+    }
+  });
+
+  it('gives no title to a post whose title only repeats its opening words', () => {
+    const item = feedItem(post({ title: 'A file-first' }), CONTEXT);
+    assert.equal('title' in item, false);
   });
 
   it('opens a read post with the read line the page prints, and summarises with its words (TASK-233)', () => {

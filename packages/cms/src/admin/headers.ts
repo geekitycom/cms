@@ -124,6 +124,10 @@ export function adminContentSecurityPolicy(nonce: string, formAction?: string): 
   ].join('; ');
 }
 
+export function allowGeolocation(policy: string): string {
+  return policy.replace(/(^|,\s*)geolocation=\(\)(?=\s*(,|$))/, '$1geolocation=(self)');
+}
+
 function applyBaseline(headers: Headers, config: ResolvedConfig, frameable: boolean): void {
   headers.set('X-Content-Type-Options', 'nosniff');
   // The same test the session cookie's `Secure` uses, so the two can never

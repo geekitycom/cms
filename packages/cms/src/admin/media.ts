@@ -31,6 +31,7 @@ import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { refusedUpload, storeUpload, uploadMarkdown } from './uploads.ts';
+import { CITED_PICTURE_DIRECTORY } from '../webmention/cited-picture.ts';
 
 /** Where the media screen lives. */
 export const MEDIA_PATH = `${ADMIN_PREFIX}/media`;
@@ -129,6 +130,7 @@ export async function listUploads(contentDir: string): Promise<MediaFile[]> {
 
     const file = path.join(entry.parentPath, entry.name);
     const relative = path.relative(root, file).split(path.sep).join('/');
+    if (relative.startsWith(`${CITED_PICTURE_DIRECTORY}/`)) continue;
 
     let stats;
     try {
