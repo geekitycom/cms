@@ -45,7 +45,7 @@ import { htmlToText } from '../content/search.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { userForAuthor } from '../web/authors.ts';
 import { isServed, permalinkOfObjectId, postObjectId } from '../web/documents.ts';
-import { excerptHtml, feedExcerpt } from '../web/feed-item.ts';
+import { feedExcerpt } from '../web/feed-item.ts';
 import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../web/locale.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { categoryHref, tagHref } from '../web/taxonomy.ts';
@@ -311,7 +311,7 @@ export function postObject(
   return new Article({
     ...common,
     name: document.title === '' ? null : document.title,
-    summaries: summary === '' ? [] : inLanguage(excerptHtml(summary), language),
+    summaries: summary === '' ? [] : inLanguage(escapeHtml(summary), language),
     contents: inLanguage(
       citing(document) + readLine(readOf(document.extra)) + document.html,
       language,

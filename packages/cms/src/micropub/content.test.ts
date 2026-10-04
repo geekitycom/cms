@@ -317,10 +317,10 @@ describe('Markdown content keeps its text (AC #6)', () => {
 });
 
 describe('the body the site stores is the body that was cleaned', () => {
-  // Found by red-team review: the edges of a body are trimmed and its line
-  // endings made \n before it is stored, so an indent that made HTML a code
-  // block, or a lone \r markdown-it breaks a line on, must not survive cleaning
-  // only to change what the stored body means.
+  // The edges of a body are trimmed and its line endings made \n before it is
+  // stored, so an indent that made HTML a code block, or a lone \r markdown-it
+  // breaks a line on, must not survive cleaning only to change what the stored
+  // body means.
   const payloads = [
     '    <script>alert(1)</script>',
     '\t<img src=x onerror=alert(1)>',

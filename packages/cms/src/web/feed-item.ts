@@ -349,15 +349,15 @@ export function excerptFromHtml(html: string): string {
 }
 
 /**
- * An excerpt as HTML that shows exactly its text, for the places that read a
- * summary as markup: the RSS description and the ActivityStreams `summary`.
+ * An excerpt as HTML that shows exactly its text, for the RSS description,
+ * which readers render as markup.
  *
  * The excerpt has had its entities resolved, so text that was inert on the
  * page (`&lt;img&gt;`, a code span) is a tag again until this escapes it. Only
  * `&`, `<` and `>`: a text node needs no more, and `&apos;` is not HTML 4.
  */
 export function excerptHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
 /**
