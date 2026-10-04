@@ -103,6 +103,7 @@ export function mountComments(app: Hono<GeekityEnv>): void {
     const outcome = await submitComment({
       records: { admin, contentDir: config.contentDir, dataDir: config.dataDir },
       document,
+      cited: (url) => c.var.replyContexts.read(url),
       form,
       dataDir: config.dataDir,
       baseUrl: config.baseUrl,

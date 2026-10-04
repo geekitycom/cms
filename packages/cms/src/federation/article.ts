@@ -26,8 +26,7 @@ import path from 'node:path';
 import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.ts';
-import { citationsOf } from '../content/citation.ts';
-import type { CitationProperty } from '../content/citation.ts';
+import { CITATION_VERBS, citationsOf } from '../content/citation.ts';
 import { readLine, readOf } from '../content/read.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf, isUploadUrl, playsAsVideo } from '../content/enclosure.ts';
@@ -441,16 +440,10 @@ function citing(document: Document): string {
   return citationsOf(document.extra)
     .map(({ property, url }) => {
       const href = escapeHtml(url).replaceAll('"', '&quot;');
-      return `<p>${CITING_VERBS[property]} <a href="${href}">${escapeHtml(url)}</a></p>\n`;
+      return `<p>${CITATION_VERBS[property]} <a href="${href}">${escapeHtml(url)}</a></p>\n`;
     })
     .join('');
 }
-
-const CITING_VERBS: Readonly<Record<CitationProperty, string>> = {
-  'repost-of': 'Reposted',
-  'like-of': 'Liked',
-  'bookmark-of': 'Bookmarked',
-};
 
 /** A note's HTML: its title first when its text does not already open with it. */
 function noteContent(document: Document): string {

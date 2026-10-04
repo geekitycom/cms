@@ -5,8 +5,8 @@ import type { Environment } from 'nunjucks';
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { citationsOf, previewShown } from '../content/citation.ts';
-import type { Citation } from '../content/citation.ts';
+import { citationsOf, citesAnImage, previewShown } from '../content/citation.ts';
+import type { Citation, CitedPageReader } from '../content/citation.ts';
 import type { SharedLocation } from '../content/location.ts';
 import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
@@ -52,7 +52,7 @@ import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 import { createTemplateEnvironment, useThemeDirs } from './templates.ts';
 import { createThemeSource, findThemeFile } from './themes.ts';
 import type { ThemeColors, ThemeSource } from './themes.ts';
-import { citedPictureAlt, citesAnImage } from '../webmention/cited-picture.ts';
+import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
@@ -555,6 +555,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       config,
       authorContext(people, document.author),
       loading,
+      options.replyContext,
     );
     return { ...context, ...citedBy(document) };
   }
@@ -596,7 +597,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     if (posts === undefined) return {};
 
     const site = siteData.read();
-    return { archiveMonths: archiveMonths(posts, siteTimezone(site), siteLocale(site)) };
+    return {
+      archiveMonths: archiveMonths(
+        posts,
+        siteTimezone(site),
+        siteLocale(site),
+        options.replyContext,
+      ),
+    };
   }
 
   /**
@@ -650,7 +658,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // `documentContext` for the reason the object id is: it needs the site's
     // users, which a document on its own does not carry.
     const writer = authorContext(users(), document.author);
-    const context = documentContext(document, config, writer, { lead: true });
+    const context = documentContext(document, config, writer, { lead: true }, options.replyContext);
     // The URL it is being served at, which is its own permalink everywhere but
     // the front page.
     const url = options_.url ?? context.url;
@@ -698,8 +706,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // the byline and the identity a theme prints are one object, so what a
       // reader sees and what the structured data says cannot drift.
       ...(writer === undefined ? {} : { siteAuthor: writer }),
-      ...neighbourContext('previous', either.previous),
-      ...neighbourContext('next', either.next),
+      ...neighbourContext('previous', either.previous, options.replyContext),
+      ...neighbourContext('next', either.next, options.replyContext),
       url,
       page: { ...context.page, url },
       ...(objectId === undefined
@@ -848,6 +856,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
               config,
               authorContext(people, listing.document.author),
               { lead: bodyLeads },
+              options.replyContext,
             );
 
       return render(listingTemplate(listing), {
@@ -875,7 +884,13 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     renderSearch(search) {
       const people = users();
       const items = search.hits.map((hit) => ({
-        ...documentContext(hit.document, config, authorContext(people, hit.document.author)),
+        ...documentContext(
+          hit.document,
+          config,
+          authorContext(people, hit.document.author),
+          undefined,
+          options.replyContext,
+        ),
         // Escaped here and marked up here, so a theme prints it with `safe`
         // and cannot get the order of the two wrong.
         snippet: snippetHtml(hit.snippet),
@@ -935,9 +950,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 function neighbourContext(
   key: 'previous' | 'next',
   document: Document | undefined,
+  cited: CitedPageReader | undefined,
 ): Record<string, NeighbourContext> | object {
   if (document === undefined) return {};
-  return { [key]: { title: postLabel(document), url: document.permalink } };
+  return { [key]: { title: postLabel(document, cited), url: document.permalink } };
 }
 
 /**

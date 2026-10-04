@@ -5,7 +5,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 
 import type { ResolvedConfig } from '../config.ts';
-import { citedImageAlt } from '../content/citation.ts';
+import { citedImageAlt, citesAnImage } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import { stripMetadata } from '../content/metadata/index.ts';
@@ -135,12 +135,6 @@ export async function sweepCitedPictures(
 
 export function shownInFull(property: string, picture: Pick<CitedPicture, 'kind'>): boolean {
   return property === 'repost-of' && picture.kind === 'photo';
-}
-
-export function citesAnImage(context: ReplyContext): boolean {
-  return (
-    context.picture?.kind === 'photo' && context.name === undefined && context.author === undefined
-  );
 }
 
 export function citedPictureAlt(

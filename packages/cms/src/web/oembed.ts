@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 
 import type { Document } from '../content/document.ts';
-import { postLabel } from '../content/post-type.ts';
 import type { ImageConfig } from '../images/paths.ts';
 import type { AuthorContext } from './authors.ts';
 import { siteLocale, siteTimezone } from './context.ts';
@@ -92,6 +91,7 @@ export function oEmbedRequest(query: (name: string) => string | undefined): OEmb
 /** One published document, served at `href`, and what its card names beside it. */
 export interface EmbedSubject {
   document: Document;
+  label: string;
   href: string;
   author: AuthorContext | undefined;
   config: { baseUrl: string };
@@ -114,9 +114,8 @@ export interface EmbedSubject {
 export function oEmbedFor(
   input: EmbedSubject & { config: ImageConfig & { baseUrl: string }; request: OEmbedRequest },
 ): OEmbedRich {
-  const { document, author, config, site, request } = input;
+  const { document, label: title, author, config, site, request } = input;
   const url = (pathname: string): string => absoluteUrl(pathname, config.baseUrl);
-  const title = postLabel(document);
   const authorUrl = author?.url === undefined ? undefined : url(author.url);
   const width = Math.min(DEFAULT_WIDTH, request.maxwidth ?? DEFAULT_WIDTH);
   const height = Math.min(DEFAULT_HEIGHT, request.maxheight ?? DEFAULT_HEIGHT);
@@ -196,7 +195,7 @@ export function embedPage(subject: EmbedSubject): string {
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     '<meta name="robots" content="noindex">',
-    `<title>${escapeXml(postLabel(subject.document))}</title>`,
+    `<title>${escapeXml(subject.label)}</title>`,
     `<style>${EMBED_STYLE}</style>`,
     '</head>',
     '<body>',
@@ -324,7 +323,7 @@ function embedCard(subject: EmbedSubject): string {
   const url = (pathname: string): string => absoluteUrl(pathname, config.baseUrl);
   return card({
     href: url(subject.href),
-    title: postLabel(document),
+    title: subject.label,
     excerpt: document.title === '' ? '' : feedExcerpt(document),
     author:
       author === undefined

@@ -10,7 +10,7 @@ import type { SharedLocation } from '../content/location.ts';
 import { citationsOf } from '../content/citation.ts';
 import { shownInFull } from '../webmention/cited-picture.ts';
 import type { CitedPicture } from '../webmention/cited-picture.ts';
-import type { Citation } from '../content/citation.ts';
+import type { Citation, CitedPageReader } from '../content/citation.ts';
 import { READ_STATUS_LABELS, readLine, readOf, uidLabel } from '../content/read.ts';
 import type { ReadOf, ReadStatus } from '../content/read.ts';
 import { postLabel, postTypeOf, replyTarget, showsTitle } from '../content/post-type.ts';
@@ -198,7 +198,7 @@ export interface DocumentContext {
   lang?: string | undefined;
   /**
    * The words a link to the document says: its title, or an untitled post's
-   * first words.
+   * first words, or what a post with neither is.
    */
   label: string;
   /** Publish date, absent for a document that has none. */
@@ -357,6 +357,7 @@ export function documentContext(
   images?: ImageConfig,
   author?: AuthorContext,
   loading?: ImageLoading,
+  cited?: CitedPageReader,
 ): DocumentContext {
   const date = toDate(document.date);
   const photos = photoContexts(document, images, loading);
@@ -381,7 +382,7 @@ export function documentContext(
     lang: documentLanguage(document),
     enclosure: enclosureContext(document),
     syndication: syndicationLinks(handSyndicationOf(document.extra)),
-    label: postLabel(document),
+    label: postLabel(document, cited),
     ...optional('date', date),
     tags: document.tags,
     categories: document.categories,

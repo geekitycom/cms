@@ -1,5 +1,5 @@
 import type { User } from '../admin/accounts.ts';
-import { citationsOf, citedHost, previewShown } from '../content/citation.ts';
+import { CITATION_VERBS, citationsOf, citedPageName, previewShown } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf } from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
@@ -18,7 +18,7 @@ import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
 import { canonicalLocale, documentLanguage } from './locale.ts';
 import { absoluteUrl, lastModifiedOf } from './negotiate.ts';
-import { citedPictureAlt, citesAnImage } from '../webmention/cited-picture.ts';
+import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 
 /**
@@ -281,11 +281,9 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   return item;
 }
 
-const CITATION_VERBS: Readonly<Record<string, string>> = {
+const CITATION_LINE_VERBS: Readonly<Record<string, string>> = {
   'in-reply-to': 'In reply to',
-  'repost-of': 'Reposted',
-  'like-of': 'Liked',
-  'bookmark-of': 'Bookmarked',
+  ...CITATION_VERBS,
 };
 
 function citationLines(
@@ -302,12 +300,7 @@ function citationLines(
     .map(({ property, url }) => {
       const context = replyContext?.(url);
       const href = escapeXml(url);
-      const image = context !== undefined && citesAnImage(context);
-      const name =
-        context?.name ??
-        (context?.author !== undefined
-          ? 'a post'
-          : `${image ? 'an image from' : 'a page on'} ${citedHost(url)}`);
+      const name = citedPageName(url, context);
       const author = context?.author?.name;
       const credit =
         author !== undefined && !name.toLowerCase().endsWith(` by ${author.toLowerCase()}`)
@@ -315,7 +308,7 @@ function citationLines(
           : author === undefined && context?.site !== undefined
             ? ` · ${escapeXml(context.site)}`
             : '';
-      const line = `<p class="cite-line">${CITATION_VERBS[property] ?? ''} <a href="${href}">${escapeXml(name)}</a>${credit}</p>\n`;
+      const line = `<p class="cite-line">${CITATION_LINE_VERBS[property] ?? ''} <a href="${href}">${escapeXml(name)}</a>${credit}</p>\n`;
       if (context?.picture === undefined || !previewShown(document.extra)) return line;
       const { picture } = context;
       const alt = citedPictureAlt(property, context, document);

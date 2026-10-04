@@ -8,10 +8,11 @@ import {
   citationText,
   CITED_ALT_FRONT_MATTER_KEY,
   citedHost,
+  citesAnImage,
   PREVIEW_FRONT_MATTER_KEY,
   previewShown,
 } from '../content/citation.ts';
-import type { CitationProperty } from '../content/citation.ts';
+import type { CitationProperty, CitedPageReader } from '../content/citation.ts';
 import type { Document, DocumentContent, DocumentType } from '../content/document.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
@@ -121,7 +122,7 @@ import {
   syndicateToOf,
   syndicationTargetsReader,
 } from '../webmention/syndication.ts';
-import { citesAnImage, shownInFull } from '../webmention/cited-picture.ts';
+import { shownInFull } from '../webmention/cited-picture.ts';
 import type { CitedPicture } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
@@ -336,7 +337,9 @@ export function mountDocumentScreens(
         current: name === filter,
       })),
       documents: rows.map((document) =>
-        listRow(kind, document, c.var.store.now(), pageRole(kind, document, c)),
+        listRow(kind, document, c.var.store.now(), pageRole(kind, document, c), (url) =>
+          c.var.replyContexts.read(url),
+        ),
       ),
       newUrl: newEditorPath(kind),
       returnUrl: listingUrl(kind, filter, pageNumber),
@@ -484,7 +487,11 @@ async function saveFromForm(
   }
   const { saved, undescribed } = written;
 
-  flash(c, 'notice', savedMessage(kind, document, saved, store.now()));
+  flash(
+    c,
+    'notice',
+    savedMessage(document, saved, store.now(), (url) => c.var.replyContexts.read(url)),
+  );
   if (undescribed.length > 0) flash(c, 'warning', missingAltText(undescribed));
   return c.redirect(editorPath(kind, saved.slug), 303);
 }
@@ -896,18 +903,19 @@ function decodedSegment(segment: string): string {
 
 /** What the flash says after a save, which depends on what the save did. */
 function savedMessage(
-  kind: DocumentKind,
   previous: Document | undefined,
   saved: Document,
   now: Date,
+  cited: CitedPageReader,
 ): string {
-  if (saved.draft) return `Draft saved: ${postLabel(saved)}`;
+  const label = postLabel(saved, cited);
+  if (saved.draft) return `Draft saved: ${label}`;
   // A date in the future is not a refusal to publish, it is an instruction
   // about when, and the flash has to say so or the author will think the
   // Publish button did nothing.
-  if (scheduledFor(saved, now) !== undefined) return `Scheduled: ${postLabel(saved)}`;
-  if (previous === undefined || previous.draft) return `Published: ${postLabel(saved)}`;
-  return `Updated: ${postLabel(saved)}`;
+  if (scheduledFor(saved, now) !== undefined) return `Scheduled: ${label}`;
+  if (previous === undefined || previous.draft) return `Published: ${label}`;
+  return `Updated: ${label}`;
 }
 
 /** Where a document's file goes, trash included. */
@@ -1445,10 +1453,8 @@ async function moveDocument(
     return backTo(c, options, `Could not move ${document.path}. Is the file still there?`);
   }
 
-  const message =
-    action === 'trash'
-      ? `Moved to the trash: ${postLabel(document)}`
-      : `Restored: ${postLabel(document)}`;
+  const label = postLabel(document, (url) => c.var.replyContexts.read(url));
+  const message = action === 'trash' ? `Moved to the trash: ${label}` : `Restored: ${label}`;
   flash(c, 'notice', message);
 
   return c.redirect(
@@ -1878,7 +1884,7 @@ async function renderEditor(
     heading:
       document === undefined
         ? `Add ${kind.singular}`
-        : `Edit ${kind.singular}: ${postLabel(document)}`,
+        : `Edit ${kind.singular}: ${postLabel(document, (url) => c.var.replyContexts.read(url))}`,
     saveUrl: document === undefined ? newEditorPath(kind) : editorPath(kind, document.slug),
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
@@ -2010,10 +2016,11 @@ function listRow(
   document: Document,
   now: Date,
   role: string | undefined,
+  cited: CitedPageReader,
 ): DocumentRow {
   const isPublic = isServed(document, now);
   return {
-    title: postLabel(document),
+    title: postLabel(document, cited),
     slug: document.slug,
     author: document.author,
     tags: document.tags.join(', '),

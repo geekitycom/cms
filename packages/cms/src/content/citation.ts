@@ -34,6 +34,33 @@ export function citedHost(url: string): string {
   }
 }
 
+export interface CitedPage {
+  readonly name?: string;
+  readonly author?: { readonly name: string };
+  readonly picture?: { readonly kind: string };
+}
+
+export type CitedPageReader = (url: string) => CitedPage | undefined;
+
+export function citesAnImage(context: CitedPage): boolean {
+  return (
+    context.picture?.kind === 'photo' && context.name === undefined && context.author === undefined
+  );
+}
+
+export function citedPageName(url: string, context: CitedPage | undefined): string {
+  if (context?.name !== undefined) return context.name;
+  if (context?.author !== undefined) return 'a post';
+  const image = context !== undefined && citesAnImage(context);
+  return `${image ? 'an image from' : 'a page on'} ${citedHost(url)}`;
+}
+
+export const CITATION_VERBS: Readonly<Record<CitationProperty, string>> = {
+  'repost-of': 'Reposted',
+  'like-of': 'Liked',
+  'bookmark-of': 'Bookmarked',
+};
+
 /** The citing properties, each a front matter key, in Post Type Discovery's order. */
 export const CITATION_PROPERTIES = ['repost-of', 'like-of', 'bookmark-of'] as const;
 

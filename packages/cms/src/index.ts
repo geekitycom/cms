@@ -1853,14 +1853,26 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // Who hears about a comment (TASK-55). It reads the users file and the mail
   // settings per message rather than at boot, so an address added on the users
   // screen is written to by the very next comment.
-  const notifications = createCommentNotifier({ admin, store, mail, config: resolved });
+  const notifications = createCommentNotifier({
+    admin,
+    store,
+    mail,
+    config: resolved,
+    cited: (url) => replyContexts.read(url),
+  });
 
   // And the other half of it (TASK-60): a user who asked for an hourly or a
   // daily digest hears nothing above and one message per window from here,
   // listing whatever is still pending when their window comes up. It reads the
   // users file and the record of what it has sent per run, for the same
   // reason: a mode chosen on the users screen takes effect at the next tick.
-  const digests = createCommentDigest({ admin, store, mail, config: resolved });
+  const digests = createCommentDigest({
+    admin,
+    store,
+    mail,
+    config: resolved,
+    cited: (url) => replyContexts.read(url),
+  });
 
   // And so does the webmention sender: telling the pages a post links to is
   // the same news as telling the followers, and it should not matter which

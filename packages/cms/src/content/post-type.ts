@@ -1,5 +1,5 @@
-import { citationsOf } from './citation.ts';
-import type { CitationProperty } from './citation.ts';
+import { CITATION_VERBS, citationOf, citationsOf, citedPageName } from './citation.ts';
+import type { CitationProperty, CitedPageReader } from './citation.ts';
 import type { Document } from './document.ts';
 import { photosOf } from './photo.ts';
 import { isReadStatus, readLine, readOf } from './read.ts';
@@ -107,17 +107,36 @@ const LABEL_WORDS = 10;
  * The words a link to a document says: its title, or for an untitled post the
  * first words of its text, so a note is never an empty link.
  */
-export function postLabel(
-  document: Pick<Document, 'title' | 'html' | 'description' | 'extra'>,
-): string {
+export function postLabel(document: PostDocument, cited?: CitedPageReader): string {
   if (document.title !== '') return document.title;
 
   const html = readLine(readOf(document.extra)) + document.html;
   const text = normalize(htmlToText(html)) || normalize(document.description ?? '');
-  if (text === '') return 'Untitled';
+  if (text === '') return wordlessLabel(document, cited);
 
   const words = text.split(' ');
   return words.length <= LABEL_WORDS ? text : `${words.slice(0, LABEL_WORDS).join(' ')} …`;
+}
+
+function wordlessLabel(document: PostDocument, cited: CitedPageReader | undefined): string {
+  const type = postTypeOf(document);
+  if (type === 'photo') return 'Photo';
+  const citing = (verb: string, url: string): string => {
+    const context = cited?.(url);
+    const name = citedPageName(url, context);
+    const author = context?.name === undefined ? context?.author?.name : undefined;
+    return author === undefined ? `${verb} ${name}` : `${verb} ${name} by ${author}`;
+  };
+  if (type === 'reply') {
+    const url = replyTarget(document);
+    if (url !== undefined) return citing('Reply to', url);
+  }
+  if (type === 'repost' || type === 'like' || type === 'bookmark') {
+    const property = `${type}-of` as const;
+    const url = citationOf(document, property);
+    if (url !== undefined) return citing(CITATION_VERBS[property], url);
+  }
+  return 'Untitled';
 }
 
 function isNamedPost(properties: PostProperties): boolean {

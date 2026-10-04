@@ -5,6 +5,7 @@ import type { AdminStore, PostComment } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { ContentStore } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
+import type { CitedPageReader } from '../content/citation.ts';
 import type { MailService } from '../mail/service.ts';
 import { moderationLink, unsubscribeLink } from './links.ts';
 import { hasOptedOut } from './optouts.ts';
@@ -52,6 +53,7 @@ export interface CreateCommentNotifierOptions {
   admin: AdminStore;
   /** The content index, for the post's title. */
   store: ContentStore;
+  cited?: CitedPageReader | undefined;
   /** The one door out for email. */
   mail: MailService;
   /**
@@ -83,7 +85,7 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
   function postOf(comment: PostComment): { title: string; url: string } {
     const document = store.getBySlug(comment.slug);
     return {
-      title: document === undefined ? comment.slug : postLabel(document),
+      title: document === undefined ? comment.slug : postLabel(document, options.cited),
       url: absolute(comment.permalink, config.baseUrl),
     };
   }

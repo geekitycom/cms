@@ -4,6 +4,7 @@ import type { Document } from '../content/document.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
+import type { CitedPageReader } from '../content/citation.ts';
 import type { GeekityEnv } from '../env.ts';
 import { listUsers } from './accounts.ts';
 import type { User } from './accounts.ts';
@@ -105,7 +106,8 @@ export function mountFederationScreen(
   app.get(FEDERATION_PATH, (c) => {
     const admin = c.var.admin;
     const baseUrl = c.var.config.baseUrl;
-    const post = localPosts(c.var.store, baseUrl);
+    const cited: CitedPageReader = (url) => c.var.replyContexts.read(url);
+    const post = localPosts(c.var.store, baseUrl, cited);
     const users = listUsers(c.var.config.dataDir);
     const targets = syndicationTargetsReader(c.var.config.contentDir);
     const copies = syndicationCopies(c.var.config.contentDir);
@@ -137,6 +139,7 @@ export function mountFederationScreen(
         .map((relay) => relayRow(relay, admin.lastDeliveryToInbox(relay.inboxId))),
       posts: deliveryRows(c.var.store.listFederated({ limit: FEDERATION_RECENT }), {
         baseUrl,
+        cited,
         author: (document) => userForAuthor(users, document.author)?.username ?? null,
         lastDelivery: (objectId) => admin.lastDeliveryToObject(objectId),
         counts: (activityId) => admin.countDeliveriesByStatus(activityId),
@@ -345,6 +348,7 @@ export interface SyndicationRow {
 export interface DeliveryRowsContext {
   /** The site's public origin, which a post's object id is built on. */
   readonly baseUrl: string;
+  readonly cited: CitedPageReader;
   /** Whose actor announced one post, or `null` when its `author` names nobody. */
   readonly author: (document: Document) => string | null;
   /** The newest outcome recorded about one object id, or `undefined`. */
@@ -382,7 +386,7 @@ export function deliveryRows(
     return {
       post: {
         slug: document.slug,
-        title: postLabel(document),
+        title: postLabel(document, context.cited),
         editUrl: editorPath(POST_KIND, document.slug),
       },
       author: context.author(document),
@@ -608,6 +612,7 @@ function replyObject(
 export function localPosts(
   store: ContentStore,
   baseUrl: string,
+  cited: CitedPageReader,
 ): (objectId: string | null) => LocalPost | null {
   const site = baseUrl === '' ? 'http://localhost' : baseUrl;
   const origin = new URL(site).origin;
@@ -630,7 +635,7 @@ export function localPosts(
 
     return {
       slug: document.slug,
-      title: postLabel(document),
+      title: postLabel(document, cited),
       editUrl: editorPath(POST_KIND, document.slug),
     };
   };

@@ -336,6 +336,7 @@ function embedSubject(
   const users = listUsers(c.var.config.dataDir);
   return {
     ...found,
+    label: postLabel(found.document, (url) => c.var.replyContexts.read(url)),
     // Who the byline names: the document's author, else the site's.
     author: authorContext(users, found.document.author) ?? siteAuthorContext(users, site.author),
     config: c.var.config,
@@ -1457,7 +1458,7 @@ function comments(c: Context<GeekityEnv>, document: Document | undefined): Respo
   // answers the same one.
   const found: readonly FeedComment[] = feedComments(
     document === undefined ? conversation.latest(limit) : spokenIn(conversation.thread(document)),
-    { baseUrl: config.baseUrl, limit },
+    { baseUrl: config.baseUrl, limit, cited: (url) => c.var.replyContexts.read(url) },
   );
 
   const source: CommentFeedSource = {
@@ -1466,7 +1467,7 @@ function comments(c: Context<GeekityEnv>, document: Document | undefined): Respo
     title:
       document === undefined
         ? `${site.title}: comments`
-        : `${COMMENTS_TITLE_PREFIX}${postLabel(document)}`,
+        : `${COMMENTS_TITLE_PREFIX}${postLabel(document, (url) => c.var.replyContexts.read(url))}`,
     href: document?.permalink ?? '/',
     feedHref: commentsFeedHref(document),
     baseUrl: config.baseUrl,
@@ -1578,8 +1579,10 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
   const now = store.now();
   const home = frontPages(c).home;
 
+  const label = (document: Document): string =>
+    postLabel(document, (url) => c.var.replyContexts.read(url));
   const entry = (document: Document): LlmsEntry => ({
-    title: postLabel(document),
+    title: label(document),
     href: representationHref(
       document.path === home?.path ? '/' : encodePath(document.permalink),
       'markdown',
@@ -1591,7 +1594,7 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
   const pages = store
     .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
     .filter((document) => isListed(document, now))
-    .sort((a, b) => postLabel(a).localeCompare(postLabel(b)));
+    .sort((a, b) => label(a).localeCompare(label(b)));
   const posts = store
     .listPosts({ limit: feedSize(site) })
     .filter((document) => isListed(document, now));
