@@ -457,9 +457,9 @@ one and the post has not removed its preview. The picture is the page's
 oEmbed photo, else its oEmbed thumbnail, else its `og:image`, else its
 `twitter:image`, copied into the site's uploads when the post was saved, so
 a reader's browser never asks the cited site or its CDN for anything. It is
-`context.picture`: `{ src, width, height, kind, video, full, html }`, where
-`html` is an `img.u-photo` inside the `h-cite`, responsive when the copy has
-variants. A repost of a photo (`full`, such as a Giphy GIF) prints it in full
+`context.picture`: `{ src, width, height, kind, video, shownInFull, imgHtml }`, where
+`imgHtml` is an `img.u-photo` inside the `h-cite`, responsive when the copy has
+variants. A repost of a photo (`shownInFull`, such as a Giphy GIF) prints it in full
 under the line, as `a.cite-photo` linking to the target, with the target's
 name as its alt text. Every other citation with a picture (a like, a bookmark,
 a reply, a repost of a video or a page) is classed `cite-with-thumb` and

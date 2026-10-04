@@ -24,7 +24,7 @@
   author, so it is no `h-card`.
 
   `thumb(url, picture)` is a cited page's thumbnail (TASK-252): a link to the
-  page around `picture.html`, out of the tab order and hidden from assistive
+  page around `picture.imgHtml`, out of the tab order and hidden from assistive
   technology because the title beside it is the same link. A video's carries
   `cite-video`, which the stylesheet draws a play mark on.
 #}
@@ -47,7 +47,7 @@
 {%- endmacro %}
 
 {% macro thumb(url, picture) -%}
-<a class="cite-thumb{% if picture.video %} cite-video{% endif %}" href="{{ url }}" tabindex="-1" aria-hidden="true">{{ picture.html | safe }}</a>
+<a class="cite-thumb{% if picture.video %} cite-video{% endif %}" href="{{ url }}" tabindex="-1" aria-hidden="true">{{ picture.imgHtml | safe }}</a>
 {%- endmacro %}
 
 {% macro card(author, name) -%}

@@ -1,17 +1,3 @@
-/* The editor's Use my location button, and nothing else.
-
-   The Location boxes are typed by hand and work without this file. The
-   button is rendered `hidden` and revealed here only where the browser has
-   the Geolocation API, and it fills Coordinates and Accuracy in the shape the
-   server reads back: "latitude, longitude" and whole metres. It does not turn
-   the position into a place name: that would mean sending it to a geocoding
-   service somebody else runs (TASK-254).
-
-   It is a file rather than an inline <script> for the same reason slug.js is:
-   the admin's Content-Security-Policy says `script-src 'self'` and means it.
-
-   Plain ES5-shaped browser JavaScript, checked by eslint's browser config and
-   left alone by the TypeScript build: it is served as it is written. */
 (function () {
   if (!navigator.geolocation) return;
 

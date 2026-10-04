@@ -643,9 +643,6 @@
     @apply mt-1 text-[0.98rem] leading-snug text-muted italic;
   }
 
-  /* A cited page's picture (TASK-252), copied into the site's uploads. Any
-     citation but a repost of a photo puts a thumbnail beside its line, with a
-     play mark on a video's; a reposted photo is drawn in full under it. */
   .cite-with-thumb {
     @apply grid grid-cols-[6rem_minmax(0,1fr)] items-start gap-x-3;
   }

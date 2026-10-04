@@ -20,11 +20,6 @@ import type { ReplyContext } from './reply-context.ts';
  */
 export const REPLY_CONTEXTS_FILE = '_data/replyContexts.json';
 
-/**
- * How long a save waits for a cited page it names a new post after
- * (TASK-250). Long enough for a page and its oEmbed answer from a host that is
- * merely slow; past it the post takes its target's address words instead.
- */
 export const CITED_SLUG_TIMEOUT_MS = 3_000;
 
 /** Where the service reports a target it could not read. */
@@ -115,7 +110,6 @@ export function createReplyContextService(
     });
   }
 
-  /** The context with its picture copied in, or as it is when the picture cannot be. */
   async function withPicture(
     context: ReplyContext,
     source: PictureSource | undefined,
@@ -128,7 +122,6 @@ export function createReplyContextService(
     return picture === undefined ? context : { ...context, picture };
   }
 
-  /** Delete every copied picture no entry names any more (decision-19). */
   async function sweep(): Promise<void> {
     const kept = new Set<string>();
     for (const context of Object.values(readAll())) {
@@ -144,12 +137,11 @@ export function createReplyContextService(
       return;
     }
     const context = await withPicture(fetched.context, fetched.picture);
-    if (showsNothing(context)) return;
+    if (hasNoPictureOrWords(context)) return;
     await write(target, context);
     await sweep();
   }
 
-  /** Copy the picture of a context {@link ReplyContextService.describe} stored without one. */
   async function attachPicture(target: string, source: PictureSource): Promise<void> {
     const held = readAll()[target];
     if (held === undefined || held.picture !== undefined) return;
@@ -159,7 +151,6 @@ export function createReplyContextService(
     }
   }
 
-  /** Forget a target, and the picture copied for it, unless a post still cites it. */
   async function forget(target: string): Promise<void> {
     if (!(target in readAll())) return;
     const stillCited = store.listAll().some((document) => targetsOf(document).includes(target));
@@ -217,9 +208,7 @@ export function createReplyContextService(
       const fetched = await fetchReplyContext(target, { lookup, timeoutMs: CITED_SLUG_TIMEOUT_MS });
       if (!fetched.ok) return undefined;
       const { picture } = fetched;
-      if (showsNothing(fetched.context)) {
-        // An image has no title to spend the deadline on, so it goes on the
-        // copy, which lets the save see what it cites (TASK-255).
+      if (hasNoPictureOrWords(fetched.context)) {
         const timeoutMs = deadline - Date.now();
         const copied =
           picture === undefined || timeoutMs <= 0
@@ -247,12 +236,7 @@ export function createReplyContextService(
   };
 }
 
-/**
- * Whether a context has nothing to show but its picture, as a cited image
- * has: kept only with the picture, so one that could not be copied leaves no
- * entry and is tried again (TASK-255).
- */
-function showsNothing(context: ReplyContext): boolean {
+function hasNoPictureOrWords(context: ReplyContext): boolean {
   return (
     context.picture === undefined &&
     context.name === undefined &&

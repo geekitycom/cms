@@ -28,30 +28,47 @@ export interface FetchPublicOptions {
   readonly accept: string;
   /** The content types taken, and what to call anything else when refusing it. */
   readonly contentType: { readonly pattern: RegExp; readonly name: string };
-  /**
-   * Content types answered from the headers alone, taken as well as
-   * `contentType`: the body is never read, so the answer's body is empty and
-   * marked truncated.
-   */
   readonly headersOnly?: RegExp;
 }
 
+interface PublicResponse {
+  /** The URL the response came from, after any redirects. */
+  readonly url: string;
+  /** The response's `Content-Type`. */
+  readonly type: string;
+  /** The response's `Link` header, or `null` when it sent none. */
+  readonly link: string | null;
+}
+
+export interface PublicBody extends PublicResponse {
+  readonly ok: true;
+  readonly read: 'body';
+  readonly body: Uint8Array;
+  readonly truncated: boolean;
+}
+
+export interface PublicHeaders extends PublicResponse {
+  readonly ok: true;
+  readonly read: 'headers';
+}
+
+export interface PublicRefusal {
+  readonly ok: false;
+  readonly reason: string;
+}
+
 /** What one fetch came to. */
-export type PublicFetch =
-  | {
-      readonly ok: true;
-      /** The URL the body came from, after any redirects. */
-      readonly url: string;
-      /** The response's `Content-Type`. */
-      readonly type: string;
-      /** The response's `Link` header, or `null` when it sent none. */
-      readonly link: string | null;
-      readonly body: Uint8Array;
-      readonly truncated: boolean;
-    }
-  | { readonly ok: false; readonly reason: string };
+export type PublicFetch = PublicBody | PublicHeaders | PublicRefusal;
 
 /** Fetch `target` within the limits `options` sets. */
+export function fetchPublic(
+  target: string,
+  options: FetchPublicOptions & { readonly headersOnly: RegExp },
+): Promise<PublicFetch>;
+export function fetchPublic(
+  target: string,
+  options: FetchPublicOptions & { readonly headersOnly?: undefined },
+): Promise<PublicBody | PublicRefusal>;
 export async function fetchPublic(
   target: string,
   options: FetchPublicOptions,
@@ -90,7 +107,7 @@ export async function fetchPublic(
       const link = response.headers.get('link');
       if (options.headersOnly?.test(type) === true) {
         await response.body?.cancel();
-        return { ok: true, url: url.href, type, link, body: new Uint8Array(), truncated: true };
+        return { ok: true, read: 'headers', url: url.href, type, link };
       }
       if (!options.contentType.pattern.test(type)) {
         await response.body?.cancel();
@@ -100,7 +117,7 @@ export async function fetchPublic(
       const read = await readWithin(response, options.maxBytes, options.overflow ?? 'refuse');
       if (read === undefined) return refuse(`larger than ${String(options.maxBytes)} bytes`);
 
-      return { ok: true, url: url.href, type, link, ...read };
+      return { ok: true, read: 'body', url: url.href, type, link, ...read };
     }
   } catch (thrown) {
     return refuse(thrown instanceof Error ? thrown.message : String(thrown));
@@ -158,6 +175,6 @@ async function readWithin(
   return { body: Buffer.concat(chunks), truncated: false };
 }
 
-function refuse(reason: string): PublicFetch {
+function refuse(reason: string): PublicRefusal {
   return { ok: false, reason };
 }

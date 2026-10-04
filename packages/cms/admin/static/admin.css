@@ -544,11 +544,6 @@ button[type='submit']:hover,
   grid-column: 1 / -1;
 }
 
-/* A cited page's stored preview under the URL that cites it (TASK-252). The
-   X is the label of a checkbox kept in the tab order but not drawn, so it is
-   a native control with or without script: checked, the card fades and says
-   the post shows the plain citation. */
-
 .admin-cited-card {
   position: relative;
   margin-top: 0.5rem;

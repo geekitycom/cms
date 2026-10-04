@@ -611,23 +611,25 @@ function photoContexts(
   });
 }
 
-/**
- * A cited page's picture as a theme draws it (TASK-252): `full` for a repost
- * of a photo, which is drawn in full, else a thumbnail beside the title.
- * `html` is the `img.u-photo` with `alt` as its alt text, responsive when the
- * copy has variants.
- */
+export interface CitedPictureContext extends CitedPicture {
+  readonly shownInFull: boolean;
+  readonly imgHtml: string;
+}
+
 export function citedPictureContext(
   picture: CitedPicture,
   property: string,
   alt: string,
   images: ImageConfig,
-): CitedPicture & { full: boolean; html: string } {
-  const full = shownInFull(property, picture);
+): CitedPictureContext {
   const tag =
     `<img class="u-photo" src="${escapeAttribute(picture.src)}" alt="${escapeAttribute(alt)}"` +
     ` width="${String(picture.width)}" height="${String(picture.height)}" loading="lazy" decoding="async">`;
-  return { ...picture, full, html: siteImageMarkup(images, tag) };
+  return {
+    ...picture,
+    shownInFull: shownInFull(property, picture),
+    imgHtml: siteImageMarkup(images, tag),
+  };
 }
 
 function escapeAttribute(value: string): string {

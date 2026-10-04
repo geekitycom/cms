@@ -28,10 +28,6 @@
 {% if errorField == id %}<p class="admin-field-error" id="{{ id }}-error">{{ error }}</p>{% endif %}
 {% endmacro %}
 
-{# A cited page's stored preview (TASK-252) under the URL that cites it, with
-   a checkbox drawn as an X that removes it: checked writes `preview: false`,
-   cleared shows it again, and no script is needed either way. A reposted
-   image's card also takes its alt text, `cited-alt` (TASK-255). #}
 {% macro citedCard(property) %}
 {% set card = citedPreviews[property] %}
 {% if card %}
@@ -356,12 +352,9 @@
           {{ problem('editor-bookmark-of') }}
           {{ citedCard('bookmark-of') }}
           <p class="admin-hint">The address of a post this one likes, reposts or bookmarks. Leave them empty for a post that cites nothing.</p>
-          {#- A removed preview stays removed while there is no card to show
-              it again on. -#}
           {% if form.previewHidden and not (citedPreviews | length) %}
           <input type="hidden" name="preview" value="hide">
           {% endif %}
-          {#- And an image's alt text while no card takes it. -#}
           {% if form.citedAlt and not describesCitedImage %}
           <input type="hidden" name="cited-alt" value="{{ form.citedAlt }}">
           {% endif %}

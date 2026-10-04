@@ -283,12 +283,6 @@ const CITATION_VERBS: Readonly<Record<string, string>> = {
   'bookmark-of': 'Bookmarked',
 };
 
-/**
- * The pages a post answers or cites, each a line as the theme's citation reads
- * (TASK-252): the verb, the page's name as a link, its author or else its
- * site, and its copied picture unless the post hid its previews. Only the
- * name, author and site: a page's description is not the post that cited it.
- */
 function citationLines(
   document: Document,
   replyContext: FeedItemContext['replyContext'],

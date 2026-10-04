@@ -26,7 +26,6 @@ export const REPLY_CONTEXT_TIMEOUT_MS = 10_000;
  */
 export const REPLY_CONTEXT_MAX_BYTES = 1_000_000;
 
-/** A response that is an image rather than a page about one (TASK-255). */
 const IMAGE_TYPE = /^\s*image\//i;
 
 /** How many words of a target's text a preview keeps. */
@@ -53,10 +52,6 @@ export interface ReplyContext {
   readonly picture?: CitedPicture;
 }
 
-/**
- * What fetching one target came to. `picture` is the picture the page names,
- * still on its own host: the caller copies it or leaves it.
- */
 export type ReplyContextFetch =
   | { readonly ok: true; readonly context: ReplyContext; readonly picture?: PictureSource }
   | { readonly ok: false; readonly reason: string };
@@ -116,9 +111,7 @@ export async function fetchReplyContext(
           headersOnly: IMAGE_TYPE,
         });
 
-  // The address is the picture: its bytes are left for the copy, which holds
-  // them to the site's upload limit rather than a page's.
-  if (fetched.ok && IMAGE_TYPE.test(fetched.type)) {
+  if (fetched.ok && fetched.read === 'headers') {
     return described({ url: target }, { url: fetched.url, kind: 'photo' });
   }
 
@@ -144,10 +137,6 @@ function described(context: ReplyContext, picture: PictureSource | undefined): R
   return { ok: true, context, ...(picture === undefined ? {} : { picture }) };
 }
 
-/**
- * The page's `og:image`, else its Twitter card's image, as a thumbnail of it,
- * marked a video's when its `og:type` or its card says so.
- */
 function pagePicture(root: HtmlElement, base: string): PictureSource | undefined {
   const image =
     metaOf(root, 'og:image') || metaOf(root, 'twitter:image') || metaOf(root, 'twitter:image:src');
@@ -172,10 +161,8 @@ function pagePicture(root: HtmlElement, base: string): PictureSource | undefined
  */
 const KNOWN_OEMBED_PROVIDERS: readonly {
   readonly hosts: readonly string[];
-  /** Tested against the path and query of the cited URL. */
   readonly path: RegExp;
   readonly endpoint: string;
-  /** What the endpoint appends to every title, cut off before the title is kept. */
   readonly titleSuffix?: string;
 }[] = [
   {
@@ -316,7 +303,6 @@ function withoutDirectionControls(text: string | undefined): string {
     .trim();
 }
 
-/** A page's title, or empty when it is only a site suffix such as "- YouTube". */
 function pageTitle(text: string): string {
   const title = withoutDirectionControls(text);
   return /^[-–—|·•:]\s/u.test(title) ? '' : title;

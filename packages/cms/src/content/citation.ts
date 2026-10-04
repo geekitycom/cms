@@ -13,33 +13,19 @@
 import type { Document } from './document.ts';
 import { isWebUrl } from './enclosure.ts';
 
-/**
- * The front matter key a post hides the previews of what it cites with
- * (TASK-252): `preview: false`. Absent, a preview shows.
- */
 export const PREVIEW_FRONT_MATTER_KEY = 'preview';
 
-/** Whether a post shows the pictures of the pages it cites. */
 export function previewShown(extra: Readonly<Record<string, unknown>>): boolean {
   return extra[PREVIEW_FRONT_MATTER_KEY] !== false;
 }
 
-/**
- * The front matter key that describes an image a post cites (TASK-255), which
- * the editor writes from the image's Alt text field.
- */
 export const CITED_ALT_FRONT_MATTER_KEY = 'cited-alt';
 
-/**
- * The alt text of an image a post cites: its `cited-alt`, else the post's
- * title, else empty.
- */
 export function citedImageAlt(document: Pick<Document, 'extra' | 'title'>): string {
   const alt = document.extra[CITED_ALT_FRONT_MATTER_KEY];
   return (typeof alt === 'string' ? alt.trim() : '') || document.title.trim();
 }
 
-/** The host a citation with nothing better to say names its page by. */
 export function citedHost(url: string): string {
   try {
     return new URL(url).hostname;

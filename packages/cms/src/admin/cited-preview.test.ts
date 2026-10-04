@@ -96,7 +96,6 @@ function respondingGroup(editor: string): string {
   return found;
 }
 
-/** Every field the editor would submit as it stands, the way a browser posts the form. */
 function fieldsOf(editor: string): [string, string][] {
   const fields: [string, string][] = [];
   for (const match of editor.matchAll(/<input\b[^>]*>/g)) {

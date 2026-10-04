@@ -16,20 +16,9 @@ import { fetchPublic } from './fetch-public.ts';
 import type { HostLookup } from './public-address.ts';
 import type { ReplyContext } from './reply-context.ts';
 
-/**
- * A cited page's picture, copied into the site (TASK-252, decision-19).
- *
- * A reader's browser never asks the cited site or its CDN for it, and a post
- * keeps its picture after the original goes away. The copy takes the guarded
- * fetch and the upload pipeline's checks: its first bytes must be an image
- * format the site knows, its metadata is stripped, and its variants are
- * derived like an upload's.
- */
-
 /** `photo` when the cited page is the picture (an oEmbed photo), else a `thumbnail` of it. */
 export type CitedPictureKind = 'photo' | 'thumbnail';
 
-/** A picture a cited page names, still on its own host. */
 export interface PictureSource {
   readonly url: string;
   readonly kind: CitedPictureKind;
@@ -47,27 +36,16 @@ export interface CitedPicture {
   readonly video?: true;
 }
 
-/** The directory under `content/uploads/` the copies live in. */
 export const CITED_PICTURE_DIRECTORY = 'cited';
 
-/** The public path every copy's `src` starts with. */
 export const CITED_PICTURE_PREFIX = `${UPLOAD_ASSET_PREFIX}${CITED_PICTURE_DIRECTORY}/`;
 
-/** How long one picture is given to arrive. */
 export const CITED_PICTURE_TIMEOUT_MS = 10_000;
 
-/** What copying a picture needs: where uploads go, and the limit an upload is held to. */
 export type CitedPictureConfig = ImageConfig & Pick<ResolvedConfig, 'uploadMaxBytes'>;
 
-/** The image formats a copy may be, by the extension it is stored with. */
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.gif', '.webp', '.avif'] as const;
 
-/**
- * Copy a picture into `content/uploads/cited/`, or `undefined` when it cannot
- * be: unreachable, not public, not an image the site knows, or bigger than the
- * site's upload limit. The file is named after a hash of its stripped bytes,
- * so copying the same picture twice writes it once.
- */
 export async function copyCitedPicture(
   source: PictureSource,
   options: {
@@ -136,11 +114,6 @@ async function uprightSize(
   return (metadata.orientation ?? 1) >= 5 ? { width: height, height: width } : { width, height };
 }
 
-/**
- * Delete every copy under `content/uploads/cited/` that `kept` does not name,
- * with its variants. Run whenever an entry may have dropped its picture, and
- * when the site starts, so a copy left by a crash goes too.
- */
 export async function sweepCitedPictures(
   config: ImageConfig,
   kept: ReadonlySet<string>,
@@ -160,31 +133,16 @@ export async function sweepCitedPictures(
   }
 }
 
-/**
- * Whether a citation shows its page's picture in full: a repost of a photo
- * does, since the photo is what was reposted. Anything else shows a thumbnail
- * beside the citation's title.
- */
 export function shownInFull(property: string, picture: Pick<CitedPicture, 'kind'>): boolean {
   return property === 'repost-of' && picture.kind === 'photo';
 }
 
-/**
- * Whether the cited URL is itself an image (TASK-255): its context is a photo
- * and says nothing else about it, so a citation calls it an image from its
- * host and the citing post describes it.
- */
 export function citesAnImage(context: ReplyContext): boolean {
   return (
     context.picture?.kind === 'photo' && context.name === undefined && context.author === undefined
   );
 }
 
-/**
- * The alt text of a cited page's picture: empty for a thumbnail, whose title
- * beside it says what it is; for a picture shown in full, the citing post's
- * description of a cited image, else the page's name.
- */
 export function citedPictureAlt(
   property: string,
   context: ReplyContext,
@@ -194,7 +152,6 @@ export function citedPictureAlt(
   return citesAnImage(context) ? citedImageAlt(document) : (context.name ?? '');
 }
 
-/** A picture as the file holds it, or `undefined` when the entry is not one. */
 export function parseCitedPicture(value: unknown): CitedPicture | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const fields = value as Record<string, unknown>;

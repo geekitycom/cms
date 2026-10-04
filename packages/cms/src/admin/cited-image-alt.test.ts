@@ -77,7 +77,6 @@ function card(editor: string): string | undefined {
   return /<div class="admin-cited-card">[\s\S]*?<\/div>/.exec(editor)?.[0];
 }
 
-/** Every field the editor would submit as it stands, the way a browser posts the form. */
 function fieldsOf(editor: string): [string, string][] {
   const fields: [string, string][] = [];
   for (const match of editor.matchAll(/<input\b[^>]*>/g)) {

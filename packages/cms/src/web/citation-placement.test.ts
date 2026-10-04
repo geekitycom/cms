@@ -28,10 +28,8 @@ interface Post {
   day: string;
   title?: string;
   property?: string;
-  /** No description and no words, only the title and the citation (TASK-256). */
-  bare?: boolean;
-  /** A title that only repeats the opening words, so it is no heading. */
-  echo?: boolean;
+  noDescriptionOrBody?: boolean;
+  titleRepeatsOpeningWords?: boolean;
 }
 
 const BARE_KINDS = KINDS.filter(({ kind }) => kind !== 'reply');
@@ -54,13 +52,21 @@ const POSTS: Post[] = [
     day: String(27 + index),
     title: `A bare ${kind}`,
     property,
-    bare: true,
+    noDescriptionOrBody: true,
   })),
-  { slug: 'echo-note', day: '26', title: 'The words of echo-note', echo: true },
+  { slug: 'echo-note', day: '26', title: 'The words of echo-note', titleRepeatsOpeningWords: true },
 ];
 
-function file({ slug, day, title, property, bare, echo }: Post): string {
-  const described = title !== undefined && bare !== true && echo !== true;
+function file({
+  slug,
+  day,
+  title,
+  property,
+  noDescriptionOrBody,
+  titleRepeatsOpeningWords,
+}: Post): string {
+  const described =
+    title !== undefined && noDescriptionOrBody !== true && titleRepeatsOpeningWords !== true;
   return [
     '---',
     ...(title === undefined ? [] : [`title: ${title}`]),
@@ -70,7 +76,7 @@ function file({ slug, day, title, property, bare, echo }: Post): string {
     ...(property === undefined ? [] : [`${property}: ${TARGET}`]),
     '---',
     '',
-    ...(bare === true ? [] : [`The words of ${slug}.`]),
+    ...(noDescriptionOrBody === true ? [] : [`The words of ${slug}.`]),
     '',
   ].join('\n');
 }
@@ -282,13 +288,13 @@ function entries(html: string, url: string): Item[] {
 }
 
 function expected(
-  { slug, title, property, bare, echo }: Post,
+  { slug, title, property, noDescriptionOrBody, titleRepeatsOpeningWords }: Post,
   listed: boolean,
 ): Record<string, unknown> {
-  const heading = title !== undefined && echo !== true;
+  const heading = title !== undefined && titleRepeatsOpeningWords !== true;
   const keys = ['published', 'url'];
   if (heading) keys.push('name');
-  if (heading && bare !== true) keys.push('summary');
+  if (heading && noDescriptionOrBody !== true) keys.push('summary');
   if (property !== undefined) keys.push(property);
   if (!listed || !heading) keys.push('content');
   return {

@@ -130,8 +130,6 @@ export async function listUploads(contentDir: string): Promise<MediaFile[]> {
 
     const file = path.join(entry.parentPath, entry.name);
     const relative = path.relative(root, file).split(path.sep).join('/');
-    // The copies of cited pages' pictures are the reply contexts' to keep and
-    // delete (decision-19), not the author's library.
     if (relative.startsWith(`${CITED_PICTURE_DIRECTORY}/`)) continue;
 
     let stats;

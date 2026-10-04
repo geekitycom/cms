@@ -496,9 +496,7 @@ export interface DocumentSite {
   readonly announce: (change: DocumentChange) => Promise<void>;
   /** The username of whoever is writing: the author a new document starts on. */
   readonly writer: string | undefined;
-  /** What a cited page says about itself, which an untitled new post is named after. */
   readonly citedContext: (target: string) => Promise<ReplyContext | undefined>;
-  /** What the file holds for a cited page, without asking it. */
   readonly storedContext: (target: string) => ReplyContext | undefined;
 }
 
@@ -804,12 +802,6 @@ export async function writeDocument(
   return { outcome: 'saved', saved, undescribed };
 }
 
-/**
- * Whether the post shows an image it cites in full with no alt text, its
- * `cited-alt` and title both empty (TASK-255). A new post asks the cited page
- * within the save's deadline, as naming it would; an edit reads only what the
- * file holds, since an edit never fetches during the save.
- */
 async function citesUndescribedImage(
   site: DocumentSite,
   document: Document | undefined,
@@ -1147,8 +1139,6 @@ function resolveExtra(
       if (cited === '') delete extra[property];
       else extra[property] = cited;
     }
-    // Written or removed, never `true`: a preview shows unless the post says
-    // otherwise, so a Micropub post shows it until the author removes it.
     if (form.previewHidden) extra[PREVIEW_FRONT_MATTER_KEY] = false;
     else delete extra[PREVIEW_FRONT_MATTER_KEY];
     if (form.citedAlt === '') delete extra[CITED_ALT_FRONT_MATTER_KEY];
@@ -1842,8 +1832,6 @@ async function renderEditor(
   else if (document !== undefined) actions.push({ value: 'trash', label: 'Move to trash' });
 
   if (options.status !== undefined) c.status(options.status);
-  // The baseline leaves a header the handler set alone, so only this response
-  // is allowed the browser's position.
   const permissions = c.var.config.securityHeaders['permissions-policy'];
   if (kind.type === 'post' && permissions !== undefined) {
     c.header('Permissions-Policy', allowGeolocation(permissions));
@@ -1907,12 +1895,6 @@ async function renderEditor(
   });
 }
 
-/**
- * The card the editor shows under each cited URL whose stored context has a
- * picture (TASK-252), by the citing property, with the title its remove
- * control is named after. A URL the file holds nothing for has no card yet.
- * The card of an image shown in full takes its alt text (TASK-255).
- */
 function citedPreviews(
   c: Context<GeekityEnv>,
   form: EditorForm,

@@ -194,9 +194,6 @@ function addFilters(
     typeof value === 'string' && value !== '' ? `@${accountOf(value, baseUrl)}` : '',
   );
 
-  // `{{ url | host }}`: the host a citation names a page by when it knows
-  // nothing better (TASK-255), rather than a URL that can run to hundreds of
-  // characters.
   environment.addFilter('host', (value: unknown) =>
     typeof value === 'string' ? citedHost(value) : '',
   );
