@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.1](https://github.com/geekitycom/cms/compare/v0.19.0...v0.19.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **cms:** keep a word whole across an apostrophe in a slug ([b105959](https://github.com/geekitycom/cms/commit/b105959daa3cb51c6895d97814adbaa18a2ace90))
+
 ## [0.19.0](https://github.com/geekitycom/cms/compare/v0.18.0...v0.19.0) (2026-10-03)
 
 
