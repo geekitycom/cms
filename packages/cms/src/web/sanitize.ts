@@ -153,7 +153,6 @@ export function sanitizeCommentHtml(html: string): string {
   return out.join('');
 }
 
-/** What one attribute's value may be: the value to write, or `undefined` to drop it. */
 type AttributeRule = (value: string) => string | undefined;
 
 const anyText: AttributeRule = (value) => value;

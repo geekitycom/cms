@@ -11,6 +11,8 @@ import { absoluteUrl, contentEtag, isNotModified, latestModified } from './negot
 import type { ConditionalHeaders } from './negotiate.ts';
 import { resolveLicense } from './license.ts';
 
+const COMMENTS_FEED_REVISION = 2;
+
 /**
  * How a feed is served: its validator, its headers, and which serialiser
  * writes its body.
@@ -143,9 +145,10 @@ export function commentsFeedResponse(
   source: CommentFeedSource,
   conditional?: ConditionalHeaders,
 ): Response {
-  // The suffix moved when descriptions began to be escaped (TASK-259), so a
-  // reader holding the old bytes is not handed a 304 for them.
-  const etag = contentEtag('comments:rss:2', commentsFingerprint(source));
+  const etag = contentEtag(
+    `comments:rss:${String(COMMENTS_FEED_REVISION)}`,
+    commentsFingerprint(source),
+  );
   const lastModified = source.comments[0]?.published;
   const headers = feedHeaders(source, etag, lastModified);
 

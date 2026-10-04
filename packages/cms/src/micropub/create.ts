@@ -392,10 +392,6 @@ function readOf(values: readonly unknown[], errors: string[]): ReadOfForm {
   return { name: field('name'), author: field('author'), uid: field('uid'), url: field('url') };
 }
 
-/**
- * The body: text as the Markdown it is written in and HTML as Markdown, each
- * with its raw HTML cleaned (TASK-258).
- */
 function content(values: readonly unknown[], errors: string[]): string {
   if (values.length > 1) errors.push('content takes one value.');
   const [value] = values;

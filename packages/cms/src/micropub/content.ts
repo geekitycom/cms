@@ -13,10 +13,8 @@ import { cleanPostHtml } from '../web/sanitize.ts';
  * its text while every piece of raw HTML in it is cleaned in place.
  */
 
-/** Elements Markdown cannot express, written as an HTML block. */
 const KEPT_BLOCKS = ['TABLE', 'FIGURE', 'DETAILS', 'DL'];
 
-/** Elements Markdown cannot express, kept as tags around their converted content. */
 const KEPT_INLINE = ['ABBR', 'INS', 'KBD', 'MARK', 'Q', 'SMALL', 'SUB', 'SUP', 'U'];
 
 /**
@@ -26,7 +24,6 @@ const KEPT_INLINE = ['ABBR', 'INS', 'KBD', 'MARK', 'Q', 'SMALL', 'SUB', 'SUP', '
  */
 const ROUNDS = 4;
 
-/** Stands for a newline inside a `<pre>` until a kept block is written out. */
 const PRE_NEWLINE = '\uE000';
 
 const turndown = new TurndownService({
@@ -80,10 +77,6 @@ turndown.addRule('keptInline', {
   },
 });
 
-/**
- * HTML content as the Markdown a post stores, or `undefined` when what is
- * left still has HTML the site cannot clean.
- */
 export function markdownFromHtml(html: string): string | undefined {
   return cleanMarkdown(turndown.turndown(cleanPostHtml(html)));
 }
@@ -115,11 +108,10 @@ function stored(body: string): string {
   return normalizeBody(body).replaceAll('\0', '\uFFFD');
 }
 
-/** `source` cleaned and read again until nothing changes. */
 function settled(source: string): string | undefined {
   let current = source;
   for (let round = 0; round < ROUNDS; round += 1) {
-    const edits = dirtyHtml(current);
+    const edits = cleaningEdits(current);
     if (edits === undefined) return undefined;
     if (edits.length === 0) return current;
     for (const { start, end, text } of edits.toSorted((a, b) => b.start - a.start)) {
@@ -135,8 +127,7 @@ interface Edit {
   readonly text: string;
 }
 
-/** The changes that clean every piece of raw HTML in `source`. */
-function dirtyHtml(source: string): Edit[] | undefined {
+function cleaningEdits(source: string): Edit[] | undefined {
   const lineStarts = [0];
   for (let at = source.indexOf('\n'); at >= 0; at = source.indexOf('\n', at + 1)) {
     lineStarts.push(at + 1);
@@ -146,8 +137,7 @@ function dirtyHtml(source: string): Edit[] | undefined {
     map === null ? undefined : { start: offset(map[0]), end: offset(map[1]) };
 
   const edits: Edit[] = [];
-  /** The inline content already read from each block's lines, for blocks with several. */
-  const readBefore = new Map<string, string>();
+  const inlineTextReadPerLineRange = new Map<string, string>();
   /** The lines of each open block, for an inline token that has none of its own: a table cell. */
   const open: ([number, number] | null)[] = [];
 
@@ -164,9 +154,9 @@ function dirtyHtml(source: string): Edit[] | undefined {
     if (token.type !== 'inline') continue;
 
     const map = token.map ?? open.at(-1) ?? null;
-    const key = String(map);
-    const before = readBefore.get(key) ?? '';
-    readBefore.set(key, before + token.content);
+    const lineRange = String(map);
+    const before = inlineTextReadPerLineRange.get(lineRange) ?? '';
+    inlineTextReadPerLineRange.set(lineRange, before + token.content);
     for (const child of token.children ?? []) {
       if (child.type !== 'html_inline') continue;
       const cleaned = cleanPostHtml(child.content);
@@ -218,14 +208,12 @@ function cleanedBlock(source: string, region: { start: number; end: number }): E
   return { ...region, text: [...kept, last].join('\n') };
 }
 
-/** How many times `part` occurs in `text`, without overlaps. */
 function count(text: string, part: string): number {
   let found = 0;
   for (let at = text.indexOf(part); at >= 0; at = text.indexOf(part, at + part.length)) found += 1;
   return found;
 }
 
-/** Where the `n`th (from zero) occurrence of `part` in `text` begins. */
 function nth(text: string, part: string, n: number): number | undefined {
   let at = text.indexOf(part);
   for (let seen = 0; at >= 0 && seen < n; seen += 1) at = text.indexOf(part, at + part.length);
@@ -248,7 +236,6 @@ function htmlBlock(element: TurndownNode): string {
     .replaceAll(PRE_NEWLINE, '&#10;');
 }
 
-/** Elements whose children a kept block puts on lines of their own. */
 const CONTAINERS = [
   'BLOCKQUOTE',
   'DETAILS',

@@ -21,7 +21,6 @@ export function renderMarkdown(body: string): string {
   return markdown.render(body);
 }
 
-/** A body as the renderer reads it, before it is rendered. */
 export function markdownTokens(body: string): Token[] {
   return markdown.parse(body, {});
 }

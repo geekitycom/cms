@@ -155,10 +155,6 @@ async function rss(
   return { response, body, rss: document, channel };
 }
 
-/**
- * The text a browser shows for an RSS description, which readers render as
- * HTML: refuses one that holds any markup or a bare ampersand.
- */
 function htmlText(html: string): string {
   assert.ok(!html.includes('<'), `no markup in ${JSON.stringify(html)}`);
   assert.ok(!/&(?!amp;|lt;|gt;)/.test(html), `no bare ampersand in ${JSON.stringify(html)}`);

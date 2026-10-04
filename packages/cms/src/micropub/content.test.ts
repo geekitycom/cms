@@ -23,7 +23,6 @@ function cleaned(markdown: string): string {
   return result;
 }
 
-/** Fails when anything in `page` would run script or load a frame. */
 function assertInert(page: string): void {
   assert.doesNotMatch(page, /<script/i, 'no script element');
   assert.doesNotMatch(
