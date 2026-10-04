@@ -1407,13 +1407,9 @@ describe('a cited page in a note (TASK-262)', () => {
     },
   };
 
-  async function noteAt(
-    lines: string[],
-    body = '',
-    contexts: Record<string, unknown> = CONTEXTS,
-  ): Promise<Record<string, unknown>> {
+  async function noteAt(lines: string[], body = ''): Promise<Record<string, unknown>> {
     const instance = await site({
-      '_data/replyContexts.json': JSON.stringify(contexts),
+      '_data/replyContexts.json': JSON.stringify(CONTEXTS),
       'posts/2026-10-01-cited.md': rawPost(
         ["date: '2026-10-01T09:00:00Z'", 'permalink: /2026/10/cited/', ...lines],
         body,
