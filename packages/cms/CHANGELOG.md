@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.21.0](https://github.com/geekitycom/cms/compare/v0.20.0...v0.21.0) (2026-10-04)
+
+
+### Features
+
+* **cms:** name the cited page in a like, repost or bookmark's federated note ([4b5e163](https://github.com/geekitycom/cms/commit/4b5e1637f77dd64ae4ebbfcab96e7881e90dc51b))
+* **cms:** send an update when a cited page's context arrives after the create ([f24d243](https://github.com/geekitycom/cms/commit/f24d2433b283a2e7d959a53094d123e7e22aa098))
+
+
+### Bug Fixes
+
+* **cms:** label an untitled like, repost, bookmark, reply or photo by what it is ([32c6a72](https://github.com/geekitycom/cms/commit/32c6a7241ff05f90cc2672e0ae61576d24f01501))
+
 ## [0.20.0](https://github.com/geekitycom/cms/compare/v0.19.0...v0.20.0) (2026-10-04)
 
 
