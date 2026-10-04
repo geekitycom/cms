@@ -88,6 +88,7 @@ import {
 import type { EnclosureForm } from './enclosure-field.ts';
 import { openGroups } from './editor-layout.ts';
 import type { EditorField, Refusal } from './editor-layout.ts';
+import { allowGeolocation } from './headers.ts';
 import {
   BLANK_LOCATION_FORM,
   LOCATION_FIELDS,
@@ -1789,6 +1790,12 @@ async function renderEditor(
   else if (document !== undefined) actions.push({ value: 'trash', label: 'Move to trash' });
 
   if (options.status !== undefined) c.status(options.status);
+  // The baseline leaves a header the handler set alone, so only this response
+  // is allowed the browser's position.
+  const permissions = c.var.config.securityHeaders['permissions-policy'];
+  if (kind.type === 'post' && permissions !== undefined) {
+    c.header('Permissions-Policy', allowGeolocation(permissions));
+  }
 
   return options.render(c, ADMIN_TEMPLATES.documentEditor, {
     section: kind.section,

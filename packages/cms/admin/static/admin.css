@@ -621,6 +621,21 @@ button[type='submit']:hover,
   display: block;
 }
 
+.admin-location-here {
+  margin-top: 0.75rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--admin-link);
+  border-radius: 3px;
+  background: var(--admin-surface);
+  color: var(--admin-link);
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-location-here:hover {
+  background: var(--admin-field);
+}
+
 .admin-hint {
   margin: 0.25rem 0 0;
   color: var(--admin-muted);

@@ -134,6 +134,8 @@
             Kept in <code>data/locations.json</code>, not in the post’s file. What readers see of it
             is chosen on Settings &gt; Privacy. Empty every box to remove it.
           </p>
+          <button type="button" id="editor-location-here" class="admin-location-here" hidden>Use my location</button>
+          <p id="editor-location-status" class="admin-hint" role="status"></p>
           <label for="editor-location-geo">Coordinates</label>
           <input id="editor-location-geo" name="{{ locationFields.geo }}" type="text" value="{{ form.location.geo }}" placeholder="48.85837, 2.29448" autocomplete="off" spellcheck="false"{{ invalid('editor-location-geo', 'editor-location-geo-hint') }} />
           {{ problem('editor-location-geo') }}
@@ -485,4 +487,7 @@
   {# The slug and permalink auto-fill, in a file of its own so the policy never
      has to allow an inline script. #}
   <script defer src="{{ assetPrefix }}slug.js"></script>
+  {% if kind.type == 'post' %}
+    <script defer src="{{ assetPrefix }}location.js"></script>
+  {% endif %}
 {% endblock %}

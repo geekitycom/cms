@@ -124,6 +124,16 @@ export function adminContentSecurityPolicy(nonce: string, formAction?: string): 
   ].join('; ');
 }
 
+/**
+ * The site's Permissions-Policy with the browser's position allowed to the
+ * site itself, for the post editor's Use my location button (TASK-254). Only
+ * `geolocation=()`, the default's value, is rewritten: a policy the site
+ * wrote with no such entry already says what it means.
+ */
+export function allowGeolocation(policy: string): string {
+  return policy.replace(/(^|,\s*)geolocation=\(\)(?=\s*(,|$))/, '$1geolocation=(self)');
+}
+
 function applyBaseline(headers: Headers, config: ResolvedConfig, frameable: boolean): void {
   headers.set('X-Content-Type-Options', 'nosniff');
   // The same test the session cookie's `Secure` uses, so the two can never

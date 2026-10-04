@@ -812,7 +812,9 @@ is a bare `'self'`. The public site gets none of that. It gets a
 `Referrer-Policy` of `strict-origin-when-cross-origin`, framing by the site
 itself only (`frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`), a
 `Permissions-Policy` that turns off the camera, microphone, geolocation,
-payments, USB and similar, and `Cross-Origin-Opener-Policy: same-origin`. None
+payments, USB and similar, and `Cross-Origin-Opener-Policy: same-origin`. The
+post editor alone allows geolocation to the site itself, for its Use my
+location button. None
 of them limits what a page loads, so a theme is still free to reference whatever
 it likes, and a site can change or remove each one with `securityHeaders`. The
 package README has
@@ -1003,6 +1005,12 @@ keyed by the post's permalink, at mode 0600. It is never written into the
 post's file, so `content/` and its git history never carry it, whatever the
 setting says (decision-29). An Eleventy build of the same `content/` prints no
 location for the same reason.
+
+Where the browser can share its position, the Location box has a **Use my
+location** button. It fills Coordinates and Accuracy, and says in the box when
+the browser refused, timed out or could not find a position. It does not fill
+in the place's name: turning coordinates into a name means sending them to a
+geocoding service somebody else runs, so those boxes stay typed by hand.
 
 A Micropub `checkin`, which Swarm-style apps send, is kept the same way, with
 the editor's A check-in box ticked. Only its venue's name, locality, region,
