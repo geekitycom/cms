@@ -1,14 +1,19 @@
+import { createHash } from 'node:crypto';
+
 import type { Context } from '@fedify/fedify';
 import { Activity, getTypeId, PUBLIC_COLLECTION } from '@fedify/vocab';
-import type { Actor, Recipient } from '@fedify/vocab';
+import type { Actor, Object as ActivityObject, Recipient } from '@fedify/vocab';
 
 import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore, Delivery, DeliveryStatus, Follower } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
+import { citationsOf } from '../content/citation.ts';
+import type { CitedPage } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { pinnedAt } from '../content/pinned.ts';
+import { replyTarget } from '../content/post-type.ts';
 import { saveDocument } from '../content/save.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
@@ -22,6 +27,7 @@ import {
   isFederatedDocument,
   postCreateActivity,
   postDeleteActivity,
+  postObject,
   postPinActivity,
   postUpdateActivity,
 } from './article.ts';
@@ -118,6 +124,13 @@ export interface DeliveryService {
    * announce.
    */
   resend(slug: string): Promise<DeliveryReport | undefined>;
+  /**
+   * Bring the followers' copies of the posts that cite a page up to date with
+   * its newly stored context: an `Update` for each served, announced post
+   * whose object now reads differently from the one they were last sent.
+   * Queued like a save's own delivery.
+   */
+  citedPageStored(target: string, previous: CitedPage | undefined): void;
   /** Resolve once every queued delivery has finished, however it finished. */
   settled(): Promise<void>;
 }
@@ -160,15 +173,24 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   }
 
   /** A context outside any request, which is where a delivery happens from. */
-  function deliveryContext(): Context<FederationContextData> {
+  function deliveryContext(
+    cited: FederationContextData['cited'] = options.cited,
+  ): Context<FederationContextData> {
     return federation.createContext(new URL(config.baseUrl), {
       admin,
       store,
       config,
       actorProfiles: options.actorProfiles,
-      cited: options.cited,
+      cited,
     });
   }
+
+  // The object a post's followers last received, by object id, as a
+  // fingerprint: what tells a cited page's new context that changes nothing
+  // they were shown from one that does. In memory, so a post sent before this
+  // process started is compared against its object rendered with the
+  // context it replaced instead.
+  const lastSent = new Map<string, string>();
 
   /**
    * Write `activitypub.published` into the post's file, and answer with the
@@ -274,11 +296,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     shape: Shape,
   ): Promise<DeliveryReport> {
     if (shape.kind === 'object') {
-      return await send(
+      return await sendObject(
         context,
         postCreateActivity(context, document, shape.replyTo),
         document,
-        citedAuthor(shape.replyTo?.author),
+        shape,
       );
     }
     return await send(context, shape.citing.activity, document, citedAuthor(shape.citing.author));
@@ -313,12 +335,26 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     shape: Shape & { kind: 'object' },
     revision?: string,
   ): Promise<DeliveryReport> {
-    return await send(
+    return await sendObject(
       context,
       postUpdateActivity(context, document, revision, shape.replyTo),
       document,
-      citedAuthor(shape.replyTo?.author),
+      shape,
     );
+  }
+
+  /** Send a `Create` or `Update` carrying the post's object, and remember what it carried. */
+  async function sendObject(
+    context: Context<FederationContextData>,
+    activity: Activity,
+    document: Document,
+    shape: Shape & { kind: 'object' },
+  ): Promise<DeliveryReport> {
+    const object = await activity.getObject();
+    const sent = object === null ? undefined : await fingerprint(object);
+    const report = await send(context, activity, document, citedAuthor(shape.replyTo?.author));
+    if (sent !== undefined) lastSent.set(shape.id, sent);
+    return report;
   }
 
   /**
@@ -544,6 +580,31 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       });
     },
 
+    citedPageStored(target, previous) {
+      queue(async () => {
+        const now = store.now();
+        const context = deliveryContext();
+        const before = deliveryContext((url) => (url === target ? previous : options.cited(url)));
+        const citing = store
+          .listFederated()
+          .filter((document) => isFederatedDocument(document, now) && cites(document, target));
+
+        for (const document of citing) {
+          const shape = await shapeOf(context, document);
+          // A like or a repost of a fediverse object has no content to update.
+          if (shape.kind !== 'object') continue;
+          const current = await fingerprint(postObject(context, document, shape.replyTo));
+          const sent =
+            lastSent.get(shape.id) ??
+            (await fingerprint(postObject(before, document, shape.replyTo)));
+          if (current === sent) continue;
+          // Named by what it carries, so the id differs from the edit's
+          // Update that went out under the post's own hash.
+          await revise(context, document, shape, current.slice(0, 16));
+        }
+      });
+    },
+
     settled() {
       return chain.then(ignore);
     },
@@ -582,6 +643,20 @@ function citedAuthor(author: Actor | undefined): DeliveryTarget[] {
       actorIds: [author.id.href],
     },
   ];
+}
+
+/** A post's object as a peer reads it, hashed. */
+async function fingerprint(object: ActivityObject): Promise<string> {
+  const json = JSON.stringify(await object.toJsonLd());
+  return createHash('sha256').update(json).digest('hex');
+}
+
+/** Whether a post replies to, likes, reposts or bookmarks this URL. */
+function cites(document: Document, target: string): boolean {
+  return (
+    replyTarget(document) === target ||
+    citationsOf(document.extra).some((citation) => citation.url === target)
+  );
 }
 
 /** Whether two versions of a post are one object to a peer: the same id. */

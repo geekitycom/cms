@@ -67,6 +67,9 @@ const SHARED_INBOX_AUTHOR_STATUS_URL = `${REMOTE_ORIGIN}/@dora/2`;
 /** A page on the remote host that is no ActivityPub object. */
 const PLAIN_PAGE = `${REMOTE_ORIGIN}/blog/a-page/`;
 
+/** A page the stubbed host answers only once a test opens {@link slowPage}. */
+const SLOW_PAGE = `${REMOTE_ORIGIN}/blog/slow-page/`;
+
 /** One POST the site made while delivering. */
 interface Delivery {
   /** Where it went. */
@@ -91,6 +94,8 @@ let statusDocument: unknown;
 let sharedInboxAuthorDocument: unknown;
 let sharedInboxAuthorStatusDocument: unknown;
 let restoreFetch: () => void;
+let slowPage: Promise<void> = Promise.resolve();
+let inboxes: Promise<void> = Promise.resolve();
 
 before(async () => {
   const keys = await testKeyPair(REMOTE_PAIR);
@@ -168,6 +173,7 @@ function routeRemoteHost(): () => void {
 
     const request = new Request(input, init);
     if (request.method === 'POST') {
+      await inboxes;
       deliveries.push({
         url: request.url,
         signature: request.headers.get('signature-input') ?? request.headers.get('signature') ?? '',
@@ -191,6 +197,12 @@ function routeRemoteHost(): () => void {
     if (served !== undefined) {
       return new Response(JSON.stringify(served), {
         headers: { 'content-type': 'application/activity+json' },
+      });
+    }
+    if (url.href === SLOW_PAGE) {
+      await slowPage;
+      return new Response('<!doctype html><title>A slow page</title>', {
+        headers: { 'content-type': 'text/html' },
       });
     }
     if (url.href === PLAIN_PAGE) {
@@ -228,7 +240,9 @@ interface Site {
 /**
  * A federated CMS with one follower, no queue — so a delivery is a POST that
  * has already happened by the time `settled()` resolves — and the
- * private-address guard off, because neither host in this file resolves.
+ * private-address guard off, because neither host in this file resolves. The
+ * same reason gives it a host lookup that answers for the remote host, so a
+ * cited page's context is fetched from the stub there.
  */
 async function site(
   options: {
@@ -289,6 +303,8 @@ async function site(
     watch: options.watch ?? false,
     baseUrl: BASE_URL,
     federation: { queue: null, allowPrivateAddress: true },
+    hostLookup: (host) =>
+      Promise.resolve(host === new URL(REMOTE_ORIGIN).hostname ? ['203.0.113.7'] : []),
     ...(options.now === undefined ? {} : { now: options.now }),
   });
   started.push(cms);
@@ -1827,4 +1843,164 @@ describe('a cited page in a delivered note (TASK-262)', () => {
       `<p>Bookmarked <a href="${UNFETCHED}">a page on remote.example</a></p>\n`,
     );
   });
+});
+
+describe('a cited page whose context is stored after the Create (TASK-263)', () => {
+  const line = (name: string, title = 'Worth keeping'): string =>
+    `<p>Bookmarked <a href="${SLOW_PAGE}">${name}</a></p>\n<p>${title}</p>`;
+
+  function holdSlowPage(): () => void {
+    let open = (): void => undefined;
+    slowPage = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return open;
+  }
+
+  function holdInboxes(): () => void {
+    let open = (): void => undefined;
+    inboxes = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return open;
+  }
+
+  async function bookmarkSlowPage(agent: Browser): Promise<void> {
+    const response = await publishNewPost(agent, {
+      title: 'Worth keeping',
+      slug: 'cited',
+      body: '',
+      'bookmark-of': SLOW_PAGE,
+    });
+    assert.equal(response.status, 303, await response.text());
+  }
+
+  function contentOf(delivery: Delivery | undefined): string {
+    assert.ok(delivery !== undefined, `expected a delivery, saw ${JSON.stringify(deliveries)}`);
+    return String((delivery.body['object'] as Record<string, unknown>)['content']);
+  }
+
+  async function storeContext(cms: Cms, open: () => void): Promise<void> {
+    open();
+    await cms.replyContexts.settled();
+    await cms.delivery.settled();
+  }
+
+  it('sends an Update naming the page to the inbox the host-form Create went to (AC #1)', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    const open = holdSlowPage();
+    await bookmarkSlowPage(agent);
+    await cms.delivery.settled();
+    const [create] = delivered('Create');
+    assert.equal(contentOf(create), line('a page on remote.example'));
+
+    deliveries.length = 0;
+    await storeContext(cms, open);
+
+    const updates = delivered('Update');
+    assert.equal(updates.length, 1, `expected one Update, saw ${JSON.stringify(deliveries)}`);
+    assert.equal(contentOf(updates[0]), line('A slow page'));
+    assert.equal(updates[0]?.url, create?.url);
+    assert.deepEqual(
+      deliveries.map((delivery) => delivery.url),
+      [REMOTE_SHARED_INBOX],
+      'once per shared inbox',
+    );
+  });
+
+  it('sends nothing when the stored context changes nothing in the Note (AC #2)', async () => {
+    const contexts = { [SLOW_PAGE]: { url: SLOW_PAGE, name: 'A slow page', text: 'Old words.' } };
+    const { cms, contentDir } = await site({
+      files: { '_data/replyContexts.json': JSON.stringify(contexts) },
+    });
+    const agent = await signedIn(cms);
+    await bookmarkSlowPage(agent);
+    await cms.delivery.settled();
+    assert.equal(contentOf(delivered('Create')[0]), line('A slow page'));
+
+    deliveries.length = 0;
+    const open = holdSlowPage();
+    const response = await publishNewPost(agent, {
+      title: 'Also worth keeping',
+      slug: 'cited-again',
+      body: '',
+      'bookmark-of': SLOW_PAGE,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await storeContext(cms, open);
+
+    const stored = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'replyContexts.json'), 'utf8'),
+    ) as Record<string, Record<string, unknown>>;
+    assert.equal(stored[SLOW_PAGE]?.['text'], undefined, 'the context was stored again');
+    assert.deepEqual(delivered('Update'), [], `saw ${JSON.stringify(deliveries)}`);
+  });
+
+  it('sends nothing to a post whose Create was built after the context landed (AC #2)', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    const openPage = holdSlowPage();
+    const openInboxes = holdInboxes();
+
+    await publishNewPost(agent);
+    await bookmarkSlowPage(agent);
+    openPage();
+    await cms.replyContexts.settled();
+    openInboxes();
+    await cms.delivery.settled();
+
+    const cited = delivered('Create').find((delivery) => contentOf(delivery).includes(SLOW_PAGE));
+    assert.equal(contentOf(cited), line('A slow page'));
+    assert.deepEqual(delivered('Update'), [], `saw ${JSON.stringify(deliveries)}`);
+  });
+
+  it('sends nothing to a post its followers were never sent', async () => {
+    const open = holdSlowPage();
+    const { cms } = await site({
+      account: true,
+      files: {
+        'posts/kept.md': `---
+title: Kept before federation
+date: 2026-03-04T10:00:00.000Z
+permalink: /2026/03/kept/
+author: ${ADA}
+bookmark-of: ${SLOW_PAGE}
+---
+`,
+      },
+    });
+
+    await storeContext(cms, open);
+
+    assert.equal(cms.replyContexts.read(SLOW_PAGE)?.name, 'A slow page');
+    assert.deepEqual(deliveries, [], `saw ${JSON.stringify(deliveries)}`);
+  });
+
+  for (const [hidden, changes] of [
+    ['a draft', { action: 'save-draft' }],
+    ['a trashed post', { action: 'trash', return: '' }],
+    ['a post of unrecognised visibility', { visibility: 'private' }],
+    ['a post re-dated into the future', { date: '2999-01-01T00:00:00.000Z' }],
+  ] as const) {
+    it(`sends nothing to ${hidden} (AC #3)`, async () => {
+      const { cms } = await site();
+      const agent = await signedIn(cms);
+      const open = holdSlowPage();
+      await bookmarkSlowPage(agent);
+      await cms.delivery.settled();
+      const response = await submitEditor(agent, '/admin/posts/cited', {
+        'bookmark-of': SLOW_PAGE,
+        ...changes,
+      });
+      assert.equal(response.status, 303, await response.text());
+      await cms.delivery.settled();
+      assert.equal(delivered('Delete').length, 1, 'the post was withdrawn');
+
+      deliveries.length = 0;
+      await storeContext(cms, open);
+
+      assert.deepEqual(deliveries, [], `saw ${JSON.stringify(deliveries)}`);
+    });
+  }
 });

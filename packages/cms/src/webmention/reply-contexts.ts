@@ -37,6 +37,8 @@ export interface CreateReplyContextServiceOptions {
   readonly lookup: HostLookup;
   /** Defaults to `console`. */
   readonly logger?: ReplyContextLogger | undefined;
+  /** Told each time a target's context is stored, with the one it replaced. */
+  readonly onStored?: ((target: string, previous: ReplyContext | undefined) => void) | undefined;
 }
 
 /**
@@ -102,12 +104,15 @@ export function createReplyContextService(
 
   /** Rewrite the file with one target's entry set, or removed when `undefined`. */
   async function write(target: string, context: ReplyContext | undefined): Promise<void> {
+    let previous: ReplyContext | undefined;
     await updateFileAtomically(file, (current) => {
       const all = current === undefined ? {} : parseContexts(current);
+      previous = all[target];
       if (context === undefined) delete all[target];
       else all[target] = context;
       return `${JSON.stringify(all, null, 2)}\n`;
     });
+    if (context !== undefined) options.onStored?.(target, previous);
   }
 
   async function withPicture(
