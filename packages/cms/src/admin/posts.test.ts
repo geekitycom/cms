@@ -1516,11 +1516,54 @@ describe('the slug of a post with no title and no text (TASK-242)', () => {
     });
   }
 
-  it('names a photo post photo', async () => {
+  it('names a photo post by its first photo’s alt text, five words at most (TASK-264)', async () => {
     assert.equal(
       await slugOf({ 'photo-url-0': 'https://peer.example/a.jpg', 'photo-alt-0': 'A gull' }),
+      '/admin/posts/a-gull',
+    );
+    assert.equal(
+      await slugOf({
+        'photo-url-0': 'https://peer.example/a.jpg',
+        'photo-alt-0': 'Greg & the dog, asleep on the porch',
+        'photo-url-1': 'https://peer.example/b.jpg',
+        'photo-alt-1': 'The second photo',
+      }),
+      '/admin/posts/greg-the-dog-asleep-on',
+    );
+  });
+
+  it('names a photo post photo when its first photo has no alt text (TASK-264)', async () => {
+    assert.equal(
+      await slugOf({
+        'photo-url-0': 'https://peer.example/a.jpg',
+        'photo-url-1': 'https://peer.example/b.jpg',
+        'photo-alt-1': 'The second photo',
+      }),
       '/admin/posts/photo',
     );
+  });
+
+  it('leaves an existing untitled post at its slug when it gains a described photo (TASK-264)', async () => {
+    const cms = await box.site({
+      contentDir: await seeded([
+        {
+          file: 'posts/2026-10-03-photo.md',
+          title: '',
+          date: '2026-10-03',
+          permalink: '/2026/10/photo/',
+          body: '',
+        },
+      ]),
+    });
+    const agent = await signedIn(cms);
+    const response = await submit(agent, '/admin/posts/photo', {
+      'photo-url-0': 'https://peer.example/a.jpg',
+      'photo-alt-0': 'Greg',
+      action: 'update',
+    });
+    assert.equal(response.status, 303, await response.clone().text());
+    assert.equal(response.headers.get('location'), '/admin/posts/photo');
+    assert.equal(cms.store.getBySlug('photo')?.permalink, '/2026/10/photo/');
   });
 
   it('names a reply with a photo by what it replies to, as its type does', async () => {

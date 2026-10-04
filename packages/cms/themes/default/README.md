@@ -961,7 +961,9 @@ IndieWeb. The graph holds:
   A post with no words either is labelled by what it is (TASK-261): "Liked",
   "Reposted", "Bookmarked" or "Reply to" and the cited page's stored title,
   else the host its citation line names ("Liked a page on www.youtube.com"), and
-  "Photo" for a photo post. "Untitled" is the last fallback.
+  for a photo post its first photo's alt text, cut to ten words like a note's
+  (TASK-264), or "Photo" when that photo has none. The kicker still says Photo
+  and no heading is printed. "Untitled" is the last fallback.
   Its `image` is the picture the Open Graph tags print, so the two always
   agree (see [The head](#the-head)). Its `license` is the page's license URL,
   the front matter's over the site's, and absent with none.

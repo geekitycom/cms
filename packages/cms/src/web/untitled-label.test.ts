@@ -16,6 +16,9 @@ const UNREAD = 'https://unread.example/2026/10/post/';
 const CITED_NAME = 'RuneScape <Official> & "4th" MMO teaser';
 const CITED_ESCAPED = 'RuneScape &lt;Official&gt; &amp; &quot;4th&quot; MMO teaser';
 
+const PHOTO_ALT = 'Greg <the> "dog" & cat';
+const PHOTO_ALT_ESCAPED = 'Greg &lt;the&gt; &quot;dog&quot; &amp; cat';
+
 const STORED = {
   [VIDEO]: { url: VIDEO, name: CITED_NAME },
   [THREAD]: { url: THREAD, name: 'A thread' },
@@ -55,6 +58,13 @@ const POSTS: Record<string, string> = {
   bookmarked: post('bookmarked', [`bookmark-of: ${UNREAD}`]),
   replied: post('replied', [`in-reply-to: ${THREAD}`]),
   photo: post('photo', ['photo: /uploads/2026/10/a.jpg']),
+  described: post('described', [
+    'photo:',
+    '  - url: /uploads/2026/10/a.jpg',
+    `    alt: '${PHOTO_ALT}'`,
+    '  - url: /uploads/2026/10/b.jpg',
+    '    alt: The second photo',
+  ]),
   worded: post('worded', [`like-of: ${VIDEO}`], 'So good.'),
   empty: post('empty', []),
 };
@@ -150,6 +160,41 @@ describe('an untitled post is labelled by what it is (TASK-261)', () => {
     assert.deepEqual(await pageHead('photo'), every('Photo'));
     assert.deepEqual(await pageHead('worded'), every('So good.'));
     assert.deepEqual(await pageHead('empty'), every('Untitled'));
+  });
+
+  it('heads a photo post with no words by its first photo’s alt text (TASK-264)', async () => {
+    assert.deepEqual(await pageHead('described'), every(PHOTO_ALT));
+  });
+
+  it('shows no heading for that alt text, and the kicker still reads Photo (TASK-264)', async () => {
+    const html = await (await cms.app.request('/2026/10/described/')).text();
+    assert.match(html, /<span class="kicker-kind">Photo<\/span>/);
+    assert.doesNotMatch(html, /<h1 class="p-name"/);
+    assert.ok(!html.includes('<the>'), 'the alt text is printed escaped');
+  });
+
+  it('names a photo post by its alt text in the admin list (TASK-264)', async () => {
+    const list = await (await agent.get('/admin/posts')).text();
+    assert.ok(list.includes(PHOTO_ALT_ESCAPED), 'the list labels the photo post');
+    assert.ok(!list.includes('<the>'), 'the list escapes the alt text');
+  });
+
+  it('names a saved photo post by its alt text in the flash (TASK-264)', async () => {
+    const token = csrfField(await (await agent.get('/admin/posts/new')).text());
+    assert.ok(token !== undefined);
+    const response = await agent.post('/admin/posts/new', {
+      csrf_token: token,
+      'photo-url-0': 'https://peer.example/a.jpg',
+      'photo-alt-0': PHOTO_ALT,
+      date: '2026-10-02T09:00:00Z',
+      action: 'publish',
+    });
+    assert.equal(response.status, 303);
+    const editor = response.headers.get('location');
+    assert.equal(editor, '/admin/posts/greg-the-dog-cat');
+
+    const html = await (await agent.get(editor)).text();
+    assert.ok(html.includes(`Published: ${PHOTO_ALT_ESCAPED}`), 'the flash labels the photo post');
   });
 
   it('names the post the same way in the admin list and the editor heading (AC #3)', async () => {
