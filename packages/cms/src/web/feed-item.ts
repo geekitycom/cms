@@ -1,5 +1,5 @@
 import type { User } from '../admin/accounts.ts';
-import { citationsOf, citedHost, citedImageAlt, previewShown } from '../content/citation.ts';
+import { citationsOf, citedHost, previewShown } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf } from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
@@ -18,7 +18,7 @@ import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
 import { canonicalLocale, documentLanguage } from './locale.ts';
 import { absoluteUrl, lastModifiedOf } from './negotiate.ts';
-import { citesAnImage, shownInFull } from '../webmention/cited-picture.ts';
+import { citedPictureAlt, citesAnImage } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 
 /**
@@ -317,13 +317,9 @@ function citationLines(
             ? ` · ${escapeXml(context.site)}`
             : '';
       const line = `<p class="cite-line">${CITATION_VERBS[property] ?? ''} <a href="${href}">${escapeXml(name)}</a>${credit}</p>\n`;
-      const picture = context?.picture;
-      if (picture === undefined || !previewShown(document.extra)) return line;
-      const alt = !shownInFull(property, picture)
-        ? ''
-        : image
-          ? citedImageAlt(document)
-          : (context?.name ?? '');
+      if (context?.picture === undefined || !previewShown(document.extra)) return line;
+      const { picture } = context;
+      const alt = citedPictureAlt(property, context, document);
       return (
         line +
         `<p><a href="${href}"><img src="${escapeXml(absoluteUrl(picture.src, baseUrl))}"` +

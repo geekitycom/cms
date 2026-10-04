@@ -804,12 +804,11 @@ export async function writeDocument(
   return { outcome: 'saved', saved, undescribed };
 }
 
-/** What a save says about the images it found with no alt text, naming each. */
 /**
  * Whether the post shows an image it cites in full with no alt text, its
- * `cited-alt` and title both empty (TASK-255). A new post asks the
- * cited page within the save's deadline, as naming it would; an edit reads
- * only what the file holds, since an edit never fetches during the save.
+ * `cited-alt` and title both empty (TASK-255). A new post asks the cited page
+ * within the save's deadline, as naming it would; an edit reads only what the
+ * file holds, since an edit never fetches during the save.
  */
 async function citesUndescribedImage(
   site: DocumentSite,
@@ -826,6 +825,7 @@ async function citesUndescribedImage(
   return false;
 }
 
+/** What a save says about the images it found with no alt text, naming each. */
 function missingAltText(images: readonly UndescribedImage[]): string {
   const names = images.map((image) => image.name).join(', ');
   const count = images.length === 1 ? '1 image has' : `${String(images.length)} images have`;

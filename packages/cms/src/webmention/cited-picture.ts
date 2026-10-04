@@ -5,6 +5,8 @@ import path from 'node:path';
 import sharp from 'sharp';
 
 import type { ResolvedConfig } from '../config.ts';
+import { citedImageAlt } from '../content/citation.ts';
+import type { Document } from '../content/document.ts';
 import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import { stripMetadata } from '../content/metadata/index.ts';
 import { generateImageVariants, removeImageVariants } from '../images/variants.ts';
@@ -176,6 +178,20 @@ export function citesAnImage(context: ReplyContext): boolean {
   return (
     context.picture?.kind === 'photo' && context.name === undefined && context.author === undefined
   );
+}
+
+/**
+ * The alt text of a cited page's picture: empty for a thumbnail, whose title
+ * beside it says what it is; for a picture shown in full, the citing post's
+ * description of a cited image, else the page's name.
+ */
+export function citedPictureAlt(
+  property: string,
+  context: ReplyContext,
+  document: Pick<Document, 'extra' | 'title'>,
+): string {
+  if (context.picture === undefined || !shownInFull(property, context.picture)) return '';
+  return citesAnImage(context) ? citedImageAlt(document) : (context.name ?? '');
 }
 
 /** A picture as the file holds it, or `undefined` when the entry is not one. */
