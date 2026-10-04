@@ -8,6 +8,8 @@ import type { Enclosure, Transcript } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { citationsOf } from '../content/citation.ts';
+import { shownInFull } from '../webmention/cited-picture.ts';
+import type { CitedPicture } from '../webmention/cited-picture.ts';
 import type { Citation } from '../content/citation.ts';
 import { READ_STATUS_LABELS, readLine, readOf, uidLabel } from '../content/read.ts';
 import type { ReadOf, ReadStatus } from '../content/read.ts';
@@ -606,6 +608,27 @@ function photoContexts(
         : siteImageMarkup(images, tag, { lead: index === 0 && loading?.lead === true });
     return { url: photo.url, alt, html };
   });
+}
+
+/**
+ * A cited page's picture as a theme draws it (TASK-252): `full` for a repost
+ * of a photo, which is drawn in full with the page's name as its alt text,
+ * else a thumbnail beside the title, whose alt text is empty because the title
+ * beside it says what it is. `html` is the `img.u-photo`, responsive when the
+ * copy has variants.
+ */
+export function citedPictureContext(
+  picture: CitedPicture,
+  property: string,
+  name: string | undefined,
+  images: ImageConfig,
+): CitedPicture & { full: boolean; html: string } {
+  const full = shownInFull(property, picture);
+  const alt = full ? (name ?? '') : '';
+  const tag =
+    `<img class="u-photo" src="${escapeAttribute(picture.src)}" alt="${escapeAttribute(alt)}"` +
+    ` width="${String(picture.width)}" height="${String(picture.height)}" loading="lazy" decoding="async">`;
+  return { ...picture, full, html: siteImageMarkup(images, tag) };
 }
 
 function escapeAttribute(value: string): string {

@@ -1,4 +1,5 @@
 import { discoverPostType } from '../content/post-type.ts';
+import type { CitedPicture, PictureSource } from './cited-picture.ts';
 import { fetchPublic, webUrl } from './fetch-public.ts';
 import { elementsIn, hasRel, parseHtml, textOf } from './html.ts';
 import type { HtmlElement } from './html.ts';
@@ -43,11 +44,18 @@ export interface ReplyContext {
   readonly author?: { readonly name: string; readonly url?: string };
   /** When it says it was published, as an ISO 8601 instant. */
   readonly published?: string;
+  /** The site it is on, its `og:site_name`, kept only when it names no author. */
+  readonly site?: string;
+  /** Its picture, copied into the site's uploads (TASK-252). */
+  readonly picture?: CitedPicture;
 }
 
-/** What fetching one target came to. */
+/**
+ * What fetching one target came to. `picture` is the picture the page names,
+ * still on its own host: the caller copies it or leaves it.
+ */
 export type ReplyContextFetch =
-  | { readonly ok: true; readonly context: ReplyContext }
+  | { readonly ok: true; readonly context: ReplyContext; readonly picture?: PictureSource }
   | { readonly ok: false; readonly reason: string };
 
 /** What {@link fetchReplyContext} needs. */
@@ -83,8 +91,9 @@ export async function fetchReplyContext(
 
   const known = knownEndpoint(target);
   if (known !== undefined) {
-    const context = describe(parseHtml(''), undefined, target, await fetchOembed(known, limits));
-    if (context !== undefined) return { ok: true, context };
+    const oembed = withoutSuffix(await fetchOembed(known.endpoint, limits), known.titleSuffix);
+    const context = describe(parseHtml(''), undefined, target, oembed);
+    if (context !== undefined) return described(context, oembed?.picture);
   }
 
   const timeoutMs = limits.deadline - Date.now();
@@ -112,8 +121,38 @@ export async function fetchReplyContext(
   const oembed = endpoint === undefined ? undefined : await fetchOembed(endpoint, limits);
 
   const context = describe(root, entry, target, oembed);
-  if (context !== undefined) return { ok: true, context };
+  if (context !== undefined) {
+    return described(
+      context,
+      oembed?.picture ?? (fetched.ok ? pagePicture(root, fetched.url) : undefined),
+    );
+  }
   return fetched.ok ? refuse('nothing to show') : fetched;
+}
+
+function described(context: ReplyContext, picture: PictureSource | undefined): ReplyContextFetch {
+  return { ok: true, context, ...(picture === undefined ? {} : { picture }) };
+}
+
+/**
+ * The page's `og:image`, else its Twitter card's image, as a thumbnail of it,
+ * marked a video's when its `og:type` or its card says so.
+ */
+function pagePicture(root: HtmlElement, base: string): PictureSource | undefined {
+  const image =
+    metaOf(root, 'og:image') || metaOf(root, 'twitter:image') || metaOf(root, 'twitter:image:src');
+  if (image === '') return undefined;
+  let url: URL | undefined;
+  try {
+    url = webUrl(new URL(image, base).href);
+  } catch {
+    return undefined;
+  }
+  if (url === undefined) return undefined;
+  const video =
+    metaOf(root, 'og:type').toLowerCase().startsWith('video') ||
+    metaOf(root, 'twitter:card').toLowerCase() === 'player';
+  return { url: url.href, kind: 'thumbnail', ...(video ? { video: true } : {}) };
 }
 
 /**
@@ -126,6 +165,8 @@ const KNOWN_OEMBED_PROVIDERS: readonly {
   /** Tested against the path and query of the cited URL. */
   readonly path: RegExp;
   readonly endpoint: string;
+  /** What the endpoint appends to every title, cut off before the title is kept. */
+  readonly titleSuffix?: string;
 }[] = [
   {
     hosts: ['youtube.com', 'www.youtube.com', 'm.youtube.com'],
@@ -147,10 +188,13 @@ const KNOWN_OEMBED_PROVIDERS: readonly {
     hosts: ['giphy.com', 'www.giphy.com'],
     path: /^\/gifs\/[^/?]+/,
     endpoint: 'https://giphy.com/services/oembed',
+    titleSuffix: ' - Find & Share on GIPHY',
   },
 ];
 
-function knownEndpoint(target: string): string | undefined {
+function knownEndpoint(
+  target: string,
+): { readonly endpoint: string; readonly titleSuffix?: string | undefined } | undefined {
   const url = webUrl(target);
   if (url === undefined) return undefined;
   const provider = KNOWN_OEMBED_PROVIDERS.find(
@@ -160,12 +204,22 @@ function knownEndpoint(target: string): string | undefined {
   const endpoint = new URL(provider.endpoint);
   endpoint.searchParams.set('format', 'json');
   endpoint.searchParams.set('url', target);
-  return endpoint.href;
+  return { endpoint: endpoint.href, titleSuffix: provider.titleSuffix };
+}
+
+function withoutSuffix(oembed: Oembed | undefined, suffix: string | undefined): Oembed | undefined {
+  if (oembed?.title === undefined || suffix === undefined || !oembed.title.endsWith(suffix)) {
+    return oembed;
+  }
+  const title = oembed.title.slice(0, -suffix.length).trim();
+  const { title: _title, ...rest } = oembed;
+  return title === '' ? rest : { ...rest, title };
 }
 
 export interface Oembed {
   readonly title?: string;
   readonly author?: { readonly name: string; readonly url?: string };
+  readonly picture?: PictureSource;
 }
 
 /**
@@ -216,6 +270,7 @@ function describe(
             },
           }),
       ...(entry.published === null ? {} : { published: entry.published }),
+      ...(authorName === '' ? siteOf(root) : {}),
     };
   }
 
@@ -235,8 +290,13 @@ function describe(
     url: target,
     ...(name === '' ? {} : { name }),
     ...(text === '' ? {} : { text }),
-    ...(author === undefined ? {} : { author }),
+    ...(author === undefined ? siteOf(root) : { author }),
   };
+}
+
+function siteOf(root: HtmlElement): { site?: string } {
+  const site = withoutDirectionControls(metaOf(root, 'og:site_name'));
+  return site === '' ? {} : { site };
 }
 
 function withoutDirectionControls(text: string | undefined): string {
@@ -299,8 +359,18 @@ async function fetchOembed(
   const title = plainText(fields['title']);
   const authorName = plainText(fields['author_name']);
   const authorUrl = webUrl(plainText(fields['author_url']) ?? '');
+  const type = plainText(fields['type']);
+  const photo = type === 'photo' ? webUrl(plainText(fields['url']) ?? '') : undefined;
+  const thumbnail = webUrl(plainText(fields['thumbnail_url']) ?? '');
+  const picture: PictureSource | undefined =
+    photo !== undefined
+      ? { url: photo.href, kind: 'photo' }
+      : thumbnail !== undefined
+        ? { url: thumbnail.href, kind: 'thumbnail', ...(type === 'video' ? { video: true } : {}) }
+        : undefined;
   return {
     ...(title === undefined ? {} : { title }),
+    ...(picture === undefined ? {} : { picture }),
     ...(authorName === undefined
       ? {}
       : {

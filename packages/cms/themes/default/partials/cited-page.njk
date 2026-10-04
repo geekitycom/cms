@@ -16,6 +16,15 @@
   is not followed by the author again. Its last words become the `h-card`,
   printed as the title wrote them, and the whole name stays the `p-name`, so a
   parser reads the same name and author either way.
+
+  A page that names no author may name its site, `context.site` (its
+  `og:site_name`), printed after a middle dot as plain text: a site is not an
+  author, so it is no `h-card`.
+
+  `thumb(url, picture)` is a cited page's thumbnail (TASK-252): a link to the
+  page around `picture.html`, out of the tab order and hidden from assistive
+  technology because the title beside it is the same link. A video's carries
+  `cite-video`, which the stylesheet draws a play mark on.
 #}
 {% macro page(url, context) %}
 {%- set title = (context.name or "") | trim -%}
@@ -29,8 +38,13 @@
   {%- elif context.author %} <a class="u-url" href="{{ url }}">a post</a>
   {%- else %} <a class="u-url" href="{{ url }}">{{ url }}</a>
   {%- endif %}
-  {%- if context.author %} by {{ card(context.author, context.author.name) }}{% endif %}
+  {%- if context.author %} by {{ card(context.author, context.author.name) }}
+  {%- elif context.site %} · <span class="cite-site">{{ context.site }}</span>{% endif %}
 {%- endif %}
+{%- endmacro %}
+
+{% macro thumb(url, picture) -%}
+<a class="cite-thumb{% if picture.video %} cite-video{% endif %}" href="{{ url }}" tabindex="-1" aria-hidden="true">{{ picture.html | safe }}</a>
 {%- endmacro %}
 
 {% macro card(author, name) -%}

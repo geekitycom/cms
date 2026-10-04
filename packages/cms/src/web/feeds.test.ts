@@ -1041,7 +1041,9 @@ describe('a reply in the feeds', () => {
 
     assert.equal(body.includes('purl.org/syndication/thread'), false);
     assert.equal(body.includes('<thr:'), false);
-    assert.equal(body.includes(TARGET), false);
+    const line = `<p class="cite-line">In reply to <a href="${TARGET}">${TARGET}</a></p>`;
+    assert.ok(body.includes(line), 'the post’s HTML names its target (TASK-252)');
+    assert.equal(body.replaceAll(line, '').includes(TARGET), false);
   });
 });
 

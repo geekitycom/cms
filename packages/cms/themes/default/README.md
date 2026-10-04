@@ -440,7 +440,35 @@ as its author. The title link stops before " by ", and the words after it
 become the `p-author h-card`, so the line reads "Liked Flickermood by Forss"
 and a parser still reads the whole title as the `p-name`. A name that mentions
 its author anywhere else, such as "Rick Astley - Never Gonna Give You Up" by
-Rick Astley, keeps the author after it.
+Rick Astley, keeps the author after it. A page that names no author but names
+its site, its `og:site_name`, is followed by a middle dot and the site as a
+plain `span.cite-site`, never an `h-card`, because a site is not an author: a
+bookmark of a Scripting News post reads "Bookmarked RSS tip #2 · Scripting
+News". A like's, a repost's or a bookmark's citation never prints the page's
+description, which on many sites describes the site rather than the post.
+
+**A citation shows the cited page's picture** (TASK-252) when the page named
+one and the post has not removed its preview. The picture is the page's
+oEmbed photo, else its oEmbed thumbnail, else its `og:image`, else its
+`twitter:image`, copied into the site's uploads when the post was saved, so
+a reader's browser never asks the cited site or its CDN for anything. It is
+`context.picture`: `{ src, width, height, kind, video, full, html }`, where
+`html` is an `img.u-photo` inside the `h-cite`, responsive when the copy has
+variants. A repost of a photo (`full`, such as a Giphy GIF) prints it in full
+under the line, as `a.cite-photo` linking to the target, with the target's
+name as its alt text. Every other citation with a picture (a like, a bookmark,
+a reply, a repost of a video or a page) is classed `cite-with-thumb` and
+prints it as `a.cite-thumb` beside the line: a 6rem thumbnail linking to the
+target, out of the tab order and hidden from assistive technology because the
+title beside it is the same link, with an empty alt text. A video's thumbnail
+is also classed `cite-video`, which the stylesheet draws a play mark on. A
+picture that could not be copied, was bigger than the site's upload limit or
+was never named leaves the citation as it was, with no picture. A post whose
+front matter says `preview: false`, which the editor's remove control writes,
+prints the plain citation, and so do its listing entry and its feed items.
+There is never an iframe or a script from the cited page. The feeds open each
+citing post's HTML with the same citation as a `p.cite-line`, the picture
+after it with an absolute `src`.
 
 **A read says what was read** (TASK-229) with `partials/read.njk`, a
 `p.read-line` at the top of the `e-content` that reads like indiebookclub's

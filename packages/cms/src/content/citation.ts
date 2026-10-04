@@ -13,6 +13,17 @@
 import type { Document } from './document.ts';
 import { isWebUrl } from './enclosure.ts';
 
+/**
+ * The front matter key a post hides the previews of what it cites with
+ * (TASK-252): `preview: false`. Absent, a preview shows.
+ */
+export const PREVIEW_FRONT_MATTER_KEY = 'preview';
+
+/** Whether a post shows the pictures of the pages it cites. */
+export function previewShown(extra: Readonly<Record<string, unknown>>): boolean {
+  return extra[PREVIEW_FRONT_MATTER_KEY] !== false;
+}
+
 /** The citing properties, each a front matter key, in Post Type Discovery's order. */
 export const CITATION_PROPERTIES = ['repost-of', 'like-of', 'bookmark-of'] as const;
 

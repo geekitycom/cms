@@ -77,3 +77,19 @@ The table is now asked before the page, not after it. For a provider in the tabl
 | Giphy    | `giphy.com`, `www.giphy.com`: `/gifs/…`                                        | `https://giphy.com/services/oembed` |
 
 A cited URL in the table is first asked of its endpoint. When the answer names a title or an author, that is the context and the page is not read, so its description is not kept either. When the endpoint fails or names nothing, the page is read with what is left of the one deadline: an `h-entry` wins, then `og:title` and `<title>`, and the page's own oEmbed link is not asked, since it is the endpoint that just failed. When no time is left the page is not fetched. When both fail, the fetch fails with the page's own reason, as before. A URL not in the table is unchanged: its page first, then the oEmbed endpoint the page links when it has no `h-entry`.
+
+## Amendment (2026-10-03, TASK-252)
+
+A context also keeps the cited page's picture, and the picture itself is copied into the site. Hotlinking it would have every reader's browser ask the cited site or its CDN for it, and the post would lose it when the original went away.
+
+The picture is, in order: an oEmbed answer's `url` when its `type` is `photo` (Giphy's GIF), else its `thumbnail_url` (YouTube's `hqdefault.jpg`), else the page's `og:image`, else its `twitter:image` or `twitter:image:src`. A known provider's endpoint can name a title suffix it appends to every title, which is cut off: Giphy's " - Find & Share on GIPHY".
+
+The picture is fetched with the same guards as the page (public hosts only, every redirect checked, a 10-second timeout of its own), held to the site's `uploadMaxBytes`, the limit an author's own upload is held to (10 MiB by default, which a Giphy GIF fits), and refused unless its first bytes are a PNG, JPEG, GIF, WebP or AVIF. Its metadata is stripped as an upload's is, and its variants are derived as an upload's are. It is written to `content/uploads/cited/`, named after the first 16 hex digits of the SHA-256 of its stripped bytes, so copying the same picture twice writes one file and two contexts can share it. The media library leaves that directory out: the copies are this file's to keep and delete, not the author's.
+
+The entry records it as `picture`: `src` (its public path, always under `/uploads/cited/`), `width` and `height` (read from the stripped file, not from the provider), `kind` (`photo` or `thumbnail`), and `video: true` for a video's thumbnail. A picture that fails, is too big or is not an image leaves the entry without one, as before. A save that names a new post after its target stores the context at once and copies the picture after the save, so the 3-second deadline is spent on the title only.
+
+A page that names no author keeps its `og:site_name` as `site`, which a citation prints as plain text after the title.
+
+A picture is forgotten with the last entry that names it. Whenever an entry is removed or replaced, and when the site starts serving, every file under `content/uploads/cited/` that no entry names is deleted with its variants, so a copy left by a crash or by an entry removed by hand goes too.
+
+A post can hide the previews of what it cites with `preview: false` in its front matter, which the editor writes; the picture stays in the file, so clearing the box shows it again without a fetch.

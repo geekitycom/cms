@@ -1,4 +1,5 @@
 import type { User } from '../admin/accounts.ts';
+import { citationsOf, previewShown } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf } from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
@@ -17,6 +18,8 @@ import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
 import { canonicalLocale, documentLanguage } from './locale.ts';
 import { absoluteUrl, lastModifiedOf } from './negotiate.ts';
+import { shownInFull } from '../webmention/cited-picture.ts';
+import type { ReplyContext } from '../webmention/reply-context.ts';
 
 /**
  * One post as a feed shows it, in one shape whatever format the feed is.
@@ -163,7 +166,8 @@ export interface FeedItem {
  * where nobody was named, and revision 7 printed a post's photos and named its
  * main image, and revision 8 made the relative URLs in a post's body absolute,
  * and revision 9 opened a read post with its read line and summarised it by
- * that line —
+ * that line, and revision 10 opened a post that cites a page with a line
+ * naming it and that page's copied picture —
  * would leave the validator where it was, and a reader polling with
  * `If-None-Match` would be handed a 304 that hides the new bytes.
  *
@@ -171,7 +175,7 @@ export interface FeedItem {
  * never again until the next such change. The comments feeds do not carry it:
  * a comment is not a {@link FeedItem} and its bytes are untouched.
  */
-export const FEED_ITEM_REVISION = 9;
+export const FEED_ITEM_REVISION = 10;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -195,6 +199,11 @@ export interface FeedItemContext {
   commentCounts?: ReadonlyMap<string, number> | undefined;
   /** The media library, for a photo's alt text the post does not give. Empty when absent. */
   altTexts?: AltTextLibrary | undefined;
+  /**
+   * What is stored about a page a post cites (decision-19), by its URL. A
+   * citation with nothing stored is a line with the bare URL.
+   */
+  replyContext?: ((target: string) => ReplyContext | undefined) | undefined;
 }
 
 /**
@@ -220,6 +229,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     terms: [...document.categories, ...document.tags],
     summary: feedExcerpt(document),
     html:
+      citationLines(document, context.replyContext, baseUrl) +
       readLine(readOf(document.extra)) +
       photosHtml(photos, context.altTexts ?? new Map(), baseUrl) +
       absoluteHtmlUrls(document.html, link, baseUrl),
@@ -262,6 +272,54 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   }
 
   return item;
+}
+
+const CITATION_VERBS: Readonly<Record<string, string>> = {
+  'in-reply-to': 'In reply to',
+  'repost-of': 'Reposted',
+  'like-of': 'Liked',
+  'bookmark-of': 'Bookmarked',
+};
+
+/**
+ * The pages a post answers or cites, each a line as the theme's citation reads
+ * (TASK-252): the verb, the page's name as a link, its author or else its
+ * site, and its copied picture unless the post hid its previews. Only the
+ * name, author and site: a page's description is not the post that cited it.
+ */
+function citationLines(
+  document: Document,
+  replyContext: FeedItemContext['replyContext'],
+  baseUrl: string,
+): string {
+  const answered = replyTarget(document);
+  const cited = [
+    ...(answered === undefined ? [] : [{ property: 'in-reply-to', url: answered }]),
+    ...citationsOf(document.extra),
+  ];
+  return cited
+    .map(({ property, url }) => {
+      const context = replyContext?.(url);
+      const href = escapeXml(url);
+      const name = context?.name ?? (context?.author === undefined ? url : 'a post');
+      const author = context?.author?.name;
+      const credit =
+        author !== undefined && !name.toLowerCase().endsWith(` by ${author.toLowerCase()}`)
+          ? ` by ${escapeXml(author)}`
+          : author === undefined && context?.site !== undefined
+            ? ` · ${escapeXml(context.site)}`
+            : '';
+      const line = `<p class="cite-line">${CITATION_VERBS[property] ?? ''} <a href="${href}">${escapeXml(name)}</a>${credit}</p>\n`;
+      const picture = context?.picture;
+      if (picture === undefined || !previewShown(document.extra)) return line;
+      const alt = shownInFull(property, picture) ? (context?.name ?? '') : '';
+      return (
+        line +
+        `<p><a href="${href}"><img src="${escapeXml(absoluteUrl(picture.src, baseUrl))}"` +
+        ` alt="${escapeXml(alt)}" width="${String(picture.width)}" height="${String(picture.height)}"></a></p>\n`
+      );
+    })
+    .join('');
 }
 
 function photosHtml(photos: readonly Photo[], library: AltTextLibrary, baseUrl: string): string {

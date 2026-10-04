@@ -5,7 +5,7 @@ import type { Environment } from 'nunjucks';
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { citationsOf } from '../content/citation.ts';
+import { citationsOf, previewShown } from '../content/citation.ts';
 import type { Citation } from '../content/citation.ts';
 import type { SharedLocation } from '../content/location.ts';
 import type { ImageLoading } from '../images/markup.ts';
@@ -19,6 +19,7 @@ import { archiveMonths, archiveOpen } from './archive.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import {
+  citedPictureContext,
   createSiteDataSource,
   documentContext,
   frontPageSlugs,
@@ -512,16 +513,24 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     replyContext?: Record<string, unknown>;
     citations: (Citation & { context?: Record<string, unknown> })[];
   } {
-    const contextOf = (target: string): Record<string, unknown> | undefined => {
+    const shown = previewShown(document.extra);
+    const contextOf = (target: string, property: string): Record<string, unknown> | undefined => {
       const cited = options.replyContext?.(target);
-      return cited === undefined ? undefined : replyContextFor(cited);
+      if (cited === undefined) return undefined;
+      const { picture, ...rest } = cited;
+      return {
+        ...replyContextFor(rest),
+        ...(picture === undefined || !shown
+          ? {}
+          : { picture: citedPictureContext(picture, property, rest.name, config) }),
+      };
     };
     const target = replyTarget(document);
-    const replyContext = target === undefined ? undefined : contextOf(target);
+    const replyContext = target === undefined ? undefined : contextOf(target, 'in-reply-to');
     return {
       ...(replyContext === undefined ? {} : { replyContext }),
       citations: citationsOf(document.extra).map((citation) => {
-        const context = contextOf(citation.url);
+        const context = contextOf(citation.url, citation.property);
         return context === undefined ? citation : { ...citation, context };
       }),
     };
@@ -961,7 +970,7 @@ function currentUrl(context: Record<string, unknown>): string {
  * A stored reply context as a theme reads it: the published instant as a
  * `Date`, so the `date` filter prints it in the site's zone like any other.
  */
-function replyContextFor(context: ReplyContext): Record<string, unknown> {
+function replyContextFor(context: Omit<ReplyContext, 'picture'>): Record<string, unknown> {
   const published = context.published === undefined ? undefined : new Date(context.published);
   const { published: _published, ...rest } = context;
   return published === undefined || Number.isNaN(published.getTime())

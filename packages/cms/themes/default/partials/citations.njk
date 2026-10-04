@@ -13,14 +13,25 @@
   synced (TASK-244), only when it said something: its `name` and `author`,
   printed through autoescaping like a reply's context. With a name, the name
   is the link; with only an author, "a post" is; with neither, the bare URL.
+
+  `context.picture` is the target's picture, copied into the site's uploads
+  (TASK-252), absent when there is none or the post hid its previews. A
+  repost of a photo (`picture.full`) shows it in full under the line; any
+  other citation shows it as a thumbnail beside the line. Both link to the
+  target, and `picture.html` is the `img.u-photo` inside the `h-cite`.
 #}
 {% import "partials/cited-page.njk" as cited %}
 {% set citationVerbs = { "repost-of": "Reposted", "like-of": "Liked", "bookmark-of": "Bookmarked" } %}
 {% for citation in citations %}
 {% set citedPage = citation.context %}
-<div class="reply-context cite u-{{ citation.property }} h-cite">
+{% set picture = citedPage.picture %}
+<div class="reply-context cite u-{{ citation.property }} h-cite{% if picture and not picture.full %} cite-with-thumb{% endif %}">
+  {%- if picture and not picture.full %}{{ cited.thumb(citation.url, picture) }}{% endif %}
   <p class="cite-line small">{{ citationVerbs[citation.property] }}
     {{- cited.page(citation.url, citedPage) -}}
   </p>
+  {%- if picture.full %}
+  <a class="cite-photo" href="{{ citation.url }}">{{ picture.html | safe }}</a>
+  {%- endif %}
 </div>
 {% endfor %}

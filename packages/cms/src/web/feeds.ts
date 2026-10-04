@@ -1,4 +1,6 @@
+import { citationsOf } from '../content/citation.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
+import { replyTarget } from '../content/post-type.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { atomFeed } from './feed-atom.ts';
@@ -231,6 +233,9 @@ function feedFingerprint(source: FeedSource): string {
         ...photosOf(document.extra).map(
           (photo) => photoAlt(photo, source.altTexts ?? new Map()) ?? '',
         ),
+        ...[replyTarget(document), ...citationsOf(document.extra).map(({ url }) => url)]
+          .filter((target) => target !== undefined)
+          .map((target) => JSON.stringify(source.replyContext?.(target) ?? null)),
       ].join(' '),
     ),
   ].join('\n');

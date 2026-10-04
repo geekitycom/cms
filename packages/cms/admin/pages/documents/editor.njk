@@ -28,6 +28,22 @@
 {% if errorField == id %}<p class="admin-field-error" id="{{ id }}-error">{{ error }}</p>{% endif %}
 {% endmacro %}
 
+{# A cited page's stored preview (TASK-252) under the URL that cites it, with
+   a checkbox drawn as an X that removes it: checked writes `preview: false`,
+   cleared shows it again, and no script is needed either way. #}
+{% macro citedCard(property) %}
+{% set card = citedPreviews[property] %}
+{% if card %}
+<div class="admin-cited-card">
+  <img src="{{ card.picture.src }}" alt="" width="{{ card.picture.width }}" height="{{ card.picture.height }}" loading="lazy">
+  <p class="admin-cited-title">{{ card.name }}</p>
+  <input type="checkbox" id="editor-preview-{{ property }}" name="preview" value="hide"{% if form.previewHidden %} checked{% endif %}>
+  <label class="admin-cited-remove" for="editor-preview-{{ property }}"><span aria-hidden="true">×</span><span class="admin-visually-hidden">Remove the preview of {{ card.name }}</span></label>
+  <p class="admin-cited-removed">Removed. The post shows the plain citation until you select the X again.</p>
+</div>
+{% endif %}
+{% endmacro %}
+
 {% block content %}
   <h1>{{ heading }}</h1>
 
@@ -313,6 +329,7 @@
           <label for="editor-in-reply-to">In reply to</label>
           <input id="editor-in-reply-to" name="in-reply-to" type="url" value="{{ form.inReplyTo }}"{{ invalid('editor-in-reply-to') }} />
           {{ problem('editor-in-reply-to') }}
+          {{ citedCard('in-reply-to') }}
           <p class="admin-hint">The address of the post this one answers. Leave it empty for a post that answers nobody.</p>
 
           {#- The mf2 `like-of`, `repost-of` and `bookmark-of` (TASK-169): each
@@ -320,13 +337,21 @@
           <label for="editor-like-of">Like of</label>
           <input id="editor-like-of" name="like-of" type="url" value="{{ form.likeOf }}"{{ invalid('editor-like-of') }} />
           {{ problem('editor-like-of') }}
+          {{ citedCard('like-of') }}
           <label for="editor-repost-of">Repost of</label>
           <input id="editor-repost-of" name="repost-of" type="url" value="{{ form.repostOf }}"{{ invalid('editor-repost-of') }} />
           {{ problem('editor-repost-of') }}
+          {{ citedCard('repost-of') }}
           <label for="editor-bookmark-of">Bookmark of</label>
           <input id="editor-bookmark-of" name="bookmark-of" type="url" value="{{ form.bookmarkOf }}"{{ invalid('editor-bookmark-of') }} />
           {{ problem('editor-bookmark-of') }}
+          {{ citedCard('bookmark-of') }}
           <p class="admin-hint">The address of a post this one likes, reposts or bookmarks. Leave them empty for a post that cites nothing.</p>
+          {#- A removed preview stays removed while there is no card to show
+              it again on. -#}
+          {% if form.previewHidden and not (citedPreviews | length) %}
+          <input type="hidden" name="preview" value="hide">
+          {% endif %}
         {% endcall %}
 
         {% call group('Read', open.read) %}

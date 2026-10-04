@@ -643,6 +643,46 @@
     @apply mt-1 text-[0.98rem] leading-snug text-muted italic;
   }
 
+  /* A cited page's picture (TASK-252), copied into the site's uploads. Any
+     citation but a repost of a photo puts a thumbnail beside its line, with a
+     play mark on a video's; a reposted photo is drawn in full under it. */
+  .cite-with-thumb {
+    @apply grid grid-cols-[6rem_minmax(0,1fr)] items-start gap-x-3;
+  }
+
+  .cite-with-thumb > :not(.cite-thumb) {
+    @apply col-start-2;
+  }
+
+  .cite-thumb {
+    @apply relative row-span-2 block;
+  }
+
+  .cite-thumb img {
+    @apply block aspect-[4/3] h-auto w-full rounded-sm object-cover;
+  }
+
+  .cite-video::before {
+    @apply absolute inset-0 m-auto size-9 rounded-full;
+    content: '';
+    background: rgb(0 0 0 / 0.65);
+  }
+
+  .cite-video::after {
+    @apply absolute inset-0 m-auto h-4 w-3.5 translate-x-[10%];
+    content: '';
+    background: #fff;
+    clip-path: polygon(0 0, 100% 50%, 0 100%);
+  }
+
+  .cite-photo {
+    @apply mt-2 block;
+  }
+
+  .cite-photo img {
+    @apply block h-auto max-w-full rounded-sm;
+  }
+
   /* One post or page: `article.blog-post.h-entry`. */
   .post-header {
     @apply mb-8;

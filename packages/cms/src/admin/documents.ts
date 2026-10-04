@@ -3,7 +3,12 @@ import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
 
-import { CITATION_PROPERTIES, citationText } from '../content/citation.ts';
+import {
+  CITATION_PROPERTIES,
+  citationText,
+  PREVIEW_FRONT_MATTER_KEY,
+  previewShown,
+} from '../content/citation.ts';
 import type { CitationProperty } from '../content/citation.ts';
 import type { Document, DocumentContent, DocumentType } from '../content/document.ts';
 import { renderMarkdown } from '../content/markdown.ts';
@@ -113,6 +118,7 @@ import {
   syndicateToOf,
   syndicationTargetsReader,
 } from '../webmention/syndication.ts';
+import type { CitedPicture } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 
@@ -418,6 +424,7 @@ async function saveFromForm(
     exclude: body['exclude'] !== undefined,
     contact: body['contact'] !== undefined,
     pinned: kind.type === 'post' && body['pinned'] !== undefined,
+    previewHidden: kind.type === 'post' && body[PREVIEW_FRONT_MATTER_KEY] !== undefined,
     comments: commentSetting(text(body['comments'])),
     enclosure: kind.type === 'post' ? readEnclosureForm(body) : BLANK_ENCLOSURE_FORM,
     photos: kind.type === 'post' ? readPhotoForm(body) : [],
@@ -1076,6 +1083,7 @@ function resolveExtra(
     | 'contact'
     | 'lang'
     | 'pinned'
+    | 'previewHidden'
     | 'syndicateTo'
     | 'visibility'
     | 'readStatus'
@@ -1098,6 +1106,10 @@ function resolveExtra(
       if (cited === '') delete extra[property];
       else extra[property] = cited;
     }
+    // Written or removed, never `true`: a preview shows unless the post says
+    // otherwise, so a Micropub post shows it until the author removes it.
+    if (form.previewHidden) extra[PREVIEW_FRONT_MATTER_KEY] = false;
+    else delete extra[PREVIEW_FRONT_MATTER_KEY];
     const resolved = resolveRead(form.readStatus, form.readOf);
     if ('read' in resolved) {
       const { read } = resolved;
@@ -1594,6 +1606,11 @@ export interface EditorForm {
   /** Whether the post is pinned to its author's profile (TASK-207). Posts only. */
   pinned: boolean;
   /**
+   * Whether the post hides the previews of the pages it cites, `preview:
+   * false` (TASK-252). Posts only.
+   */
+  previewHidden: boolean;
+  /**
    * What the document says about comments: one of {@link COMMENT_SETTINGS}.
    *
    * Three values rather than a checkbox, because there are three answers: the
@@ -1653,6 +1670,7 @@ export function blankForm(
     exclude: false,
     contact: false,
     pinned: false,
+    previewHidden: false,
     comments: COMMENT_SETTINGS.site,
     enclosure: BLANK_ENCLOSURE_FORM,
     photos: [],
@@ -1710,6 +1728,7 @@ export function formFor(
     exclude: document.extra[EXCLUDE_KEY] === true,
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
     pinned: pinnedAt(document) !== undefined,
+    previewHidden: document.type === 'post' && !previewShown(document.extra),
     comments: commentSettingOf(document),
     enclosure: document.type === 'post' ? enclosureForm(document) : BLANK_ENCLOSURE_FORM,
     photos: document.type === 'post' ? photoRows(document) : [],
@@ -1791,6 +1810,7 @@ async function renderEditor(
           photoRows: photoRowViews(form.photos, readAltTexts(c.var.config.contentDir)),
           photoChoices: await photoChoices(c.var.config.contentDir),
           locationFields: LOCATION_FIELDS,
+          citedPreviews: citedPreviews(c, form),
           readFields: READ_FIELDS,
           readStatuses: READ_STATUSES.map((value) => ({ value, label: READ_STATUS_LABELS[value] })),
           ...(form.readStatus === '' || isReadStatus(form.readStatus)
@@ -1826,6 +1846,35 @@ async function renderEditor(
       : { error: options.refusal.message, errorField: options.refusal.field }),
     open: openGroups(form, options.refusal?.field),
   });
+}
+
+/**
+ * The card the editor shows under each cited URL whose stored context has a
+ * picture (TASK-252), by the citing property, with the title its remove
+ * control is named after. A URL the file holds nothing for has no card yet.
+ */
+function citedPreviews(
+  c: Context<GeekityEnv>,
+  form: EditorForm,
+): Record<string, { name: string; picture: CitedPicture }> {
+  const cited: [string, string][] = [
+    ['in-reply-to', form.inReplyTo],
+    ...CITATION_PROPERTIES.map((property): [string, string] => [
+      property,
+      form[CITATION_FIELDS[property]],
+    ]),
+  ];
+  const cards: Record<string, { name: string; picture: CitedPicture }> = {};
+  for (const [property, url] of cited) {
+    if (url === '') continue;
+    const context = c.var.replyContexts.read(url);
+    if (context?.picture === undefined) continue;
+    cards[property] = {
+      name: context.name ?? context.author?.name ?? url,
+      picture: context.picture,
+    };
+  }
+  return cards;
 }
 
 /**
