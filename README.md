@@ -1693,7 +1693,7 @@ otherwise.
 | Property               | Becomes                                                                                                                                                                                                                                                                                                                                                         |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `h=entry`              | The only type accepted. In JSON, `"type": ["h-entry"]`.                                                                                                                                                                                                                                                                                                         |
-| `content`              | The body. Plain text is kept as Markdown. `{"html": "…"}` is kept as HTML.                                                                                                                                                                                                                                                                                      |
+| `content`              | The body. Text is kept as the Markdown it is written in, and `{"html": "…"}` is converted to Markdown. Either way the HTML in it is cleaned first; see below.                                                                                                                                                                                                   |
 | `name`                 | The title. A post without one is a note.                                                                                                                                                                                                                                                                                                                        |
 | `summary`              | The description.                                                                                                                                                                                                                                                                                                                                                |
 | `category`             | The tags, one tag per value. Several values.                                                                                                                                                                                                                                                                                                                    |
@@ -1714,6 +1714,22 @@ otherwise.
 | `p3k-content-type`     | `text/plain` or `text/markdown`, which Quill sends from its content type selector. Either way the content is kept as Markdown, and nothing else is stored. Any other type is refused.                                                                                                                                                                           |
 | `visibility`           | `public` or `unlisted`. Unlisted writes `visibility: unlisted`: the post keeps its page and federates, but is left off every listing, feed, the sitemap and search. `private` is refused, since the site has no private posts.                                                                                                                                  |
 | `access_token`         | The token, when it is not in the header. It is never stored on the post.                                                                                                                                                                                                                                                                                        |
+
+Content is cleaned at the endpoint, because a post's Markdown is rendered with
+its raw HTML, as Eleventy renders it, and an app granted only the `create`
+scope should not be able to put script on the site. HTML content is put through
+an allow-list (headings, paragraphs, emphasis, links, lists, images, code,
+quotations, tables, figures and details) and converted to Markdown. Script,
+style, iframe, object, SVG and form elements, event-handler and `style`
+attributes, link addresses with a scheme other than `http`, `https` or
+`mailto`, and image addresses with one other than `http` or `https` are
+removed. A table, figure, details or definition list
+stays as an HTML block with no indentation and no blank line inside it, so
+pretty-printed HTML never turns into a code block. Text and Markdown content
+keeps its text as sent, and each piece of raw HTML in it, as the renderer reads
+it, goes through the same allow-list. `q=source` answers the Markdown that was
+stored. Posts written in the editor or as files are the owner's and are not
+cleaned.
 
 A like, repost or bookmark cites its URL on the post's page and sends that URL
 a webmention when the post is published, as a reply does.

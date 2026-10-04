@@ -1,5 +1,5 @@
 import MarkdownIt from 'markdown-it';
-import type { MarkdownIt as MarkdownItInstance } from 'markdown-it';
+import type { MarkdownIt as MarkdownItInstance, StateInline, Token } from 'markdown-it';
 import footnote from 'markdown-it-footnote';
 
 import { slugify } from './slug.ts';
@@ -13,11 +13,47 @@ import { slugify } from './slug.ts';
 const markdown: MarkdownItInstance = new MarkdownIt({ html: true })
   .use(footnote)
   .use(headingAnchors)
-  .use(focusableCodeBlocks);
+  .use(focusableCodeBlocks)
+  .use(htmlInlineOffsets);
 
 /** Render a Markdown body to the HTML the site and the feeds serve. */
 export function renderMarkdown(body: string): string {
   return markdown.render(body);
+}
+
+/** A body as the renderer reads it, before it is rendered. */
+export function markdownTokens(body: string): Token[] {
+  return markdown.parse(body, {});
+}
+
+/**
+ * Where an `html_inline` token begins in its inline token's `content`, which
+ * markdown-it records for no inline token. A Micropub client's Markdown has
+ * its raw HTML cleaned in place (TASK-258), and this is how the tag is found
+ * without mistaking the same characters in a code span for it.
+ */
+export function htmlInlineOffset(token: Token): number | undefined {
+  const meta: unknown = token.meta;
+  if (typeof meta !== 'object' || meta === null || !('htmlAt' in meta)) return undefined;
+  return typeof meta.htmlAt === 'number' ? meta.htmlAt : undefined;
+}
+
+/**
+ * Run markdown-it's own `html_inline` rule from a rule placed just before it,
+ * so the position it starts from can be put on the token it pushes.
+ */
+function htmlInlineOffsets(md: MarkdownItInstance): void {
+  const rule: (state: StateInline, silent: boolean) => boolean = (state, silent) => {
+    const rules = state.md.inline.ruler.getRules('');
+    const htmlInline = rules[rules.indexOf(rule) + 1];
+    if (htmlInline === undefined) return false;
+    const start = state.pos;
+    if (!htmlInline(state, silent)) return false;
+    const token = state.tokens.at(-1);
+    if (!silent && token?.type === 'html_inline') token.meta = { htmlAt: start };
+    return true;
+  };
+  md.inline.ruler.before('html_inline', 'geekity_html_inline_offset', rule);
 }
 
 /**
