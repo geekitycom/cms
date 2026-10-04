@@ -12,7 +12,8 @@
   `context` is what the target said about itself when the post was saved or
   synced (TASK-244), only when it said something: its `name` and `author`,
   printed through autoescaping like a reply's context. With a name, the name
-  is the link; with only an author, "a post" is; with neither, the bare URL.
+  is the link; with only an author, "a post" is; for a URL that is an image,
+  "an image from" its host; with nothing, "a page on" its host.
 
   `context.picture` is the target's picture, copied into the site's uploads
   (TASK-252), absent when there is none or the post hid its previews. A

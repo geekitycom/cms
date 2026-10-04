@@ -6,6 +6,8 @@ import type { Context, Hono } from 'hono';
 import {
   CITATION_PROPERTIES,
   citationText,
+  CITED_ALT_FRONT_MATTER_KEY,
+  citedHost,
   PREVIEW_FRONT_MATTER_KEY,
   previewShown,
 } from '../content/citation.ts';
@@ -119,6 +121,7 @@ import {
   syndicateToOf,
   syndicationTargetsReader,
 } from '../webmention/syndication.ts';
+import { citesAnImage, shownInFull } from '../webmention/cited-picture.ts';
 import type { CitedPicture } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
@@ -426,6 +429,7 @@ async function saveFromForm(
     contact: body['contact'] !== undefined,
     pinned: kind.type === 'post' && body['pinned'] !== undefined,
     previewHidden: kind.type === 'post' && body[PREVIEW_FRONT_MATTER_KEY] !== undefined,
+    citedAlt: kind.type === 'post' ? text(body[CITED_ALT_FRONT_MATTER_KEY]).trim() : '',
     comments: commentSetting(text(body['comments'])),
     enclosure: kind.type === 'post' ? readEnclosureForm(body) : BLANK_ENCLOSURE_FORM,
     photos: kind.type === 'post' ? readPhotoForm(body) : [],
@@ -463,6 +467,7 @@ async function saveFromForm(
       announce: c.var.announce,
       writer: currentUsername(c),
       citedContext: (target) => c.var.replyContexts.describe(target),
+      storedContext: (target) => c.var.replyContexts.read(target),
     },
     { kind, document, form, draft },
   );
@@ -493,6 +498,8 @@ export interface DocumentSite {
   readonly writer: string | undefined;
   /** What a cited page says about itself, which an untitled new post is named after. */
   readonly citedContext: (target: string) => Promise<ReplyContext | undefined>;
+  /** What the file holds for a cited page, without asking it. */
+  readonly storedContext: (target: string) => ReplyContext | undefined;
 }
 
 /** What {@link writeDocument} is asked to write. */
@@ -641,6 +648,17 @@ export async function writeDocument(
   if (undescribed.length > 0 && config.requireAltText) {
     return refused(`This site publishes no image without alt text. ${missingAltText(undescribed)}`);
   }
+  if (
+    !draft &&
+    config.requireAltText &&
+    kind.type === 'post' &&
+    (await citesUndescribedImage(site, document, form))
+  ) {
+    return refused(
+      'This site publishes no image without alt text. Describe the image this post reposts in its alt text field.',
+      'editor-cited-alt',
+    );
+  }
 
   const timezone = readSiteSettings(contentDir).timezone;
 
@@ -787,6 +805,27 @@ export async function writeDocument(
 }
 
 /** What a save says about the images it found with no alt text, naming each. */
+/**
+ * Whether the post shows an image it cites in full with no alt text, its
+ * `cited-alt` and title both empty (TASK-255). A new post asks the
+ * cited page within the save's deadline, as naming it would; an edit reads
+ * only what the file holds, since an edit never fetches during the save.
+ */
+async function citesUndescribedImage(
+  site: DocumentSite,
+  document: Document | undefined,
+  form: EditorForm,
+): Promise<boolean> {
+  if (form.previewHidden || form.citedAlt !== '' || form.title !== '') return false;
+  for (const property of CITATION_PROPERTIES) {
+    const url = form[CITATION_FIELDS[property]];
+    if (url === '' || !shownInFull(property, { kind: 'photo' })) continue;
+    const context = document === undefined ? await site.citedContext(url) : site.storedContext(url);
+    if (context !== undefined && citesAnImage(context)) return true;
+  }
+  return false;
+}
+
 function missingAltText(images: readonly UndescribedImage[]): string {
   const names = images.map((image) => image.name).join(', ');
   const count = images.length === 1 ? '1 image has' : `${String(images.length)} images have`;
@@ -1085,6 +1124,7 @@ function resolveExtra(
     | 'lang'
     | 'pinned'
     | 'previewHidden'
+    | 'citedAlt'
     | 'syndicateTo'
     | 'visibility'
     | 'readStatus'
@@ -1111,6 +1151,8 @@ function resolveExtra(
     // otherwise, so a Micropub post shows it until the author removes it.
     if (form.previewHidden) extra[PREVIEW_FRONT_MATTER_KEY] = false;
     else delete extra[PREVIEW_FRONT_MATTER_KEY];
+    if (form.citedAlt === '') delete extra[CITED_ALT_FRONT_MATTER_KEY];
+    else extra[CITED_ALT_FRONT_MATTER_KEY] = form.citedAlt;
     const resolved = resolveRead(form.readStatus, form.readOf);
     if ('read' in resolved) {
       const { read } = resolved;
@@ -1612,6 +1654,11 @@ export interface EditorForm {
    */
   previewHidden: boolean;
   /**
+   * The alt text of an image the post cites, `cited-alt` (TASK-255). Posts
+   * only; empty for none, when the post's title describes it.
+   */
+  citedAlt: string;
+  /**
    * What the document says about comments: one of {@link COMMENT_SETTINGS}.
    *
    * Three values rather than a checkbox, because there are three answers: the
@@ -1672,6 +1719,7 @@ export function blankForm(
     contact: false,
     pinned: false,
     previewHidden: false,
+    citedAlt: '',
     comments: COMMENT_SETTINGS.site,
     enclosure: BLANK_ENCLOSURE_FORM,
     photos: [],
@@ -1730,6 +1778,10 @@ export function formFor(
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
     pinned: pinnedAt(document) !== undefined,
     previewHidden: document.type === 'post' && !previewShown(document.extra),
+    citedAlt:
+      document.type === 'post' && typeof document.extra[CITED_ALT_FRONT_MATTER_KEY] === 'string'
+        ? document.extra[CITED_ALT_FRONT_MATTER_KEY]
+        : '',
     comments: commentSettingOf(document),
     enclosure: document.type === 'post' ? enclosureForm(document) : BLANK_ENCLOSURE_FORM,
     photos: document.type === 'post' ? photoRows(document) : [],
@@ -1817,7 +1869,7 @@ async function renderEditor(
           photoRows: photoRowViews(form.photos, readAltTexts(c.var.config.contentDir)),
           photoChoices: await photoChoices(c.var.config.contentDir),
           locationFields: LOCATION_FIELDS,
-          citedPreviews: citedPreviews(c, form),
+          ...citedPreviews(c, form),
           readFields: READ_FIELDS,
           readStatuses: READ_STATUSES.map((value) => ({ value, label: READ_STATUS_LABELS[value] })),
           ...(form.readStatus === '' || isReadStatus(form.readStatus)
@@ -1859,11 +1911,15 @@ async function renderEditor(
  * The card the editor shows under each cited URL whose stored context has a
  * picture (TASK-252), by the citing property, with the title its remove
  * control is named after. A URL the file holds nothing for has no card yet.
+ * The card of an image shown in full takes its alt text (TASK-255).
  */
 function citedPreviews(
   c: Context<GeekityEnv>,
   form: EditorForm,
-): Record<string, { name: string; picture: CitedPicture }> {
+): {
+  citedPreviews: Record<string, { name: string; picture: CitedPicture; described: boolean }>;
+  describesCitedImage: boolean;
+} {
   const cited: [string, string][] = [
     ['in-reply-to', form.inReplyTo],
     ...CITATION_PROPERTIES.map((property): [string, string] => [
@@ -1871,17 +1927,25 @@ function citedPreviews(
       form[CITATION_FIELDS[property]],
     ]),
   ];
-  const cards: Record<string, { name: string; picture: CitedPicture }> = {};
+  const cards: Record<string, { name: string; picture: CitedPicture; described: boolean }> = {};
   for (const [property, url] of cited) {
     if (url === '') continue;
     const context = c.var.replyContexts.read(url);
     if (context?.picture === undefined) continue;
+    const image = citesAnImage(context);
     cards[property] = {
-      name: context.name ?? context.author?.name ?? url,
+      name:
+        context.name ??
+        context.author?.name ??
+        `${image ? 'An image from' : 'A page on'} ${citedHost(url)}`,
       picture: context.picture,
+      described: image && shownInFull(property, context.picture),
     };
   }
-  return cards;
+  return {
+    citedPreviews: cards,
+    describesCitedImage: Object.values(cards).some((card) => card.described),
+  };
 }
 
 /**

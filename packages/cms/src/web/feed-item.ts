@@ -1,5 +1,5 @@
 import type { User } from '../admin/accounts.ts';
-import { citationsOf, previewShown } from '../content/citation.ts';
+import { citationsOf, citedHost, citedImageAlt, previewShown } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf } from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
@@ -18,7 +18,7 @@ import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
 import { canonicalLocale, documentLanguage } from './locale.ts';
 import { absoluteUrl, lastModifiedOf } from './negotiate.ts';
-import { shownInFull } from '../webmention/cited-picture.ts';
+import { citesAnImage, shownInFull } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 
 /**
@@ -167,7 +167,8 @@ export interface FeedItem {
  * main image, and revision 8 made the relative URLs in a post's body absolute,
  * and revision 9 opened a read post with its read line and summarised it by
  * that line, and revision 10 opened a post that cites a page with a line
- * naming it and that page's copied picture —
+ * naming it and that page's copied picture, and revision 11 named a page
+ * nothing was read from by its host and a cited image as one —
  * would leave the validator where it was, and a reader polling with
  * `If-None-Match` would be handed a 304 that hides the new bytes.
  *
@@ -175,7 +176,7 @@ export interface FeedItem {
  * never again until the next such change. The comments feeds do not carry it:
  * a comment is not a {@link FeedItem} and its bytes are untouched.
  */
-export const FEED_ITEM_REVISION = 10;
+export const FEED_ITEM_REVISION = 11;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -201,7 +202,7 @@ export interface FeedItemContext {
   altTexts?: AltTextLibrary | undefined;
   /**
    * What is stored about a page a post cites (decision-19), by its URL. A
-   * citation with nothing stored is a line with the bare URL.
+   * citation with nothing stored names the page by its host.
    */
   replyContext?: ((target: string) => ReplyContext | undefined) | undefined;
 }
@@ -301,7 +302,12 @@ function citationLines(
     .map(({ property, url }) => {
       const context = replyContext?.(url);
       const href = escapeXml(url);
-      const name = context?.name ?? (context?.author === undefined ? url : 'a post');
+      const image = context !== undefined && citesAnImage(context);
+      const name =
+        context?.name ??
+        (context?.author !== undefined
+          ? 'a post'
+          : `${image ? 'an image from' : 'a page on'} ${citedHost(url)}`);
       const author = context?.author?.name;
       const credit =
         author !== undefined && !name.toLowerCase().endsWith(` by ${author.toLowerCase()}`)
@@ -312,7 +318,11 @@ function citationLines(
       const line = `<p class="cite-line">${CITATION_VERBS[property] ?? ''} <a href="${href}">${escapeXml(name)}</a>${credit}</p>\n`;
       const picture = context?.picture;
       if (picture === undefined || !previewShown(document.extra)) return line;
-      const alt = shownInFull(property, picture) ? (context?.name ?? '') : '';
+      const alt = !shownInFull(property, picture)
+        ? ''
+        : image
+          ? citedImageAlt(document)
+          : (context?.name ?? '');
       return (
         line +
         `<p><a href="${href}"><img src="${escapeXml(absoluteUrl(picture.src, baseUrl))}"` +

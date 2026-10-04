@@ -93,3 +93,13 @@ A page that names no author keeps its `og:site_name` as `site`, which a citation
 A picture is forgotten with the last entry that names it. Whenever an entry is removed or replaced, and when the site starts serving, every file under `content/uploads/cited/` that no entry names is deleted with its variants, so a copy left by a crash or by an entry removed by hand goes too.
 
 A post can hide the previews of what it cites with `preview: false` in its front matter, which the editor writes; the picture stays in the file, so clearing the box shows it again without a fetch.
+
+## Amendment (2026-10-03, TASK-255)
+
+A cited URL can be an image rather than a page about one: a repost of a bare PNG on a vendor's CDN. The page fetch already reads the response's `Content-Type`, so that is how an image is recognised, with no `HEAD` and no second request inside the one deadline. The fetch takes `image/*` beside HTML, and for an image it reads the headers only and cancels the body. The context is the URL alone, and its picture is the URL the image came from after any redirects, of kind `photo`. The picture is then copied exactly as any other (TASK-252): its own guarded fetch with its own 10-second timeout, held to `uploadMaxBytes` rather than the page limit, its signature checked, its metadata stripped, stored under `content/uploads/cited/`. That copy is the one download of the image's bytes.
+
+An entry with nothing to show but its picture, no name, text, author or site, is kept only with the picture. An image that fails, is not one, or is over the limit leaves no entry, and the next save or start tries again, as a target that could not be read does. At save time (TASK-250) an image has no title to spend the three seconds on, so the save copies it within what is left of them and stores the entry with its picture, or stores nothing and leaves it to the change after the save.
+
+An entry whose picture is a `photo` and which has no name and no author is an image. A citation of one says "an image from" the URL's host, as the link; a citation with nothing stored says "a page on" its host. The bare URL is never the link text, on the page, in a listing or in a feed.
+
+A post describes an image it cites with `cited-alt` in its front matter, which the editor's card for a reposted image writes. Its alt text is `cited-alt`, else the post's title, else empty. With `requireAltText` on, a published save whose repost of an image would be shown in full with neither is refused. A new post asks the image within the save's deadline, as naming it does, and an edit reads only the stored entry.

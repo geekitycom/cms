@@ -160,8 +160,8 @@ describe('a feed item', () => {
     }
   });
 
-  it('is at revision 10, so feeds cached before a post named the page it cites are refetched', () => {
-    assert.equal(FEED_ITEM_REVISION, 10);
+  it('is at revision 11, so feeds cached before a citation named its page by its host are refetched', () => {
+    assert.equal(FEED_ITEM_REVISION, 11);
   });
 
   it('opens a read post with the read line the page prints, and summarises with its words (TASK-233)', () => {

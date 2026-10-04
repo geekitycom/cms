@@ -26,6 +26,9 @@ export const REPLY_CONTEXT_TIMEOUT_MS = 10_000;
  */
 export const REPLY_CONTEXT_MAX_BYTES = 1_000_000;
 
+/** A response that is an image rather than a page about one (TASK-255). */
+const IMAGE_TYPE = /^\s*image\//i;
+
 /** How many words of a target's text a preview keeps. */
 const EXCERPT_WORDS = 40;
 
@@ -110,7 +113,14 @@ export async function fetchReplyContext(
             pattern: /^\s*(text\/html|application\/xhtml\+xml)/i,
             name: 'an HTML page',
           },
+          headersOnly: IMAGE_TYPE,
         });
+
+  // The address is the picture: its bytes are left for the copy, which holds
+  // them to the site's upload limit rather than a page's.
+  if (fetched.ok && IMAGE_TYPE.test(fetched.type)) {
+    return described({ url: target }, { url: fetched.url, kind: 'photo' });
+  }
 
   const root = parseHtml(fetched.ok ? new TextDecoder().decode(fetched.body) : '');
   const entry = fetched.ok && !fetched.truncated ? citedEntry(root, fetched.url) : undefined;

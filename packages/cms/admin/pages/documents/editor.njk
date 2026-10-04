@@ -30,7 +30,8 @@
 
 {# A cited page's stored preview (TASK-252) under the URL that cites it, with
    a checkbox drawn as an X that removes it: checked writes `preview: false`,
-   cleared shows it again, and no script is needed either way. #}
+   cleared shows it again, and no script is needed either way. A reposted
+   image's card also takes its alt text, `cited-alt` (TASK-255). #}
 {% macro citedCard(property) %}
 {% set card = citedPreviews[property] %}
 {% if card %}
@@ -40,6 +41,12 @@
   <input type="checkbox" id="editor-preview-{{ property }}" name="preview" value="hide"{% if form.previewHidden %} checked{% endif %}>
   <label class="admin-cited-remove" for="editor-preview-{{ property }}"><span aria-hidden="true">×</span><span class="admin-visually-hidden">Remove the preview of {{ card.name }}</span></label>
   <p class="admin-cited-removed">Removed. The post shows the plain citation until you select the X again.</p>
+  {%- if card.described %}
+  <label for="editor-cited-alt">Alt text of the reposted image</label>
+  <input id="editor-cited-alt" name="cited-alt" type="text" value="{{ form.citedAlt or form.title }}"{{ invalid('editor-cited-alt', 'editor-cited-alt-hint') }} />
+  {{ problem('editor-cited-alt') }}
+  <p class="admin-hint" id="editor-cited-alt-hint">What the image shows, for readers who cannot see it. It starts as the post’s title.</p>
+  {%- endif %}
 </div>
 {% endif %}
 {% endmacro %}
@@ -353,6 +360,10 @@
               it again on. -#}
           {% if form.previewHidden and not (citedPreviews | length) %}
           <input type="hidden" name="preview" value="hide">
+          {% endif %}
+          {#- And an image's alt text while no card takes it. -#}
+          {% if form.citedAlt and not describesCitedImage %}
+          <input type="hidden" name="cited-alt" value="{{ form.citedAlt }}">
           {% endif %}
         {% endcall %}
 

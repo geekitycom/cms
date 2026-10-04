@@ -143,7 +143,9 @@ export function createReplyContextService(
       logger.warn(`Could not read ${target} for a citation's context: ${fetched.reason}`);
       return;
     }
-    await write(target, await withPicture(fetched.context, fetched.picture));
+    const context = await withPicture(fetched.context, fetched.picture);
+    if (showsNothing(context)) return;
+    await write(target, context);
     await sweep();
   }
 
@@ -211,11 +213,26 @@ export function createReplyContextService(
     async describe(target) {
       const held = readAll()[target];
       if (held !== undefined) return held;
+      const deadline = Date.now() + CITED_SLUG_TIMEOUT_MS;
       const fetched = await fetchReplyContext(target, { lookup, timeoutMs: CITED_SLUG_TIMEOUT_MS });
       if (!fetched.ok) return undefined;
+      const { picture } = fetched;
+      if (showsNothing(fetched.context)) {
+        // An image has no title to spend the deadline on, so it goes on the
+        // copy, which lets the save see what it cites (TASK-255).
+        const timeoutMs = deadline - Date.now();
+        const copied =
+          picture === undefined || timeoutMs <= 0
+            ? undefined
+            : await copyCitedPicture(picture, { lookup, config, timeoutMs });
+        if (copied === undefined) return undefined;
+        const context = { ...fetched.context, picture: copied };
+        await write(target, context);
+        describedForSave.add(target);
+        return context;
+      }
       await write(target, fetched.context);
       describedForSave.add(target);
-      const { picture } = fetched;
       if (picture !== undefined) enqueue(() => attachPicture(target, picture));
       return fetched.context;
     },
@@ -228,6 +245,21 @@ export function createReplyContextService(
       return chain.then(ignore);
     },
   };
+}
+
+/**
+ * Whether a context has nothing to show but its picture, as a cited image
+ * has: kept only with the picture, so one that could not be copied leaves no
+ * entry and is tried again (TASK-255).
+ */
+function showsNothing(context: ReplyContext): boolean {
+  return (
+    context.picture === undefined &&
+    context.name === undefined &&
+    context.text === undefined &&
+    context.author === undefined &&
+    context.site === undefined
+  );
 }
 
 function targetsOf(document: Document | undefined): string[] {

@@ -612,21 +612,20 @@ function photoContexts(
 
 /**
  * A cited page's picture as a theme draws it (TASK-252): `full` for a repost
- * of a photo, which is drawn in full with the page's name as its alt text,
- * else a thumbnail beside the title, whose alt text is empty because the title
+ * of a photo, which is drawn in full with `alt` as its alt text, else a
+ * thumbnail beside the title, whose alt text is empty because the title
  * beside it says what it is. `html` is the `img.u-photo`, responsive when the
  * copy has variants.
  */
 export function citedPictureContext(
   picture: CitedPicture,
   property: string,
-  name: string | undefined,
+  alt: string,
   images: ImageConfig,
 ): CitedPicture & { full: boolean; html: string } {
   const full = shownInFull(property, picture);
-  const alt = full ? (name ?? '') : '';
   const tag =
-    `<img class="u-photo" src="${escapeAttribute(picture.src)}" alt="${escapeAttribute(alt)}"` +
+    `<img class="u-photo" src="${escapeAttribute(picture.src)}" alt="${escapeAttribute(full ? alt : '')}"` +
     ` width="${String(picture.width)}" height="${String(picture.height)}" loading="lazy" decoding="async">`;
   return { ...picture, full, html: siteImageMarkup(images, tag) };
 }

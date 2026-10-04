@@ -28,6 +28,12 @@ export interface FetchPublicOptions {
   readonly accept: string;
   /** The content types taken, and what to call anything else when refusing it. */
   readonly contentType: { readonly pattern: RegExp; readonly name: string };
+  /**
+   * Content types answered from the headers alone, taken as well as
+   * `contentType`: the body is never read, so the answer's body is empty and
+   * marked truncated.
+   */
+  readonly headersOnly?: RegExp;
 }
 
 /** What one fetch came to. */
@@ -81,6 +87,11 @@ export async function fetchPublic(
       }
 
       const type = response.headers.get('content-type') ?? '';
+      const link = response.headers.get('link');
+      if (options.headersOnly?.test(type) === true) {
+        await response.body?.cancel();
+        return { ok: true, url: url.href, type, link, body: new Uint8Array(), truncated: true };
+      }
       if (!options.contentType.pattern.test(type)) {
         await response.body?.cancel();
         return refuse(`not ${options.contentType.name}`);
@@ -89,7 +100,7 @@ export async function fetchPublic(
       const read = await readWithin(response, options.maxBytes, options.overflow ?? 'refuse');
       if (read === undefined) return refuse(`larger than ${String(options.maxBytes)} bytes`);
 
-      return { ok: true, url: url.href, type, link: response.headers.get('link'), ...read };
+      return { ok: true, url: url.href, type, link, ...read };
     }
   } catch (thrown) {
     return refuse(thrown instanceof Error ? thrown.message : String(thrown));

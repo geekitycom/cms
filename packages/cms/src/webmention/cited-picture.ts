@@ -12,6 +12,7 @@ import type { ImageConfig } from '../images/variants.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
 import { fetchPublic } from './fetch-public.ts';
 import type { HostLookup } from './public-address.ts';
+import type { ReplyContext } from './reply-context.ts';
 
 /**
  * A cited page's picture, copied into the site (TASK-252, decision-19).
@@ -162,8 +163,19 @@ export async function sweepCitedPictures(
  * does, since the photo is what was reposted. Anything else shows a thumbnail
  * beside the citation's title.
  */
-export function shownInFull(property: string, picture: CitedPicture): boolean {
+export function shownInFull(property: string, picture: Pick<CitedPicture, 'kind'>): boolean {
   return property === 'repost-of' && picture.kind === 'photo';
+}
+
+/**
+ * Whether the cited URL is itself an image (TASK-255): its context is a photo
+ * and says nothing else about it, so a citation calls it an image from its
+ * host and the citing post describes it.
+ */
+export function citesAnImage(context: ReplyContext): boolean {
+  return (
+    context.picture?.kind === 'photo' && context.name === undefined && context.author === undefined
+  );
 }
 
 /** A picture as the file holds it, or `undefined` when the entry is not one. */

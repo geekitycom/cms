@@ -5,7 +5,7 @@ import type { Environment } from 'nunjucks';
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { citationsOf, previewShown } from '../content/citation.ts';
+import { citationsOf, citedImageAlt, previewShown } from '../content/citation.ts';
 import type { Citation } from '../content/citation.ts';
 import type { SharedLocation } from '../content/location.ts';
 import type { ImageLoading } from '../images/markup.ts';
@@ -52,6 +52,7 @@ import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
 import { createTemplateEnvironment, useThemeDirs } from './templates.ts';
 import { createThemeSource, findThemeFile } from './themes.ts';
 import type { ThemeColors, ThemeSource } from './themes.ts';
+import { citesAnImage } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
@@ -518,11 +519,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       const cited = options.replyContext?.(target);
       if (cited === undefined) return undefined;
       const { picture, ...rest } = cited;
+      const image = citesAnImage(cited);
+      const alt = image ? citedImageAlt(document) : (rest.name ?? '');
       return {
         ...replyContextFor(rest),
+        ...(image ? { image } : {}),
         ...(picture === undefined || !shown
           ? {}
-          : { picture: citedPictureContext(picture, property, rest.name, config) }),
+          : { picture: citedPictureContext(picture, property, alt, config) }),
       };
     };
     const target = replyTarget(document);

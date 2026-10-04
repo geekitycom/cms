@@ -202,11 +202,14 @@ describe('a reply’s preview of the post it answers, in the default theme', () 
     assert.doesNotMatch(citation, /p-author/);
   });
 
-  it('cites an unreachable target by its URL alone', async () => {
+  it('cites an unreachable target by its host, never its whole URL', async () => {
     const citation = cite(await get(cms, '/2026/09/down/'));
 
     assert.ok(citation !== undefined);
-    assert.match(citation, new RegExp(`<a class="u-url" href="${DOWN}">${DOWN}</a>`));
+    assert.match(
+      citation,
+      new RegExp(`<a class="u-url" href="${DOWN}">a page on down\\.example</a>`),
+    );
     assert.doesNotMatch(citation, /p-name|p-author|p-content|dt-published/);
   });
 

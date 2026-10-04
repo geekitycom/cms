@@ -427,7 +427,9 @@ a `p-author h-card`, when the target was read when the post was saved
 provider's known oEmbed endpoint, asked before its page, which is read only
 when the endpoint names nothing (TASK-251, TASK-253). Any other target's oEmbed
 title comes from the endpoint its page links. A title that is only a site suffix such as "- YouTube" is
-no title. With only an author it says "a post", and with neither the bare URL. Its kicker
+no title. With only an author it says "a post", and with neither "a page on"
+the target's host, never the bare URL, which can run to hundreds of
+characters: "Bookmarked a page on example.com" (TASK-255). Its kicker
 and its hidden `h1` say Repost, Like or Bookmark. It is placed as the reply
 context is: at the top of an untitled post, after the header of a titled one.
 A listing cites each entry's from the same partial, by the same rule.
@@ -466,7 +468,20 @@ picture that could not be copied, was bigger than the site's upload limit or
 was never named leaves the citation as it was, with no picture. A post whose
 front matter says `preview: false`, which the editor's remove control writes,
 prints the plain citation, and so do its listing entry and its feed items.
-There is never an iframe or a script from the cited page. The feeds open each
+There is never an iframe or a script from the cited page.
+
+**A cited URL that is itself an image** (TASK-255), one that answers with an
+`image/*` type rather than a page, is copied as its own picture of kind
+`photo` and has no name, so `context.image` is true and the line says "an
+image from" its host as the link: "Reposted an image from edu.casio.com". A
+repost shows it in full like a reposted GIF, a like or a bookmark as a
+thumbnail beside "Liked an image from edu.casio.com", and a post that hid its
+preview still says it reposted an image. Its alt text is the post's
+`cited-alt`, which the editor's card writes, else the post's title, else
+empty. An image that could not be copied, or was bigger than the site's
+upload limit, keeps no context, so its citation says "a page on" its host.
+
+The feeds open each
 citing post's HTML with the same citation as a `p.cite-line`, the picture
 after it with an absolute `src`.
 

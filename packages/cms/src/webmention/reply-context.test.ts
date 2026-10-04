@@ -1261,3 +1261,56 @@ function untilAborted(request: Request): Promise<Response> {
     });
   });
 }
+
+describe('fetchReplyContext and a cited URL that is an image', () => {
+  const IMAGE = 'https://plain.example/photos/calculator.png?w=1200&sig=abc';
+
+  it('answers with the image as a photo picture and no name, without reading its bytes', async () => {
+    let read = false;
+    answer = () =>
+      new Response(
+        new ReadableStream(
+          {
+            pull(controller) {
+              read = true;
+              controller.enqueue(new Uint8Array(1024));
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+        { headers: { 'content-type': 'image/png' } },
+      );
+
+    const fetched = await fetchReplyContext(IMAGE, { lookup });
+
+    assert.deepEqual(fetched, {
+      ok: true,
+      context: { url: IMAGE },
+      picture: { url: IMAGE, kind: 'photo' },
+    });
+    assert.equal(read, false);
+    assert.deepEqual(requested, [IMAGE]);
+  });
+
+  it('names the picture by the address the image came from after a redirect', async () => {
+    const moved = 'https://plain.example/cdn/calculator.png';
+    answer = (request) =>
+      request.url === IMAGE
+        ? new Response(null, { status: 302, headers: { location: moved } })
+        : new Response(new Uint8Array(8), { headers: { 'content-type': 'image/jpeg' } });
+
+    const fetched = await fetchReplyContext(IMAGE, { lookup });
+
+    assert.ok(fetched.ok);
+    assert.deepEqual(fetched.context, { url: IMAGE });
+    assert.deepEqual(fetched.picture, { url: moved, kind: 'photo' });
+  });
+
+  it('still refuses a type that is neither a page nor an image', async () => {
+    answer = () => new Response('%PDF', { headers: { 'content-type': 'application/pdf' } });
+
+    const fetched = await fetchReplyContext(IMAGE, { lookup });
+
+    assert.equal(fetched.ok, false);
+  });
+});

@@ -254,10 +254,13 @@ describe('a like, a repost or a bookmark names what it cites', () => {
       assert.doesNotMatch(citation, /- Video/);
     });
 
-    it(`prints the bare URL only when no title was found, in the ${where}`, async () => {
+    it(`names the host, never the bare URL, when no title was found, in the ${where}`, async () => {
       const citation = await read('bookmarked-down', 'bookmark-of');
 
-      assert.match(citation, new RegExp(`Bookmarked <a class="u-url" href="${DOWN}">${DOWN}</a>`));
+      assert.match(
+        citation,
+        new RegExp(`Bookmarked <a class="u-url" href="${DOWN}">a page on down\\.example</a>`),
+      );
       assert.doesNotMatch(citation, /p-name|p-author/);
     });
   }
