@@ -67,7 +67,6 @@ const SHARED_INBOX_AUTHOR_STATUS_URL = `${REMOTE_ORIGIN}/@dora/2`;
 /** A page on the remote host that is no ActivityPub object. */
 const PLAIN_PAGE = `${REMOTE_ORIGIN}/blog/a-page/`;
 
-/** A page the stubbed host answers only once a test opens {@link slowPage}. */
 const SLOW_PAGE = `${REMOTE_ORIGIN}/blog/slow-page/`;
 
 /** One POST the site made while delivering. */
@@ -411,7 +410,6 @@ function delivered(type: string): Delivery[] {
   return deliveries.filter((delivery) => delivery.body['type'] === type);
 }
 
-/** The `content` of a delivered activity's object. */
 function contentOf(delivery: Delivery | undefined): string {
   assert.ok(delivery !== undefined, `expected a delivery, saw ${JSON.stringify(deliveries)}`);
   return String((delivery.body['object'] as Record<string, unknown>)['content']);

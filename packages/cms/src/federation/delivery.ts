@@ -185,9 +185,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     });
   }
 
-  // In memory, so a post sent before this process started is compared
-  // against its object rendered with the context the new one replaced.
-  const lastSent = new Map<string, string>();
+  const sentThisProcess = new Map<string, string>();
 
   /**
    * Write `activitypub.published` into the post's file, and answer with the
@@ -293,7 +291,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     shape: Shape,
   ): Promise<DeliveryReport> {
     if (shape.kind === 'object') {
-      return await sendObject(
+      return await sendAndRecordObject(
         context,
         postCreateActivity(context, document, shape.replyTo),
         document,
@@ -332,7 +330,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     shape: Shape & { kind: 'object' },
     revision?: string,
   ): Promise<DeliveryReport> {
-    return await sendObject(
+    return await sendAndRecordObject(
       context,
       postUpdateActivity(context, document, revision, shape.replyTo),
       document,
@@ -340,8 +338,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     );
   }
 
-  /** Send a `Create` or `Update` carrying the post's object, and remember what it carried. */
-  async function sendObject(
+  function contentRevision(hash: string): string {
+    return hash.slice(0, 16);
+  }
+
+  async function sendAndRecordObject(
     context: Context<FederationContextData>,
     activity: Activity,
     document: Document,
@@ -349,7 +350,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   ): Promise<DeliveryReport> {
     const report = await send(context, activity, document, citedAuthor(shape.replyTo?.author));
     const object = await activity.getObject();
-    if (object !== null) lastSent.set(shape.id, await fingerprint(object));
+    if (object !== null) sentThisProcess.set(shape.id, await fingerprint(object));
     return report;
   }
 
@@ -587,16 +588,13 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
 
         for (const document of citing) {
           const shape = await shapeOf(context, document);
-          // A like or a repost of a fediverse object has no content to update.
           if (shape.kind !== 'object') continue;
           const current = await fingerprint(postObject(context, document, shape.replyTo));
           const sent =
-            lastSent.get(shape.id) ??
+            sentThisProcess.get(shape.id) ??
             (await fingerprint(postObject(before, document, shape.replyTo)));
           if (current === sent) continue;
-          // Named by what it carries, so the id differs from the edit's
-          // Update that went out under the post's own hash.
-          await revise(context, document, shape, current.slice(0, 16));
+          await revise(context, document, shape, contentRevision(current));
         }
       });
     },
@@ -641,13 +639,11 @@ function citedAuthor(author: Actor | undefined): DeliveryTarget[] {
   ];
 }
 
-/** A post's object as a peer reads it, hashed. */
 async function fingerprint(object: ActivityObject): Promise<string> {
   const json = JSON.stringify(await object.toJsonLd());
   return createHash('sha256').update(json).digest('hex');
 }
 
-/** Whether a post replies to, likes, reposts or bookmarks this URL. */
 function cites(document: Document, target: string): boolean {
   return (
     replyTarget(document) === target ||
