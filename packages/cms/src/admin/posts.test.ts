@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 import matter from 'gray-matter';
 
 import { browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import { assertInOrder, titleCell } from './__testing__/markup.ts';
 import { statuses } from './__testing__/statuses.ts';
 import { readSiteSettings, writeSiteJson } from './settings.ts';
 import type { Browser } from './__testing__/harness.ts';
@@ -198,9 +199,9 @@ describe('the posts listing', () => {
 
     const titles = async (query: string): Promise<string[]> => {
       const html = await (await agent.get(`/admin/posts${query}`)).text();
-      return [
-        ...html.matchAll(/<td><a\b[^>]*href="\/admin\/posts\/[^"]+">([^<]+)<\/a><\/td>/g),
-      ].map((match) => match[1] ?? '');
+      return [...html.matchAll(/<td>\s*<a\b[^>]*href="\/admin\/posts\/[^"]+">([^<]+)<\/a>/g)].map(
+        (match) => match[1] ?? '',
+      );
     };
 
     assert.deepEqual(await titles(''), ['Out in the world', 'Still cooking'], 'all, minus the bin');
@@ -241,6 +242,32 @@ describe('the posts listing', () => {
     const trashed = await (await agent.get('/admin/posts?status=trash')).text();
     assert.ok(!/value="trash"/.test(trashed), 'and nothing there can be binned twice');
   });
+
+  it('draws Edit, the bin action and View under the title, with no Actions column (TASK-276 AC #2, #3)', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+      { file: '_trash/posts/2026-01-01-old.md', title: 'Thrown away', permalink: '/old/' },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const live = await (await agent.get('/admin/posts')).text();
+    assert.doesNotMatch(live, />Actions<\/th>/);
+    assertInOrder(titleCell(live, 'Out in the world'), [
+      /<a\b[^>]*href="\/admin\/posts\/published">Out in the world<\/a>/,
+      /<a\b[^>]*href="\/admin\/posts\/published">Edit<\/a>/,
+      'name="action" value="trash">Move to trash<',
+      /<a\b[^>]*href="\/2026\/01\/published\/">View<\/a>/,
+    ]);
+
+    const trashed = await (await agent.get('/admin/posts?status=trash')).text();
+    assert.match(titleCell(trashed, 'Thrown away'), /name="action" value="restore">Restore</);
+  });
 });
 
 describe('a scheduled post in the admin', () => {
@@ -275,9 +302,9 @@ describe('a scheduled post in the admin', () => {
 
     const titles = async (query: string): Promise<string[]> => {
       const html = await (await agent.get(`/admin/posts${query}`)).text();
-      return [
-        ...html.matchAll(/<td><a\b[^>]*href="\/admin\/posts\/[^"]+">([^<]+)<\/a><\/td>/g),
-      ].map((match) => match[1] ?? '');
+      return [...html.matchAll(/<td>\s*<a\b[^>]*href="\/admin\/posts\/[^"]+">([^<]+)<\/a>/g)].map(
+        (match) => match[1] ?? '',
+      );
     };
 
     const all = await (await agent.get('/admin/posts')).text();

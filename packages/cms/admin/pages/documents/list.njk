@@ -40,13 +40,29 @@
             <th scope="col">Updated</th>
           {% endif %}
           <th scope="col">Status</th>
-          <th scope="col">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for document in documents %}
-          <tr>
-            <td><a class="link link-hover font-medium" href="{{ document.editUrl }}">{{ document.title }}</a>{% if document.role %} &mdash; {{ document.role }}{% endif %}</td>
+          <tr class="group *:align-top">
+            <td>
+              <a class="link link-hover font-medium" href="{{ document.editUrl }}">{{ document.title }}</a>{% if document.role %} &mdash; {{ document.role }}{% endif %}
+              <div class="-ms-2 mt-1 flex items-center gap-1 whitespace-nowrap transition-opacity lg:[@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+                {{ buttonLink('Edit', document.editUrl, style='ghost', size='xs') }}
+                <form method="post" action="{{ document.editUrl }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                  <input type="hidden" name="return" value="{{ returnUrl }}" />
+                  {% if document.trashed %}
+                    {{ button('Restore', type='submit', name='action', value='restore', style='ghost', size='xs') }}
+                  {% else %}
+                    {{ button('Move to trash', type='submit', name='action', value='trash', style='ghost', size='xs') }}
+                  {% endif %}
+                </form>
+                {% if document.viewUrl %}
+                  {{ buttonLink('View', document.viewUrl, style='ghost', size='xs') }}
+                {% endif %}
+              </div>
+            </td>
             <td class="whitespace-nowrap">{{ document.author }}</td>
             {% if kind.tagged %}
               <td>{{ document.tags }}</td>
@@ -71,23 +87,6 @@
               {% else %}
                 {{ status('published', 'Published') }}
               {% endif %}
-            </td>
-            <td>
-              <div class="flex items-center gap-1 whitespace-nowrap">
-                {{ buttonLink('Edit', document.editUrl, style='ghost', size='xs') }}
-                <form method="post" action="{{ document.editUrl }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-                  <input type="hidden" name="return" value="{{ returnUrl }}" />
-                  {% if document.trashed %}
-                    {{ button('Restore', type='submit', name='action', value='restore', style='ghost', size='xs') }}
-                  {% else %}
-                    {{ button('Move to trash', type='submit', name='action', value='trash', style='ghost', size='xs') }}
-                  {% endif %}
-                </form>
-                {% if document.viewUrl %}
-                  {{ buttonLink('View', document.viewUrl, style='ghost', size='xs') }}
-                {% endif %}
-              </div>
             </td>
           </tr>
         {% endfor %}

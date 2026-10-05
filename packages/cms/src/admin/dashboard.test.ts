@@ -354,11 +354,14 @@ describe('the dashboard', async () => {
     assert.deepEqual(rowTexts(empty), [], 'and draws no empty table');
   });
 
-  it('draws Recent posts as a card around its table', () => {
+  it('draws Recent posts as a card around its table, and no second surface inside it (TASK-276 AC #1)', () => {
     const card =
       /<div class="card bg-base-100 shadow-sm">\s*<div class="card-body">\s*<h2 class="card-title">Recent posts<\/h2>([\s\S]*?)<\/div>\s*<\/div>\s*<\/main>/;
 
-    assert.match(card.exec(recent)?.[1] ?? '', /<table class="table table-sm">/);
+    assert.match(
+      card.exec(recent)?.[1] ?? '',
+      /<div class="max-w-full overflow-x-auto contain-inline-size">\s*<table class="table table-sm">/,
+    );
     assert.match(card.exec(empty)?.[1] ?? '', /Nothing written yet/);
   });
 

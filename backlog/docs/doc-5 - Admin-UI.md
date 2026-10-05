@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 05:47'
+updated_date: '2026-10-05 09:59'
 ---
 # Admin UI
 
@@ -117,7 +117,7 @@ macros; it does not spell out component markup of its own.
 | `card.njk` | `card`, `cardActions` | a `card` on base-100 with an optional `card-title`; the `card-actions` row |
 | `stat.njk` | `stats`, `stat` | `stats` around its body; one `stat` with title, value and description |
 | `badge.njk` | `badge`, `status` | `<span class="badge">`; `status` is the badge for the state a row is in, coloured from one map |
-| `table.njk` | `table` | a `table` with a screen-reader caption, wrapped to scroll sideways, the wrapper's width contained so a wide table never widens the card or the page around it |
+| `table.njk` | `table` | a `table` with a screen-reader caption, wrapped to scroll sideways, the wrapper's width contained so a wide table never widens the card or the page around it; the wrapper is the table's base-100 surface (a card's rounding and shadow), and `inCard` leaves the surface off for a table already inside a card |
 | `copy.njk` | `copyField` | a readonly box joined to a Copy button, the button `hidden` until `static/copy.js` finds the clipboard |
 | `tabs.njk` | `tabs` | a labelled `<nav class="tabs">` of links, the current one marked |
 | `pagination.njk` | `pagination` | newer, the page you are on and older, joined as one `join` group |
@@ -184,9 +184,26 @@ What the screens make of the library:
   `{ label, url, current, count }`) through `tabs`, and their page links
   (`page`, `pages`, `previousUrl`, `nextUrl`) through `pagination`. A row's
   actions are one line of small ghost buttons, Edit, then what can be done,
-  then View; Add new above the table is the one primary button. Syndication's
+  then View; Add new above the table is the one primary button. Every table
+  sits on its own base-100 surface, so the rows never lie on the page's
+  base-200; a table inside a card (Recent posts, Archive redirects, What the
+  index holds, WordPress paths, an actor's followers) passes `inCard=true`, and
+  a test that reads the templates holds each `table` call inside a `card` call
+  to saying so. Syndication's
   entries are forms, so its table lists them, offered or ignored, and a card
   per entry edits it.
+- **Posts and Pages put a row's actions under its title.** There is no Actions
+  column: the first cell holds the title link (and a page's role), then the
+  row's Edit, Move to trash or Restore, and View on one line under it, so the
+  action is beside the thing it acts on and Tab reaches a row's actions right
+  after its title. On a wide screen with a pointer that hovers they are
+  transparent (`opacity-0`) until the row is hovered or holds focus; below
+  `lg`, and on a device without hover, they always show. They are never `invisible` or
+  `hidden`, which would take them out of the Tab order and away from a screen
+  reader browsing the table, and the media query that hides them is the one
+  Tailwind's `group-hover` needs, so wherever they are hidden a hover can bring
+  them back. The row's cells align to the top, so the date and status sit on
+  the title's line.
 - **A record that is not a row is a card.** Comments and Messages draw one
   card per comment or message: the author line (name, site or address, and the
   state as a `status` badge), the where line (when, on or from what, the

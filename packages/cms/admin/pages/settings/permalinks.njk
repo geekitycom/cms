@@ -26,7 +26,7 @@
      and this page is where the URLs they are about are decided. #}
   {% call card(title='Archive redirects') %}
     {% if taxonomyRedirects.length %}
-      {% call table('Archive redirects') %}
+      {% call table('Archive redirects', inCard=true) %}
         <thead>
           <tr><th scope="col">Taxonomy</th><th scope="col">Was</th><th scope="col">Is now</th></tr>
         </thead>

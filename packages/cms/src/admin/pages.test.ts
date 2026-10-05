@@ -4,6 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import { assertInOrder, titleCell } from './__testing__/markup.ts';
 import { statuses } from './__testing__/statuses.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { saveUrlOf } from './__testing__/editor-form.ts';
@@ -139,6 +140,24 @@ describe('the pages listing', () => {
     assert.ok(!/<th scope="col">Date<\/th>/.test(html), 'and no publish date');
   });
 
+  it('draws Edit, the bin action and View under the title, with no Actions column (TASK-276 AC #2, #3)', async () => {
+    const cms = await box.site({
+      contentDir: await seeded([
+        { file: 'pages/about.md', title: 'About this site', permalink: '/about/' },
+      ]),
+    });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/pages')).text();
+    assert.doesNotMatch(html, />Actions<\/th>/);
+    assertInOrder(titleCell(html, 'About this site'), [
+      /<a\b[^>]*href="\/admin\/pages\/about">About this site<\/a>/,
+      /<a\b[^>]*href="\/admin\/pages\/about">Edit<\/a>/,
+      'name="action" value="trash">Move to trash<',
+      /<a\b[^>]*href="\/about\/">View<\/a>/,
+    ]);
+  });
+
   it('marks the homepage and the posts page, the way WordPress does (AC #4)', async () => {
     const contentDir = await seeded([
       { file: 'pages/welcome.md', title: 'Welcome', permalink: '/welcome/' },
@@ -156,7 +175,7 @@ describe('the pages listing', () => {
     const agent = await signedIn(cms);
 
     const rows = (await (await agent.get('/admin/pages')).text())
-      .split('<tr>')
+      .split(/<tr\b/)
       .filter((row) => row.includes('/admin/pages/'));
 
     const rowFor = (title: string): string =>
@@ -446,7 +465,7 @@ describe('the page trash', () => {
     // filter is what is under test, not the order the rows come back in.
     const titles = async (query: string): Promise<string[]> => {
       const html = await (await agent.get(`/admin/pages${query}`)).text();
-      return [...html.matchAll(/<td><a\b[^>]*href="\/admin\/pages\/[^"]+">([^<]+)<\/a><\/td>/g)]
+      return [...html.matchAll(/<td>\s*<a\b[^>]*href="\/admin\/pages\/[^"]+">([^<]+)<\/a>/g)]
         .map((match) => match[1] ?? '')
         .sort();
     };

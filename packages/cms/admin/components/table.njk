@@ -1,10 +1,10 @@
-{# A table that scrolls sideways inside its own box instead of widening the
-   page.
+{# A table on a surface of its own, scrolling sideways inside it instead of
+   widening the page.
 
    `{% call table(caption, …) %}<thead>…</thead><tbody>…</tbody>{% endcall %}`
    emits
 
-     <div class="max-w-full overflow-x-auto contain-inline-size">
+     <div class="max-w-full overflow-x-auto contain-inline-size rounded-box bg-base-100 p-2 shadow-sm">
        <table class="table table-sm">
          <caption class="sr-only">caption</caption>
          body
@@ -22,13 +22,14 @@
      zebra    true stripes the rows
      pinRows  true keeps the head and foot in view as the rows scroll
      pinCols  true keeps the `th` cells of each row in view
+     inCard   true leaves off the surface, for a table already in a card's body
 
    A size outside its set is a render error. #}
 
 {% set SIZES = { xs: 'table-xs', sm: 'table-sm', md: 'table-md', lg: 'table-lg', xl: 'table-xl' } %}
 
-{% macro table(caption, size='sm', zebra=false, pinRows=false, pinCols=false) -%}
-<div class="max-w-full overflow-x-auto contain-inline-size">
+{% macro table(caption, size='sm', zebra=false, pinRows=false, pinCols=false, inCard=false) -%}
+<div class="max-w-full overflow-x-auto contain-inline-size{% if not inCard %} rounded-box bg-base-100 p-2 shadow-sm {%- endif %}">
   <table class="table{{ SIZES | modifier(size) }}{% if zebra %} table-zebra {%- endif %}{% if pinRows %} table-pin-rows {%- endif %}{% if pinCols %} table-pin-cols {%- endif %}">
     <caption class="sr-only">{{ caption }}</caption>
     {{ caller() }}

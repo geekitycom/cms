@@ -234,14 +234,21 @@ describe('status', () => {
 });
 
 describe('table', () => {
-  it('scrolls sideways inside its wrapper and opens with its caption', () => {
+  it('scrolls sideways inside a base-100 surface of its own and opens with its caption', () => {
     assert.equal(
       render(
         'table',
         'table',
         `{% call table('Posts', zebra=true, pinRows=true) %}<thead><tr><th scope="col">Title</th></tr></thead>{% endcall %}`,
       ),
-      '<div class="max-w-full overflow-x-auto contain-inline-size"><table class="table table-sm table-zebra table-pin-rows"><caption class="sr-only">Posts</caption><thead><tr><th scope="col">Title</th></tr></thead></table></div>',
+      '<div class="max-w-full overflow-x-auto contain-inline-size rounded-box bg-base-100 p-2 shadow-sm"><table class="table table-sm table-zebra table-pin-rows"><caption class="sr-only">Posts</caption><thead><tr><th scope="col">Title</th></tr></thead></table></div>',
+    );
+  });
+
+  it('draws no second surface for a table already in a card', () => {
+    assert.equal(
+      render('table', 'table', `{% call table('Recent posts', inCard=true) %}{% endcall %}`),
+      '<div class="max-w-full overflow-x-auto contain-inline-size"><table class="table table-sm"><caption class="sr-only">Recent posts</caption></table></div>',
     );
   });
 });

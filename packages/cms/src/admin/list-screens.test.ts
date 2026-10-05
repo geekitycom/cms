@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from './__testing__/harness.ts';
 import { listScreens } from './__testing__/list-screens.ts';
 import type { ListScreen } from './__testing__/list-screens.ts';
 import { classesOutsideTheBar, pagination, screenOf, tabs, text } from './__testing__/markup.ts';
+import { PACKAGED_ADMIN_DIR } from './templates.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -59,11 +62,31 @@ describe('the list screens', async () => {
         assert.ok(opened.length > 0, 'the screen has a table');
         const drawn = [
           ...page.matchAll(
-            /<div class="max-w-full overflow-x-auto contain-inline-size">\s*<table class="table table-sm">\s*<caption class="sr-only">([^<]+)<\/caption>/g,
+            /<div class="max-w-full overflow-x-auto contain-inline-size(?: rounded-box bg-base-100 p-2 shadow-sm)?">\s*<table class="table table-sm">\s*<caption class="sr-only">([^<]+)<\/caption>/g,
           ),
         ];
         assert.equal(drawn.length, opened.length, 'every table is the macro’s');
         for (const [, caption] of drawn) assert.notEqual(caption?.trim(), '');
+      });
+
+      it('draws every table on a base-100 surface, or in a card that is one (TASK-276 AC #1)', () => {
+        const wrappers = [
+          ...screenOf(served[screen]).matchAll(
+            /<div class="(max-w-full overflow-x-auto contain-inline-size[^"]*)">\s*<table\b/g,
+          ),
+        ].map(([, classes]) => classes);
+        const inCards = screen === 'followers' ? 1 : 0;
+        assert.deepEqual(wrappers, [
+          ...Array.from(
+            { length: inCards },
+            () => 'max-w-full overflow-x-auto contain-inline-size',
+          ),
+          ...Array.from(
+            { length: wrappers.length - inCards },
+            () =>
+              'max-w-full overflow-x-auto contain-inline-size rounded-box bg-base-100 p-2 shadow-sm',
+          ),
+        ]);
       });
 
       it('carries no admin-* class outside the bar (AC #4)', () => {
@@ -159,4 +182,52 @@ describe('the list screens', async () => {
       assert.deepEqual(badges(served[screen as ListScreen]), wanted, screen);
     }
   });
+});
+
+async function tableCalls(): Promise<
+  { template: string; inCard: boolean; passesInCard: boolean }[]
+> {
+  const templates = (await readdir(PACKAGED_ADMIN_DIR, { recursive: true }))
+    .filter((file) => file.endsWith('.njk'))
+    .sort();
+  const calls: { template: string; inCard: boolean; passesInCard: boolean }[] = [];
+  for (const template of templates) {
+    const source = (await readFile(path.join(PACKAGED_ADMIN_DIR, template), 'utf8')).replaceAll(
+      /\{#[\s\S]*?#\}/g,
+      '',
+    );
+    const open: string[] = [];
+    for (const [tag, name, args] of source.matchAll(
+      /\{%-?\s*(?:call\s+([\w.]+)\(([\s\S]*?)-?%\}|endcall\s*-?%\})/g,
+    )) {
+      if (name === undefined) {
+        assert.ok(open.pop() !== undefined, `${template}: ${tag} closes nothing`);
+        continue;
+      }
+      if (name === 'table') {
+        calls.push({
+          template,
+          inCard: open.includes('card'),
+          passesInCard: /\binCard=true\b/.test(args ?? ''),
+        });
+      }
+      open.push(name);
+    }
+  }
+  return calls;
+}
+
+describe('a table inside a card', async () => {
+  const calls = await tableCalls();
+
+  it('is found by reading the templates', () => {
+    assert.ok(calls.filter(({ inCard }) => inCard).length >= 5);
+    assert.ok(calls.filter(({ inCard }) => !inCard).length >= 10);
+  });
+
+  for (const { template, inCard, passesInCard } of calls) {
+    it(`in ${template} ${inCard ? 'says inCard, so it is not wrapped twice' : 'draws its own surface'} (TASK-276 AC #1)`, () => {
+      assert.equal(passesInCard, inCard);
+    });
+  }
 });
