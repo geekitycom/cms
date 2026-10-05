@@ -1,0 +1,388 @@
+{# The editor behind /admin/posts/{slug} and /admin/pages/{slug}, and behind
+   .../new. One template for both kinds: `kind` decides whether there is a date
+   and the taxonomy fields, and the handler decides which buttons the form
+   carries.
+
+   Two columns from `xl`: the writing on the left, everything about it on the
+   right, with the buttons at the top of the right where they are in view.
+   Below `xl` the right column follows the left. Every group is a collapse
+   the server opens when it holds something, or the box a save was refused
+   for. #}
+{% extends "layouts/shell.njk" %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% import "components/fields.njk" as field %}
+{% from "components/alert.njk" import alert %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/card.njk" import card, cardActions %}
+{% from "components/collapse.njk" import collapse %}
+
+{# The one action that puts the document in front of readers is the primary
+   one; throwing it away is drawn as the danger it is. #}
+{% set ACTION_COLORS = { 'publish': 'primary', 'update': 'primary', 'trash': 'error' } %}
+{% set ACTION_STYLES = { 'trash': 'ghost' } %}
+
+{% macro citedCard(property) %}
+{% set cited = citedPreviews[property] %}
+{% if cited %}
+{% call card(size='sm', style='border') %}
+  {# The checkbox comes first so the X, the picture and the note after it can
+     each follow its state with no script. #}
+  <input class="peer sr-only" type="checkbox" id="editor-preview-{{ property }}" name="preview" value="hide"{% if form.previewHidden %} checked{% endif %}>
+  <label class="btn btn-circle btn-xs absolute end-2 top-2 peer-checked:btn-neutral peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-base-content" for="editor-preview-{{ property }}"><span aria-hidden="true">×</span><span class="sr-only">Remove the preview of {{ cited.name }}</span></label>
+  <img class="h-auto max-h-32 w-full rounded-box object-cover peer-checked:opacity-40" src="{{ cited.picture.src }}" alt="" width="{{ cited.picture.width }}" height="{{ cited.picture.height }}" loading="lazy">
+  <p class="break-words pe-8 peer-checked:opacity-40">{{ cited.name }}</p>
+  <p class="label hidden whitespace-normal peer-checked:block">Removed. The post shows the plain citation until you select the X again.</p>
+  {% if cited.described %}
+  {{ field.text('editor-cited-alt', 'cited-alt', 'Alt text of the reposted image', value=(form.citedAlt or form.title), error=(error if errorField == 'editor-cited-alt' else ''), hint='What the image shows, for readers who cannot see it. It starts as the post’s title.', hintId='editor-cited-alt-hint') }}
+  {% endif %}
+{% endcall %}
+{% endif %}
+{% endmacro %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
+
+  {% if error and errorField %}
+    {% call field.summary('Nothing was saved. Fix the field marked below and try again.') %}
+      {{ field.problem(errorField, error) }}
+    {% endcall %}
+  {% elif error %}
+    {{ field.summary(error) }}
+  {% endif %}
+
+  {% if trashed or scheduledFor %}
+    <div class="my-6 flex flex-col gap-2">
+      {% if trashed %}
+        {% call alert(color='warning', polite=true) %}
+          <span>This {{ kind.singular }} is in the trash. The public site is not serving it.</span>
+        {% endcall %}
+      {% endif %}
+      {% if scheduledFor %}
+        {% call alert(color='info', polite=true) %}
+          <span>Scheduled for {{ scheduledFor }}. The public site starts serving it then, and the followers are told then.</span>
+        {% endcall %}
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <form class="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]" method="post" action="{{ saveUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    {# The hash of the file this form was filled in from. A save whose hash no
+       longer matches what is on disk is refused rather than overwriting
+       somebody else's edit (doc-1). #}
+    <input type="hidden" name="hash" value="{{ form.hash }}" />
+    {# Which layout the preview renders through. The save handler ignores it. #}
+    <input type="hidden" name="type" value="{{ kind.type }}" />
+
+    <div class="flex min-w-0 flex-col gap-4">
+      {% call card() %}
+        {% set titleHint %}{% if kind.type == "post" %}Leave it empty to write a note: the post is then its words, and takes its slug from the first of them.{% endif %}{% endset %}
+        {#- A post may go without one, and is then a note; a page is always named. -#}
+        {{ field.text('editor-title', 'title', 'Title', value=form.title, required=(kind.type == "page"), autofocus=true, error=(error if errorField == 'editor-title' else ''), hint=titleHint) }}
+
+        {{ field.textarea('editor-body', 'body', 'Body', value=form.body, rows=24) }}
+
+        {# Everything the editor's own script needs, on the element it hangs
+           off. With JavaScript off this is one button that posts the form to
+           the preview in a new tab, which is a preview. With it on, editor.js
+           takes the button over, puts CodeMirror on the textarea above and
+           adds the Write and Preview tabs, the upload control and its status
+           line here. #}
+        <div
+          class="flex flex-wrap items-center gap-2"
+          id="editor-enhance"
+          data-preview-url="{{ previewUrl }}"
+          data-upload-url="{{ uploadUrl }}"
+          data-kind="{{ kind.type }}"
+        >
+          {{ button('Preview', type='submit', id='editor-preview-fallback', style='soft', formaction=previewUrl, formtarget='_blank', formnovalidate=true) }}
+        </div>
+      {% endcall %}
+
+      {% if kind.type == "post" %}
+        {% call collapse('Photos', open.photos, fields=true) %}
+          <p class="label block whitespace-normal text-xs">
+            Each is an image in the media library or an address starting https://. Leave the alt text
+            empty to use the media library’s. Empty an address to remove that photo.
+          </p>
+          {% for row in photoRows %}
+            {% set n = loop.index0 %}
+            {% call collapse(('Photo ' + loop.index) if row.url else 'Add a photo', row.url, fields=true) %}
+              {{ field.text('editor-photo-url-' + n, photoFields.url + n, 'Address', value=row.url, list='editor-photo-uploads', autocomplete='off', error=(error if errorField == ('editor-photo-url-' + n) else '')) }}
+              {{ field.text('editor-photo-alt-' + n, photoFields.alt + n, 'Alt text', value=row.alt, placeholder=row.libraryAlt) }}
+            {% endcall %}
+          {% endfor %}
+          <datalist id="editor-photo-uploads">
+            {% for url in photoChoices %}
+              <option value="{{ url }}"></option>
+            {% endfor %}
+          </datalist>
+        {% endcall %}
+
+        {% call collapse('Location', open.location, fields=true) %}
+          <p class="label block whitespace-normal text-xs">
+            Kept in <code>data/locations.json</code>, not in the post’s file. What readers see of it
+            is chosen on Settings &gt; Privacy. Empty every box to remove it.
+          </p>
+          <div>
+            {{ button('Use my location', id='editor-location-here', style='soft', hidden=true) }}
+          </div>
+          <p id="editor-location-status" class="label block whitespace-normal text-xs" role="status"></p>
+          {{ field.text('editor-location-geo', locationFields.geo, 'Coordinates', value=form.location.geo, placeholder='48.85837, 2.29448', autocomplete='off', spellcheck='false', error=(error if errorField == 'editor-location-geo' else ''), hint='Latitude, longitude, as decimal degrees. A <code>geo:</code> URI works too.', hintId='editor-location-geo-hint') }}
+          {{ field.text('editor-location-accuracy', locationFields.accuracy, 'Accuracy', value=form.location.accuracy, inputmode='numeric', autocomplete='off', error=(error if errorField == 'editor-location-accuracy' else ''), hint='Metres. Leave it empty if you do not know.', hintId='editor-location-accuracy-hint') }}
+          {{ field.text('editor-location-name', locationFields.name, 'Place', value=form.location.name) }}
+          {{ field.text('editor-location-locality', locationFields.locality, 'Locality', value=form.location.locality) }}
+          {{ field.text('editor-location-region', locationFields.region, 'Region', value=form.location.region) }}
+          {{ field.text('editor-location-country', locationFields.country, 'Country', value=form.location.country) }}
+          {{ field.checkbox('editor-location-checkin', locationFields.checkin, 'A check-in', checked=form.location.checkin, hint='A Micropub app sent it as a checkin, and reads it back as one. Readers see it as any other location.', hintId='editor-location-checkin-hint') }}
+        {% endcall %}
+
+        {% call collapse('Recording', open.recording, fields=true) %}
+          {% call field.select('editor-enclosure-url', enclosureFields.url, 'Audio or video file', error=(error if errorField == 'editor-enclosure-url' else ''), hint='Upload the file to the media library first. Feeds carry it as the post’s enclosure and the post page plays it. None removes the recording, its transcript and its other versions.', hintId='editor-enclosure-url-hint') %}
+            <option value=""{% if form.enclosure.url == "" %} selected{% endif %}>None</option>
+            {% for choice in enclosureChoices.media %}
+              <option value="{{ choice.url }}"{% if choice.url == form.enclosure.url %} selected{% endif %}>{{ choice.label }}</option>
+            {% endfor %}
+          {% endcall %}
+
+          {{ field.text('editor-enclosure-duration', enclosureFields.duration, 'Duration', value=form.enclosure.duration, inputmode='numeric', autocomplete='off', error=(error if errorField == 'editor-enclosure-duration' else ''), hint='Seconds, or 30:34, or 1:02:03. Leave it empty if you do not know.', hintId='editor-enclosure-duration-hint') }}
+
+          {# The transcript and its type share one hint, written under the
+             type, so both name it. #}
+          {{ field.text('editor-enclosure-transcript', enclosureFields.transcriptUrl, 'Transcript or captions', value=form.enclosure.transcriptUrl, list='editor-transcript-uploads', autocomplete='off', error=(error if errorField == 'editor-enclosure-transcript' else ''), hintId='editor-enclosure-transcript-hint') }}
+          <datalist id="editor-transcript-uploads">
+            {% for url in enclosureChoices.transcripts %}
+              <option value="{{ url }}"></option>
+            {% endfor %}
+          </datalist>
+          {% call field.select('editor-enclosure-transcript-type', enclosureFields.transcriptType, 'Transcript type', error=(error if errorField == 'editor-enclosure-transcript-type' else ''), hint='A .vtt, .srt or .txt file in the media library, or an address starting https://. A linked transcript needs its type.', hintId='editor-enclosure-transcript-hint') %}
+            <option value=""{% if form.enclosure.transcriptType == "" %} selected{% endif %}>From the file</option>
+            {% for type in transcriptTypes %}
+              <option value="{{ type }}"{% if type == form.enclosure.transcriptType %} selected{% endif %}>{{ type }}</option>
+            {% endfor %}
+          {% endcall %}
+
+          {% call collapse('Other versions', open.versions, fields=true) %}
+            <p class="label block whitespace-normal text-xs">
+              A video of an audio episode, a smaller file, another language. Each is a file in the media
+              library or an address starting https://, which needs its type. Empty an address to remove
+              that version.
+            </p>
+            {% for row in alternateRows %}
+              {% set n = loop.index0 %}
+              {% call collapse(('Version ' + loop.index) if row.url else 'Add a version', row.url, fields=true) %}
+                {{ field.text('editor-alternate-url-' + n, enclosureFields.alternate.url + n, 'Address', value=row.url, list='editor-media-uploads', autocomplete='off', error=(error if errorField == ('editor-alternate-url-' + n) else '')) }}
+                {{ field.text('editor-alternate-type-' + n, enclosureFields.alternate.type + n, 'Type', value=row.type, placeholder='video/mp4', autocomplete='off', spellcheck='false', error=(error if errorField == ('editor-alternate-type-' + n) else '')) }}
+                {{ field.text('editor-alternate-title-' + n, enclosureFields.alternate.title + n, 'Title', value=row.title, maxlength='32', error=(error if errorField == ('editor-alternate-title-' + n) else '')) }}
+                {{ field.text('editor-alternate-height-' + n, enclosureFields.alternate.height + n, 'Height', value=row.height, inputmode='numeric', autocomplete='off', error=(error if errorField == ('editor-alternate-height-' + n) else '')) }}
+                {{ field.text('editor-alternate-lang-' + n, enclosureFields.alternate.lang + n, 'Language', value=row.lang, autocomplete='off', spellcheck='false', error=(error if errorField == ('editor-alternate-lang-' + n) else '')) }}
+              {% endcall %}
+            {% endfor %}
+            <datalist id="editor-media-uploads">
+              {% for choice in enclosureChoices.media %}
+                <option value="{{ choice.url }}"></option>
+              {% endfor %}
+            </datalist>
+          {% endcall %}
+        {% endcall %}
+      {% endif %}
+    </div>
+
+    <div class="flex min-w-0 flex-col gap-4">
+      {% call card(size='sm') %}
+        {% call cardActions() %}
+          {% for action in actions %}
+            {{ button(action.label, type='submit', name='action', value=action.value, color=ACTION_COLORS[action.value], style=ACTION_STYLES[action.value]) }}
+          {% endfor %}
+          {% if viewUrl %}
+            {{ buttonLink('View', viewUrl, style='ghost') }}
+          {% endif %}
+        {% endcall %}
+      {% endcall %}
+
+      {% call collapse('Publishing', open.publishing, fields=true) %}
+        {{ field.checkbox('editor-draft', 'draft', 'Draft', checked=form.draft) }}
+
+        {% if kind.dated %}
+          {# The file holds a UTC instant; this field is that instant as the
+             site's own clock reads it, so the zone has to be on the screen. #}
+          {% set dateHint %}Wall-clock time in {{ dateZone }}. Stored as UTC.{% endset %}
+          {{ field.text('editor-date', 'date', 'Date', value=form.date, error=(error if errorField == 'editor-date' else ''), hint=dateHint) }}
+        {% endif %}
+
+        {% set visibilityHint %}
+          {% if form.visibility.unrecognized is defined %}
+            The front matter says <code>visibility: {{ form.visibility.unrecognized }}</code>, which this
+            site does not recognize. The {{ kind.singular }} is hidden until you choose Public or Unlisted:
+            its page answers 404 and it is not listed or sent to your followers.
+          {% endif %}
+          Unlisted writes <code>visibility: unlisted</code> into the front matter. The {{ kind.singular }}
+          keeps its page and still goes to your followers, but is left off the home page, archives,
+          feeds, the sitemap, search and llms.txt, and asks search engines not to index it.
+        {% endset %}
+        {% call field.select('editor-visibility', 'visibility', 'Visibility', hint=visibilityHint, hintId='editor-visibility-hint') %}
+          {% if form.visibility.unrecognized is defined %}
+            <option value="{{ form.visibility.unrecognized }}" selected>{{ form.visibility.unrecognized }} (not recognized)</option>
+          {% endif %}
+          <option value="public"{% if form.visibility == "public" %} selected{% endif %}>Public</option>
+          <option value="unlisted"{% if form.visibility == "unlisted" %} selected{% endif %}>Unlisted</option>
+        {% endcall %}
+
+        {% if kind.type == "post" %}
+          {# TASK-207: shown at the top of the author's fediverse profile, from
+             the featured collection their actor links. #}
+          {{ field.checkbox('editor-pinned', 'pinned', 'Pinned', checked=form.pinned, error=(error if errorField == 'editor-pinned' else ''), hint='Writes <code>pinned:</code> and the moment you pinned it into the front matter. Pinned posts show first on your fediverse profile, newest pin first, up to five.') }}
+        {% endif %}
+
+        {# Who the front matter says wrote this (TASK-67). A select of the site's
+           users rather than a free box, because after decision-14 the value is a
+           person rather than a string: it decides whose archive the post is on
+           and, once the actors land, whose followers hear about it. A file that
+           still names somebody who has no account keeps an option of its own, so
+           opening the editor cannot silently reattribute it. #}
+        {% call field.select('editor-author', 'author', 'Author') %}
+          {% for choice in authors %}
+            <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
+          {% endfor %}
+        {% endcall %}
+      {% endcall %}
+
+      {% if kind.tagged or kind.categorised %}
+        {% call collapse('Tags and categories', open.taxonomy, fields=true) %}
+          {% if kind.tagged %}
+            {{ field.text('editor-tags', 'tags', 'Tags', value=form.tags, hint='Separated by commas.') }}
+          {% endif %}
+          {% if kind.categorised %}
+            {{ field.text('editor-categories', 'categories', 'Categories', value=form.categories, hint='Separated by commas.') }}
+          {% endif %}
+        {% endcall %}
+      {% endif %}
+
+      {% call collapse('Address', open.address, fields=true) %}
+        {{ field.text('editor-slug', 'slug', 'Slug', value=form.slug, error=(error if errorField == 'editor-slug' else '')) }}
+        {% set permalinkHint %}Leave it empty to let the {{ kind.singular }} take the URL its slug implies.{% endset %}
+        {{ field.text('editor-permalink', 'permalink', 'Permalink', value=form.permalink, hint=permalinkHint) }}
+      {% endcall %}
+
+      {% if kind.type == "post" %}
+        {% call collapse('Responding to', open.responding, fields=true) %}
+          {#- The mf2 `in-reply-to`: a URL here makes the post a reply, threads
+              it in the fediverse and sends that page a webmention. -#}
+          {{ field.text('editor-in-reply-to', 'in-reply-to', 'In reply to', value=form.inReplyTo, type='url', error=(error if errorField == 'editor-in-reply-to' else '')) }}
+          {{ citedCard('in-reply-to') }}
+          <p class="label block whitespace-normal text-xs">The address of the post this one answers. Leave it empty for a post that answers nobody.</p>
+
+          {#- The mf2 `like-of`, `repost-of` and `bookmark-of` (TASK-169): each
+              cites a page the way a reply does, and sends it a webmention. -#}
+          {{ field.text('editor-like-of', 'like-of', 'Like of', value=form.likeOf, type='url', error=(error if errorField == 'editor-like-of' else '')) }}
+          {{ citedCard('like-of') }}
+          {{ field.text('editor-repost-of', 'repost-of', 'Repost of', value=form.repostOf, type='url', error=(error if errorField == 'editor-repost-of' else '')) }}
+          {{ citedCard('repost-of') }}
+          {{ field.text('editor-bookmark-of', 'bookmark-of', 'Bookmark of', value=form.bookmarkOf, type='url', error=(error if errorField == 'editor-bookmark-of' else '')) }}
+          {{ citedCard('bookmark-of') }}
+          <p class="label block whitespace-normal text-xs">The address of a post this one likes, reposts or bookmarks. Leave them empty for a post that cites nothing.</p>
+          {% if form.previewHidden and not (citedPreviews | length) %}
+          <input type="hidden" name="preview" value="hide">
+          {% endif %}
+          {% if form.citedAlt and not describesCitedImage %}
+          <input type="hidden" name="cited-alt" value="{{ form.citedAlt }}">
+          {% endif %}
+        {% endcall %}
+
+        {% call collapse('Read', open.read, fields=true) %}
+          {% call field.select('editor-read-status', readFields.status, 'Read status', error=(error if errorField == 'editor-read-status' else '')) %}
+            <option value=""{% if form.readStatus == "" %} selected{% endif %}>Not a read post</option>
+            {% for status in readStatuses %}
+              <option value="{{ status.value }}"{% if form.readStatus == status.value %} selected{% endif %}>{{ status.label }}</option>
+            {% endfor %}
+            {% if unrecognizedReadStatus %}
+              <option value="{{ unrecognizedReadStatus }}" selected>{{ unrecognizedReadStatus }} (not recognized)</option>
+            {% endif %}
+          {% endcall %}
+          {{ field.text('editor-read-of-name', readFields.name, 'Title', value=form.readOf.name, error=(error if errorField == 'editor-read-of-name' else '')) }}
+          {{ field.text('editor-read-of-author', readFields.author, 'Author', value=form.readOf.author) }}
+          {{ field.text('editor-read-of-uid', readFields.uid, 'Identifier', value=form.readOf.uid, placeholder='isbn:9780441478125', autocomplete='off', spellcheck='false') }}
+          {{ field.text('editor-read-of-url', readFields.url, 'Address', value=form.readOf.url, type='url', error=(error if errorField == 'editor-read-of-url' else '')) }}
+          <p class="label block whitespace-normal text-xs">A book or paper this post says its author read. An identifier is an ISBN or a DOI, written isbn:… or doi:…. Choose Not a read post and empty every box to remove it. A read is described by what it says, so leave its Description empty.</p>
+        {% endcall %}
+      {% endif %}
+
+      {% call collapse('Summary and language', open.summary, fields=true) %}
+        {{ field.text('editor-description', 'description', 'Description', value=form.description, error=(error if errorField == 'editor-description' else '')) }}
+
+        {#- The `lang` front matter (TASK-154): a post or page written in another
+            language than the site's says so, for screen readers, translation
+            and fediverse language filters. -#}
+        {% set langHint %}A language tag, such as fr or pt-BR. Leave it empty for the site’s language, {{ siteLanguage }}.{% endset %}
+        {{ field.text('editor-lang', 'lang', 'Language', value=form.lang, autocomplete='off', spellcheck='false', error=(error if errorField == 'editor-lang' else ''), hint=langHint, hintId='editor-lang-hint') }}
+      {% endcall %}
+
+      {% if kind.type == "post" and syndicationTargets.length %}
+        {# TASK-155: the targets content/_data/syndicationTargets.json declares.
+           A target whose tag the post carries is selected without a tick. #}
+        {% call collapse('Syndicate to', open.syndication, fields=true) %}
+          {% for target in syndicationTargets %}
+            {{ field.checkbox('editor-' + target.field, target.field, target.name | escape, checked=target.checked) }}
+          {% endfor %}
+          <p class="label block whitespace-normal text-xs">
+            Writes <code>syndicate-to:</code> into the front matter. The post links to each target and
+            sends it a webmention when it is published or updated. A post tagged with a target’s tag is
+            sent there without a tick.
+          </p>
+        {% endcall %}
+      {% endif %}
+
+      {% call collapse('Display and discussion', open.display, fields=true) %}
+        {# What this document says about comments, if anything. Three answers
+           rather than two: the site's own rules, always open, always closed. #}
+        {% call field.select('editor-comments', 'comments', 'Comments', hint='Writes <code>comments: true</code> or <code>comments: false</code> into the front matter, which beats the site’s switch and its closing window in both directions. Fediverse replies are shown either way.') %}
+          <option value="{{ commentSettings.site }}"{% if form.comments == commentSettings.site %} selected{% endif %}>Follow the site settings</option>
+          <option value="{{ commentSettings.open }}"{% if form.comments == commentSettings.open %} selected{% endif %}>Open</option>
+          <option value="{{ commentSettings.closed }}"{% if form.comments == commentSettings.closed %} selected{% endif %}>Closed</option>
+        {% endcall %}
+
+        {% if kind.excludable %}
+          {# doc-2's eleventyExcludeFromCollections: still published and still at
+             its URL, but out of every collection a template lists from. #}
+          {% set excludeHint %}Keeps the {{ kind.singular }} out of listings that gather content, without unpublishing it.{% endset %}
+          {{ field.checkbox('editor-exclude', 'exclude', 'Hide from collections', checked=form.exclude, hint=excludeHint) }}
+        {% endif %}
+
+        {% if kind.contactable %}
+          {# The page offers a contact form under its content (TASK-56). Where a
+             message goes is the contact address on the Settings screen; it is
+             never on this page or in its HTML. #}
+          {% set contactHint %}Writes <code>contact: true</code> into the front matter and puts a name, email, subject and message form under this {{ kind.singular }}. Messages arrive on the Messages screen and are emailed to the contact address on Settings.{% endset %}
+          {{ field.checkbox('editor-contact', 'contact', 'Contact form', checked=form.contact, hint=contactHint) }}
+        {% endif %}
+      {% endcall %}
+    </div>
+  </form>
+
+  {# CodeMirror, the preview tab and the upload control. A module script is
+     deferred by definition, so it runs after the form is in the document.
+     Nothing above depends on it: with the bundle missing or JavaScript off the
+     textarea and the Preview button are the whole editor.
+
+     The nonce is not what lets it run — `script-src 'self'` already does, and
+     the admin has no inline script at all. It is here so the bundle can read
+     it back off this element and hand it to CodeMirror, whose themes are
+     injected as <style> elements at runtime and would otherwise be refused by
+     `style-src`. Reading it through the element's `.nonce` property rather
+     than a data attribute keeps it out of reach of a CSS selector. #}
+  <script
+    type="module"
+    id="editor-script"
+    src="{{ assetPrefix }}editor.js"
+    nonce="{{ cspNonce }}"
+  ></script>
+
+  {# The slug and permalink auto-fill, in a file of its own so the policy never
+     has to allow an inline script. #}
+  <script defer src="{{ assetPrefix }}slug.js"></script>
+  {% if kind.type == 'post' %}
+    <script defer src="{{ assetPrefix }}location.js"></script>
+  {% endif %}
+{% endblock %}

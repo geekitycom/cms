@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 03:08'
+updated_date: '2026-10-05 03:39'
 ---
 # Admin UI
 
@@ -114,9 +114,10 @@ macros; it does not spell out component markup of its own.
 | `menu.njk` | `menu` | a `menu` list from the menu registry's shape, children under the open item |
 | `navbar.njk` | `navbar`, `navbarStart`, `navbarCenter`, `navbarEnd` | the `navbar` and its three parts |
 | `dropdown.njk` | `dropdown` | a button that opens its body as a `dropdown` popover |
+| `collapse.njk` | `collapse` | a `<details>` drawn as a `collapse` with an arrow, open where asked; with `fields`, its body in a `fieldset` whose hidden legend repeats the title |
 
 - **A body goes through `{% call %}`.** card, cardActions, alert, table, stats,
-  navbar and its parts, and dropdown take their contents as the body of a
+  navbar and its parts, dropdown and collapse take their contents as the body of a
   `{% call %}` block. Lists the routes already hand a screen (tabs, menu,
   pagination) are passed in as data.
 - **A field is one call.** `fields.njk` keeps the old admin's seven macros and
@@ -126,6 +127,13 @@ macros; it does not spell out component markup of its own.
   red and shows after it; a read-only box is drawn on `base-200` with a dashed
   edge, and a disabled one as DaisyUI draws it. The summary is an error alert
   that takes focus on load, with no script, and links to each refused field.
+- **What the editor asks of them.** `button` also takes `id`, `hidden`,
+  `formtarget` and `formnovalidate`. `text` takes `list` and `maxlength`.
+  `text`, `textarea`, `select` and `checkbox` take `hintId`, which gives the
+  hint that id and names it in the control's `aria-describedby`, after the
+  error when there is one; a control given a `hintId` and no hint names the
+  hint another field draws. A `textarea` with no `name` shows a value and
+  posts nothing.
 - **A modifier is a name, never a class.** Colour, style, size, shape,
   direction and placement are each a closed set of names (`color='error'`,
   `size='lg'`) that the macro maps to the DaisyUI class through the admin
@@ -173,6 +181,55 @@ macros; it does not spell out component markup of its own.
 - Save writes the file (see doc-1 sync model). The form carries the file hash it was loaded with; a mismatch on save returns the form with a warning and both versions.
 - **Author** is a select of the site's users, not a free box: doc-2's `author` names a user, and after decision-14 that decides whose archive the post lands on and, once the actors land, whose followers hear about it. A new document starts on whoever is signed in; an existing one opens on the user the file names, which for a file written before decision-14 is the one its display name reads as. A file naming somebody with no account here keeps an option of its own, marked, so opening the editor and pressing Update cannot quietly reattribute the post.
 - Buttons: Save draft, Publish, Update, Move to trash, View.
+- **In the DaisyUI admin** (decision-30, TASK-273) the form is one grid: the
+  writing column (a card holding Title, Body and the editor's tools, then the
+  post's Photos, Location and Recording groups) and the side column (a card of
+  the buttons, then the other groups), side by side from `xl` and the side
+  column under the writing one below that. Every group is the `collapse`
+  macro, opened by the server as before. Publish and Update are the primary
+  button, Move to trash an error ghost button, View a ghost link; the buttons
+  sit at the top of the side column, so they are in view without scrolling
+  past the groups. A trashed or scheduled document says so in a `polite`
+  alert, so a refused save's summary stays the page's one `role="alert"`.
+- **Write and Preview** are a DaisyUI `tabs` strip that `editor/main.ts`
+  builds: `role="tablist"`, each tab a `role="tab"` button with
+  `aria-selected` and `aria-controls`, the CodeMirror surface and the preview
+  box their `tabpanel`s, only the current tab in the tab order, and the arrow
+  keys, Home and End moving between them. DaisyUI draws the tab with
+  `aria-selected="true"` as current, so no class is toggled. The upload
+  control is an Add file button (`btn btn-soft btn-sm`) over a hidden file
+  input; the status line under it says what an upload or a preview is doing,
+  and turns `text-error` when it says that one failed. Drag and drop onto the
+  surface uploads the same way.
+- **Two editor bundles while both admins ship.** `editor/look.ts` holds the
+  classes the script writes, `CLASSIC` for the old admin and `DAISYUI` for the
+  new one. `scripts/build-editor.js` builds `editor/main.ts` twice with
+  `ADMIN_LOOK` defined, to `admin/static/editor.js` and to
+  `daisyui/static/editor.js`, which the overlay serves ahead of the old one.
+  Tailwind reads `editor/look.ts`, and `styles.test.ts` holds every `DAISYUI`
+  class to a rule in the compiled sheet. The flip keeps the DaisyUI build
+  alone, written to `admin/static/editor.js`, and deletes `CLASSIC`.
+- **The CodeMirror surface** is the one third-party component the admin
+  draws. Its `.cm-*` rules are the only authored rules the editor has: in
+  `daisyui/src/admin.css`, every one under `#editor-surface` (the box the
+  script mounts CodeMirror in, whose id outranks CodeMirror's own injected
+  theme), each colour a theme token such as `--color-base-100`,
+  `--color-base-content` or `--color-primary`, so the surface follows the
+  user's theme, light or dark. The DaisyUI bundle highlights Markdown by
+  giving tokens `.cm-md-*` classes (heading, strong, emphasis, link, code,
+  quote, and the marks around them) rather than CodeMirror's fixed colours,
+  which were drawn for a white page.
+- **A cited page** shows as a small bordered `card` under its address: the
+  picture, the page's name, and an X in the corner that is the label of a
+  visually hidden `preview` checkbox. Ticking it dims the picture and the
+  name and shows the sentence that the post now shows the plain citation,
+  with no script. A reposted image the post shows in full adds its Alt text
+  box, described by its hint.
+- **The conflict screen** shows the two versions as read-only boxes in two
+  cards, Your version and The version on disk, side by side from `lg`, under
+  an error alert saying nothing was saved. Discard mine and edit the file on
+  disk is a link; Keep mine and overwrite the file posts the refused form
+  again with the hash the file has now.
 
 ## Comments
 

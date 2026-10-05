@@ -10,15 +10,15 @@
  * built-in theme, any of which a user may pick. `light` is drawn when nothing
  * names a theme, and `dark` when the system prefers dark.
  *
- * Tailwind reads the class names out of the admin's templates and out of the
- * editor's script, which builds some of its markup at runtime and names those
- * classes as string literals.
+ * Tailwind reads the class names out of the admin's templates and out of
+ * `editor/look.ts`, the classes the editor's script gives the markup it builds
+ * at runtime.
  */
 @import 'tailwindcss' source(none);
 @source '../layouts';
 @source '../components';
 @source '../pages';
-@source '../../editor/main.ts';
+@source '../../editor/look.ts';
 
 @plugin 'daisyui' {
   themes:
@@ -78,4 +78,139 @@
   :root:has(> body > geekity-admin-bar) {
     --geekity-admin-bar-height: 80px;
   }
+}
+
+/*
+ * The editor's CodeMirror surface (decision-30), the one third-party component
+ * the admin draws: CodeMirror writes the `.cm-*` classes, and these rules give
+ * them the theme's own colours, so the surface follows whichever theme the user
+ * picked, light or dark. `editor/main.ts` marks the Markdown it highlights with
+ * the `.cm-md-*` classes rather than colouring it.
+ *
+ * CodeMirror injects its own theme after this sheet, outside any layer, two
+ * classes to a selector. Every rule here hangs off the surface's id, which
+ * outranks any number of classes, so these win without `!important`.
+ */
+#editor-surface .cm-editor {
+  height: 28rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-field);
+  background-color: var(--color-base-100);
+  color: var(--color-base-content);
+  font-size: 0.95rem;
+}
+
+#editor-surface .cm-editor.cm-focused {
+  outline: 2px solid var(--color-base-content);
+  outline-offset: 2px;
+}
+
+#editor-surface .cm-scroller {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1.5;
+}
+
+#editor-surface .cm-content {
+  caret-color: var(--color-base-content);
+}
+
+#editor-surface .cm-cursor,
+#editor-surface .cm-dropCursor {
+  border-left-color: var(--color-base-content);
+}
+
+#editor-surface .cm-selectionBackground {
+  background: color-mix(in oklab, var(--color-base-content) 15%, transparent);
+}
+
+#editor-surface .cm-focused .cm-selectionBackground {
+  background: color-mix(in oklab, var(--color-primary) 30%, transparent);
+}
+
+#editor-surface .cm-activeLine {
+  background-color: color-mix(in oklab, var(--color-base-content) 5%, transparent);
+}
+
+#editor-surface .cm-gutters {
+  border-color: var(--color-base-300);
+  background-color: var(--color-base-200);
+  color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+}
+
+#editor-surface .cm-activeLineGutter {
+  background-color: var(--color-base-300);
+  color: var(--color-base-content);
+}
+
+#editor-surface .cm-selectionMatch {
+  background-color: color-mix(in oklab, var(--color-accent) 25%, transparent);
+}
+
+#editor-surface .cm-searchMatch {
+  background-color: color-mix(in oklab, var(--color-warning) 35%, transparent);
+}
+
+#editor-surface .cm-searchMatch-selected {
+  background-color: color-mix(in oklab, var(--color-warning) 65%, transparent);
+}
+
+#editor-surface .cm-matchingBracket {
+  background-color: color-mix(in oklab, var(--color-success) 30%, transparent);
+}
+
+#editor-surface .cm-nonmatchingBracket {
+  background-color: color-mix(in oklab, var(--color-error) 30%, transparent);
+}
+
+#editor-surface .cm-specialChar {
+  color: var(--color-error);
+}
+
+#editor-surface .cm-panels,
+#editor-surface .cm-tooltip,
+#editor-surface .cm-foldPlaceholder {
+  border-color: var(--color-base-300);
+  background-color: var(--color-base-200);
+  color: var(--color-base-content);
+}
+
+#editor-surface .cm-textfield {
+  border-color: var(--color-base-300);
+  background-color: var(--color-base-100);
+  color: var(--color-base-content);
+}
+
+#editor-surface .cm-button {
+  border-color: var(--color-base-300);
+  background-image: none;
+  background-color: var(--color-base-300);
+  color: var(--color-base-content);
+}
+
+#editor-surface .cm-md-heading,
+#editor-surface .cm-md-strong {
+  font-weight: 700;
+}
+
+#editor-surface .cm-md-emphasis,
+#editor-surface .cm-md-quote {
+  font-style: italic;
+}
+
+#editor-surface .cm-md-strikethrough {
+  text-decoration: line-through;
+}
+
+#editor-surface .cm-md-link {
+  text-decoration: underline;
+  text-decoration-color: var(--color-primary);
+}
+
+#editor-surface .cm-md-code {
+  border-radius: 0.25rem;
+  background-color: var(--color-base-200);
+}
+
+#editor-surface .cm-md-mark {
+  color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
 }

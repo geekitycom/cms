@@ -547,6 +547,46 @@ describe('the DaisyUI fields', () => {
     );
   });
 
+  it('offers a list of suggestions to a text box and caps its length where asked', () => {
+    const tag = control(
+      render(DAISYUI, `{{ field.text('f', 'n', 'L', list='choices', maxlength='32') }}`),
+    );
+
+    assert.match(tag, /\slist="choices"/);
+    assert.match(tag, /\smaxlength="32"/);
+  });
+
+  for (const { what, body } of CALLS.filter((entry) => entry.what !== 'password')) {
+    it(`${what} names its hint as what describes it, when the hint has an id`, () => {
+      const html = render(DAISYUI, callWith(body, `, hint='A note.', hintId='f-hint'`));
+
+      assert.match(html, /<p class="label block whitespace-normal" id="f-hint">A note\.<\/p>/);
+      assert.match(control(html), /\saria-describedby="f-hint"/);
+      assert.doesNotMatch(control(html), /aria-invalid/);
+    });
+
+    it(`${what} names its error and then its hint when the form refused it`, () => {
+      const html = render(
+        DAISYUI,
+        callWith(body, `, hint='A note.', hintId='f-hint', error='Wrong.'`),
+      );
+
+      assert.match(control(html), /\saria-invalid="true" aria-describedby="f-error f-hint"/);
+      assert.deepEqual(
+        tiedErrors(
+          `<div role="alert" tabindex="-1" autofocus aria-labelledby="h"><h2 id="h">x</h2><a href="#f">x</a></div>${html}`,
+        ).invalid,
+        ['f'],
+      );
+    });
+  }
+
+  it('leaves the name off a box that only shows something', () => {
+    const tag = control(render(DAISYUI, `{{ field.textarea('f', '', 'L', 'v', readonly=true) }}`));
+
+    assert.doesNotMatch(tag, /\sname=/);
+  });
+
   it('heads a refused form with an error alert whose links read as links', () => {
     const html = render(
       DAISYUI,

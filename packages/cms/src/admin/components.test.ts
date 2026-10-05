@@ -51,6 +51,46 @@ describe('button', () => {
   });
 });
 
+describe('button, with what the editor asks of it', () => {
+  it('carries an id, starts hidden, and posts the form elsewhere in a new tab unchecked', () => {
+    assert.equal(
+      render(
+        'button',
+        'button',
+        `{{ button('Preview', type='submit', id='p', formaction='/preview', formtarget='_blank', formnovalidate=true, hidden=true) }}`,
+      ),
+      '<button type="submit" id="p" class="btn btn-sm" formaction="/preview" formtarget="_blank" formnovalidate hidden>Preview</button>',
+    );
+  });
+});
+
+describe('collapse', () => {
+  it('is a disclosure with an arrow, closed unless told', () => {
+    assert.equal(
+      render('collapse', 'collapse', `{% call collapse('Photos') %}<p>x</p>{% endcall %}`),
+      '<details class="collapse collapse-arrow border border-base-300 bg-base-100"><summary class="collapse-title font-semibold">Photos</summary><div class="collapse-content"><p>x</p></div></details>',
+    );
+  });
+
+  it('opens when told, and escapes its title', () => {
+    assert.match(
+      render('collapse', 'collapse', `{% call collapse('<b>', open=true) %}x{% endcall %}`),
+      /^<details class="[^"]*" open><summary class="[^"]*">&lt;b&gt;<\/summary>/,
+    );
+  });
+
+  it('groups the fields inside it under its title, for a screen reader', () => {
+    assert.equal(
+      render(
+        'collapse',
+        'collapse',
+        `{% call collapse('Location', fields=true, icon='plus') %}<p>x</p>{% endcall %}`,
+      ),
+      '<details class="collapse collapse-plus border border-base-300 bg-base-100"><summary class="collapse-title font-semibold">Location</summary><div class="collapse-content"><fieldset class="flex min-w-0 flex-col gap-1"><legend class="sr-only">Location</legend><p>x</p></fieldset></div></details>',
+    );
+  });
+});
+
 describe('buttonLink', () => {
   it('is a link drawn as a button, which still navigates as a link', () => {
     assert.equal(
@@ -390,6 +430,13 @@ describe('every macro', () => {
       modifier: 'size',
     },
     { what: 'menu', file: 'menu', macros: 'menu', body: `{{ menu([]{args}) }}`, modifier: 'size' },
+    {
+      what: 'collapse',
+      file: 'collapse',
+      macros: 'collapse',
+      body: `{% call collapse('x'{args}) %}{% endcall %}`,
+      modifier: 'icon',
+    },
     {
       what: 'dropdown',
       file: 'dropdown',

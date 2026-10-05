@@ -9,6 +9,7 @@ import { browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts'
 import { statuses } from './__testing__/statuses.ts';
 import { readSiteSettings, writeSiteJson } from './settings.ts';
 import type { Browser } from './__testing__/harness.ts';
+import { saveUrlOf } from './__testing__/editor-form.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -128,7 +129,7 @@ async function submit(
     ...changes,
   };
 
-  const saveUrl = /<form class="admin-editor" method="post" action="([^"]+)"/.exec(html)?.[1];
+  const saveUrl = saveUrlOf(html);
   assert.ok(saveUrl !== undefined, 'the editor knew where to post');
 
   return agent.post(saveUrl, fields);
@@ -691,7 +692,7 @@ describe('the post language in the editor (TASK-154 AC #1)', () => {
     const html = await (await agent.get('/admin/posts/new')).text();
 
     assert.equal(field(html, 'lang'), '');
-    assert.match(html, /<label for="editor-lang">Language<\/label>/);
+    assert.match(html, /<label\b[^>]*\bfor="editor-lang"[^>]*>Language<\/label>/);
     assert.match(html, /Leave it empty for the site’s language, en\./);
   });
 
@@ -868,8 +869,14 @@ describe('pinning a post in the editor (TASK-207 AC #1)', () => {
 
     const html = await (await agent.get('/admin/posts/post-1')).text();
 
-    assert.match(html, /<input id="editor-pinned" name="pinned" type="checkbox" value="1" \/>/);
-    assert.match(html, /<label for="editor-pinned">Pinned<\/label>/);
+    assert.match(
+      html,
+      /<input id="editor-pinned" name="pinned" type="checkbox" value="1"(?! checked)[^>]*>/,
+    );
+    assert.match(
+      html,
+      /<label\b[^>]*\bfor="editor-pinned"[^>]*>(?:\s*<input\b[^>]*>)?\s*Pinned\s*<\/label>/,
+    );
   });
 
   it('pins with the moment it was pinned, and unpins', async () => {
@@ -945,9 +952,12 @@ describe('syndication targets in the post editor (TASK-155 AC #2)', () => {
 
     assert.match(
       html,
-      /<input id="editor-syndicate-to-indienews" name="syndicate-to-indienews" type="checkbox" value="1" \/>/,
+      /<input id="editor-syndicate-to-indienews" name="syndicate-to-indienews" type="checkbox" value="1"(?! checked)[^>]*>/,
     );
-    assert.match(html, /<label for="editor-syndicate-to-indienews">IndieNews<\/label>/);
+    assert.match(
+      html,
+      /<label\b[^>]*\bfor="editor-syndicate-to-indienews"[^>]*>(?:\s*<input\b[^>]*>)?\s*IndieNews\s*<\/label>/,
+    );
     assert.match(html, /name="syndicate-to-mastodon" type="checkbox" value="1" checked/);
   });
 
@@ -1019,14 +1029,14 @@ describe('photos in the post editor (TASK-166 AC #5, #7)', () => {
 
     const html = await (await agent.get('/admin/posts/beach')).text();
 
-    assert.match(html, /<summary>Photos<\/summary>/);
+    assert.match(html, /<summary\b[^>]*>Photos<\/summary>/);
     assert.equal(field(html, 'photo-url-0'), '/uploads/2026/10/beach.jpg');
     assert.equal(field(html, 'photo-alt-0'), 'Waves breaking at dusk');
     assert.equal(field(html, 'photo-url-1'), '/uploads/2026/10/dog.jpg');
     assert.equal(field(html, 'photo-alt-1'), '');
     assert.match(html, /name="photo-alt-1"[^>]*placeholder="A dog asleep on a rug"/);
     assert.equal(field(html, 'photo-url-2'), '');
-    assert.match(html, /<summary>Add a photo<\/summary>/);
+    assert.match(html, /<summary\b[^>]*>Add a photo<\/summary>/);
     const offered = /<datalist id="editor-photo-uploads">([\s\S]*?)<\/datalist>/.exec(html)?.[1];
     assert.match(offered ?? '', /<option value="\/uploads\/2026\/10\/gull\.png">/);
     assert.doesNotMatch(offered ?? '', /episode\.mp3/, 'only images are offered');
@@ -1154,7 +1164,7 @@ describe('the recording in the post editor (TASK-213 AC #1, #2)', () => {
 
     const html = await (await agent.get('/admin/posts/episode')).text();
 
-    assert.match(html, /<summary>Recording<\/summary>/);
+    assert.match(html, /<summary\b[^>]*>Recording<\/summary>/);
     assert.match(html, /<option value="" selected>None<\/option>/);
     assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp3">2026\/10\/episode\.mp3</);
     assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp4">2026\/10\/episode\.mp4</);

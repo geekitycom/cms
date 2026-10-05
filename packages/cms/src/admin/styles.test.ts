@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 
+import { DAISYUI } from '../../editor/look.ts';
 import { DAISYUI_ADMIN_DIR } from './templates.ts';
 
 /**
@@ -201,6 +202,16 @@ describe('the DaisyUI admin templates', () => {
       assert.deepEqual(foreignColours(source), [], 'these colours are not semantic tokens');
     });
   }
+
+  it('has a rule for every class the editor script writes, in the theme’s colours alone', () => {
+    const classes = Object.values(DAISYUI).join(' ').split(/\s+/).filter(Boolean);
+    assert.deepEqual(
+      classes.filter((name) => !STYLED.has(name)),
+      [],
+      'these classes in editor/look.ts have no rule in the compiled sheet',
+    );
+    assert.deepEqual(foreignColours(`<b class="${classes.join(' ')}">`), []);
+  });
 
   it('would refuse a misspelt, built or foreign class wherever a template writes it', () => {
     assert.deepEqual(unstyled('<b class="btn btn-primay">', STYLED).missing, ['btn-primay']);

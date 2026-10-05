@@ -9,6 +9,7 @@ import { saveSettings } from './admin/__testing__/settings.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './admin/settings.ts';
 import type { Cms } from './index.ts';
 import { INDEXNOW_ENDPOINT } from './indexnow.ts';
+import { saveUrlOf } from './admin/__testing__/editor-form.ts';
 
 /**
  * IndexNow (TASK-151): a site that turns it on serves a key at `/{key}.txt`
@@ -114,7 +115,7 @@ async function submit(
   }
   fields['body'] = /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '';
 
-  const saveUrl = /<form class="admin-editor" method="post" action="([^"]+)"/.exec(html)?.[1];
+  const saveUrl = saveUrlOf(html);
   return agent.post(saveUrl ?? url, { ...fields, ...changes });
 }
 

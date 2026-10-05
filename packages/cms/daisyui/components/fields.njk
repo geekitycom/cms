@@ -33,6 +33,11 @@
    any public template and cannot reach in here, so no theme can shadow or
    break a field on the login form.
 
+   `hintId` gives the hint an id and names it in the control's
+   `aria-describedby`, after the error where there is one, so a screen reader
+   reads the explanation with the box rather than leaving it to be found. A
+   textarea given no `name` only shows something and posts nothing.
+
    `label` and `hint` are written into the page as markup, because the admin's
    labels and hints carry `<code>`, `<em>` and links. They are template
    literals, never anything a visitor typed; a hint that interpolates a value
@@ -51,7 +56,7 @@
    whether or not the form was refused. The hint is a `label` laid out as a
    block, since an inline flex row would split a sentence around its `<code>`,
    and wrapped, since DaisyUI's label does not wrap. #}
-{% macro _below(id, hint, error, errorHtml) %}
+{% macro _below(id, hint, error, errorHtml, hintId='') %}
 {% if error %}
   <p class="validator-hint" id="{{ id }}-error">{{ error }}</p>
 {% endif %}
@@ -59,7 +64,7 @@
   <div class="text-error">{{ errorHtml | safe }}</div>
 {% endif %}
 {% if hint %}
-  <p class="label block whitespace-normal">{{ hint | safe }}</p>
+  <p class="label block whitespace-normal"{% if hintId %} id="{{ hintId }}"{% endif %}>{{ hint | safe }}</p>
 {% endif %}
 {% endmacro %}
 
@@ -67,8 +72,8 @@
    invalid, and which paragraph says why, so a screen reader reads the message
    with the field rather than leaving it to be found. `errorHtml` is not named
    here: it is a standing note about the stored value, not a refusal. #}
-{% macro _invalid(id, error) -%}
-{% if error %} aria-invalid="true" aria-describedby="{{ id }}-error"{% endif %}
+{% macro _invalid(id, error, hintId='') -%}
+{% if error %} aria-invalid="true" aria-describedby="{{ id }}-error{% if hintId %} {{ hintId }}{% endif %}"{% elif hintId %} aria-describedby="{{ hintId }}"{% endif %}
 {%- endmacro %}
 
 {# A box somebody types into: text, email, number, or whatever `type` says.
@@ -88,11 +93,14 @@
   hint='',
   error='',
   errorHtml='',
+  hintId='',
   min='',
   step='',
   inputmode='',
   autocomplete='',
   placeholder='',
+  list='',
+  maxlength='',
   spellcheck='',
   required=false,
   autofocus=false,
@@ -101,8 +109,8 @@
 ) %}
 <div class="fieldset">
   <label class="fieldset-legend" for="{{ id }}">{{ label | safe }}</label>
-  <input id="{{ id }}" name="{{ name }}" type="{{ type }}"{% if min %} min="{{ min }}"{% endif %}{% if step %} step="{{ step }}"{% endif %}{% if inputmode %} inputmode="{{ inputmode }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %} value="{{ value }}"{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }} class="input input-sm w-full read-only:bg-base-200 read-only:border-dashed{% if error %} validator{% endif %}" />
-{{ _below(id, hint, error, errorHtml) }}
+  <input id="{{ id }}" name="{{ name }}" type="{{ type }}"{% if min %} min="{{ min }}"{% endif %}{% if step %} step="{{ step }}"{% endif %}{% if inputmode %} inputmode="{{ inputmode }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %} value="{{ value }}"{% if list %} list="{{ list }}"{% endif %}{% if maxlength %} maxlength="{{ maxlength }}"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error, hintId) }} class="input input-sm w-full read-only:bg-base-200 read-only:border-dashed{% if error %} validator{% endif %}" />
+{{ _below(id, hint, error, errorHtml, hintId) }}
 </div>
 {%- endmacro %}
 
@@ -139,6 +147,7 @@
   hint='',
   error='',
   errorHtml='',
+  hintId='',
   rows='',
   spellcheck='',
   required=false,
@@ -148,8 +157,8 @@
 ) %}
 <div class="fieldset">
   <label class="fieldset-legend" for="{{ id }}">{{ label | safe }}</label>
-  <textarea id="{{ id }}" name="{{ name }}"{% if rows %} rows="{{ rows }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }} class="textarea textarea-sm w-full read-only:bg-base-200 read-only:border-dashed{% if error %} validator{% endif %}">{{ value }}</textarea>
-{{ _below(id, hint, error, errorHtml) }}
+  <textarea id="{{ id }}"{% if name %} name="{{ name }}"{% endif %}{% if rows %} rows="{{ rows }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error, hintId) }} class="textarea textarea-sm w-full read-only:bg-base-200 read-only:border-dashed{% if error %} validator{% endif %}">{{ value }}</textarea>
+{{ _below(id, hint, error, errorHtml, hintId) }}
 </div>
 {%- endmacro %}
 
@@ -167,16 +176,17 @@
   hint='',
   error='',
   errorHtml='',
+  hintId='',
   required=false,
   autofocus=false,
   disabled=false
 ) %}
 <div class="fieldset">
   <label class="fieldset-legend" for="{{ id }}">{{ label | safe }}</label>
-  <select id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }} class="select select-sm w-full{% if error %} validator{% endif %}">
+  <select id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error, hintId) }} class="select select-sm w-full{% if error %} validator{% endif %}">
 {{ caller() }}
   </select>
-{{ _below(id, hint, error, errorHtml) }}
+{{ _below(id, hint, error, errorHtml, hintId) }}
 </div>
 {%- endmacro %}
 
@@ -194,14 +204,15 @@
   hint='',
   error='',
   errorHtml='',
+  hintId='',
   disabled=false
 ) %}
 <div class="fieldset">
   <label class="label whitespace-normal text-base-content{% if error %} validator{% endif %}" for="{{ id }}">
-    <input id="{{ id }}" name="{{ name }}" type="checkbox" value="{{ value }}"{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }} class="checkbox checkbox-sm" />
+    <input id="{{ id }}" name="{{ name }}" type="checkbox" value="{{ value }}"{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error, hintId) }} class="checkbox checkbox-sm" />
     {{ label | safe }}
   </label>
-{{ _below(id, hint, error, errorHtml) }}
+{{ _below(id, hint, error, errorHtml, hintId) }}
 </div>
 {%- endmacro %}
 

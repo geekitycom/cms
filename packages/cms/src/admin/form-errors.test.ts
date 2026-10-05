@@ -116,9 +116,14 @@ function syndicationRefused(key: string): Record<string, unknown> {
 /**
  * Screens whose form is never shown back refused. The IndieAuth consent form
  * has nothing to type, only boxes to untick: a request it cannot answer is a
- * page of its own (`pages/indieauth/refused.njk`), never this form again.
+ * page of its own (`pages/indieauth/refused.njk`), never this form again. The
+ * conflict screen draws its two versions in read-only boxes and posts only
+ * hidden fields; a refused save there is the editor or the conflict again.
  */
-const NEVER_REFUSED: ReadonlySet<string> = new Set(['pages/indieauth/consent.njk']);
+const NEVER_REFUSED: ReadonlySet<string> = new Set([
+  'pages/indieauth/consent.njk',
+  'pages/documents/conflict.njk',
+]);
 
 /** Every page under `roots` that imports the field macros, as the first root that has it. */
 async function templatesUsingFields(roots: readonly string[]): Promise<string[]> {

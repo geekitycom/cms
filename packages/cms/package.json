@@ -65,7 +65,9 @@
   "devDependencies": {
     "@11ty/eleventy": "^3.1.6",
     "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.12.4",
     "@fedify/cli": "2.4.0",
+    "@lezer/highlight": "^1.2.3",
     "@tailwindcss/cli": "^4.3.3",
     "@types/markdown-it-footnote": "^3.0.4",
     "@types/node": "^26.6.3",

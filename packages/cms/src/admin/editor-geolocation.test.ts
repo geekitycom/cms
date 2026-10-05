@@ -77,10 +77,12 @@ describe('the editor’s geolocation', () => {
     const agent = await admin();
     const html = await (await agent.get('/admin/posts/new')).text();
 
-    assert.match(
+    const here = /<button\b[^>]*\bid="editor-location-here"[^>]*>Use my location<\/button>/.exec(
       html,
-      /<button type="button" id="editor-location-here" class="[^"]*" hidden>Use my location<\/button>/,
-    );
+    )?.[0];
+    assert.ok(here !== undefined, 'a Use my location button');
+    assert.match(here, /\btype="button"/);
+    assert.match(here, /\shidden[\s>]/);
     assert.match(html, /<p id="editor-location-status" class="[^"]*" role="status"><\/p>/);
     assert.match(html, /<script defer src="\/admin\/_static\/location\.js"><\/script>/);
 

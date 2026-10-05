@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import { statuses } from './__testing__/statuses.ts';
 import type { Browser } from './__testing__/harness.ts';
+import { saveUrlOf } from './__testing__/editor-form.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -98,7 +99,7 @@ async function submit(
   if (fields['exclude'] === '') delete fields['exclude'];
   if (fields['contact'] === '') delete fields['contact'];
 
-  const saveUrl = /<form class="admin-editor" method="post" action="([^"]+)"/.exec(html)?.[1];
+  const saveUrl = saveUrlOf(html);
   assert.ok(saveUrl !== undefined, 'the editor knew where to post');
 
   return agent.post(saveUrl, fields);

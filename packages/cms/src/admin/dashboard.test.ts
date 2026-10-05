@@ -9,6 +9,7 @@ import { flashes } from './__testing__/flash.ts';
 import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import { findUser, setUserProfile } from './accounts.ts';
 import type { Browser } from './__testing__/harness.ts';
+import { saveUrlOf } from './__testing__/editor-form.ts';
 
 const execFile = promisify(execFileCallback);
 
@@ -55,7 +56,7 @@ async function newDraft(agent: Browser, title: string): Promise<Response> {
   const token = csrfField(html);
   assert.ok(token !== undefined, 'the editor carries a form with a CSRF token');
 
-  const saveUrl = /<form class="admin-editor" method="post" action="([^"]+)"/.exec(html)?.[1];
+  const saveUrl = saveUrlOf(html);
   assert.ok(saveUrl !== undefined, 'the editor knew where to post');
 
   return agent.post(saveUrl, {

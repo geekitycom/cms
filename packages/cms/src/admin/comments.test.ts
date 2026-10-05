@@ -316,7 +316,7 @@ describe('the editor’s Comments field', () => {
     const { agent } = await moderating();
     const { html } = await editing(agent);
 
-    assert.match(html, /<select id="editor-comments" name="comments">/);
+    assert.match(html, /<select id="editor-comments" name="comments"[\s>]/);
     assert.match(html, /<option value=""[^>]* selected>Follow the site settings<\/option>/);
     assert.match(html, /<option value="open">Open<\/option>/);
     assert.match(html, /<option value="closed">Closed<\/option>/);

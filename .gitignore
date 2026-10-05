@@ -5,8 +5,9 @@ dist/
 # Eleventy build output, if anyone builds a content directory in place
 _site/
 
-# The admin editor's bundle, written by `pnpm build` from packages/cms/editor/
+# The admin editor's bundles, written by `pnpm build` from packages/cms/editor/
 packages/cms/admin/static/editor.js
+packages/cms/daisyui/static/editor.js
 
 # The default theme's stylesheet, compiled by `pnpm build` from
 # packages/cms/themes/default/src/style.css with Tailwind

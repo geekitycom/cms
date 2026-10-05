@@ -14,6 +14,7 @@ try {
   const login = await (await cms.app.request('/admin/login')).text();
   const stylesheet = await cms.app.request('/admin/_static/admin.css');
   const editor = await cms.app.request('/admin/_static/editor.js');
+  const slug = await cms.app.request('/admin/_static/slug.js');
 
   process.stdout.write(
     JSON.stringify({
@@ -21,6 +22,7 @@ try {
       unconverted,
       stylesheet: { status: stylesheet.status, body: await stylesheet.text() },
       editor: { status: editor.status, body: await editor.text() },
+      slug: { status: slug.status, body: await slug.text() },
     }),
   );
 } finally {
