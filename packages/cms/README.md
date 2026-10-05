@@ -1894,6 +1894,13 @@ Tailwind and DaisyUI from `daisyui/src/admin.css`, and ships in the package
 like the default theme's. It carries every built-in DaisyUI theme, with
 `light` as the default and `dark` when the system prefers dark.
 
+Each user picks the theme the admin is drawn in for themselves, on their own
+screen under Users: any built-in DaisyUI theme, or Follow the system. The
+choice is stored as `adminTheme` on the user in `data/users.json`, and every
+admin page drawn for that user carries it as `data-theme` on `<html>`. Following
+the system stores nothing and puts no `data-theme` on the page. The login,
+setup, forgot-password and reset screens never carry one.
+
 ### The menu
 
 The menu is WordPress classic: twelve sections — Dashboard, Posts, Pages,

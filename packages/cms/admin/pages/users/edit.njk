@@ -223,6 +223,13 @@
     </section>
   {% endif %}
 
+  {# The theme panel is the DaisyUI admin's alone (decision-30): it lives in
+     daisyui/components/, so the old admin, which has no themes, finds
+     nothing to include. #}
+  {% if account.you %}
+    {% include "components/theme-choice.njk" ignore missing %}
+  {% endif %}
+
   {% if account.you %}
     <form class="admin-settings" id="change-password" method="post" action="{{ changePasswordUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />

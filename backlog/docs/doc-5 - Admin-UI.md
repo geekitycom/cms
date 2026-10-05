@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 00:47'
+updated_date: '2026-10-05 01:03'
 ---
 # Admin UI
 
@@ -247,6 +247,13 @@ macros; it does not spell out component markup of its own.
 - **What it is.** A display name, a short bio, an avatar and a list of links, stored under `profile` on the user in `data/users.json` beside the account. It is the public face of a person: the display name heads their archive at `/author/{username}/` and is what a byline under their posts prints, and the bio, avatar and links go on the archive beside it. decision-14 makes the same four fields the actor's `name`, `summary`, `icon` and `attachments`, which is why they live with the account rather than in the site settings.
 - **Where it is edited.** One form per row on `/admin/users`, beside the email field: display name, bio, avatar and a links box of one `Label | URL` per line — a bare URL labels itself. Any row, not only your own, for the reason the email field is any row: there is one role, and every user already has every power there is. The row also links to the archive the profile heads.
 - **Nothing is required.** A field left empty is not stored, and a user with no profile at all has no `profile` key and still has an archive under their username, headed by that username.
+
+## Admin theme
+
+- **The choice.** Each user draws the DaisyUI admin (decision-30) in a theme of their own: any of DaisyUI's built-in themes, or **Follow the system**, which is the default. It is a select on the Theme panel of your own screen under Users, posted to `/admin/users/theme`, which only ever sets the theme of whoever is signed in: the admin's look is a personal preference, not something one admin sets for another. The panel is drawn only with `GEEKITY_ADMIN=daisyui`, because the old admin has no themes.
+- **Where it lives.** `adminTheme` on the user in `data/users.json`, beside the notification maps, and on the same rule: following the system is the default and is never written down, and a name this version does not know is dropped on the way in and read as following the system. The form refuses a name outside the table with a flash and writes nothing.
+- **How a page carries it.** The admin's `render` puts the signed-in user's choice on every context as `dataTheme`, and `daisyui/layouts/base.njk` renders it as `data-theme` on `<html>`. Following the system renders no attribute, and the stylesheet's `light` default and `dark` for `prefers-color-scheme: dark` decide. The login, setup, forgot-password and reset screens carry none even for somebody signed in, because they are shown to nobody in particular. There is no client-side switch.
+- **Light or dark.** `ADMIN_THEMES` in `src/admin/admin-theme.ts` is the one table of the built-in themes, each with its label and whether it is light or dark, and `adminColorScheme` reduces a choice to `light`, `dark` or `auto` for whatever draws outside the theme's reach, such as the admin bar. A test holds the table to DaisyUI's own list of themes and each entry to the `color-scheme` the compiled sheet gives it.
 
 ## User email and password recovery
 

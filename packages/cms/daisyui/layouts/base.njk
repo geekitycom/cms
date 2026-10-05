@@ -1,9 +1,10 @@
 {# The admin's base layout, the bare page: head, the compiled stylesheet and
    one column. It keeps the blocks of admin/layouts/base.njk, so a screen not
-   yet converted to DaisyUI renders inside it unchanged. No data-theme on
-   <html>: the light and dark defaults follow the system. #}
+   yet converted to DaisyUI renders inside it unchanged. `dataTheme` is the
+   signed-in user's theme; with none, the light and dark defaults follow the
+   system. #}
 <!doctype html>
-<html lang="en">
+<html lang="en"{% if dataTheme %} data-theme="{{ dataTheme }}"{% endif %}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

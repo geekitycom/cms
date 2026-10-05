@@ -18,6 +18,7 @@ import {
   DuplicateUsernameError,
   findUserById,
   listUsers,
+  setUserAdminTheme,
   setUserEmail,
   setUserNotification,
   setUserNotificationMode,
@@ -26,6 +27,7 @@ import {
   verifyUserPassword,
 } from './accounts.ts';
 import type { ProfileLink, User } from './accounts.ts';
+import { ADMIN_THEMES, adminTheme } from './admin-theme.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
@@ -123,6 +125,13 @@ export const USER_NOTIFICATIONS_PATH = `${USERS_PATH}/notifications`;
  */
 export const USER_NOTIFICATION_MODE_PATH = `${USER_NOTIFICATIONS_PATH}/mode`;
 
+/**
+ * Where the Theme panel posts. It sets the theme of whoever is signed in and
+ * names nobody else: the admin's look is a personal preference, not a setting
+ * one admin makes for another.
+ */
+export const USER_THEME_PATH = `${USERS_PATH}/theme`;
+
 /** The fields the forms on these screens submit. */
 export const USER_FIELDS = {
   username: 'username',
@@ -159,6 +168,8 @@ export const USER_FIELDS = {
   location: 'location',
   /** Somewhere else they are: one `Label | URL` per line. */
   links: 'links',
+  /** The admin's theme: a built-in DaisyUI theme's name, or empty to follow the system. */
+  adminTheme: 'admin_theme',
 } as const;
 
 /** What {@link mountUsers} needs from the admin around it. */
@@ -477,6 +488,31 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     return c.redirect(editUserPath(target.id), 303);
   });
 
+  app.post(USER_THEME_PATH, async (c) => {
+    const dataDir = c.var.config.dataDir;
+    const userId = c.var.session?.userId;
+    const user = userId == null ? undefined : findUserById(dataDir, userId);
+    if (user === undefined) return c.redirect(USERS_PATH, 303);
+
+    const body = await c.req.parseBody();
+    const wanted = field(body[USER_FIELDS.adminTheme]);
+    const theme = adminTheme(wanted);
+    if (wanted !== '' && theme === undefined) {
+      flash(c, 'error', 'That is not one of the themes.');
+      return c.redirect(editUserPath(user.id), 303);
+    }
+
+    await setUserAdminTheme({ dataDir, userId: user.id, theme });
+    flash(
+      c,
+      'notice',
+      theme === undefined
+        ? "The admin follows your system's light or dark setting."
+        : `The admin is drawn in ${ADMIN_THEMES[theme].label} for you.`,
+    );
+    return c.redirect(editUserPath(user.id), 303);
+  });
+
   app.post(DELETE_USER_PATH, async (c) => {
     const dataDir = c.var.config.dataDir;
     const body = await c.req.parseBody();
@@ -682,6 +718,8 @@ function userScreen(
     userNotificationsUrl: USER_NOTIFICATIONS_PATH,
     userNotificationModeUrl: USER_NOTIFICATION_MODE_PATH,
     connectedAppsUrl: CONNECTED_APPS_PATH,
+    userThemeUrl: USER_THEME_PATH,
+    themeChoices: themeChoices(user),
     fields: USER_FIELDS,
     // `account` rather than `user`, which the chrome already holds: the bar
     // says who is signed in, and this screen is about somebody who may well be
@@ -727,6 +765,18 @@ function screen(
     addProblems: {},
     ...extra,
   };
+}
+
+/** The Theme panel's options: Follow the system, then every built-in theme, `user`'s marked. */
+function themeChoices(user: User): { value: string; label: string; chosen: boolean }[] {
+  return [
+    { value: '', label: 'Follow the system', chosen: user.adminTheme === undefined },
+    ...Object.entries(ADMIN_THEMES).map(([name, { label }]) => ({
+      value: name,
+      label,
+      chosen: user.adminTheme === name,
+    })),
+  ];
 }
 
 /** A form field as a string. A file upload, or a missing field, is the empty one. */

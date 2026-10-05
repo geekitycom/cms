@@ -1,0 +1,20 @@
+{# The Theme panel on your own user screen: a select of Follow the system and
+   every built-in DaisyUI theme, posting to `userThemeUrl`. #}
+{% import "components/fields.njk" as field %}
+{% from "components/card.njk" import card, cardActions %}
+{% from "components/button.njk" import button %}
+
+{% call card(title='Theme') %}
+  <form method="post" action="{{ userThemeUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    {% call field.select('admin-theme', fields.adminTheme, 'Draw the admin in',
+         hint='Only you see it. Follow the system draws light or dark as your device is set.') %}
+      {% for choice in themeChoices %}
+        <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
+      {% endfor %}
+    {% endcall %}
+    {% call cardActions() %}
+      {{ button('Save theme', type='submit', color='primary') }}
+    {% endcall %}
+  </form>
+{% endcall %}

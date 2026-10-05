@@ -13,6 +13,8 @@ import {
   withNotificationMode,
 } from '../notifications/preferences.ts';
 import { relText } from '../web/navigation.ts';
+import { adminTheme } from './admin-theme.ts';
+import type { AdminTheme } from './admin-theme.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
 import type { AdminStore } from './store.ts';
 
@@ -91,6 +93,12 @@ export interface User {
    * adding an event adds no field here either.
    */
   readonly notificationModes?: Readonly<Record<string, string>> | undefined;
+  /**
+   * The built-in DaisyUI theme this user draws the admin in, when they have
+   * picked one (decision-30). Absent means they follow the system, and the
+   * default is never written down.
+   */
+  readonly adminTheme?: AdminTheme | undefined;
   /**
    * What the public site says about this person, when somebody has filled any
    * of it in (TASK-67).
@@ -547,6 +555,36 @@ export async function setUserNotificationMode(input: {
 }
 
 /**
+ * Set the theme a user draws the admin in, or take it off with `undefined`,
+ * which leaves them following the system. Returns `false` when there is no
+ * such user.
+ */
+export async function setUserAdminTheme(input: {
+  /** Which site's users file to write. */
+  dataDir: string;
+  /** Whose theme. */
+  userId: number;
+  /** The theme, or `undefined` to follow the system. */
+  theme: AdminTheme | undefined;
+}): Promise<boolean> {
+  let changed = false;
+
+  await write(input.dataDir, (contents) => {
+    changed = contents.users.some((user) => user.id === input.userId);
+    return {
+      ...contents,
+      users: contents.users.map((user) => {
+        if (user.id !== input.userId) return user;
+        const { adminTheme: _removed, ...rest } = user;
+        return input.theme === undefined ? rest : { ...rest, adminTheme: input.theme };
+      }),
+    };
+  });
+
+  return changed;
+}
+
+/**
  * Thrown when the id being imported already belongs to somebody else.
  *
  * Two accounts answering to one actor id is two people with one identity, and
@@ -734,6 +772,7 @@ function withoutHash(user: StoredUser): User {
     ...(user.email === undefined ? {} : { email: user.email }),
     ...(user.notifications === undefined ? {} : { notifications: user.notifications }),
     ...(user.notificationModes === undefined ? {} : { notificationModes: user.notificationModes }),
+    ...(user.adminTheme === undefined ? {} : { adminTheme: user.adminTheme }),
     ...(user.profile === undefined ? {} : { profile: user.profile }),
     ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
     ...(user.wordpressActorId === undefined ? {} : { wordpressActorId: user.wordpressActorId }),
@@ -831,6 +870,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const email = record['email'];
   const preferences = notificationsFrom(record['notifications']);
   const modes = notificationModesFrom(record['notificationModes']);
+  const theme = adminTheme(record['adminTheme']);
   const profile = profileFrom(record['profile']);
   const actorId = storedActorIdFrom(record['actorId']);
   const wordpressActorId = wordpressActorIdFrom(record['wordpressActorId']);
@@ -865,6 +905,9 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
     // know: a stored `weekly` from a later version is read as the default
     // rather than as a window nothing here could wait for.
     ...(modes === undefined ? {} : { notificationModes: modes }),
+    // And a theme this version does not know, from a newer DaisyUI or a typo,
+    // is read as following the system rather than as a name no sheet draws.
+    ...(theme === undefined ? {} : { adminTheme: theme }),
     // Dropped field by field on the same rule, and for the sharper reason that
     // a profile is prose somebody may well have typed straight into the file:
     // a bio that is a number is not a bio, and refusing to load the users file
