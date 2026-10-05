@@ -1,17 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { adminFile, adminTemplates } from './__testing__/admin-files.ts';
 import { browser, sandbox, signedIn } from './__testing__/harness.ts';
 import { adminMenu } from './menu.ts';
-import {
-  adminDirectories,
-  createAdminTemplateEnvironment,
-  DAISYUI_ADMIN_DIR,
-  PACKAGED_ADMIN_DIR,
-} from './templates.ts';
+import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.ts';
 
 /**
  * The admin for someone on a keyboard (TASK-143): a way past the chrome on
@@ -24,15 +18,18 @@ import {
 
 const environment = createAdminTemplateEnvironment({ noCache: true });
 
-const daisyui = createAdminTemplateEnvironment({
-  noCache: true,
-  roots: adminDirectories({ GEEKITY_ADMIN: 'daisyui' }),
-});
+/** Every `.njk` under `directory` of the admin, relative to the admin, sorted. */
+async function adminTemplates(directory: string): Promise<string[]> {
+  return (await readdir(path.join(PACKAGED_ADMIN_DIR, directory), { recursive: true }))
+    .filter((entry) => entry.endsWith('.njk'))
+    .map((entry) => `${directory}/${entry}`)
+    .sort();
+}
 
-/** The skip link's opening tag, as the base layout the admin serves writes it. */
+/** The skip link's opening tag, as the base layout writes it. */
 const SKIP_LINK =
   /<a class="[^"]*" href="#main">/.exec(
-    await readFile(adminFile('layouts/base.njk'), 'utf8'),
+    await readFile(path.join(PACKAGED_ADMIN_DIR, 'layouts', 'base.njk'), 'utf8'),
   )?.[0] ?? 'no skip link in layouts/base.njk';
 
 /** The opening tag of the first element a Tab press can land on. */
@@ -80,7 +77,7 @@ describe('every admin table', async () => {
   const tables: { template: string; opening: string; rest: string }[] = [];
   const calls: { template: string; caption: string }[] = [];
   for (const template of templates) {
-    const source = await readFile(adminFile(template), 'utf8');
+    const source = await readFile(path.join(PACKAGED_ADMIN_DIR, template), 'utf8');
     for (const match of source.matchAll(/<table\b[^>]*>/g)) {
       tables.push({
         template,
@@ -121,16 +118,6 @@ describe('every admin table', async () => {
   }
 });
 
-/** The custom properties one of the old admin's stylesheets declares, by name. */
-async function tokens(stylesheet: string): Promise<Map<string, string>> {
-  const css = await readFile(path.join(PACKAGED_ADMIN_DIR, 'static', stylesheet), 'utf8');
-  return new Map(
-    [...css.matchAll(/(--admin-[a-z-]+):\s*(#[0-9a-f]{3}(?:[0-9a-f]{3})?)\s*;/gi)].map(
-      ([, name, value]) => [name ?? '', value ?? ''],
-    ),
-  );
-}
-
 /** WCAG relative luminance of a #rgb or #rrggbb colour. */
 function luminance(colour: string): number {
   const hex = colour.length === 4 ? colour.replaceAll(/[0-9a-f]/gi, '$&$&') : colour;
@@ -146,42 +133,9 @@ function contrast(one: string, other: string): number {
   return ((light ?? 0) + 0.05) / ((dark ?? 0) + 0.05);
 }
 
-describe("the old admin's focus ring", () => {
-  /** Each ring colour, and every background it is drawn against. */
-  const SURFACES: Readonly<Record<string, readonly string[]>> = {
-    '--admin-focus': ['--admin-field', '--admin-surface', '--admin-unread'],
-    '--admin-focus-on-dark': [
-      '--admin-bar',
-      '--admin-nav',
-      '--admin-nav-open',
-      '--admin-nav-children',
-      '--admin-nav-current',
-    ],
-  };
-
-  for (const [ring, backgrounds] of Object.entries(SURFACES)) {
-    for (const background of backgrounds) {
-      it(`${ring} stands out 3:1 against ${background}`, async () => {
-        const declared = new Map([
-          ...(await tokens('admin-bar.css')),
-          ...(await tokens('admin.css')),
-        ]);
-        const ringColour = declared.get(ring);
-        const backgroundColour = declared.get(background);
-        assert.ok(
-          ringColour !== undefined && backgroundColour !== undefined,
-          `${ring} and ${background} are declared`,
-        );
-        const ratio = contrast(ringColour, backgroundColour);
-        assert.ok(ratio >= 3, `${ringColour} on ${backgroundColour} is ${ratio.toFixed(2)}:1`);
-      });
-    }
-  }
-});
-
-describe("the DaisyUI shell's focus ring", () => {
+describe("the shell's focus ring", () => {
   it('outlines every link in the section menu, the current one too, in the theme text colour', () => {
-    const html = daisyui.renderString('{% extends "layouts/shell.njk" %}', {
+    const html = environment.renderString('{% extends "layouts/shell.njk" %}', {
       navigation: adminMenu({ section: 'posts', child: 'tags' }),
     });
     const nav = /<nav\b[^>]*\baria-label="Sections"[^>]*>[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
@@ -205,8 +159,8 @@ describe("the DaisyUI shell's focus ring", () => {
   });
 });
 
-describe('the DaisyUI admin bar, in its light palette and its dark one', async () => {
-  const css = await readFile(path.join(DAISYUI_ADMIN_DIR, 'static', 'admin-bar.css'), 'utf8');
+describe('the admin bar, in its light palette and its dark one', async () => {
+  const css = await readFile(path.join(PACKAGED_ADMIN_DIR, 'static', 'admin-bar.css'), 'utf8');
   const declared =
     /(--admin-bar-[a-z-]+):\s*light-dark\(\s*(#[0-9a-f]{3,6})\s*,\s*(#[0-9a-f]{3,6})\s*\)\s*;/gi;
   const palettes = {
@@ -252,7 +206,7 @@ describe('the DaisyUI admin bar, in its light palette and its dark one', async (
   }
 
   it('leaves the skip link first on a screen, ahead of the bar, and draws it over the fixed bar', () => {
-    const html = daisyui.render('pages/dashboard/home.njk', {});
+    const html = environment.render('pages/dashboard/home.njk', {});
     const skip = firstFocusable(html) ?? '';
     assert.match(skip, /^<a class="[^"]*" href="#main">$/, 'the first stop is the skip link');
     assert.ok(html.indexOf(skip) < html.indexOf('<geekity-admin-bar'), 'it comes before the bar');

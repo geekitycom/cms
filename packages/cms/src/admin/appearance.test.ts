@@ -98,9 +98,9 @@ async function screen(agent: Browser): Promise<string> {
   return response.text();
 }
 
-/** The theme cards on the screen, in the order they are drawn, in either admin. */
+/** The theme cards on the screen, in the order they are drawn. */
 function cards(html: string): string[] {
-  return html.split(/<li class="admin-theme|<li>\s*<div class="card /).slice(1);
+  return html.split(/<li>\s*<div class="card /).slice(1);
 }
 
 /** The display name on one card. */

@@ -1,12 +1,9 @@
 /**
- * The classes the editor's script gives the markup it builds at runtime, once
- * for each admin. `scripts/build-editor.js` builds `main.ts` twice and tells
- * each build which admin it is for (decision-30): the old admin's bundle keeps
- * its `admin-*` classes, and the DaisyUI admin's draws with DaisyUI's
- * components and Tailwind's utilities. The flip deletes {@link CLASSIC}.
+ * The classes the editor's script gives the markup it builds at runtime:
+ * DaisyUI's components and Tailwind's utilities (decision-30).
  *
- * The DaisyUI admin's stylesheet reads this file for class names, so every
- * name in {@link DAISYUI} is written out in full.
+ * The admin's stylesheet reads this file for class names, so every name in
+ * {@link LOOK} is written out in full.
  */
 export interface Look {
   /** The box CodeMirror is mounted in. */
@@ -27,18 +24,7 @@ export interface Look {
   readonly statusError: string;
 }
 
-export const CLASSIC: Look = {
-  surface: 'admin-editor-surface',
-  tabs: 'admin-editor-tabs',
-  tab: 'admin-editor-tab',
-  preview: 'admin-editor-preview',
-  upload: 'admin-editor-upload',
-  uploadButton: 'admin-button-quiet',
-  status: 'admin-editor-status',
-  statusError: 'admin-editor-status',
-};
-
-export const DAISYUI: Look = {
+export const LOOK: Look = {
   surface: '',
   tabs: 'tabs tabs-box tabs-sm me-auto',
   tab: 'tab',

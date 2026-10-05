@@ -24,7 +24,7 @@
      radio and a select that can disagree with each other. #}
   {% set homepageGone %}
     {% if homepageMissing %}
-      <p class="admin-field-error">
+      <p>
         The homepage was <code>{{ form.homepage }}</code>, which is no longer published,
         so the site is showing its latest posts. Publish that page again to have it back,
         or pick another.
@@ -45,7 +45,7 @@
 
   {% set postsPageGone %}
     {% if postsPageMissing %}
-      <p class="admin-field-error">
+      <p>
         The posts page was <code>{{ form.postsPage }}</code>, which is no longer published,
         so the listing has no page of its own.
       </p>
@@ -100,7 +100,7 @@
 
   {# TASK-148. What /robots.txt tells crawlers beyond keeping them out of the
      admin, which it does whatever is set here. #}
-  <h2>Crawlers</h2>
+  <h2 class="mt-6 text-lg font-semibold">Crawlers</h2>
 
   {% set aiHint %}
     Training crawlers gather pages to train AI models. Retrieval crawlers fetch a

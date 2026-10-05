@@ -19,12 +19,7 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { basicSetup, EditorView } from 'codemirror';
 
-import { CLASSIC, DAISYUI } from './look.ts';
-
-/** Which admin this bundle is for, set by `scripts/build-editor.js`. */
-declare const ADMIN_LOOK: 'classic' | 'daisyui';
-
-const LOOK = ADMIN_LOOK === 'daisyui' ? DAISYUI : CLASSIC;
+import { LOOK } from './look.ts';
 
 /** The element the server hangs the editor's URLs off. */
 const TOOLS_ID = 'editor-enhance';
@@ -346,13 +341,11 @@ function addClasses(element: HTMLElement, names: string): void {
 }
 
 /**
- * What the DaisyUI admin adds to CodeMirror: the Markdown it highlights is
- * marked with `.cm-md-*` classes rather than coloured, so the stylesheet draws
- * it in the theme's own colours (decision-30). The old admin keeps
- * CodeMirror's own highlighting.
+ * What the admin adds to CodeMirror: the Markdown it highlights is marked with
+ * `.cm-md-*` classes rather than coloured, so the stylesheet draws it in the
+ * theme's own colours (decision-30).
  */
 function themeExtensions(): ReturnType<typeof syntaxHighlighting>[] {
-  if (ADMIN_LOOK !== 'daisyui') return [];
   const highlighting = syntaxHighlighting(
     HighlightStyle.define([
       { tag: tags.heading, class: 'cm-md-heading' },

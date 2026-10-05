@@ -1,104 +1,98 @@
 {# /admin/messages: what the contact form left behind (TASK-56).
 
-   A message is a file under data/contact/ and nothing else, so the two buttons
-   here are a rewrite and an unlink. Every button is a form of its own, so the
-   whole screen works with JavaScript switched off. #}
+   One card per message, as on Comments. An unread one says so in a badge and
+   in a heavier name, so it is not told by colour alone. A message is a file
+   under data/contact/ and nothing else, so the two buttons are a rewrite and
+   an unlink, each a form of its own. #}
 {% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import status as statusBadge %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/card.njk" import card %}
+{% from "components/pagination.njk" import pagination %}
+{% from "components/tabs.njk" import tabs as tabsNav %}
 
 {% block title %}{{ heading }}{% endblock %}
 
 {% block content %}
-  <h1>{{ heading }}</h1>
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
 
-  <nav class="admin-filters" aria-label="Message status">
-    <ul>
-      {% for tab in tabs %}
-        <li>
-          <a href="{{ tab.url }}"{% if tab.current %} aria-current="page"{% endif %}>
-            {{ tab.label }} ({{ tab.count }})
-          </a>
-        </li>
-      {% endfor %}
-    </ul>
-  </nav>
+  <div class="mb-6">{{ tabsNav(tabs, 'Message status') }}</div>
 
   {% if rows.length == 0 %}
-    <p class="admin-empty">Nothing here.</p>
+    <p class="mb-6">Nothing here.</p>
   {% else %}
-    <ul class="admin-comments">
+    <ul class="mb-6 flex max-w-3xl flex-col gap-4">
       {% for row in rows %}
-        <li class="admin-comment{% if not row.read %} admin-comment-unread{% endif %}">
-          <div class="admin-comment-meta">
-            <span class="admin-comment-author">{{ row.author }}</span>
-            <a class="admin-comment-email" href="mailto:{{ row.email }}">{{ row.email }}</a>
-            {% if not row.read %}
-              <span class="admin-status admin-status-pending">unread</span>
-            {% endif %}
-            {% if row.status == 'spam' %}
-              <span class="admin-status admin-status-spam">spam</span>
-            {% endif %}
-          </div>
-
-          <p class="admin-comment-where">
-            <time>{{ row.received }}</time>
-            from
-            {% if row.pageUrl %}
-              <a href="{{ row.pageUrl }}">{{ row.page }}</a>
-            {% else %}
-              {{ row.page }}
-            {% endif %}
-            {% if row.address %}
-              &middot; <code title="A salted hash of the address it came from">{{ row.address }}</code>
-            {% endif %}
-          </p>
-
-          {% if row.subject %}
-            <p class="admin-message-subject"><strong>{{ row.subject }}</strong></p>
-          {% endif %}
-
-          {# Printed, never rendered: a contact message is plain text, and
-             nothing a stranger typed is turned into markup here. #}
-          <div class="admin-comment-body admin-message-body">{{ row.message }}</div>
-
-          <div class="admin-actions">
-            <a class="admin-button admin-button-quiet" href="{{ row.replyUrl }}">Reply</a>
-
-            <form method="post" action="{{ readUrl }}">
-              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-              <input type="hidden" name="{{ fields.id }}" value="{{ row.id }}" />
-              <input type="hidden" name="{{ fields.status }}" value="{{ status }}" />
+        <li>
+          {% call card() %}
+            <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
               {% if row.read %}
-                <button type="submit" name="{{ fields.read }}" value="">Mark unread</button>
+                <span class="font-medium">{{ row.author }}</span>
               {% else %}
-                <button type="submit" name="{{ fields.read }}" value="1">Mark read</button>
+                <span class="font-bold">{{ row.author }}</span>
               {% endif %}
-            </form>
+              <a class="link break-all" href="mailto:{{ row.email }}">{{ row.email }}</a>
+              {% if not row.read %}
+                {{ statusBadge('unread', 'Unread') }}
+              {% endif %}
+              {% if row.status == 'spam' %}
+                {{ statusBadge('spam', 'Spam') }}
+              {% endif %}
+            </p>
 
-            <form method="post" action="{{ deleteUrl }}">
-              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-              <input type="hidden" name="{{ fields.id }}" value="{{ row.id }}" />
-              <input type="hidden" name="{{ fields.status }}" value="{{ status }}" />
-              <button type="submit">Delete</button>
-            </form>
-          </div>
+            <p class="text-sm">
+              <time>{{ row.received }}</time>
+              from
+              {% if row.pageUrl %}
+                <a class="link" href="{{ row.pageUrl }}">{{ row.page }}</a>
+              {% else %}
+                {{ row.page }}
+              {% endif %}
+              {% if row.address %}
+                &middot; <code title="A salted hash of the address it came from">{{ row.address }}</code>
+              {% endif %}
+            </p>
+
+            {% if row.subject %}
+              <p class="font-semibold">{{ row.subject }}</p>
+            {% endif %}
+
+            {# Printed, never rendered: a contact message is plain text, and
+               nothing a stranger typed is turned into markup here. #}
+            <div class="whitespace-pre-line break-words">{{ row.message }}</div>
+
+            <div class="flex flex-wrap gap-1">
+              {{ buttonLink('Reply', row.replyUrl, style='ghost', size='xs') }}
+
+              <form method="post" action="{{ readUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.id }}" value="{{ row.id }}" />
+                <input type="hidden" name="{{ fields.status }}" value="{{ status }}" />
+                {% if row.read %}
+                  {{ button('Mark unread', type='submit', style='ghost', size='xs', name=fields.read) }}
+                {% else %}
+                  {{ button('Mark read', type='submit', style='ghost', size='xs', name=fields.read, value='1') }}
+                {% endif %}
+              </form>
+
+              <form method="post" action="{{ deleteUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.id }}" value="{{ row.id }}" />
+                <input type="hidden" name="{{ fields.status }}" value="{{ status }}" />
+                {{ button('Delete', type='submit', color='error', style='ghost', size='xs') }}
+              </form>
+            </div>
+          {% endcall %}
         </li>
       {% endfor %}
     </ul>
 
-    {% if previousUrl or nextUrl %}
-      <nav class="admin-pagination" aria-label="Pages">
-        {% if previousUrl %}
-          <a rel="prev" href="{{ previousUrl }}">Newer</a>
-        {% endif %}
-        <span>Page {{ page }} of {{ pages }}</span>
-        {% if nextUrl %}
-          <a rel="next" href="{{ nextUrl }}">Older</a>
-        {% endif %}
-      </nav>
-    {% endif %}
+    <div class="mb-6">
+      {{ pagination(page, pages=pages, previousUrl=previousUrl, nextUrl=nextUrl) }}
+    </div>
   {% endif %}
 
-  <p class="admin-hint">
+  <p class="max-w-prose text-sm">
     A page carrying <code>contact: true</code> in its front matter offers a contact form, and every
     message it takes is one JSON file under <code>data/contact/</code> &mdash; written before
     anything is emailed, so a message survives a mail outage and a site with no mail configured

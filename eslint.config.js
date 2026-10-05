@@ -30,7 +30,6 @@ export default tseslint.config(
       // Build products: esbuild's output, written by `pnpm build` from
       // packages/cms/editor/, which is linted as source instead.
       'packages/cms/admin/static/editor.js',
-      'packages/cms/daisyui/static/editor.js',
       // The other esbuild output: the default theme's highlight.js bundle,
       // written by `pnpm --filter @geekity/cms build:highlight`. Unlike the
       // editor's it is committed, so it has to be named here; the source it is
@@ -127,7 +126,7 @@ export default tseslint.config(
     // through the linter into a page. `editor.js` beside them is esbuild's
     // output and is ignored; its source is linted as TypeScript.
     name: 'geekity/admin-static',
-    files: ['packages/cms/admin/static/**/*.js', 'packages/cms/daisyui/static/**/*.js'],
+    files: ['packages/cms/admin/static/**/*.js'],
     languageOptions: {
       sourceType: 'script',
       globals: globals.browser,

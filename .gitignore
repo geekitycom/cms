@@ -5,17 +5,16 @@ dist/
 # Eleventy build output, if anyone builds a content directory in place
 _site/
 
-# The admin editor's bundles, written by `pnpm build` from packages/cms/editor/
+# The admin editor's bundle, written by `pnpm build` from packages/cms/editor/
 packages/cms/admin/static/editor.js
-packages/cms/daisyui/static/editor.js
 
 # The default theme's stylesheet, compiled by `pnpm build` from
 # packages/cms/themes/default/src/style.css with Tailwind
 packages/cms/themes/default/static/style.css
 
-# The DaisyUI admin's stylesheet, compiled by `pnpm build` from
-# packages/cms/daisyui/src/admin.css with Tailwind and DaisyUI
-packages/cms/daisyui/static/admin.css
+# The admin's stylesheet, compiled by `pnpm build` from
+# packages/cms/admin/src/admin.css with Tailwind and DaisyUI
+packages/cms/admin/static/admin.css
 
 # SQLite index and other derived state, including data/images/ — the image
 # variants sharp derives from the originals under content/uploads/.

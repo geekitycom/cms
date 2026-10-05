@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { adminDirectories, createAdminTemplateEnvironment } from './templates.ts';
+import { createAdminTemplateEnvironment } from './templates.ts';
 
-const environment = createAdminTemplateEnvironment({
-  noCache: true,
-  roots: adminDirectories({ GEEKITY_ADMIN: 'daisyui' }),
-});
+const environment = createAdminTemplateEnvironment({ noCache: true });
 
 /** `body` rendered after importing `macros` from `components/<file>.njk`. */
 function render(file: string, macros: string, body: string, context = {}): string {

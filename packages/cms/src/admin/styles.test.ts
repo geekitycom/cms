@@ -3,8 +3,8 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 
-import { DAISYUI } from '../../editor/look.ts';
-import { DAISYUI_ADMIN_DIR } from './templates.ts';
+import { LOOK } from '../../editor/look.ts';
+import { PACKAGED_ADMIN_DIR } from './templates.ts';
 
 /**
  * Tailwind writes a rule only for a class it knows, so a class token with no
@@ -14,11 +14,11 @@ import { DAISYUI_ADMIN_DIR } from './templates.ts';
  * semantic tokens.
  */
 
-const TEMPLATES = (await readdir(DAISYUI_ADMIN_DIR, { recursive: true }))
+const TEMPLATES = (await readdir(PACKAGED_ADMIN_DIR, { recursive: true }))
   .filter((file) => file.endsWith('.njk'))
   .sort();
 
-const COMPILED = await readFile(path.join(DAISYUI_ADMIN_DIR, 'static', 'admin.css'), 'utf8');
+const COMPILED = await readFile(path.join(PACKAGED_ADMIN_DIR, 'static', 'admin.css'), 'utf8');
 
 const HOLE = '\0';
 
@@ -131,7 +131,7 @@ async function stylesFor(template: string): Promise<Set<string>> {
   const own = OWN_STYLESHEET[template];
   return own === undefined
     ? STYLED
-    : styledClasses(await readFile(path.join(DAISYUI_ADMIN_DIR, own), 'utf8'));
+    : styledClasses(await readFile(path.join(PACKAGED_ADMIN_DIR, own), 'utf8'));
 }
 
 /** The classes `template` emits that `styled` has no rule for, and the ones it
@@ -170,8 +170,8 @@ function foreignColours(template: string): string[] {
   return found;
 }
 
-describe('the DaisyUI admin templates', () => {
-  it('are found by reading daisyui/', () => {
+describe('the admin templates', () => {
+  it('are found by reading admin/', () => {
     assert.ok(
       TEMPLATES.includes('layouts/base.njk') && TEMPLATES.includes('components/button.njk'),
       `the templates were found: ${TEMPLATES.join(', ')}`,
@@ -180,13 +180,13 @@ describe('the DaisyUI admin templates', () => {
 
   it('names only templates that exist among its exceptions', () => {
     for (const template of [...Object.keys(OWN_STYLESHEET), ...ON_THE_PUBLIC_SITE]) {
-      assert.ok(TEMPLATES.includes(template), `${template} is in daisyui/`);
+      assert.ok(TEMPLATES.includes(template), `${template} is in admin/`);
     }
   });
 
   for (const template of TEMPLATES.filter((name) => !ON_THE_PUBLIC_SITE.has(name))) {
     it(`${template} writes every class out in full, and each has a rule in ${OWN_STYLESHEET[template] ?? 'the compiled sheet'}`, async () => {
-      const source = await readFile(path.join(DAISYUI_ADMIN_DIR, template), 'utf8');
+      const source = await readFile(path.join(PACKAGED_ADMIN_DIR, template), 'utf8');
       const { missing, built } = unstyled(source, await stylesFor(template));
 
       assert.deepEqual(
@@ -198,13 +198,46 @@ describe('the DaisyUI admin templates', () => {
     });
 
     it(`${template} draws in the theme's semantic colours alone`, async () => {
-      const source = await readFile(path.join(DAISYUI_ADMIN_DIR, template), 'utf8');
+      const source = await readFile(path.join(PACKAGED_ADMIN_DIR, template), 'utf8');
       assert.deepEqual(foreignColours(source), [], 'these colours are not semantic tokens');
     });
   }
 
+  it('write no admin-* class but in the bar, whose classes live in its own sheet', async () => {
+    const legacy: string[] = [];
+    for (const template of TEMPLATES.filter((name) => !(name in OWN_STYLESHEET))) {
+      const source = await readFile(path.join(PACKAGED_ADMIN_DIR, template), 'utf8');
+      for (const name of classTokens(source).classes) {
+        if (name.startsWith('admin-')) legacy.push(`${template}: ${name}`);
+      }
+    }
+    legacy.push(
+      ...Object.values(LOOK)
+        .flatMap((value) => value.split(/\s+/))
+        .filter((name) => name.startsWith('admin-'))
+        .map((name) => `editor/look.ts: ${name}`),
+    );
+    assert.deepEqual(legacy, []);
+
+    const sheets = (await readdir(PACKAGED_ADMIN_DIR, { recursive: true })).filter((file) =>
+      file.endsWith('.css'),
+    );
+    const rules: string[] = [];
+    for (const sheet of sheets) {
+      const css = await readFile(path.join(PACKAGED_ADMIN_DIR, sheet), 'utf8');
+      for (const name of styledClasses(css)) {
+        if (name.startsWith('admin-')) rules.push(`${sheet}: .${name}`);
+      }
+    }
+    assert.ok(rules.includes('static/admin-bar.css: .admin-bar'), 'the bar sheet was read');
+    assert.deepEqual(
+      rules.filter((rule) => !rule.startsWith('static/admin-bar.css: ')),
+      [],
+    );
+  });
+
   it('has a rule for every class the editor script writes, in the theme’s colours alone', () => {
-    const classes = Object.values(DAISYUI).join(' ').split(/\s+/).filter(Boolean);
+    const classes = Object.values(LOOK).join(' ').split(/\s+/).filter(Boolean);
     assert.deepEqual(
       classes.filter((name) => !STYLED.has(name)),
       [],

@@ -16,9 +16,7 @@ import { writeUsers } from './users.ts';
  * One site holding something in every state the admin's remaining screens can
  * draw (TASK-274): comments, messages, themes, menus, the settings pages and
  * their panels, the tools, the IndieAuth consent and refused screens, the
- * admin's error page and the user forms. `remaining-screens.test.ts` reads
- * them from the old admin in its own process and from the DaisyUI admin
- * through `remaining-probe.ts`, so one assertion can be held over both.
+ * admin's error page and the user forms, for `remaining-screens.test.ts`.
  */
 
 const NOW = new Date('2026-10-02T12:00:00.000Z');

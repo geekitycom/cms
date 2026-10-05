@@ -10,9 +10,7 @@ import { writeUsers } from './users.ts';
 
 /**
  * One site holding a row in every state each list screen can show, and those
- * screens as a signed-in admin is served them. `list-screens.test.ts` reads
- * them from the old admin in its own process and from the DaisyUI admin through
- * `list-probe.ts`, so one assertion can be held over both.
+ * screens as a signed-in admin is served them, for `list-screens.test.ts`.
  */
 
 const NOW = new Date('2026-10-02T12:00:00.000Z');

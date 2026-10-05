@@ -2,71 +2,77 @@
    (TASK-135). Looking is a step of its own because erasing cannot be undone. #}
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/card.njk" import card, cardActions %}
 
 {% block title %}{{ heading }}{% endblock %}
 
 {% block content %}
-  <h1>{{ heading }}</h1>
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
 
-  <p>
-    When somebody asks for what this site holds about them to be erased, type
-    the email address they commented or wrote in under. Their comments stay in
-    their threads, with their words and their moderation status, signed
-    <strong>{{ erasedName }}</strong> and with their email, website and address
-    hash removed. Their contact messages are deleted, and the address comes off
-    the list of people who asked not to be emailed about replies.
-  </p>
+  <div class="flex max-w-2xl flex-col gap-6">
+    <p class="max-w-prose">
+      When somebody asks for what this site holds about them to be erased, type
+      the email address they commented or wrote in under. Their comments stay in
+      their threads, with their words and their moderation status, signed
+      <strong>{{ erasedName }}</strong> and with their email, website and address
+      hash removed. Their contact messages are deleted, and the address comes off
+      the list of people who asked not to be emailed about replies.
+    </p>
 
-  {% if found %}
-    <form class="admin-settings" method="post" action="{{ actionUrl }}">
-      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-      <input type="hidden" name="{{ fields.email }}" value="{{ email }}" />
-      <input type="hidden" name="{{ fields.confirm }}" value="1" />
+    {% if found %}
+      {% call card(title='What this site holds for ' + email) %}
+        <form method="post" action="{{ actionUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          <input type="hidden" name="{{ fields.email }}" value="{{ email }}" />
+          <input type="hidden" name="{{ fields.confirm }}" value="1" />
 
-      <h2>What this site holds for {{ email }}</h2>
+          <ul class="list-disc ps-5">
+            <li>{{ found.comments }}</li>
+            <li>{{ found.messages }}</li>
+            <li>
+              {% if found.optedOut %}On{% else %}Not on{% endif %} the list of addresses not
+              to email about replies
+            </li>
+          </ul>
 
-      <ul>
-        <li>{{ found.comments }}</li>
-        <li>{{ found.messages }}</li>
-        <li>
-          {% if found.optedOut %}On{% else %}Not on{% endif %} the list of addresses not
-          to email about replies
-        </li>
-      </ul>
-
-      {% if found.anything %}
-        <p>
-          Erasing cannot be undone. A copy of a comment file in git history or in a
-          backup keeps what it held; this changes the site as it is now.
-        </p>
-        <p class="admin-settings-buttons">
-          <button type="submit">Erase it</button>
-          <a href="{{ actionUrl }}">Cancel</a>
-        </p>
-      {% else %}
-        <p>There is nothing to erase for that address.</p>
-        <p class="admin-settings-buttons"><a href="{{ actionUrl }}">Look for another</a></p>
+          {% if found.anything %}
+            <p class="mt-4">
+              Erasing cannot be undone. A copy of a comment file in git history or in a
+              backup keeps what it held; this changes the site as it is now.
+            </p>
+            {% call cardActions() %}
+              {{ buttonLink('Cancel', actionUrl, style='ghost') }}
+              {{ button('Erase it', type='submit', color='error') }}
+            {% endcall %}
+          {% else %}
+            <p class="mt-4">There is nothing to erase for that address.</p>
+            {% call cardActions() %}
+              {{ buttonLink('Look for another', actionUrl) }}
+            {% endcall %}
+          {% endif %}
+        </form>
+      {% endcall %}
+    {% else %}
+      {% if problem %}
+        {% call field.summary('Nothing was looked up.') %}
+          {{ field.problem('personal-data-email', problem) }}
+        {% endcall %}
       {% endif %}
-    </form>
-  {% else %}
-    {% if problem %}
-      {% call field.summary('Nothing was looked up.') %}
-        {{ field.problem('personal-data-email', problem) }}
+      {% call card(title='Look up an address') %}
+        <form method="post" action="{{ actionUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          {{ field.text('personal-data-email', fields.email, 'Email address', email,
+               type='email', error=problem) }}
+          <div class="mt-2">{{ button('Look for it', type='submit', color='primary') }}</div>
+        </form>
       {% endcall %}
     {% endif %}
-    <form class="admin-settings" method="post" action="{{ actionUrl }}">
-      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-      {{ field.text('personal-data-email', fields.email, 'Email address', email,
-           type='email', error=problem) }}
-      <p class="admin-settings-buttons">
-        <button type="submit">Look for it</button>
-      </p>
-    </form>
-  {% endif %}
 
-  <p class="admin-hint">
-    Comments are found by the email they carry, so a comment whose email the
-    retention sweep has already removed, a webmention and a fediverse reply are
-    not found here. Delete those one by one from the Comments screen.
-  </p>
+    <p class="max-w-prose text-sm">
+      Comments are found by the email they carry, so a comment whose email the
+      retention sweep has already removed, a webmention and a fediverse reply are
+      not found here. Delete those one by one from the Comments screen.
+    </p>
+  </div>
 {% endblock %}

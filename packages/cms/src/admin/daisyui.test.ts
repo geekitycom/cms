@@ -3,24 +3,24 @@ import { execFile as execFileCallback } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, it } from 'node:test';
+import { after, describe, it } from 'node:test';
 import { promisify } from 'node:util';
 
 import themeOrder from 'daisyui/functions/themeOrder';
 
-import { CLASSIC, DAISYUI } from '../../editor/look.ts';
+import { LOOK } from '../../editor/look.ts';
 import { PACKAGE_ROOT } from '../__testing__/cli.ts';
-import { adminDirectories, DAISYUI_ADMIN_DIR, PACKAGED_ADMIN_DIR } from './templates.ts';
+import { THEMES_PATH } from './appearance.ts';
+import { sandbox, signedIn } from './__testing__/harness.ts';
+import { PACKAGED_ADMIN_DIR } from './templates.ts';
 
 /**
- * The DaisyUI admin (decision-30) is built in `daisyui/` behind
- * `GEEKITY_ADMIN=daisyui`, laid over `admin/` so that anything not yet
- * converted falls through to the old admin.
+ * The admin is DaisyUI on Tailwind, compiled at build time (decision-30).
  */
 
 const execFile = promisify(execFileCallback);
 
-const COMPILED = path.join(DAISYUI_ADMIN_DIR, 'static', 'admin.css');
+const COMPILED = path.join(PACKAGED_ADMIN_DIR, 'static', 'admin.css');
 
 /** A stylesheet on one line, so a rule can be matched however it was printed. */
 async function oneLine(file: string): Promise<string> {
@@ -32,112 +32,71 @@ function declarations(css: string, selector: RegExp): string | undefined {
   return new RegExp(`${selector.source}\\s*\\{([^{}]*)\\}`).exec(css)?.[1]?.trim();
 }
 
-describe('GEEKITY_ADMIN', () => {
-  it('serves the old admin alone when it is unset or empty', () => {
-    assert.deepEqual(adminDirectories({}), [PACKAGED_ADMIN_DIR]);
-    assert.deepEqual(adminDirectories({ GEEKITY_ADMIN: '' }), [PACKAGED_ADMIN_DIR]);
-  });
+describe('the admin, over HTTP', async () => {
+  const box = sandbox();
+  after(() => box.cleanup());
 
-  it('lays daisyui/ over admin/ when it is daisyui', () => {
-    assert.deepEqual(adminDirectories({ GEEKITY_ADMIN: 'daisyui' }), [
-      DAISYUI_ADMIN_DIR,
-      PACKAGED_ADMIN_DIR,
-    ]);
-  });
+  const cms = await box.site();
+  const agent = await signedIn(cms);
+  const themes = await (await agent.get(THEMES_PATH)).text();
+  const login = await (await cms.app.request('/admin/login')).text();
+  const stylesheet = await cms.app.request('/admin/_static/admin.css');
+  const editor = await cms.app.request('/admin/_static/editor.js');
 
-  it('refuses a value it does not know rather than quietly serving the old admin', () => {
-    assert.throws(() => adminDirectories({ GEEKITY_ADMIN: 'daisyUI' }), /GEEKITY_ADMIN/);
-  });
+  for (const [screen, html] of [
+    ['the login screen', login],
+    ['the Themes screen', themes],
+  ] as const) {
+    it(`draws ${screen} in layouts/base.njk, which links the compiled sheet alone`, () => {
+      const sheets = [...html.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*>/g)].map(
+        ([tag]) => tag,
+      );
+      assert.deepEqual(sheets, ['<link rel="stylesheet" href="/admin/_static/admin.css" />']);
+    });
+  }
 
-  describe('set to daisyui, over HTTP', async () => {
-    const { stdout } = await execFile(
-      process.execPath,
-      [
-        '--import',
-        import.meta.resolve('tsx'),
-        path.join(import.meta.dirname, '__testing__', 'overlay-probe.ts'),
-      ],
-      { env: { ...process.env, GEEKITY_ADMIN: 'daisyui' }, maxBuffer: 64 * 1024 * 1024 },
+  it('draws a screen inside the DaisyUI shell, with no admin-* class outside the bar', () => {
+    assert.match(themes, /<div class="drawer lg:drawer-open">/);
+    const page = themes.replace(/<geekity-admin-bar\b[\s\S]*<\/geekity-admin-bar>/, '');
+    assert.match(page, /<div class="card bg-base-100 shadow-sm/);
+    const tokens = [...page.matchAll(/\bclass="([^"]*)"/g)].flatMap(([, value]) =>
+      (value ?? '').split(/\s+/),
     );
-    const served = JSON.parse(stdout) as {
-      login: string;
-      themes: string;
-      stylesheet: { status: number; body: string };
-      editor: { status: number; body: string };
-      slug: { status: number; body: string };
-    };
-    const compiled = await readFile(COMPILED, 'utf8');
-    const editor = await readFile(path.join(DAISYUI_ADMIN_DIR, 'static', 'editor.js'), 'utf8');
-    const slug = await readFile(path.join(PACKAGED_ADMIN_DIR, 'static', 'slug.js'), 'utf8');
+    assert.deepEqual(
+      tokens.filter((token) => token.startsWith('admin-')),
+      [],
+    );
+  });
 
-    for (const [screen, html] of [
-      ['the login screen', served.login],
-      ['the Themes screen', served.themes],
-    ] as const) {
-      it(`draws ${screen} in daisyui/layouts/base.njk, which links the compiled sheet alone`, () => {
-        const sheets = [...html.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*>/g)].map(
-          ([tag]) => tag,
-        );
-        assert.deepEqual(sheets, ['<link rel="stylesheet" href="/admin/_static/admin.css" />']);
-      });
-    }
+  it('serves the compiled sheet as /admin/_static/admin.css', async () => {
+    assert.equal(stylesheet.status, 200);
+    assert.equal(await stylesheet.text(), await readFile(COMPILED, 'utf8'));
+  });
 
-    it('draws a screen from daisyui/ inside the DaisyUI shell, with no class of the old admin', () => {
-      assert.match(served.themes, /<div class="drawer lg:drawer-open">/);
-      const page = served.themes.replace(/<geekity-admin-bar\b[\s\S]*<\/geekity-admin-bar>/, '');
-      assert.match(page, /<div class="card bg-base-100 shadow-sm/);
-      const tokens = [...page.matchAll(/\bclass="([^"]*)"/g)].flatMap(([, value]) =>
-        (value ?? '').split(/\s+/),
-      );
-      assert.deepEqual(
-        tokens.filter((token) => token.startsWith('admin-')),
-        [],
-      );
-    });
-
-    it('serves the compiled DaisyUI sheet as /admin/_static/admin.css', () => {
-      assert.equal(served.stylesheet.status, 200);
-      assert.equal(served.stylesheet.body, compiled);
-    });
-
-    it('serves the DaisyUI editor bundle as /admin/_static/editor.js', () => {
-      assert.equal(served.editor.status, 200);
-      assert.equal(served.editor.body, editor);
-    });
-
-    it('falls through to admin/static/ for a file daisyui/static/ does not have', () => {
-      assert.equal(served.slug.status, 200);
-      assert.equal(served.slug.body, slug);
-    });
+  it('serves the editor bundle as /admin/_static/editor.js', async () => {
+    assert.equal(editor.status, 200);
+    assert.equal(
+      await editor.text(),
+      await readFile(path.join(PACKAGED_ADMIN_DIR, 'static', 'editor.js'), 'utf8'),
+    );
   });
 });
 
-describe('the editor bundles', async () => {
-  const bundle = (dir: string): Promise<string> =>
-    readFile(path.join(dir, 'static', 'editor.js'), 'utf8');
-  const [classic, daisyui] = await Promise.all([
-    bundle(PACKAGED_ADMIN_DIR),
-    bundle(DAISYUI_ADMIN_DIR),
-  ]);
+describe('the editor bundle', async () => {
+  const bundle = await readFile(path.join(PACKAGED_ADMIN_DIR, 'static', 'editor.js'), 'utf8');
 
-  it('give the old admin its own classes and the DaisyUI admin its own, from one source', () => {
-    for (const name of [CLASSIC.tabs, CLASSIC.tab, CLASSIC.status]) {
-      assert.ok(classic.includes(`"${name}"`), `the old bundle writes ${name}`);
-      assert.ok(!daisyui.includes(`"${name}"`), `the DaisyUI bundle does not write ${name}`);
-    }
-    for (const name of [DAISYUI.tabs, DAISYUI.uploadButton, DAISYUI.status]) {
-      assert.ok(daisyui.includes(`"${name}"`), `the DaisyUI bundle writes ${name}`);
-      assert.ok(!classic.includes(`"${name}"`), `the old bundle does not write ${name}`);
+  it('writes the classes editor/look.ts names', () => {
+    for (const name of [LOOK.tabs, LOOK.uploadButton, LOOK.status]) {
+      assert.ok(bundle.includes(`"${name}"`), `the bundle writes ${name}`);
     }
   });
 
-  it('mark the Markdown for the stylesheet to colour in the DaisyUI admin alone', () => {
-    assert.match(daisyui, /cm-md-heading/);
-    assert.doesNotMatch(classic, /cm-md-/);
+  it('marks the Markdown for the stylesheet to colour', () => {
+    assert.match(bundle, /cm-md-heading/);
   });
 });
 
-describe('the compiled DaisyUI stylesheet', async () => {
+describe('the compiled stylesheet', async () => {
   const css = await oneLine(COMPILED);
 
   it('carries every built-in DaisyUI theme', () => {
@@ -169,7 +128,7 @@ describe('the compiled DaisyUI stylesheet', async () => {
 });
 
 describe('the authored rules in the stylesheet source', async () => {
-  const source = (await readFile(path.join(DAISYUI_ADMIN_DIR, 'src', 'admin.css'), 'utf8'))
+  const source = (await readFile(path.join(PACKAGED_ADMIN_DIR, 'src', 'admin.css'), 'utf8'))
     .replaceAll(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/@plugin[^{]*\{[^}]*\}/, ' ')
     .replaceAll(/@(?:import|source)[^;]*;/g, ' ');
@@ -210,7 +169,7 @@ describe('the authored rules in the stylesheet source', async () => {
 });
 
 describe('what Tailwind reads for the admin stylesheet', () => {
-  it('finds a class in daisyui/ and in editor/look.ts, and nothing else', async () => {
+  it('finds a class in admin/ and in editor/look.ts, and nothing else', async () => {
     const tree = await mkdtemp(path.join(tmpdir(), 'geekity-admin-sources-'));
     try {
       await symlink(
@@ -218,14 +177,14 @@ describe('what Tailwind reads for the admin stylesheet', () => {
         path.join(tree, 'node_modules'),
         'dir',
       );
-      await cp(path.join(DAISYUI_ADMIN_DIR, 'src'), path.join(tree, 'daisyui', 'src'), {
+      await cp(path.join(PACKAGED_ADMIN_DIR, 'src'), path.join(tree, 'admin', 'src'), {
         recursive: true,
       });
       const probes: Record<string, string> = {
-        'daisyui/layouts/probe.njk': '<kbd class="kbd">K</kbd>',
-        'daisyui/components/probe.njk': '<span class="loading">…</span>',
-        'daisyui/pages/probe.njk': '<div class="skeleton"></div>',
-        'editor/look.ts': "export const DAISYUI = { tab: 'swap-rotate' };",
+        'admin/layouts/probe.njk': '<kbd class="kbd">K</kbd>',
+        'admin/components/probe.njk': '<span class="loading">…</span>',
+        'admin/pages/probe.njk': '<div class="skeleton"></div>',
+        'editor/look.ts': "export const LOOK = { tab: 'swap-rotate' };",
         'editor/main.ts': "element.className = 'countdown';",
         'elsewhere/probe.njk': '<div class="countdown"></div>',
       };
@@ -237,7 +196,7 @@ describe('what Tailwind reads for the admin stylesheet', () => {
       const output = path.join(tree, 'out.css');
       await execFile(path.join(PACKAGE_ROOT, 'node_modules', '.bin', 'tailwindcss'), [
         '-i',
-        path.join(tree, 'daisyui', 'src', 'admin.css'),
+        path.join(tree, 'admin', 'src', 'admin.css'),
         '-o',
         output,
       ]);
@@ -249,7 +208,7 @@ describe('what Tailwind reads for the admin stylesheet', () => {
       assert.doesNotMatch(
         css,
         /\.countdown\b/,
-        'a file outside daisyui/ and editor/look.ts is not read',
+        'a file outside admin/ and editor/look.ts is not read',
       );
     } finally {
       await rm(tree, { recursive: true, force: true });

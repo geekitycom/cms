@@ -1,41 +1,161 @@
 import assert from 'node:assert/strict';
-import { execFile as execFileCallback } from 'node:child_process';
-import path from 'node:path';
 import { after, describe, it } from 'node:test';
-import { promisify } from 'node:util';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
 import { citedCard, fieldsOf } from './__testing__/editor-form.ts';
 import { editorScreens } from './__testing__/editor-screens.ts';
-import type { EditorScreen, Served } from './__testing__/editor-screens.ts';
 import { sandbox } from './__testing__/harness.ts';
 
 /**
- * The editor and the conflict screen in the DaisyUI admin (decision-30,
- * TASK-273): the writing column and the side column, the groups as collapses,
- * the buttons by what they do, the cited card, and the two versions side by
- * side, posting exactly the form the old admin posts.
+ * The editor and the conflict screen (decision-30, TASK-273): the writing
+ * column and the side column, the groups as collapses, the buttons by what
+ * they do, the cited card, and the two versions side by side.
  */
-
-const execFile = promisify(execFileCallback);
 
 const box = sandbox();
 after(() => box.cleanup());
 
-async function daisyuiScreens(): Promise<Record<EditorScreen, Served>> {
-  const { stdout } = await execFile(
-    process.execPath,
-    [
-      '--import',
-      import.meta.resolve('tsx'),
-      path.join(import.meta.dirname, '__testing__', 'editor-probe.ts'),
-    ],
-    { env: { ...process.env, GEEKITY_ADMIN: 'daisyui' }, maxBuffer: 64 * 1024 * 1024 },
-  );
-  return JSON.parse(stdout) as Record<EditorScreen, Served>;
-}
-
 const EDITORS = ['newPost', 'newPage', 'filled', 'refused', 'trashed'] as const;
+
+/** The status each screen is served with. */
+const STATUSES = {
+  newPost: 200,
+  newPage: 200,
+  filled: 200,
+  refused: 400,
+  trashed: 200,
+  conflict: 409,
+} as const;
+
+/** Each editor's groups, and whether each starts open, in page order. */
+const GROUPS: Readonly<Record<(typeof EDITORS)[number], [string, boolean][]>> = {
+  newPost: [
+    ['Photos', false],
+    ['Add a photo', false],
+    ['Location', false],
+    ['Recording', false],
+    ['Other versions', false],
+    ['Add a version', false],
+    ['Publishing', true],
+    ['Tags and categories', true],
+    ['Address', false],
+    ['Responding to', false],
+    ['Read', false],
+    ['Summary and language', false],
+    ['Syndicate to', false],
+    ['Display and discussion', false],
+  ],
+  newPage: [
+    ['Publishing', true],
+    ['Address', false],
+    ['Summary and language', false],
+    ['Display and discussion', false],
+  ],
+  filled: [
+    ['Photos', true],
+    ['Photo 1', true],
+    ['Add a photo', false],
+    ['Location', true],
+    ['Recording', true],
+    ['Other versions', true],
+    ['Version 1', true],
+    ['Add a version', false],
+    ['Publishing', true],
+    ['Tags and categories', true],
+    ['Address', true],
+    ['Responding to', true],
+    ['Read', true],
+    ['Summary and language', true],
+    ['Syndicate to', true],
+    ['Display and discussion', true],
+  ],
+  refused: [
+    ['Photos', false],
+    ['Add a photo', false],
+    ['Location', false],
+    ['Recording', false],
+    ['Other versions', false],
+    ['Add a version', false],
+    ['Publishing', true],
+    ['Tags and categories', true],
+    ['Address', false],
+    ['Responding to', true],
+    ['Read', false],
+    ['Summary and language', false],
+    ['Syndicate to', false],
+    ['Display and discussion', false],
+  ],
+  trashed: [
+    ['Photos', false],
+    ['Add a photo', false],
+    ['Location', false],
+    ['Recording', false],
+    ['Other versions', false],
+    ['Add a version', false],
+    ['Publishing', true],
+    ['Tags and categories', true],
+    ['Address', true],
+    ['Responding to', false],
+    ['Read', false],
+    ['Summary and language', false],
+    ['Syndicate to', false],
+    ['Display and discussion', false],
+  ],
+};
+
+/** What the filled-in editor posts, less the session's token and the file's hash. */
+const FILLED_FORM: [string, string][] = [
+  ['alternate-height-0', ''],
+  ['alternate-height-1', ''],
+  ['alternate-lang-0', ''],
+  ['alternate-lang-1', ''],
+  ['alternate-title-0', ''],
+  ['alternate-title-1', ''],
+  ['alternate-type-0', 'video/mp4'],
+  ['alternate-type-1', ''],
+  ['alternate-url-0', '/uploads/2026/10/episode.mp4'],
+  ['alternate-url-1', ''],
+  ['author', 'ada'],
+  ['body', 'Every box.'],
+  ['bookmark-of', ''],
+  ['categories', ''],
+  ['cited-alt', 'Everything'],
+  ['comments', 'closed'],
+  ['csrf_token', ''],
+  ['date', '2026-10-02 09:00:00'],
+  ['description', ''],
+  ['enclosure-duration', ''],
+  ['enclosure-transcript-type', ''],
+  ['enclosure-transcript-url', ''],
+  ['enclosure-url', '/uploads/2026/10/episode.mp3'],
+  ['hash', ''],
+  ['in-reply-to', ''],
+  ['lang', 'fr'],
+  ['like-of', ''],
+  ['location-accuracy', ''],
+  ['location-country', ''],
+  ['location-geo', ''],
+  ['location-locality', ''],
+  ['location-name', 'The pier'],
+  ['location-region', ''],
+  ['permalink', '/2026/10/everything/'],
+  ['photo-alt-0', 'A photo'],
+  ['photo-alt-1', ''],
+  ['photo-url-0', 'https://example.com/a.jpg'],
+  ['photo-url-1', ''],
+  ['read-of-author', ''],
+  ['read-of-name', 'A book'],
+  ['read-of-uid', ''],
+  ['read-of-url', ''],
+  ['read-status', 'finished'],
+  ['repost-of', 'https://edu.example/files/calculator.png'],
+  ['slug', 'everything'],
+  ['syndicate-to-mastodon', '1'],
+  ['tags', 'one'],
+  ['title', 'Everything'],
+  ['type', 'post'],
+  ['visibility', 'public'],
+];
 
 function screenOf(html: string): string {
   return /<main\b[\s\S]*<\/main>/.exec(html)?.[0] ?? '';
@@ -66,32 +186,32 @@ function disclosures(html: string): [string, boolean][] {
   );
 }
 
-describe('the editor in the DaisyUI admin', async () => {
-  const [old, served] = await Promise.all([editorScreens(box), daisyuiScreens()]);
+describe('the editor', async () => {
+  const served = await editorScreens(box);
 
   for (const screen of [...EDITORS, 'conflict'] as const) {
-    it(`serves ${screen} with the status the old admin does`, () => {
-      assert.equal(served[screen].status, old[screen].status);
+    it(`serves ${screen} with status ${String(STATUSES[screen])}`, () => {
+      assert.equal(served[screen].status, STATUSES[screen]);
     });
   }
 
+  it('posts every box of a filled-in post', () => {
+    assert.deepEqual(comparable(served.filled.html), FILLED_FORM);
+  });
+
   for (const screen of EDITORS) {
-    it(`posts the same form as the old admin on ${screen}`, () => {
-      assert.deepEqual(comparable(served[screen].html), comparable(old[screen].html));
+    it(`folds and opens the groups on ${screen} by what they hold`, () => {
+      assert.deepEqual(disclosures(served[screen].html), GROUPS[screen]);
     });
 
-    it(`folds and opens the same groups as the old admin on ${screen}`, () => {
-      assert.deepEqual(disclosures(served[screen].html), disclosures(old[screen].html));
-    });
-
-    it(`draws ${screen} with no class of the old admin's`, () => {
+    it(`draws ${screen} with no admin-* class outside the bar`, () => {
       assert.deepEqual(
         classesOutsideTheBar(served[screen].html).filter((name) => name.startsWith('admin-')),
         [],
       );
     });
 
-    it(`draws every group on ${screen} as a DaisyUI collapse`, () => {
+    it(`draws every group on ${screen} as a collapse`, () => {
       const groups = [
         ...screenOf(served[screen].html).matchAll(/<details\b[^>]*>\s*<summary\b[^>]*>/g),
       ];

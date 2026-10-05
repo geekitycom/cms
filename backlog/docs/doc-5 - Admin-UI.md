@@ -3,11 +3,22 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 04:06'
+updated_date: '2026-10-05 05:47'
 ---
 # Admin UI
 
-The admin lives at `/admin` and borrows the shape of WordPress classic without its editors. Server-rendered Nunjucks pages, progressive enhancement only where it clearly helps (markdown preview, slug auto-fill).
+The admin lives at `/admin`: server-rendered Nunjucks pages, with progressive enhancement only where it clearly helps (markdown preview, slug auto-fill). It keeps the sections and the menu of WordPress classic, but not its look. It is drawn in DaisyUI 5 on Tailwind v4 (decision-30), in whichever of DaisyUI's built-in themes the signed-in user chose, from one library of Nunjucks component macros, under one shadow-rooted admin bar that the public site shares.
+
+Everything the admin is lives under `packages/cms/admin/`: `pages/`, `layouts/` and `components/` for the templates, `static/` for what a browser fetches, and `src/admin.css` for the stylesheet source. `pnpm build` compiles that source to `static/admin.css`, a gitignored build product that ships in the package. A test resolves every template the admin renders by name, everything those extend, import or include, and every static file they reference, inside this one folder.
+
+## The shell
+
+Every signed-in screen extends `layouts/shell.njk`, which extends the bare `layouts/base.njk`.
+
+- **Base.** The document: the head, the compiled stylesheet as the only `<link>`, `data-theme` on `<html>` for a user who chose a theme, and the skip link as the first thing a keyboard reaches. A screen that extends it alone draws in one centred column.
+- **Shell.** The admin bar fixed across the top, then a DaisyUI `drawer` holding the menu and the screen (see The menu). The screen is the one `<main id="main">`, the flash first in it, then the screen's own `<h1>` and content.
+- **Settings page.** `layouts/settings-page.njk` extends the shell: the heading, the error summary when a save was refused, the one form with its Save settings button, and the page's panels under it, all in one column as wide as a field reads comfortably.
+- **Authored CSS is the exception.** The templates carry DaisyUI components and Tailwind utilities. The only rules written by hand are the admin bar's own stylesheet, the CodeMirror surface (see Editor), and the rule that pushes a page down by the bar's height. A test over the stylesheet source refuses anything else.
 
 ## The menu
 
@@ -48,12 +59,11 @@ section's `children` and the same `child` name on what that screen renders.
 The menu needs no JavaScript. The server already knows which section is open,
 so expanding one is a page the browser asks for rather than a class a script
 toggles: it is a list of links, the open section a real nested `<ul>` inside its
-section's `<li>`. On a narrow screen the column moves above the page and wraps
-instead of becoming a sliver.
+section's `<li>`.
 
-In the DaisyUI admin (decision-30) the menu is the `menu` macro inside a DaisyUI
-drawer, `daisyui/layouts/shell.njk`. From `lg` up the drawer is open and the
-menu is a column beside the screen, held under the fixed admin bar. Below that
+The menu is the `menu` macro inside a DaisyUI drawer, in `layouts/shell.njk`.
+From `lg` up the drawer is open and the menu is a column beside the screen,
+held under the fixed admin bar. Below that
 the column is a panel the Menu button slides in over the screen. The button is
 the label of a checkbox, so the browser shows and hides the panel and no script
 runs; which section is open and which screen is current, the server has already
@@ -91,8 +101,8 @@ faint tint.
 
 ## Components
 
-The DaisyUI admin (decision-30) draws every DaisyUI component it uses from one
-library of Nunjucks macros under `daisyui/components/`, one file per component,
+The admin draws every DaisyUI component it uses from one library of Nunjucks
+macros under `admin/components/`, one file per component,
 each documented at the top of its file the way `components/fields.njk` documents
 the form fields. A screen imports what it needs, as in
 `{% from "components/button.njk" import button, buttonLink %}`, and composes
@@ -120,9 +130,9 @@ macros; it does not spell out component markup of its own.
   navbar and its parts, dropdown and collapse take their contents as the body of a
   `{% call %}` block. Lists the routes already hand a screen (tabs, menu,
   pagination) are passed in as data.
-- **A field is one call.** `fields.njk` keeps the old admin's seven macros and
-  their arguments, so every screen that imports it by name draws its fields in
-  DaisyUI with no change of its own. A refused control carries `validator`,
+- **A field is one call.** `fields.njk` has seven macros, and a screen draws
+  each field with one of them rather than writing a label, a control, a hint
+  and an error by hand. A refused control carries `validator`,
   `aria-invalid` and `aria-describedby` naming its error, which DaisyUI turns
   red and shows after it; a read-only box is drawn on `base-200` with a dashed
   edge, and a disabled one as DaisyUI draws it. The summary is an error alert
@@ -140,18 +150,25 @@ macros; it does not spell out component markup of its own.
   environment's `modifier` filter. A name outside its set is a render error, so a
   misspelt modifier fails at once instead of drawing an unstyled component. No
   macro takes a class string from its caller.
+The library holds to two rules, each enforced by a test that finds the
+templates by reading the folder:
+
 - **Semantic colours only.** A template names colours only by the theme's
   semantic tokens (`base-100`, `primary`, `error` and the rest), so every
   built-in theme draws the admin as its author meant. A test reads every
-  template under `daisyui/` and refuses a hex value, an arbitrary colour
+  template under `admin/` and refuses a hex value, an arbitrary colour
   utility such as `bg-[#123456]` or `text-(--brand)`, and a Tailwind palette
   colour such as `gray-200`, `white` or `black`.
 - **Every class has a rule.** Tailwind writes a rule only for a class it knows.
-  A second test reads every template under `daisyui/` with the compiled
-  `daisyui/static/admin.css` and refuses a class token that has no rule there,
+  A second test reads every template under `admin/` with the compiled
+  `admin/static/admin.css` and refuses a class token that has no rule there,
   which is how a misspelt DaisyUI class is caught, and a class built by
-  interpolation, which Tailwind cannot read. Both tests find the templates by
-  reading the folder, so a new template is held to them without being listed.
+  interpolation, which Tailwind cannot read. A new template is held to both
+  without being listed. The admin bar's template is held to its own stylesheet
+  instead, since no DaisyUI class reaches inside its shadow root.
+
+What the screens make of the library:
+
 - **A row's state is one map.** `status(name, label)` in `badge.njk` is the only
   place a state gets a colour: `published`, `approved`, `accepted`, `described`
   and `decorative` are plain; `active` and `unread` are `primary`; `connected`
@@ -205,12 +222,12 @@ macros; it does not spell out component markup of its own.
 - Save writes the file (see doc-1 sync model). The form carries the file hash it was loaded with; a mismatch on save returns the form with a warning and both versions.
 - **Author** is a select of the site's users, not a free box: doc-2's `author` names a user, and after decision-14 that decides whose archive the post lands on and, once the actors land, whose followers hear about it. A new document starts on whoever is signed in; an existing one opens on the user the file names, which for a file written before decision-14 is the one its display name reads as. A file naming somebody with no account here keeps an option of its own, marked, so opening the editor and pressing Update cannot quietly reattribute the post.
 - Buttons: Save draft, Publish, Update, Move to trash, View.
-- **In the DaisyUI admin** (decision-30, TASK-273) the form is one grid: the
+- **Layout** (TASK-273). The form is one grid: the
   writing column (a card holding Title, Body and the editor's tools, then the
   post's Photos, Location and Recording groups) and the side column (a card of
   the buttons, then the other groups), side by side from `xl` and the side
   column under the writing one below that. Every group is the `collapse`
-  macro, opened by the server as before. Publish and Update are the primary
+  macro, opened by the server where it holds something. Publish and Update are the primary
   button, Move to trash an error ghost button, View a ghost link; the buttons
   sit at the top of the side column, so they are in view without scrolling
   past the groups. A trashed or scheduled document says so in a `polite`
@@ -225,21 +242,18 @@ macros; it does not spell out component markup of its own.
   input; the status line under it says what an upload or a preview is doing,
   and turns `text-error` when it says that one failed. Drag and drop onto the
   surface uploads the same way.
-- **Two editor bundles while both admins ship.** `editor/look.ts` holds the
-  classes the script writes, `CLASSIC` for the old admin and `DAISYUI` for the
-  new one. `scripts/build-editor.js` builds `editor/main.ts` twice with
-  `ADMIN_LOOK` defined, to `admin/static/editor.js` and to
-  `daisyui/static/editor.js`, which the overlay serves ahead of the old one.
-  Tailwind reads `editor/look.ts`, and `styles.test.ts` holds every `DAISYUI`
-  class to a rule in the compiled sheet. The flip keeps the DaisyUI build
-  alone, written to `admin/static/editor.js`, and deletes `CLASSIC`.
+- **The classes the script writes** are `LOOK` in `editor/look.ts`, so the
+  markup the script builds at runtime is in DaisyUI's vocabulary like the
+  rest. `scripts/build-editor.js` bundles `editor/main.ts` to
+  `admin/static/editor.js`. Tailwind reads `editor/look.ts`, and
+  `styles.test.ts` holds every class in `LOOK` to a rule in the compiled sheet.
 - **The CodeMirror surface** is the one third-party component the admin
   draws. Its `.cm-*` rules are the only authored rules the editor has: in
-  `daisyui/src/admin.css`, every one under `#editor-surface` (the box the
+  `admin/src/admin.css`, every one under `#editor-surface` (the box the
   script mounts CodeMirror in, whose id outranks CodeMirror's own injected
   theme), each colour a theme token such as `--color-base-100`,
   `--color-base-content` or `--color-primary`, so the surface follows the
-  user's theme, light or dark. The DaisyUI bundle highlights Markdown by
+  user's theme, light or dark. The bundle highlights Markdown by
   giving tokens `.cm-md-*` classes (heading, strong, emphasis, link, code,
   quote, and the marks around them) rather than CodeMirror's fixed colours,
   which were drawn for a white page.
@@ -369,14 +383,14 @@ macros; it does not spell out component markup of its own.
 
 ## Admin theme
 
-- **The choice.** Each user draws the DaisyUI admin (decision-30) in a theme of their own: any of DaisyUI's built-in themes, or **Follow the system**, which is the default. It is a select on the Theme panel of your own screen under Users, posted to `/admin/users/theme`, which only ever sets the theme of whoever is signed in: the admin's look is a personal preference, not something one admin sets for another. The panel is drawn only with `GEEKITY_ADMIN=daisyui`, because the old admin has no themes.
+- **The choice.** Each user draws the admin (decision-30) in a theme of their own: any of DaisyUI's built-in themes, or **Follow the system**, which is the default. It is a select on the Theme panel of your own screen under Users, posted to `/admin/users/theme`, which only ever sets the theme of whoever is signed in: the admin's look is a personal preference, not something one admin sets for another.
 - **Where it lives.** `adminTheme` on the user in `data/users.json`, beside the notification maps, and on the same rule: following the system is the default and is never written down, and a name this version does not know is dropped on the way in and read as following the system. The form refuses a name outside the table with a flash and writes nothing.
-- **How a page carries it.** The admin's `render` puts the signed-in user's choice on every context as `dataTheme`, and `daisyui/layouts/base.njk` renders it as `data-theme` on `<html>`. Following the system renders no attribute, and the stylesheet's `light` default and `dark` for `prefers-color-scheme: dark` decide. The login, setup, forgot-password and reset screens carry none even for somebody signed in, because they are shown to nobody in particular. There is no client-side switch.
+- **How a page carries it.** The admin's `render` puts the signed-in user's choice on every context as `dataTheme`, and `layouts/base.njk` renders it as `data-theme` on `<html>`. Following the system renders no attribute, and the stylesheet's `light` default and `dark` for `prefers-color-scheme: dark` decide. The login, setup, forgot-password and reset screens carry none even for somebody signed in, because they are shown to nobody in particular. There is no client-side switch.
 - **Light or dark.** `ADMIN_THEMES` in `src/admin/admin-theme.ts` is the one table of the built-in themes, each with its label and whether it is light or dark, and `adminColorScheme` reduces a choice to `light`, `dark` or `auto` for whatever draws outside the theme's reach, such as the admin bar. A test holds the table to DaisyUI's own list of themes and each entry to the `color-scheme` the compiled sheet gives it.
 
 ## Admin bar
 
-- **One component on both sides.** The DaisyUI admin (decision-30) draws the bar from one template, `daisyui/components/admin-bar.njk`, on every signed-in admin screen and across the top of every public page a signed-in user reads (TASK-183). It is a `geekity-admin-bar` host holding a declarative shadow root, with its own stylesheet, `static/admin-bar.css`, inlined into it and its script, `static/admin-bar.js`, loaded by `<script src>`. On the admin it shadows the old admin's `components/admin-bar.njk` by name, so the shell that includes that draws this one. On the public site `components/public-admin-bar.njk` includes it and prints the unpublished notice under it.
+- **One component on both sides.** The admin (decision-30) draws the bar from one template, `components/admin-bar.njk`, on every signed-in admin screen and across the top of every public page a signed-in user reads (TASK-183). It is a `geekity-admin-bar` host holding a declarative shadow root, with its own stylesheet, `static/admin-bar.css`, inlined into it and its script, `static/admin-bar.js`, loaded by `<script src>`. On the admin `layouts/shell.njk` includes it. On the public site `components/public-admin-bar.njk` includes it and prints the unpublished notice under it.
 - **Light and dark.** The stylesheet writes every colour as `light-dark(light, dark)`. The host carries `data-scheme="light"` or `data-scheme="dark"` from the signed-in user's admin theme, through `adminColorScheme`, which the admin's `render` and the public site's middleware both call. Following the system puts nothing on the host, and the bar follows `prefers-color-scheme`. No DaisyUI class reaches inside a shadow root, so the bar is plain CSS of its own, and `keyboard.test.ts` holds its text, hover text and focus ring to WCAG contrast in both palettes.
 - **Under the admin's CSP.** The inlined `<style>` carries the response's nonce and is the only inline stylesheet an admin page has. The host is placed by the stylesheet's `:host` rule, because the CSP refuses a style attribute. The public site has no content policy, and there the host also carries that placement as a style attribute, which outranks a theme's rules for the element.
 - **Room for it.** The bar is fixed to the top of the window, and the page moves down by a margin on `<html>` of `--geekity-admin-bar-height`: one 40px line, or two on a screen 600px wide or less, until the script measures the bar and sets the height it really has. On the public site that rule is the `<style>` the middleware puts in `<head>`. On the admin it is in `admin.css`, for a page whose `<body>` holds the bar, which the login screens do not. The skip link comes before the bar and is drawn over it while it has focus.

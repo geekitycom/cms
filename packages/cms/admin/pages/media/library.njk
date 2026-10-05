@@ -6,62 +6,64 @@
    readonly fields, which select and copy like any other text; copy.js adds a
    button beside each of them and nothing else. #}
 {% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/card.njk" import card, cardActions %}
+{% from "components/copy.njk" import copyField %}
+{% from "components/pagination.njk" import pagination %}
+{% from "components/table.njk" import table %}
 
 {% block title %}{{ heading }}{% endblock %}
 
 {% block content %}
-  <h1>{{ heading }}</h1>
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
 
   {% if confirm %}
-    <form class="admin-settings" method="post" action="{{ deleteUrl }}">
+    <form class="mb-6 max-w-2xl" method="post" action="{{ deleteUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
       <input type="hidden" name="{{ fields.path }}" value="{{ confirm.path }}" />
       <input type="hidden" name="{{ fields.confirm }}" value="1" />
-
-      <h2>Delete {{ confirm.url }}?</h2>
-
-      <p>
-        {{ confirm.references.length }}
-        {% if confirm.references.length == 1 %}document still points{% else %}documents still point{% endif %}
-        at it. Deleting the file does not change them, so they will point at nothing.
-      </p>
-
-      <ul class="admin-references">
-        {% for reference in confirm.references %}
-          <li>
-            <a href="{{ reference.editUrl }}">{{ reference.title }}</a>
-            {% if reference.trashed %}<span class="admin-status admin-status-trashed">Trash</span>{% endif %}
-            <code>{{ reference.path }}</code>
-          </li>
-        {% endfor %}
-      </ul>
-
-      <p class="admin-settings-buttons">
-        <button type="submit">Delete it anyway</button>
-        <a href="{{ listUrl }}">Cancel</a>
-      </p>
+      {% call card(title='Delete ' + confirm.url + '?', style='border') %}
+        <p>
+          {{ confirm.references.length }}
+          {% if confirm.references.length == 1 %}document still points{% else %}documents still point{% endif %}
+          at it. Deleting the file does not change them, so they will point at nothing.
+        </p>
+        <ul class="list-disc pl-6">
+          {% for reference in confirm.references %}
+            <li>
+              <a class="link" href="{{ reference.editUrl }}">{{ reference.title }}</a>
+              {% if reference.trashed %}{{ status('trashed', 'Trash') }}{% endif %}
+              <code>{{ reference.path }}</code>
+            </li>
+          {% endfor %}
+        </ul>
+        {% call cardActions() %}
+          {{ buttonLink('Cancel', listUrl, style='ghost') }}
+          {{ button('Delete it anyway', type='submit', color='error') }}
+        {% endcall %}
+      {% endcall %}
     </form>
   {% endif %}
 
-  <form class="admin-settings admin-media-upload" method="post" action="{{ uploadUrl }}" enctype="multipart/form-data">
+  <form class="mb-8 max-w-2xl" method="post" action="{{ uploadUrl }}" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-    <label for="media-file">Add a file</label>
-    <input id="media-file" name="{{ fields.file }}" type="file" accept="{{ accepts }}" required />
-    <p class="admin-hint">
-      This site accepts {{ accepts | replace(',', ', ') }}, up to {{ maxBytes }} bytes, or
-      {{ mediaMaxBytes }} bytes for audio and video. The same
-      rules the editor’s upload control enforces.
-    </p>
-    <p class="admin-settings-buttons">
-      <button type="submit">Upload</button>
-    </p>
+    <div class="fieldset">
+      <label class="fieldset-legend" for="media-file">Add a file</label>
+      <input id="media-file" name="{{ fields.file }}" type="file" accept="{{ accepts }}" required class="file-input file-input-sm w-full" />
+      <p class="label block whitespace-normal">
+        This site accepts {{ accepts | replace(',', ', ') }}, up to {{ maxBytes }} bytes, or
+        {{ mediaMaxBytes }} bytes for audio and video. The same
+        rules the editor’s upload control enforces.
+      </p>
+    </div>
+    <div class="mt-2">{{ button('Upload', type='submit', color='primary') }}</div>
   </form>
 
   {% if total == 0 %}
-    <p class="admin-empty">Nothing has been uploaded yet.</p>
+    <p>Nothing has been uploaded yet.</p>
   {% else %}
-    <table class="admin-list admin-media">
-      <caption class="admin-visually-hidden">{{ heading }}</caption>
+    {% call table(heading) %}
       <thead>
         <tr>
           <th scope="col">File</th>
@@ -76,117 +78,94 @@
       <tbody>
         {% for file in files %}
           <tr>
-            <td class="admin-media-file">
-              {% if file.kind == 'image' %}
-                <a href="{{ file.url }}">
-                  <img class="admin-media-thumbnail" src="{{ file.url }}" alt="" width="60" height="60" />
-                </a>
-              {% else %}
-                <span class="admin-media-icon" aria-hidden="true">{{ file.extension | replace('.', '') | upper }}</span>
-              {% endif %}
-              <a href="{{ file.url }}">{{ file.path }}</a>
+            <td>
+              <div class="flex min-w-56 items-center gap-3">
+                {% if file.kind == 'image' %}
+                  <a class="shrink-0" href="{{ file.url }}">
+                    <img class="size-15 rounded-box bg-base-200 object-cover" src="{{ file.url }}" alt="" width="60" height="60" />
+                  </a>
+                {% else %}
+                  <span class="flex size-15 shrink-0 items-center justify-center rounded-box bg-base-200 text-xs font-bold" aria-hidden="true">{{ file.extension | replace('.', '') | upper }}</span>
+                {% endif %}
+                <a class="link link-hover break-all" href="{{ file.url }}">{{ file.path }}</a>
+              </div>
             </td>
-            <td class="admin-media-alt">
+            <td>
               {% if file.kind == 'image' %}
-                <form method="post" action="{{ altUrl }}">
+                <form class="flex min-w-72 flex-wrap items-center gap-2" method="post" action="{{ altUrl }}">
                   <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
                   <input type="hidden" name="{{ fields.path }}" value="{{ file.path }}" />
                   <input type="hidden" name="{{ fields.page }}" value="{{ page }}" />
-                  <label class="admin-visually-hidden" for="media-alt-{{ loop.index }}">
-                    Alt text for {{ file.name }}
-                  </label>
+                  <label class="sr-only" for="media-alt-{{ loop.index }}">Alt text for {{ file.name }}</label>
                   <input
                     id="media-alt-{{ loop.index }}"
                     name="{{ fields.alt }}"
                     type="text"
                     value="{% if file.alt and file.alt.kind == 'described' %}{{ file.alt.text }}{% endif %}"
                     aria-describedby="media-alt-state-{{ loop.index }}"
+                    class="input input-sm min-w-40 flex-1"
                   />
-                  <span class="admin-check">
+                  <label class="label text-sm text-base-content" for="media-decorative-{{ loop.index }}">
                     <input
                       id="media-decorative-{{ loop.index }}"
                       name="{{ fields.decorative }}"
                       type="checkbox"
                       value="1"
                       {% if file.alt and file.alt.kind == 'decorative' %}checked{% endif %}
+                      class="checkbox checkbox-sm"
                     />
-                    <label for="media-decorative-{{ loop.index }}">Decorative</label>
-                  </span>
-                  <button type="submit">Save</button>
-                  <span id="media-alt-state-{{ loop.index }}" class="admin-status{% if not file.alt %} admin-status-missing{% endif %}">
-                    {%- if not file.alt %}Missing: describe it, or mark it decorative
-                    {%- elif file.alt.kind == 'decorative' %}Decorative: inserted with an empty alt
-                    {%- else %}Offered when it is inserted{% endif -%}
-                  </span>
+                    Decorative
+                  </label>
+                  {{ button('Save', type='submit', size='sm') }}
+                  <p id="media-alt-state-{{ loop.index }}" class="w-full text-sm">
+                    {%- if not file.alt %}{{ status('missing', 'Missing') }} Describe it, or mark it decorative.
+                    {%- elif file.alt.kind == 'decorative' %}{{ status('decorative', 'Decorative') }} Inserted with an empty alt.
+                    {%- else %}{{ status('described', 'Described') }} Offered when it is inserted.{% endif -%}
+                  </p>
                 </form>
               {% else %}
-                <span class="admin-status">Not an image</span>
+                Not an image
               {% endif %}
             </td>
-            <td>{{ file.modified | date('html') }}</td>
-            <td>{{ file.bytes }}</td>
-            <td class="admin-media-links">
-              <label class="admin-visually-hidden" for="media-url-{{ loop.index }}">
-                URL of {{ file.name }}
-              </label>
-              <span class="admin-copy">
-                <input id="media-url-{{ loop.index }}" type="text" value="{{ file.url }}" readonly />
-                <button type="button" class="admin-copy-button" data-copy="media-url-{{ loop.index }}" hidden>
-                  Copy
-                </button>
-              </span>
-
-              <label class="admin-visually-hidden" for="media-markdown-{{ loop.index }}">
-                Markdown for {{ file.name }}
-              </label>
-              <span class="admin-copy">
-                <input id="media-markdown-{{ loop.index }}" type="text" value="{{ file.markdown }}" readonly />
-                <button type="button" class="admin-copy-button" data-copy="media-markdown-{{ loop.index }}" hidden>
-                  Copy
-                </button>
-              </span>
+            <td class="whitespace-nowrap">{{ file.modified | date('html') }}</td>
+            <td class="whitespace-nowrap">{{ file.bytes }}</td>
+            <td>
+              <div class="flex min-w-60 flex-col gap-2">
+                {{ copyField('media-url-' + loop.index, 'URL of ' + file.name, file.url) }}
+                {{ copyField('media-markdown-' + loop.index, 'Markdown for ' + file.name, file.markdown) }}
+              </div>
             </td>
             <td>
               {% if file.references.length %}
-                <ul class="admin-references">
+                <ul>
                   {% for reference in file.references %}
-                    <li>
-                      <a href="{{ reference.editUrl }}">{{ reference.title }}</a>
-                      {% if reference.trashed %}
-                        <span class="admin-status admin-status-trashed">Trash</span>
-                      {% endif %}
+                    <li class="whitespace-nowrap">
+                      <a class="link link-hover" href="{{ reference.editUrl }}">{{ reference.title }}</a>
+                      {% if reference.trashed %}{{ status('trashed', 'Trash') }}{% endif %}
                     </li>
                   {% endfor %}
                 </ul>
               {% else %}
-                <span class="admin-status">Nothing</span>
+                Nothing
               {% endif %}
             </td>
-            <td class="admin-actions">
+            <td>
               <form method="post" action="{{ deleteUrl }}">
                 <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
                 <input type="hidden" name="{{ fields.path }}" value="{{ file.path }}" />
-                <button type="submit">Delete</button>
+                {{ button('Delete', type='submit', style='ghost', size='xs') }}
               </form>
             </td>
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {% endcall %}
 
-    {% if previousUrl or nextUrl %}
-      <nav class="admin-pagination" aria-label="Pages">
-        {% if previousUrl %}
-          <a rel="prev" href="{{ previousUrl }}">Newer</a>
-        {% endif %}
-        <span>Page {{ page }} of {{ pages }}</span>
-        {% if nextUrl %}
-          <a rel="next" href="{{ nextUrl }}">Older</a>
-        {% endif %}
-      </nav>
-    {% endif %}
+    <div class="mt-4">
+      {{ pagination(page, pages=pages, previousUrl=previousUrl, nextUrl=nextUrl) }}
+    </div>
 
-    <p class="admin-hint">
+    <p class="mt-4 max-w-prose text-sm">
       The list is the <code>content/uploads</code> directory itself, read afresh on every request,
       so a file copied in by hand is here without a restart. Deleting one removes the file and
       whatever was derived from it; it does not touch the documents that link to it, which is why

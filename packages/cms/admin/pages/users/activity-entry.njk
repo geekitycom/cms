@@ -1,15 +1,16 @@
 {# /admin/users/activity/:id: one request an app made, in full (TASK-221). #}
 {% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import status %}
+{% from "components/table.njk" import table %}
 
 {% block title %}{{ entry.endpoint }} {{ entry.action }}{% endblock %}
 
 {% block content %}
-  <h1>{{ entry.endpoint }} {{ entry.action }}</h1>
+  <h1 class="mb-2 text-2xl font-bold">{{ entry.endpoint }} {{ entry.action }}</h1>
 
-  <p><a href="{{ listUrl }}">All app activity</a></p>
+  <p class="mb-6"><a class="link" href="{{ listUrl }}">All app activity</a></p>
 
-  <table class="admin-list">
-    <caption class="admin-visually-hidden">The request</caption>
+  {% call table('The request') %}
     <tbody>
       <tr><th scope="row">When</th><td><time datetime="{{ entry.when.iso }}">{{ entry.when.text }}</time></td></tr>
       <tr><th scope="row">App</th><td>{{ entry.app or "Unknown" }}</td></tr>
@@ -20,7 +21,7 @@
       <tr>
         <th scope="row">Result</th>
         <td>
-          {% if entry.failed %}<span class="admin-status admin-status-failed">Refused</span>{% endif %}
+          {% if entry.failed %}{{ status('failed', 'Refused') }}{% endif %}
           {{ entry.status }}
         </td>
       </tr>
@@ -31,12 +32,11 @@
         <tr><th scope="row">Why</th><td>{{ entry.errorDescription }}</td></tr>
       {% endif %}
     </tbody>
-  </table>
+  {% endcall %}
 
-  <h2>What it sent</h2>
+  <h2 class="mt-10 mb-3 text-lg font-semibold">What it sent</h2>
   {% if carried | length %}
-    <table class="admin-list">
-      <caption class="admin-visually-hidden">The fields the request carried</caption>
+    {% call table('The fields the request carried') %}
       <thead>
         <tr>
           <th scope="col">Field</th>
@@ -47,12 +47,12 @@
         {% for field in carried %}
           <tr>
             <td>{{ field.name }}</td>
-            <td>{% if field.note %}<span class="admin-status">{{ field.value }}</span>{% else %}{{ field.value }}{% endif %}</td>
+            <td>{% if field.note %}<em>{{ field.value }}</em>{% else %}{{ field.value }}{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {% endcall %}
   {% else %}
-    <p class="admin-empty">No fields were read from this request.</p>
+    <p>No fields were read from this request.</p>
   {% endif %}
 {% endblock %}

@@ -1,38 +1,18 @@
 import assert from 'node:assert/strict';
-import { execFile as execFileCallback } from 'node:child_process';
-import path from 'node:path';
 import { after, describe, it } from 'node:test';
-import { promisify } from 'node:util';
 
 import { sandbox } from './__testing__/harness.ts';
 import { listScreens } from './__testing__/list-screens.ts';
 import type { ListScreen } from './__testing__/list-screens.ts';
 
 /**
- * The screens that are tables of rows, in the DaisyUI admin (decision-30,
- * TASK-272): each table is the table macro's, filters are tabs, page links are
+ * The screens that are tables of rows (decision-30, TASK-272): each table is the table macro's, filters are tabs, page links are
  * the pagination macro, and every state a row is in is a badge that prints its
  * word.
  */
 
-const execFile = promisify(execFileCallback);
-
 const box = sandbox();
 after(() => box.cleanup());
-
-/** The list screens over one seeded site, served by a child process with `GEEKITY_ADMIN=daisyui`. */
-async function daisyuiScreens(): Promise<Record<ListScreen, string>> {
-  const { stdout } = await execFile(
-    process.execPath,
-    [
-      '--import',
-      import.meta.resolve('tsx'),
-      path.join(import.meta.dirname, '__testing__', 'list-probe.ts'),
-    ],
-    { env: { ...process.env, GEEKITY_ADMIN: 'daisyui' }, maxBuffer: 64 * 1024 * 1024 },
-  );
-  return JSON.parse(stdout) as Record<ListScreen, string>;
-}
 
 /** The screen itself: what is inside `<main>`. */
 function screenOf(html: string): string {
@@ -48,14 +28,11 @@ function text(html: string): string {
 }
 
 /** The first cell of every body row of every table on the screen, as text, less
- *  the marks either admin prints beside a row's name. */
+ *  the badges printed beside a row's name. */
 function firstCells(html: string): string[] {
   return [...screenOf(html).matchAll(/<tbody>([\s\S]*?)<\/tbody>/g)].flatMap(([, body]) =>
     [...(body ?? '').matchAll(/<tr\b[^>]*>\s*<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/g)].map(
-      ([, cell]) =>
-        text(
-          (cell ?? '').replaceAll(/<span class="(?:admin-status|badge)\b[^"]*">[^<]*<\/span>/g, ''),
-        ),
+      ([, cell]) => text((cell ?? '').replaceAll(/<span class="badge\b[^"]*">[^<]*<\/span>/g, '')),
     ),
   );
 }
@@ -112,19 +89,16 @@ const SCREENS: readonly ListScreen[] = [
 ];
 
 describe('the list screens', async () => {
-  const [old, daisyui] = await Promise.all([listScreens(box), daisyuiScreens()]);
+  const served = await listScreens(box);
 
   for (const screen of SCREENS) {
     describe(screen, () => {
-      if (screen !== 'syndication') {
-        it('lists the same rows in both admins', () => {
-          assert.deepEqual(firstCells(daisyui[screen]), firstCells(old[screen]));
-          assert.ok(firstCells(old[screen]).length > 0, 'and there are rows to list');
-        });
-      }
+      it('lists rows', () => {
+        assert.ok(firstCells(served[screen]).length > 0);
+      });
 
       it('draws every table through the table macro, scrolling inside its wrapper, caption first (AC #1)', () => {
-        const page = screenOf(daisyui[screen]);
+        const page = screenOf(served[screen]);
         const opened = [...page.matchAll(/<table\b[^>]*>/g)];
         assert.ok(opened.length > 0, 'the screen has a table');
         const drawn = [
@@ -136,9 +110,9 @@ describe('the list screens', async () => {
         for (const [, caption] of drawn) assert.notEqual(caption?.trim(), '');
       });
 
-      it('carries no class of the old admin (AC #4)', () => {
+      it('carries no admin-* class outside the bar (AC #4)', () => {
         assert.deepEqual(
-          classesOutsideTheBar(daisyui[screen]).filter((token) => token.startsWith('admin-')),
+          classesOutsideTheBar(served[screen]).filter((token) => token.startsWith('admin-')),
           [],
         );
       });
@@ -146,7 +120,7 @@ describe('the list screens', async () => {
   }
 
   it('lists every syndication target the file holds, the ignored one too', () => {
-    assert.deepEqual(firstCells(daisyui.syndication), ['IndieNews', 'Nameless']);
+    assert.deepEqual(firstCells(served.syndication), ['IndieNews', 'Nameless']);
   });
 
   it('draws the posts filters as tabs with the current one marked (AC #2)', () => {
@@ -158,7 +132,7 @@ describe('the list screens', async () => {
       ['pages', 'All'],
     ] as const) {
       assert.deepEqual(
-        tabs(daisyui[screen]),
+        tabs(served[screen]),
         labels.map((label) => ({ label, current: label === current })),
         screen,
       );
@@ -166,11 +140,11 @@ describe('the list screens', async () => {
   });
 
   it('draws the app activity filters as tabs with their counts (AC #2)', () => {
-    assert.deepEqual(tabs(daisyui.activity), [
+    assert.deepEqual(tabs(served.activity), [
       { label: 'All (2)', current: true },
       { label: 'Failures (1)', current: false },
     ]);
-    assert.deepEqual(tabs(daisyui.activityFailures), [
+    assert.deepEqual(tabs(served.activityFailures), [
       { label: 'All (2)', current: false },
       { label: 'Failures (1)', current: true },
     ]);
@@ -181,7 +155,7 @@ describe('the list screens', async () => {
       /<nav aria-label="Pages">\s*<div class="join">([\s\S]*?)<\/div>\s*<\/nav>/.exec(html)?.[1] ??
       '';
 
-    const first = join(daisyui.posts);
+    const first = join(served.posts);
     assert.match(
       first,
       /<span class="join-item btn btn-sm btn-disabled" aria-disabled="true">Newer<\/span>/,
@@ -192,7 +166,7 @@ describe('the list screens', async () => {
       /<a class="join-item btn btn-sm" rel="next" href="\/admin\/posts\?page=2">Older<\/a>/,
     );
 
-    const second = join(daisyui.postsPageTwo);
+    const second = join(served.postsPageTwo);
     assert.match(
       second,
       /<a class="join-item btn btn-sm" rel="prev" href="\/admin\/posts">Newer<\/a>/,
@@ -230,7 +204,7 @@ describe('the list screens', async () => {
       ],
     };
     for (const [screen, wanted] of Object.entries(expected)) {
-      assert.deepEqual(badges(daisyui[screen as ListScreen]), wanted, screen);
+      assert.deepEqual(badges(served[screen as ListScreen]), wanted, screen);
     }
   });
 });

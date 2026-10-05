@@ -1,33 +1,26 @@
 import assert from 'node:assert/strict';
-import { execFile as execFileCallback } from 'node:child_process';
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { describe, it } from 'node:test';
-import { promisify } from 'node:util';
+import { after, describe, it } from 'node:test';
 
+import { findUser, setUserAdminTheme } from './accounts.ts';
+import type { AdminTheme } from './admin-theme.ts';
+import { FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 import { adminContentSecurityPolicy } from './headers.ts';
-import { DAISYUI_ADMIN_DIR } from './templates.ts';
+import { PACKAGED_ADMIN_DIR } from './templates.ts';
 
 /**
- * The admin bar of the DaisyUI admin (decision-30, TASK-268): one template in
- * one declarative shadow root, drawn on an admin screen and on a public page
- * alike, in a light or a dark palette chosen by the signed-in user's theme.
+ * The admin bar (decision-30, TASK-268): one template in one declarative
+ * shadow root, drawn on an admin screen and on a public page alike, in a light
+ * or a dark palette chosen by the signed-in user's theme.
  */
 
-const execFile = promisify(execFileCallback);
-
-const STATIC = path.join(DAISYUI_ADMIN_DIR, 'static');
+const STATIC = path.join(PACKAGED_ADMIN_DIR, 'static');
 
 interface Drawn {
   admin: string;
   csp: string;
   public: string;
-}
-
-interface Served {
-  drawn: Record<'system' | 'dracula' | 'cupcake', Drawn>;
-  editor: string;
-  script: { status: number; type: string; body: string };
 }
 
 /** The bar in a page, its host and shadow root included. */
@@ -57,29 +50,48 @@ function nonceOf(csp: string): string {
   return nonce;
 }
 
-describe('the admin bar with GEEKITY_ADMIN=daisyui', async () => {
-  const { stdout } = await execFile(
-    process.execPath,
-    [
-      '--import',
-      import.meta.resolve('tsx'),
-      path.join(import.meta.dirname, '__testing__', 'bar-probe.ts'),
-    ],
-    { env: { ...process.env, GEEKITY_ADMIN: 'daisyui' }, maxBuffer: 64 * 1024 * 1024 },
+describe('the admin bar', async () => {
+  const box = sandbox();
+  after(() => box.cleanup());
+
+  const contentDir = await box.dir('geekity-bar-content-');
+  const post = path.join(contentDir, 'posts', '2026-01-02-published.md');
+  await mkdir(path.dirname(post), { recursive: true });
+  await writeFile(
+    post,
+    '---\ntitle: Published\ndate: 2026-01-02T09:00:00Z\npermalink: /2026/01/published/\n---\n\nBody.\n',
   );
-  const served = JSON.parse(stdout) as Served;
-  const { system, dracula, cupcake } = served.drawn;
+
+  const cms = await box.site({ contentDir });
+  const agent = await signedIn(cms);
+  const userId = findUser(cms.config.dataDir, FIRST_ADMIN.username)?.id ?? 0;
+
+  async function drawnFor(theme: AdminTheme | undefined): Promise<Drawn> {
+    await setUserAdminTheme({ dataDir: cms.config.dataDir, userId, theme });
+    const admin = await agent.get('/admin');
+    return {
+      admin: await admin.text(),
+      csp: admin.headers.get('content-security-policy') ?? '',
+      public: await (await agent.get('/2026/01/published/')).text(),
+    };
+  }
+
+  const system = await drawnFor(undefined);
+  const dracula = await drawnFor('dracula');
+  const cupcake = await drawnFor('cupcake');
+  const editor = await (await agent.get('/admin/posts/published')).text();
+  const scriptResponse = await cms.app.request('/admin/_static/admin-bar.js');
   const stylesheet = (await readFile(path.join(STATIC, 'admin-bar.css'), 'utf8')).trim();
   const script = await readFile(path.join(STATIC, 'admin-bar.js'), 'utf8');
   const compiled = await readFile(path.join(STATIC, 'admin.css'), 'utf8');
 
-  it('is one template in daisyui/, the only one with a shadow root (AC #1)', async () => {
-    const templates = (await readdir(DAISYUI_ADMIN_DIR, { recursive: true })).filter((file) =>
+  it('is one template, the only one with a shadow root (AC #1)', async () => {
+    const templates = (await readdir(PACKAGED_ADMIN_DIR, { recursive: true })).filter((file) =>
       file.endsWith('.njk'),
     );
     const rooted: string[] = [];
     for (const template of templates) {
-      const source = await readFile(path.join(DAISYUI_ADMIN_DIR, template), 'utf8');
+      const source = await readFile(path.join(PACKAGED_ADMIN_DIR, template), 'utf8');
       if (source.includes('shadowrootmode')) rooted.push(template);
     }
     assert.deepEqual(rooted, ['components/admin-bar.njk']);
@@ -163,10 +175,10 @@ describe('the admin bar with GEEKITY_ADMIN=daisyui', async () => {
     });
   }
 
-  it('serves the bar script as a static file (AC #3)', () => {
-    assert.equal(served.script.status, 200);
-    assert.match(served.script.type, /javascript/);
-    assert.equal(served.script.body, script);
+  it('serves the bar script as a static file (AC #3)', async () => {
+    assert.equal(scriptResponse.status, 200);
+    assert.match(scriptResponse.headers.get('content-type') ?? '', /javascript/);
+    assert.equal(await scriptResponse.text(), script);
   });
 
   it("puts the response's nonce on the admin bar's stylesheet and leaves the admin's CSP as it was (AC #4)", () => {
@@ -205,7 +217,7 @@ describe('the admin bar with GEEKITY_ADMIN=daisyui', async () => {
       { label: 'View site', href: '/' },
       { label: '+ New', href: '/admin/posts/new' },
     ]);
-    assert.deepEqual(barLinks(barIn(served.editor)).slice(0, 4), [
+    assert.deepEqual(barLinks(barIn(editor)).slice(0, 4), [
       { label: 'Geekity', href: '/admin' },
       { label: 'View site', href: '/' },
       { label: '+ New', href: '/admin/posts/new' },

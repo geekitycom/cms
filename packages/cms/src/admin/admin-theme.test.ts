@@ -1,29 +1,25 @@
 import assert from 'node:assert/strict';
-import { execFile as execFileCallback } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
-import { promisify } from 'node:util';
 
 import themeOrder from 'daisyui/functions/themeOrder';
 
 import { findUser, findUserById, setUserAdminTheme, usersFile } from './accounts.ts';
 import { ADMIN_THEMES, adminColorScheme, adminTheme } from './admin-theme.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
-import { DAISYUI_ADMIN_DIR } from './templates.ts';
-import { csrfField, FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
+import { PACKAGED_ADMIN_DIR } from './templates.ts';
+import { browser, csrfField, FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 
 /**
  * Each user draws the admin in a built-in DaisyUI theme of their own choosing,
  * or follows the system (decision-30, TASK-267).
  */
 
-const execFile = promisify(execFileCallback);
-
 const box = sandbox();
 after(() => box.cleanup());
 
-const COMPILED = path.join(DAISYUI_ADMIN_DIR, 'static', 'admin.css');
+const COMPILED = path.join(PACKAGED_ADMIN_DIR, 'static', 'admin.css');
 
 /** The `data-theme` on a page's `<html>`, or `undefined` when it carries none. */
 function dataTheme(html: string): string | undefined {
@@ -102,20 +98,7 @@ describe('a theme on the users file', () => {
   });
 });
 
-describe('the old admin, with GEEKITY_ADMIN unset', () => {
-  it('offers no theme and draws no data-theme, whatever the user chose', async () => {
-    const cms = await box.site();
-    const agent = await signedIn(cms);
-    const { dataDir } = cms.config;
-    const id = findUser(dataDir, FIRST_ADMIN.username)?.id ?? 0;
-    await setUserAdminTheme({ dataDir, userId: id, theme: 'dracula' });
-
-    const edit = await (await agent.get(`/admin/users/${String(id)}`)).text();
-    assert.doesNotMatch(edit, /admin_theme/);
-    assert.equal(dataTheme(edit), undefined);
-    assert.equal(dataTheme(await (await agent.get('/admin')).text()), undefined);
-  });
-
+describe('the theme form', () => {
   it('still takes the form, but only for whoever is signed in', async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
@@ -134,35 +117,61 @@ describe('the old admin, with GEEKITY_ADMIN unset', () => {
   });
 });
 
-describe('with GEEKITY_ADMIN=daisyui, over HTTP', async () => {
-  const { stdout } = await execFile(
-    process.execPath,
-    [
-      '--import',
-      import.meta.resolve('tsx'),
-      path.join(import.meta.dirname, '__testing__', 'theme-probe.ts'),
-    ],
-    { env: { ...process.env, GEEKITY_ADMIN: 'daisyui' }, maxBuffer: 64 * 1024 * 1024 },
-  );
-  const served = JSON.parse(stdout) as {
-    setup: string;
-    edit: string;
-    editUrl: string;
-    someoneElse: string;
-    storedBefore: unknown;
-    choseDracula: number;
-    storedDracula: unknown;
-    screens: Record<string, string>;
-    account: Record<string, string>;
-    stylesheet: string;
-    choseUnknown: number;
-    storedAfterUnknown: unknown;
-    choseSystem: number;
-    storedSystem: unknown;
-    dashboardSystem: string;
-  };
+describe('choosing a theme, over HTTP', async () => {
+  const cms = await box.site();
+  const setup = await (await browser(cms).get('/admin/setup')).text();
+  const agent = await signedIn(cms);
+  const id = findUser(cms.config.dataDir, FIRST_ADMIN.username)?.id ?? 0;
+  const editUrl = `/admin/users/${String(id)}`;
 
-  const select = /<select\b[^>]*\bname="admin_theme"[^>]*>([\s\S]*?)<\/select>/.exec(served.edit);
+  async function stored(): Promise<unknown> {
+    const file = JSON.parse(await readFile(usersFile(cms.config.dataDir), 'utf8')) as {
+      users: Record<string, unknown>[];
+    };
+    return file.users.find((user) => user['id'] === id)?.['adminTheme'] ?? null;
+  }
+
+  async function page(url: string): Promise<string> {
+    return await (await agent.get(url)).text();
+  }
+
+  async function choose(theme: string): Promise<number> {
+    const token = csrfField(await page(editUrl)) ?? '';
+    return (await agent.post('/admin/users/theme', { csrf_token: token, admin_theme: theme }))
+      .status;
+  }
+
+  const edit = await page(editUrl);
+  await agent.post('/admin/users/new', {
+    csrf_token: csrfField(edit) ?? '',
+    username: 'grace',
+    password: 'another horse battery staple',
+  });
+  const grace = findUser(cms.config.dataDir, 'grace')?.id ?? 0;
+  const someoneElse = await page(`/admin/users/${String(grace)}`);
+  const storedBefore = await stored();
+
+  const choseDracula = await choose('dracula');
+  const storedDracula = await stored();
+  const screens: Record<string, string> = { [editUrl]: await page(editUrl) };
+  for (const section of ADMIN_SECTIONS) {
+    for (const child of section.children) screens[child.url] = await page(child.url);
+  }
+  const account = {
+    login: await page('/admin/login'),
+    forgot: await page('/admin/forgot'),
+    reset: await page('/admin/reset'),
+  };
+  const stylesheet = await page('/admin/_static/admin.css');
+
+  const choseUnknown = await choose('solarized');
+  const storedAfterUnknown = await stored();
+
+  const choseSystem = await choose('');
+  const storedSystem = await stored();
+  const dashboardSystem = await page('/admin');
+
+  const select = /<select\b[^>]*\bname="admin_theme"[^>]*>([\s\S]*?)<\/select>/.exec(edit);
   const options = [...(select?.[1] ?? '').matchAll(/<option value="([^"]*)"([^>]*)>([^<]*)</g)].map(
     ([, value, attributes, label]) => ({
       value: value ?? '',
@@ -182,8 +191,8 @@ describe('with GEEKITY_ADMIN=daisyui, over HTTP', async () => {
   });
 
   it("offers no theme on somebody else's screen", () => {
-    assert.match(served.someoneElse, /Edit grace/);
-    assert.doesNotMatch(served.someoneElse, /admin_theme/);
+    assert.match(someoneElse, /Edit grace/);
+    assert.doesNotMatch(someoneElse, /admin_theme/);
   });
 
   it('offers only themes the table holds', () => {
@@ -195,50 +204,48 @@ describe('with GEEKITY_ADMIN=daisyui, over HTTP', async () => {
   });
 
   it('stores nothing for a user who has not chosen', () => {
-    assert.equal(served.storedBefore, null);
+    assert.equal(storedBefore, null);
   });
 
   it('stores a chosen theme in data/users.json and holds it in the select', () => {
-    assert.equal(served.choseDracula, 303);
-    assert.equal(served.storedDracula, 'dracula');
-    assert.match(served.screens[served.editUrl] ?? '', /<option value="dracula" selected>/);
+    assert.equal(choseDracula, 303);
+    assert.equal(storedDracula, 'dracula');
+    assert.match(screens[editUrl] ?? '', /<option value="dracula" selected>/);
   });
 
   it('refuses a theme outside the table and keeps the one stored', () => {
-    assert.equal(served.choseUnknown, 303);
-    assert.equal(served.storedAfterUnknown, 'dracula');
+    assert.equal(choseUnknown, 303);
+    assert.equal(storedAfterUnknown, 'dracula');
   });
 
   it('carries the chosen theme as data-theme on every screen in the menu', () => {
     const urls = ADMIN_SECTIONS.flatMap((section) => section.children.map((child) => child.url));
-    const missing = [...urls, served.editUrl].filter(
-      (url) => dataTheme(served.screens[url] ?? '') !== 'dracula',
-    );
+    const missing = [...urls, editUrl].filter((url) => dataTheme(screens[url] ?? '') !== 'dracula');
     assert.deepEqual(missing, []);
   });
 
   it('carries none on the login, setup, forgot and reset screens, even for a signed-in user', () => {
-    assert.equal(dataTheme(served.setup), undefined);
-    for (const [screen, html] of Object.entries(served.account)) {
+    assert.equal(dataTheme(setup), undefined);
+    for (const [screen, html] of Object.entries(account)) {
       assert.match(html, /<html\b/, `${screen} rendered`);
       assert.equal(dataTheme(html), undefined, screen);
     }
   });
 
   it('draws the dashboard in the dark palette of the chosen theme', () => {
-    const dashboard = served.screens['/admin'] ?? '';
+    const dashboard = screens['/admin'] ?? '';
     assert.equal(dataTheme(dashboard), 'dracula');
     assert.equal(adminColorScheme('dracula'), 'dark');
-    assert.equal(compiledScheme(served.stylesheet, 'dracula'), 'dark');
+    assert.equal(compiledScheme(stylesheet, 'dracula'), 'dark');
     assert.match(
-      served.stylesheet,
+      stylesheet,
       /\[data-theme="dracula"\]\s*\{\s*color-scheme: dark;[^}]*--color-base-100:/,
     );
   });
 
   it('takes Follow the system as removing the choice, and the dashboard then names no theme', () => {
-    assert.equal(served.choseSystem, 303);
-    assert.equal(served.storedSystem, null);
-    assert.equal(dataTheme(served.dashboardSystem), undefined);
+    assert.equal(choseSystem, 303);
+    assert.equal(storedSystem, null);
+    assert.equal(dataTheme(dashboardSystem), undefined);
   });
 });

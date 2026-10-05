@@ -257,12 +257,14 @@ async function activityStreams(cms: Cms, url: string): Promise<unknown> {
 }
 
 /**
- * A rendered admin screen with the one thing on it that is per-session taken
- * out. A CSRF token is minted per session, so two logins legitimately differ
- * there and nowhere else; see {@link capture}.
+ * A rendered admin screen with the two things on it that are per-session or
+ * per-response taken out: the CSRF token, minted per session, and the CSP
+ * nonce on the admin bar's stylesheet, minted per response; see {@link capture}.
  */
-function withoutCsrf(html: string): string {
-  return html.replaceAll(/name="csrf_token" value="[^"]*"/g, 'name="csrf_token"');
+function withoutTokens(html: string): string {
+  return html
+    .replaceAll(/name="csrf_token" value="[^"]*"/g, 'name="csrf_token"')
+    .replaceAll(/ nonce="[^"]*"/g, '');
 }
 
 /**
@@ -302,15 +304,15 @@ async function logIn(cms: Cms): Promise<{ agent: Browser; status: number; locati
  * Everything a reader, a follower and an admin can see, in one object that can
  * be compared with `deepEqual`.
  *
- * Three things are deliberately normalised, and only three. The session cookie
+ * Four things are deliberately normalised, and only four. The session cookie
  * is new every login by design, so it is not captured at all. The CSRF token is
- * minted per session for the same reason, so {@link withoutCsrf} takes it out
- * of the two screens that carry one, and the comment form's `loaded` stamp is
- * per render, so {@link withoutFormAge} takes that out of the post. Everything
- * else — the actor document with
- * its public keys, the followers collection, the outbox, the settings form's
- * values, the rendered post with its `<picture>`, the bytes of a derived image
- * — is asserted byte for byte.
+ * minted per session and the admin bar's CSP nonce per response for the same
+ * reason, so {@link withoutTokens} takes both out of the two screens that carry
+ * them, and the comment form's `loaded` stamp is per render, so
+ * {@link withoutFormAge} takes that out of the post. Everything else — the
+ * actor document with its public keys, the followers collection, the outbox,
+ * the settings form's values, the rendered post with its `<picture>`, the bytes
+ * of a derived image — is asserted byte for byte.
  */
 async function capture(cms: Cms): Promise<Record<string, unknown>> {
   const { agent, status, location } = await logIn(cms);
@@ -335,8 +337,8 @@ async function capture(cms: Cms): Promise<Record<string, unknown>> {
     postObject: await activityStreams(cms, '/ap/posts/hello'),
     postAtPermalink: await activityStreams(cms, '/2026/09/hello/'),
     login: { status, location },
-    settings: withoutCsrf(await screen(agent, '/admin/settings')),
-    federationScreen: withoutCsrf(await screen(agent, '/admin/federation')),
+    settings: withoutTokens(await screen(agent, '/admin/settings')),
+    federationScreen: withoutTokens(await screen(agent, '/admin/federation')),
     post: withoutFormAge(await post.text()),
     variant: {
       type: variant.headers.get('content-type'),

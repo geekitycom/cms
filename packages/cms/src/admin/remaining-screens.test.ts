@@ -1,40 +1,21 @@
 import assert from 'node:assert/strict';
-import { execFile as execFileCallback } from 'node:child_process';
-import path from 'node:path';
 import { after, describe, it } from 'node:test';
-import { promisify } from 'node:util';
 
 import { sandbox } from './__testing__/harness.ts';
 import { remainingScreens } from './__testing__/remaining-screens.ts';
 import type { RemainingScreen } from './__testing__/remaining-screens.ts';
-import { ADMIN_TEMPLATES, adminDirectories, createAdminTemplateEnvironment } from './templates.ts';
+import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
 
 /**
- * The admin's remaining screens in the DaisyUI admin (decision-30, TASK-274):
- * comments and messages, themes, menus, the settings panels, the tools, the
- * IndieAuth consent and refused screens, the error page, the placeholder and
- * the user forms, each drawn from cards, tables, tabs and badges with nothing
- * of the old admin left, and each saying what the old admin said.
+ * The admin's remaining screens (decision-30, TASK-274): comments and
+ * messages, themes, menus, the settings panels, the tools, the IndieAuth
+ * consent and refused screens, the error page, the placeholder and the user
+ * forms, each drawn from cards, tables, tabs and badges, and each saying what
+ * it has to say.
  */
-
-const execFile = promisify(execFileCallback);
 
 const box = sandbox();
 after(() => box.cleanup());
-
-/** The screens over one seeded site, served by a child process with `GEEKITY_ADMIN=daisyui`. */
-async function daisyuiScreens(): Promise<Record<RemainingScreen, string>> {
-  const { stdout } = await execFile(
-    process.execPath,
-    [
-      '--import',
-      import.meta.resolve('tsx'),
-      path.join(import.meta.dirname, '__testing__', 'remaining-probe.ts'),
-    ],
-    { env: { ...process.env, GEEKITY_ADMIN: 'daisyui' }, maxBuffer: 64 * 1024 * 1024 },
-  );
-  return JSON.parse(stdout) as Record<RemainingScreen, string>;
-}
 
 /** The screen itself: what is inside `<main>`. */
 function screenOf(html: string): string {
@@ -102,7 +83,7 @@ function pagination(html: string): string {
   );
 }
 
-/** What each screen must say in both admins: the content the redraw has to keep. */
+/** What each screen must say: the content the redraw had to keep. */
 const WORDS: Record<RemainingScreen, readonly string[]> = {
   comments: [
     'Pending (2)',
@@ -221,28 +202,26 @@ const WORDS: Record<RemainingScreen, readonly string[]> = {
 const SCREENS = Object.keys(WORDS) as RemainingScreen[];
 
 describe('the remaining screens', async () => {
-  const [old, daisyui] = await Promise.all([remainingScreens(box), daisyuiScreens()]);
+  const served = await remainingScreens(box);
 
   for (const screen of SCREENS) {
     describe(screen, () => {
-      it('says what the old admin says', () => {
-        for (const html of [old[screen], daisyui[screen]]) {
-          const words = text(html).toLowerCase();
-          for (const phrase of WORDS[screen]) {
-            assert.ok(words.includes(phrase.toLowerCase()), phrase);
-          }
+      it('says what it has to say', () => {
+        const words = text(served[screen]).toLowerCase();
+        for (const phrase of WORDS[screen]) {
+          assert.ok(words.includes(phrase.toLowerCase()), phrase);
         }
       });
 
-      it('carries no class of the old admin (AC #4)', () => {
+      it('carries no admin-* class outside the bar (AC #4)', () => {
         assert.deepEqual(
-          classesOutsideTheBar(daisyui[screen]).filter((token) => token.startsWith('admin-')),
+          classesOutsideTheBar(served[screen]).filter((token) => token.startsWith('admin-')),
           [],
         );
       });
 
       it('draws every table through the table macro, caption first', () => {
-        const page = screenOf(daisyui[screen]);
+        const page = screenOf(served[screen]);
         const opened = [...page.matchAll(/<table\b[^>]*>/g)].length;
         const drawn = [
           ...page.matchAll(
@@ -253,7 +232,7 @@ describe('the remaining screens', async () => {
       });
 
       it('has at most one alert, ahead of any field that takes focus', () => {
-        const page = daisyui[screen];
+        const page = served[screen];
         const alerts = [...page.matchAll(/role="alert"/g)].map((match) => match.index);
         assert.ok(alerts.length <= 1, `${String(alerts.length)} alerts`);
         const focus = /\sautofocus\b/.exec(page.replace(/role="alert"[^>]*autofocus/, ''));
@@ -263,7 +242,7 @@ describe('the remaining screens', async () => {
   }
 
   describe('comments (AC #1)', () => {
-    const rows = cards(daisyui.comments);
+    const rows = cards(served.comments);
 
     it('draws each comment as a card with its author line, where line, body and actions', () => {
       assert.equal(rows.length, 2);
@@ -290,7 +269,7 @@ describe('the remaining screens', async () => {
         { label: 'Pending', modifiers: 'badge-sm badge-warning' },
         { label: 'Webmention', modifiers: 'badge-outline badge-sm' },
       ]);
-      assert.deepEqual(badges(cards(daisyui.commentsSpam)[0] ?? ''), [
+      assert.deepEqual(badges(cards(served.commentsSpam)[0] ?? ''), [
         { label: 'Spam', modifiers: 'badge-sm badge-error' },
       ]);
     });
@@ -309,19 +288,19 @@ describe('the remaining screens', async () => {
     });
 
     it('draws the pending / approved / spam filters as tabs, the current one marked (TASK-272 AC #2)', () => {
-      assert.deepEqual(tabs(daisyui.comments), [
+      assert.deepEqual(tabs(served.comments), [
         { label: 'Pending (2)', current: true },
         { label: 'Approved (26)', current: false },
         { label: 'Spam (1)', current: false },
       ]);
       assert.deepEqual(
-        tabs(daisyui.commentsSpam).map((tab) => tab.current),
+        tabs(served.commentsSpam).map((tab) => tab.current),
         [false, false, true],
       );
     });
 
     it('pages through comments with the pagination macro (TASK-272 AC #2)', () => {
-      const group = pagination(daisyui.commentsApproved);
+      const group = pagination(served.commentsApproved);
       assert.match(group, /aria-current="page">Page 1 of 2<\/span>/);
       assert.match(
         group,
@@ -331,7 +310,7 @@ describe('the remaining screens', async () => {
   });
 
   describe('messages (AC #1)', () => {
-    const rows = cards(daisyui.messages);
+    const rows = cards(served.messages);
 
     it('draws each message as a card with its author line, where line, body and actions', () => {
       assert.equal(rows.length, 25);
@@ -356,24 +335,24 @@ describe('the remaining screens', async () => {
     });
 
     it('draws the inbox / spam filters as tabs and pages with the pagination macro (TASK-272 AC #2)', () => {
-      assert.deepEqual(tabs(daisyui.messages), [
+      assert.deepEqual(tabs(served.messages), [
         { label: 'Inbox (26)', current: true },
         { label: 'Spam (1)', current: false },
       ]);
-      assert.deepEqual(tabs(daisyui.messagesSpam), [
+      assert.deepEqual(tabs(served.messagesSpam), [
         { label: 'Inbox (26)', current: false },
         { label: 'Spam (1)', current: true },
       ]);
-      assert.deepEqual(badges(cards(daisyui.messagesSpam)[0] ?? ''), [
+      assert.deepEqual(badges(cards(served.messagesSpam)[0] ?? ''), [
         { label: 'Unread', modifiers: 'badge-sm badge-primary' },
         { label: 'Spam', modifiers: 'badge-sm badge-error' },
       ]);
-      assert.match(pagination(daisyui.messages), /aria-current="page">Page 1 of 2<\/span>/);
+      assert.match(pagination(served.messages), /aria-current="page">Page 1 of 2<\/span>/);
     });
   });
 
   describe('themes (AC #2)', () => {
-    const themes = cards(daisyui.themes);
+    const themes = cards(served.themes);
 
     it('draws each theme as a card, the active one marked and every other with Activate', () => {
       assert.deepEqual(themes.slice(0, 2).map(cardTitle), ['Default', 'Midnight']);
@@ -399,7 +378,7 @@ describe('the remaining screens', async () => {
   });
 
   describe('navigation (AC #2)', () => {
-    const menus = cards(daisyui.navigation);
+    const menus = cards(served.navigation);
     const titled = (title: string): string => menus.find((card) => cardTitle(card) === title) ?? '';
 
     it('draws one card per menu, each saving its own items', () => {
@@ -431,7 +410,7 @@ describe('the remaining screens', async () => {
   });
 
   describe('the settings panels, tools, IndieAuth and error screens (AC #3)', () => {
-    const titles = (screen: RemainingScreen): string[] => cards(daisyui[screen]).map(cardTitle);
+    const titles = (screen: RemainingScreen): string[] => cards(served[screen]).map(cardTitle);
 
     it('draws each settings panel as a card', () => {
       assert.deepEqual(titles('settingsPermalinks'), ['Archive redirects']);
@@ -441,14 +420,14 @@ describe('the remaining screens', async () => {
     });
 
     it('states the Akismet key and the mail credential with a badge word', () => {
-      assert.deepEqual(badges(cards(daisyui.settingsDiscussion)[0] ?? ''), [
+      assert.deepEqual(badges(cards(served.settingsDiscussion)[0] ?? ''), [
         { label: 'Not recognised', modifiers: 'badge-sm badge-error' },
       ]);
-      assert.deepEqual(badges(cards(daisyui.settingsEmail)[0] ?? '').slice(0, 1), [
+      assert.deepEqual(badges(cards(served.settingsEmail)[0] ?? '').slice(0, 1), [
         { label: 'Configured', modifiers: 'badge-sm badge-success' },
       ]);
       assert.match(
-        cards(daisyui.settingsEmail)[0] ?? '',
+        cards(served.settingsEmail)[0] ?? '',
         /<form method="post" action="\/admin\/settings\/mail\/test">[\s\S]*>Send test email<\/button>/,
       );
     });
@@ -462,15 +441,15 @@ describe('the remaining screens', async () => {
 
     for (const screen of ['consent', 'refused', 'error'] as const) {
       it(`draws ${screen} as one card in the centred column, headed by the page's heading`, () => {
-        const page = screenOf(daisyui[screen]);
+        const page = screenOf(served[screen]);
         assert.match(page, /<main id="main" class="mx-auto flex min-h-screen max-w-md/);
-        assert.equal(cards(daisyui[screen]).length, 1);
-        assert.match(cards(daisyui[screen])[0] ?? '', /<h1 class="card-title/);
+        assert.equal(cards(served[screen]).length, 1);
+        assert.match(cards(served[screen])[0] ?? '', /<h1 class="card-title/);
       });
     }
 
     it('offers Approve and Deny on the consent card', () => {
-      const card = cards(daisyui.consent)[0] ?? '';
+      const card = cards(served.consent)[0] ?? '';
       assert.match(
         card,
         /<button type="submit" class="btn btn-primary[^"]*" name="decision" value="approve">Approve<\/button>/,
@@ -482,10 +461,7 @@ describe('the remaining screens', async () => {
     });
 
     it('draws the placeholder as a card under its heading', () => {
-      const environment = createAdminTemplateEnvironment({
-        noCache: true,
-        roots: adminDirectories({ GEEKITY_ADMIN: 'daisyui' }),
-      });
+      const environment = createAdminTemplateEnvironment({ noCache: true });
       const html = environment.render(ADMIN_TEMPLATES.placeholder, {
         heading: 'Widgets',
         slug: 'blue',
@@ -503,7 +479,7 @@ describe('the remaining screens', async () => {
 
   describe('the user forms', () => {
     it('draws each of a user’s forms as a card', () => {
-      assert.deepEqual(cards(daisyui.usersEdit).map(cardTitle), [
+      assert.deepEqual(cards(served.usersEdit).map(cardTitle), [
         'Account',
         'Profile',
         'Email ada about',
@@ -512,13 +488,13 @@ describe('the remaining screens', async () => {
         'Change your password',
         'Delete',
       ]);
-      assert.deepEqual(cards(daisyui.usersEditOther).map(cardTitle), [
+      assert.deepEqual(cards(served.usersEditOther).map(cardTitle), [
         'Account',
         'Profile',
         'Email grace about',
         'Delete',
       ]);
-      assert.equal(cards(daisyui.usersNew).length, 1);
+      assert.equal(cards(served.usersNew).length, 1);
     });
   });
 });

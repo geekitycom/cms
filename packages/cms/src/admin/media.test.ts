@@ -201,7 +201,7 @@ describe('the media screen', () => {
     );
     // The other file is referenced by nothing, and the screen says so rather
     // than leaving the column blank.
-    assert.match(html, /<td>\s*Nothing\s*<\/td>|admin-status">Nothing</);
+    assert.match(html, /<td>\s*Nothing\s*<\/td>/);
   });
 
   it('stores a file uploaded from the screen exactly as the editor does (AC #3)', async () => {

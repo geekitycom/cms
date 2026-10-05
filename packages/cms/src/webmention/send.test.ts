@@ -624,7 +624,7 @@ describe('syndication on the federation screen (TASK-155 AC #9)', () => {
 
     assert.match(
       html,
-      new RegExp(`News: sent, <a href="${NEWS_COPY}">copy</a>`),
+      new RegExp(`News: sent, <a class="link" href="${NEWS_COPY}">copy</a>`),
       'the target that made a copy links it',
     );
     assert.match(html, /Friend: sent</, 'the target that made none says how it went');

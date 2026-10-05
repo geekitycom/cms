@@ -22,7 +22,6 @@
   "files": [
     "dist",
     "admin",
-    "daisyui",
     "themes",
     "templates",
     "README.md",
@@ -31,7 +30,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/build-editor.js && pnpm build:theme && pnpm build:admin",
     "build:editor": "node scripts/build-editor.js",
-    "build:admin": "tailwindcss -i daisyui/src/admin.css -o daisyui/static/admin.css --optimize",
+    "build:admin": "tailwindcss -i admin/src/admin.css -o admin/static/admin.css --optimize",
     "build:highlight": "node scripts/build-highlight.js",
     "build:theme": "tailwindcss -i themes/default/src/style.css -o themes/default/static/style.css --optimize",
     "dev": "tsc -p tsconfig.build.json --watch",

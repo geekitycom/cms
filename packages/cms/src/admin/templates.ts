@@ -13,49 +13,19 @@ import { formatDate } from '../web/templates.ts';
  * site wears may override any public template, and must not be able to shadow
  * the login form or the CSRF field inside it (decision-4, decision-15).
  *
- * Under it are three siblings, and a template is in exactly one of them:
+ * A template is in exactly one of three folders under it:
  *
  * - `pages/` — the screens, one folder per section of the admin menu, plus
  *   `account/` for the four screens shown when nobody is signed in yet.
  * - `layouts/` — the chrome a page extends: the document, the signed-in shell,
  *   and the shared settings page.
- * - `components/` — what a page imports or includes: the field macros and the
- *   flash.
+ * - `components/` — the DaisyUI component macros a page imports, one file per
+ *   component, and what a page includes: the flash and the admin bar.
+ *
+ * Beside them, `static/` holds what a browser fetches and `src/` the stylesheet
+ * source that `pnpm build` compiles into `static/admin.css` (decision-30).
  */
 export const PACKAGED_ADMIN_DIR: string = fileURLToPath(new URL('../../admin/', import.meta.url));
-
-/**
- * The DaisyUI admin under construction (decision-30), with the same
- * `layouts/`, `components/`, `pages/` and `static/` as {@link PACKAGED_ADMIN_DIR}
- * and holding only what has been converted so far. `GEEKITY_ADMIN=daisyui`
- * lays it over the old admin; the flip renames it to `admin/`.
- */
-export const DAISYUI_ADMIN_DIR: string = fileURLToPath(new URL('../../daisyui/', import.meta.url));
-
-/**
- * The admin roots `GEEKITY_ADMIN` asks for, first match wins: the old admin
- * alone when it is unset or empty, and `daisyui/` ahead of it when it is
- * `daisyui`, so a converted file is served from there and an unconverted one
- * still from `admin/`.
- *
- * A value it does not know is refused, so a misspelt switch fails at boot
- * instead of quietly serving the admin somebody meant to leave behind.
- */
-export function adminDirectories(env: Record<string, string | undefined>): readonly string[] {
-  const value = env['GEEKITY_ADMIN'] ?? '';
-  if (value === '') return [PACKAGED_ADMIN_DIR];
-  if (value === 'daisyui') return [DAISYUI_ADMIN_DIR, PACKAGED_ADMIN_DIR];
-  throw new Error(
-    `GEEKITY_ADMIN is ${JSON.stringify(value)}; set it to "daisyui" for the DaisyUI admin, or leave it unset`,
-  );
-}
-
-/**
- * The admin roots this process serves from, read once at load. Every reader of
- * an admin file goes through it: the template loader, the static files, and
- * the tests that read templates by path.
- */
-export const ADMIN_DIRS: readonly string[] = adminDirectories(process.env);
 
 /**
  * Templates {@link mountAdmin} asks for by name.
@@ -112,8 +82,6 @@ export interface CreateAdminTemplateEnvironmentOptions {
    * content watcher is on, which is the same switch as "this is a dev server".
    */
   noCache?: boolean | undefined;
-  /** The admin roots to load from, first match wins. {@link ADMIN_DIRS} when absent. */
-  roots?: readonly string[] | undefined;
 }
 
 /**
@@ -135,11 +103,11 @@ function modifierClass(classes: unknown, value: unknown): string {
   return found === '' ? '' : ` ${found}`;
 }
 
-/** A Nunjucks environment over `options.roots`, {@link ADMIN_DIRS} by default, and nothing else. */
+/** A Nunjucks environment over {@link PACKAGED_ADMIN_DIR} and nothing else. */
 export function createAdminTemplateEnvironment(
   options: CreateAdminTemplateEnvironmentOptions = {},
 ): Environment {
-  const loader = new FileSystemLoader([...(options.roots ?? ADMIN_DIRS)], {
+  const loader = new FileSystemLoader([PACKAGED_ADMIN_DIR], {
     noCache: options.noCache === true,
   });
 

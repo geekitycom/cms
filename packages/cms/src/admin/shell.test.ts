@@ -1,25 +1,21 @@
 import assert from 'node:assert/strict';
-import { execFile as execFileCallback } from 'node:child_process';
-import path from 'node:path';
-import { describe, it } from 'node:test';
-import { promisify } from 'node:util';
+import { after, describe, it } from 'node:test';
 
+import { browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import { saveSettings, SETTINGS_PAGE_FORMS, settingsPageUrl } from './__testing__/settings.ts';
 import { adminMenu } from './menu.ts';
+import { RESET_PATH } from './recovery.ts';
+import { MAIL_TEST_FIELDS, MAIL_TEST_PATH } from './settings-email.ts';
 import type { FlashMessage } from './store.ts';
-import { adminDirectories, createAdminTemplateEnvironment } from './templates.ts';
+import { createAdminTemplateEnvironment } from './templates.ts';
 
 /**
- * The DaisyUI admin's chrome (decision-30, TASK-270): the shell every signed-in
- * screen is drawn inside, the settings pages' layout, the flash and the four
- * account screens, rendered from daisyui/ over admin/ as the switch serves them.
+ * The admin's chrome (decision-30, TASK-270): the shell every signed-in screen
+ * is drawn inside, the settings pages' layout, the flash and the four account
+ * screens.
  */
 
-const execFile = promisify(execFileCallback);
-
-const daisyui = createAdminTemplateEnvironment({
-  noCache: true,
-  roots: adminDirectories({ GEEKITY_ADMIN: 'daisyui' }),
-});
+const environment = createAdminTemplateEnvironment({ noCache: true });
 
 const CHROME = {
   site: { title: 'A Site' },
@@ -36,7 +32,7 @@ const CHROME = {
 
 /** A screen that extends the shell and says nothing of its own but a heading. */
 function shell(context: Record<string, unknown> = {}): string {
-  return daisyui.renderString(
+  return environment.renderString(
     '{% extends "layouts/shell.njk" %}{% block content %}<h1>Tags</h1>{% endblock %}',
     { ...CHROME, ...context },
   );
@@ -66,7 +62,7 @@ function linkTexts(html: string): string[] {
   return [...html.matchAll(/<a\b[^>]*>([^<]*)<\/a>/g)].map(([, text]) => text ?? '');
 }
 
-describe('the DaisyUI shell', () => {
+describe('the shell', () => {
   it('draws the registry as a menu: every section, the open one with its children nested', () => {
     const nav = sectionsNav(shell());
     const expected = CHROME.navigation.flatMap((section) => [
@@ -151,7 +147,7 @@ describe('the DaisyUI shell', () => {
 });
 
 describe('the settings page layout', () => {
-  const html = daisyui.renderString(
+  const html = environment.renderString(
     `{% extends "layouts/settings-page.njk" %}
      {% import "components/fields.njk" as field %}
      {% block settingsProblems %}{{ field.problem('settings-title', 'A title is needed.') }}{% endblock %}
@@ -238,7 +234,7 @@ describe('the account screens', () => {
 
   for (const [name, context] of Object.entries(screens)) {
     it(`draws ${name} as one centred card with a primary submit button`, () => {
-      const html = daisyui.render(`pages/account/${name}.njk`, {
+      const html = environment.render(`pages/account/${name}.njk`, {
         site: { title: 'A Site' },
         csrfToken: 'token',
         ...context,
@@ -249,7 +245,7 @@ describe('the account screens', () => {
   }
 
   it('draws a reset link that no longer works as an error alert in the card', () => {
-    const html = daisyui.render('pages/account/reset.njk', {
+    const html = environment.render('pages/account/reset.njk', {
       invalid: true,
       forgotUrl: '/admin/forgot',
     });
@@ -258,29 +254,52 @@ describe('the account screens', () => {
   });
 });
 
-describe('set to daisyui, over HTTP', async () => {
-  const { stdout } = await execFile(
-    process.execPath,
-    [
-      '--import',
-      import.meta.resolve('tsx'),
-      path.join(import.meta.dirname, '__testing__', 'shell-probe.ts'),
-    ],
-    { env: { ...process.env, GEEKITY_ADMIN: 'daisyui' }, maxBuffer: 64 * 1024 * 1024 },
-  );
-  const served = JSON.parse(stdout) as {
-    account: Record<string, string>;
-    saves: Record<string, { status: number; location: string; url: string; html: string }>;
-    refusedTest: string;
+describe('over HTTP', async () => {
+  const box = sandbox();
+  after(() => box.cleanup());
+
+  const cms = await box.site();
+  const guest = browser(cms);
+
+  async function page(url: string, as = guest): Promise<string> {
+    return await (await as.get(url)).text();
+  }
+
+  const setup = await page('/admin/setup');
+  const agent = await signedIn(cms);
+  const account = {
+    setup,
+    login: await page('/admin/login'),
+    forgot: await page('/admin/forgot'),
+    reset: await page(`${RESET_PATH}?token=${'0'.repeat(64)}`),
   };
 
-  for (const [name, html] of Object.entries(served.account)) {
+  const saves: Record<string, { status: number; location: string; url: string; html: string }> = {};
+  for (const name of Object.keys(SETTINGS_PAGE_FORMS)) {
+    const response = await saveSettings(agent, name);
+    const location = response.headers.get('location') ?? '';
+    saves[name] = {
+      status: response.status,
+      location,
+      url: settingsPageUrl(name),
+      html: await page(location, agent),
+    };
+  }
+
+  const email = settingsPageUrl('email');
+  await agent.post(MAIL_TEST_PATH, {
+    csrf_token: csrfField(await page(email, agent)) ?? '',
+    [MAIL_TEST_FIELDS.to]: '',
+  });
+  const refusedTest = await page(email, agent);
+
+  for (const [name, html] of Object.entries(account)) {
     it(`serves the ${name} screen as one centred card`, () => {
       assertOneCentredCard(html, name);
     });
   }
 
-  for (const [name, save] of Object.entries(served.saves)) {
+  for (const [name, save] of Object.entries(saves)) {
     it(`saves the ${name} settings page and says so in a success alert in the shell`, () => {
       assert.equal(save.status, 303);
       assert.equal(save.location, save.url, 'back to the page it was saved from');
@@ -295,7 +314,7 @@ describe('set to daisyui, over HTTP', async () => {
 
   it('shows a refused test email as an error alert', () => {
     assert.match(
-      served.refusedTest,
+      refusedTest,
       /<div role="status" class="alert alert-error">\s*<span>Type the address to send the test message to\.<\/span>/,
     );
   });

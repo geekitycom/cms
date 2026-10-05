@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 
 /**
- * The editor's form read out of a served page, the same way in either admin,
- * so a test about what the editor posts does not depend on how it is drawn.
+ * The editor's form read out of a served page, so a test about what the editor
+ * posts does not depend on how it is drawn.
  */
 
 /** Every control the form would post, as a browser builds the form data. */
@@ -35,7 +35,7 @@ export function fieldsOf(html: string): [string, string][] {
   return fields.sort(([a], [b]) => a.localeCompare(b));
 }
 
-/** Where the editor form posts, in either admin. */
+/** Where the editor form posts. */
 export function saveUrlOf(html: string): string | undefined {
   return /<form\b[^>]*\baction="([^"]+)"[^>]*>\s*<input type="hidden" name="csrf_token"[^>]*>\s*<input type="hidden" name="hash"/.exec(
     html,
@@ -53,14 +53,12 @@ export function elementAt(html: string, start: number): string {
   return html.slice(start);
 }
 
-/** The first card of a cited page in `html`, as either admin draws it: the
- *  card around the first Remove toggle. */
+/** The first card of a cited page in `html`: the card around the first Remove
+ *  toggle. */
 export function citedCard(html: string): string | undefined {
   const toggle = html.search(/<input\b[^>]*\btype="checkbox"[^>]*\bname="preview"/);
   if (toggle === -1) return undefined;
-  const opens = [
-    ...html.slice(0, toggle).matchAll(/<div class="(?:admin-cited-card|card\b[^"]*)">/g),
-  ];
+  const opens = [...html.slice(0, toggle).matchAll(/<div class="card\b[^"]*">/g)];
   const at = opens.at(-1)?.index;
   return at === undefined ? undefined : elementAt(html, at);
 }

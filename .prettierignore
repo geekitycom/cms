@@ -6,7 +6,6 @@ data/
 *.tsbuildinfo
 *.tgz
 packages/cms/admin/static/editor.js
-packages/cms/daisyui/static/editor.js
 packages/cms/themes/default/static/style.css
 # esbuild's other output, committed rather than gitignored so a site gets a
 # highlighter without a build step. Written by `pnpm --filter @geekity/cms

@@ -1,46 +1,53 @@
 {# /admin/federation: who this site's people are to the fediverse, who follows
    each of them, what arrived in the inbox, and how what went out landed. #}
 {% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card %}
+{% from "components/table.njk" import table %}
 
 {% block title %}Federation{% endblock %}
 
-{% block content %}
-  <h1>Federation</h1>
+{# An avatar, or a blank placeholder in its place. Decoration: the name is
+   printed beside it. #}
+{% set AVATAR_SIZES = { large: 'w-24', small: 'w-8' } %}
+{% macro avatar(url, size) %}
+  {% if url %}
+    <div class="avatar shrink-0">
+      <div class="rounded-full{{ AVATAR_SIZES | modifier(size) }}">
+        <img class="object-cover" src="{{ url }}" alt="" width="{{ 96 if size == 'large' else 32 }}" height="{{ 96 if size == 'large' else 32 }}" loading="lazy" />
+      </div>
+    </div>
+  {% else %}
+    <div class="avatar avatar-placeholder shrink-0" aria-hidden="true">
+      <div class="rounded-full bg-base-300{{ AVATAR_SIZES | modifier(size) }}"></div>
+    </div>
+  {% endif %}
+{% endmacro %}
 
-  {% if actors.length %}
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">Federation</h1>
+
+  <div class="mb-10 grid grid-cols-1 gap-6">
     {% for actor in actors %}
-      <section class="admin-panel admin-actor">
-        <h2>{{ actor.handle }}</h2>
-        <div class="admin-actor-identity">
-          {% if actor.avatarUrl %}
-            <img class="admin-avatar admin-avatar-large" src="{{ actor.avatarUrl }}" alt="" width="96" height="96" />
-          {% else %}
-            <span class="admin-avatar admin-avatar-large admin-avatar-blank" aria-hidden="true"></span>
-          {% endif %}
-          <p class="admin-actor-handle">{{ actor.name }}</p>
+      {% call card(title=actor.handle) %}
+        <div class="flex items-center gap-4">
+          {{ avatar(actor.avatarUrl, 'large') }}
+          <p class="text-lg">{{ actor.name }}</p>
         </div>
-        <dl class="admin-actor-fields">
-          <div>
-            <dt>Summary</dt>
-            <dd>{% if actor.summary %}{{ actor.summary }}{% else %}<span class="admin-empty">None set.</span>{% endif %}</dd>
-          </div>
-          <div>
-            <dt>Actor</dt>
-            <dd><a href="{{ actor.actorId }}">{{ actor.actorId }}</a></dd>
-          </div>
-          <div>
-            <dt>Profile</dt>
-            <dd><a href="{{ actor.url }}">{{ actor.url }}</a></dd>
-          </div>
-          <div>
-            <dt>Followers</dt>
-            <dd>{{ actor.followerCount }}</dd>
-          </div>
+        <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+          <dt>Summary</dt>
+          <dd>{{ actor.summary or 'None set.' }}</dd>
+          <dt>Actor</dt>
+          <dd><a class="link break-all" href="{{ actor.actorId }}">{{ actor.actorId }}</a></dd>
+          <dt>Profile</dt>
+          <dd><a class="link break-all" href="{{ actor.url }}">{{ actor.url }}</a></dd>
+          <dt>Followers</dt>
+          <dd>{{ actor.followerCount }}</dd>
         </dl>
 
         {% if actor.followers.length %}
-          <table class="admin-list">
-            <caption>Followers of {{ actor.handle }}</caption>
+          {% call table('Followers of ' + actor.handle) %}
             <thead>
               <tr>
                 <th scope="col">Follower</th>
@@ -51,37 +58,33 @@
             <tbody>
               {% for follower in actor.followers %}
                 <tr>
-                  <td class="admin-follower">
-                    {% if follower.iconUrl %}
-                      <img class="admin-avatar" src="{{ follower.iconUrl }}" alt="" width="32" height="32" loading="lazy" />
-                    {% else %}
-                      <span class="admin-avatar admin-avatar-blank" aria-hidden="true"></span>
-                    {% endif %}
-                    <a href="{{ follower.url }}">{{ follower.name }}</a>
+                  <td>
+                    <div class="flex items-center gap-2">
+                      {{ avatar(follower.iconUrl, 'small') }}
+                      <a class="link link-hover" href="{{ follower.url }}">{{ follower.name }}</a>
+                    </div>
                   </td>
                   <td>{{ follower.handle }}</td>
-                  <td>{{ follower.followedAt | date('html') }}</td>
+                  <td class="whitespace-nowrap">{{ follower.followedAt | date('html') }}</td>
                 </tr>
               {% endfor %}
             </tbody>
-          </table>
+          {% endcall %}
         {% else %}
-          <p class="admin-empty">Nobody follows {{ actor.name }} yet.</p>
+          <p>Nobody follows {{ actor.name }} yet.</p>
         {% endif %}
-      </section>
+      {% endcall %}
+    {% else %}
+      {% call card(title='Actors') %}
+        <p>The site has no users, so it has no actors.</p>
+      {% endcall %}
     {% endfor %}
-  {% else %}
-    <section class="admin-panel admin-actor">
-      <h2>Actors</h2>
-      <p class="admin-empty">The site has no users, so it has no actors.</p>
-    </section>
-  {% endif %}
+  </div>
 
-  <section class="admin-panel">
-    <h2>Relays</h2>
+  <section class="mb-10">
+    <h2 class="mb-3 text-lg font-semibold">Relays</h2>
     {% if relays.length %}
-      <table class="admin-list">
-        <caption class="admin-visually-hidden">Relays</caption>
+      {% call table('Relays') %}
         <thead>
           <tr>
             <th scope="col">Relay</th>
@@ -96,87 +99,80 @@
             <tr>
               <td>
                 {% if relay.actorId %}
-                  <a href="{{ relay.actorId }}">{{ relay.inboxId }}</a>
+                  <a class="link link-hover" href="{{ relay.actorId }}">{{ relay.inboxId }}</a>
                 {% else %}
                   {{ relay.inboxId }}
                 {% endif %}
                 {% if relay.reason %}
-                  <p class="admin-hint">{{ relay.reason }}</p>
+                  <p class="text-sm">{{ relay.reason }}</p>
                 {% endif %}
               </td>
-              <td>
-                {% if relay.state == 'rejected' %}
-                  <span class="admin-status admin-status-failed">{{ relay.stateLabel }}</span>
-                {% else %}
-                  {{ relay.stateLabel }}
-                {% endif %}
-              </td>
-              <td>{{ relay.updatedAt | date('html') }}</td>
+              <td>{{ status(relay.state, relay.stateLabel) }}</td>
+              <td class="whitespace-nowrap">{{ relay.updatedAt | date('html') }}</td>
               <td>
                 {% if relay.lastDelivery %}
                   {{ relay.lastDelivery.activityType }} {{ relay.lastDelivery.status }}
-                  <span class="admin-inbox-when">{{ relay.lastDelivery.attemptedAt | date('html') }}</span>
+                  <span class="whitespace-nowrap text-sm">{{ relay.lastDelivery.attemptedAt | date('html') }}</span>
                   {% if relay.lastDelivery.error %}
-                    <p class="admin-hint">{{ relay.lastDelivery.error }}</p>
+                    <p class="text-sm">{{ relay.lastDelivery.error }}</p>
                   {% endif %}
                 {% else %}
-                  <span class="admin-empty">Nothing yet.</span>
+                  Nothing yet.
                 {% endif %}
               </td>
-              <td class="admin-actions">
+              <td>
                 {% if relay.retriable %}
                   <form method="post" action="{{ relayRetryUrl }}">
                     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
                     <input type="hidden" name="{{ fields.relay }}" value="{{ relay.inboxId }}" />
-                    <button type="submit">Retry</button>
+                    {{ button('Retry', type='submit', style='ghost', size='xs') }}
                   </form>
                 {% endif %}
               </td>
             </tr>
           {% endfor %}
         </tbody>
-      </table>
-      <p class="admin-hint">
+      {% endcall %}
+      <p class="mt-4 max-w-prose text-sm">
         A relay boosts every public post it is sent on to instances nobody here
         follows. The list lives on the Settings screen; Retry sends the follow
         again to one that is still waiting.
       </p>
     {% else %}
-      <p class="admin-empty">The site subscribes to no relay. Add one on the Settings screen.</p>
+      <p>The site subscribes to no relay. Add one on the Settings screen.</p>
     {% endif %}
   </section>
 
-  <section class="admin-panel">
-    <h2>Recent activity</h2>
+  <section class="mb-10">
+    <h2 class="mb-3 text-lg font-semibold">Recent activity</h2>
     {% if inbox.length %}
-      <ul class="admin-inbox">
+      <ul class="space-y-1">
         {% for entry in inbox %}
           <li>
-            <span class="admin-inbox-actor"><a href="{{ entry.actorId }}">{{ entry.actorLabel }}</a></span>
+            <a class="link link-hover font-medium" href="{{ entry.actorId }}">{{ entry.actorLabel }}</a>
             {% if entry.remoteUrl %}
-              <a href="{{ entry.remoteUrl }}">{{ entry.action }}</a>
+              <a class="link" href="{{ entry.remoteUrl }}">{{ entry.action }}</a>
             {% else %}
               {{ entry.action }}
             {% endif %}
             {% if entry.post %}
-              <a href="{{ entry.post.editUrl }}">{{ entry.post.title }}</a>
+              <a class="link" href="{{ entry.post.editUrl }}">{{ entry.post.title }}</a>
             {% else %}
-              <span class="admin-empty">something of ours</span>
+              <em>something of ours</em>
             {% endif %}
-            <span class="admin-inbox-when">{{ entry.receivedAt | date('html') }}</span>
+            <span class="whitespace-nowrap text-sm">{{ entry.receivedAt | date('html') }}</span>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="admin-empty">Nothing has arrived yet: no likes, boosts or replies.</p>
+      <p>Nothing has arrived yet: no likes, boosts or replies.</p>
     {% endif %}
   </section>
 
-  <section class="admin-panel">
-    <h2>Delivery</h2>
+  <section>
+    <h2 class="mb-3 text-lg font-semibold">Delivery</h2>
     {% if posts.length %}
-      <table class="admin-list">
-        <caption class="admin-visually-hidden">Delivery</caption>
+      {% call table('Delivery') %}
         <thead>
           <tr>
             <th scope="col">Post</th>
@@ -193,47 +189,47 @@
           {% for row in posts %}
             <tr>
               <td>
-                <a href="{{ row.post.editUrl }}">{{ row.post.title }}</a>
-                {% if row.trashed %}<p class="admin-hint">In the trash.</p>{% endif %}
+                <a class="link link-hover font-medium" href="{{ row.post.editUrl }}">{{ row.post.title }}</a>
+                {% if row.trashed %}<p class="text-sm">In the trash.</p>{% endif %}
               </td>
-              <td>{% if row.author %}@{{ row.author }}{% else %}<span class="admin-empty">—</span>{% endif %}</td>
+              <td>{% if row.author %}@{{ row.author }}{% else %}—{% endif %}</td>
               {% if row.lastActivity %}
-                <td>{{ row.lastActivity.activityType }} <span class="admin-inbox-when">{{ row.lastActivity.attemptedAt | date('html') }}</span></td>
+                <td>{{ row.lastActivity.activityType }} <span class="whitespace-nowrap text-sm">{{ row.lastActivity.attemptedAt | date('html') }}</span></td>
                 <td>{{ row.lastActivity.counts.sent }}</td>
                 <td>{{ row.lastActivity.counts.queued }}</td>
-                <td>{% if row.lastActivity.counts.failed %}<span class="admin-status admin-status-failed">{{ row.lastActivity.counts.failed }}</span>{% else %}0{% endif %}</td>
+                <td class="whitespace-nowrap">{% if row.lastActivity.counts.failed %}{{ status('failed', row.lastActivity.counts.failed + ' failed') }}{% else %}0{% endif %}</td>
               {% else %}
-                <td><span class="admin-empty">Nothing recorded.</span></td>
+                <td>Nothing recorded.</td>
                 <td>—</td>
                 <td>—</td>
                 <td>—</td>
               {% endif %}
               <td>
                 {% if row.webmentions.sent or row.webmentions["none"] or row.webmentions.failed %}
-                  {{ row.webmentions.sent }} told{% if row.webmentions["none"] %}, {{ row.webmentions["none"] }} take none{% endif %}{% if row.webmentions.failed %}, <span class="admin-status admin-status-failed">{{ row.webmentions.failed }} failed</span>{% endif %}
+                  {{ row.webmentions.sent }} told{% if row.webmentions["none"] %}, {{ row.webmentions["none"] }} take none{% endif %}{% if row.webmentions.failed %}, {{ status('failed', row.webmentions.failed + ' failed') }}{% endif %}
                 {% else %}
-                  <span class="admin-empty">—</span>
+                  —
                 {% endif %}
                 {% if row.syndication.length %}
-                  <ul class="admin-syndication">
+                  <ul>
                     {% for target in row.syndication %}
-                      <li>{{ target.name }}: {% if target.status == "failed" %}<span class="admin-status admin-status-failed">failed</span>{% if target.error %} ({{ target.error }}){% endif %}{% elif target.status == "none" %}takes none{% elif target.status %}sent{% else %}not sent yet{% endif %}{% if target.copy %}, <a href="{{ target.copy }}">copy</a>{% endif %}</li>
+                      <li>{{ target.name }}: {% if target.status == "failed" %}{{ status('failed', 'failed') }}{% if target.error %} ({{ target.error }}){% endif %}{% elif target.status == "none" %}takes none{% elif target.status %}sent{% else %}not sent yet{% endif %}{% if target.copy %}, <a class="link" href="{{ target.copy }}">copy</a>{% endif %}</li>
                     {% endfor %}
                   </ul>
                 {% endif %}
               </td>
-              <td class="admin-actions">
+              <td>
                 <form method="post" action="{{ resendUrl }}">
                   <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
                   <input type="hidden" name="{{ fields.slug }}" value="{{ row.slug }}" />
-                  <button type="submit">Resend</button>
+                  {{ button('Resend', type='submit', style='ghost', size='xs') }}
                 </form>
               </td>
             </tr>
           {% endfor %}
         </tbody>
-      </table>
-      <p class="admin-hint">
+      {% endcall %}
+      <p class="mt-4 max-w-prose text-sm">
         Resending builds the post again from its file and sends it to every one
         of its author's followers and every accepted relay the site has now, and tells every
         page the post links to at the same time: an update for a
@@ -242,7 +238,7 @@
         recorded against them.
       </p>
     {% else %}
-      <p class="admin-empty">No post has been announced to the fediverse yet.</p>
+      <p>No post has been announced to the fediverse yet.</p>
     {% endif %}
   </section>
 {% endblock %}

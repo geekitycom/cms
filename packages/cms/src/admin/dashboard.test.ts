@@ -1,17 +1,13 @@
 import assert from 'node:assert/strict';
-import { execFile as execFileCallback } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
-import { promisify } from 'node:util';
 
 import { flashes } from './__testing__/flash.ts';
 import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import { findUser, setUserProfile } from './accounts.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { saveUrlOf } from './__testing__/editor-form.ts';
-
-const execFile = promisify(execFileCallback);
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -266,15 +262,8 @@ interface Count {
   href: string | undefined;
 }
 
-/** The old admin's counts: a definition list, each number its label's dd. */
-function definitionCounts(html: string): Count[] {
-  return [...html.matchAll(/<dt>([^<]*)<\/dt>\s*<dd>(?:<a href="([^"]*)">)?([^<]*)/g)].map(
-    ([, label, href, value]) => ({ label: label ?? '', value: value ?? '', href }),
-  );
-}
-
-/** The DaisyUI admin's counts: a stat each, the whole stat a link when it leads somewhere. */
-function statCounts(html: string): Count[] {
+/** The counts: a stat each, the whole stat a link when it leads somewhere. */
+function counts(html: string): Count[] {
   return [
     ...html.matchAll(
       /<(?:div|a) class="stat\b[^"]*"(?: href="([^"]*)")?>\s*<div class="stat-title">([^<]*)<\/div>\s*<div class="stat-value\b[^"]*">([^<]*)<\/div>/g,
@@ -327,84 +316,56 @@ const RECENT: Seed[] = Array.from({ length: 7 }, (_, index) => {
   };
 });
 
-/** The dashboard a signed-in user is served over `contentDir`, in this process. */
+/** The dashboard a signed-in user is served over `contentDir`. */
 async function dashboardOver(contentDir: string): Promise<string> {
   const agent = await signedIn(await box.site({ contentDir }));
   return await (await agent.get('/admin')).text();
 }
 
-/** The dashboards over `contentDirs`, served by a child process with `GEEKITY_ADMIN=daisyui`. */
-async function daisyuiDashboards(contentDirs: string[]): Promise<string[]> {
-  const { stdout } = await execFile(
-    process.execPath,
-    [
-      '--import',
-      import.meta.resolve('tsx'),
-      path.join(import.meta.dirname, '__testing__', 'dashboard-probe.ts'),
-      ...contentDirs,
-    ],
-    { env: { ...process.env, GEEKITY_ADMIN: 'daisyui' }, maxBuffer: 64 * 1024 * 1024 },
-  );
-  return JSON.parse(stdout) as string[];
-}
-
 describe('the dashboard', async () => {
-  const contentDirs = [await seeded(COUNTED), await seeded(RECENT), await seeded([])];
-  const daisyui = await daisyuiDashboards(contentDirs);
-  const admins = [
-    {
-      name: 'the old admin',
-      counts: definitionCounts,
-      dashboards: await Promise.all(contentDirs.map(dashboardOver)),
-    },
-    { name: 'the DaisyUI admin', counts: statCounts, dashboards: daisyui },
-  ];
+  const dashboards = await Promise.all(
+    [await seeded(COUNTED), await seeded(RECENT), await seeded([])].map(dashboardOver),
+  );
+  const [counted = '', recent = '', empty = ''] = dashboards;
 
-  for (const { name, counts, dashboards } of admins) {
-    const [counted = '', recent = '', empty = ''] = dashboards;
+  it('counts what the index holds, each number under its label', () => {
+    assert.deepEqual(counts(counted), [
+      { label: 'Published posts', value: '3', href: undefined },
+      { label: 'Drafts', value: '1', href: undefined },
+      { label: 'Pages', value: '2', href: undefined },
+      { label: 'Followers', value: '0', href: '/admin/federation' },
+      { label: 'Comments waiting', value: '0', href: '/admin/comments?status=pending' },
+      { label: 'Messages unread', value: '0', href: '/admin/messages' },
+    ]);
+  });
 
-    describe(`in ${name}`, () => {
-      it('counts what the index holds, each number under its label', () => {
-        assert.deepEqual(counts(counted), [
-          { label: 'Published posts', value: '3', href: undefined },
-          { label: 'Drafts', value: '1', href: undefined },
-          { label: 'Pages', value: '2', href: undefined },
-          { label: 'Followers', value: '0', href: '/admin/federation' },
-          { label: 'Comments waiting', value: '0', href: '/admin/comments?status=pending' },
-          { label: 'Messages unread', value: '0', href: '/admin/messages' },
-        ]);
-      });
+  it('lists the five most recent posts, newest first, with their date and status', () => {
+    const screen = recent.slice(recent.indexOf('<main'));
+    const listed = [
+      ...screen.matchAll(/<a\b[^>]*\bhref="\/admin\/posts\/([^"]+)"[^>]*>([^<]+)<\/a>/g),
+    ];
 
-      it('lists the five most recent posts, newest first, with their date and status', () => {
-        const screen = recent.slice(recent.indexOf('<main'));
-        const listed = [
-          ...screen.matchAll(/<a\b[^>]*\bhref="\/admin\/posts\/([^"]+)"[^>]*>([^<]+)<\/a>/g),
-        ];
+    assert.deepEqual(
+      listed.map((match) => match[1]),
+      ['post-7', 'post-6', 'post-5', 'post-4', 'post-3'],
+      'each linking to its editor',
+    );
+    assert.deepEqual(rowTexts(recent), [
+      'Title Date Status',
+      'Post 7 2026-02-07 Draft',
+      'Post 6 2026-02-06 Published',
+      'Post 5 2026-02-05 Published',
+      'Post 4 2026-02-04 Published',
+      'Post 3 2026-02-03 Published',
+    ]);
+  });
 
-        assert.deepEqual(
-          listed.map((match) => match[1]),
-          ['post-7', 'post-6', 'post-5', 'post-4', 'post-3'],
-          'each linking to its editor',
-        );
-        assert.deepEqual(rowTexts(recent), [
-          'Title Date Status',
-          'Post 7 2026-02-07 Draft',
-          'Post 6 2026-02-06 Published',
-          'Post 5 2026-02-05 Published',
-          'Post 4 2026-02-04 Published',
-          'Post 3 2026-02-03 Published',
-        ]);
-      });
+  it('says so when there is nothing written yet', () => {
+    assert.match(empty, /Nothing written yet/);
+    assert.deepEqual(rowTexts(empty), [], 'and draws no empty table');
+  });
 
-      it('says so when there is nothing written yet', () => {
-        assert.match(empty, /Nothing written yet/);
-        assert.deepEqual(rowTexts(empty), [], 'and draws no empty table');
-      });
-    });
-  }
-
-  it('draws Recent posts in the DaisyUI admin as a card around its table', () => {
-    const [, recent = '', empty = ''] = daisyui;
+  it('draws Recent posts as a card around its table', () => {
     const card =
       /<div class="card bg-base-100 shadow-sm">\s*<div class="card-body">\s*<h2 class="card-title">Recent posts<\/h2>([\s\S]*?)<\/div>\s*<\/div>\s*<\/main>/;
 
@@ -412,8 +373,8 @@ describe('the dashboard', async () => {
     assert.match(card.exec(empty)?.[1] ?? '', /Nothing written yet/);
   });
 
-  it('carries no class of the old admin in the DaisyUI admin', () => {
-    for (const html of daisyui) {
+  it('carries no admin-* class outside the bar', () => {
+    for (const html of dashboards) {
       assert.deepEqual(
         classesOutsideTheBar(html).filter((token) => token.startsWith('admin-')),
         [],

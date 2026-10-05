@@ -28,9 +28,7 @@ packages/cms/          published as @geekity/cms
   admin/               admin templates and static files, editor.js among them
     pages/             one folder per admin menu section, a file per screen
     layouts/           the chrome a page extends: base, shell, settings-page
-    components/        what a page imports or includes: field macros, the flash
-  daisyui/             the DaisyUI admin under construction, laid over admin/
-                       when GEEKITY_ADMIN=daisyui (decision-30)
+    components/        DaisyUI component macros, the flash and the admin bar
     src/admin.css      its stylesheet's Tailwind and DaisyUI source;
                        static/admin.css is the compiled output, gitignored
   themes/default/      default theme, shipped inside the package
@@ -788,33 +786,17 @@ such as a hand-typed `visibility: private`, hides the post like a draft until
 you choose one. The package README's
 [Unlisted posts](packages/cms/README.md#unlisted-posts) has the whole table.
 
-### The DaisyUI admin, behind a switch
+### The admin's stylesheet
 
-The admin is being redrawn in DaisyUI on Tailwind (decision-30). The new admin
-is built in `packages/cms/daisyui/`, beside the current one in
-`packages/cms/admin/`, with the same `layouts/`, `components/`, `pages/` and
-`static/`. It holds only the files converted so far.
-
-Set `GEEKITY_ADMIN=daisyui` to try it:
-
-```sh
-GEEKITY_ADMIN=daisyui pnpm dev
-```
-
-With the switch on, `daisyui/` is searched before `admin/` for templates and
-for files under `/admin/_static/`. A file in `daisyui/` wins, and a screen not
-converted yet still comes from `admin/`, drawn inside the new
-`daisyui/layouts/base.njk`. With the switch unset, the current admin is served
-exactly as before. Any other value stops the server at boot.
-
-The new admin's stylesheet is a build product, like the default theme's. The
-source is `packages/cms/daisyui/src/admin.css`: Tailwind in full, Preflight
-included, and the DaisyUI 5 plugin with every built-in theme, `light` as the
-default and `dark` when the system prefers dark. `pnpm build`, and the
-package's `pretest`, compile it to `packages/cms/daisyui/static/admin.css`,
-which is gitignored. `pnpm --filter @geekity/cms build:admin` compiles it
-alone. Tailwind reads class names from the templates under `daisyui/` and from
-`editor/main.ts`.
+The admin is drawn in DaisyUI on Tailwind (decision-30). Its stylesheet is a
+build product, like the default theme's. The source is
+`packages/cms/admin/src/admin.css`: Tailwind in full, Preflight included, and
+the DaisyUI 5 plugin with every built-in theme, `light` as the default and
+`dark` when the system prefers dark. `pnpm build`, and the package's
+`pretest`, compile it to `packages/cms/admin/static/admin.css`, which is
+gitignored. `pnpm --filter @geekity/cms build:admin` compiles it alone.
+Tailwind reads class names from the templates under `admin/` and from
+`editor/look.ts`.
 
 ### Login hardening and security headers
 

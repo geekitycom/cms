@@ -10,9 +10,7 @@ import type { Browser, Sandbox } from './harness.ts';
 
 /**
  * One site holding everything the editor can show, and the editor and conflict
- * screens as a signed-in admin is served them. `editor-daisyui.test.ts` reads
- * them from the old admin in its own process and from the DaisyUI admin through
- * `editor-probe.ts`, so the form each admin posts can be held to be the same.
+ * screens as a signed-in admin is served them, for `editor-daisyui.test.ts`.
  */
 
 const NOW = new Date('2026-10-03T12:00:00.000Z');

@@ -12,25 +12,29 @@
    lands back here, so a Save always shows its own result. #}
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/badge.njk" import badge, status %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
 
 {% block title %}Edit {{ account.username }}{% endblock %}
 
 {% block content %}
-  <h1>Edit {{ account.username }}{% if account.you %} <span class="admin-status">(you)</span>{% endif %}</h1>
+  <h1 class="mb-2 flex flex-wrap items-center gap-2 text-2xl font-bold">Edit {{ account.username }}{% if account.you %} {{ badge('(you)', style='outline', size='md') }}{% endif %}</h1>
 
-  <p class="admin-hint"><a href="{{ usersUrl }}">Back to all users</a></p>
+  <p class="mb-6 text-sm"><a class="link" href="{{ usersUrl }}">Back to all users</a></p>
 
-  <form class="admin-settings" method="post" action="{{ userEmailUrl }}">
+  <div class="flex max-w-2xl flex-col gap-6">
+
+  {% call card(title='Account') %}
+  <form method="post" action="{{ userEmailUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
     <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
 
-    <h2>Account</h2>
-
-    <p class="admin-field-static">
+    <p>
       Signs in as <strong>{{ account.username }}</strong>, and writes at
-      <a href="{{ account.archiveUrl }}">{{ account.archiveUrl }}</a>.
+      <a class="link break-all" href="{{ account.archiveUrl }}">{{ account.archiveUrl }}</a>.
     </p>
-    <p class="admin-hint">
+    <p class="text-sm">
       A username is not editable: it is the login, the author URL above, and
       the actor a follower holds. Somebody who needs a different one is a new
       account.
@@ -39,7 +43,7 @@
        purpose: it is what the fediverse already holds, and changing it would
        orphan every follow. #}
     {% if account.storedActorId %}
-      <p class="admin-hint">
+      <p class="text-sm">
         Also <code>{{ account.storedActorId }}</code> — what the fediverse knows
         this user by. Set by the import or by hand in
         <code>data/users.json</code>, never here.
@@ -50,16 +54,15 @@
       {% if mailConfigured %}
         Optional, and never shown on the public site. It is what a forgotten password is recovered through and where the notices below go. Empty it to stop the site writing to this person at all.
       {% else %}
-        Optional, and this site sends no mail yet, so nothing will be sent to one. Choose a provider on <a href="{{ adminUrl }}/settings/email">Settings &rsaquo; Email</a> to turn password recovery on.
+        Optional, and this site sends no mail yet, so nothing will be sent to one. Choose a provider on <a class="link" href="{{ adminUrl }}/settings/email">Settings &rsaquo; Email</a> to turn password recovery on.
       {% endif %}
     {% endset %}
     {{ field.text('user-email', fields.email, 'Email address', account.email,
          type='email', autocomplete='email', hint=emailHint) }}
 
-    <p class="admin-settings-buttons">
-      <button type="submit">Save email address</button>
-    </p>
+    <div class="mt-2">{{ button('Save email address', type='submit', color='primary') }}</div>
   </form>
+  {% endcall %}
 
   {# The public face of this person (TASK-67). Anybody's, not only your own:
      there is one role, so an admin who has just added a colleague can put a
@@ -67,13 +70,12 @@
      sign in. After decision-14 these same fields are what their ActivityPub
      actor carries, which is why they live beside the account rather than in
      the site settings — and why saving them tells their followers. #}
-  <form class="admin-settings" method="post" action="{{ userProfileUrl }}">
+  {% call card(title='Profile') %}
+  <form method="post" action="{{ userProfileUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
     <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
 
-    <h2>Profile</h2>
-
-    <p class="admin-hint">
+    <p class="text-sm">
       A profile is public. Nothing in it is required — a user with no profile
       still has an archive under their username — and a box left empty is a
       field they do not have.
@@ -116,7 +118,7 @@
       <code>Mastodon | https://example.social/@me | me</code>,
       <code>Their post | https://example.com/post | me nofollow author</code>.
       It is the same line the menu boxes on
-      <a href="{{ adminUrl }}/navigation">Navigation</a> take.
+      <a class="link" href="{{ adminUrl }}/navigation">Navigation</a> take.
       Every link here is published with <code>rel="me"</code> whether or not
       you type it: it is how Mastodon verifies a profile field that points back
       at this site, and how IndieAuth knows these are yours. Nothing else in
@@ -125,10 +127,9 @@
     {{ field.textarea('profile-links', fields.links, 'Links', account.profile.links, rows='4',
          hint=linksHint, error=profileProblems.links) }}
 
-    <p class="admin-settings-buttons">
-      <button type="submit">Save profile</button>
-    </p>
+    <div class="mt-2">{{ button('Save profile', type='submit', color='primary') }}</div>
   </form>
+  {% endcall %}
 
   {# Only once there is both somewhere to write to and something to write
      with. These switches decide what is sent to the address above, so without
@@ -137,10 +138,9 @@
      lines below say which is missing where the panel would have been, rather
      than letting it vanish without explanation. #}
   {% if account.email and mailConfigured %}
-  <section class="admin-settings">
-    <h2>Email {{ account.username }} about</h2>
+  {% call card(title='Email ' + account.username + ' about') %}
 
-    <p class="admin-hint">
+    <p class="text-sm">
       What this site writes to {{ account.username }} at <code>{{ account.email }}</code>.
     </p>
 
@@ -149,17 +149,22 @@
        this off" from "left it alone". Adding a notice is one entry in the
        registry and no change here. #}
     {% for notice in account.notifications %}
-      <div class="admin-notice">
-        <h3>{{ notice.label }}</h3>
-        <p class="admin-hint">{{ notice.description }}</p>
+      <div class="flex flex-col gap-2 border-t border-base-300 pt-4">
+        <h3 class="font-semibold">{{ notice.label }}</h3>
+        <p class="text-sm">{{ notice.description }}</p>
 
-        <form class="admin-inline" method="post" action="{{ userNotificationsUrl }}">
+        <form class="flex flex-wrap items-center gap-2" method="post" action="{{ userNotificationsUrl }}">
           <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
           <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
           <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
           <input type="hidden" name="{{ fields.on }}" value="{% if notice.on %}{% else %}1{% endif %}" />
-          <span class="admin-status">{% if notice.on %}On{% else %}Off{% endif %}</span>
-          <button type="submit">{% if notice.on %}Turn off{% else %}Turn on{% endif %}</button>
+          {% if notice.on %}
+            {{ status('active', 'On') }}
+            {{ button('Turn off', type='submit', style='outline', size='xs') }}
+          {% else %}
+            {{ status('hidden', 'Off') }}
+            {{ button('Turn on', type='submit', style='outline', size='xs') }}
+          {% endif %}
         </form>
 
         {# And, for a notice the registry says can be batched, how often it
@@ -167,7 +172,7 @@
            it and the switch above is a button; the registry decides which
            notices get one. #}
         {% if notice.batched %}
-          <form class="admin-inline" method="post" action="{{ userNotificationModeUrl }}">
+          <form class="flex flex-wrap items-end gap-2" method="post" action="{{ userNotificationModeUrl }}">
             <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
             <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
             <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
@@ -176,9 +181,9 @@
                 <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
               {% endfor %}
             {% endcall %}
-            <button type="submit">Save</button>
+            <div class="pb-1">{{ button('Save', type='submit') }}</div>
           </form>
-          <p class="admin-hint">
+          <p class="text-sm">
             On an hourly or a daily digest nothing is sent as they arrive;
             instead one message a window lists everything still waiting, and
             no message goes at all when nothing is.
@@ -186,25 +191,24 @@
         {% endif %}
       </div>
     {% endfor %}
-  </section>
+  {% endcall %}
   {% else %}
-  <section class="admin-settings">
-    <h2>Email {{ account.username }} about</h2>
+  {% call card(title='Email ' + account.username + ' about') %}
 
     {% if not mailConfigured %}
-      <p class="admin-hint">
+      <p class="text-sm">
         Nothing, while this site has no mail provider: there is nothing to send
-        with. Choose one on <a href="{{ adminUrl }}/settings/email">Settings
+        with. Choose one on <a class="link" href="{{ adminUrl }}/settings/email">Settings
         &rsaquo; Email</a> and what to send comes back here.
       </p>
     {% else %}
-      <p class="admin-hint">
+      <p class="text-sm">
         Nothing, while the box above is empty: there is nowhere to write to.
         Give {% if account.you %}yourself{% else %}this account{% endif %} an
         address and what to send comes back here.
       </p>
     {% endif %}
-  </section>
+  {% endcall %}
   {% endif %}
 
   {# Only on your own page: it asks for the current password, so it is about
@@ -214,27 +218,22 @@
   {# Only on your own page, as the screen it links to only ever lists your
      own connections (TASK-162). #}
   {% if account.you %}
-    <section class="admin-settings">
-      <h2>Connected apps</h2>
-      <p class="admin-hint">
+    {% call card(title='Connected apps') %}
+      <p class="text-sm">
         Apps you signed in to with your site's address can act as you.
-        <a href="{{ connectedAppsUrl }}">Review or revoke them</a>.
+        <a class="link" href="{{ connectedAppsUrl }}">Review or revoke them</a>.
       </p>
-    </section>
-  {% endif %}
-
-  {# The theme panel is the DaisyUI admin's alone (decision-30): it lives in
-     daisyui/components/, so the old admin, which has no themes, finds
-     nothing to include. #}
-  {% if account.you %}
-    {% include "components/theme-choice.njk" ignore missing %}
+    {% endcall %}
   {% endif %}
 
   {% if account.you %}
-    <form class="admin-settings" id="change-password" method="post" action="{{ changePasswordUrl }}">
+    {% include "components/theme-choice.njk" %}
+  {% endif %}
+
+  {% if account.you %}
+    {% call card(title='Change your password') %}
+    <form id="change-password" method="post" action="{{ changePasswordUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-
-      <h2>Change your password</h2>
 
       {% if passwordProblems.currentPassword or passwordProblems.newPassword %}
         {% call field.summary('Your password was not changed. Fix the fields marked below and try again.') %}
@@ -253,31 +252,32 @@
       {{ field.password('new-password-confirmation', fields.newPasswordConfirmation,
            'New password again', autocomplete='new-password', required=true) }}
 
-      <p class="admin-hint">Every other browser signed in as you is signed out. This one stays.</p>
+      <p class="text-sm">Every other browser signed in as you is signed out. This one stays.</p>
 
-      <p class="admin-settings-buttons">
-        <button type="submit">Change password</button>
-      </p>
+      <div class="mt-2">{{ button('Change password', type='submit', color='primary') }}</div>
     </form>
+    {% endcall %}
   {% endif %}
 
-  <section class="admin-settings">
-    <h2>Delete</h2>
+  {% call card(title='Delete') %}
 
     {# Either the button or the reason there is none, never both: the screen
        does not offer an action it is about to refuse. #}
     {% if deleteRefusal %}
-      <p class="admin-hint">{{ deleteRefusal }}</p>
+      <p class="text-sm">{{ deleteRefusal }}</p>
     {% else %}
-      <p class="admin-hint">
+      <p class="text-sm">
         Deleting {{ account.username }} signs out every browser they are in and
         cannot be undone. What they have written stays where it is.
       </p>
       <form method="post" action="{{ deleteUserUrl }}">
         <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
         <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
-        <button type="submit">Delete {{ account.username }}</button>
+        {% call cardActions() %}
+          {{ button('Delete ' + account.username, type='submit', color='error') }}
+        {% endcall %}
       </form>
     {% endif %}
-  </section>
+  {% endcall %}
+  </div>
 {% endblock %}

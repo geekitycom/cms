@@ -229,7 +229,7 @@ describe('the comments screen', () => {
     assert.match(html, /Comments waiting/);
     assert.match(
       html,
-      /href="\/admin\/comments\?status=pending"[^>]*>(?:\s*<div class="stat-title">Comments waiting<\/div>\s*<div class="stat-value[^"]*">)?2</,
+      /href="\/admin\/comments\?status=pending"[^>]*>\s*<div class="stat-title">Comments waiting<\/div>\s*<div class="stat-value[^"]*">2</,
     );
   });
 });

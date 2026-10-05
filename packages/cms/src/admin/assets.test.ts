@@ -37,7 +37,7 @@ describe('the admin stylesheet', () => {
     assert.match(response.headers.get('content-type') ?? '', /text\/css/);
     assert.match(response.headers.get('cache-control') ?? '', /max-age=\d+/);
     assert.ok(response.headers.get('etag') !== null, 'and a validator');
-    assert.match(css, /admin-nav/, 'and it is the admin stylesheet');
+    assert.match(css, /\[data-theme="dark"\]/, 'and it is the compiled admin stylesheet');
   });
 
   it('is readable while logged out, because the login page links to it', async () => {

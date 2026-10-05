@@ -1,43 +1,9 @@
-{# The admin bar as the public site draws it for a signed-in user (TASK-183),
-   put straight after the theme's <body> tag.
-
-   Whatever theme the site wears has never heard of it, so it keeps to a shadow
-   root: no selector of the theme's reaches the markup inside, and the
-   stylesheet inside reaches nothing outside. The stylesheet is inlined rather
-   than linked so the bar is never drawn unstyled; the public site has no
-   content CSP to refuse it.
-
-   The host is fixed to the top of the window, as WordPress's is. In normal
-   flow it sat inside whatever padding or margin the theme gave <body>, so it
-   stopped short of the window's edges. Out of flow, nothing the theme does to
-   <body> moves it, and the inline reset keeps the theme's rules for the host
-   element itself, a `body > *` or a grid on <body>, from restyling it; only an
-   `!important` rule can, which is also how a theme that insists hides it. The
-   page is pushed down from outside, by a stylesheet the CMS puts in <head>
-   (OFFSET_STYLE in src/web/admin-bar.ts) reading --geekity-admin-bar-height.
-
-   The script does two things. It measures the bar and sets that height on
-   <html>, so a bar that wraps to two lines on a phone, or one a theme has
-   hidden, pushes the page down by what it really is. And it gives focus back
-   to the greeting when the menu closes with focus inside it: Chrome does that
-   for a popover in the light DOM, not from inside a shadow root, where the
-   focus is simply lost. A click elsewhere has already moved focus by then,
-   and keeps it. #}
-<geekity-admin-bar style="all: initial; display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 99999"><template shadowrootmode="open"><style>{% include "static/admin-bar.css" %}</style>{% include "components/admin-bar.njk" %}<script>
-(() => {
-  const host = document.querySelector('geekity-admin-bar');
-  const root = host.shadowRoot;
-  new ResizeObserver(() => {
-    const height = host.getBoundingClientRect().height;
-    document.documentElement.style.setProperty('--geekity-admin-bar-height', `${height}px`);
-  }).observe(host);
-  const menu = root.getElementById('admin-account-menu');
-  menu?.addEventListener('beforetoggle', (event) => {
-    if (event.newState === 'closed' && menu.contains(root.activeElement)) {
-      setTimeout(() => root.querySelector('.admin-bar-account').focus());
-    }
-  });
-})();
-</script></template></geekity-admin-bar>{% if notice %}
+{# The public site's entry to the admin bar (TASK-183, decision-30), put
+   straight after the theme's <body> tag: components/admin-bar.njk, and under
+   it the notice that the post or page being read is not published, which
+   only the public site prints. The notice is in the light DOM of a page the
+   site's theme draws, so it is styled inline, reset first, against whatever
+   that theme does. #}
+{% include "components/admin-bar.njk" %}{% if notice %}
 <p class="geekity-unpublished-notice" style="all: initial; display: block; box-sizing: border-box; margin: 0; padding: 8px 16px; background: #fcf9e8; color: #1d2327; border-bottom: 1px solid #dba617; font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">{{ notice }}</p>
 {%- endif %}

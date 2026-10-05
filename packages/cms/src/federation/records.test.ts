@@ -638,10 +638,9 @@ async function followersCollection(instance: Cms): Promise<unknown[]> {
 async function federationScreen(agent: Browser): Promise<string> {
   const response = await agent.get('/admin/federation');
   assert.equal(response.status, 200);
-  return (await response.text()).replaceAll(
-    /name="csrf_token" value="[^"]*"/g,
-    'name="csrf_token"',
-  );
+  return (await response.text())
+    .replaceAll(/name="csrf_token" value="[^"]*"/g, 'name="csrf_token"')
+    .replaceAll(/ nonce="[^"]*"/g, '');
 }
 
 /** Throw the database away, the way decision-9 says a site is free to. */

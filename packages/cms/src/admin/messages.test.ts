@@ -20,8 +20,8 @@ import { MESSAGES_DELETE_PATH, MESSAGES_PATH, MESSAGES_READ_PATH } from './messa
 const box = sandbox();
 after(() => box.cleanup());
 
-/** How either admin marks a row unread: the old admin's class, or the DaisyUI badge. */
-const UNREAD = /class="admin-comment admin-comment-unread"|<span class="badge[^"]*">Unread<\/span>/;
+/** How a row is marked unread: a badge that says so. */
+const UNREAD = /<span class="badge[^"]*">Unread<\/span>/;
 
 /** One message already on disk when the screen is opened. */
 function message(overrides: Partial<NewContactMessage> = {}): NewContactMessage {
@@ -151,9 +151,7 @@ describe('the Messages screen', () => {
 
     assert.match(
       html,
-      new RegExp(
-        `Messages unread(?:[\\s\\S]*?<a href="${MESSAGES_PATH}">|</div>\\s*<div class="stat-value[^"]*">)1<`,
-      ),
+      new RegExp(`Messages unread</div>\\s*<div class="stat-value[^"]*">1<`),
       'the dashboard says how many are waiting',
     );
     assert.match(html, new RegExp(`<a\\b[^>]*href="${MESSAGES_PATH}"`), 'and links here');
