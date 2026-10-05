@@ -59,3 +59,23 @@
     silk;
   logs: false;
 }
+
+/*
+ * Room for the admin bar (decision-30), which is fixed to the top of the
+ * window and takes none by itself. The page moves down by a margin on <html>,
+ * as the public site's does under OFFSET_STYLE in src/web/admin-bar.ts: one
+ * 40px line, two where the bar wraps on a narrow screen, until the bar's
+ * script sets the height it measures on <html> itself. Only on a page that
+ * draws the bar, which the login screens do not.
+ */
+:root:has(> body > geekity-admin-bar) {
+  --geekity-admin-bar-height: 40px;
+  margin-top: var(--geekity-admin-bar-height);
+  scroll-padding-top: var(--geekity-admin-bar-height);
+}
+
+@media (max-width: 600px) {
+  :root:has(> body > geekity-admin-bar) {
+    --geekity-admin-bar-height: 80px;
+  }
+}

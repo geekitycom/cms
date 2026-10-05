@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 01:03'
+updated_date: '2026-10-05 01:21'
 ---
 # Admin UI
 
@@ -254,6 +254,13 @@ macros; it does not spell out component markup of its own.
 - **Where it lives.** `adminTheme` on the user in `data/users.json`, beside the notification maps, and on the same rule: following the system is the default and is never written down, and a name this version does not know is dropped on the way in and read as following the system. The form refuses a name outside the table with a flash and writes nothing.
 - **How a page carries it.** The admin's `render` puts the signed-in user's choice on every context as `dataTheme`, and `daisyui/layouts/base.njk` renders it as `data-theme` on `<html>`. Following the system renders no attribute, and the stylesheet's `light` default and `dark` for `prefers-color-scheme: dark` decide. The login, setup, forgot-password and reset screens carry none even for somebody signed in, because they are shown to nobody in particular. There is no client-side switch.
 - **Light or dark.** `ADMIN_THEMES` in `src/admin/admin-theme.ts` is the one table of the built-in themes, each with its label and whether it is light or dark, and `adminColorScheme` reduces a choice to `light`, `dark` or `auto` for whatever draws outside the theme's reach, such as the admin bar. A test holds the table to DaisyUI's own list of themes and each entry to the `color-scheme` the compiled sheet gives it.
+
+## Admin bar
+
+- **One component on both sides.** The DaisyUI admin (decision-30) draws the bar from one template, `daisyui/components/admin-bar.njk`, on every signed-in admin screen and across the top of every public page a signed-in user reads (TASK-183). It is a `geekity-admin-bar` host holding a declarative shadow root, with its own stylesheet, `static/admin-bar.css`, inlined into it and its script, `static/admin-bar.js`, loaded by `<script src>`. On the admin it shadows the old admin's `components/admin-bar.njk` by name, so the shell that includes that draws this one. On the public site `components/public-admin-bar.njk` includes it and prints the unpublished notice under it.
+- **Light and dark.** The stylesheet writes every colour as `light-dark(light, dark)`. The host carries `data-scheme="light"` or `data-scheme="dark"` from the signed-in user's admin theme, through `adminColorScheme`, which the admin's `render` and the public site's middleware both call. Following the system puts nothing on the host, and the bar follows `prefers-color-scheme`. No DaisyUI class reaches inside a shadow root, so the bar is plain CSS of its own, and `keyboard.test.ts` holds its text, hover text and focus ring to WCAG contrast in both palettes.
+- **Under the admin's CSP.** The inlined `<style>` carries the response's nonce and is the only inline stylesheet an admin page has. The host is placed by the stylesheet's `:host` rule, because the CSP refuses a style attribute. The public site has no content policy, and there the host also carries that placement as a style attribute, which outranks a theme's rules for the element.
+- **Room for it.** The bar is fixed to the top of the window, and the page moves down by a margin on `<html>` of `--geekity-admin-bar-height`: one 40px line, or two on a screen 600px wide or less, until the script measures the bar and sets the height it really has. On the public site that rule is the `<style>` the middleware puts in `<head>`. On the admin it is in `admin.css`, for a page whose `<body>` holds the bar, which the login screens do not. The skip link comes before the bar and is drawn over it while it has focus.
 
 ## User email and password recovery
 

@@ -126,7 +126,7 @@ export default tseslint.config(
     // through the linter into a page. `editor.js` beside them is esbuild's
     // output and is ignored; its source is linted as TypeScript.
     name: 'geekity/admin-static',
-    files: ['packages/cms/admin/static/**/*.js'],
+    files: ['packages/cms/admin/static/**/*.js', 'packages/cms/daisyui/static/**/*.js'],
     languageOptions: {
       sourceType: 'script',
       globals: globals.browser,

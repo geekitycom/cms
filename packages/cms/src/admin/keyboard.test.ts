@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { adminFile, adminTemplates } from './__testing__/admin-files.ts';
 import { browser, sandbox, signedIn } from './__testing__/harness.ts';
-import { createAdminTemplateEnvironment } from './templates.ts';
+import {
+  adminDirectories,
+  createAdminTemplateEnvironment,
+  DAISYUI_ADMIN_DIR,
+} from './templates.ts';
 
 /**
  * The admin for someone on a keyboard (TASK-143): a way past the chrome on
@@ -144,4 +149,74 @@ describe('the focus ring', () => {
       });
     }
   }
+});
+
+describe('the DaisyUI admin bar, in its light palette and its dark one', async () => {
+  const css = await readFile(path.join(DAISYUI_ADMIN_DIR, 'static', 'admin-bar.css'), 'utf8');
+  const declared =
+    /(--admin-bar-[a-z-]+):\s*light-dark\(\s*(#[0-9a-f]{3,6})\s*,\s*(#[0-9a-f]{3,6})\s*\)\s*;/gi;
+  const palettes = {
+    light: new Map<string, string>(),
+    dark: new Map<string, string>(),
+  };
+  for (const [, name = '', light = '', dark = ''] of css.matchAll(declared)) {
+    palettes.light.set(name, light);
+    palettes.dark.set(name, dark);
+  }
+
+  it('draws in no colour outside its two palettes, so every one is measured here', () => {
+    const elsewhere = css.replaceAll(/\/\*[\s\S]*?\*\//g, '').replaceAll(declared, '');
+    assert.deepEqual(elsewhere.match(/#[0-9a-f]{3,8}\b/gi) ?? [], []);
+    assert.ok(
+      palettes.light.size >= 5,
+      `the palette was read: ${[...palettes.light.keys()].join(', ')}`,
+    );
+  });
+
+  /** Each foreground, the ratio it is held to, and every background it is drawn on. */
+  const PAIRS: readonly [string, number, readonly string[]][] = [
+    ['--admin-bar-text', 4.5, ['--admin-bar-surface', '--admin-bar-menu']],
+    ['--admin-bar-hover', 4.5, ['--admin-bar-surface']],
+    ['--admin-bar-focus', 3, ['--admin-bar-surface', '--admin-bar-menu']],
+  ];
+
+  for (const [scheme, palette] of Object.entries(palettes)) {
+    for (const [foreground, minimum, backgrounds] of PAIRS) {
+      for (const background of backgrounds) {
+        it(`${scheme}: ${foreground} stands out ${String(minimum)}:1 against ${background}`, () => {
+          const one = palette.get(foreground);
+          const other = palette.get(background);
+          assert.ok(
+            one !== undefined && other !== undefined,
+            `${foreground} and ${background} are declared`,
+          );
+          const ratio = contrast(one, other);
+          assert.ok(ratio >= minimum, `${one} on ${other} is ${ratio.toFixed(2)}:1`);
+        });
+      }
+    }
+  }
+
+  it('leaves the skip link first on a screen, ahead of the bar, and draws it over the fixed bar', () => {
+    const daisyui = createAdminTemplateEnvironment({
+      noCache: true,
+      roots: adminDirectories({ GEEKITY_ADMIN: 'daisyui' }),
+    });
+    const html = daisyui.render('pages/dashboard/home.njk', {});
+    const skip = firstFocusable(html) ?? '';
+    assert.match(skip, /^<a class="[^"]*" href="#main">$/, 'the first stop is the skip link');
+    assert.ok(html.indexOf(skip) < html.indexOf('<geekity-admin-bar'), 'it comes before the bar');
+
+    const classes = /class="([^"]*)"/.exec(skip)?.[1]?.split(/\s+/) ?? [];
+    const above = Number(
+      /^z-\[(\d+)\]$/.exec(classes.find((name) => name.startsWith('z-')) ?? '')?.[1],
+    );
+    const bar = Number(/:host\s*\{[^}]*z-index:\s*(\d+)/.exec(css)?.[1]);
+    assert.ok(
+      classes.includes('fixed') && classes.includes('top-0'),
+      `it is pinned to the top: ${skip}`,
+    );
+    assert.ok(above > bar, `its z-index, ${String(above)}, is above the bar's, ${String(bar)}`);
+    assert.ok(classes.includes('focus:translate-y-0'), 'and it comes into view when it has focus');
+  });
 });

@@ -15,6 +15,7 @@ import {
   verifyUserPassword,
 } from './accounts.ts';
 import type { User } from './accounts.ts';
+import { adminColorScheme } from './admin-theme.ts';
 import { mountAppearanceScreen } from './appearance.ts';
 import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';
@@ -164,6 +165,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
           : { name: user.profile?.displayName ?? user.username, url: editUserPath(user.id) },
       flash: takeFlash(c),
       dataTheme: ACCOUNT_TEMPLATES.has(template) ? undefined : user?.adminTheme,
+      barScheme: adminColorScheme(user?.adminTheme),
       ...context,
     });
     return c.html(html);

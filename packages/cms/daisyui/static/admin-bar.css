@@ -1,0 +1,176 @@
+/*
+ * The admin bar's stylesheet (decision-30), inlined into the bar's shadow root
+ * on admin screens and on the public site alike.
+ *
+ * No DaisyUI theme reaches inside a shadow root, so the bar is plain CSS in a
+ * palette of its own, light and dark, and keyboard.test.ts holds its text and
+ * focus ring to WCAG contrast in both. Self-contained, because on the public
+ * site the host sits under whatever theme the site wears: nothing here leans
+ * on another stylesheet, and sizes are in pixels since a `rem` is the page's.
+ */
+
+/* Pinned to the top of the window, out of the page's flow. The public site
+   also writes these declarations on the host as a style attribute, which
+   outranks a theme's rules for the element; the admin's CSP refuses a style
+   attribute, and there this rule alone places it. */
+
+:host {
+  all: initial;
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 99999;
+}
+
+/* Every colour is light-dark(light, dark). With no data-scheme on the host the
+   system's preference picks; the server sets one from the user's admin theme. */
+
+.admin-bar {
+  color-scheme: light dark;
+  --admin-bar-surface: light-dark(#f0f0f1, #1d2327);
+  --admin-bar-menu: light-dark(#ffffff, #2c3338);
+  --admin-bar-text: light-dark(#1d2327, #f0f0f1);
+  --admin-bar-hover: light-dark(#135e96, #72aee6);
+  --admin-bar-focus: light-dark(#2271b1, #ffffff);
+  --admin-bar-edge: light-dark(#c3c4c7, #1d2327);
+}
+
+:host([data-scheme='light']) .admin-bar {
+  color-scheme: light;
+}
+
+:host([data-scheme='dark']) .admin-bar {
+  color-scheme: dark;
+}
+
+.admin-bar,
+.admin-bar * {
+  box-sizing: border-box;
+}
+
+/* Site name on the left, the shortcuts beside it, who you are on the right. */
+
+.admin-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 16px;
+  padding: 0 16px;
+  min-height: 40px;
+  background: var(--admin-bar-surface);
+  box-shadow: 0 1px 0 var(--admin-bar-edge);
+  color: var(--admin-bar-text);
+  font:
+    14px/40px -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  anchor-name: --admin-bar;
+}
+
+.admin-bar a {
+  color: var(--admin-bar-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.admin-bar a:hover,
+.admin-bar a:focus {
+  color: var(--admin-bar-hover);
+}
+
+.admin-bar :focus-visible {
+  outline: 2px solid var(--admin-bar-focus);
+  outline-offset: 2px;
+}
+
+.admin-bar-site {
+  font-weight: 600;
+}
+
+.admin-bar-spacer {
+  flex: 1;
+}
+
+.admin-bar-account {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--admin-bar-text);
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+  anchor-name: --admin-account;
+}
+
+/* On a phone the bar wraps, and the greeting keeps to the right of its line
+   so the menu under it opens inside the screen. */
+
+.admin-bar-spacer + .admin-bar-account {
+  margin-left: auto;
+}
+
+.admin-bar-account:hover,
+.admin-bar-account:focus-visible,
+.admin-bar-account:popover-open {
+  color: var(--admin-bar-hover);
+}
+
+.admin-bar-account::after {
+  content: ' \25BE' / '';
+}
+
+/* The menu is in the top layer, so it is placed rather than laid out: under
+   the greeting where anchor positioning exists, at the bar's right edge
+   where it does not. */
+
+.admin-account-menu {
+  inset: 40px 0 auto auto;
+  margin: 0;
+  min-width: 160px;
+  padding: 4px 0;
+  border: 0;
+  background: var(--admin-bar-menu);
+  color: var(--admin-bar-text);
+  line-height: 1.6;
+  box-shadow: 0 3px 5px rgb(0 0 0 / 20%);
+}
+
+@supports (top: anchor(--admin-bar bottom)) {
+  .admin-account-menu {
+    inset: anchor(--admin-bar bottom) anchor(--admin-account right) auto auto;
+  }
+}
+
+.admin-account-menu a,
+.admin-account-menu button[type='submit'] {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--admin-bar-text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* A menu entry fills the menu's width, so its ring is drawn inside it. */
+
+.admin-bar .admin-account-menu :focus-visible {
+  outline-offset: -2px;
+}
+
+.admin-account-menu a:hover,
+.admin-account-menu a:focus-visible,
+.admin-account-menu button[type='submit']:hover,
+.admin-account-menu button[type='submit']:focus-visible {
+  background: var(--admin-bar-surface);
+  color: var(--admin-bar-hover);
+}

@@ -113,6 +113,27 @@ function styledClasses(css: string): Set<string> {
 
 const STYLED = styledClasses(COMPILED);
 
+/**
+ * The templates no DaisyUI theme draws, which decision-30 lists among its
+ * authored exceptions. The admin bar is drawn in a shadow root, where the theme
+ * stops, by a plain stylesheet of its own, so its classes are held to that
+ * sheet instead of to admin.css. The public site's entry to the bar adds the
+ * notice printed under it on a page the site's own theme draws, styled inline
+ * in colours of its own, so neither check reads that template.
+ */
+const OWN_STYLESHEET: Readonly<Record<string, string>> = {
+  'components/admin-bar.njk': 'static/admin-bar.css',
+};
+const ON_THE_PUBLIC_SITE: ReadonlySet<string> = new Set(['components/public-admin-bar.njk']);
+
+/** The classes `template` is held to: its own stylesheet's, or admin.css's. */
+async function stylesFor(template: string): Promise<Set<string>> {
+  const own = OWN_STYLESHEET[template];
+  return own === undefined
+    ? STYLED
+    : styledClasses(await readFile(path.join(DAISYUI_ADMIN_DIR, own), 'utf8'));
+}
+
 /** The classes `template` emits that `styled` has no rule for, and the ones it
  *  builds by interpolation. */
 function unstyled(template: string, styled: Set<string>): { missing: string[]; built: string[] } {
@@ -157,17 +178,23 @@ describe('the DaisyUI admin templates', () => {
     );
   });
 
-  for (const template of TEMPLATES) {
-    it(`${template} writes every class out in full, and each has a rule in the compiled sheet`, async () => {
+  it('names only templates that exist among its exceptions', () => {
+    for (const template of [...Object.keys(OWN_STYLESHEET), ...ON_THE_PUBLIC_SITE]) {
+      assert.ok(TEMPLATES.includes(template), `${template} is in daisyui/`);
+    }
+  });
+
+  for (const template of TEMPLATES.filter((name) => !ON_THE_PUBLIC_SITE.has(name))) {
+    it(`${template} writes every class out in full, and each has a rule in ${OWN_STYLESHEET[template] ?? 'the compiled sheet'}`, async () => {
       const source = await readFile(path.join(DAISYUI_ADMIN_DIR, template), 'utf8');
-      const { missing, built } = unstyled(source, STYLED);
+      const { missing, built } = unstyled(source, await stylesFor(template));
 
       assert.deepEqual(
         built,
         [],
         'these classes are built by interpolation, which Tailwind cannot read',
       );
-      assert.deepEqual(missing, [], 'these classes have no rule in daisyui/static/admin.css');
+      assert.deepEqual(missing, [], 'these classes have no rule in the stylesheet that draws them');
     });
 
     it(`${template} draws in the theme's semantic colours alone`, async () => {

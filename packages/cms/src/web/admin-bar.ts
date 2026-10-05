@@ -1,6 +1,8 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { Environment } from 'nunjucks';
 
+import { adminColorScheme } from '../admin/admin-theme.ts';
+import { ADMIN_ASSET_PREFIX } from '../admin/assets.ts';
 import { editorPath, newEditorPath, PAGE_KIND, POST_KIND } from '../admin/documents.ts';
 import type { DocumentKind } from '../admin/documents.ts';
 import { LOGOUT_PATH } from '../admin/routes.ts';
@@ -93,6 +95,8 @@ function renderBar(c: Context<GeekityEnv>, account: SignedInAccount): string {
             ]),
       ],
       me: { name: user.profile?.displayName ?? user.username, url: editUserPath(user.id) },
+      barScheme: adminColorScheme(user.adminTheme),
+      assetPrefix: ADMIN_ASSET_PREFIX,
       logoutUrl: LOGOUT_PATH,
       csrfToken: account.csrfToken,
       notice: shown === undefined ? undefined : unpublishedNotice(c, shown),
