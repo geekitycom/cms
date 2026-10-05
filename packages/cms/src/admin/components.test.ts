@@ -187,7 +187,7 @@ describe('badge', () => {
   it('is a small badge by default', () => {
     assert.equal(
       render('badge', 'badge', `{{ badge('Draft') }}`),
-      '<span class="badge badge-sm">Draft</span>',
+      '<span class="badge badge-outline badge-sm">Draft</span>',
     );
   });
 
@@ -211,17 +211,17 @@ describe('status', () => {
     );
   });
 
-  it('draws a state that needs nothing as a plain badge, with no empty class', () => {
+  it('draws a state that needs nothing as an outlined badge, so it reads on a card too', () => {
     assert.equal(
       render('badge', 'status', `{{ status('published', 'Published') }}`),
-      '<span class="badge badge-sm">Published</span>',
+      '<span class="badge badge-sm badge-outline">Published</span>',
     );
   });
 
   it('escapes the word', () => {
     assert.equal(
       render('badge', 'status', `{{ status('published', '<b>') }}`),
-      '<span class="badge badge-sm">&lt;b&gt;</span>',
+      '<span class="badge badge-sm badge-outline">&lt;b&gt;</span>',
     );
   });
 
@@ -262,7 +262,7 @@ describe('table', () => {
       '<div class="max-w-full overflow-x-auto contain-inline-size rounded-box bg-base-100 p-2 shadow-sm"><table class="table table-sm"><caption class="sr-only">Posts</caption>' +
         '<thead><tr><th scope="col">Title</th><th scope="col" class="max-lg:hidden">Date</th></tr></thead>' +
         '<tbody><tr class="group *:align-top max-lg:relative max-lg:block max-lg:pe-10 max-lg:not-last:border-b max-lg:border-base-content/5 max-lg:*:border-b-0">' +
-        '<td>A &amp; B<details class="absolute end-1 top-1 lg:hidden"><summary class="btn btn-ghost btn-xs btn-square"><span class="sr-only">Details of A &amp; B</span><span aria-hidden="true" class="-mt-1 size-2 rotate-45 border-e-2 border-b-2 transition-transform group-has-open:mt-1 group-has-open:rotate-225"></span></summary></details></td>' +
+        '<td>A &amp; B<details class="absolute end-1 top-1 lg:hidden"><summary class="btn btn-ghost btn-sm btn-square"><span class="sr-only">Details of A &amp; B</span><span aria-hidden="true" class="-mt-1 size-2 rotate-45 border-e-2 border-b-2 transition-transform group-has-open:mt-1 group-has-open:rotate-225"></span></summary></details></td>' +
         '<td data-label="Date" class="whitespace-nowrap max-lg:hidden max-lg:gap-2 max-lg:py-1 max-lg:group-has-open:flex max-lg:before:w-24 max-lg:before:shrink-0 max-lg:before:font-semibold max-lg:before:text-base-content/60 max-lg:before:content-[attr(data-label)]">2026-01-02</td>' +
         '<td data-label="&lt;b&gt;" class="max-lg:hidden max-lg:gap-2 max-lg:py-1 max-lg:group-has-open:flex max-lg:before:w-24 max-lg:before:shrink-0 max-lg:before:font-semibold max-lg:before:text-base-content/60 max-lg:before:content-[attr(data-label)]">x</td>' +
         '</tr></tbody></table></div>',

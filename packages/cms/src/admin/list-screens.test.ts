@@ -155,12 +155,12 @@ describe('the list screens', async () => {
         { label: 'Scheduled', modifiers: 'badge-info' },
         { label: 'Hidden', modifiers: 'badge-ghost' },
         { label: 'Draft', modifiers: 'badge-warning' },
-        ...Array.from({ length: 22 }, () => ({ label: 'Published', modifiers: '' })),
+        ...Array.from({ length: 22 }, () => ({ label: 'Published', modifiers: 'badge-outline' })),
       ],
       postTrash: [{ label: 'Trash', modifiers: 'badge-ghost' }],
       pages: [
         { label: 'Draft', modifiers: 'badge-warning' },
-        { label: 'Published', modifiers: '' },
+        { label: 'Published', modifiers: 'badge-outline' },
       ],
       activity: [{ label: 'Refused', modifiers: 'badge-error' }],
       activityEntry: [{ label: 'Refused', modifiers: 'badge-error' }],
@@ -174,7 +174,7 @@ describe('the list screens', async () => {
         { label: '1 failed', modifiers: 'badge-error' },
       ],
       syndication: [
-        { label: 'Offered', modifiers: '' },
+        { label: 'Offered', modifiers: 'badge-outline' },
         { label: 'Ignored', modifiers: 'badge-error' },
       ],
     };
