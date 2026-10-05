@@ -82,6 +82,17 @@ describe('alert', () => {
       '<div role="alert" class="alert">Note</div>',
     );
   });
+
+  it('can be named by its heading and take focus when the page loads, with no script', () => {
+    assert.equal(
+      render(
+        'alert',
+        'alert',
+        `{% call alert(color='error', labelledby='problems', focus=true) %}<h2 id="problems">Nothing was saved.</h2>{% endcall %}`,
+      ),
+      '<div role="alert" aria-labelledby="problems" tabindex="-1" autofocus class="alert alert-error"><h2 id="problems">Nothing was saved.</h2></div>',
+    );
+  });
 });
 
 describe('card', () => {

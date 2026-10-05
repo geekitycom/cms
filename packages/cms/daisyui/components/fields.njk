@@ -1,0 +1,243 @@
+{# One labelled box, written once, in DaisyUI's form components.
+
+   Every admin form used to spell out its own `<label for>`, control, hint and
+   error, roughly seventy-five times across sixteen templates, against a class
+   vocabulary each template had to remember. That is how /admin/users drifted
+   into hidden labels nobody else used (TASK-97): a field written by hand can
+   forget the error line, leave a label unbound, or invent a class the
+   stylesheet has never heard of, and nothing says it is wrong.
+
+   Each macro here emits one `fieldset` holding the same four things in the
+   same order:
+
+     1. the `<label for>`, bound to the control by its id, drawn as the
+        field's `fieldset-legend`,
+     2. the control: `input`, `textarea`, `select` or `checkbox`, small, the
+        width of its column, and a `validator` when the form refused it,
+     3. the field error, where the form has something to say about this box,
+        as the `validator-hint` that a refused control turns red,
+     4. the hint, where the field needs explaining, as a `label`.
+
+   The `fieldset` is a class on a `<div>`, as DaisyUI's own validator example
+   puts it on a `<label>` and a `<form>`: a `<fieldset>` element is a group
+   that a screen reader names by its legend, and one box has no group to name.
+   The label is a `<label>` carrying `fieldset-legend` rather than a
+   `<legend>`, because a legend names a group and not the control in it.
+
+   Error before hint, because that is the order every screen already used: the
+   sentence about what went wrong belongs next to the box it is about, and the
+   standing explanation sits under both.
+
+   This file is under the admin directory, which is the admin environment's
+   only search root (`src/admin/templates.ts`). A site's theme can override
+   any public template and cannot reach in here, so no theme can shadow or
+   break a field on the login form.
+
+   `label` and `hint` are written into the page as markup, because the admin's
+   labels and hints carry `<code>`, `<em>` and links. They are template
+   literals, never anything a visitor typed; a hint that interpolates a value
+   should be captured with `{% set … %}…{% endset %}`, which escapes what it
+   interpolates before this ever sees it. `error` is a message from the server
+   and is escaped. #}
+
+{% from "components/alert.njk" import alert %}
+
+{# The field error, then the hint: the two paragraphs every macro below ends
+   with. The error is a `validator-hint`, which DaisyUI shows only after a
+   control marked `aria-invalid` with the `validator` class, so it has to stay
+   that control's later sibling. `errorHtml` is the rare second thing a field
+   has to say — the Reading page's "that page is no longer published" —
+   already written as its own paragraph, and drawn here in the error colour
+   whether or not the form was refused. The hint is a `label` laid out as a
+   block, since an inline flex row would split a sentence around its `<code>`,
+   and wrapped, since DaisyUI's label does not wrap. #}
+{% macro _below(id, hint, error, errorHtml) %}
+{% if error %}
+  <p class="validator-hint" id="{{ id }}-error">{{ error }}</p>
+{% endif %}
+{% if errorHtml %}
+  <div class="text-error">{{ errorHtml | safe }}</div>
+{% endif %}
+{% if hint %}
+  <p class="label block whitespace-normal">{{ hint | safe }}</p>
+{% endif %}
+{% endmacro %}
+
+{# What a control says about itself when the form refused it: that it is
+   invalid, and which paragraph says why, so a screen reader reads the message
+   with the field rather than leaving it to be found. `errorHtml` is not named
+   here: it is a standing note about the stored value, not a refusal. #}
+{% macro _invalid(id, error) -%}
+{% if error %} aria-invalid="true" aria-describedby="{{ id }}-error"{% endif %}
+{%- endmacro %}
+
+{# A box somebody types into: text, email, number, or whatever `type` says.
+
+   `value` is always written, even empty, so the control's state is on the page
+   rather than implied by its absence. A read-only box is drawn on the darker
+   base, as DaisyUI draws a disabled one, and with a dashed edge, since a dark
+   theme's two bases are close, so it does not look like a box that takes
+   typing; its text stays at full strength, since it is there to be read and
+   copied. #}
+{% macro text(
+  id,
+  name,
+  label,
+  value='',
+  type='text',
+  hint='',
+  error='',
+  errorHtml='',
+  min='',
+  step='',
+  inputmode='',
+  autocomplete='',
+  placeholder='',
+  spellcheck='',
+  required=false,
+  autofocus=false,
+  readonly=false,
+  disabled=false
+) %}
+<div class="fieldset">
+  <label class="fieldset-legend" for="{{ id }}">{{ label | safe }}</label>
+  <input id="{{ id }}" name="{{ name }}" type="{{ type }}"{% if min %} min="{{ min }}"{% endif %}{% if step %} step="{{ step }}"{% endif %}{% if inputmode %} inputmode="{{ inputmode }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %} value="{{ value }}"{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }} class="input input-sm w-full read-only:bg-base-200 read-only:border-dashed{% if error %} validator{% endif %}" />
+{{ _below(id, hint, error, errorHtml) }}
+</div>
+{%- endmacro %}
+
+{# A password box. It carries `value=""` and no way to set one: nothing typed
+   into a password field is ever printed back into the page, and a stored
+   secret is never printed at all — the placeholder says whether there is one.
+   #}
+{% macro password(
+  id,
+  name,
+  label,
+  hint='',
+  error='',
+  errorHtml='',
+  autocomplete='',
+  placeholder='',
+  spellcheck='',
+  required=false,
+  autofocus=false
+) %}
+<div class="fieldset">
+  <label class="fieldset-legend" for="{{ id }}">{{ label | safe }}</label>
+  <input id="{{ id }}" name="{{ name }}" type="password" value=""{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{{ _invalid(id, error) }} class="input input-sm w-full{% if error %} validator{% endif %}" />
+{{ _below(id, hint, error, errorHtml) }}
+</div>
+{%- endmacro %}
+
+{# A box of several lines, read-only drawn as the text box draws it. #}
+{% macro textarea(
+  id,
+  name,
+  label,
+  value='',
+  hint='',
+  error='',
+  errorHtml='',
+  rows='',
+  spellcheck='',
+  required=false,
+  autofocus=false,
+  readonly=false,
+  disabled=false
+) %}
+<div class="fieldset">
+  <label class="fieldset-legend" for="{{ id }}">{{ label | safe }}</label>
+  <textarea id="{{ id }}" name="{{ name }}"{% if rows %} rows="{{ rows }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }} class="textarea textarea-sm w-full read-only:bg-base-200 read-only:border-dashed{% if error %} validator{% endif %}">{{ value }}</textarea>
+{{ _below(id, hint, error, errorHtml) }}
+</div>
+{%- endmacro %}
+
+{# A list to pick from. The options are the call's body, because which of them
+   is `selected` is the caller's business and an option's label is markup as
+   often as it is a word:
+
+     {% call field.select('settings-homepage', fields.homepage, 'Homepage') %}
+       <option value="">Your latest posts</option>
+     {% endcall %} #}
+{% macro select(
+  id,
+  name,
+  label,
+  hint='',
+  error='',
+  errorHtml='',
+  required=false,
+  autofocus=false,
+  disabled=false
+) %}
+<div class="fieldset">
+  <label class="fieldset-legend" for="{{ id }}">{{ label | safe }}</label>
+  <select id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }} class="select select-sm w-full{% if error %} validator{% endif %}">
+{{ caller() }}
+  </select>
+{{ _below(id, hint, error, errorHtml) }}
+</div>
+{%- endmacro %}
+
+{# A switch: the tick inside its label with the sentence beside it, as
+   DaisyUI draws a checkbox, so the whole line toggles it. The sentence is in
+   the text colour rather than a label's muted one, because it is what the
+   tick means rather than a note about it, and it wraps. A refused box puts
+   the `validator` on the label, whose later sibling the error is. #}
+{% macro checkbox(
+  id,
+  name,
+  label,
+  checked=false,
+  value='1',
+  hint='',
+  error='',
+  errorHtml='',
+  disabled=false
+) %}
+<div class="fieldset">
+  <label class="label whitespace-normal text-base-content{% if error %} validator{% endif %}" for="{{ id }}">
+    <input id="{{ id }}" name="{{ name }}" type="checkbox" value="{{ value }}"{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error) }} class="checkbox checkbox-sm" />
+    {{ label | safe }}
+  </label>
+{{ _below(id, hint, error, errorHtml) }}
+</div>
+{%- endmacro %}
+
+{# The top of a refused form: what went wrong, and a link to every field that
+   needs putting right. It is an error alert and takes focus when the page
+   loads, so a screen reader hears it at once and a keyboard starts from it,
+   with no script. It comes before the form, so its `autofocus` is the first
+   on the page and wins over any a field carries.
+
+   A form with one thing to say calls it bare, with the message as the heading.
+   A form with fields to fix calls it with a `problem` per field; one given no
+   message writes nothing, so a page lists every field it could fault:
+
+     {% call field.summary('Nothing was saved. Fix the fields marked below.') %}
+       {{ field.problem('settings-title', problems.title) }}
+     {% endcall %}
+
+   Only one form on a page is ever refused at a time, which is why the ids are
+   fixed. #}
+{% macro summary(heading) %}
+{% set problems = (caller() if caller else '') | trim %}
+{% call alert(color='error', labelledby='admin-error-summary-heading', focus=true) %}
+  <div>
+    <h2 id="admin-error-summary-heading" class="font-semibold">{{ heading }}</h2>
+{% if problems %}
+    <ul class="list-disc ps-5">
+{{ problems | safe }}
+    </ul>
+{% endif %}
+  </div>
+{% endcall %}
+{%- endmacro %}
+
+{# One field's line in the summary: its message, linking to the field. #}
+{% macro problem(id, message) %}
+{% if message %}
+      <li><a class="link" href="#{{ id }}">{{ message }}</a></li>
+{% endif %}
+{%- endmacro %}

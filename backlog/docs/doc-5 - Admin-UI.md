@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 01:21'
+updated_date: '2026-10-05 01:39'
 ---
 # Admin UI
 
@@ -90,7 +90,8 @@ macros; it does not spell out component markup of its own.
 | File | Macros | Emits |
 | --- | --- | --- |
 | `button.njk` | `button`, `buttonLink` | `<button class="btn">`, and `<a class="btn">` for a link drawn as a button |
-| `alert.njk` | `alert` | `<div role="alert" class="alert">` around its body |
+| `alert.njk` | `alert` | `<div role="alert" class="alert">` around its body, named by a heading in it (`labelledby`) and taking focus on load (`focus`) where asked |
+| `fields.njk` | `text`, `password`, `textarea`, `select`, `checkbox`, `summary`, `problem` | one `fieldset` per field: the label as its `fieldset-legend`, bound by `for` and `id`; the `input`, `textarea`, `select` or `checkbox`; the error as the `validator-hint` a refused control shows; the hint as a `label`. `summary` is an error `alert` |
 | `card.njk` | `card`, `cardActions` | a `card` on base-100 with an optional `card-title`; the `card-actions` row |
 | `stat.njk` | `stats`, `stat` | `stats` around its body; one `stat` with title, value and description |
 | `badge.njk` | `badge` | `<span class="badge">` |
@@ -105,6 +106,13 @@ macros; it does not spell out component markup of its own.
   navbar and its parts, and dropdown take their contents as the body of a
   `{% call %}` block. Lists the routes already hand a screen (tabs, menu,
   pagination) are passed in as data.
+- **A field is one call.** `fields.njk` keeps the old admin's seven macros and
+  their arguments, so every screen that imports it by name draws its fields in
+  DaisyUI with no change of its own. A refused control carries `validator`,
+  `aria-invalid` and `aria-describedby` naming its error, which DaisyUI turns
+  red and shows after it; a read-only box is drawn on `base-200` with a dashed
+  edge, and a disabled one as DaisyUI draws it. The summary is an error alert
+  that takes focus on load, with no script, and links to each refused field.
 - **A modifier is a name, never a class.** Colour, style, size, shape,
   direction and placement are each a closed set of names (`color='error'`,
   `size='lg'`) that the macro maps to the DaisyUI class through the admin

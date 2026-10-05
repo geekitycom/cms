@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { execFile as execFileCallback } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+import { promisify } from 'node:util';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
 import {
@@ -12,7 +15,11 @@ import {
   setUpFirstAdmin,
   signedIn,
 } from './__testing__/harness.ts';
-import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.ts';
+import {
+  adminDirectories,
+  createAdminTemplateEnvironment,
+  PACKAGED_ADMIN_DIR,
+} from './templates.ts';
 
 /**
  * Every admin form built from `components/fields.njk`, refused (TASK-142).
@@ -21,10 +28,24 @@ import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.
  * a form added later is held to the same contract without anybody
  * remembering to add it here: rendered with a problem on every field it could
  * fault, it has one summary that takes focus, and every field the summary
- * links to is marked invalid and names its message.
+ * links to is marked invalid and names its message. Every screen is held to
+ * that in both admins: the old one, and the DaisyUI one laid over it
+ * (decision-30), whose field macros every unconverted screen picks up by name.
  */
 
-const environment = createAdminTemplateEnvironment({ noCache: true });
+const execFile = promisify(execFileCallback);
+
+const ADMINS = [
+  { name: 'the old admin', roots: [PACKAGED_ADMIN_DIR] },
+  { name: 'the DaisyUI admin', roots: adminDirectories({ GEEKITY_ADMIN: 'daisyui' }) },
+].map(({ name, roots }) => ({
+  name,
+  roots,
+  environment: createAdminTemplateEnvironment({ noCache: true, roots }),
+}));
+
+/** A field's error paragraph, whichever admin wrote it. */
+const FIELD_ERROR = /<p\b[^>]*\bid="[\w-]+-error"/g;
 
 /** A problem for whatever key a template asks after. */
 const everyProblem: Record<string, string> = new Proxy(
@@ -99,42 +120,47 @@ function syndicationRefused(key: string): Record<string, unknown> {
  */
 const NEVER_REFUSED: ReadonlySet<string> = new Set(['pages/indieauth/consent.njk']);
 
-async function templatesUsingFields(): Promise<string[]> {
-  const pages = path.join(PACKAGED_ADMIN_DIR, 'pages');
-  const found: string[] = [];
-  for (const entry of await readdir(pages, { recursive: true })) {
-    if (!entry.endsWith('.njk')) continue;
-    const source = await readFile(path.join(pages, entry), 'utf8');
-    const template = `pages/${entry}`;
-    if (source.includes('"components/fields.njk"') && !NEVER_REFUSED.has(template)) {
-      found.push(template);
+/** Every page under `roots` that imports the field macros, as the first root that has it. */
+async function templatesUsingFields(roots: readonly string[]): Promise<string[]> {
+  const found = new Set<string>();
+  for (const root of roots) {
+    const pages = path.join(root, 'pages');
+    if (!existsSync(pages)) continue;
+    for (const entry of await readdir(pages, { recursive: true })) {
+      const template = `pages/${entry}`;
+      if (!entry.endsWith('.njk') || found.has(template) || NEVER_REFUSED.has(template)) continue;
+      const first = roots.map((dir) => path.join(dir, template)).find((file) => existsSync(file));
+      const source = await readFile(first ?? path.join(pages, entry), 'utf8');
+      if (source.includes('"components/fields.njk"')) found.add(template);
     }
   }
-  return found.sort();
+  return [...found].sort();
 }
 
-describe('every admin form built from the field macros, refused', async () => {
-  const templates = await templatesUsingFields();
+for (const admin of ADMINS) {
+  describe(`every form in ${admin.name} built from the field macros, refused`, async () => {
+    const templates = await templatesUsingFields(admin.roots);
 
-  it('is found by reading the templates', () => {
-    assert.ok(templates.length >= 14, `the macro's screens were found: ${templates.join(', ')}`);
-  });
+    it('is found by reading the templates', () => {
+      assert.ok(templates.length >= 14, `the macro's screens were found: ${templates.join(', ')}`);
+    });
 
-  for (const template of templates) {
-    for (const variant of SEPARATELY[template] ?? [{}]) {
-      it(`${template} ties each error to its field and leads with a summary ${JSON.stringify(Object.keys(variant))}`, () => {
-        const html = environment.render(template, { ...refused, ...variant });
+    for (const template of templates) {
+      for (const variant of SEPARATELY[template] ?? [{}]) {
+        it(`${template} ties each error to its field and leads with a summary ${JSON.stringify(Object.keys(variant))}`, () => {
+          const html = admin.environment.render(template, { ...refused, ...variant });
 
-        const { heading, links } = tiedErrors(html);
-        const fieldErrors = html.match(/class="admin-field-error" id=/g)?.length ?? 0;
-        assert.equal(links.length, fieldErrors, 'every field error is in the summary');
-        if (links.length === 0) {
-          assert.equal(heading, 'Wrong error.', 'a form-level error heads its own summary');
-        }
-      });
+          const { heading, links } = tiedErrors(html);
+          const fieldErrors = html.match(FIELD_ERROR)?.length ?? 0;
+          assert.equal(links.length, fieldErrors, 'every field error is in the summary');
+          if (links.length === 0) {
+            assert.equal(heading, 'Wrong error.', 'a form-level error heads its own summary');
+          }
+        });
+      }
     }
-  }
-});
+  });
+}
 
 describe('a refused request, over HTTP', () => {
   const box = sandbox();
@@ -174,4 +200,85 @@ describe('a refused request, over HTTP', () => {
     const { links } = tiedErrors(await response.text());
     assert.deepEqual(links, ['settings-title', 'settings-timezone']);
   });
+});
+
+/** The opening tag of the control with this id. */
+function controlTag(html: string, id: string): string {
+  const tag = new RegExp(`<(?:input|select|textarea)\\b[^>]*\\bid="${id}"[^>]*>`).exec(html)?.[0];
+  assert.ok(tag !== undefined, `there is a control #${id}`);
+  return tag;
+}
+
+/** The names in a tag's class attribute. */
+function classesOf(tag: string): string[] {
+  return (/\sclass="([^"]*)"/.exec(tag)?.[1] ?? '').split(/\s+/).filter(Boolean);
+}
+
+describe('a refused request, over HTTP, with GEEKITY_ADMIN=daisyui', async () => {
+  const { stdout } = await execFile(
+    process.execPath,
+    [
+      '--import',
+      import.meta.resolve('tsx'),
+      path.join(import.meta.dirname, '__testing__', 'fields-probe.ts'),
+    ],
+    { env: { ...process.env, GEEKITY_ADMIN: 'daisyui' }, maxBuffer: 64 * 1024 * 1024 },
+  );
+  const served = JSON.parse(stdout) as {
+    refused: Record<'login' | 'settings' | 'addUser', { status: number; html: string }>;
+    screens: Record<string, string>;
+  };
+
+  for (const [what, refusal] of Object.entries(served.refused)) {
+    it(`heads the refused ${what} form with the DaisyUI error alert`, () => {
+      const open = /<div\b[^>]*\brole="alert"[^>]*>/.exec(refusal.html)?.[0] ?? '';
+      assert.deepEqual(classesOf(open), ['alert', 'alert-error']);
+    });
+  }
+
+  it('announces a failed login and moves focus to it', () => {
+    assert.equal(served.refused.login.status, 401);
+    const { heading } = tiedErrors(served.refused.login.html);
+    assert.equal(heading, 'That username and password do not match.');
+  });
+
+  it('links a refused settings save to the field it refused, each drawn through the validator', () => {
+    const { status, html } = served.refused.settings;
+    assert.equal(status, 400);
+    const { links } = tiedErrors(html);
+    assert.deepEqual(links, ['settings-title', 'settings-timezone']);
+
+    for (const id of links) {
+      const tag = controlTag(html, id);
+      assert.ok(classesOf(tag).includes('validator'), `#${id} is a validator: ${tag}`);
+      const after = html.slice(html.indexOf(tag) + tag.length);
+      assert.match(
+        after.slice(0, after.indexOf('</div>')),
+        new RegExp(`<p class="validator-hint" id="${id}-error">`),
+        `#${id}'s message follows it in the same fieldset`,
+      );
+    }
+  });
+
+  it('ties a refused add-user form to its fields', () => {
+    assert.equal(served.refused.addUser.status, 400);
+    assert.ok(tiedErrors(served.refused.addUser.html).links.length > 0);
+  });
+
+  for (const [url, html] of Object.entries(served.screens)) {
+    it(`${url} draws every field through the DaisyUI macros`, () => {
+      const labels = [...html.matchAll(/<label class="fieldset-legend" for="([^"]+)">/g)].map(
+        ([, id]) => id ?? '',
+      );
+      assert.ok(labels.length > 0, `${url} has fields`);
+      for (const id of labels) {
+        const [component] = classesOf(controlTag(html, id));
+        assert.ok(
+          ['input', 'select', 'textarea'].includes(component ?? ''),
+          `#${id} is drawn as a DaisyUI control`,
+        );
+      }
+      assert.doesNotMatch(html, /\b(?:admin-field-error|admin-check)\b/, 'no old field markup');
+    });
+  }
 });
