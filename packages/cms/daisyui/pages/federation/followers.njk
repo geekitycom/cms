@@ -1,0 +1,244 @@
+{# /admin/federation: who this site's people are to the fediverse, who follows
+   each of them, what arrived in the inbox, and how what went out landed. #}
+{% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card %}
+{% from "components/table.njk" import table %}
+
+{% block title %}Federation{% endblock %}
+
+{# An avatar, or a blank placeholder in its place. Decoration: the name is
+   printed beside it. #}
+{% set AVATAR_SIZES = { large: 'w-24', small: 'w-8' } %}
+{% macro avatar(url, size) %}
+  {% if url %}
+    <div class="avatar shrink-0">
+      <div class="rounded-full{{ AVATAR_SIZES | modifier(size) }}">
+        <img class="object-cover" src="{{ url }}" alt="" width="{{ 96 if size == 'large' else 32 }}" height="{{ 96 if size == 'large' else 32 }}" loading="lazy" />
+      </div>
+    </div>
+  {% else %}
+    <div class="avatar avatar-placeholder shrink-0" aria-hidden="true">
+      <div class="rounded-full bg-base-300{{ AVATAR_SIZES | modifier(size) }}"></div>
+    </div>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">Federation</h1>
+
+  <div class="mb-10 grid grid-cols-1 gap-6">
+    {% for actor in actors %}
+      {% call card(title=actor.handle) %}
+        <div class="flex items-center gap-4">
+          {{ avatar(actor.avatarUrl, 'large') }}
+          <p class="text-lg">{{ actor.name }}</p>
+        </div>
+        <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+          <dt>Summary</dt>
+          <dd>{{ actor.summary or 'None set.' }}</dd>
+          <dt>Actor</dt>
+          <dd><a class="link break-all" href="{{ actor.actorId }}">{{ actor.actorId }}</a></dd>
+          <dt>Profile</dt>
+          <dd><a class="link break-all" href="{{ actor.url }}">{{ actor.url }}</a></dd>
+          <dt>Followers</dt>
+          <dd>{{ actor.followerCount }}</dd>
+        </dl>
+
+        {% if actor.followers.length %}
+          {% call table('Followers of ' + actor.handle) %}
+            <thead>
+              <tr>
+                <th scope="col">Follower</th>
+                <th scope="col">Handle</th>
+                <th scope="col">Followed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for follower in actor.followers %}
+                <tr>
+                  <td>
+                    <div class="flex items-center gap-2">
+                      {{ avatar(follower.iconUrl, 'small') }}
+                      <a class="link link-hover" href="{{ follower.url }}">{{ follower.name }}</a>
+                    </div>
+                  </td>
+                  <td>{{ follower.handle }}</td>
+                  <td class="whitespace-nowrap">{{ follower.followedAt | date('html') }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          {% endcall %}
+        {% else %}
+          <p>Nobody follows {{ actor.name }} yet.</p>
+        {% endif %}
+      {% endcall %}
+    {% else %}
+      {% call card(title='Actors') %}
+        <p>The site has no users, so it has no actors.</p>
+      {% endcall %}
+    {% endfor %}
+  </div>
+
+  <section class="mb-10">
+    <h2 class="mb-3 text-lg font-semibold">Relays</h2>
+    {% if relays.length %}
+      {% call table('Relays') %}
+        <thead>
+          <tr>
+            <th scope="col">Relay</th>
+            <th scope="col">State</th>
+            <th scope="col">Since</th>
+            <th scope="col">Last delivery</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for relay in relays %}
+            <tr>
+              <td>
+                {% if relay.actorId %}
+                  <a class="link link-hover" href="{{ relay.actorId }}">{{ relay.inboxId }}</a>
+                {% else %}
+                  {{ relay.inboxId }}
+                {% endif %}
+                {% if relay.reason %}
+                  <p class="text-sm">{{ relay.reason }}</p>
+                {% endif %}
+              </td>
+              <td>{{ status(relay.state, relay.stateLabel) }}</td>
+              <td class="whitespace-nowrap">{{ relay.updatedAt | date('html') }}</td>
+              <td>
+                {% if relay.lastDelivery %}
+                  {{ relay.lastDelivery.activityType }} {{ relay.lastDelivery.status }}
+                  <span class="whitespace-nowrap text-sm">{{ relay.lastDelivery.attemptedAt | date('html') }}</span>
+                  {% if relay.lastDelivery.error %}
+                    <p class="text-sm">{{ relay.lastDelivery.error }}</p>
+                  {% endif %}
+                {% else %}
+                  Nothing yet.
+                {% endif %}
+              </td>
+              <td>
+                {% if relay.retriable %}
+                  <form method="post" action="{{ relayRetryUrl }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                    <input type="hidden" name="{{ fields.relay }}" value="{{ relay.inboxId }}" />
+                    {{ button('Retry', type='submit', style='ghost', size='xs') }}
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      {% endcall %}
+      <p class="mt-4 max-w-prose text-sm">
+        A relay boosts every public post it is sent on to instances nobody here
+        follows. The list lives on the Settings screen; Retry sends the follow
+        again to one that is still waiting.
+      </p>
+    {% else %}
+      <p>The site subscribes to no relay. Add one on the Settings screen.</p>
+    {% endif %}
+  </section>
+
+  <section class="mb-10">
+    <h2 class="mb-3 text-lg font-semibold">Recent activity</h2>
+    {% if inbox.length %}
+      <ul class="space-y-1">
+        {% for entry in inbox %}
+          <li>
+            <a class="link link-hover font-medium" href="{{ entry.actorId }}">{{ entry.actorLabel }}</a>
+            {% if entry.remoteUrl %}
+              <a class="link" href="{{ entry.remoteUrl }}">{{ entry.action }}</a>
+            {% else %}
+              {{ entry.action }}
+            {% endif %}
+            {% if entry.post %}
+              <a class="link" href="{{ entry.post.editUrl }}">{{ entry.post.title }}</a>
+            {% else %}
+              <em>something of ours</em>
+            {% endif %}
+            <span class="whitespace-nowrap text-sm">{{ entry.receivedAt | date('html') }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>Nothing has arrived yet: no likes, boosts or replies.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2 class="mb-3 text-lg font-semibold">Delivery</h2>
+    {% if posts.length %}
+      {% call table('Delivery') %}
+        <thead>
+          <tr>
+            <th scope="col">Post</th>
+            <th scope="col">Announced by</th>
+            <th scope="col">Last activity</th>
+            <th scope="col">Sent</th>
+            <th scope="col">Queued</th>
+            <th scope="col">Failed</th>
+            <th scope="col">Webmentions</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in posts %}
+            <tr>
+              <td>
+                <a class="link link-hover font-medium" href="{{ row.post.editUrl }}">{{ row.post.title }}</a>
+                {% if row.trashed %}<p class="text-sm">In the trash.</p>{% endif %}
+              </td>
+              <td>{% if row.author %}@{{ row.author }}{% else %}—{% endif %}</td>
+              {% if row.lastActivity %}
+                <td>{{ row.lastActivity.activityType }} <span class="whitespace-nowrap text-sm">{{ row.lastActivity.attemptedAt | date('html') }}</span></td>
+                <td>{{ row.lastActivity.counts.sent }}</td>
+                <td>{{ row.lastActivity.counts.queued }}</td>
+                <td class="whitespace-nowrap">{% if row.lastActivity.counts.failed %}{{ status('failed', row.lastActivity.counts.failed + ' failed') }}{% else %}0{% endif %}</td>
+              {% else %}
+                <td>Nothing recorded.</td>
+                <td>—</td>
+                <td>—</td>
+                <td>—</td>
+              {% endif %}
+              <td>
+                {% if row.webmentions.sent or row.webmentions["none"] or row.webmentions.failed %}
+                  {{ row.webmentions.sent }} told{% if row.webmentions["none"] %}, {{ row.webmentions["none"] }} take none{% endif %}{% if row.webmentions.failed %}, {{ status('failed', row.webmentions.failed + ' failed') }}{% endif %}
+                {% else %}
+                  —
+                {% endif %}
+                {% if row.syndication.length %}
+                  <ul>
+                    {% for target in row.syndication %}
+                      <li>{{ target.name }}: {% if target.status == "failed" %}{{ status('failed', 'failed') }}{% if target.error %} ({{ target.error }}){% endif %}{% elif target.status == "none" %}takes none{% elif target.status %}sent{% else %}not sent yet{% endif %}{% if target.copy %}, <a class="link" href="{{ target.copy }}">copy</a>{% endif %}</li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+              </td>
+              <td>
+                <form method="post" action="{{ resendUrl }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                  <input type="hidden" name="{{ fields.slug }}" value="{{ row.slug }}" />
+                  {{ button('Resend', type='submit', style='ghost', size='xs') }}
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      {% endcall %}
+      <p class="mt-4 max-w-prose text-sm">
+        Resending builds the post again from its file and sends it to every one
+        of its author's followers and every accepted relay the site has now, and tells every
+        page the post links to at the same time: an update for a
+        published post, a withdrawal for one in the trash. The outcomes are a
+        cache, so a database deleted since leaves the posts listed with nothing
+        recorded against them.
+      </p>
+    {% else %}
+      <p>No post has been announced to the fediverse yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}

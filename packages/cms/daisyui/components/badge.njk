@@ -7,7 +7,14 @@
      style  outline, dash, soft, ghost
      size   xs, sm (the default), md, lg, xl
 
-   A value outside its set is a render error. #}
+   A value outside its set is a render error.
+
+   `status(name, label)` is the badge for the state a row is in, and the one
+   place a state is given its colour: plain where it needs nothing of
+   anybody, and in a colour where it needs attention or is gone. The label is
+   the word the screen prints for it, escaped and always printed, so the
+   state is never told by colour alone. A name outside the set below is a
+   render error. #}
 
 {% set COLORS = {
   neutral: 'badge-neutral',
@@ -24,4 +31,26 @@
 
 {% macro badge(label, color=none, style=none, size='sm') -%}
 <span class="badge{{ COLORS | modifier(color) }}{{ STYLES | modifier(style) }}{{ SIZES | modifier(size) }}">{{ label }}</span>
+{%- endmacro %}
+
+{% set STATUSES = {
+  published: '',
+  approved: '',
+  accepted: '',
+  described: '',
+  decorative: '',
+  active: 'badge-primary',
+  scheduled: 'badge-info',
+  draft: 'badge-warning',
+  pending: 'badge-warning',
+  missing: 'badge-warning',
+  failed: 'badge-error',
+  rejected: 'badge-error',
+  spam: 'badge-error',
+  hidden: 'badge-ghost',
+  trashed: 'badge-ghost'
+} %}
+
+{% macro status(name, label) -%}
+<span class="badge badge-sm{{ STATUSES | modifier(name) }}">{{ label }}</span>
 {%- endmacro %}

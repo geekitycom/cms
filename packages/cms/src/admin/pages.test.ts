@@ -4,6 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import { statuses } from './__testing__/statuses.ts';
 import type { Browser } from './__testing__/harness.ts';
 
 const box = sandbox();
@@ -127,12 +128,12 @@ describe('the pages listing', () => {
     assert.equal(response.status, 200);
 
     const html = await response.text();
-    assert.match(html, /<a href="\/admin\/pages\/about">About this site<\/a>/);
-    assert.match(html, /<a href="\/admin\/pages\/colophon">Still writing it<\/a>/);
+    assert.match(html, /<a\b[^>]*href="\/admin\/pages\/about">About this site<\/a>/);
+    assert.match(html, /<a\b[^>]*href="\/admin\/pages\/colophon">Still writing it<\/a>/);
     assert.match(html, />ada</, 'the author column');
     assert.match(html, /<th scope="col">Updated<\/th>/, 'the updated column');
     assert.match(html, /2026-01-02/, 'and the date in it');
-    assert.match(html, /admin-status-draft">Draft</, 'and which of them is a draft');
+    assert.ok(statuses(html).includes('Draft'), 'and which of them is a draft');
     assert.ok(!/<th scope="col">Tags<\/th>/.test(html), 'a page carries no tags');
     assert.ok(!/<th scope="col">Date<\/th>/.test(html), 'and no publish date');
   });
@@ -444,7 +445,7 @@ describe('the page trash', () => {
     // filter is what is under test, not the order the rows come back in.
     const titles = async (query: string): Promise<string[]> => {
       const html = await (await agent.get(`/admin/pages${query}`)).text();
-      return [...html.matchAll(/<td><a href="\/admin\/pages\/[^"]+">([^<]+)<\/a><\/td>/g)]
+      return [...html.matchAll(/<td><a\b[^>]*href="\/admin\/pages\/[^"]+">([^<]+)<\/a><\/td>/g)]
         .map((match) => match[1] ?? '')
         .sort();
     };

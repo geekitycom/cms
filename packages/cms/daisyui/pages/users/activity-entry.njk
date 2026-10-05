@@ -1,0 +1,58 @@
+{# /admin/users/activity/:id: one request an app made, in full (TASK-221). #}
+{% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import status %}
+{% from "components/table.njk" import table %}
+
+{% block title %}{{ entry.endpoint }} {{ entry.action }}{% endblock %}
+
+{% block content %}
+  <h1 class="mb-2 text-2xl font-bold">{{ entry.endpoint }} {{ entry.action }}</h1>
+
+  <p class="mb-6"><a class="link" href="{{ listUrl }}">All app activity</a></p>
+
+  {% call table('The request') %}
+    <tbody>
+      <tr><th scope="row">When</th><td><time datetime="{{ entry.when.iso }}">{{ entry.when.text }}</time></td></tr>
+      <tr><th scope="row">App</th><td>{{ entry.app or "Unknown" }}</td></tr>
+      <tr><th scope="row">User</th><td>{{ entry.user or "Unknown" }}</td></tr>
+      {% for line in details %}
+        <tr><th scope="row">{{ line.label }}</th><td>{{ line.value }}</td></tr>
+      {% endfor %}
+      <tr>
+        <th scope="row">Result</th>
+        <td>
+          {% if entry.failed %}{{ status('failed', 'Refused') }}{% endif %}
+          {{ entry.status }}
+        </td>
+      </tr>
+      {% if entry.error %}
+        <tr><th scope="row">Error</th><td>{{ entry.error }}</td></tr>
+      {% endif %}
+      {% if entry.errorDescription %}
+        <tr><th scope="row">Why</th><td>{{ entry.errorDescription }}</td></tr>
+      {% endif %}
+    </tbody>
+  {% endcall %}
+
+  <h2 class="mt-10 mb-3 text-lg font-semibold">What it sent</h2>
+  {% if carried | length %}
+    {% call table('The fields the request carried') %}
+      <thead>
+        <tr>
+          <th scope="col">Field</th>
+          <th scope="col">Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for field in carried %}
+          <tr>
+            <td>{{ field.name }}</td>
+            <td>{% if field.note %}<em>{{ field.value }}</em>{% else %}{{ field.value }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    {% endcall %}
+  {% else %}
+    <p>No fields were read from this request.</p>
+  {% endif %}
+{% endblock %}

@@ -162,6 +162,40 @@ describe('badge', () => {
   });
 });
 
+describe('status', () => {
+  it('draws a state that needs attention in its colour, with its word', () => {
+    assert.equal(
+      render('badge', 'status', `{{ status('draft', 'Draft') }}`),
+      '<span class="badge badge-sm badge-warning">Draft</span>',
+    );
+    assert.equal(
+      render('badge', 'status', `{{ status('failed', '3 failed') }}`),
+      '<span class="badge badge-sm badge-error">3 failed</span>',
+    );
+  });
+
+  it('draws a state that needs nothing as a plain badge, with no empty class', () => {
+    assert.equal(
+      render('badge', 'status', `{{ status('published', 'Published') }}`),
+      '<span class="badge badge-sm">Published</span>',
+    );
+  });
+
+  it('escapes the word', () => {
+    assert.equal(
+      render('badge', 'status', `{{ status('published', '<b>') }}`),
+      '<span class="badge badge-sm">&lt;b&gt;</span>',
+    );
+  });
+
+  it('refuses a status it does not know, naming the ones it does', () => {
+    assert.throws(
+      () => render('badge', 'status', `{{ status('drafted', 'Draft') }}`),
+      /"drafted" is not one of published, \w+(, \w+)+/,
+    );
+  });
+});
+
 describe('table', () => {
   it('scrolls sideways inside its wrapper and opens with its caption', () => {
     assert.equal(
@@ -170,7 +204,7 @@ describe('table', () => {
         'table',
         `{% call table('Posts', zebra=true, pinRows=true) %}<thead><tr><th scope="col">Title</th></tr></thead>{% endcall %}`,
       ),
-      '<div class="max-w-full overflow-x-auto"><table class="table table-sm table-zebra table-pin-rows"><caption class="sr-only">Posts</caption><thead><tr><th scope="col">Title</th></tr></thead></table></div>',
+      '<div class="max-w-full overflow-x-auto contain-inline-size"><table class="table table-sm table-zebra table-pin-rows"><caption class="sr-only">Posts</caption><thead><tr><th scope="col">Title</th></tr></thead></table></div>',
     );
   });
 });

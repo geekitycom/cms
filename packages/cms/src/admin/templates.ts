@@ -119,7 +119,8 @@ export interface CreateAdminTemplateEnvironmentOptions {
 /**
  * The `modifier` filter, `{{ COLORS | modifier(color) }}`: the class `classes`
  * maps `value` to with a space before it, so `class="btn{{ … }}"` reads right,
- * or nothing when `value` is absent. Any other value throws, naming the keys.
+ * or nothing when `value` is absent or maps to `''`. Any other value throws,
+ * naming the keys.
  */
 function modifierClass(classes: unknown, value: unknown): string {
   if (value === undefined || value === null || value === '') return '';
@@ -131,7 +132,7 @@ function modifierClass(classes: unknown, value: unknown): string {
   if (typeof found !== 'string') {
     throw new Error(`${JSON.stringify(value)} is not one of ${Object.keys(known).join(', ')}`);
   }
-  return ` ${found}`;
+  return found === '' ? '' : ` ${found}`;
 }
 
 /** A Nunjucks environment over `options.roots`, {@link ADMIN_DIRS} by default, and nothing else. */

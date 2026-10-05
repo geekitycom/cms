@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import type { Cms } from '../index.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import { statuses } from './__testing__/statuses.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { deleteUpload, mentionsUpload, resolveUpload } from './media.ts';
 
@@ -138,10 +139,10 @@ describe('the media screen', () => {
 
     assert.match(
       html,
-      /<img class="admin-media-thumbnail" src="\/uploads\/2026\/01\/photo\.png"/,
+      /<img\b[^>]*src="\/uploads\/2026\/01\/photo\.png"/,
       'the picture is shown as a thumbnail',
     );
-    assert.match(html, /admin-media-icon[^>]*>PDF</, 'the PDF is shown as an extension badge');
+    assert.match(html, /aria-hidden="true">PDF</, 'the PDF is shown as an extension badge');
   });
 
   it('is in the admin navigation (AC #1)', async () => {
@@ -167,7 +168,7 @@ describe('the media screen', () => {
 
     assert.match(
       html,
-      /<input id="media-url-\d+" type="text" value="\/uploads\/2026\/01\/photo\.png" readonly \/>/,
+      /<input id="media-url-\d+" type="text" value="\/uploads\/2026\/01\/photo\.png" readonly\b/,
       'the URL is a readonly field, which copies without any script',
     );
     // An image embeds and anything else links, exactly as the editor's upload
@@ -195,12 +196,12 @@ describe('the media screen', () => {
 
     assert.match(
       html,
-      /<a href="\/admin\/posts\/illustrated">Illustrated<\/a>/,
+      /<a\b[^>]*href="\/admin\/posts\/illustrated">Illustrated<\/a>/,
       'the referencing document links to its editor',
     );
     // The other file is referenced by nothing, and the screen says so rather
     // than leaving the column blank.
-    assert.match(html, /admin-status">Nothing</);
+    assert.match(html, /<td>\s*Nothing\s*<\/td>|admin-status">Nothing</);
   });
 
   it('stores a file uploaded from the screen exactly as the editor does (AC #3)', async () => {
@@ -296,7 +297,7 @@ describe('the media screen', () => {
     assert.match(question, /Delete \/uploads\/2026\/01\/photo\.png\?/);
     assert.match(
       question,
-      /<a href="\/admin\/posts\/illustrated">Illustrated<\/a>/,
+      /<a\b[^>]*href="\/admin\/posts\/illustrated">Illustrated<\/a>/,
       'the confirmation names the document and links to its editor',
     );
     assert.equal(
@@ -338,7 +339,7 @@ describe('the media screen', () => {
     const question = await asked.text();
 
     assert.match(question, /Thrown Away/);
-    assert.match(question, /admin-status-trashed/, 'the confirmation says it is in the trash');
+    assert.ok(statuses(question).includes('Trash'), 'the confirmation says it is in the trash');
   });
 
   it('refuses a delete that points outside the uploads directory (AC #4)', async () => {
@@ -389,11 +390,14 @@ describe('the media screen', () => {
     const { html } = await screen(agent);
 
     // Every action is a form that posts on its own.
-    assert.match(html, /<form class="admin-settings admin-media-upload" method="post"/);
+    assert.match(
+      html,
+      /<form\b[^>]*method="post" action="\/admin\/media\/upload" enctype="multipart\/form-data">/,
+    );
     assert.match(html, /<form method="post" action="\/admin\/media\/delete">/);
     // The copy control is an enhancement: the field is there and readable, and
     // the button is hidden until copy.js reveals it.
-    assert.match(html, /<button type="button" class="admin-copy-button" data-copy="[^"]+" hidden>/);
+    assert.match(html, /<button type="button" class="[^"]*" data-copy="[^"]+" hidden>/);
     // No inline script anywhere, so the admin's CSP stays a bare `'self'`.
     assert.doesNotMatch(html, /<script(?![^>]*\ssrc=)/);
   });

@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 02:05'
+updated_date: '2026-10-05 03:08'
 ---
 # Admin UI
 
@@ -106,8 +106,9 @@ macros; it does not spell out component markup of its own.
 | `fields.njk` | `text`, `password`, `textarea`, `select`, `checkbox`, `summary`, `problem` | one `fieldset` per field: the label as its `fieldset-legend`, bound by `for` and `id`; the `input`, `textarea`, `select` or `checkbox`; the error as the `validator-hint` a refused control shows; the hint as a `label`. `summary` is an error `alert` |
 | `card.njk` | `card`, `cardActions` | a `card` on base-100 with an optional `card-title`; the `card-actions` row |
 | `stat.njk` | `stats`, `stat` | `stats` around its body; one `stat` with title, value and description |
-| `badge.njk` | `badge` | `<span class="badge">` |
-| `table.njk` | `table` | a `table` with a screen-reader caption, wrapped to scroll sideways |
+| `badge.njk` | `badge`, `status` | `<span class="badge">`; `status` is the badge for the state a row is in, coloured from one map |
+| `table.njk` | `table` | a `table` with a screen-reader caption, wrapped to scroll sideways, the wrapper's width contained so a wide table never widens the card or the page around it |
+| `copy.njk` | `copyField` | a readonly box joined to a Copy button, the button `hidden` until `static/copy.js` finds the clipboard |
 | `tabs.njk` | `tabs` | a labelled `<nav class="tabs">` of links, the current one marked |
 | `pagination.njk` | `pagination` | newer, the page you are on and older, joined as one `join` group |
 | `menu.njk` | `menu` | a `menu` list from the menu registry's shape, children under the open item |
@@ -143,6 +144,23 @@ macros; it does not spell out component markup of its own.
   which is how a misspelt DaisyUI class is caught, and a class built by
   interpolation, which Tailwind cannot read. Both tests find the templates by
   reading the folder, so a new template is held to them without being listed.
+- **A row's state is one map.** `status(name, label)` in `badge.njk` is the only
+  place a state gets a colour: `published`, `approved`, `accepted`, `described`
+  and `decorative` are plain; `active` is `primary`; `scheduled` is `info`;
+  `draft`, `pending` and `missing` are `warning`; `failed`, `rejected` and
+  `spam` are `error`; `hidden` and `trashed` are `ghost`. The label is the word
+  the screen prints, so a state is never told by colour alone, and a name
+  outside the map is a render error.
+- **A list screen is a table, tabs and pagination.** Posts, Pages, Tags,
+  Categories, Users, Connected apps, App activity and its entry, Media,
+  Followers and Syndication draw their rows through `table`, their filters
+  (the `filters` and `tabs` lists the routes hand them, each
+  `{ label, url, current, count }`) through `tabs`, and their page links
+  (`page`, `pages`, `previousUrl`, `nextUrl`) through `pagination`. A row's
+  actions are one line of small ghost buttons, Edit, then what can be done,
+  then View; Add new above the table is the one primary button. Syndication's
+  entries are forms, so its table lists them, offered or ignored, and a card
+  per entry edits it.
 - **The dropdown has no inline style.** DaisyUI's reference anchors a popover
   to its button with `anchor-name` and `position-anchor` style attributes. The
   admin's Content Security Policy refuses style attributes, so the popover is

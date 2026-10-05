@@ -2,7 +2,7 @@
 {% from "components/stat.njk" import stats, stat %}
 {% from "components/card.njk" import card %}
 {% from "components/table.njk" import table %}
-{% from "components/badge.njk" import badge %}
+{% from "components/badge.njk" import status %}
 
 {% block title %}Dashboard{% endblock %}
 
@@ -47,9 +47,9 @@
               <td class="whitespace-nowrap">{{ post.date | date('html') }}</td>
               <td>
                 {% if post.draft %}
-                  {{ badge('Draft', color='warning') }}
+                  {{ status('draft', 'Draft') }}
                 {% else %}
-                  {{ badge('Published') }}
+                  {{ status('published', 'Published') }}
                 {% endif %}
               </td>
             </tr>

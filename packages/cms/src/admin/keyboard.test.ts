@@ -78,6 +78,7 @@ describe('the skip link', async () => {
 describe('every admin table', async () => {
   const templates = [...(await adminTemplates('pages')), ...(await adminTemplates('components'))];
   const tables: { template: string; opening: string; rest: string }[] = [];
+  const calls: { template: string; caption: string }[] = [];
   for (const template of templates) {
     const source = await readFile(adminFile(template), 'utf8');
     for (const match of source.matchAll(/<table\b[^>]*>/g)) {
@@ -87,11 +88,29 @@ describe('every admin table', async () => {
         rest: source.slice(match.index + match[0].length),
       });
     }
+    for (const [, caption] of source.matchAll(
+      /\{%-?\s*call\s+table\(\s*('[^']*'|"[^"]*"|[^,)]*)/g,
+    )) {
+      calls.push({ template, caption: (caption ?? '').trim() });
+    }
   }
 
   it('is found by reading the templates', () => {
-    assert.ok(tables.length >= 11, `the tables were found in ${templates.length} templates`);
+    assert.ok(
+      tables.length + calls.length >= 11,
+      `the tables were found in ${templates.length} templates`,
+    );
   });
+
+  for (const { template, caption } of calls) {
+    it(`in ${template} drawn by the table macro is given a caption that names it`, () => {
+      assert.match(
+        caption,
+        /^(?:'[^']*\S[^']*'|"[^"]*\S[^"]*"|[a-z_][\w.]*)$/i,
+        'the first argument is a caption, written out or held in a variable',
+      );
+    });
+  }
 
   for (const { template, rest } of tables) {
     it(`in ${template} opens with a caption that names it`, () => {

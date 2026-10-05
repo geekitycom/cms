@@ -69,7 +69,7 @@ describe('GEEKITY_ADMIN', () => {
 
     for (const [screen, html] of [
       ['the login screen', served.login],
-      ['the unconverted Followers screen', served.unconverted],
+      ['the unconverted Themes screen', served.unconverted],
     ] as const) {
       it(`draws ${screen} in daisyui/layouts/base.njk, which links the compiled sheet alone`, () => {
         const sheets = [...html.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*>/g)].map(
@@ -81,7 +81,7 @@ describe('GEEKITY_ADMIN', () => {
 
     it('still draws an unconverted screen from admin/ inside the DaisyUI shell', () => {
       assert.match(served.unconverted, /<div class="drawer lg:drawer-open">/);
-      assert.match(served.unconverted, /<section class="admin-panel admin-actor">/);
+      assert.match(served.unconverted, /<ul class="admin-themes">/);
     });
 
     it('serves the compiled DaisyUI sheet as /admin/_static/admin.css', () => {

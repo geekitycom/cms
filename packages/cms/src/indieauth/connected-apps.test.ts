@@ -66,7 +66,7 @@ describe('the connected apps screen', () => {
     await recordUse(dataDir, quill.token, USED);
 
     const row = rowFor(await screen(agent), 'Quill');
-    assert.match(row, /<a href="https:\/\/quill\.example\/">Quill<\/a>/);
+    assert.match(row, /<a\b[^>]*href="https:\/\/quill\.example\/">Quill<\/a>/);
     assert.match(row, /Create posts as you/);
     assert.match(row, /Upload media to your site/);
     assert.match(row, new RegExp(`<time datetime="${ISSUED.toISOString()}">`));
@@ -110,7 +110,7 @@ describe('the connected apps screen', () => {
 
     const html = await screen(agent);
     assert.match(html, /<caption[^>]*>Connected apps<\/caption>/);
-    assert.match(html, /<button type="submit">Revoke Quill<\/button>/);
+    assert.match(html, /<button type="submit"[^>]*>Revoke Quill<\/button>/);
     assert.match(
       html,
       /<a\b[^>]*href="\/admin\/users\/apps" aria-current="page">Connected apps<\/a>/,
@@ -218,7 +218,7 @@ describe('the list of apps allowed without PKCE (TASK-225)', () => {
       flashes(html)[0]?.message ?? '',
       /^https:\/\/ia\.net\/writer may now sign in without PKCE\./,
     );
-    assert.match(html, /<button type="submit">Remove https:\/\/ia\.net\/writer<\/button>/);
+    assert.match(html, /<button type="submit"[^>]*>Remove https:\/\/ia\.net\/writer<\/button>/);
   });
 
   it('refuses what is not a client_id, and one already listed, saving nothing', async () => {
@@ -335,7 +335,7 @@ describe('creating a token (TASK-230)', () => {
     const row = rowFor(later, 'Publishing script');
     assert.match(row, /Create posts as you/);
     assert.ok(!row.includes('Upload media'), 'only the scope chosen');
-    assert.match(row, /<button type="submit">Revoke Publishing script<\/button>/);
+    assert.match(row, /<button type="submit"[^>]*>Revoke Publishing script<\/button>/);
 
     const [stored] = listTokens(cms.config.dataDir);
     assert.ok(stored?.kind === 'created');

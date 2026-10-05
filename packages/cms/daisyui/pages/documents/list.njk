@@ -1,0 +1,103 @@
+{# The listing behind /admin/posts and /admin/pages. One template for both:
+   `kind` says which, and whether the table has a date column and taxonomy
+   ones. `pages/documents/` is named after what its screens are about rather
+   than after the menu, because Posts, Pages, Categories and Tags are four
+   menu entries over three templates. #}
+{% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/pagination.njk" import pagination %}
+{% from "components/table.njk" import table %}
+{% from "components/tabs.njk" import tabs %}
+
+{% block title %}{{ kind.plural }}{% endblock %}
+
+{% block content %}
+  <div class="mb-6 flex flex-wrap items-center gap-4">
+    <h1 class="text-2xl font-bold">{{ kind.plural }}</h1>
+    {{ buttonLink('Add new', newUrl, color='primary') }}
+  </div>
+
+  <div class="mb-4 max-w-full overflow-x-auto contain-inline-size">
+    {{ tabs(filters, 'Show ' + (kind.plural | lower)) }}
+  </div>
+
+  {% if documents.length %}
+    {% call table(kind.plural) %}
+      <thead>
+        <tr>
+          <th scope="col">Title</th>
+          <th scope="col">Author</th>
+          {% if kind.tagged %}
+            <th scope="col">Tags</th>
+          {% endif %}
+          {% if kind.categorised %}
+            <th scope="col">Categories</th>
+          {% endif %}
+          {% if kind.dated %}
+            <th scope="col">Date</th>
+          {% else %}
+            <th scope="col">Updated</th>
+          {% endif %}
+          <th scope="col">Status</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for document in documents %}
+          <tr>
+            <td><a class="link link-hover font-medium" href="{{ document.editUrl }}">{{ document.title }}</a>{% if document.role %} &mdash; {{ document.role }}{% endif %}</td>
+            <td class="whitespace-nowrap">{{ document.author }}</td>
+            {% if kind.tagged %}
+              <td>{{ document.tags }}</td>
+            {% endif %}
+            {% if kind.categorised %}
+              <td>{{ document.categories }}</td>
+            {% endif %}
+            {% if kind.dated %}
+              <td class="whitespace-nowrap">{{ document.date | date('html') }}</td>
+            {% else %}
+              <td class="whitespace-nowrap">{{ document.updated | date('html') }}</td>
+            {% endif %}
+            <td>
+              {% if document.trashed %}
+                {{ status('trashed', 'Trash') }}
+              {% elif document.draft %}
+                {{ status('draft', 'Draft') }}
+              {% elif document.scheduled %}
+                {{ status('scheduled', 'Scheduled') }}
+              {% elif document.hidden %}
+                {{ status('hidden', 'Hidden') }}
+              {% else %}
+                {{ status('published', 'Published') }}
+              {% endif %}
+            </td>
+            <td>
+              <div class="flex items-center gap-1 whitespace-nowrap">
+                {{ buttonLink('Edit', document.editUrl, style='ghost', size='xs') }}
+                <form method="post" action="{{ document.editUrl }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                  <input type="hidden" name="return" value="{{ returnUrl }}" />
+                  {% if document.trashed %}
+                    {{ button('Restore', type='submit', name='action', value='restore', style='ghost', size='xs') }}
+                  {% else %}
+                    {{ button('Move to trash', type='submit', name='action', value='trash', style='ghost', size='xs') }}
+                  {% endif %}
+                </form>
+                {% if document.viewUrl %}
+                  {{ buttonLink('View', document.viewUrl, style='ghost', size='xs') }}
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    {% endcall %}
+
+    <div class="mt-4">
+      {{ pagination(page, previousUrl=previousUrl, nextUrl=nextUrl) }}
+    </div>
+  {% else %}
+    <p>Nothing here.</p>
+  {% endif %}
+{% endblock %}

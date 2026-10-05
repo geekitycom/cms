@@ -12,6 +12,7 @@ import path from 'node:path';
 import { after, describe, it, mock } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { statuses } from '../admin/__testing__/statuses.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { findUser } from '../admin/accounts.ts';
 import type { Cms } from '../index.ts';
@@ -549,12 +550,12 @@ describe('Users > App activity', () => {
     const list = await agent.get(SCREEN);
     assert.equal(list.status, 200);
     const html = await list.text();
-    assert.match(html, /<h1>App activity<\/h1>/);
+    assert.match(html, /<h1\b[^>]*>App activity<\/h1>/);
     const create = html.indexOf('>create<');
     const config = html.indexOf('>q=config<');
     assert.ok(create > 0 && config > 0, 'both requests are listed');
     assert.ok(create < config, 'the newest is first');
-    assert.match(html, /admin-status-failed[^>]*>Refused/);
+    assert.ok(statuses(html).includes('Refused'));
 
     const failures = await (await agent.get(`${SCREEN}?show=failures`)).text();
     assert.ok(failures.includes('>create<'));

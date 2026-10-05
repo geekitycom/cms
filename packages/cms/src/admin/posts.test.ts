@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 import matter from 'gray-matter';
 
 import { browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import { statuses } from './__testing__/statuses.ts';
 import { readSiteSettings, writeSiteJson } from './settings.ts';
 import type { Browser } from './__testing__/harness.ts';
 
@@ -160,13 +161,13 @@ describe('the posts listing', () => {
     assert.equal(response.status, 200);
 
     const html = await response.text();
-    assert.match(html, /<a href="\/admin\/posts\/published">Out in the world<\/a>/);
-    assert.match(html, /<a href="\/admin\/posts\/hidden">Still cooking<\/a>/);
+    assert.match(html, /<a\b[^>]*href="\/admin\/posts\/published">Out in the world<\/a>/);
+    assert.match(html, /<a\b[^>]*href="\/admin\/posts\/hidden">Still cooking<\/a>/);
     assert.match(html, />ada</, 'the author column');
     assert.match(html, />essays, notes</, 'the tag column');
     assert.match(html, />general, meta</, 'the category column');
     assert.match(html, /2026-01-02/, 'the date column');
-    assert.match(html, /admin-status-draft">Draft</, 'and which of them is a draft');
+    assert.ok(statuses(html).includes('Draft'), 'and which of them is a draft');
   });
 
   it('filters to published, drafts and the trash', async () => {
@@ -196,9 +197,9 @@ describe('the posts listing', () => {
 
     const titles = async (query: string): Promise<string[]> => {
       const html = await (await agent.get(`/admin/posts${query}`)).text();
-      return [...html.matchAll(/<td><a href="\/admin\/posts\/[^"]+">([^<]+)<\/a><\/td>/g)].map(
-        (match) => match[1] ?? '',
-      );
+      return [
+        ...html.matchAll(/<td><a\b[^>]*href="\/admin\/posts\/[^"]+">([^<]+)<\/a><\/td>/g),
+      ].map((match) => match[1] ?? '');
     };
 
     assert.deepEqual(await titles(''), ['Out in the world', 'Still cooking'], 'all, minus the bin');
@@ -228,9 +229,9 @@ describe('the posts listing', () => {
     const agent = await signedIn(cms);
 
     const live = await (await agent.get('/admin/posts')).text();
-    assert.match(live, /<a href="\/2026\/01\/published\/">View<\/a>/);
+    assert.match(live, /<a\b[^>]*href="\/2026\/01\/published\/">View<\/a>/);
     assert.ok(
-      !/<a href="\/2026\/01\/hidden\/">View<\/a>/.test(live),
+      !/<a\b[^>]*href="\/2026\/01\/hidden\/">View<\/a>/.test(live),
       'a draft has nothing to view',
     );
     assert.match(live, /name="action" value="trash">Move to trash</);
@@ -273,16 +274,16 @@ describe('a scheduled post in the admin', () => {
 
     const titles = async (query: string): Promise<string[]> => {
       const html = await (await agent.get(`/admin/posts${query}`)).text();
-      return [...html.matchAll(/<td><a href="\/admin\/posts\/[^"]+">([^<]+)<\/a><\/td>/g)].map(
-        (match) => match[1] ?? '',
-      );
+      return [
+        ...html.matchAll(/<td><a\b[^>]*href="\/admin\/posts\/[^"]+">([^<]+)<\/a><\/td>/g),
+      ].map((match) => match[1] ?? '');
     };
 
     const all = await (await agent.get('/admin/posts')).text();
-    assert.match(all, /admin-status-scheduled">Scheduled</, 'the status badge');
+    assert.ok(statuses(all).includes('Scheduled'), 'the status badge');
     assert.match(all, /href="\/admin\/posts\?status=scheduled"/, 'the filter');
     assert.ok(
-      !/<a href="\/2026\/09\/tomorrow\/">View<\/a>/.test(all),
+      !/<a\b[^>]*href="\/2026\/09\/tomorrow\/">View<\/a>/.test(all),
       'there is nothing public to view yet',
     );
 
@@ -831,8 +832,8 @@ describe('a post whose visibility the site does not recognize (TASK-227)', () =>
 
     const html = await (await agent.get('/admin/posts')).text();
 
-    assert.match(html, /admin-status[^"]*">Hidden</);
-    assert.doesNotMatch(html, /<span class="admin-status">Published</);
+    assert.ok(statuses(html).includes('Hidden'));
+    assert.ok(!statuses(html).includes('Published'));
   });
 });
 
@@ -1452,7 +1453,7 @@ describe('writing a post', () => {
     const listing = await (await agent.get('/admin/posts')).text();
     assert.match(
       listing,
-      /<a href="\/admin\/posts\/coffee-first-then-the-inbox">Coffee first, then the inbox and after that a walk\.<\/a>/,
+      /<a\b[^>]*href="\/admin\/posts\/coffee-first-then-the-inbox">Coffee first, then the inbox and after that a walk\.<\/a>/,
       'the posts list links a note by its first words',
     );
 

@@ -208,7 +208,7 @@ describe('the actor panels', () => {
 
     assert.match(
       await federationScreen(agent),
-      /admin-avatar-blank/,
+      /admin-avatar-blank|avatar-placeholder/,
       'a user with no avatar gets the placeholder',
     );
 
@@ -225,7 +225,7 @@ describe('the actor panels', () => {
 
     assert.match(
       await federationScreen(agent),
-      new RegExp(`<img class="admin-avatar[^"]*" src="${BASE_URL}/uploads/2026/09/me\\.png"`),
+      new RegExp(`<img\\b[^>]*src="${BASE_URL}/uploads/2026/09/me\\.png"`),
       'and the avatar itself once there is one',
     );
   });
@@ -357,7 +357,7 @@ describe('per-post delivery status', () => {
     assert.match(html, /Hello, world/, 'the post is named');
     assert.match(html, /\/admin\/posts\/hello-world/, 'and links to its editor');
     assert.match(html, /Create/, 'the last activity type is shown');
-    assert.match(html, /<button type="submit">Resend<\/button>/, 'and it can be sent again');
+    assert.match(html, /<button type="submit"[^>]*>Resend<\/button>/, 'and it can be sent again');
   });
 
   it('lists a post in the trash, which is a copy the followers still hold', async () => {
@@ -403,11 +403,7 @@ describe('per-post delivery status', () => {
     const agent = await signedIn(cms);
     follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
     await publishPost(agent, cms);
-    assert.match(
-      await federationScreen(agent),
-      /Create <span class="admin-inbox-when">/,
-      'the outcome was recorded first',
-    );
+    assert.match(await federationScreen(agent), /Create <span\b/, 'the outcome was recorded first');
 
     const { contentDir, dataDir } = cms.config;
     await cms.close();
@@ -426,7 +422,7 @@ describe('per-post delivery status', () => {
     const html = await federationScreen(rebootedAgent);
     assert.match(html, /Hello, world/, 'the post is listed, because its file says it was sent');
     assert.match(html, /Nothing recorded/, 'with no outcome, because the cache is gone');
-    assert.match(html, /<button type="submit">Resend<\/button>/, 'and it can be sent again');
+    assert.match(html, /<button type="submit"[^>]*>Resend<\/button>/, 'and it can be sent again');
   });
 });
 

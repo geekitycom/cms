@@ -1,4 +1,4 @@
-import { FEDERATION_PATH } from '../federation.ts';
+import { THEMES_PATH } from '../appearance.ts';
 import { sandbox, signedIn } from './harness.ts';
 
 /**
@@ -10,7 +10,7 @@ const box = sandbox();
 try {
   const cms = await box.site();
   const agent = await signedIn(cms);
-  const unconverted = await (await agent.get(FEDERATION_PATH)).text();
+  const unconverted = await (await agent.get(THEMES_PATH)).text();
   const login = await (await cms.app.request('/admin/login')).text();
   const stylesheet = await cms.app.request('/admin/_static/admin.css');
   const editor = await cms.app.request('/admin/_static/editor.js');

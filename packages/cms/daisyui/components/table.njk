@@ -4,7 +4,7 @@
    `{% call table(caption, …) %}<thead>…</thead><tbody>…</tbody>{% endcall %}`
    emits
 
-     <div class="max-w-full overflow-x-auto">
+     <div class="max-w-full overflow-x-auto contain-inline-size">
        <table class="table table-sm">
          <caption class="sr-only">caption</caption>
          body
@@ -12,6 +12,11 @@
      </div>
 
    The caption is required and escaped. The body is the rows.
+
+   The wrapper's width is contained, so the table's own width never reaches
+   the boxes around it: a table inside a card, or anything else sized to its
+   content, would otherwise widen that box past the page instead of
+   scrolling.
 
    Modifiers:
 
@@ -25,7 +30,7 @@
 {% set SIZES = { xs: 'table-xs', sm: 'table-sm', md: 'table-md', lg: 'table-lg', xl: 'table-xl' } %}
 
 {% macro table(caption, size='sm', zebra=false, pinRows=false, pinCols=false) -%}
-<div class="max-w-full overflow-x-auto">
+<div class="max-w-full overflow-x-auto contain-inline-size">
   <table class="table{{ SIZES | modifier(size) }}{% if zebra %} table-zebra {%- endif %}{% if pinRows %} table-pin-rows {%- endif %}{% if pinCols %} table-pin-cols {%- endif %}">
     <caption class="sr-only">{{ caption }}</caption>
     {{ caller() }}
