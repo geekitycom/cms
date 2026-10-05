@@ -13,9 +13,6 @@
 
    The caption is required and escaped. The body is the rows.
 
-   A table inside a card's body passes `inCard=true` and gets the wrapper
-   without `rounded-box bg-base-100 p-2 shadow-sm`.
-
    `contain-inline-size` keeps the table's intrinsic width from sizing the
    card or grid cell around it.
 
@@ -25,6 +22,7 @@
      zebra    true stripes the rows
      pinRows  true keeps the head and foot in view as the rows scroll
      pinCols  true keeps the `th` cells of each row in view
+     inCard   true leaves off the surface, for a table already in a card's body
 
    A size outside its set is a render error. #}
 
