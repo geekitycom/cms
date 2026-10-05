@@ -25,6 +25,39 @@ import { formatDate } from '../web/templates.ts';
 export const PACKAGED_ADMIN_DIR: string = fileURLToPath(new URL('../../admin/', import.meta.url));
 
 /**
+ * The DaisyUI admin under construction (decision-30), with the same
+ * `layouts/`, `components/`, `pages/` and `static/` as {@link PACKAGED_ADMIN_DIR}
+ * and holding only what has been converted so far. `GEEKITY_ADMIN=daisyui`
+ * lays it over the old admin; the flip renames it to `admin/`.
+ */
+export const DAISYUI_ADMIN_DIR: string = fileURLToPath(new URL('../../daisyui/', import.meta.url));
+
+/**
+ * The admin roots `GEEKITY_ADMIN` asks for, first match wins: the old admin
+ * alone when it is unset or empty, and `daisyui/` ahead of it when it is
+ * `daisyui`, so a converted file is served from there and an unconverted one
+ * still from `admin/`.
+ *
+ * A value it does not know is refused, so a misspelt switch fails at boot
+ * instead of quietly serving the admin somebody meant to leave behind.
+ */
+export function adminDirectories(env: Record<string, string | undefined>): readonly string[] {
+  const value = env['GEEKITY_ADMIN'] ?? '';
+  if (value === '') return [PACKAGED_ADMIN_DIR];
+  if (value === 'daisyui') return [DAISYUI_ADMIN_DIR, PACKAGED_ADMIN_DIR];
+  throw new Error(
+    `GEEKITY_ADMIN is ${JSON.stringify(value)}; set it to "daisyui" for the DaisyUI admin, or leave it unset`,
+  );
+}
+
+/**
+ * The admin roots this process serves from, read once at load. Every reader of
+ * an admin file goes through it: the template loader, the static files, and
+ * the tests that read templates by path.
+ */
+export const ADMIN_DIRS: readonly string[] = adminDirectories(process.env);
+
+/**
  * Templates {@link mountAdmin} asks for by name.
  *
  * The path of each is where the menu says it is, with one exception:
@@ -81,11 +114,11 @@ export interface CreateAdminTemplateEnvironmentOptions {
   noCache?: boolean | undefined;
 }
 
-/** A Nunjucks environment over {@link PACKAGED_ADMIN_DIR} and nothing else. */
+/** A Nunjucks environment over {@link ADMIN_DIRS} and nothing else. */
 export function createAdminTemplateEnvironment(
   options: CreateAdminTemplateEnvironmentOptions = {},
 ): Environment {
-  const loader = new FileSystemLoader([PACKAGED_ADMIN_DIR], {
+  const loader = new FileSystemLoader([...ADMIN_DIRS], {
     noCache: options.noCache === true,
   });
 

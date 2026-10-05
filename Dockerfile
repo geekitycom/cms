@@ -51,8 +51,9 @@ COPY packages/cms packages/cms
 RUN pnpm --filter @geekity/cms build
 
 # The package as npm would publish it (package.json `files`: dist, admin,
-# themes, templates) with its production dependencies and nothing else: no
-# sources, no tests, no devDependencies, no apps/demo and no demo theme.
+# daisyui, themes, templates) with its production dependencies and nothing
+# else: no sources, no tests, no devDependencies, no apps/demo and no demo
+# theme.
 #
 # The one devDependency --prod cannot keep out is @types/node: sharp declares it
 # an optional peer, and pnpm resolves an optional peer from whatever the

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { readdir, readFile } from 'node:fs/promises';
-import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { after, describe, it } from 'node:test';
 
+import { adminFile, adminTemplates } from './__testing__/admin-files.ts';
 import { browser, sandbox, signedIn } from './__testing__/harness.ts';
-import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.ts';
+import { createAdminTemplateEnvironment } from './templates.ts';
 
 /**
  * The admin for someone on a keyboard (TASK-143): a way past the chrome on
@@ -16,16 +16,6 @@ import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.
  */
 
 const environment = createAdminTemplateEnvironment({ noCache: true });
-
-async function adminTemplates(directory: string): Promise<string[]> {
-  const found: string[] = [];
-  for (const entry of await readdir(path.join(PACKAGED_ADMIN_DIR, directory), {
-    recursive: true,
-  })) {
-    if (entry.endsWith('.njk')) found.push(`${directory}/${entry}`);
-  }
-  return found.sort();
-}
 
 /** The opening tag of the first element a Tab press can land on. */
 function firstFocusable(html: string): string | undefined {
@@ -75,7 +65,7 @@ describe('every admin table', async () => {
   const templates = [...(await adminTemplates('pages')), ...(await adminTemplates('components'))];
   const tables: { template: string; opening: string; rest: string }[] = [];
   for (const template of templates) {
-    const source = await readFile(path.join(PACKAGED_ADMIN_DIR, template), 'utf8');
+    const source = await readFile(adminFile(template), 'utf8');
     for (const match of source.matchAll(/<table\b[^>]*>/g)) {
       tables.push({
         template,
@@ -100,7 +90,7 @@ describe('every admin table', async () => {
 
 /** The custom properties a stylesheet declares, by name. */
 async function tokens(stylesheet: string): Promise<Map<string, string>> {
-  const css = await readFile(path.join(PACKAGED_ADMIN_DIR, 'static', stylesheet), 'utf8');
+  const css = await readFile(adminFile(`static/${stylesheet}`), 'utf8');
   return new Map(
     [...css.matchAll(/(--admin-[a-z-]+):\s*(#[0-9a-f]{3}(?:[0-9a-f]{3})?)\s*;/gi)].map(
       ([, name, value]) => [name ?? '', value ?? ''],

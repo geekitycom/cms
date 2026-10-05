@@ -300,6 +300,9 @@ importers:
       codemirror:
         specifier: ^6.0.2
         version: 6.0.2
+      daisyui:
+        specifier: ^5.7.47
+        version: 5.7.47
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -2101,6 +2104,9 @@ packages:
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
+
+  daisyui@5.7.47:
+    resolution: {integrity: sha512-NOl4vPifelRqB3CMzoU751zc44KCDD9HdHMTTqQ30uiYVpIyK7+s94/ySDWgYqjdl1tQCaCrgGBx4KCizm+a3Q==}
 
   dax@0.46.1:
     resolution: {integrity: sha512-E8FidFoEgb2M981RBXA13LZ8amEmp60zzJc8rVSm0Y0Lr/vWz8ImPipkzrthyMa/EjjnD4hr6Dr/9OARBF7D6Q==}
@@ -5568,6 +5574,8 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
+
+  daisyui@5.7.47: {}
 
   dax@0.46.1:
     dependencies:

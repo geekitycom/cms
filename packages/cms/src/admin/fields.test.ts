@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
-import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.ts';
+import { adminFile } from './__testing__/admin-files.ts';
+import { createAdminTemplateEnvironment } from './templates.ts';
 
 /**
  * `admin/components/fields.njk`: the one place a labelled box is written.
@@ -367,8 +368,8 @@ describe('a label or a hint written by the template', () => {
 
 describe('the classes the partial emits', () => {
   it('are every one of them styled, so no field renders bare', async () => {
-    const partial = await readFile(`${PACKAGED_ADMIN_DIR}components/fields.njk`, 'utf8');
-    const css = await readFile(`${PACKAGED_ADMIN_DIR}static/admin.css`, 'utf8');
+    const partial = await readFile(adminFile('components/fields.njk'), 'utf8');
+    const css = await readFile(adminFile('static/admin.css'), 'utf8');
     const rules = new Set(
       [...css.replaceAll(/\/\*[\s\S]*?\*\//g, ' ').matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map(
         ([, name]) => name ?? '',

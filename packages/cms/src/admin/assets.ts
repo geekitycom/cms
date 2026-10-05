@@ -1,8 +1,10 @@
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { assetNotModified, assetResponse, findAsset, matchesEtag } from '../web/assets.ts';
 import type { StaticAsset } from '../web/assets.ts';
 import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_DIRS } from './templates.ts';
 
 /**
  * Where the admin's own files live: stylesheets and, later, whatever the
@@ -24,9 +26,17 @@ export const ADMIN_ASSET_PREFIX = `${ADMIN_PREFIX}/_static/`;
 /** How long a browser may keep an admin asset. One hour, as for a theme's. */
 export const ADMIN_ASSET_MAX_AGE = 3600;
 
-/** One file under {@link ADMIN_STATIC_DIR}, or `undefined`. */
+/**
+ * The `static/` of each of {@link ADMIN_DIRS}, in the same order, so a file
+ * the DaisyUI admin has is served from there and any other from the old one.
+ */
+export const ADMIN_STATIC_DIRS: readonly string[] = ADMIN_DIRS.map((dir) =>
+  path.join(dir, 'static'),
+);
+
+/** One file under {@link ADMIN_STATIC_DIRS}, the first that has it, or `undefined`. */
 export function findAdminAsset(relative: string): StaticAsset | undefined {
-  return findAsset(relative, [ADMIN_STATIC_DIR]);
+  return findAsset(relative, ADMIN_STATIC_DIRS);
 }
 
 /**

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 
+import { adminFile } from './__testing__/admin-files.ts';
 import { COMMENT_STATUSES } from './store.ts';
 
 /**
@@ -12,8 +12,6 @@ import { COMMENT_STATUSES } from './store.ts';
  * shipped. These tests read the templates rather than a list, so a class added
  * to one of them later has to be styled before it can land.
  */
-
-const ADMIN_DIR = fileURLToPath(new URL('../../admin/', import.meta.url));
 
 /**
  * The templates this file covers: the two lists of what somebody wrote, and
@@ -72,7 +70,7 @@ function styledClasses(css: string): Set<string> {
   return new Set([...rules.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map(([, name]) => name ?? ''));
 }
 
-const stylesheet = await readFile(`${ADMIN_DIR}static/admin.css`, 'utf8');
+const stylesheet = await readFile(adminFile('static/admin.css'), 'utf8');
 const css = styledClasses(stylesheet);
 
 /**
@@ -113,7 +111,7 @@ function declaration(selector: string, property: string): string | undefined {
 describe('the admin screens', () => {
   for (const screen of SCREENS) {
     it(`has a rule for every class ${screen} emits`, async () => {
-      const { literal } = classNames(await readFile(`${ADMIN_DIR}${screen}`, 'utf8'));
+      const { literal } = classNames(await readFile(adminFile(screen), 'utf8'));
 
       assert.ok(literal.length > 0, 'the template was read and has classes');
       assert.deepEqual(
@@ -125,7 +123,7 @@ describe('the admin screens', () => {
   }
 
   it('has a rule for every comment status the meta line can print', async () => {
-    const { prefixes } = classNames(await readFile(`${ADMIN_DIR}pages/comments/all.njk`, 'utf8'));
+    const { prefixes } = classNames(await readFile(adminFile('pages/comments/all.njk'), 'utf8'));
 
     assert.deepEqual(prefixes, ['admin-status-'], 'the only interpolated class is the status');
     assert.deepEqual(
@@ -193,7 +191,7 @@ describe('the At a glance counts (TASK-115)', () => {
   });
 
   it('stays a dl whose every cell is a dt then its dd', async () => {
-    const home = await readFile(`${ADMIN_DIR}pages/dashboard/home.njk`, 'utf8');
+    const home = await readFile(adminFile('pages/dashboard/home.njk'), 'utf8');
     const list = /<dl class="admin-counts">([\s\S]*?)<\/dl>/.exec(home)?.[1];
     assert.ok(list !== undefined, 'At a glance is a definition list');
 

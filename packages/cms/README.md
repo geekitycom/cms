@@ -1880,6 +1880,20 @@ flash messages. A message queued with `flash(c, 'notice', '…')` is kept on the
 session row, shown on the next page the browser asks for, and cleared as it is
 read, so it survives exactly one redirect.
 
+### The DaisyUI admin
+
+A new admin drawn in DaisyUI is being built in the package's `daisyui/`
+directory, one screen at a time (decision-30). It is off by default. Start the
+server with `GEEKITY_ADMIN=daisyui` to see it: templates and files under
+`/admin/_static/` are looked for in `daisyui/` first, and anything not
+converted yet comes from `admin/` as before. Leave the variable unset for the
+current admin. Any other value stops the server at boot.
+
+Its stylesheet, `daisyui/static/admin.css`, is compiled at build time with
+Tailwind and DaisyUI from `daisyui/src/admin.css`, and ships in the package
+like the default theme's. It carries every built-in DaisyUI theme, with
+`light` as the default and `dark` when the system prefers dark.
+
 ### The menu
 
 The menu is WordPress classic: twelve sections — Dashboard, Posts, Pages,

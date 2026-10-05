@@ -1,0 +1,61 @@
+/*
+ * The admin's stylesheet (decision-30).
+ *
+ * The source. `pnpm build` compiles it with Tailwind v4 and the DaisyUI 5
+ * plugin to `static/admin.css`, which is what an admin page loads and what the
+ * package ships; that file is a build product and gitignored.
+ *
+ * The templates carry DaisyUI components and Tailwind utilities, so this file
+ * stays small: Tailwind in full, Preflight included, and DaisyUI with every
+ * built-in theme, any of which a user may pick. `light` is drawn when nothing
+ * names a theme, and `dark` when the system prefers dark.
+ *
+ * Tailwind reads the class names out of the admin's templates and out of the
+ * editor's script, which builds some of its markup at runtime and names those
+ * classes as string literals.
+ */
+@import 'tailwindcss' source(none);
+@source '../layouts';
+@source '../components';
+@source '../pages';
+@source '../../editor/main.ts';
+
+@plugin 'daisyui' {
+  themes:
+    light --default,
+    dark --prefersdark,
+    cupcake,
+    bumblebee,
+    emerald,
+    corporate,
+    synthwave,
+    retro,
+    cyberpunk,
+    valentine,
+    halloween,
+    garden,
+    forest,
+    aqua,
+    lofi,
+    pastel,
+    fantasy,
+    wireframe,
+    black,
+    luxury,
+    dracula,
+    cmyk,
+    autumn,
+    business,
+    acid,
+    lemonade,
+    night,
+    coffee,
+    winter,
+    dim,
+    nord,
+    sunset,
+    caramellatte,
+    abyss,
+    silk;
+  logs: false;
+}
