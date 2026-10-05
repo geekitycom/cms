@@ -5,6 +5,7 @@ import { tiedErrors } from '../__testing__/form-errors.ts';
 import { citedCard, fieldsOf } from './__testing__/editor-form.ts';
 import { editorScreens } from './__testing__/editor-screens.ts';
 import { sandbox } from './__testing__/harness.ts';
+import { classesOf, classesOutsideTheBar, screenOf } from './__testing__/markup.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -150,21 +151,6 @@ const FILLED_FORM: [string, string][] = [
   ['type', 'post'],
   ['visibility', 'public'],
 ];
-
-function screenOf(html: string): string {
-  return /<main\b[\s\S]*<\/main>/.exec(html)?.[0] ?? '';
-}
-
-function classesOf(tag: string): string[] {
-  return (/\sclass="([^"]*)"/.exec(tag)?.[1] ?? '').split(/\s+/).filter(Boolean);
-}
-
-function classesOutsideTheBar(html: string): string[] {
-  const page = html.replace(/<geekity-admin-bar\b[\s\S]*<\/geekity-admin-bar>/, '');
-  return [...page.matchAll(/\bclass="([^"]*)"/g)].flatMap(([, value]) =>
-    (value ?? '').split(/\s+/).filter(Boolean),
-  );
-}
 
 /** The form's fields, less the two values that differ from one session or one save to the next. */
 function comparable(html: string): [string, string][] {

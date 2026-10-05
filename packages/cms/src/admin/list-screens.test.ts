@@ -4,22 +4,10 @@ import { after, describe, it } from 'node:test';
 import { sandbox } from './__testing__/harness.ts';
 import { listScreens } from './__testing__/list-screens.ts';
 import type { ListScreen } from './__testing__/list-screens.ts';
+import { classesOutsideTheBar, pagination, screenOf, tabs, text } from './__testing__/markup.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
-
-/** The screen itself: what is inside `<main>`. */
-function screenOf(html: string): string {
-  return /<main\b[\s\S]*<\/main>/.exec(html)?.[0] ?? '';
-}
-
-/** Markup as the words it reads as. */
-function text(html: string): string {
-  return html
-    .replaceAll(/<[^>]*>/g, ' ')
-    .replaceAll(/\s+/g, ' ')
-    .trim();
-}
 
 /** The first cell of every body row of every table on the screen, as text, less
  *  the badges printed beside a row's name. */
@@ -36,32 +24,6 @@ function badges(html: string): { label: string; modifiers: string }[] {
   return [
     ...screenOf(html).matchAll(/<span class="badge badge-sm((?: [\w-]+)*)">([^<]*)<\/span>/g),
   ].map(([, modifiers, label]) => ({ label: label ?? '', modifiers: (modifiers ?? '').trim() }));
-}
-
-/** Every class token outside the admin bar, whose shadow root keeps classes of its own. */
-function classesOutsideTheBar(html: string): string[] {
-  const page = html.replace(/<geekity-admin-bar\b[\s\S]*<\/geekity-admin-bar>/, '');
-  return [...page.matchAll(/\bclass="([^"]*)"/g)].flatMap(([, value]) =>
-    (value ?? '').split(/\s+/).filter(Boolean),
-  );
-}
-
-/** The tabs a screen draws: each link's words, and whether it is the current one. */
-function tabs(html: string): { label: string; current: boolean }[] {
-  const nav = /<nav class="tabs tabs-box" aria-label="[^"]+">([\s\S]*?)<\/nav>/.exec(html);
-  assert.ok(nav, 'the filters are a labelled tabs nav');
-  return [
-    ...(nav[1] ?? '').matchAll(
-      /<a class="tab( tab-active)?" href="[^"]*"( aria-current="page")?>([^<]*)<\/a>/g,
-    ),
-  ].map(([, active, current, label]) => {
-    assert.equal(
-      active !== undefined,
-      current !== undefined,
-      `${label} is marked for both eye and ear`,
-    );
-    return { label: (label ?? '').trim(), current: current !== undefined };
-  });
 }
 
 const SCREENS: readonly ListScreen[] = [
@@ -145,11 +107,7 @@ describe('the list screens', async () => {
   });
 
   it('pages through posts with the pagination macro (AC #2)', () => {
-    const join = (html: string): string =>
-      /<nav aria-label="Pages">\s*<div class="join">([\s\S]*?)<\/div>\s*<\/nav>/.exec(html)?.[1] ??
-      '';
-
-    const first = join(served.posts);
+    const first = pagination(served.posts);
     assert.match(
       first,
       /<span class="join-item btn btn-sm btn-disabled" aria-disabled="true">Newer<\/span>/,
@@ -160,7 +118,7 @@ describe('the list screens', async () => {
       /<a class="join-item btn btn-sm" rel="next" href="\/admin\/posts\?page=2">Older<\/a>/,
     );
 
-    const second = join(served.postsPageTwo);
+    const second = pagination(served.postsPageTwo);
     assert.match(
       second,
       /<a class="join-item btn btn-sm" rel="prev" href="\/admin\/posts">Newer<\/a>/,

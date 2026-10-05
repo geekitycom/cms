@@ -13,8 +13,6 @@ import { ADMIN_TEMPLATES, PACKAGED_ADMIN_DIR } from './templates.ts';
  * `{{ assetPrefix }}name`.
  */
 
-const ROOT = PACKAGED_ADMIN_DIR;
-
 const TEMPLATE_REFERENCE = /\{%-?\s*(?:extends|import|include|from)\s+(["'])([^"']+)\1/g;
 const ASSET_REFERENCE = /\{\{\s*assetPrefix\s*\}\}([\w./-]+)/g;
 
@@ -27,7 +25,7 @@ interface Walk {
 async function walk(name: string, from: string, seen: Walk): Promise<void> {
   if (seen.templates.has(name)) return;
   seen.templates.add(name);
-  const file = path.join(ROOT, name);
+  const file = path.join(PACKAGED_ADMIN_DIR, name);
   if (!existsSync(file)) {
     seen.missing.push(`${name} (from ${from})`);
     return;
@@ -51,7 +49,7 @@ describe('the admin folder', async () => {
 
   it('holds every static file those templates reference', () => {
     const missing = [...seen.assets].filter(
-      (asset) => !existsSync(path.join(ROOT, 'static', asset)),
+      (asset) => !existsSync(path.join(PACKAGED_ADMIN_DIR, 'static', asset)),
     );
     assert.deepEqual(missing, []);
     assert.ok(seen.assets.has('editor.js'));

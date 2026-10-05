@@ -122,10 +122,10 @@ export async function editorScreens(box: Sandbox): Promise<Record<EditorScreen, 
   try {
     const filled = await served(await agent.get('/admin/posts/everything'));
 
-    const blank = await (await agent.get('/admin/posts/new')).text();
+    const newPost = await served(await agent.get('/admin/posts/new'));
     const refused = await served(
       await agent.post('/admin/posts/new', {
-        csrf_token: csrfField(blank) ?? '',
+        csrf_token: csrfField(newPost.html) ?? '',
         action: 'publish',
         'repost-of': IMAGE,
       }),
@@ -139,7 +139,7 @@ export async function editorScreens(box: Sandbox): Promise<Record<EditorScreen, 
     );
 
     return {
-      newPost: await served(await agent.get('/admin/posts/new')),
+      newPost,
       newPage: await served(await agent.get('/admin/pages/new')),
       filled,
       refused,

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
+import { classesOf } from './__testing__/markup.ts';
 import { createAdminTemplateEnvironment } from './templates.ts';
 
 /**
@@ -36,11 +37,6 @@ function control(html: string): string {
 /** An opening tag with its class attribute taken out. */
 function withoutClass(tag: string): string {
   return tag.replace(/\sclass="[^"]*"/, '');
-}
-
-/** The value of the class attribute on an opening tag, split into names. */
-function classesOf(tag: string): string[] {
-  return (/\sclass="([^"]*)"/.exec(tag)?.[1] ?? '').split(/\s+/).filter(Boolean);
 }
 
 /** The `<label for="…">` bound to that id: its opening tag and its text. */

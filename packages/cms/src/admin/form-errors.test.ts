@@ -7,6 +7,7 @@ import { tiedErrors } from '../__testing__/form-errors.ts';
 import { findUser } from './accounts.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 import { SETTINGS_PAGE_FORMS, settingsPageUrl } from './__testing__/settings.ts';
+import { classesOf } from './__testing__/markup.ts';
 import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.ts';
 
 /**
@@ -145,11 +146,6 @@ function controlTag(html: string, id: string): string {
   const tag = new RegExp(`<(?:input|select|textarea)\\b[^>]*\\bid="${id}"[^>]*>`).exec(html)?.[0];
   assert.ok(tag !== undefined, `there is a control #${id}`);
   return tag;
-}
-
-/** The names in a tag's class attribute. */
-function classesOf(tag: string): string[] {
-  return (/\sclass="([^"]*)"/.exec(tag)?.[1] ?? '').split(/\s+/).filter(Boolean);
 }
 
 describe('a refused request, over HTTP', async () => {

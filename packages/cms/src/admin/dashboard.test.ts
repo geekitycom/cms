@@ -7,6 +7,7 @@ import { flashes } from './__testing__/flash.ts';
 import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import { findUser, setUserProfile } from './accounts.ts';
 import type { Browser } from './__testing__/harness.ts';
+import { classesOutsideTheBar, screenOf, text } from './__testing__/markup.ts';
 import { saveUrlOf } from './__testing__/editor-form.ts';
 
 const box = sandbox();
@@ -273,20 +274,8 @@ function counts(html: string): Count[] {
 
 /** The rows of the screen's tables as text, one string a row, the head first. */
 function rowTexts(html: string): string[] {
-  const screen = html.slice(html.indexOf('<main'));
-  return [...screen.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].map(([, row]) =>
-    (row ?? '')
-      .replaceAll(/<[^>]*>/g, ' ')
-      .replaceAll(/\s+/g, ' ')
-      .trim(),
-  );
-}
-
-/** Every class token outside the admin bar, whose shadow root keeps classes of its own. */
-function classesOutsideTheBar(html: string): string[] {
-  const page = html.replace(/<geekity-admin-bar\b[\s\S]*<\/geekity-admin-bar>/, '');
-  return [...page.matchAll(/\bclass="([^"]*)"/g)].flatMap(([, value]) =>
-    (value ?? '').split(/\s+/).filter(Boolean),
+  return [...screenOf(html).matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].map(([, row]) =>
+    text(row ?? ''),
   );
 }
 
@@ -324,7 +313,7 @@ async function dashboardOver(contentDir: string): Promise<string> {
 
 describe('the dashboard', async () => {
   const dashboards = await Promise.all(
-    [await seeded(COUNTED), await seeded(RECENT), await seeded([])].map(dashboardOver),
+    [COUNTED, RECENT, []].map(async (seeds) => dashboardOver(await seeded(seeds))),
   );
   const [counted = '', recent = '', empty = ''] = dashboards;
 

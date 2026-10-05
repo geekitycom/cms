@@ -12,6 +12,7 @@ import { LOOK } from '../../editor/look.ts';
 import { PACKAGE_ROOT } from '../__testing__/cli.ts';
 import { THEMES_PATH } from './appearance.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
+import { classesOutsideTheBar } from './__testing__/markup.ts';
 import { PACKAGED_ADMIN_DIR } from './templates.ts';
 
 const execFile = promisify(execFileCallback);
@@ -53,13 +54,9 @@ describe('the admin, over HTTP', async () => {
 
   it('draws a screen inside the DaisyUI shell, with no admin-* class outside the bar', () => {
     assert.match(themes, /<div class="drawer lg:drawer-open">/);
-    const page = themes.replace(/<geekity-admin-bar\b[\s\S]*<\/geekity-admin-bar>/, '');
-    assert.match(page, /<div class="card bg-base-100 shadow-sm/);
-    const tokens = [...page.matchAll(/\bclass="([^"]*)"/g)].flatMap(([, value]) =>
-      (value ?? '').split(/\s+/),
-    );
+    assert.match(themes, /<div class="card bg-base-100 shadow-sm/);
     assert.deepEqual(
-      tokens.filter((token) => token.startsWith('admin-')),
+      classesOutsideTheBar(themes).filter((token) => token.startsWith('admin-')),
       [],
     );
   });

@@ -2,34 +2,13 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from './__testing__/harness.ts';
+import { classesOutsideTheBar, pagination, screenOf, tabs, text } from './__testing__/markup.ts';
 import { remainingScreens } from './__testing__/remaining-screens.ts';
 import type { RemainingScreen } from './__testing__/remaining-screens.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
-
-/** The screen itself: what is inside `<main>`. */
-function screenOf(html: string): string {
-  return /<main\b[\s\S]*<\/main>/.exec(html)?.[0] ?? '';
-}
-
-/** Markup as the words it reads as. */
-function text(html: string): string {
-  return html
-    .replaceAll(/<[^>]*>/g, ' ')
-    .replaceAll(/&amp;/g, '&')
-    .replaceAll(/\s+/g, ' ')
-    .trim();
-}
-
-/** Every class token outside the admin bar, whose shadow root keeps classes of its own. */
-function classesOutsideTheBar(html: string): string[] {
-  const page = html.replace(/<geekity-admin-bar\b[\s\S]*<\/geekity-admin-bar>/, '');
-  return [...page.matchAll(/\bclass="([^"]*)"/g)].flatMap(([, value]) =>
-    (value ?? '').split(/\s+/).filter(Boolean),
-  );
-}
 
 /** Each card on the screen, from its opening tag to the next card's. */
 function cards(html: string): string[] {
@@ -47,31 +26,6 @@ function cardTitle(card: string): string {
 function badges(html: string): { label: string; modifiers: string }[] {
   return [...html.matchAll(/<span class="badge((?: [\w-]+)*)">([^<]*)<\/span>/g)].map(
     ([, modifiers, label]) => ({ label: label ?? '', modifiers: (modifiers ?? '').trim() }),
-  );
-}
-
-/** The tabs a screen draws: each link's words, and whether it is the current one. */
-function tabs(html: string): { label: string; current: boolean }[] {
-  const nav = /<nav class="tabs tabs-box" aria-label="[^"]+">([\s\S]*?)<\/nav>/.exec(html);
-  assert.ok(nav, 'the filters are a labelled tabs nav');
-  return [
-    ...(nav[1] ?? '').matchAll(
-      /<a class="tab( tab-active)?" href="[^"]*"( aria-current="page")?>([^<]*)<\/a>/g,
-    ),
-  ].map(([, active, current, label]) => {
-    assert.equal(
-      active !== undefined,
-      current !== undefined,
-      `${label} is marked for both eye and ear`,
-    );
-    return { label: (label ?? '').trim(), current: current !== undefined };
-  });
-}
-
-/** The pagination macro's group, or `''` when the screen has none. */
-function pagination(html: string): string {
-  return (
-    /<nav aria-label="Pages">\s*<div class="join">([\s\S]*?)<\/div>\s*<\/nav>/.exec(html)?.[1] ?? ''
   );
 }
 

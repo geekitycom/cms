@@ -3,6 +3,7 @@ import { after, describe, it } from 'node:test';
 
 import { browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings, SETTINGS_PAGE_FORMS, settingsPageUrl } from './__testing__/settings.ts';
+import { classesOutsideTheBar, classTokens } from './__testing__/markup.ts';
 import { adminMenu } from './menu.ts';
 import { RESET_PATH } from './recovery.ts';
 import { MAIL_TEST_FIELDS, MAIL_TEST_PATH } from './settings-email.ts';
@@ -29,18 +30,6 @@ function shell(context: Record<string, unknown> = {}): string {
   return environment.renderString(
     '{% extends "layouts/shell.njk" %}{% block content %}<h1>Tags</h1>{% endblock %}',
     { ...CHROME, ...context },
-  );
-}
-
-/** The page with the bar's shadow root cut out, which keeps classes of its own. */
-function outsideTheBar(html: string): string {
-  return html.replace(/<geekity-admin-bar\b[\s\S]*<\/geekity-admin-bar>/, '');
-}
-
-/** Every class token the markup carries. */
-function classTokens(html: string): string[] {
-  return [...html.matchAll(/\bclass="([^"]*)"/g)].flatMap(([, value]) =>
-    (value ?? '').split(/\s+/).filter(Boolean),
   );
 }
 
@@ -134,7 +123,7 @@ describe('the shell', () => {
 
   it('carries no legacy admin-* class outside the bar', () => {
     assert.deepEqual(
-      classTokens(outsideTheBar(shell())).filter((token) => token.startsWith('admin-')),
+      classesOutsideTheBar(shell()).filter((token) => token.startsWith('admin-')),
       [],
     );
   });
@@ -182,7 +171,7 @@ describe('the settings page layout', () => {
 
   it('carries no legacy admin-* class of its own', () => {
     assert.deepEqual(
-      classTokens(outsideTheBar(html)).filter((token) => token.startsWith('admin-')),
+      classesOutsideTheBar(html).filter((token) => token.startsWith('admin-')),
       [],
     );
   });

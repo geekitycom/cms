@@ -55,7 +55,6 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
 
   const surface = document.createElement('div');
   surface.id = SURFACE_ID;
-  addClasses(surface, LOOK.surface);
   textarea.insertAdjacentElement('afterend', surface);
 
   const status = document.createElement('p');
@@ -71,7 +70,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
       EditorView.cspNonce.of(cspNonce()),
       basicSetup,
       markdown(),
-      themeExtensions(),
+      markdownHighlighting(),
       EditorView.lineWrapping,
       // The textarea is the form's value; the view is only a view of it.
       EditorView.updateListener.of((update) => {
@@ -205,7 +204,6 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   /** The button and the file input behind it. */
   function uploadControl(): HTMLElement {
     const wrapper = document.createElement('span');
-    addClasses(wrapper, LOOK.upload);
 
     // No `name`, so it is never part of the form the editor submits or the
     // form the preview posts.
@@ -328,13 +326,9 @@ function tab(label: string, panel: HTMLElement): HTMLButtonElement {
   return button;
 }
 
-function addClasses(element: HTMLElement, names: string): void {
-  element.classList.add(...names.split(' ').filter(Boolean));
-}
-
 /** Marks highlighted Markdown with the `.cm-md-*` classes admin/src/admin.css colours. */
-function themeExtensions(): ReturnType<typeof syntaxHighlighting>[] {
-  const highlighting = syntaxHighlighting(
+function markdownHighlighting(): ReturnType<typeof syntaxHighlighting> {
+  return syntaxHighlighting(
     HighlightStyle.define([
       { tag: tags.heading, class: 'cm-md-heading' },
       { tag: tags.strong, class: 'cm-md-strong' },
@@ -355,7 +349,6 @@ function themeExtensions(): ReturnType<typeof syntaxHighlighting>[] {
       },
     ]),
   );
-  return [highlighting];
 }
 
 /**

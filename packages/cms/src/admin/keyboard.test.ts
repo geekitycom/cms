@@ -4,6 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { browser, sandbox, signedIn } from './__testing__/harness.ts';
+import { classesOf } from './__testing__/markup.ts';
 import { adminMenu } from './menu.ts';
 import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.ts';
 
@@ -146,7 +147,7 @@ describe("the shell's focus ring", () => {
     );
 
     for (const tag of links) {
-      const classes = /class="([^"]*)"/.exec(tag)?.[1]?.split(/\s+/) ?? [];
+      const classes = classesOf(tag);
       for (const ring of [
         'focus-visible:outline-solid',
         'focus-visible:outline-2',
@@ -211,7 +212,7 @@ describe('the admin bar, in its light palette and its dark one', async () => {
     assert.match(skip, /^<a class="[^"]*" href="#main">$/, 'the first stop is the skip link');
     assert.ok(html.indexOf(skip) < html.indexOf('<geekity-admin-bar'), 'it comes before the bar');
 
-    const classes = /class="([^"]*)"/.exec(skip)?.[1]?.split(/\s+/) ?? [];
+    const classes = classesOf(skip);
     assert.ok(classes.includes('fixed'), `it is fixed to the window: ${skip}`);
     assert.ok(
       classes.includes('top-(--geekity-admin-bar-height)'),

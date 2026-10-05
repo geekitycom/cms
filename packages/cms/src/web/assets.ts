@@ -64,7 +64,7 @@ export type ThemeAsset = StaticAsset;
  * matches nothing. Traversal is checked after resolution rather than by
  * inspecting the request, so an encoded `..` cannot slip past.
  */
-export function findAsset(relative: string, roots: readonly string[]): StaticAsset | undefined {
+export function findAsset(relative: string, roots: string[]): StaticAsset | undefined {
   const normalized = normalizeAssetPath(relative);
   if (normalized === undefined) return undefined;
 
