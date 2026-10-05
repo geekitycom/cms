@@ -1,0 +1,30 @@
+{# Stats, numbers set out in a row.
+
+   `{% call stats(…) %}…{% endcall %}` emits `<div class="stats shadow">`
+   around its body, and `stat(title, value, desc='')` inside it emits one
+   `<div class="stat">` holding a `stat-title`, a `stat-value` and, when it is
+   given one, a `stat-desc`. Title, value and description are escaped.
+
+   `direction` is horizontal, vertical, or responsive (a column on a phone, a
+   row from `lg` up); left out, the stats lie in a row. Any other value is a
+   render error. #}
+
+{% set DIRECTIONS = {
+  horizontal: 'stats-horizontal',
+  vertical: 'stats-vertical',
+  responsive: 'stats-vertical lg:stats-horizontal'
+} %}
+
+{% macro stats(direction=none) -%}
+<div class="stats shadow{{ DIRECTIONS | modifier(direction) }}">{{ caller() }}</div>
+{%- endmacro %}
+
+{% macro stat(title, value, desc='') -%}
+<div class="stat">
+  <div class="stat-title">{{ title }}</div>
+  <div class="stat-value">{{ value }}</div>
+  {% if desc %}
+  <div class="stat-desc">{{ desc }}</div>
+  {% endif %}
+</div>
+{%- endmacro %}

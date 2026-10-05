@@ -112,13 +112,33 @@ export interface CreateAdminTemplateEnvironmentOptions {
    * content watcher is on, which is the same switch as "this is a dev server".
    */
   noCache?: boolean | undefined;
+  /** The admin roots to load from, first match wins. {@link ADMIN_DIRS} when absent. */
+  roots?: readonly string[] | undefined;
 }
 
-/** A Nunjucks environment over {@link ADMIN_DIRS} and nothing else. */
+/**
+ * The `modifier` filter, `{{ COLORS | modifier(color) }}`: the class `classes`
+ * maps `value` to with a space before it, so `class="btn{{ … }}"` reads right,
+ * or nothing when `value` is absent. Any other value throws, naming the keys.
+ */
+function modifierClass(classes: unknown, value: unknown): string {
+  if (value === undefined || value === null || value === '') return '';
+  const known = typeof classes === 'object' && classes !== null ? classes : {};
+  const found: unknown =
+    typeof value === 'string' && Object.hasOwn(known, value)
+      ? (known as Record<string, unknown>)[value]
+      : undefined;
+  if (typeof found !== 'string') {
+    throw new Error(`${JSON.stringify(value)} is not one of ${Object.keys(known).join(', ')}`);
+  }
+  return ` ${found}`;
+}
+
+/** A Nunjucks environment over `options.roots`, {@link ADMIN_DIRS} by default, and nothing else. */
 export function createAdminTemplateEnvironment(
   options: CreateAdminTemplateEnvironmentOptions = {},
 ): Environment {
-  const loader = new FileSystemLoader([...ADMIN_DIRS], {
+  const loader = new FileSystemLoader([...(options.roots ?? ADMIN_DIRS)], {
     noCache: options.noCache === true,
   });
 
@@ -134,6 +154,7 @@ export function createAdminTemplateEnvironment(
   environment.addFilter('date', (value: unknown, format: unknown = 'readable') =>
     formatDate(value, typeof format === 'string' ? format : 'readable'),
   );
+  environment.addFilter('modifier', modifierClass);
 
   return environment;
 }

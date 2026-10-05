@@ -1,0 +1,34 @@
+{# Tabs: a row of links between views of one screen.
+
+   `tabs(items, label, …)` emits
+
+     <nav class="tabs tabs-box" aria-label="label">
+       <a class="tab tab-active" href="…" aria-current="page">All (3)</a>
+       <a class="tab" href="…">Spam (0)</a>
+     </nav>
+
+   Each item is `{ label, url, current, count }`: `current` marks the view
+   being looked at, and `count`, when there is one, is printed after the
+   label. Labels are escaped.
+
+   No `role="tablist"` or `role="tab"`: ARIA promises a screen reader panels
+   and arrow keys behind those roles, and these are plain links. DaisyUI styles
+   `.tab` without them.
+
+   Modifiers:
+
+     style  box (the default, a segmented control), border, lift
+     size   xs, sm, md, lg, xl
+
+   A value outside its set is a render error. #}
+
+{% set STYLES = { box: 'tabs-box', border: 'tabs-border', lift: 'tabs-lift' } %}
+{% set SIZES = { xs: 'tabs-xs', sm: 'tabs-sm', md: 'tabs-md', lg: 'tabs-lg', xl: 'tabs-xl' } %}
+
+{% macro tabs(items, label, style='box', size=none) -%}
+<nav class="tabs{{ STYLES | modifier(style) }}{{ SIZES | modifier(size) }}" aria-label="{{ label }}">
+  {% for item in items %}
+  <a class="tab{% if item.current %} tab-active{% endif %}" href="{{ item.url }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}{% if item.count is defined %} ({{ item.count }}){% endif %}</a>
+  {% endfor %}
+</nav>
+{%- endmacro %}

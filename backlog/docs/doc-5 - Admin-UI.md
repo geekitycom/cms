@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-03 01:24'
+updated_date: '2026-10-05 00:47'
 ---
 # Admin UI
 
@@ -77,6 +77,56 @@ instead of becoming a sliver.
 | `/admin/users/new` | the add form, Users > Add new |
 | `/admin/federation` | Federation > Followers: follower list, recent inbox activity, manual re-deliver |
 | `/admin/federation/settings` | Federation > Settings: the relays the site subscribes to, and the WordPress ActivityPub compatibility switch |
+
+## Components
+
+The DaisyUI admin (decision-30) draws every DaisyUI component it uses from one
+library of Nunjucks macros under `daisyui/components/`, one file per component,
+each documented at the top of its file the way `components/fields.njk` documents
+the form fields. A screen imports what it needs, as in
+`{% from "components/button.njk" import button, buttonLink %}`, and composes
+macros; it does not spell out component markup of its own.
+
+| File | Macros | Emits |
+| --- | --- | --- |
+| `button.njk` | `button`, `buttonLink` | `<button class="btn">`, and `<a class="btn">` for a link drawn as a button |
+| `alert.njk` | `alert` | `<div role="alert" class="alert">` around its body |
+| `card.njk` | `card`, `cardActions` | a `card` on base-100 with an optional `card-title`; the `card-actions` row |
+| `stat.njk` | `stats`, `stat` | `stats` around its body; one `stat` with title, value and description |
+| `badge.njk` | `badge` | `<span class="badge">` |
+| `table.njk` | `table` | a `table` with a screen-reader caption, wrapped to scroll sideways |
+| `tabs.njk` | `tabs` | a labelled `<nav class="tabs">` of links, the current one marked |
+| `pagination.njk` | `pagination` | newer, the page you are on and older, joined as one `join` group |
+| `menu.njk` | `menu` | a `menu` list from the menu registry's shape, children under the open item |
+| `navbar.njk` | `navbar`, `navbarStart`, `navbarCenter`, `navbarEnd` | the `navbar` and its three parts |
+| `dropdown.njk` | `dropdown` | a button that opens its body as a `dropdown` popover |
+
+- **A body goes through `{% call %}`.** card, cardActions, alert, table, stats,
+  navbar and its parts, and dropdown take their contents as the body of a
+  `{% call %}` block. Lists the routes already hand a screen (tabs, menu,
+  pagination) are passed in as data.
+- **A modifier is a name, never a class.** Colour, style, size, shape,
+  direction and placement are each a closed set of names (`color='error'`,
+  `size='lg'`) that the macro maps to the DaisyUI class through the admin
+  environment's `modifier` filter. A name outside its set is a render error, so a
+  misspelt modifier fails at once instead of drawing an unstyled component. No
+  macro takes a class string from its caller.
+- **Semantic colours only.** A template names colours only by the theme's
+  semantic tokens (`base-100`, `primary`, `error` and the rest), so every
+  built-in theme draws the admin as its author meant. A test reads every
+  template under `daisyui/` and refuses a hex value, an arbitrary colour
+  utility such as `bg-[#123456]` or `text-(--brand)`, and a Tailwind palette
+  colour such as `gray-200`, `white` or `black`.
+- **Every class has a rule.** Tailwind writes a rule only for a class it knows.
+  A second test reads every template under `daisyui/` with the compiled
+  `daisyui/static/admin.css` and refuses a class token that has no rule there,
+  which is how a misspelt DaisyUI class is caught, and a class built by
+  interpolation, which Tailwind cannot read. Both tests find the templates by
+  reading the folder, so a new template is held to them without being listed.
+- **The dropdown has no inline style.** DaisyUI's reference anchors a popover
+  to its button with `anchor-name` and `position-anchor` style attributes. The
+  admin's Content Security Policy refuses style attributes, so the popover is
+  placed against the button that opened it, its implicit anchor.
 
 ## Editor
 

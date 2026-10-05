@@ -1,0 +1,47 @@
+{# Pagination: newer, where you are, and older, joined into one group of
+   buttons.
+
+   `pagination(page, pages=…, previousUrl=…, nextUrl=…)` emits
+
+     <nav aria-label="Pages">
+       <div class="join">
+         <a class="join-item btn btn-sm" rel="prev" href="…">Newer</a>
+         <span class="join-item btn btn-sm btn-active" aria-current="page">Page 2 of 5</span>
+         <a class="join-item btn btn-sm" rel="next" href="…">Older</a>
+       </div>
+     </nav>
+
+   An end with nowhere to go is a `btn-disabled` span. `pages` is left out of
+   the middle when it is not given. With neither a newer nor an older page it
+   draws nothing.
+
+   `previousLabel`, `nextLabel` and `label` change the words; all three are
+   escaped. #}
+
+{% macro _end(url, rel, text) -%}
+{% if url %}
+<a class="join-item btn btn-sm" rel="{{ rel }}" href="{{ url }}">{{ text }}</a>
+{% else %}
+<span class="join-item btn btn-sm btn-disabled" aria-disabled="true">{{ text }}</span>
+{% endif %}
+{%- endmacro %}
+
+{% macro pagination(
+  page,
+  pages=none,
+  previousUrl='',
+  nextUrl='',
+  previousLabel='Newer',
+  nextLabel='Older',
+  label='Pages'
+) -%}
+{% if previousUrl or nextUrl %}
+<nav aria-label="{{ label }}">
+  <div class="join">
+    {{ _end(previousUrl, 'prev', previousLabel) }}
+    <span class="join-item btn btn-sm btn-active" aria-current="page">Page {{ page }}{% if pages %} of {{ pages }}{% endif %}</span>
+    {{ _end(nextUrl, 'next', nextLabel) }}
+  </div>
+</nav>
+{% endif %}
+{%- endmacro %}

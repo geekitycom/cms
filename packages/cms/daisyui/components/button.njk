@@ -1,0 +1,52 @@
+{# A button, and a link drawn as one.
+
+   `button(label, …)` emits `<button type="button" class="btn btn-sm">`, and
+   `buttonLink(label, href, …)` emits `<a class="btn btn-sm" href>`, with no
+   `role="button"`: ARIA gives that role to an `<a>` that goes nowhere.
+
+   Each takes the same modifiers:
+
+     color   neutral, primary, secondary, accent, info, success, warning, error
+     style   outline, dash, soft, ghost, link
+     size    xs, sm (the default), md, lg, xl
+     shape   wide, block, square, circle
+     active  true draws it pressed
+
+   A value outside its set is a render error.
+   `button` also takes `type` (button, unless it submits), `name`, `value`,
+   `formaction`, `popovertarget` and `disabled`. The label is escaped. #}
+
+{% set COLORS = {
+  neutral: 'btn-neutral',
+  primary: 'btn-primary',
+  secondary: 'btn-secondary',
+  accent: 'btn-accent',
+  info: 'btn-info',
+  success: 'btn-success',
+  warning: 'btn-warning',
+  error: 'btn-error'
+} %}
+{% set STYLES = { outline: 'btn-outline', dash: 'btn-dash', soft: 'btn-soft', ghost: 'btn-ghost', link: 'btn-link' } %}
+{% set SIZES = { xs: 'btn-xs', sm: 'btn-sm', md: 'btn-md', lg: 'btn-lg', xl: 'btn-xl' } %}
+{% set SHAPES = { wide: 'btn-wide', block: 'btn-block', square: 'btn-square', circle: 'btn-circle' } %}
+
+{% macro button(
+  label,
+  type='button',
+  color=none,
+  style=none,
+  size='sm',
+  shape=none,
+  active=false,
+  name='',
+  value='',
+  formaction='',
+  popovertarget='',
+  disabled=false
+) -%}
+<button type="{{ type }}" class="btn{{ COLORS | modifier(color) }}{{ STYLES | modifier(style) }}{{ SIZES | modifier(size) }}{{ SHAPES | modifier(shape) }}{% if active %} btn-active {%- endif %}"{% if name %} name="{{ name }}"{% endif %}{% if value %} value="{{ value }}"{% endif %}{% if formaction %} formaction="{{ formaction }}"{% endif %}{% if popovertarget %} popovertarget="{{ popovertarget }}"{% endif %}{% if disabled %} disabled{% endif %}>{{ label }}</button>
+{%- endmacro %}
+
+{% macro buttonLink(label, href, color=none, style=none, size='sm', shape=none, active=false) -%}
+<a class="btn{{ COLORS | modifier(color) }}{{ STYLES | modifier(style) }}{{ SIZES | modifier(size) }}{{ SHAPES | modifier(shape) }}{% if active %} btn-active {%- endif %}" href="{{ href }}">{{ label }}</a>
+{%- endmacro %}

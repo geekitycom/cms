@@ -1,0 +1,48 @@
+{# A menu: a list of links, down the side or across the top.
+
+   `menu(items, …)` emits
+
+     <ul class="menu w-full">
+       <li>
+         <a href="…">Posts</a>
+         <ul>
+           <li><a class="menu-active" href="…" aria-current="page">All posts</a></li>
+         </ul>
+       </li>
+     </ul>
+
+   Each item is `{ label, url, current, open, children }`, as
+   `src/admin/menu.ts` builds it: `current` marks the screen being looked at
+   with `menu-active` and `aria-current`, and an item's `children` are listed
+   only while it is `open`. Labels are escaped. No `<nav>` is emitted; the
+   screen wraps the menu in one where it is a landmark.
+
+   Modifiers:
+
+     direction  vertical (the default, filling its column), horizontal, or
+                responsive (down on a phone, across from `lg` up)
+     size       xs, sm, md, lg, xl
+
+   A value outside its set is a render error. #}
+
+{% set DIRECTIONS = {
+  vertical: 'w-full',
+  horizontal: 'menu-horizontal',
+  responsive: 'menu-vertical lg:menu-horizontal'
+} %}
+{% set SIZES = { xs: 'menu-xs', sm: 'menu-sm', md: 'menu-md', lg: 'menu-lg', xl: 'menu-xl' } %}
+
+{% macro _items(items) -%}
+{% for item in items %}
+<li>
+  <a{% if item.current %} class="menu-active"{% endif %} href="{{ item.url }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a>
+  {% if item.open and item.children.length %}
+  <ul>{{ _items(item.children) }}</ul>
+  {% endif %}
+</li>
+{% endfor %}
+{%- endmacro %}
+
+{% macro menu(items, direction='vertical', size=none) -%}
+<ul class="menu{{ DIRECTIONS | modifier(direction) }}{{ SIZES | modifier(size) }}">{{ _items(items) }}</ul>
+{%- endmacro %}
