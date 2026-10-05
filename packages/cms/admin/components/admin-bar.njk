@@ -1,13 +1,33 @@
-{# The admin bar, in the admin and across the top of the public site alike
-   (TASK-126, TASK-183). The site title leads to `siteHref` and `barLinks` are
-   the shortcuts beside it, both chosen by each place for itself: the admin's
-   title leads to the dashboard, the public site's home (TASK-257). The account
-   menu ends it.
+{# The admin bar (decision-30), on every signed-in admin screen and every
+   public page a signed-in user reads. The context it takes:
+   - `siteHref` and `barLinks`: the admin's title leads to the dashboard, the
+     public site's home (TASK-257).
+   - `me`, `logoutUrl` and `csrfToken`, for the account menu that ends it.
+   - `barScheme`, `adminColorScheme` of the user's admin theme; `auto` puts no
+     data-scheme on the host.
+   - `cspNonce`, on the admin only.
+   - `assetPrefix`, where static/admin-bar.js is served from.
 
    WordPress's "Howdy," menu, greeting the way this site's owner does. A
    popover rather than a script: the browser opens and closes it, shuts it on
    Escape or a click elsewhere, and tells a screen reader whether it is
-   expanded, all under the admin CSP's script-src 'self'. #}
+   expanded.
+
+   The offset stylesheet makes room for the fixed bar, and the bar's script
+   replaces the height with the one it measures. The margin is on <html>, as
+   under WordPress's bar, so a theme's own padding is left alone; `!important`
+   outlasts a reset such as `html, body { margin: 0 }`, and `:where()` lets a
+   theme with a sticky header of its own keep its scroll padding. #}
+{% set HOST_STYLE = "all: initial; display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 99999" -%}
+<style id="geekity-admin-bar-offset"{% if cspNonce %} nonce="{{ cspNonce }}"{% endif %}>
+:root { --geekity-admin-bar-height: 40px; }
+@media (max-width: 600px) { :root { --geekity-admin-bar-height: 80px; } }
+html { margin-top: var(--geekity-admin-bar-height) !important; }
+:where(html) { scroll-padding-top: var(--geekity-admin-bar-height); }
+</style><geekity-admin-bar
+  {%- if barScheme == 'light' or barScheme == 'dark' %} data-scheme="{{ barScheme }}"{% endif %}
+  {%- if not cspNonce %} style="{{ HOST_STYLE }}"{% endif %}><template shadowrootmode="open"><style{% if cspNonce %} nonce="{{ cspNonce }}"{% endif %}>:host { {{ HOST_STYLE }}; }
+{% include "static/admin-bar.css" %}</style>
 <nav class="admin-bar" aria-label="Admin bar">
   <a class="admin-bar-site" href="{{ siteHref }}">{{ site.title }}</a>
   {% for link in barLinks %}
@@ -25,3 +45,4 @@
     </div>
   {% endif %}
 </nav>
+<script src="{{ assetPrefix }}admin-bar.js" defer></script></template></geekity-admin-bar>

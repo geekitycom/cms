@@ -15,7 +15,11 @@
  * `scripts/build-editor.js`.
  */
 import { markdown } from '@codemirror/lang-markdown';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { basicSetup, EditorView } from 'codemirror';
+
+import { LOOK } from './look.ts';
 
 /** The element the server hangs the editor's URLs off. */
 const TOOLS_ID = 'editor-enhance';
@@ -25,6 +29,9 @@ const BODY_ID = 'editor-body';
 const FALLBACK_ID = 'editor-preview-fallback';
 /** This script's own tag, which carries the page's Content-Security-Policy nonce. */
 const SCRIPT_ID = 'editor-script';
+/** The box CodeMirror is mounted in; admin/src/admin.css hangs its `.cm-*` rules off this id. */
+const SURFACE_ID = 'editor-surface';
+const PREVIEW_ID = 'editor-preview';
 
 enhance();
 
@@ -47,11 +54,11 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   const uploadUrl = tools.dataset['uploadUrl'] ?? '';
 
   const surface = document.createElement('div');
-  surface.className = 'admin-editor-surface';
+  surface.id = SURFACE_ID;
   textarea.insertAdjacentElement('afterend', surface);
 
   const status = document.createElement('p');
-  status.className = 'admin-editor-status';
+  status.className = LOOK.status;
   status.setAttribute('role', 'status');
 
   const view = new EditorView({
@@ -63,6 +70,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
       EditorView.cspNonce.of(cspNonce()),
       basicSetup,
       markdown(),
+      markdownHighlighting(),
       EditorView.lineWrapping,
       // The textarea is the form's value; the view is only a view of it.
       EditorView.updateListener.of((update) => {
@@ -95,9 +103,14 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
     textarea.value = view.state.doc.toString();
   });
 
-  // Reassigned on every render; see `refresh`.
+  // The frame inside is replaced on every render; see `refresh`.
+  const previewPanel = document.createElement('div');
+  previewPanel.id = PREVIEW_ID;
+  previewPanel.hidden = true;
   let preview = previewFrame();
-  surface.insertAdjacentElement('afterend', preview);
+  preview.hidden = true;
+  previewPanel.append(preview);
+  surface.insertAdjacentElement('afterend', previewPanel);
 
   const tabs = tabStrip();
   tools.insertAdjacentElement('afterbegin', tabs.element);
@@ -110,26 +123,44 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   /** The Write and Preview tabs, and what switching between them does. */
   function tabStrip(): { element: HTMLElement } {
     const element = document.createElement('div');
-    element.className = 'admin-editor-tabs';
+    element.className = LOOK.tabs;
+    element.setAttribute('role', 'tablist');
+    element.setAttribute('aria-label', 'Body');
 
-    const write = tab('Write', true);
-    const read = tab('Preview', false);
+    const write = tab('Write', surface);
+    const read = tab('Preview', previewPanel);
     element.append(write, read);
+    select(true);
 
     write.addEventListener('click', () => {
       show(true);
     });
     read.addEventListener('click', () => {
       show(false);
-      void refresh();
     });
+    element.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const writing =
+        event.key === 'Home' ||
+        (event.key !== 'End' && read.getAttribute('aria-selected') === 'true');
+      show(writing);
+      (writing ? write : read).focus();
+    });
+
+    function select(writing: boolean): void {
+      write.setAttribute('aria-selected', String(writing));
+      read.setAttribute('aria-selected', String(!writing));
+      write.tabIndex = writing ? 0 : -1;
+      read.tabIndex = writing ? -1 : 0;
+    }
 
     function show(writing: boolean): void {
       surface.hidden = !writing;
-      preview.hidden = writing;
-      write.setAttribute('aria-selected', String(writing));
-      read.setAttribute('aria-selected', String(!writing));
+      previewPanel.hidden = writing;
+      select(writing);
       if (writing) view.focus();
+      else void refresh();
     }
 
     /**
@@ -154,17 +185,16 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
           credentials: 'same-origin',
         });
         if (!response.ok) {
-          say(`The preview came back ${String(response.status)}.`);
+          say(`The preview came back ${String(response.status)}.`, 'error');
           return;
         }
         const next = previewFrame();
-        next.hidden = false;
         next.srcdoc = await response.text();
         preview.replaceWith(next);
         preview = next;
         say('');
       } catch {
-        say('The preview could not be reached.');
+        say('The preview could not be reached.', 'error');
       }
     }
 
@@ -174,7 +204,6 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   /** The button and the file input behind it. */
   function uploadControl(): HTMLElement {
     const wrapper = document.createElement('span');
-    wrapper.className = 'admin-editor-upload';
 
     // No `name`, so it is never part of the form the editor submits or the
     // form the preview posts.
@@ -185,7 +214,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
 
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'admin-button-quiet';
+    button.className = LOOK.uploadButton;
     button.textContent = 'Add file…';
     button.addEventListener('click', () => {
       input.click();
@@ -225,7 +254,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
         credentials: 'same-origin',
       });
     } catch {
-      say(`${file.name} could not be uploaded.`);
+      say(`${file.name} could not be uploaded.`, 'error');
       return false;
     }
 
@@ -235,7 +264,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
     };
 
     if (!response.ok || typeof result.markdown !== 'string') {
-      say(result.error ?? `${file.name} was refused (${String(response.status)}).`);
+      say(result.error ?? `${file.name} was refused (${String(response.status)}).`, 'error');
       return false;
     }
 
@@ -262,7 +291,8 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   }
 
   /** Say something, or nothing, in the editor's status line. */
-  function say(message: string): void {
+  function say(message: string, tone: 'news' | 'error' = 'news'): void {
+    status.className = tone === 'error' ? LOOK.statusError : LOOK.status;
     status.textContent = message;
   }
 }
@@ -276,21 +306,49 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
  */
 function previewFrame(): HTMLIFrameElement {
   const frame = document.createElement('iframe');
-  frame.className = 'admin-editor-preview';
+  frame.className = LOOK.preview;
   frame.title = 'Preview';
-  frame.hidden = true;
   frame.setAttribute('sandbox', '');
   return frame;
 }
 
-/** One tab in the strip. */
-function tab(label: string, selected: boolean): HTMLButtonElement {
+/** One tab in the strip, and the panel it shows, which it names and is named by. */
+function tab(label: string, panel: HTMLElement): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'admin-editor-tab';
+  button.id = `${panel.id}-tab`;
+  button.className = LOOK.tab;
   button.textContent = label;
-  button.setAttribute('aria-selected', String(selected));
+  button.setAttribute('role', 'tab');
+  button.setAttribute('aria-controls', panel.id);
+  panel.setAttribute('role', 'tabpanel');
+  panel.setAttribute('aria-labelledby', button.id);
   return button;
+}
+
+/** Marks highlighted Markdown with the `.cm-md-*` classes admin/src/admin.css colours. */
+function markdownHighlighting(): ReturnType<typeof syntaxHighlighting> {
+  return syntaxHighlighting(
+    HighlightStyle.define([
+      { tag: tags.heading, class: 'cm-md-heading' },
+      { tag: tags.strong, class: 'cm-md-strong' },
+      { tag: tags.emphasis, class: 'cm-md-emphasis' },
+      { tag: tags.strikethrough, class: 'cm-md-strikethrough' },
+      { tag: [tags.link, tags.url], class: 'cm-md-link' },
+      { tag: tags.monospace, class: 'cm-md-code' },
+      { tag: tags.quote, class: 'cm-md-quote' },
+      {
+        tag: [
+          tags.processingInstruction,
+          tags.meta,
+          tags.contentSeparator,
+          tags.labelName,
+          tags.comment,
+        ],
+        class: 'cm-md-mark',
+      },
+    ]),
+  );
 }
 
 /**

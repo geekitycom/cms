@@ -1,37 +1,40 @@
 {# A save that was refused because the file changed after the form loaded.
-   Nothing has been written. Both versions are here in full so the decision is
-   made by somebody who has seen them, not by whoever saved last. #}
+   Nothing has been written. Both versions are here in full, side by side from
+   `lg`, so the decision is made by somebody who has seen them, not by whoever
+   saved last. #}
 {% extends "layouts/shell.njk" %}
 
 {% block title %}Conflicting edit{% endblock %}
 
+{% import "components/fields.njk" as field %}
+{% from "components/alert.njk" import alert %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/card.njk" import card %}
+
 {% block content %}
-  <h1>This {{ kind.singular }} changed while you were editing it</h1>
+  <h1 class="mb-6 text-2xl font-bold">This {{ kind.singular }} changed while you were editing it</h1>
 
-  <p class="admin-error">
-    Nothing has been saved. The file on disk is not the one this form was filled in
-    from — somebody else, or something else, has written to it.
-  </p>
-
-  <div class="admin-conflict">
-    <section>
-      <h2>Your version</h2>
-      <textarea readonly rows="20" aria-label="The version you submitted">{{ submitted }}</textarea>
-    </section>
-
-    <section>
-      <h2>The version on disk</h2>
-      <textarea readonly rows="20" aria-label="The version on disk">{{ current }}</textarea>
-    </section>
+  <div class="mb-6">
+    {% call alert(color='error', style='soft', polite=true) %}
+      <span>
+        Nothing has been saved. The file on disk is not the one this form was filled in
+        from — somebody else, or something else, has written to it.
+      </span>
+    {% endcall %}
   </div>
 
-  <p class="admin-conflict-actions">
-    <a class="admin-button admin-button-quiet" href="{{ editUrl }}">Discard mine and edit the file on disk</a>
-  </p>
+  <div class="grid gap-6 lg:grid-cols-2">
+    {% call card(title='Your version') %}
+      {{ field.textarea('conflict-submitted', '', 'The version you submitted', value=submitted, rows=20, readonly=true) }}
+    {% endcall %}
+    {% call card(title='The version on disk') %}
+      {{ field.textarea('conflict-current', '', 'The version on disk, as it is now', value=current, rows=20, readonly=true) }}
+    {% endcall %}
+  </div>
 
   {# Everything the refused form carried, with the hash the file has now. One
      click is then a deliberate overwrite of a version its author has read. #}
-  <form method="post" action="{{ saveUrl }}">
+  <form class="mt-6 flex flex-wrap items-center gap-2" method="post" action="{{ saveUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
     <input type="hidden" name="hash" value="{{ freshHash }}" />
     <input type="hidden" name="title" value="{{ form.title }}" />
@@ -44,7 +47,9 @@
     {% if form.draft %}
       <input type="hidden" name="draft" value="1" />
     {% endif %}
-    <textarea class="admin-hidden-field" name="body" aria-hidden="true" tabindex="-1">{{ form.body }}</textarea>
-    <button type="submit" name="action" value="{{ action }}">Keep mine and overwrite the file</button>
+    {# `hidden` still posts: only a disabled control is left out of a form. #}
+    <textarea name="body" hidden>{{ form.body }}</textarea>
+    {{ buttonLink('Discard mine and edit the file on disk', editUrl, style='soft') }}
+    {{ button('Keep mine and overwrite the file', type='submit', name='action', value=action, color='error') }}
   </form>
 {% endblock %}

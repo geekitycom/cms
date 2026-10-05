@@ -1,6 +1,9 @@
 {# /admin/settings/discussion: comments, webmentions, and what checks them. #}
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
 
 {# What a retention field says about the period as it stands: kept forever at
    0, removed after so many days otherwise. Nothing for a value the form is
@@ -21,7 +24,7 @@
 {% endblock %}
 
 {% block settingsFields %}
-  <h2>Comments</h2>
+  <h2 class="mt-2 text-lg font-semibold">Comments</h2>
 
   {% set commentsHint %}
     Clear this and no post shows a comment form and every submission is
@@ -41,7 +44,7 @@
        form.commentsCloseAfterDays, type='number', min='0', step='1',
        error=problems.commentsCloseAfterDays, hint=closeHint) }}
 
-  <h2>Webmentions</h2>
+  <h2 class="mt-6 text-lg font-semibold">Webmentions</h2>
 
   {% set sendHint %}
     When a post is published or edited, every external page it links to is
@@ -60,9 +63,9 @@
   {{ field.checkbox('settings-webmentions-receive', fields.webmentionsReceive,
        'Accept webmentions sent here', checked=form.webmentionsReceive, hint=receiveHint) }}
 
-  <h2>Keeping personal data</h2>
+  <h2 class="mt-6 text-lg font-semibold">Keeping personal data</h2>
 
-  <p class="admin-hint">
+  <p class="max-w-prose text-sm">
     How long the site keeps what commenters and people writing through the
     contact form hand it, in days from when it arrived; <code>0</code> keeps
     it forever. A site that has never set these keeps everything, so upgrading
@@ -107,21 +110,19 @@
   {# Akismet is its own pair of forms for the reason the avatar is: the key is
      a credential in data/akismet.json rather than a setting in site.json, and
      a key Akismet will not take must not lose an edit to the fields above. #}
-  <section class="admin-settings admin-akismet-panel">
-    <h2>Spam checking</h2>
-
-    <p class="admin-akismet-state admin-akismet-{{ akismetState }}">
+  {% call card(title='Spam checking') %}
+    <p>
       {% if akismetState == 'valid' %}
-        <strong>Connected</strong> &mdash; key {{ akismetKeyHint }}, checked {{ akismetCheckedAt }}.
+        {{ status('connected', 'Connected') }} Key {{ akismetKeyHint }}, checked {{ akismetCheckedAt }}.
       {% elif akismetState == 'invalid' %}
-        <strong>Akismet does not recognise this key</strong> &mdash; key {{ akismetKeyHint }}, checked {{ akismetCheckedAt }}.
+        {{ status('rejected', 'Not recognised') }} Akismet does not recognise this key: key {{ akismetKeyHint }}, checked {{ akismetCheckedAt }}.
       {% elif akismetState == 'unchecked' %}
-        <strong>Akismet could not be reached</strong> to check key {{ akismetKeyHint }}.
+        {{ status('unreachable', 'Not checked') }} Akismet could not be reached to check key {{ akismetKeyHint }}.
       {% else %}
-        <strong>Not connected</strong> &mdash; this site has no key.
+        {{ status('disconnected', 'Not connected') }} This site has no key.
       {% endif %}
     </p>
-    <p class="admin-hint">{{ akismetHint }}</p>
+    <p class="text-sm">{{ akismetHint }}</p>
 
     <form method="post" action="{{ akismetUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
@@ -132,28 +133,28 @@
       {% endif %}
       {{ field.password('settings-akismet-key', akismetFields.key, 'Akismet API key',
            autocomplete='off', spellcheck='false', placeholder=akismetPlaceholder) }}
-      <p class="admin-settings-buttons">
-        <button type="submit">{% if akismetPresent %}Replace key{% else %}Save key{% endif %}</button>
-      </p>
+      <div class="mt-2">
+        {{ button('Replace key' if akismetPresent else 'Save key', type='submit', color='primary') }}
+      </div>
     </form>
 
-    {% if akismetPresent %}
-      <form method="post" action="{{ akismetUrl }}">
-        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-        <input type="hidden" name="{{ akismetFields.action }}" value="{{ akismetRemove }}" />
-        <p class="admin-settings-buttons">
-          <button type="submit">Remove key</button>
-        </p>
-      </form>
-    {% endif %}
-
-    <p class="admin-hint">
-      A key from <a href="https://akismet.com/">akismet.com</a> turns on spam
+    <p class="text-sm">
+      A key from <a class="link" href="https://akismet.com/">akismet.com</a> turns on spam
       checking for native comments and incoming webmentions. It is checked with
       Akismet when it is saved and kept in <code>data/akismet.json</code>, never
       in <code>site.json</code> and never on the public site. Marking something
       spam or not spam on the Comments screen tells Akismet, which is the only
       way it learns. Fediverse replies are never sent to it.
     </p>
-  </section>
+
+    {% if akismetPresent %}
+      <form method="post" action="{{ akismetUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ akismetFields.action }}" value="{{ akismetRemove }}" />
+        {% call cardActions() %}
+          {{ button('Remove key', type='submit', color='error', style='ghost') }}
+        {% endcall %}
+      </form>
+    {% endif %}
+  {% endcall %}
 {% endblock %}

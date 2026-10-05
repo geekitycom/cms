@@ -33,7 +33,7 @@ describe('Settings > Privacy (AC #2)', () => {
     const agent = await signedIn(cms);
 
     const html = await (await agent.get('/admin/settings/privacy')).text();
-    assert.match(html, /<h1>Privacy<\/h1>/);
+    assert.match(html, /<h1\b[^>]*>Privacy<\/h1>/);
     assert.match(html, /name="location_sharing"/);
     assert.match(html, /<option value="none" selected>/, 'a new site publishes no location');
     assert.match(html, /<option value="place"/);

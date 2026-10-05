@@ -1,0 +1,20 @@
+{# A value to copy: a readonly box, and a button that copies what it holds.
+
+   `copyField(id, label, value)` emits
+
+     <label class="sr-only" for="id">label</label>
+     <div class="join w-full">
+       <input id="id" type="text" value="value" readonly class="input input-sm join-item w-full" />
+       <button type="button" class="btn btn-sm join-item" data-copy="id" hidden>Copy</button>
+     </div>
+
+   The button stays `hidden` until `static/copy.js` reveals it. Label and
+   value are escaped. #}
+
+{% macro copyField(id, label, value) -%}
+<label class="sr-only" for="{{ id }}">{{ label }}</label>
+<div class="join w-full">
+  <input id="{{ id }}" type="text" value="{{ value }}" readonly class="input input-sm join-item w-full min-w-48" />
+  <button type="button" class="btn btn-sm join-item" data-copy="{{ id }}" hidden>Copy</button>
+</div>
+{%- endmacro %}

@@ -6,6 +6,7 @@ import { after, before, describe, it } from 'node:test';
 import { pngWithMetadata } from '../__testing__/metadata.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../webmention/public-address.ts';
+import { citedCard } from './__testing__/editor-form.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 
@@ -73,10 +74,6 @@ async function site(
   return { cms, contentDir, agent: await signedIn(cms) };
 }
 
-function card(editor: string): string | undefined {
-  return /<div class="admin-cited-card">[\s\S]*?<\/div>/.exec(editor)?.[0];
-}
-
 function fieldsOf(editor: string): [string, string][] {
   const fields: [string, string][] = [];
   for (const match of editor.matchAll(/<input\b[^>]*>/g)) {
@@ -135,10 +132,13 @@ describe('the editor’s card for a reposted image', () => {
       ]),
     });
 
-    const found = card(await (await agent.get('/admin/posts/titled')).text()) ?? '';
+    const found = citedCard(await (await agent.get('/admin/posts/titled')).text()) ?? '';
 
-    assert.match(found, /<p class="admin-cited-title">An image from edu\.example<\/p>/);
-    assert.match(found, /<label for="editor-cited-alt">Alt text of the reposted image<\/label>/);
+    assert.match(found, /<p\b[^>]*>An image from edu\.example<\/p>/);
+    assert.match(
+      found,
+      /<label\b[^>]*\bfor="editor-cited-alt"[^>]*>Alt text of the reposted image<\/label>/,
+    );
     assert.match(
       found,
       /<input id="editor-cited-alt" name="cited-alt" type="text" value="My new calculator"/,
@@ -169,7 +169,7 @@ describe('the editor’s card for a reposted image', () => {
     });
 
     assert.match(
-      card(await (await agent.get('/admin/posts/described')).text()) ?? '',
+      citedCard(await (await agent.get('/admin/posts/described')).text()) ?? '',
       /name="cited-alt" type="text" value="A Casio calculator, face on"/,
     );
   });
@@ -179,7 +179,7 @@ describe('the editor’s card for a reposted image', () => {
       'posts/2026-09-10-liked.md': post('liked', [`like-of: ${IMAGE}`]),
     });
 
-    const found = card(await (await agent.get('/admin/posts/liked')).text()) ?? '';
+    const found = citedCard(await (await agent.get('/admin/posts/liked')).text()) ?? '';
     assert.match(found, /An image from edu\.example/);
     assert.doesNotMatch(found, /cited-alt/);
   });
@@ -229,7 +229,7 @@ describe('requireAltText and a reposted image', () => {
     assert.equal(response.status, 400);
     const editor = await response.text();
     assert.match(editor, /This site publishes no image without alt text/);
-    assert.match(editor, /<p class="admin-field-error" id="editor-cited-alt-error">/);
+    assert.match(editor, /<p\b[^>]*\bid="editor-cited-alt-error"[^>]*>/);
     assert.match(
       editor,
       /id="editor-cited-alt"[^>]* aria-invalid="true" aria-describedby="editor-cited-alt-error editor-cited-alt-hint"/,
@@ -266,7 +266,7 @@ describe('requireAltText and a reposted image', () => {
     const editor = await response.text();
     assert.match(editor, /This site publishes no image without alt text/);
     assert.match(
-      card(editor) ?? '',
+      citedCard(editor) ?? '',
       /<input id="editor-cited-alt" name="cited-alt" type="text" value=""/,
     );
   });

@@ -100,7 +100,7 @@ async function screen(agent: Browser): Promise<string> {
 
 /** The theme cards on the screen, in the order they are drawn. */
 function cards(html: string): string[] {
-  return html.split('<li class="admin-theme').slice(1);
+  return html.split(/<li>\s*<div class="card /).slice(1);
 }
 
 /** The display name on one card. */
@@ -142,12 +142,12 @@ describe('the Appearance section', () => {
 
     assert.match(
       html,
-      /<li class="admin-nav-section admin-nav-open">\s*<a class="admin-nav-heading" href="\/admin\/appearance\/themes">Appearance<\/a>/,
+      /<a\b[^>]*href="\/admin\/appearance\/themes"[^>]*>Appearance<\/a>\s*<ul\b/,
       'the Appearance section is the open one',
     );
     assert.match(
       html,
-      /<a href="\/admin\/appearance\/themes" aria-current="page">Themes<\/a>/,
+      /<a\b[^>]*href="\/admin\/appearance\/themes" aria-current="page">Themes<\/a>/,
       'and Themes is the child being looked at',
     );
   });
@@ -246,7 +246,7 @@ describe('a folder that is not a theme', () => {
 
     assert.deepEqual(cards(html).map(cardName), ['Default', 'Midnight'], 'not one of the themes');
     for (const id of ['bare', 'halfway']) {
-      const broken = /<li class="admin-broken-theme">([\s\S]*?)<\/li>/g;
+      const broken = /<li\b[^>]*>([\s\S]*?)<\/li>/g;
       const listed = [...html.matchAll(broken)].map((match) => match[1] ?? '');
       const entry = listed.find((one) => one.includes(id));
       assert.ok(entry !== undefined, `${id} is listed as unreadable`);

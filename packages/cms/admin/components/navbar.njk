@@ -1,0 +1,23 @@
+{# A navbar, the bar across the top of a page.
+
+   `{% call navbar() %}…{% endcall %}` emits
+   `<div class="navbar bg-base-100 shadow-sm">` around its body. Inside it,
+   `navbarStart()`, `navbarCenter()` and `navbarEnd()`, each optional, take a
+   body through `{% call %}` and emit `<div class="navbar-start">`,
+   `navbar-center` and `navbar-end`. Every body is markup. #}
+
+{% macro navbar() -%}
+<div class="navbar bg-base-100 shadow-sm">{{ caller() }}</div>
+{%- endmacro %}
+
+{% macro navbarStart() -%}
+<div class="navbar-start">{{ caller() }}</div>
+{%- endmacro %}
+
+{% macro navbarCenter() -%}
+<div class="navbar-center">{{ caller() }}</div>
+{%- endmacro %}
+
+{% macro navbarEnd() -%}
+<div class="navbar-end">{{ caller() }}</div>
+{%- endmacro %}

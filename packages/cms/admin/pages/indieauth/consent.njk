@@ -1,55 +1,71 @@
 {# The IndieAuth consent screen (TASK-158): an app wants to know who the
-   signed-in person is. A bare page like the login form, because the person
-   arrived from another site and has one thing to decide here. #}
+   signed-in person is. One card in the bare column, like the login form,
+   because the person arrived from another site and has one thing to decide
+   here. #}
 {% extends "layouts/base.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/alert.njk" import alert %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
 
 {% block title %}Sign in to {{ client.name }}{% endblock %}
 
 {% block content %}
-  {# A data: URI the server fetched, never the client's URL (TASK-190). #}
-  {% if client.logo %}
-    <img class="admin-consent-logo" src="{{ client.logo }}" alt="" width="64" height="64" />
-  {% endif %}
-  <h1>Sign in to {{ client.name }}?</h1>
-
-  <dl class="admin-consent">
-    <dt>App</dt>
-    <dd>{{ client.name }}{% if client.named %} <span class="admin-hint">({{ client.id }})</span>{% endif %}</dd>
-    <dt>Sends you back to</dt>
-    <dd>{{ redirectHost }}</dd>
-    <dt>Signs you in as</dt>
-    <dd>{{ identity }}</dd>
-    {% if resource %}
-      <dt>For use at</dt>
-      <dd>{{ resource }}</dd>
+  {% call card() %}
+    {# A data: URI the server fetched, never the client's URL (TASK-190). #}
+    {% if client.logo %}
+      <div class="avatar">
+        <div class="w-16 rounded-box">
+          <img class="object-cover" src="{{ client.logo }}" alt="" width="64" height="64" />
+        </div>
+      </div>
     {% endif %}
-  </dl>
+    <h1 class="card-title text-2xl break-all">Sign in to {{ client.name }}?</h1>
 
-  {% if withoutPkce %}
-    <p class="admin-hint">This app does not use PKCE, which protects a sign-in if the code it is handed is intercepted. It is let in only because it is on your list of apps allowed without PKCE, under Users &gt; Connected apps.</p>
-  {% endif %}
+    <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+      <dt class="font-semibold">App</dt>
+      <dd class="break-all">{{ client.name }}{% if client.named %} <span class="text-sm">({{ client.id }})</span>{% endif %}</dd>
+      <dt class="font-semibold">Sends you back to</dt>
+      <dd class="break-all">{{ redirectHost }}</dd>
+      <dt class="font-semibold">Signs you in as</dt>
+      <dd class="break-all">{{ identity }}</dd>
+      {% if resource %}
+        <dt class="font-semibold">For use at</dt>
+        <dd class="break-all">{{ resource }}</dd>
+      {% endif %}
+    </dl>
 
-  {% if loopback %}
-    <p class="admin-hint">This app runs on your own computer or network. Approve only if you started this sign-in yourself.</p>
-  {% endif %}
-
-  <form method="post" action="{{ consentUrl }}">
-    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-    <input type="hidden" name="request" value="{{ pending }}" />
-
-    {% if scopes | length %}
-      <fieldset>
-        <legend>It also asks for</legend>
-        {% for scope in scopes %}
-          {{ field.checkbox('scope-' ~ scope.name, 'scope', scope.label, checked=true, value=scope.name) }}
-        {% endfor %}
-      </fieldset>
-    {% else %}
-      <p>It asks only who you are.</p>
+    {% if withoutPkce %}
+      {% call alert(color='warning', style='soft') %}
+        <p>This app does not use PKCE, which protects a sign-in if the code it is handed is intercepted. It is let in only because it is on your list of apps allowed without PKCE, under Users &gt; Connected apps.</p>
+      {% endcall %}
     {% endif %}
 
-    <button type="submit" name="decision" value="approve">Approve</button>
-    <button type="submit" name="decision" value="deny">Deny</button>
-  </form>
+    {% if loopback %}
+      {% call alert(color='info', style='soft', polite=true) %}
+        <p>This app runs on your own computer or network. Approve only if you started this sign-in yourself.</p>
+      {% endcall %}
+    {% endif %}
+
+    <form method="post" action="{{ consentUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+      <input type="hidden" name="request" value="{{ pending }}" />
+
+      {% if scopes | length %}
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">It also asks for</legend>
+          {% for scope in scopes %}
+            {{ field.checkbox('scope-' ~ scope.name, 'scope', scope.label, checked=true, value=scope.name) }}
+          {% endfor %}
+        </fieldset>
+      {% else %}
+        <p>It asks only who you are.</p>
+      {% endif %}
+
+      {% call cardActions() %}
+        {{ button('Approve', type='submit', color='primary', name='decision', value='approve') }}
+        {{ button('Deny', type='submit', style='ghost', name='decision', value='deny') }}
+      {% endcall %}
+    </form>
+  {% endcall %}
 {% endblock %}

@@ -15,6 +15,7 @@ import {
   verifyUserPassword,
 } from './accounts.ts';
 import type { User } from './accounts.ts';
+import { adminColorScheme } from './admin-theme.ts';
 import { mountAppearanceScreen } from './appearance.ts';
 import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';
@@ -131,13 +132,13 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   /**
    * Render one admin template.
    *
-   * Everything the chrome needs — who is signed in, the navigation, the CSRF
-   * token, the queued flash messages — is put in the context here rather than
-   * by each handler, so a new screen is a template and the pair of names that
-   * says where it is in the menu: its `section` and its `child`. A pair the
-   * registry does not hold throws rather than rendering a menu expanded around
-   * nothing. Reading the flash is what clears it, so it shows on exactly this
-   * page.
+   * Everything the chrome needs — who is signed in, the theme they draw the
+   * admin in, the navigation, the CSRF token, the queued flash messages — is
+   * put in the context here rather than by each handler, so a new screen is a
+   * template and the pair of names that says where it is in the menu: its
+   * `section` and its `child`. A pair the registry does not hold throws rather
+   * than rendering a menu expanded around nothing. Reading the flash is what
+   * clears it, so it shows on exactly this page.
    */
   function render(
     c: Context<GeekityEnv>,
@@ -163,6 +164,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
           ? undefined
           : { name: user.profile?.displayName ?? user.username, url: editUserPath(user.id) },
       flash: takeFlash(c),
+      dataTheme: ACCOUNT_TEMPLATES.has(template) ? undefined : user?.adminTheme,
+      barScheme: adminColorScheme(user?.adminTheme),
       ...context,
     });
     return c.html(html);
@@ -172,7 +175,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // "every admin response" means every one of them rather than every one a
   // handler happened to reach. It also mints the CSP nonce the editor's script
   // tag carries, which is why it has to run before any template is rendered.
-  app.use(ADMIN_PREFIX, adminSecurityHeaders);
   app.use(`${ADMIN_PREFIX}/*`, adminSecurityHeaders);
 
   // Registered before the guard, so the login page can load its stylesheet
@@ -448,6 +450,14 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return c.redirect(returnTo ?? ADMIN_PREFIX, 303);
   }
 }
+
+/** Drawn without the signed-in user's theme (decision-30). */
+const ACCOUNT_TEMPLATES: ReadonlySet<string> = new Set([
+  ADMIN_TEMPLATES.login,
+  ADMIN_TEMPLATES.setup,
+  ADMIN_TEMPLATES.forgot,
+  ADMIN_TEMPLATES.reset,
+]);
 
 const USERNAME_FIELD = 'username';
 const PASSWORD_FIELD = 'password';

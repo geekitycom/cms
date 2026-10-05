@@ -3,11 +3,22 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-03 01:24'
+updated_date: '2026-10-05 05:47'
 ---
 # Admin UI
 
-The admin lives at `/admin` and borrows the shape of WordPress classic without its editors. Server-rendered Nunjucks pages, progressive enhancement only where it clearly helps (markdown preview, slug auto-fill).
+The admin lives at `/admin`: server-rendered Nunjucks pages, with progressive enhancement only where it clearly helps (markdown preview, slug auto-fill). It keeps the sections and the menu of WordPress classic, but not its look. It is drawn in DaisyUI 5 on Tailwind v4 (decision-30), in whichever of DaisyUI's built-in themes the signed-in user chose, from one library of Nunjucks component macros, under one shadow-rooted admin bar that the public site shares.
+
+Everything the admin is lives under `packages/cms/admin/`: `pages/`, `layouts/` and `components/` for the templates, `static/` for what a browser fetches, and `src/admin.css` for the stylesheet source. `pnpm build` compiles that source to `static/admin.css`, a gitignored build product that ships in the package. A test resolves every template the admin renders by name, everything those extend, import or include, and every static file they reference, inside this one folder.
+
+## The shell
+
+Every signed-in screen extends `layouts/shell.njk`, which extends the bare `layouts/base.njk`.
+
+- **Base.** The document: the head, the compiled stylesheet as the only `<link>`, `data-theme` on `<html>` for a user who chose a theme, and the skip link as the first thing a keyboard reaches. A screen that extends it alone draws in one centred column.
+- **Shell.** The admin bar fixed across the top, then a DaisyUI `drawer` holding the menu and the screen (see The menu). The screen is the one `<main id="main">`, the flash first in it, then the screen's own `<h1>` and content.
+- **Settings page.** `layouts/settings-page.njk` extends the shell: the heading, the error summary when a save was refused, the one form with its Save settings button, and the page's panels under it, all in one column as wide as a field reads comfortably.
+- **Authored CSS is the exception.** The templates carry DaisyUI components and Tailwind utilities. The only rules written by hand are the admin bar's own stylesheet, the CodeMirror surface (see Editor), and the rule that pushes a page down by the bar's height. A test over the stylesheet source refuses anything else.
 
 ## The menu
 
@@ -48,8 +59,18 @@ section's `children` and the same `child` name on what that screen renders.
 The menu needs no JavaScript. The server already knows which section is open,
 so expanding one is a page the browser asks for rather than a class a script
 toggles: it is a list of links, the open section a real nested `<ul>` inside its
-section's `<li>`. On a narrow screen the column moves above the page and wraps
-instead of becoming a sliver.
+section's `<li>`.
+
+The menu is the `menu` macro inside a DaisyUI drawer, in `layouts/shell.njk`.
+From `lg` up the drawer is open and the menu is a column beside the screen,
+held under the fixed admin bar. Below that
+the column is a panel the Menu button slides in over the screen. The button is
+the label of a checkbox, so the browser shows and hides the panel and no script
+runs; which section is open and which screen is current, the server has already
+written into the list. The menu comes before the screen in the page, so a
+keyboard meets it first, and each of its links is outlined in the theme's text
+colour while it has focus, since DaisyUI's own menu swaps the outline for a
+faint tint.
 
 ## Screens
 
@@ -78,6 +99,122 @@ instead of becoming a sliver.
 | `/admin/federation` | Federation > Followers: follower list, recent inbox activity, manual re-deliver |
 | `/admin/federation/settings` | Federation > Settings: the relays the site subscribes to, and the WordPress ActivityPub compatibility switch |
 
+## Components
+
+The admin draws every DaisyUI component it uses from one library of Nunjucks
+macros under `admin/components/`, one file per component,
+each documented at the top of its file the way `components/fields.njk` documents
+the form fields. A screen imports what it needs, as in
+`{% from "components/button.njk" import button, buttonLink %}`, and composes
+macros; it does not spell out component markup of its own.
+
+| File | Macros | Emits |
+| --- | --- | --- |
+| `button.njk` | `button`, `buttonLink` | `<button class="btn">`, and `<a class="btn">` for a link drawn as a button |
+| `alert.njk` | `alert` | `<div role="alert" class="alert">` around its body, named by a heading in it (`labelledby`) and taking focus on load (`focus`) where asked, or `role="status"` for news rather than a problem (`polite`) |
+| `flash.njk` | (included) | one `polite` alert per flash message: a notice in `success`, a warning in `warning`, an error in `error`, so a refused form's summary stays the page's one `role="alert"` |
+| `fields.njk` | `text`, `password`, `textarea`, `select`, `checkbox`, `summary`, `problem` | one `fieldset` per field: the label as its `fieldset-legend`, bound by `for` and `id`; the `input`, `textarea`, `select` or `checkbox`; the error as the `validator-hint` a refused control shows; the hint as a `label`. `summary` is an error `alert` |
+| `card.njk` | `card`, `cardActions` | a `card` on base-100 with an optional `card-title`; the `card-actions` row |
+| `stat.njk` | `stats`, `stat` | `stats` around its body; one `stat` with title, value and description |
+| `badge.njk` | `badge`, `status` | `<span class="badge">`; `status` is the badge for the state a row is in, coloured from one map |
+| `table.njk` | `table` | a `table` with a screen-reader caption, wrapped to scroll sideways, the wrapper's width contained so a wide table never widens the card or the page around it |
+| `copy.njk` | `copyField` | a readonly box joined to a Copy button, the button `hidden` until `static/copy.js` finds the clipboard |
+| `tabs.njk` | `tabs` | a labelled `<nav class="tabs">` of links, the current one marked |
+| `pagination.njk` | `pagination` | newer, the page you are on and older, joined as one `join` group |
+| `menu.njk` | `menu` | a `menu` list from the menu registry's shape, children under the open item |
+| `navbar.njk` | `navbar`, `navbarStart`, `navbarCenter`, `navbarEnd` | the `navbar` and its three parts |
+| `dropdown.njk` | `dropdown` | a button that opens its body as a `dropdown` popover |
+| `collapse.njk` | `collapse` | a `<details>` drawn as a `collapse` with an arrow, open where asked; with `fields`, its body in a `fieldset` whose hidden legend repeats the title |
+
+- **A body goes through `{% call %}`.** card, cardActions, alert, table, stats,
+  navbar and its parts, dropdown and collapse take their contents as the body of a
+  `{% call %}` block. Lists the routes already hand a screen (tabs, menu,
+  pagination) are passed in as data.
+- **A field is one call.** `fields.njk` has seven macros, and a screen draws
+  each field with one of them rather than writing a label, a control, a hint
+  and an error by hand. A refused control carries `validator`,
+  `aria-invalid` and `aria-describedby` naming its error, which DaisyUI turns
+  red and shows after it; a read-only box is drawn on `base-200` with a dashed
+  edge, and a disabled one as DaisyUI draws it. The summary is an error alert
+  that takes focus on load, with no script, and links to each refused field.
+- **What the editor asks of them.** `button` also takes `id`, `hidden`,
+  `formtarget` and `formnovalidate`. `text` takes `list` and `maxlength`.
+  `text`, `textarea`, `select` and `checkbox` take `hintId`, which gives the
+  hint that id and names it in the control's `aria-describedby`, after the
+  error when there is one; a control given a `hintId` and no hint names the
+  hint another field draws. A `textarea` with no `name` shows a value and
+  posts nothing.
+- **A modifier is a name, never a class.** Colour, style, size, shape,
+  direction and placement are each a closed set of names (`color='error'`,
+  `size='lg'`) that the macro maps to the DaisyUI class through the admin
+  environment's `modifier` filter. A name outside its set is a render error, so a
+  misspelt modifier fails at once instead of drawing an unstyled component. No
+  macro takes a class string from its caller.
+The library holds to two rules, each enforced by a test that finds the
+templates by reading the folder:
+
+- **Semantic colours only.** A template names colours only by the theme's
+  semantic tokens (`base-100`, `primary`, `error` and the rest), so every
+  built-in theme draws the admin as its author meant. A test reads every
+  template under `admin/` and refuses a hex value, an arbitrary colour
+  utility such as `bg-[#123456]` or `text-(--brand)`, and a Tailwind palette
+  colour such as `gray-200`, `white` or `black`.
+- **Every class has a rule.** Tailwind writes a rule only for a class it knows.
+  A second test reads every template under `admin/` with the compiled
+  `admin/static/admin.css` and refuses a class token that has no rule there,
+  which is how a misspelt DaisyUI class is caught, and a class built by
+  interpolation, which Tailwind cannot read. A new template is held to both
+  without being listed. The admin bar's template is held to its own stylesheet
+  instead, since no DaisyUI class reaches inside its shadow root.
+
+What the screens make of the library:
+
+- **A row's state is one map.** `status(name, label)` in `badge.njk` is the only
+  place a state gets a colour: `published`, `approved`, `accepted`, `described`
+  and `decorative` are plain; `active` and `unread` are `primary`; `connected`
+  is `success`; `scheduled` is `info`; `draft`, `pending`, `missing` and
+  `unreachable` are `warning`; `failed`, `rejected` and `spam` are `error`;
+  `hidden`, `trashed` and `disconnected` are `ghost`. The label is the word the
+  screen prints, so a state is never told by colour alone, and a name outside
+  the map is a render error.
+- **A list screen is a table, tabs and pagination.** Posts, Pages, Tags,
+  Categories, Users, Connected apps, App activity and its entry, Media,
+  Followers and Syndication draw their rows through `table`, their filters
+  (the `filters` and `tabs` lists the routes hand them, each
+  `{ label, url, current, count }`) through `tabs`, and their page links
+  (`page`, `pages`, `previousUrl`, `nextUrl`) through `pagination`. A row's
+  actions are one line of small ghost buttons, Edit, then what can be done,
+  then View; Add new above the table is the one primary button. Syndication's
+  entries are forms, so its table lists them, offered or ignored, and a card
+  per entry edits it.
+- **A record that is not a row is a card.** Comments and Messages draw one
+  card per comment or message: the author line (name, site or address, and the
+  state as a `status` badge), the where line (when, on or from what, the
+  address hash), the body, and one line of small ghost buttons, each its own
+  form. A comment's Reply is a `collapse`, folded until it is opened, holding
+  the reply form. An unread message carries an Unread badge and a bold name, so
+  it is not told by colour alone. Their filters are `tabs` and their page links
+  `pagination`, as on the list screens.
+- **A panel is a card.** Each theme is a card, the one in use marked with an
+  Active badge and every other offering Activate; each menu is a card with its
+  items form, and a menu nothing renders has its Delete in the card's actions;
+  Add a menu is a card of its own. On the settings pages the form stays one
+  column and each panel under it is one card: Archive redirects (a `table`),
+  Spam checking and Mail credentials (each opening with a `status` badge for
+  the key or the credential), WordPress paths (a `table`). Tools, Personal
+  data and the user screens draw each of their forms as a card. A destructive
+  button (Delete, Remove key, Remove credentials, Erase it) is `error`, at the
+  card's foot.
+- **A screen shown to nobody in particular is one card.** The IndieAuth consent
+  and refused screens and the admin's error page extend the bare layout and
+  draw one card in its centred column, the page's `<h1>` as the card's title.
+  The error page is rendered outside the admin's `render`, so it never reads
+  the session and always follows the system's light or dark.
+- **The dropdown has no inline style.** DaisyUI's reference anchors a popover
+  to its button with `anchor-name` and `position-anchor` style attributes. The
+  admin's Content Security Policy refuses style attributes, so the popover is
+  placed against the button that opened it, its implicit anchor.
+
 ## Editor
 
 - Fields: title, slug (auto from title until touched), permalink preview, date, tags (comma separated), description, **author**, draft checkbox, comments (follow the site settings / open / closed), body. A post also carries a **Location** box (coordinates, accuracy, place, locality, region, country), the one field a save writes to `data/locations.json` rather than the file (TASK-223, decision-29); emptying every box removes it. A page also carries **Contact form**, which writes `contact: true` and puts a contact form under the page. The site menu is not here: it is a menu on the Navigation screen and nothing else (TASK-106, TASK-108).
@@ -85,6 +222,52 @@ instead of becoming a sliver.
 - Save writes the file (see doc-1 sync model). The form carries the file hash it was loaded with; a mismatch on save returns the form with a warning and both versions.
 - **Author** is a select of the site's users, not a free box: doc-2's `author` names a user, and after decision-14 that decides whose archive the post lands on and, once the actors land, whose followers hear about it. A new document starts on whoever is signed in; an existing one opens on the user the file names, which for a file written before decision-14 is the one its display name reads as. A file naming somebody with no account here keeps an option of its own, marked, so opening the editor and pressing Update cannot quietly reattribute the post.
 - Buttons: Save draft, Publish, Update, Move to trash, View.
+- **Layout** (TASK-273). The form is one grid: the
+  writing column (a card holding Title, Body and the editor's tools, then the
+  post's Photos, Location and Recording groups) and the side column (a card of
+  the buttons, then the other groups), side by side from `xl` and the side
+  column under the writing one below that. Every group is the `collapse`
+  macro, opened by the server where it holds something. Publish and Update are the primary
+  button, Move to trash an error ghost button, View a ghost link; the buttons
+  sit at the top of the side column, so they are in view without scrolling
+  past the groups. A trashed or scheduled document says so in a `polite`
+  alert, so a refused save's summary stays the page's one `role="alert"`.
+- **Write and Preview** are a DaisyUI `tabs` strip that `editor/main.ts`
+  builds: `role="tablist"`, each tab a `role="tab"` button with
+  `aria-selected` and `aria-controls`, the CodeMirror surface and the preview
+  box their `tabpanel`s, only the current tab in the tab order, and the arrow
+  keys, Home and End moving between them. DaisyUI draws the tab with
+  `aria-selected="true"` as current, so no class is toggled. The upload
+  control is an Add file button (`btn btn-soft btn-sm`) over a hidden file
+  input; the status line under it says what an upload or a preview is doing,
+  and turns `text-error` when it says that one failed. Drag and drop onto the
+  surface uploads the same way.
+- **The classes the script writes** are `LOOK` in `editor/look.ts`, so the
+  markup the script builds at runtime is in DaisyUI's vocabulary like the
+  rest. `scripts/build-editor.js` bundles `editor/main.ts` to
+  `admin/static/editor.js`. Tailwind reads `editor/look.ts`, and
+  `styles.test.ts` holds every class in `LOOK` to a rule in the compiled sheet.
+- **The CodeMirror surface** is the one third-party component the admin
+  draws. Its `.cm-*` rules are the only authored rules the editor has: in
+  `admin/src/admin.css`, every one under `#editor-surface` (the box the
+  script mounts CodeMirror in, whose id outranks CodeMirror's own injected
+  theme), each colour a theme token such as `--color-base-100`,
+  `--color-base-content` or `--color-primary`, so the surface follows the
+  user's theme, light or dark. The bundle highlights Markdown by
+  giving tokens `.cm-md-*` classes (heading, strong, emphasis, link, code,
+  quote, and the marks around them) rather than CodeMirror's fixed colours,
+  which were drawn for a white page.
+- **A cited page** shows as a small bordered `card` under its address: the
+  picture, the page's name, and an X in the corner that is the label of a
+  visually hidden `preview` checkbox. Ticking it dims the picture and the
+  name and shows the sentence that the post now shows the plain citation,
+  with no script. A reposted image the post shows in full adds its Alt text
+  box, described by its hint.
+- **The conflict screen** shows the two versions as read-only boxes in two
+  cards, Your version and The version on disk, side by side from `lg`, under
+  an error alert saying nothing was saved. Discard mine and edit the file on
+  disk is a link; Keep mine and overwrite the file posts the refused form
+  again with the hash the file has now.
 
 ## Comments
 
@@ -197,6 +380,20 @@ instead of becoming a sliver.
 - **What it is.** A display name, a short bio, an avatar and a list of links, stored under `profile` on the user in `data/users.json` beside the account. It is the public face of a person: the display name heads their archive at `/author/{username}/` and is what a byline under their posts prints, and the bio, avatar and links go on the archive beside it. decision-14 makes the same four fields the actor's `name`, `summary`, `icon` and `attachments`, which is why they live with the account rather than in the site settings.
 - **Where it is edited.** One form per row on `/admin/users`, beside the email field: display name, bio, avatar and a links box of one `Label | URL` per line — a bare URL labels itself. Any row, not only your own, for the reason the email field is any row: there is one role, and every user already has every power there is. The row also links to the archive the profile heads.
 - **Nothing is required.** A field left empty is not stored, and a user with no profile at all has no `profile` key and still has an archive under their username, headed by that username.
+
+## Admin theme
+
+- **The choice.** Each user draws the admin (decision-30) in a theme of their own: any of DaisyUI's built-in themes, or **Follow the system**, which is the default. It is a select on the Theme panel of your own screen under Users, posted to `/admin/users/theme`, which only ever sets the theme of whoever is signed in: the admin's look is a personal preference, not something one admin sets for another.
+- **Where it lives.** `adminTheme` on the user in `data/users.json`, beside the notification maps, and on the same rule: following the system is the default and is never written down, and a name this version does not know is dropped on the way in and read as following the system. The form refuses a name outside the table with a flash and writes nothing.
+- **How a page carries it.** The admin's `render` puts the signed-in user's choice on every context as `dataTheme`, and `layouts/base.njk` renders it as `data-theme` on `<html>`. Following the system renders no attribute, and the stylesheet's `light` default and `dark` for `prefers-color-scheme: dark` decide. The login, setup, forgot-password and reset screens carry none even for somebody signed in, because they are shown to nobody in particular. There is no client-side switch.
+- **Light or dark.** `ADMIN_THEMES` in `src/admin/admin-theme.ts` is the one table of the built-in themes, each with its label and whether it is light or dark, and `adminColorScheme` reduces a choice to `light`, `dark` or `auto` for whatever draws outside the theme's reach, such as the admin bar. A test holds the table to DaisyUI's own list of themes and each entry to the `color-scheme` the compiled sheet gives it.
+
+## Admin bar
+
+- **One component on both sides.** The admin (decision-30) draws the bar from one template, `components/admin-bar.njk`, on every signed-in admin screen and across the top of every public page a signed-in user reads (TASK-183). It is a `geekity-admin-bar` host holding a declarative shadow root, with its own stylesheet, `static/admin-bar.css`, inlined into it and its script, `static/admin-bar.js`, loaded by `<script src>`. On the admin `layouts/shell.njk` includes it. On the public site `components/public-admin-bar.njk` includes it and prints the unpublished notice under it.
+- **Light and dark.** The stylesheet writes every colour as `light-dark(light, dark)`. The host carries `data-scheme="light"` or `data-scheme="dark"` from the signed-in user's admin theme, through `adminColorScheme`, which the admin's `render` and the public site's middleware both call. Following the system puts nothing on the host, and the bar follows `prefers-color-scheme`. No DaisyUI class reaches inside a shadow root, so the bar is plain CSS of its own, and `keyboard.test.ts` holds its text, hover text and focus ring to WCAG contrast in both palettes.
+- **Under the admin's CSP.** The inlined `<style>` carries the response's nonce and is the only inline stylesheet an admin page has. The host is placed by the stylesheet's `:host` rule, because the CSP refuses a style attribute. The public site has no content policy, and there the host also carries that placement as a style attribute, which outranks a theme's rules for the element.
+- **Room for it.** The bar is fixed to the top of the window, and the page moves down by a margin on `<html>` of `--geekity-admin-bar-height`: one 40px line, or two on a screen 600px wide or less, until the script measures the bar and sets the height it really has. On the public site that rule is the `<style>` the middleware puts in `<head>`. On the admin it is in `admin.css`, for a page whose `<body>` holds the bar, which the login screens do not. The skip link comes before the bar and is drawn over it while it has focus.
 
 ## User email and password recovery
 

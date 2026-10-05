@@ -3,17 +3,21 @@
    A listing and nothing else (TASK-97). Every field a user has is edited on
    that user's own screen, which the Edit link in each row goes to, so no box
    in this table can be mistaken for another one. Adding somebody is its own
-   screen next door, `new.njk`, because Users > Add new is its own menu entry.
- #}
+   screen next door, `new.njk`, because Users > Add new is its own menu entry. #}
 {% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import badge %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/table.njk" import table %}
 
 {% block title %}Users{% endblock %}
 
 {% block content %}
-  <h1>Users <a class="admin-button admin-button-small" href="{{ addUserUrl }}">Add new</a></h1>
+  <div class="mb-6 flex flex-wrap items-center gap-4">
+    <h1 class="text-2xl font-bold">Users</h1>
+    {{ buttonLink('Add new', addUserUrl, color='primary') }}
+  </div>
 
-  <table class="admin-list">
-    <caption class="admin-visually-hidden">Users</caption>
+  {% call table('Users') %}
     <thead>
       <tr>
         <th scope="col">Username</th>
@@ -25,28 +29,26 @@
     <tbody>
       {% for entry in users %}
         <tr>
-          <td>
-            <a href="{{ entry.editUrl }}">{{ entry.username }}</a>{% if entry.you %} <span class="admin-status">(you)</span>{% endif %}
-          </td>
-          <td>{% if entry.email %}{{ entry.email }}{% else %}<span class="admin-status">None</span>{% endif %}</td>
-          <td>{{ entry.createdAt | date('html') }}</td>
+          <td><a class="link link-hover font-medium" href="{{ entry.editUrl }}">{{ entry.username }}</a>{% if entry.you %} {{ badge('You') }}{% endif %}</td>
+          <td>{{ entry.email or 'None' }}</td>
+          <td class="whitespace-nowrap">{{ entry.createdAt | date('html') }}</td>
           {# Edit, then what can be done, then View: the order and the shape
-             `pages/documents/list.njk` uses, down to Edit being a plain link
-             rather than a button. A row here is a row there. #}
-          <td class="admin-actions">
-            <a href="{{ entry.editUrl }}">Edit</a>
-            {% if entry.deletable %}
-              <form method="post" action="{{ deleteUserUrl }}">
-                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-                <input type="hidden" name="{{ fields.userId }}" value="{{ entry.id }}" />
-                <button type="submit">Delete</button>
-              </form>
-            {% endif %}
-            <a href="{{ entry.archiveUrl }}">View</a>
+             `pages/documents/list.njk` uses. A row here is a row there. #}
+          <td>
+            <div class="flex items-center gap-1 whitespace-nowrap">
+              {{ buttonLink('Edit', entry.editUrl, style='ghost', size='xs') }}
+              {% if entry.deletable %}
+                <form method="post" action="{{ deleteUserUrl }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                  <input type="hidden" name="{{ fields.userId }}" value="{{ entry.id }}" />
+                  {{ button('Delete', type='submit', style='ghost', size='xs') }}
+                </form>
+              {% endif %}
+              {{ buttonLink('View', entry.archiveUrl, style='ghost', size='xs') }}
+            </div>
           </td>
         </tr>
       {% endfor %}
     </tbody>
-  </table>
-
+  {% endcall %}
 {% endblock %}

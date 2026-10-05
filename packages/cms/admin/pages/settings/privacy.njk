@@ -6,7 +6,7 @@
 {% endblock %}
 
 {% block settingsFields %}
-  <h2>Location</h2>
+  <h2 class="mt-2 text-lg font-semibold">Location</h2>
 
   {% set locationHint %}
     A Micropub app such as Quill can send where a post was written, and the
@@ -26,9 +26,9 @@
     {% endfor %}
   {% endcall %}
 
-  <h2>Uploads</h2>
+  <h2 class="mt-6 text-lg font-semibold">Uploads</h2>
 
-  <p class="admin-hint">
+  <p class="max-w-prose text-sm">
     Location and camera metadata is always removed from pictures and videos as
     they are uploaded, whatever is chosen above. Files uploaded before this
     version keep theirs until <code>geekity strip-metadata</code> is run over

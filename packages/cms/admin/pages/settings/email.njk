@@ -2,6 +2,9 @@
    to it goes. #}
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
 
 {% block settingsProblems %}
   {{ field.problem('settings-mail-provider', problems.mailProvider) }}
@@ -50,7 +53,7 @@
   {{ field.text('settings-contact-email', fields.contactEmail, 'Contact address',
        form.contactEmail, error=problems.contactEmail, hint=contactHint, inputmode='email') }}
 
-  <h2>Security contact</h2>
+  <h2 class="mt-6 text-lg font-semibold">Security contact</h2>
 
   {% set securityContactsHint %}
     Where somebody who finds a vulnerability in this site should report it, one per line:
@@ -76,19 +79,18 @@
      key is: an API key and an SMTP password belong in data/mail.json, not in
      the public site.json, and a mistyped one must not lose an edit to the
      From line. #}
-  <section class="admin-settings admin-mail-panel">
-    <h2>Mail credentials</h2>
+  {% call card(title='Mail credentials') %}
 
-    <p class="admin-mail-state admin-mail-{{ mailProvider }}">
+    <p>
       {% if mailConfigured %}
-        <strong>Configured</strong> &mdash; sending through {{ mailProvider }}.
+        {{ status('connected', 'Configured') }} Sending through {{ mailProvider }}.
       {% elif mailProvider == 'none' %}
-        <strong>Not sending</strong> &mdash; no provider is chosen.
+        {{ status('disconnected', 'Not sending') }} No provider is chosen.
       {% else %}
-        <strong>Not configured</strong> &mdash; {{ mailProvider }} is chosen but has no credential.
+        {{ status('missing', 'Not configured') }} {{ mailProvider }} is chosen but has no credential.
       {% endif %}
     </p>
-    <p class="admin-hint">{{ mailHint }}</p>
+    <p class="text-sm">{{ mailHint }}</p>
 
     {# One provider's boxes, never both. A site sending through Brevo has no
        use for an SMTP port and a site sending through SMTP has none for an API
@@ -103,14 +105,14 @@
        would reasonably call this broken. Doing it the other way round would
        take JavaScript, and no other admin screen needs any. #}
     {% if mailProvider == 'none' %}
-      <p class="admin-hint">
+      <p class="text-sm">
         No provider is <em>saved</em>, so there is no credential to give and no
         box here to give it in. Choose one under <strong>Provider</strong> above
         and press <strong>Save settings</strong> &mdash; picking it in the select
         alone changes nothing &mdash; and the boxes it needs appear here.
       </p>
     {% else %}
-      <p class="admin-hint">
+      <p class="text-sm">
         These are the boxes
         <strong>{% if mailProvider == 'brevo' %}Brevo{% else %}SMTP{% endif %}</strong>
         needs, and they follow the provider this site has <em>saved</em> &mdash; not
@@ -122,9 +124,9 @@
         <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
 
         {% if mailProvider == 'brevo' %}
-          <h3>Brevo</h3>
+          <h3 class="font-semibold">Brevo</h3>
           {% if mailBrevoPresent %}
-            <p class="admin-hint">A key is stored, ending {{ mailBrevoKeyHint }}.</p>
+            <p class="text-sm">A key is stored, ending {{ mailBrevoKeyHint }}.</p>
             {% set brevoPlaceholder = 'Leave blank to keep the stored key' %}
           {% else %}
             {% set brevoPlaceholder = 'Paste your key' %}
@@ -132,7 +134,7 @@
           {{ field.password('settings-mail-brevo-key', mailFields.brevoApiKey, 'API key',
                autocomplete='off', spellcheck='false', placeholder=brevoPlaceholder) }}
         {% else %}
-          <h3>SMTP</h3>
+          <h3 class="font-semibold">SMTP</h3>
           {{ field.text('settings-mail-smtp-host', mailFields.smtpHost, 'Host', mailSmtp.host,
                autocomplete='off') }}
 
@@ -159,9 +161,7 @@
                autocomplete='off', spellcheck='false', placeholder=smtpPlaceholder) }}
         {% endif %}
 
-        <p class="admin-settings-buttons">
-          <button type="submit">Save credentials</button>
-        </p>
+        <div class="mt-2">{{ button('Save credentials', type='submit', color='primary') }}</div>
       </form>
     {% endif %}
 
@@ -173,22 +173,22 @@
     {% set brevoStoredElsewhere = mailBrevoPresent and mailProvider != 'brevo' %}
     {% set smtpStoredElsewhere = mailSmtpPresent and mailProvider != 'smtp' %}
     {% if brevoStoredElsewhere or smtpStoredElsewhere %}
-      <h3>Also stored</h3>
+      <h3 class="font-semibold">Also stored</h3>
 
       {% if brevoStoredElsewhere %}
-        <p class="admin-field-static">
+        <p>
           A <strong>Brevo</strong> API key, ending {{ mailBrevoKeyHint }}.
         </p>
       {% endif %}
       {% if smtpStoredElsewhere %}
-        <p class="admin-field-static">
+        <p>
           An <strong>SMTP</strong> server:
           {% if mailSmtp.user %}{{ mailSmtp.user }} at {% endif %}{{ mailSmtp.host }}
           port {{ mailSmtp.port }}{% if mailSmtp.hasPassword %}, with a password{% endif %}.
         </p>
       {% endif %}
 
-      <p class="admin-hint">
+      <p class="text-sm">
         Kept in <code>data/mail.json</code> and used by nothing while
         {% if mailProvider == 'none' %}no provider is chosen{% else %}{% if mailProvider == 'brevo' %}Brevo{% else %}SMTP{% endif %} is the chosen provider{% endif %}.
         Choose that provider above to edit it, or press
@@ -201,9 +201,9 @@
       <form method="post" action="{{ mailUrl }}">
         <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
         <input type="hidden" name="{{ mailFields.action }}" value="{{ mailRemove }}" />
-        <p class="admin-settings-buttons">
-          <button type="submit">Remove credentials</button>
-        </p>
+        {% call cardActions() %}
+          {{ button('Remove credentials', type='submit', color='error', style='ghost') }}
+        {% endcall %}
       </form>
     {% endif %}
 
@@ -216,18 +216,16 @@
         <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
         {{ field.text('settings-mail-test-to', mailTestFields.to, 'Send a test message to', '',
              inputmode='email', placeholder='you@example.com') }}
-        <p class="admin-settings-buttons">
-          <button type="submit">Send test email</button>
-        </p>
+        <div class="mt-2">{{ button('Send test email', type='submit') }}</div>
       </form>
     {% endif %}
 
-    <p class="admin-hint">
+    <p class="text-sm">
       Neither the API key nor the SMTP password is ever printed back into this
       page. Both are kept in <code>data/mail.json</code> at mode
       <code>0600</code>, beside the password hashes and the actor's private
       keys, and never in <code>site.json</code>, which is public and in git.
       Leaving a secret blank keeps the one already stored.
     </p>
-  </section>
+  {% endcall %}
 {% endblock %}

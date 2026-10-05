@@ -1,0 +1,28 @@
+{# An alert: `{% call alert(…) %}body{% endcall %}` emits
+   `<div role="alert" class="alert">body</div>`. The body is markup.
+
+   Modifiers, each a name from a closed set that maps to DaisyUI classes:
+
+     color      info, success, warning, error
+     style      outline, dash, soft
+     direction  vertical, horizontal, or responsive (stacked on a phone,
+                in a row from `sm` up)
+
+   A value outside its set is a render error.
+
+   `labelledby` names the id of the heading inside the body. `focus` adds
+   `tabindex="-1"` and `autofocus`; only one element on a page may ask for it.
+   `polite` makes it `role="status"`, read out when the reader is next idle
+   rather than at once. #}
+
+{% set COLORS = { info: 'alert-info', success: 'alert-success', warning: 'alert-warning', error: 'alert-error' } %}
+{% set STYLES = { outline: 'alert-outline', dash: 'alert-dash', soft: 'alert-soft' } %}
+{% set DIRECTIONS = {
+  vertical: 'alert-vertical',
+  horizontal: 'alert-horizontal',
+  responsive: 'alert-vertical sm:alert-horizontal'
+} %}
+
+{% macro alert(color=none, style=none, direction=none, labelledby='', focus=false, polite=false) -%}
+<div role="{{ 'status' if polite else 'alert' }}"{% if labelledby %} aria-labelledby="{{ labelledby }}"{% endif %}{% if focus %} tabindex="-1" autofocus{% endif %} class="alert{{ COLORS | modifier(color) }}{{ STYLES | modifier(style) }}{{ DIRECTIONS | modifier(direction) }}">{{ caller() }}</div>
+{%- endmacro %}

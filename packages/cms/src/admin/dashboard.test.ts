@@ -3,9 +3,12 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { flashes } from './__testing__/flash.ts';
 import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import { findUser, setUserProfile } from './accounts.ts';
 import type { Browser } from './__testing__/harness.ts';
+import { classesOutsideTheBar, screenOf, text } from './__testing__/markup.ts';
+import { saveUrlOf } from './__testing__/editor-form.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -50,7 +53,7 @@ async function newDraft(agent: Browser, title: string): Promise<Response> {
   const token = csrfField(html);
   assert.ok(token !== undefined, 'the editor carries a form with a CSRF token');
 
-  const saveUrl = /<form class="admin-editor" method="post" action="([^"]+)"/.exec(html)?.[1];
+  const saveUrl = saveUrlOf(html);
   assert.ok(saveUrl !== undefined, 'the editor knew where to post');
 
   return agent.post(saveUrl, {
@@ -90,7 +93,7 @@ describe('the admin shell', () => {
 
     assert.match(
       html,
-      /<a href="\/admin" aria-current="page">Home<\/a>/,
+      /<a\b[^>]*href="\/admin" aria-current="page">Home<\/a>/,
       'the dashboard is open on its own first child',
     );
   });
@@ -112,8 +115,8 @@ describe('the admin shell', () => {
 
     const html = await (await cms.app.request('/admin/login')).text();
 
-    assert.match(html, /<h1>Log in<\/h1>/);
-    assert.ok(!/admin-nav/.test(html), 'nowhere to navigate until you are in');
+    assert.match(html, /<h1\b[^>]*>Log in<\/h1>/);
+    assert.ok(!/aria-label="Sections"/.test(html), 'nowhere to navigate until you are in');
   });
 });
 
@@ -253,78 +256,119 @@ describe('the account menu (TASK-126)', () => {
   });
 });
 
-describe('the dashboard', () => {
-  it('counts what the index holds', async () => {
-    const contentDir = await seeded([
-      { file: 'posts/2026-01-01-one.md', title: 'One', date: '2026-01-01', permalink: '/one/' },
-      { file: 'posts/2026-01-02-two.md', title: 'Two', date: '2026-01-02', permalink: '/two/' },
-      {
-        file: 'posts/2026-01-03-three.md',
-        title: 'Three',
-        date: '2026-01-03',
-        permalink: '/three/',
-        draft: true,
-      },
-      { file: 'pages/about.md', title: 'About', permalink: '/about/' },
+/** One count under At a glance: its label, its number, and where it leads. */
+interface Count {
+  label: string;
+  value: string;
+  href: string | undefined;
+}
+
+/** The counts: a stat each, the whole stat a link when it leads somewhere. */
+function counts(html: string): Count[] {
+  return [
+    ...html.matchAll(
+      /<(?:div|a) class="stat\b[^"]*"(?: href="([^"]*)")?>\s*<div class="stat-title">([^<]*)<\/div>\s*<div class="stat-value\b[^"]*">([^<]*)<\/div>/g,
+    ),
+  ].map(([, href, label, value]) => ({ label: label ?? '', value: value ?? '', href }));
+}
+
+/** The rows of the screen's tables as text, one string a row, the head first. */
+function rowTexts(html: string): string[] {
+  return [...screenOf(html).matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].map(([, row]) =>
+    text(row ?? ''),
+  );
+}
+
+const COUNTED: Seed[] = [
+  { file: 'posts/2026-01-01-one.md', title: 'One', date: '2026-01-01', permalink: '/one/' },
+  { file: 'posts/2026-01-02-two.md', title: 'Two', date: '2026-01-02', permalink: '/two/' },
+  { file: 'posts/2026-01-03-three.md', title: 'Three', date: '2026-01-03', permalink: '/three/' },
+  {
+    file: 'posts/2026-01-04-four.md',
+    title: 'Four',
+    date: '2026-01-04',
+    permalink: '/four/',
+    draft: true,
+  },
+  { file: 'pages/about.md', title: 'About', permalink: '/about/' },
+  { file: 'pages/now.md', title: 'Now', permalink: '/now/' },
+];
+
+const RECENT: Seed[] = Array.from({ length: 7 }, (_, index) => {
+  const day = String(index + 1).padStart(2, '0');
+  return {
+    file: `posts/2026-02-${day}-post-${String(index + 1)}.md`,
+    title: `Post ${String(index + 1)}`,
+    date: `2026-02-${day}`,
+    permalink: `/2026/02/post-${String(index + 1)}/`,
+    draft: index === 6,
+  };
+});
+
+/** The dashboard a signed-in user is served over `contentDir`. */
+async function dashboardOver(contentDir: string): Promise<string> {
+  const agent = await signedIn(await box.site({ contentDir }));
+  return await (await agent.get('/admin')).text();
+}
+
+describe('the dashboard', async () => {
+  const dashboards = await Promise.all(
+    [COUNTED, RECENT, []].map(async (seeds) => dashboardOver(await seeded(seeds))),
+  );
+  const [counted = '', recent = '', empty = ''] = dashboards;
+
+  it('counts what the index holds, each number under its label', () => {
+    assert.deepEqual(counts(counted), [
+      { label: 'Published posts', value: '3', href: undefined },
+      { label: 'Drafts', value: '1', href: undefined },
+      { label: 'Pages', value: '2', href: undefined },
+      { label: 'Followers', value: '0', href: '/admin/federation' },
+      { label: 'Comments waiting', value: '0', href: '/admin/comments?status=pending' },
+      { label: 'Messages unread', value: '0', href: '/admin/messages' },
     ]);
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    const html = await (await agent.get('/admin')).text();
-
-    assert.deepEqual(cms.store.counts(), {
-      total: 4,
-      posts: 2,
-      pages: 1,
-      drafts: 1,
-      scheduled: 0,
-      trashed: 0,
-    });
-    assert.match(html, /Published posts<\/dt>\s*<dd>2<\/dd>/);
-    assert.match(html, /Drafts<\/dt>\s*<dd>1<\/dd>/);
-    assert.match(html, /Pages<\/dt>\s*<dd>1<\/dd>/);
   });
 
-  it('lists the five most recent posts, newest first, with their status', async () => {
-    const contentDir = await seeded(
-      Array.from({ length: 7 }, (_, index) => {
-        const day = String(index + 1).padStart(2, '0');
-        return {
-          file: `posts/2026-02-${day}-post-${String(index + 1)}.md`,
-          title: `Post ${String(index + 1)}`,
-          date: `2026-02-${day}`,
-          permalink: `/2026/02/post-${String(index + 1)}/`,
-          draft: index === 6,
-        };
-      }),
-    );
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
+  it('lists the five most recent posts, newest first, with their date and status', () => {
+    const screen = recent.slice(recent.indexOf('<main'));
+    const listed = [
+      ...screen.matchAll(/<a\b[^>]*\bhref="\/admin\/posts\/([^"]+)"[^>]*>([^<]+)<\/a>/g),
+    ];
 
-    const html = await (await agent.get('/admin')).text();
-    // The screen's own list, not the bar's + New, which is a posts link too.
-    const screen = html.slice(html.indexOf('<main'));
-    const listed = [...screen.matchAll(/<a href="\/admin\/posts\/([^"]+)">([^<]+)<\/a>/g)];
-
-    assert.deepEqual(
-      listed.map((match) => match[2]),
-      ['Post 7', 'Post 6', 'Post 5', 'Post 4', 'Post 3'],
-      'the five newest, newest first',
-    );
     assert.deepEqual(
       listed.map((match) => match[1]),
       ['post-7', 'post-6', 'post-5', 'post-4', 'post-3'],
       'each linking to its editor',
     );
-    assert.match(html, /2026-02-07/, 'and carrying its date');
-    assert.match(html, /admin-status-draft">Draft</, 'and saying which one is a draft');
+    assert.deepEqual(rowTexts(recent), [
+      'Title Date Status',
+      'Post 7 2026-02-07 Draft',
+      'Post 6 2026-02-06 Published',
+      'Post 5 2026-02-05 Published',
+      'Post 4 2026-02-04 Published',
+      'Post 3 2026-02-03 Published',
+    ]);
   });
 
-  it('says so when there is nothing written yet', async () => {
-    const cms = await box.site();
-    const agent = await signedIn(cms);
+  it('says so when there is nothing written yet', () => {
+    assert.match(empty, /Nothing written yet/);
+    assert.deepEqual(rowTexts(empty), [], 'and draws no empty table');
+  });
 
-    assert.match(await (await agent.get('/admin')).text(), /Nothing written yet/);
+  it('draws Recent posts as a card around its table', () => {
+    const card =
+      /<div class="card bg-base-100 shadow-sm">\s*<div class="card-body">\s*<h2 class="card-title">Recent posts<\/h2>([\s\S]*?)<\/div>\s*<\/div>\s*<\/main>/;
+
+    assert.match(card.exec(recent)?.[1] ?? '', /<table class="table table-sm">/);
+    assert.match(card.exec(empty)?.[1] ?? '', /Nothing written yet/);
+  });
+
+  it('carries no admin-* class outside the bar', () => {
+    for (const html of dashboards) {
+      assert.deepEqual(
+        classesOutsideTheBar(html).filter((token) => token.startsWith('admin-')),
+        [],
+      );
+    }
   });
 });
 
@@ -338,8 +382,11 @@ describe('flash messages', () => {
     assert.ok(editor !== null);
 
     const first = await (await agent.get(editor)).text();
+    assert.deepEqual(
+      flashes(first).map(({ kind }) => kind),
+      ['notice'],
+    );
     assert.match(first, /Draft saved: Kept for one page/);
-    assert.match(first, /class="admin-flash/);
 
     const second = await (await agent.get(editor)).text();
     assert.ok(!/Draft saved/.test(second), 'a flash is shown once and then gone');
@@ -354,6 +401,6 @@ describe('flash messages', () => {
     const html = await (await stranger.get('/admin')).text();
 
     assert.match(html, /Mine alone/, 'the stranger sees the draft in the listing');
-    assert.ok(!/admin-flash/.test(html), 'but not the message queued for someone else');
+    assert.deepEqual(flashes(html), [], 'but not the message queued for someone else');
   });
 });

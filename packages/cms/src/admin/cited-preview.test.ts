@@ -6,6 +6,7 @@ import { after, before, describe, it } from 'node:test';
 import { gifWithMetadata } from '../__testing__/metadata.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../webmention/public-address.ts';
+import { citedCard } from './__testing__/editor-form.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 
@@ -91,7 +92,7 @@ async function site(files: Record<string, string>): Promise<{ cms: Cms; contentD
 }
 
 function respondingGroup(editor: string): string {
-  const found = /<summary>Responding to<\/summary>[\s\S]*?<\/details>/.exec(editor)?.[0];
+  const found = /<summary\b[^>]*>Responding to<\/summary>[\s\S]*?<\/details>/.exec(editor)?.[0];
   assert.ok(found !== undefined, 'the editor has a Responding to group');
   return found;
 }
@@ -163,27 +164,28 @@ describe('the editor’s preview of a cited page', () => {
     const group = respondingGroup(await (await agent.get('/admin/posts/gif')).text());
 
     const afterInput = group.slice(group.indexOf('id="editor-repost-of"'));
-    const card = /<div class="admin-cited-card">[\s\S]*?<\/div>/.exec(afterInput)?.[0] ?? '';
-    assert.ok(group.indexOf('id="editor-repost-of"') < group.indexOf('admin-cited-card'));
+    const card = citedCard(afterInput) ?? '';
+    assert.ok(card !== '', 'the card is under the cited address');
     assert.match(
       card,
-      /<img src="\/uploads\/cited\/[0-9a-f]{16}\.gif" alt="" width="40" height="20"/,
+      /<img\b[^>]*\bsrc="\/uploads\/cited\/[0-9a-f]{16}\.gif" alt="" width="40" height="20"/,
     );
     assert.match(card, /Happy Dance GIF/);
+    const toggle = /<input\b[^>]*\bid="editor-preview-repost-of"[^>]*>/.exec(card)?.[0] ?? '';
+    assert.match(toggle, /\btype="checkbox"/);
+    assert.match(toggle, /\bname="preview" value="hide"[^>]*>$/);
+    assert.doesNotMatch(toggle, /\schecked\b/);
     assert.match(
       card,
-      /<input type="checkbox" id="editor-preview-repost-of" name="preview" value="hide">/,
-    );
-    assert.match(
-      card,
-      /<label class="admin-cited-remove" for="editor-preview-repost-of"><span aria-hidden="true">×<\/span><span class="admin-visually-hidden">Remove the preview of Happy Dance GIF<\/span><\/label>/,
+      /<label\b[^>]*\bfor="editor-preview-repost-of"[^>]*><span aria-hidden="true">×<\/span><span class="[^"]+">Remove the preview of Happy Dance GIF<\/span><\/label>/,
     );
   });
 
   it('shows no card for a cited page with no picture', async () => {
     const group = respondingGroup(await (await agent.get('/admin/posts/words')).text());
 
-    assert.doesNotMatch(group, /admin-cited-card|name="preview"/);
+    assert.equal(citedCard(group), undefined);
+    assert.doesNotMatch(group, /name="preview"/);
   });
 
   it('writes preview: false when the preview is removed, and the page shows the plain citation', async () => {
@@ -196,7 +198,7 @@ describe('the editor’s preview of a cited page', () => {
     assert.doesNotMatch(feed, /uploads\/cited/);
 
     const group = respondingGroup(await (await agent.get('/admin/posts/gif')).text());
-    assert.match(group, /name="preview" value="hide" checked>/);
+    assert.match(group, /name="preview" value="hide" checked\b/);
   });
 
   it('shows it again when the box is cleared, and takes the key out', async () => {
@@ -219,10 +221,7 @@ describe('the editor’s preview of a cited page', () => {
   it('opens the Responding to group whenever it shows a card', async () => {
     const editor = await (await agent.get('/admin/posts/gif')).text();
 
-    assert.match(
-      editor,
-      /<details class="admin-editor-group" open>\s*<summary>Responding to<\/summary>/,
-    );
+    assert.match(editor, /<details\b[^>]*\sopen>\s*<summary\b[^>]*>Responding to<\/summary>/);
   });
 });
 
@@ -245,6 +244,6 @@ describe('a new post that reposts a GIF', () => {
     assert.equal(slug, 'reposted-happy-dance-gif');
     assert.equal((await readdir(path.join(contentDir, 'uploads', 'cited'))).length, 1);
     const editor = await (await agent.get(`/admin/posts/${slug}`)).text();
-    assert.match(respondingGroup(editor), /admin-cited-card/);
+    assert.notEqual(citedCard(respondingGroup(editor)), undefined);
   });
 });

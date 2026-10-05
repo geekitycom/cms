@@ -1,0 +1,37 @@
+{# A table that scrolls sideways inside its own box instead of widening the
+   page.
+
+   `{% call table(caption, …) %}<thead>…</thead><tbody>…</tbody>{% endcall %}`
+   emits
+
+     <div class="max-w-full overflow-x-auto contain-inline-size">
+       <table class="table table-sm">
+         <caption class="sr-only">caption</caption>
+         body
+       </table>
+     </div>
+
+   The caption is required and escaped. The body is the rows.
+
+   `contain-inline-size` keeps the table's intrinsic width from sizing the
+   card or grid cell around it.
+
+   Modifiers:
+
+     size     xs, sm (the default), md, lg, xl
+     zebra    true stripes the rows
+     pinRows  true keeps the head and foot in view as the rows scroll
+     pinCols  true keeps the `th` cells of each row in view
+
+   A size outside its set is a render error. #}
+
+{% set SIZES = { xs: 'table-xs', sm: 'table-sm', md: 'table-md', lg: 'table-lg', xl: 'table-xl' } %}
+
+{% macro table(caption, size='sm', zebra=false, pinRows=false, pinCols=false) -%}
+<div class="max-w-full overflow-x-auto contain-inline-size">
+  <table class="table{{ SIZES | modifier(size) }}{% if zebra %} table-zebra {%- endif %}{% if pinRows %} table-pin-rows {%- endif %}{% if pinCols %} table-pin-cols {%- endif %}">
+    <caption class="sr-only">{{ caption }}</caption>
+    {{ caller() }}
+  </table>
+</div>
+{%- endmacro %}

@@ -2,34 +2,28 @@
    endpoints, newest first (TASK-221). A failure is marked in words as well
    as colour, and each row links to the request in full. #}
 {% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import status %}
+{% from "components/table.njk" import table %}
+{% from "components/tabs.njk" import tabs as tabsNav %}
 
 {% block title %}App activity{% endblock %}
 
 {% block content %}
-  <h1>App activity</h1>
+  <h1 class="mb-6 text-2xl font-bold">App activity</h1>
 
-  <p class="admin-hint">
+  <p class="mb-4 max-w-prose text-sm">
     The last requests apps made to sign in with your site and to post to it:
     the authorization and token endpoints, Micropub and its media endpoint.
     When an app will not connect or post, its request is here with the reason
     it was refused. No token, code, password or cookie is kept.
   </p>
 
-  <nav class="admin-filters" aria-label="Which requests">
-    <ul>
-      {% for tab in tabs %}
-        <li>
-          <a href="{{ tab.url }}"{% if tab.current %} aria-current="page"{% endif %}>
-            {{ tab.label }} ({{ tab.count }})
-          </a>
-        </li>
-      {% endfor %}
-    </ul>
-  </nav>
+  <div class="mb-4 max-w-full overflow-x-auto contain-inline-size">
+    {{ tabsNav(tabs, 'Which requests') }}
+  </div>
 
   {% if rows | length %}
-    <table class="admin-list">
-      <caption class="admin-visually-hidden">Recent app requests, newest first</caption>
+    {% call table('Recent app requests, newest first') %}
       <thead>
         <tr>
           <th scope="col">When</th>
@@ -43,14 +37,14 @@
       <tbody>
         {% for row in rows %}
           <tr>
-            <td><a href="{{ row.url }}"><time datetime="{{ row.when.iso }}">{{ row.when.text }}</time></a></td>
+            <td class="whitespace-nowrap"><a class="link link-hover" href="{{ row.url }}"><time datetime="{{ row.when.iso }}">{{ row.when.text }}</time></a></td>
             <td>{{ row.endpoint }}</td>
             <td>{{ row.action }}</td>
             <td>{{ row.app or "Unknown" }}</td>
             <td>{{ row.user or "Unknown" }}</td>
             <td>
               {% if row.failed %}
-                <span class="admin-status admin-status-failed">Refused</span>
+                {{ status('failed', 'Refused') }}
                 {{ row.status }}{% if row.error %} {{ row.error }}{% endif %}
               {% else %}
                 {{ row.status }}
@@ -59,8 +53,8 @@
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {% endcall %}
   {% else %}
-    <p class="admin-empty">Nothing here.</p>
+    <p>Nothing here.</p>
   {% endif %}
 {% endblock %}

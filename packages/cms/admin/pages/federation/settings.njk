@@ -6,6 +6,8 @@
    a user's profile now (decision-14). #}
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/card.njk" import card %}
+{% from "components/table.njk" import table %}
 
 {% block settingsProblems %}
   {{ field.problem('settings-relays', problems.relays) }}
@@ -22,7 +24,7 @@
   {{ field.textarea('settings-relays', fields.relays, 'Relays', form.relays,
        error=problems.relays, hint=relaysHint, rows='3', spellcheck='false', autofocus=true) }}
 
-  <h2>WordPress</h2>
+  <h2 class="mt-6 text-lg font-semibold">WordPress</h2>
 
   {% set wordpressHint %}
     Answer the inbox and collection paths the WordPress ActivityPub plugin
@@ -41,12 +43,9 @@
   {# When each compatibility path was last asked for. It is the whole reason
      the instants are recorded: once every follower's server has refetched the
      actor, nothing asks any more and the switch can go off. #}
-  <section class="admin-settings admin-wordpress-panel">
-    <h2>WordPress paths</h2>
-
+  {% call card(title='WordPress paths') %}
     {% if wordpressRoutes.length %}
-      <table class="admin-table">
-        <caption class="admin-visually-hidden">WordPress paths</caption>
+      {% call table('WordPress paths') %}
         <thead>
           <tr><th scope="col">Path</th><th scope="col">For</th><th scope="col">Last asked for</th></tr>
         </thead>
@@ -55,7 +54,7 @@
             <tr>
               <td><code>{{ route.path }}</code></td>
               <td>{{ route.username or 'every user' }}</td>
-              <td>
+              <td class="whitespace-nowrap">
                 {% if route.lastRequestedAt %}
                   {{ route.lastRequestedAt | date('readable') }}
                 {% else %}
@@ -65,18 +64,18 @@
             </tr>
           {% endfor %}
         </tbody>
-      </table>
-      <p class="admin-hint">
+      {% endcall %}
+      <p class="text-sm">
         Once every one of these has been quiet for long enough that every
         follower's server has refetched the actor, turn the switch off: these
         paths are a cache other servers hold, not this site's identity, and the
         CMS carries them only until the caches have moved on.
       </p>
     {% else %}
-      <p class="admin-hint">
+      <p class="text-sm">
         No user carries a WordPress actor id, so the switch would serve nothing.
         The <code>geekity import wordpress-actor</code> command sets one.
       </p>
     {% endif %}
-  </section>
+  {% endcall %}
 {% endblock %}

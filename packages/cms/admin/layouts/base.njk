@@ -1,29 +1,22 @@
-{# The admin's base layout. It lives outside the theme search path on purpose:
-   a site's theme/ can override any public template, and must never be able to
-   shadow the login form.
-
-   This is the bare page: head, stylesheet and one centred column. Screens that
-   need the navigation extend layouts/shell.njk, which extends this and wraps
-   the same content block in the admin chrome. Login and setup extend this one
-   directly, because a visitor who cannot log in yet has nowhere to navigate. #}
+{# The admin's base layout, the bare page: head, the compiled stylesheet and
+   one column. `dataTheme` is the signed-in user's theme; with none, the light
+   and dark defaults follow the system. #}
 <!doctype html>
-<html lang="en">
+<html lang="en"{% if dataTheme %} data-theme="{{ dataTheme }}"{% endif %}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{% block title %}Admin{% endblock %}{% if site.title %} · {{ site.title }}{% endif %}</title>
     <meta name="robots" content="noindex, nofollow" />
-    <link rel="stylesheet" href="{{ assetPrefix }}admin-bar.css" />
     <link rel="stylesheet" href="{{ assetPrefix }}admin.css" />
   </head>
-  <body>
-    {# First on every screen, so a keyboard gets past the bar and the menu
-       in one key. It moves no focus of its own: a refused form's summary
-       still takes focus on load (TASK-142). #}
-    <a class="admin-skip-link" href="#main">Skip to main content</a>
+  <body class="min-h-screen bg-base-200 text-base-content">
+    {# First on every screen, so a keyboard gets past the bar and the menu in
+       one key. #}
+    <a class="fixed top-(--geekity-admin-bar-height) left-0 z-50 -translate-y-full bg-base-100 p-3 font-semibold focus:translate-y-0" href="#main">Skip to main content</a>
     {% block chrome %}{% endblock %}
     {% block main %}
-      <main id="main" class="admin-plain">
+      <main id="main" class="mx-auto flex min-h-screen max-w-md flex-col justify-center p-6">
         {% include "components/flash.njk" %}
         {% block content %}{% endblock %}
       </main>

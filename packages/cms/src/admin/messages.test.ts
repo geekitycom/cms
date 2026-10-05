@@ -20,6 +20,9 @@ import { MESSAGES_DELETE_PATH, MESSAGES_PATH, MESSAGES_READ_PATH } from './messa
 const box = sandbox();
 after(() => box.cleanup());
 
+/** How a row is marked unread: a badge that says so. */
+const UNREAD = /<span class="badge[^"]*">Unread<\/span>/;
+
 /** One message already on disk when the screen is opened. */
 function message(overrides: Partial<NewContactMessage> = {}): NewContactMessage {
   return {
@@ -92,25 +95,21 @@ describe('the Messages screen', () => {
     assert.equal(listContactMessages(cms.config.dataDir)[0]?.read, false);
   });
 
-  it('marks the unread row for the stylesheet, and unmarks it on Mark read', async () => {
+  it('marks the unread row, and unmarks it on Mark read', async () => {
     const { cms, agent } = await siteWith();
     const whileUnread = await screen(agent);
     const token = csrfField(whileUnread);
     assert.ok(token !== undefined);
 
-    assert.match(
-      whileUnread,
-      /class="admin-comment admin-comment-unread"/,
-      'an unread row is marked',
-    );
+    assert.match(whileUnread, UNREAD, 'an unread row is marked');
 
     const id = listContactMessages(cms.config.dataDir)[0]?.id;
     assert.ok(id !== undefined);
     await agent.post(MESSAGES_READ_PATH, { csrf_token: token, id, read: '1' });
 
     const onceRead = await screen(agent);
-    assert.match(onceRead, /class="admin-comment"/, 'a read row is the plain card again');
-    assert.ok(!onceRead.includes('admin-comment-unread'), 'and carries no unread mark');
+    assert.match(onceRead, /It is a lovely machine\./, 'a read row is still listed');
+    assert.doesNotMatch(onceRead, UNREAD, 'and carries no unread mark');
   });
 
   it('deletes a message, taking its file with it (AC #2)', async () => {
@@ -152,9 +151,10 @@ describe('the Messages screen', () => {
 
     assert.match(
       html,
-      new RegExp(`Messages unread[\\s\\S]*?<a href="${MESSAGES_PATH}">1</a>`),
-      'the dashboard says how many are waiting and links here',
+      new RegExp(`Messages unread</div>\\s*<div class="stat-value[^"]*">1<`),
+      'the dashboard says how many are waiting',
     );
+    assert.match(html, new RegExp(`<a\\b[^>]*href="${MESSAGES_PATH}"`), 'and links here');
   });
 
   it('refuses an id that is not one, without touching anything', async () => {

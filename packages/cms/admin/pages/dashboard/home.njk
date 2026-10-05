@@ -1,72 +1,60 @@
 {% extends "layouts/shell.njk" %}
+{% from "components/stat.njk" import stats, stat %}
+{% from "components/card.njk" import card %}
+{% from "components/table.njk" import table %}
+{% from "components/badge.njk" import status %}
 
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-  <h1>Dashboard</h1>
+  <h1 class="mb-6 text-2xl font-bold">Dashboard</h1>
 
-  <div class="admin-panels">
-    <section class="admin-panel">
-      <h2>At a glance</h2>
-      <dl class="admin-counts">
-        <div>
-          <dt>Published posts</dt>
-          <dd>{{ counts.posts }}</dd>
-        </div>
-        <div>
-          <dt>Drafts</dt>
-          <dd>{{ counts.drafts }}</dd>
-        </div>
-        <div>
-          <dt>Pages</dt>
-          <dd>{{ counts.pages }}</dd>
-        </div>
-        <div>
-          <dt>Followers</dt>
-          <dd><a href="{{ federationUrl }}">{{ followers }}</a></dd>
-        </div>
-        <div>
-          <dt>Comments waiting</dt>
-          <dd><a href="{{ commentsUrl }}?status=pending">{{ pendingComments }}</a></dd>
-        </div>
-        <div>
-          <dt>Messages unread</dt>
-          <dd><a href="{{ messagesUrl }}">{{ unreadMessages }}</a></dd>
-        </div>
-      </dl>
-    </section>
+  {% set glance = [
+    { label: 'Published posts', value: counts.posts },
+    { label: 'Drafts', value: counts.drafts },
+    { label: 'Pages', value: counts.pages },
+    { label: 'Followers', value: followers, href: federationUrl },
+    { label: 'Comments waiting', value: pendingComments, href: commentsUrl + '?status=pending' },
+    { label: 'Messages unread', value: unreadMessages, href: messagesUrl }
+  ] %}
 
-    <section class="admin-panel">
-      <h2>Recent posts</h2>
-      {% if recent.length %}
-        <table class="admin-list">
-          <caption class="admin-visually-hidden">Recent posts</caption>
-          <thead>
+  <section class="@container mb-8">
+    <h2 class="mb-3 text-lg font-semibold">At a glance</h2>
+    <div class="grid grid-cols-2 gap-4 @2xl:grid-cols-3 @5xl:grid-cols-6">
+      {% for count in glance %}
+        {% call stats() %}{{ stat(count.label, count.value, href=count.href) }}{% endcall %}
+      {% endfor %}
+    </div>
+  </section>
+
+  {% call card(title='Recent posts') %}
+    {% if recent.length %}
+      {% call table('Recent posts') %}
+        <thead>
+          <tr>
+            <th scope="col">Title</th>
+            <th scope="col">Date</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for post in recent %}
             <tr>
-              <th scope="col">Title</th>
-              <th scope="col">Date</th>
-              <th scope="col">Status</th>
+              <td><a class="link link-hover" href="{{ post.editUrl }}">{{ post.title }}</a></td>
+              <td class="whitespace-nowrap">{{ post.date | date('html') }}</td>
+              <td>
+                {% if post.draft %}
+                  {{ status('draft', 'Draft') }}
+                {% else %}
+                  {{ status('published', 'Published') }}
+                {% endif %}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {% for post in recent %}
-              <tr>
-                <td><a href="{{ post.editUrl }}">{{ post.title }}</a></td>
-                <td>{{ post.date | date('html') }}</td>
-                <td>
-                  {% if post.draft %}
-                    <span class="admin-status admin-status-draft">Draft</span>
-                  {% else %}
-                    <span class="admin-status">Published</span>
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p class="admin-empty">Nothing written yet.</p>
-      {% endif %}
-    </section>
-  </div>
+          {% endfor %}
+        </tbody>
+      {% endcall %}
+    {% else %}
+      <p>Nothing written yet.</p>
+    {% endif %}
+  {% endcall %}
 {% endblock %}

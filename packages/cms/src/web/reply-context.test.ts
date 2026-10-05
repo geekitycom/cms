@@ -12,6 +12,7 @@ import { after, before, beforeEach, describe, it } from 'node:test';
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../webmention/public-address.ts';
+import { saveUrlOf } from '../admin/__testing__/editor-form.ts';
 
 const box = sandbox();
 
@@ -327,7 +328,7 @@ describe('saving a reply', () => {
     const agent = await signedIn(cms);
 
     const editor = await (await agent.get('/admin/posts/saved')).text();
-    const action = /<form class="admin-editor" method="post" action="([^"]+)"/.exec(editor)?.[1];
+    const action = saveUrlOf(editor);
     assert.ok(action !== undefined);
     const field = (name: string): string =>
       new RegExp(`name="${name}"[^>]*value="([^"]*)"`).exec(editor)?.[1] ?? '';

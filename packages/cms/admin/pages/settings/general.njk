@@ -50,13 +50,19 @@
   {{ field.text('settings-icon', fields.icon, 'Site icon', form.icon,
        error=problems.icon, hint=iconHint) }}
 
-  <div class="admin-avatar-current">
+  <div class="flex items-center gap-4">
     {% if iconPreview %}
-      <img class="admin-icon-preview" src="{{ iconPreview }}" alt="The current site icon" width="96" height="96" />
+      <div class="avatar shrink-0">
+        <div class="w-24 rounded-box">
+          <img class="object-cover" src="{{ iconPreview }}" alt="The current site icon" width="96" height="96" />
+        </div>
+      </div>
     {% else %}
-      <span class="admin-icon-preview admin-avatar-blank"></span>
+      <div class="avatar avatar-placeholder shrink-0" aria-hidden="true">
+        <div class="w-24 rounded-box bg-base-300"></div>
+      </div>
     {% endif %}
-    <p class="admin-hint">
+    <p class="text-sm">
       {% if iconUnderived and not imageOptimization %}
         Image optimization is off, so no icons are derived and the site links none.
       {% elif iconUnderived %}

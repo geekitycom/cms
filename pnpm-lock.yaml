@@ -279,9 +279,15 @@ importers:
       '@codemirror/lang-markdown':
         specifier: ^6.5.2
         version: 6.5.2
+      '@codemirror/language':
+        specifier: ^6.12.4
+        version: 6.12.4
       '@fedify/cli':
         specifier: 2.4.0
         version: 2.4.0(@jimp/custom@0.22.12)(@types/node@26.6.3)(supports-color@7.2.0)(typescript@7.0.2)
+      '@lezer/highlight':
+        specifier: ^1.2.3
+        version: 1.2.3
       '@tailwindcss/cli':
         specifier: ^4.3.3
         version: 4.3.3
@@ -300,6 +306,9 @@ importers:
       codemirror:
         specifier: ^6.0.2
         version: 6.0.2
+      daisyui:
+        specifier: ^5.7.47
+        version: 5.7.47
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -2101,6 +2110,9 @@ packages:
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
+
+  daisyui@5.7.47:
+    resolution: {integrity: sha512-NOl4vPifelRqB3CMzoU751zc44KCDD9HdHMTTqQ30uiYVpIyK7+s94/ySDWgYqjdl1tQCaCrgGBx4KCizm+a3Q==}
 
   dax@0.46.1:
     resolution: {integrity: sha512-E8FidFoEgb2M981RBXA13LZ8amEmp60zzJc8rVSm0Y0Lr/vWz8ImPipkzrthyMa/EjjnD4hr6Dr/9OARBF7D6Q==}
@@ -5568,6 +5580,8 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
+
+  daisyui@5.7.47: {}
 
   dax@0.46.1:
     dependencies:

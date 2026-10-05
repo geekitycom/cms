@@ -1,32 +1,29 @@
 {# The listing behind /admin/posts and /admin/pages. One template for both:
    `kind` says which, and whether the table has a date column and taxonomy
-   ones.
-
-   There is no `pages/posts/` or `pages/categories/` for the same reason.
-   Posts, Pages, Categories and Tags are four menu entries over three
-   templates — this listing, the editor beside it and the taxonomy screen —
-   because a post and a page differ by a `kind`, not by a screen. A folder per
-   menu entry would mean either a second copy of each template or a re-export
-   that exists only to make the directory look like the menu, so the folder is
-   named after what the screens are about instead. #}
+   ones. `pages/documents/` is named after what its screens are about rather
+   than after the menu, because Posts, Pages, Categories and Tags are four
+   menu entries over three templates. #}
 {% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/pagination.njk" import pagination %}
+{% from "components/table.njk" import table %}
+{% from "components/tabs.njk" import tabs %}
 
 {% block title %}{{ kind.plural }}{% endblock %}
 
 {% block content %}
-  <h1>{{ kind.plural }} <a class="admin-button admin-button-small" href="{{ newUrl }}">Add new</a></h1>
+  <div class="mb-6 flex flex-wrap items-center gap-4">
+    <h1 class="text-2xl font-bold">{{ kind.plural }}</h1>
+    {{ buttonLink('Add new', newUrl, color='primary') }}
+  </div>
 
-  <ul class="admin-filters">
-    {% for entry in filters %}
-      <li>
-        <a href="{{ entry.url }}"{% if entry.current %} aria-current="true"{% endif %}>{{ entry.label }}</a>
-      </li>
-    {% endfor %}
-  </ul>
+  <div class="mb-4 max-w-full overflow-x-auto contain-inline-size">
+    {{ tabs(filters, 'Show ' + (kind.plural | lower)) }}
+  </div>
 
   {% if documents.length %}
-    <table class="admin-list">
-      <caption class="admin-visually-hidden">{{ kind.plural }}</caption>
+    {% call table(kind.plural) %}
       <thead>
         <tr>
           <th scope="col">Title</th>
@@ -49,8 +46,8 @@
       <tbody>
         {% for document in documents %}
           <tr>
-            <td><a href="{{ document.editUrl }}">{{ document.title }}</a>{% if document.role %} &mdash; <span class="admin-page-role">{{ document.role }}</span>{% endif %}</td>
-            <td>{{ document.author }}</td>
+            <td><a class="link link-hover font-medium" href="{{ document.editUrl }}">{{ document.title }}</a>{% if document.role %} &mdash; {{ document.role }}{% endif %}</td>
+            <td class="whitespace-nowrap">{{ document.author }}</td>
             {% if kind.tagged %}
               <td>{{ document.tags }}</td>
             {% endif %}
@@ -58,55 +55,49 @@
               <td>{{ document.categories }}</td>
             {% endif %}
             {% if kind.dated %}
-              <td>{{ document.date | date('html') }}</td>
+              <td class="whitespace-nowrap">{{ document.date | date('html') }}</td>
             {% else %}
-              <td>{{ document.updated | date('html') }}</td>
+              <td class="whitespace-nowrap">{{ document.updated | date('html') }}</td>
             {% endif %}
             <td>
               {% if document.trashed %}
-                <span class="admin-status admin-status-trashed">Trash</span>
+                {{ status('trashed', 'Trash') }}
               {% elif document.draft %}
-                <span class="admin-status admin-status-draft">Draft</span>
+                {{ status('draft', 'Draft') }}
               {% elif document.scheduled %}
-                <span class="admin-status admin-status-scheduled">Scheduled</span>
+                {{ status('scheduled', 'Scheduled') }}
               {% elif document.hidden %}
-                <span class="admin-status admin-status-draft">Hidden</span>
+                {{ status('hidden', 'Hidden') }}
               {% else %}
-                <span class="admin-status">Published</span>
+                {{ status('published', 'Published') }}
               {% endif %}
             </td>
-            <td class="admin-actions">
-              <a href="{{ document.editUrl }}">Edit</a>
-              <form method="post" action="{{ document.editUrl }}">
-                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-                <input type="hidden" name="return" value="{{ returnUrl }}" />
-                {% if document.trashed %}
-                  <button type="submit" name="action" value="restore">Restore</button>
-                {% else %}
-                  <button type="submit" name="action" value="trash">Move to trash</button>
+            <td>
+              <div class="flex items-center gap-1 whitespace-nowrap">
+                {{ buttonLink('Edit', document.editUrl, style='ghost', size='xs') }}
+                <form method="post" action="{{ document.editUrl }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                  <input type="hidden" name="return" value="{{ returnUrl }}" />
+                  {% if document.trashed %}
+                    {{ button('Restore', type='submit', name='action', value='restore', style='ghost', size='xs') }}
+                  {% else %}
+                    {{ button('Move to trash', type='submit', name='action', value='trash', style='ghost', size='xs') }}
+                  {% endif %}
+                </form>
+                {% if document.viewUrl %}
+                  {{ buttonLink('View', document.viewUrl, style='ghost', size='xs') }}
                 {% endif %}
-              </form>
-              {% if document.viewUrl %}
-                <a href="{{ document.viewUrl }}">View</a>
-              {% endif %}
+              </div>
             </td>
           </tr>
         {% endfor %}
       </tbody>
-    </table>
+    {% endcall %}
 
-    {% if previousUrl or nextUrl %}
-      <nav class="admin-pagination" aria-label="Pages">
-        {% if previousUrl %}
-          <a rel="prev" href="{{ previousUrl }}">Newer</a>
-        {% endif %}
-        <span>Page {{ page }}</span>
-        {% if nextUrl %}
-          <a rel="next" href="{{ nextUrl }}">Older</a>
-        {% endif %}
-      </nav>
-    {% endif %}
+    <div class="mt-4">
+      {{ pagination(page, previousUrl=previousUrl, nextUrl=nextUrl) }}
+    </div>
   {% else %}
-    <p class="admin-empty">Nothing here.</p>
+    <p>Nothing here.</p>
   {% endif %}
 {% endblock %}

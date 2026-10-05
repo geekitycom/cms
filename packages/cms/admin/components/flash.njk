@@ -1,5 +1,12 @@
-{# Messages queued by the request that redirected here. They were cleared as
-   they were read, so this is the only page that shows them. #}
-{% for entry in flash %}
-  <p class="admin-flash admin-flash-{{ entry.kind }}" role="status">{{ entry.message }}</p>
-{% endfor %}
+{# Messages queued by the request that redirected here, one alert each in the
+   colour of its kind. They were cleared as they were read, so this is the only
+   page that shows them. #}
+{% from "components/alert.njk" import alert %}
+{% set KINDS = { notice: 'success', warning: 'warning', error: 'error' } %}
+{% if flash and flash.length %}
+<div class="mb-6 flex flex-col gap-2">
+  {% for entry in flash %}
+    {% call alert(color=KINDS[entry.kind], polite=true) %}<span>{{ entry.message }}</span>{% endcall %}
+  {% endfor %}
+</div>
+{% endif %}

@@ -1,13 +1,19 @@
 {# /admin/syndication: the services a post can be sent to, which is
    content/_data/syndicationTargets.json itself.
 
-   One panel per entry the file holds, in file order, the broken ones too:
-   an entry that declares nothing says why, so it can be fixed or removed here.
-   Each panel saves or removes its own entry, and the Add form at the bottom
-   appends one. A file that is not a JSON list is shown with its problem and
-   no forms, because saving over it would lose what it holds. #}
+   A table of every entry the file holds, in file order, the broken ones too,
+   each marked offered or ignored; then one card per entry that saves or
+   removes it, and the Add card that appends one. An entry that declares
+   nothing says why, so it can be fixed or removed here. A file that is not a
+   JSON list is shown with its problem and no forms, because saving over it
+   would lose what it holds. #}
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/alert.njk" import alert %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
+{% from "components/table.njk" import table %}
 
 {% block title %}{{ heading }}{% endblock %}
 
@@ -30,23 +36,25 @@
 {% endmacro %}
 
 {% block content %}
-  <h1>{{ heading }}</h1>
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
 
   {% if hasProblems %}
-    {% call field.summary('Nothing was saved. Fix the fields marked below and try again.') %}
-      {% for panel in panels.concat([adding]) %}
-        {% if panel.key == refusedKey %}
-          {{ field.problem(panel.key + '-id', panel.problems.id) }}
-          {{ field.problem(panel.key + '-name', panel.problems.name) }}
-          {{ field.problem(panel.key + '-url', panel.problems.url) }}
-          {{ field.problem(panel.key + '-tag', panel.problems.tag) }}
-          {{ field.problem(panel.key + '-languages', panel.problems.languages) }}
-        {% endif %}
-      {% endfor %}
-    {% endcall %}
+    <div class="max-w-2xl">
+      {% call field.summary('Nothing was saved. Fix the fields marked below and try again.') %}
+        {% for panel in panels.concat([adding]) %}
+          {% if panel.key == refusedKey %}
+            {{ field.problem(panel.key + '-id', panel.problems.id) }}
+            {{ field.problem(panel.key + '-name', panel.problems.name) }}
+            {{ field.problem(panel.key + '-url', panel.problems.url) }}
+            {{ field.problem(panel.key + '-tag', panel.problems.tag) }}
+            {{ field.problem(panel.key + '-languages', panel.problems.languages) }}
+          {% endif %}
+        {% endfor %}
+      {% endcall %}
+    </div>
   {% endif %}
 
-  <p class="admin-hint">
+  <p class="mb-6 max-w-prose text-sm">
     Services such as IndieNews and Bridgy Publish copy a post when it links to them and sends
     them a webmention. Each target listed here gets a checkbox in the post editor and is offered
     to Micropub clients. They are kept in <code>content/{{ file }}</code>, which this screen reads
@@ -54,57 +62,87 @@
   </p>
 
   {% if fileProblem %}
-    <div class="admin-error" role="alert">
-      <p>{{ fileProblem }} No target is offered until it is fixed. Fix or remove the file by hand;
-        this screen will not save over it, because that would lose what it holds.</p>
+    <div class="max-w-2xl">
+      {% call alert(color='error') %}
+        <p>{{ fileProblem }} No target is offered until it is fixed. Fix or remove the file by hand;
+          this screen will not save over it, because that would lose what it holds.</p>
+      {% endcall %}
     </div>
   {% else %}
-    <h2>Targets</h2>
-
     {% if panels.length %}
-      <ul class="admin-menu-boxes">
+      <div class="mb-8">
+        {% call table('Targets') %}
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Id</th>
+              <th scope="col">URL</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for panel in panels %}
+              <tr>
+                <td><a class="link link-hover font-medium" href="#{{ panel.key }}">{{ panel.form.name or ('Entry ' + (panel.index + 1)) }}</a></td>
+                <td><code>{{ panel.form.id }}</code></td>
+                <td class="break-all">{{ panel.form.url }}</td>
+                <td>
+                  {% if panel.fileProblems.length %}
+                    {{ status('failed', 'Ignored') }}
+                  {% else %}
+                    {{ status('accepted', 'Offered') }}
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        {% endcall %}
+      </div>
+
+      <div class="grid max-w-2xl grid-cols-1 gap-6">
         {% for panel in panels %}
-          <li class="admin-menu-box">
-            <h3>{{ panel.form.name or ('Entry ' + (panel.index + 1)) }}</h3>
-            {% if panel.fileProblems.length %}
-              {% for problem in panel.fileProblems %}
-                <p class="admin-field-error">This entry is ignored. {{ problem }}</p>
-              {% endfor %}
-            {% else %}
-              <p class="admin-menu-name"><code>{{ panel.form.id }}</code></p>
-            {% endif %}
+          <div id="{{ panel.key }}">
+            {% call card(title=(panel.form.name or ('Entry ' + (panel.index + 1)))) %}
+              {% if panel.fileProblems.length %}
+                {% for problem in panel.fileProblems %}
+                  <p>This entry is ignored. {{ problem }}</p>
+                {% endfor %}
+              {% else %}
+                <p><code>{{ panel.form.id }}</code></p>
+              {% endif %}
 
-            <form method="post" action="{{ saveUrl }}">
-              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-              <input type="hidden" name="{{ fields.entry }}" value="{{ panel.index }}" />
-              <input type="hidden" name="{{ fields.was }}" value="{{ panel.was }}" />
-              {{ boxes(panel, fields) }}
-              <p class="admin-menu-buttons">
-                <button type="submit">Save target</button>
-              </p>
-            </form>
+              <form method="post" action="{{ saveUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.entry }}" value="{{ panel.index }}" />
+                <input type="hidden" name="{{ fields.was }}" value="{{ panel.was }}" />
+                {{ boxes(panel, fields) }}
+                <div class="mt-4">{{ button('Save target', type='submit', color='primary') }}</div>
+              </form>
 
-            <form class="admin-menu-delete" method="post" action="{{ deleteUrl }}">
-              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-              <input type="hidden" name="{{ fields.entry }}" value="{{ panel.index }}" />
-              <input type="hidden" name="{{ fields.was }}" value="{{ panel.was }}" />
-              <button type="submit">Remove this target</button>
-            </form>
-          </li>
+              <form method="post" action="{{ deleteUrl }}">
+                <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                <input type="hidden" name="{{ fields.entry }}" value="{{ panel.index }}" />
+                <input type="hidden" name="{{ fields.was }}" value="{{ panel.was }}" />
+                {% call cardActions() %}
+                  {{ button('Remove this target', type='submit', color='error', style='ghost') }}
+                {% endcall %}
+              </form>
+            {% endcall %}
+          </div>
         {% endfor %}
-      </ul>
+      </div>
     {% else %}
-      <p class="admin-hint">This site declares no targets, so the editor offers none.</p>
+      <p class="mb-8">This site declares no targets, so the editor offers none.</p>
     {% endif %}
 
-    <h2>Add a target</h2>
-
-    <form class="admin-menu-add" method="post" action="{{ addUrl }}">
-      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-      {{ boxes(adding, fields) }}
-      <p class="admin-menu-buttons">
-        <button type="submit">Add target</button>
-      </p>
-    </form>
+    <div class="mt-8 max-w-2xl">
+      {% call card(title='Add a target') %}
+        <form method="post" action="{{ addUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          {{ boxes(adding, fields) }}
+          <div class="mt-4">{{ button('Add target', type='submit', color='primary') }}</div>
+        </form>
+      {% endcall %}
+    </div>
   {% endif %}
 {% endblock %}

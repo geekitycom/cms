@@ -1,0 +1,40 @@
+{# A card.
+
+   `{% call card(title=…) %}body{% endcall %}` emits
+
+     <div class="card bg-base-100 shadow-sm">
+       <div class="card-body">
+         <h2 class="card-title">title</h2>
+         body
+       </div>
+     </div>
+
+   The title is escaped and left out when there is none; the body is markup.
+
+   Modifiers, each a name from a closed set that maps to one DaisyUI class:
+
+     size   xs, sm, md, lg, xl
+     style  border, dash
+
+   A value outside its set is a render error.
+
+   `{% call cardActions() %}…{% endcall %}`, inside a card's body, is the row
+   of buttons at its foot: `<div class="card-actions justify-end">`. #}
+
+{% set SIZES = { xs: 'card-xs', sm: 'card-sm', md: 'card-md', lg: 'card-lg', xl: 'card-xl' } %}
+{% set STYLES = { border: 'card-border', dash: 'card-dash' } %}
+
+{% macro card(title='', size=none, style=none) -%}
+<div class="card bg-base-100 shadow-sm{{ SIZES | modifier(size) }}{{ STYLES | modifier(style) }}">
+  <div class="card-body">
+    {% if title %}
+    <h2 class="card-title">{{ title }}</h2>
+    {% endif %}
+    {{ caller() }}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro cardActions() -%}
+<div class="card-actions justify-end">{{ caller() }}</div>
+{%- endmacro %}

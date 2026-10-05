@@ -27,7 +27,7 @@ export default tseslint.config(
       '**/dist/**',
       '**/_site/**',
       '**/data/**',
-      // A build product: esbuild's output, written by `pnpm build` from
+      // Build products: esbuild's output, written by `pnpm build` from
       // packages/cms/editor/, which is linted as source instead.
       'packages/cms/admin/static/editor.js',
       // The other esbuild output: the default theme's highlight.js bundle,

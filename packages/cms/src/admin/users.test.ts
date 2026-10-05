@@ -126,7 +126,11 @@ describe('the users screen', () => {
 
     assert.match(html, /ada/, 'the signed-in admin is listed');
     assert.match(html, /grace/, 'the other user is listed');
-    assert.match(html, /ada[\s\S]{0,200}\(you\)/, 'the signed-in admin is marked');
+    assert.match(
+      html,
+      />ada<\/a>\s*<span[^>]*>\(?you\)?<\/span>/i,
+      'the signed-in admin is marked',
+    );
   });
 });
 
@@ -143,19 +147,17 @@ describe('the users list (TASK-110)', () => {
     ).id;
 
     const { html } = await usersScreen(agent);
-    const cells = [...html.matchAll(/<td class="admin-actions">([\s\S]*?)<\/td>/g)].map(
-      (match) => match[1] ?? '',
-    );
-    const actions = cells.at(-1);
+    const lastRow = [...html.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].at(-1)?.[1] ?? '';
+    const actions = [...lastRow.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/g)].at(-1)?.[1];
     assert.ok(actions !== undefined, 'the last row has an actions cell');
 
     assert.match(
       actions,
-      new RegExp(`<a href="/admin/users/${String(grace)}">Edit</a>`),
+      new RegExp(`<a\\b[^>]*href="/admin/users/${String(grace)}">Edit</a>`),
       'Edit is a plain link to the edit screen',
     );
-    assert.match(actions, /<button type="submit">Delete<\/button>/, 'Delete is offered');
-    assert.match(actions, /<a href="\/author\/grace\/">View<\/a>/, 'View opens the archive');
+    assert.match(actions, /<button type="submit"[^>]*>Delete<\/button>/, 'Delete is offered');
+    assert.match(actions, /<a\b[^>]*href="\/author\/grace\/">View<\/a>/, 'View opens the archive');
     assert.ok(
       actions.indexOf('Edit') < actions.indexOf('Delete') &&
         actions.indexOf('Delete') < actions.indexOf('View'),
@@ -174,7 +176,7 @@ describe('the users list (TASK-110)', () => {
 
     assert.match(
       cell,
-      new RegExp(`<a href="/admin/users/${String(ada)}">ada</a>`),
+      new RegExp(`<a\\b[^>]*href="/admin/users/${String(ada)}">ada</a>`),
       'the username links to the edit screen',
     );
     assert.doesNotMatch(cell, /\/author\//, 'the archive URL is printed under the name');
@@ -183,14 +185,14 @@ describe('the users list (TASK-110)', () => {
 
   it('styles Edit as a link rather than a button, as every other listing does', async () => {
     const { html } = await usersScreen(await signedIn(await box.site()));
-    const table = /<table class="admin-list">([\s\S]*?)<\/table>/.exec(html)?.[1];
+    const table = /<table\b[^>]*>([\s\S]*?)<\/table>/.exec(html)?.[1];
     assert.ok(table !== undefined, 'the screen has a listing');
 
     // Add new above the table is a button on every listing; a row's actions
     // are not.
     assert.doesNotMatch(
       table,
-      /admin-button/,
+      /admin-button|btn-primary/,
       'an action here is styled unlike the ones elsewhere',
     );
   });
@@ -211,7 +213,7 @@ describe('the edit user screen (TASK-97 AC #1, #7)', () => {
 
     const { html } = await editScreen(agent, ada);
     assert.match(html, /<title>Edit ada/, 'the edit page has a title of its own');
-    assert.match(html, /class="admin-nav"/, 'and renders inside the admin chrome');
+    assert.match(html, /<nav\b[^>]*aria-label="Sections"/, 'and renders inside the admin chrome');
     assert.match(
       html,
       /href="\/admin\/users"[^>]*aria-current="page"/,
@@ -261,11 +263,7 @@ describe('the edit user screen (TASK-97 AC #1, #7)', () => {
     assert.doesNotMatch(html, /name="email"/, 'no email box in the table');
     assert.doesNotMatch(html, /name="mode"/, 'no how-often select in the table');
     assert.doesNotMatch(html, /name="event"/, 'no notice switch in the table');
-    assert.doesNotMatch(
-      html,
-      /<label class="admin-visually-hidden"/,
-      'and so no hidden labels either',
-    );
+    assert.doesNotMatch(html, /<label class="sr-only"/, 'and so no hidden labels either');
     assert.doesNotMatch(html, /Change your password/, 'which belongs on your own page');
   });
 });
@@ -304,9 +302,13 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
 
     const { html } = await editScreen(agent, ada);
 
-    assert.match(html, /<h2>Account<\/h2>/);
-    assert.match(html, /<h2>Profile<\/h2>/);
-    assert.match(html, /<h2>Email ada about<\/h2>/, 'the notices are headed with whose they are');
+    assert.match(html, /<h2\b[^>]*>Account<\/h2>/);
+    assert.match(html, /<h2\b[^>]*>Profile<\/h2>/);
+    assert.match(
+      html,
+      /<h2\b[^>]*>Email ada about<\/h2>/,
+      'the notices are headed with whose they are',
+    );
 
     // The username is shown, not offered as a box: it is the author URL, the
     // login and the actor, and nothing here may change it.
@@ -341,7 +343,7 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     const [notice] = NOTIFICATION_EVENTS;
     assert.ok(notice !== undefined);
 
-    assert.match(html, /<h2>Email ada about<\/h2>/, 'the panel still says what it is for');
+    assert.match(html, /<h2\b[^>]*>Email ada about<\/h2>/, 'the panel still says what it is for');
     assert.doesNotMatch(html, /name="event"/, 'a switch is offered with nowhere to write to');
     assert.match(html, /Nothing, while the box above is empty/, 'and nothing says why');
 
@@ -359,7 +361,7 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     // what goes out of a site that cannot put anything out at all.
     const { html } = await withEmail(agent, ada, 'ada@example.com');
 
-    assert.match(html, /<h2>Email ada about<\/h2>/, 'the panel still says what it is for');
+    assert.match(html, /<h2\b[^>]*>Email ada about<\/h2>/, 'the panel still says what it is for');
     assert.doesNotMatch(html, /name="event"/, 'a switch is offered with nothing to send with');
     assert.match(html, /no mail provider/, 'and nothing says which piece is missing');
     assert.match(html, /href="\/admin\/settings\/email"/, 'or where to go and fix it');
@@ -476,7 +478,11 @@ describe('saving from the edit user screen (TASK-97 AC #3)', () => {
 
     const after = await editScreen(agent, ada);
     assert.match(after.html, /will not be emailed about new comments\./);
-    assert.match(after.html, /<button type="submit">Turn on<\/button>/, 'the switch shows as off');
+    assert.match(
+      after.html,
+      /<button type="submit"[^>]*>Turn on<\/button>/,
+      'the switch shows as off',
+    );
 
     const daily = await agent.post('/admin/users/notifications/mode', {
       csrf_token: token,
@@ -1010,7 +1016,7 @@ describe('changing your own password', () => {
     ).id;
 
     const mine = await editScreen(agent, ada);
-    assert.match(mine.html, /<h2>Change your password<\/h2>/, 'on your own page');
+    assert.match(mine.html, /<h2\b[^>]*>Change your password<\/h2>/, 'on your own page');
     assert.match(mine.html, /id="current-password"/);
 
     const hers = await editScreen(agent, grace);
@@ -1159,9 +1165,9 @@ describe('deleting a user', () => {
 
     // The only user: there is no button, and the page says what is in the way.
     const alone = await editScreen(agent, ada);
-    assert.match(alone.html, /<h2>Delete<\/h2>/);
+    assert.match(alone.html, /<h2\b[^>]*>Delete<\/h2>/);
     assert.match(alone.html, /only user/, 'the refusal is on the page');
-    assert.doesNotMatch(alone.html, /<button type="submit">Delete ada<\/button>/);
+    assert.doesNotMatch(alone.html, /<button type="submit"[^>]*>Delete ada<\/button>/);
 
     const grace = (
       await createUser({
@@ -1174,11 +1180,11 @@ describe('deleting a user', () => {
     // Still not your own account, even now that somebody else is left.
     const mine = await editScreen(agent, ada);
     assert.match(mine.html, /own account/, 'and so is this one');
-    assert.doesNotMatch(mine.html, /<button type="submit">Delete ada<\/button>/);
+    assert.doesNotMatch(mine.html, /<button type="submit"[^>]*>Delete ada<\/button>/);
 
     // Hers can go, so her page offers it.
     const hers = await editScreen(agent, grace);
-    assert.match(hers.html, /<button type="submit">Delete grace<\/button>/);
+    assert.match(hers.html, /<button type="submit"[^>]*>Delete grace<\/button>/);
 
     const response = await agent.post('/admin/users/delete', {
       csrf_token: hers.token,
@@ -1197,7 +1203,11 @@ describe('deleting a user', () => {
     const { html, token } = await usersScreen(agent);
     const ada = findUser(cms.config.dataDir, 'ada');
     assert.ok(ada !== undefined);
-    assert.doesNotMatch(html, /<button type="submit">Delete<\/button>/, 'no button is offered');
+    assert.doesNotMatch(
+      html,
+      /<button type="submit"[^>]*>Delete<\/button>/,
+      'no button is offered',
+    );
 
     const response = await agent.post('/admin/users/delete', {
       csrf_token: token,
@@ -1223,7 +1233,7 @@ describe('deleting a user', () => {
     });
     const hers = await signIn(cms, { username: 'grace', password: 'a password of her own' });
     const { html, token } = await usersScreen(agent);
-    assert.match(html, /<button type="submit">Delete<\/button>/, 'her row has a button');
+    assert.match(html, /<button type="submit"[^>]*>Delete<\/button>/, 'her row has a button');
 
     const response = await agent.post('/admin/users/delete', {
       csrf_token: token,
@@ -1236,7 +1246,7 @@ describe('deleting a user', () => {
 
     const after = await (await agent.get('/admin/users')).text();
     assert.match(after, /Deleted grace\./, 'the screen says what happened');
-    assert.doesNotMatch(after, /<td>grace/, 'and she is no longer in the table');
+    assert.doesNotMatch(after, /href="\/author\/grace\/"/, 'and she is no longer in the table');
   });
 
   it('refuses to delete you, even when somebody else is left', async () => {

@@ -13,14 +13,17 @@ import { formatDate } from '../web/templates.ts';
  * site wears may override any public template, and must not be able to shadow
  * the login form or the CSRF field inside it (decision-4, decision-15).
  *
- * Under it are three siblings, and a template is in exactly one of them:
+ * A template is in exactly one of three folders under it:
  *
  * - `pages/` — the screens, one folder per section of the admin menu, plus
  *   `account/` for the four screens shown when nobody is signed in yet.
  * - `layouts/` — the chrome a page extends: the document, the signed-in shell,
  *   and the shared settings page.
- * - `components/` — what a page imports or includes: the field macros and the
- *   flash.
+ * - `components/` — the DaisyUI component macros a page imports, one file per
+ *   component, and what a page includes: the flash and the admin bar.
+ *
+ * Beside them, `static/` holds what a browser fetches and `src/` the stylesheet
+ * source that `pnpm build` compiles into `static/admin.css` (decision-30).
  */
 export const PACKAGED_ADMIN_DIR: string = fileURLToPath(new URL('../../admin/', import.meta.url));
 
@@ -81,6 +84,25 @@ export interface CreateAdminTemplateEnvironmentOptions {
   noCache?: boolean | undefined;
 }
 
+/**
+ * The `modifier` filter, `{{ COLORS | modifier(color) }}`: the class `classes`
+ * maps `value` to with a space before it, so `class="btn{{ … }}"` reads right,
+ * or nothing when `value` is absent or maps to `''`. Any other value throws,
+ * naming the keys.
+ */
+function modifierClass(classes: unknown, value: unknown): string {
+  if (value === undefined || value === null || value === '') return '';
+  const known = typeof classes === 'object' && classes !== null ? classes : {};
+  const found: unknown =
+    typeof value === 'string' && Object.hasOwn(known, value)
+      ? (known as Record<string, unknown>)[value]
+      : undefined;
+  if (typeof found !== 'string') {
+    throw new Error(`${JSON.stringify(value)} is not one of ${Object.keys(known).join(', ')}`);
+  }
+  return found === '' ? '' : ` ${found}`;
+}
+
 /** A Nunjucks environment over {@link PACKAGED_ADMIN_DIR} and nothing else. */
 export function createAdminTemplateEnvironment(
   options: CreateAdminTemplateEnvironmentOptions = {},
@@ -101,6 +123,7 @@ export function createAdminTemplateEnvironment(
   environment.addFilter('date', (value: unknown, format: unknown = 'readable') =>
     formatDate(value, typeof format === 'string' ? format : 'readable'),
   );
+  environment.addFilter('modifier', modifierClass);
 
   return environment;
 }

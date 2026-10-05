@@ -2,6 +2,8 @@
    used to. #}
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/card.njk" import card %}
+{% from "components/table.njk" import table %}
 
 {% block settingsProblems %}
   {{ field.problem('settings-tag-base', problems.tagBase) }}
@@ -22,12 +24,9 @@
   {# The recorded renames are a record of what happened rather than a
      preference: the taxonomy screens write them as a term is renamed or merged,
      and this page is where the URLs they are about are decided. #}
-  <section class="admin-settings admin-redirects-panel">
-    <h2>Archive redirects</h2>
-
+  {% call card(title='Archive redirects') %}
     {% if taxonomyRedirects.length %}
-      <table class="admin-list">
-        <caption class="admin-visually-hidden">Archive redirects</caption>
+      {% call table('Archive redirects') %}
         <thead>
           <tr><th scope="col">Taxonomy</th><th scope="col">Was</th><th scope="col">Is now</th></tr>
         </thead>
@@ -40,17 +39,17 @@
             </tr>
           {% endfor %}
         </tbody>
-      </table>
-      <p class="admin-hint">
+      {% endcall %}
+      <p class="text-sm">
         Every one of these answers with a permanent redirect to the archive the
         term lives at now, so a link somebody published still arrives.
       </p>
     {% else %}
-      <p class="admin-hint">
+      <p class="text-sm">
         Nothing has moved yet. Renaming or merging a term on the Tags or
         Categories screen records the archive URL it used to have here, and the
         site answers that URL with a permanent redirect from then on.
       </p>
     {% endif %}
-  </section>
+  {% endcall %}
 {% endblock %}

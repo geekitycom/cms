@@ -6,8 +6,10 @@ import { after, describe, it } from 'node:test';
 import matter from 'gray-matter';
 
 import { browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import { statuses } from './__testing__/statuses.ts';
 import { readSiteSettings, writeSiteJson } from './settings.ts';
 import type { Browser } from './__testing__/harness.ts';
+import { saveUrlOf } from './__testing__/editor-form.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -127,7 +129,7 @@ async function submit(
     ...changes,
   };
 
-  const saveUrl = /<form class="admin-editor" method="post" action="([^"]+)"/.exec(html)?.[1];
+  const saveUrl = saveUrlOf(html);
   assert.ok(saveUrl !== undefined, 'the editor knew where to post');
 
   return agent.post(saveUrl, fields);
@@ -160,13 +162,13 @@ describe('the posts listing', () => {
     assert.equal(response.status, 200);
 
     const html = await response.text();
-    assert.match(html, /<a href="\/admin\/posts\/published">Out in the world<\/a>/);
-    assert.match(html, /<a href="\/admin\/posts\/hidden">Still cooking<\/a>/);
+    assert.match(html, /<a\b[^>]*href="\/admin\/posts\/published">Out in the world<\/a>/);
+    assert.match(html, /<a\b[^>]*href="\/admin\/posts\/hidden">Still cooking<\/a>/);
     assert.match(html, />ada</, 'the author column');
     assert.match(html, />essays, notes</, 'the tag column');
     assert.match(html, />general, meta</, 'the category column');
     assert.match(html, /2026-01-02/, 'the date column');
-    assert.match(html, /admin-status-draft">Draft</, 'and which of them is a draft');
+    assert.ok(statuses(html).includes('Draft'), 'and which of them is a draft');
   });
 
   it('filters to published, drafts and the trash', async () => {
@@ -196,9 +198,9 @@ describe('the posts listing', () => {
 
     const titles = async (query: string): Promise<string[]> => {
       const html = await (await agent.get(`/admin/posts${query}`)).text();
-      return [...html.matchAll(/<td><a href="\/admin\/posts\/[^"]+">([^<]+)<\/a><\/td>/g)].map(
-        (match) => match[1] ?? '',
-      );
+      return [
+        ...html.matchAll(/<td><a\b[^>]*href="\/admin\/posts\/[^"]+">([^<]+)<\/a><\/td>/g),
+      ].map((match) => match[1] ?? '');
     };
 
     assert.deepEqual(await titles(''), ['Out in the world', 'Still cooking'], 'all, minus the bin');
@@ -228,9 +230,9 @@ describe('the posts listing', () => {
     const agent = await signedIn(cms);
 
     const live = await (await agent.get('/admin/posts')).text();
-    assert.match(live, /<a href="\/2026\/01\/published\/">View<\/a>/);
+    assert.match(live, /<a\b[^>]*href="\/2026\/01\/published\/">View<\/a>/);
     assert.ok(
-      !/<a href="\/2026\/01\/hidden\/">View<\/a>/.test(live),
+      !/<a\b[^>]*href="\/2026\/01\/hidden\/">View<\/a>/.test(live),
       'a draft has nothing to view',
     );
     assert.match(live, /name="action" value="trash">Move to trash</);
@@ -273,16 +275,16 @@ describe('a scheduled post in the admin', () => {
 
     const titles = async (query: string): Promise<string[]> => {
       const html = await (await agent.get(`/admin/posts${query}`)).text();
-      return [...html.matchAll(/<td><a href="\/admin\/posts\/[^"]+">([^<]+)<\/a><\/td>/g)].map(
-        (match) => match[1] ?? '',
-      );
+      return [
+        ...html.matchAll(/<td><a\b[^>]*href="\/admin\/posts\/[^"]+">([^<]+)<\/a><\/td>/g),
+      ].map((match) => match[1] ?? '');
     };
 
     const all = await (await agent.get('/admin/posts')).text();
-    assert.match(all, /admin-status-scheduled">Scheduled</, 'the status badge');
+    assert.ok(statuses(all).includes('Scheduled'), 'the status badge');
     assert.match(all, /href="\/admin\/posts\?status=scheduled"/, 'the filter');
     assert.ok(
-      !/<a href="\/2026\/09\/tomorrow\/">View<\/a>/.test(all),
+      !/<a\b[^>]*href="\/2026\/09\/tomorrow\/">View<\/a>/.test(all),
       'there is nothing public to view yet',
     );
 
@@ -690,7 +692,7 @@ describe('the post language in the editor (TASK-154 AC #1)', () => {
     const html = await (await agent.get('/admin/posts/new')).text();
 
     assert.equal(field(html, 'lang'), '');
-    assert.match(html, /<label for="editor-lang">Language<\/label>/);
+    assert.match(html, /<label\b[^>]*\bfor="editor-lang"[^>]*>Language<\/label>/);
     assert.match(html, /Leave it empty for the site’s language, en\./);
   });
 
@@ -831,8 +833,8 @@ describe('a post whose visibility the site does not recognize (TASK-227)', () =>
 
     const html = await (await agent.get('/admin/posts')).text();
 
-    assert.match(html, /admin-status[^"]*">Hidden</);
-    assert.doesNotMatch(html, /<span class="admin-status">Published</);
+    assert.ok(statuses(html).includes('Hidden'));
+    assert.ok(!statuses(html).includes('Published'));
   });
 });
 
@@ -867,8 +869,14 @@ describe('pinning a post in the editor (TASK-207 AC #1)', () => {
 
     const html = await (await agent.get('/admin/posts/post-1')).text();
 
-    assert.match(html, /<input id="editor-pinned" name="pinned" type="checkbox" value="1" \/>/);
-    assert.match(html, /<label for="editor-pinned">Pinned<\/label>/);
+    assert.match(
+      html,
+      /<input id="editor-pinned" name="pinned" type="checkbox" value="1"(?! checked)[^>]*>/,
+    );
+    assert.match(
+      html,
+      /<label\b[^>]*\bfor="editor-pinned"[^>]*>(?:\s*<input\b[^>]*>)?\s*Pinned\s*<\/label>/,
+    );
   });
 
   it('pins with the moment it was pinned, and unpins', async () => {
@@ -944,9 +952,12 @@ describe('syndication targets in the post editor (TASK-155 AC #2)', () => {
 
     assert.match(
       html,
-      /<input id="editor-syndicate-to-indienews" name="syndicate-to-indienews" type="checkbox" value="1" \/>/,
+      /<input id="editor-syndicate-to-indienews" name="syndicate-to-indienews" type="checkbox" value="1"(?! checked)[^>]*>/,
     );
-    assert.match(html, /<label for="editor-syndicate-to-indienews">IndieNews<\/label>/);
+    assert.match(
+      html,
+      /<label\b[^>]*\bfor="editor-syndicate-to-indienews"[^>]*>(?:\s*<input\b[^>]*>)?\s*IndieNews\s*<\/label>/,
+    );
     assert.match(html, /name="syndicate-to-mastodon" type="checkbox" value="1" checked/);
   });
 
@@ -1018,14 +1029,14 @@ describe('photos in the post editor (TASK-166 AC #5, #7)', () => {
 
     const html = await (await agent.get('/admin/posts/beach')).text();
 
-    assert.match(html, /<summary>Photos<\/summary>/);
+    assert.match(html, /<summary\b[^>]*>Photos<\/summary>/);
     assert.equal(field(html, 'photo-url-0'), '/uploads/2026/10/beach.jpg');
     assert.equal(field(html, 'photo-alt-0'), 'Waves breaking at dusk');
     assert.equal(field(html, 'photo-url-1'), '/uploads/2026/10/dog.jpg');
     assert.equal(field(html, 'photo-alt-1'), '');
     assert.match(html, /name="photo-alt-1"[^>]*placeholder="A dog asleep on a rug"/);
     assert.equal(field(html, 'photo-url-2'), '');
-    assert.match(html, /<summary>Add a photo<\/summary>/);
+    assert.match(html, /<summary\b[^>]*>Add a photo<\/summary>/);
     const offered = /<datalist id="editor-photo-uploads">([\s\S]*?)<\/datalist>/.exec(html)?.[1];
     assert.match(offered ?? '', /<option value="\/uploads\/2026\/10\/gull\.png">/);
     assert.doesNotMatch(offered ?? '', /episode\.mp3/, 'only images are offered');
@@ -1153,7 +1164,7 @@ describe('the recording in the post editor (TASK-213 AC #1, #2)', () => {
 
     const html = await (await agent.get('/admin/posts/episode')).text();
 
-    assert.match(html, /<summary>Recording<\/summary>/);
+    assert.match(html, /<summary\b[^>]*>Recording<\/summary>/);
     assert.match(html, /<option value="" selected>None<\/option>/);
     assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp3">2026\/10\/episode\.mp3</);
     assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp4">2026\/10\/episode\.mp4</);
@@ -1452,7 +1463,7 @@ describe('writing a post', () => {
     const listing = await (await agent.get('/admin/posts')).text();
     assert.match(
       listing,
-      /<a href="\/admin\/posts\/coffee-first-then-the-inbox">Coffee first, then the inbox and after that a walk\.<\/a>/,
+      /<a\b[^>]*href="\/admin\/posts\/coffee-first-then-the-inbox">Coffee first, then the inbox and after that a walk\.<\/a>/,
       'the posts list links a note by its first words',
     );
 

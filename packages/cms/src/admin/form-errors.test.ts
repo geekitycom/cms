@@ -4,14 +4,10 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
-import {
-  browser,
-  csrfField,
-  FIRST_ADMIN,
-  sandbox,
-  setUpFirstAdmin,
-  signedIn,
-} from './__testing__/harness.ts';
+import { findUser } from './accounts.ts';
+import { browser, csrfField, FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
+import { SETTINGS_PAGE_FORMS, settingsPageUrl } from './__testing__/settings.ts';
+import { classesOf } from './__testing__/markup.ts';
 import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.ts';
 
 /**
@@ -25,6 +21,9 @@ import { createAdminTemplateEnvironment, PACKAGED_ADMIN_DIR } from './templates.
  */
 
 const environment = createAdminTemplateEnvironment({ noCache: true });
+
+/** A field's error paragraph. */
+const FIELD_ERROR = /<p\b[^>]*\bid="[\w-]+-error"/g;
 
 /** A problem for whatever key a template asks after. */
 const everyProblem: Record<string, string> = new Proxy(
@@ -95,25 +94,31 @@ function syndicationRefused(key: string): Record<string, unknown> {
 /**
  * Screens whose form is never shown back refused. The IndieAuth consent form
  * has nothing to type, only boxes to untick: a request it cannot answer is a
- * page of its own (`pages/indieauth/refused.njk`), never this form again.
+ * page of its own (`pages/indieauth/refused.njk`), never this form again. The
+ * conflict screen draws its two versions in read-only boxes and posts only
+ * hidden fields; a refused save there is the editor or the conflict again. An
+ * empty reply on the comments screen comes back as a flash over the list.
  */
-const NEVER_REFUSED: ReadonlySet<string> = new Set(['pages/indieauth/consent.njk']);
+const NEVER_REFUSED: ReadonlySet<string> = new Set([
+  'pages/comments/all.njk',
+  'pages/indieauth/consent.njk',
+  'pages/documents/conflict.njk',
+]);
 
+/** Every page that imports the field macros. */
 async function templatesUsingFields(): Promise<string[]> {
   const pages = path.join(PACKAGED_ADMIN_DIR, 'pages');
   const found: string[] = [];
   for (const entry of await readdir(pages, { recursive: true })) {
-    if (!entry.endsWith('.njk')) continue;
-    const source = await readFile(path.join(pages, entry), 'utf8');
     const template = `pages/${entry}`;
-    if (source.includes('"components/fields.njk"') && !NEVER_REFUSED.has(template)) {
-      found.push(template);
-    }
+    if (!entry.endsWith('.njk') || NEVER_REFUSED.has(template)) continue;
+    const source = await readFile(path.join(pages, entry), 'utf8');
+    if (source.includes('"components/fields.njk"')) found.push(template);
   }
   return found.sort();
 }
 
-describe('every admin form built from the field macros, refused', async () => {
+describe('every form built from the field macros, refused', async () => {
   const templates = await templatesUsingFields();
 
   it('is found by reading the templates', () => {
@@ -126,7 +131,7 @@ describe('every admin form built from the field macros, refused', async () => {
         const html = environment.render(template, { ...refused, ...variant });
 
         const { heading, links } = tiedErrors(html);
-        const fieldErrors = html.match(/class="admin-field-error" id=/g)?.length ?? 0;
+        const fieldErrors = html.match(FIELD_ERROR)?.length ?? 0;
         assert.equal(links.length, fieldErrors, 'every field error is in the summary');
         if (links.length === 0) {
           assert.equal(heading, 'Wrong error.', 'a form-level error heads its own summary');
@@ -136,42 +141,108 @@ describe('every admin form built from the field macros, refused', async () => {
   }
 });
 
-describe('a refused request, over HTTP', () => {
+/** The opening tag of the control with this id. */
+function controlTag(html: string, id: string): string {
+  const tag = new RegExp(`<(?:input|select|textarea)\\b[^>]*\\bid="${id}"[^>]*>`).exec(html)?.[0];
+  assert.ok(tag !== undefined, `there is a control #${id}`);
+  return tag;
+}
+
+describe('a refused request, over HTTP', async () => {
   const box = sandbox();
   after(() => box.cleanup());
 
-  it('announces a failed login and moves focus to it', async () => {
-    const cms = await box.site();
-    await setUpFirstAdmin(browser(cms));
-    const agent = browser(cms);
-    const token = csrfField(await (await agent.get('/admin/login')).text()) ?? '';
+  const cms = await box.site();
+  const agent = await signedIn(cms);
+  const guest = browser(cms);
+  const you = `/admin/users/${String(findUser(cms.config.dataDir, FIRST_ADMIN.username)?.id ?? 0)}`;
 
-    const response = await agent.post('/admin/login', {
-      csrf_token: token,
-      username: FIRST_ADMIN.username,
-      password: 'not the password',
+  async function page(url: string, as = agent): Promise<string> {
+    return await (await as.get(url)).text();
+  }
+
+  async function refuse(
+    url: string,
+    form: Record<string, string>,
+    as = agent,
+  ): Promise<{ status: number; html: string }> {
+    const token = csrfField(await page(url, as)) ?? '';
+    const response = await as.post(url, { csrf_token: token, ...form });
+    return { status: response.status, html: await response.text() };
+  }
+
+  const refusals = {
+    login: await refuse(
+      '/admin/login',
+      { username: FIRST_ADMIN.username, password: 'not the password' },
+      guest,
+    ),
+    settings: await refuse('/admin/settings', {
+      ...SETTINGS_PAGE_FORMS['general'],
+      title: '',
+      timezone: 'Nowhere/Special',
+    }),
+    addUser: await refuse('/admin/users/new', { username: '', password: 'short' }),
+  };
+  const screens: Record<string, string> = {};
+  for (const name of Object.keys(SETTINGS_PAGE_FORMS)) {
+    const url = settingsPageUrl(name);
+    screens[url] = await page(url);
+  }
+  for (const url of [you, '/admin/users/new', '/admin/users/apps']) {
+    screens[url] = await page(url);
+  }
+  screens['/admin/login'] = await page('/admin/login', guest);
+
+  for (const [what, refusal] of Object.entries(refusals)) {
+    it(`heads the refused ${what} form with an error alert`, () => {
+      const open = /<div\b[^>]*\brole="alert"[^>]*>/.exec(refusal.html)?.[0] ?? '';
+      assert.deepEqual(classesOf(open), ['alert', 'alert-error']);
     });
+  }
 
-    assert.equal(response.status, 401);
-    const { heading } = tiedErrors(await response.text());
+  it('announces a failed login and moves focus to it', () => {
+    assert.equal(refusals.login.status, 401);
+    const { heading } = tiedErrors(refusals.login.html);
     assert.equal(heading, 'That username and password do not match.');
   });
 
-  it('links a refused settings save to the field it refused', async () => {
-    const cms = await box.site();
-    const agent = await signedIn(cms);
-    const token = csrfField(await (await agent.get('/admin/settings')).text()) ?? '';
-
-    const response = await agent.post('/admin/settings', {
-      csrf_token: token,
-      title: '',
-      base_url: 'https://example.org',
-      timezone: 'Nowhere/Special',
-      language: 'en',
-    });
-
-    assert.equal(response.status, 400);
-    const { links } = tiedErrors(await response.text());
+  it('links a refused settings save to the field it refused, each drawn through the validator', () => {
+    const { status, html } = refusals.settings;
+    assert.equal(status, 400);
+    const { links } = tiedErrors(html);
     assert.deepEqual(links, ['settings-title', 'settings-timezone']);
+
+    for (const id of links) {
+      const tag = controlTag(html, id);
+      assert.ok(classesOf(tag).includes('validator'), `#${id} is a validator: ${tag}`);
+      const after = html.slice(html.indexOf(tag) + tag.length);
+      assert.match(
+        after.slice(0, after.indexOf('</div>')),
+        new RegExp(`<p class="validator-hint" id="${id}-error">`),
+        `#${id}'s message follows it in the same fieldset`,
+      );
+    }
   });
+
+  it('ties a refused add-user form to its fields', () => {
+    assert.equal(refusals.addUser.status, 400);
+    assert.ok(tiedErrors(refusals.addUser.html).links.length > 0);
+  });
+
+  for (const [url, html] of Object.entries(screens)) {
+    it(`${url} draws every field through the DaisyUI macros`, () => {
+      const labels = [...html.matchAll(/<label class="fieldset-legend" for="([^"]+)">/g)].map(
+        ([, id]) => id ?? '',
+      );
+      assert.ok(labels.length > 0, `${url} has fields`);
+      for (const id of labels) {
+        const [component] = classesOf(controlTag(html, id));
+        assert.ok(
+          ['input', 'select', 'textarea'].includes(component ?? ''),
+          `#${id} is drawn as a DaisyUI control`,
+        );
+      }
+    });
+  }
 });

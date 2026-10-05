@@ -1,0 +1,36 @@
+{# A collapse: a heading that shows and hides what is under it.
+
+   `{% call collapse(title, …) %}body{% endcall %}` emits
+
+     <details class="collapse collapse-arrow border border-base-300 bg-base-100">
+       <summary class="collapse-title font-semibold">title</summary>
+       <div class="collapse-content">body</div>
+     </details>
+
+   `open` starts it open. The title is escaped; the body is markup.
+   `fields` wraps the body in a `<fieldset>` whose `sr-only` legend repeats
+   the title.
+
+   Modifiers:
+
+     icon  arrow (the default), plus
+
+   A value outside its set is a render error. #}
+
+{% set ICONS = { arrow: 'collapse-arrow', plus: 'collapse-plus' } %}
+
+{% macro collapse(title, open=false, fields=false, icon='arrow') -%}
+<details class="collapse{{ ICONS | modifier(icon) }} border border-base-300 bg-base-100"{% if open %} open{% endif %}>
+  <summary class="collapse-title font-semibold">{{ title }}</summary>
+  <div class="collapse-content">
+    {% if fields %}
+    <fieldset class="flex min-w-0 flex-col gap-1">
+      <legend class="sr-only">{{ title }}</legend>
+      {{ caller() }}
+    </fieldset>
+    {% else %}
+    {{ caller() }}
+    {% endif %}
+  </div>
+</details>
+{%- endmacro %}

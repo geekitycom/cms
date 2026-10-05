@@ -5,9 +5,10 @@ import type { StaticAsset } from '../web/assets.ts';
 import { ADMIN_PREFIX } from './session.ts';
 
 /**
- * Where the admin's own files live: stylesheets and, later, whatever the
- * editor needs. Resolved from this module rather than the working directory,
- * like the templates beside them.
+ * Where the admin's own files live: the compiled stylesheet, the admin bar's
+ * stylesheet and script, and the editor's bundle and helpers. Resolved from
+ * this module rather than the working directory, like the templates beside
+ * them.
  */
 export const ADMIN_STATIC_DIR: string = fileURLToPath(
   new URL('../../admin/static/', import.meta.url),

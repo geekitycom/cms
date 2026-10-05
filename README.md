@@ -28,7 +28,9 @@ packages/cms/          published as @geekity/cms
   admin/               admin templates and static files, editor.js among them
     pages/             one folder per admin menu section, a file per screen
     layouts/           the chrome a page extends: base, shell, settings-page
-    components/        what a page imports or includes: field macros, the flash
+    components/        DaisyUI component macros, the flash and the admin bar
+    src/admin.css      its stylesheet's Tailwind and DaisyUI source;
+                       static/admin.css is the compiled output, gitignored
   themes/default/      default theme, shipped inside the package
     src/style.css      its stylesheet's Tailwind source; static/style.css is
                        the compiled output, gitignored
@@ -75,7 +77,7 @@ Run from the repository root.
 | `pnpm dev`               | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`).           |
 | `pnpm start`             | Starts the demo site once, without watching.                                |
 | `pnpm demo:reset`        | Replaces the demo's `playground/` with a fresh copy of `content/`.          |
-| `pnpm build`             | Compiles `packages/cms`, bundles the editor and the default theme's CSS.    |
+| `pnpm build`             | Compiles `packages/cms`, bundles the editor, compiles theme and admin CSS.  |
 | `pnpm test`              | Runs the `node:test` suites in every package through `tsx`.                 |
 | `pnpm test:coverage`     | The same suites with `--experimental-test-coverage`.                        |
 | `pnpm test:11ty`         | Builds the fixtures and the demo content with Eleventy, comparing URLs.     |
@@ -783,6 +785,18 @@ sitemap, search, `llms.txt` and IndexNow. A value the site does not recognize,
 such as a hand-typed `visibility: private`, hides the post like a draft until
 you choose one. The package README's
 [Unlisted posts](packages/cms/README.md#unlisted-posts) has the whole table.
+
+### The admin's stylesheet
+
+The admin is drawn in DaisyUI on Tailwind (decision-30). Its stylesheet is a
+build product, like the default theme's. The source is
+`packages/cms/admin/src/admin.css`: Tailwind in full, Preflight included, and
+the DaisyUI 5 plugin with every built-in theme, `light` as the default and
+`dark` when the system prefers dark. `pnpm build`, and the package's
+`pretest`, compile it to `packages/cms/admin/static/admin.css`, which is
+gitignored. `pnpm --filter @geekity/cms build:admin` compiles it alone.
+Tailwind reads class names from the templates under `admin/` and from
+`editor/look.ts`.
 
 ### Login hardening and security headers
 

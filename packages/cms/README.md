@@ -1880,6 +1880,29 @@ flash messages. A message queued with `flash(c, 'notice', '…')` is kept on the
 session row, shown on the next page the browser asks for, and cleared as it is
 read, so it survives exactly one redirect.
 
+### The admin's look
+
+The admin is drawn in DaisyUI 5 on Tailwind v4 (decision-30). Its stylesheet,
+`admin/static/admin.css`, is compiled at build time from `admin/src/admin.css`
+and ships in the package like the default theme's. It carries every built-in
+DaisyUI theme, with `light` as the default and `dark` when the system prefers
+dark. A site cannot override it or add a theme of its own.
+
+The admin bar is the same component on the admin and across the top of every
+public page a signed-in user reads: a `<geekity-admin-bar>` element holding a
+declarative shadow root, so neither the site theme nor the admin's theme
+reaches inside it. It draws in a light or a dark palette of its own, following
+the user's admin theme. On a public page it pushes the page down by
+`--geekity-admin-bar-height` and adds the `geekity-admin-bar` class to
+`<html>` for a theme that needs to make room of its own.
+
+Each user picks the theme the admin is drawn in for themselves, on their own
+screen under Users: any built-in DaisyUI theme, or Follow the system. The
+choice is stored as `adminTheme` on the user in `data/users.json`, and every
+admin page drawn for that user carries it as `data-theme` on `<html>`. Following
+the system stores nothing and puts no `data-theme` on the page. The login,
+setup, forgot-password and reset screens never carry one.
+
 ### The menu
 
 The menu is WordPress classic: twelve sections — Dashboard, Posts, Pages,

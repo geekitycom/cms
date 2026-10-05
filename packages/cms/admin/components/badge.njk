@@ -1,0 +1,57 @@
+{# A badge: `badge(label, …)` emits
+   `<span class="badge badge-sm">label</span>`. The label is escaped.
+
+   Modifiers, each a name from a closed set that maps to one DaisyUI class:
+
+     color  neutral, primary, secondary, accent, info, success, warning, error
+     style  outline, dash, soft, ghost
+     size   xs, sm (the default), md, lg, xl
+
+   A value outside its set is a render error.
+
+   `status(name, label)` is the badge for the state a row is in, coloured by
+   `STATUSES` below; the label is escaped. A name outside that set is a
+   render error. #}
+
+{% set COLORS = {
+  neutral: 'badge-neutral',
+  primary: 'badge-primary',
+  secondary: 'badge-secondary',
+  accent: 'badge-accent',
+  info: 'badge-info',
+  success: 'badge-success',
+  warning: 'badge-warning',
+  error: 'badge-error'
+} %}
+{% set STYLES = { outline: 'badge-outline', dash: 'badge-dash', soft: 'badge-soft', ghost: 'badge-ghost' } %}
+{% set SIZES = { xs: 'badge-xs', sm: 'badge-sm', md: 'badge-md', lg: 'badge-lg', xl: 'badge-xl' } %}
+
+{% macro badge(label, color=none, style=none, size='sm') -%}
+<span class="badge{{ COLORS | modifier(color) }}{{ STYLES | modifier(style) }}{{ SIZES | modifier(size) }}">{{ label }}</span>
+{%- endmacro %}
+
+{% set STATUSES = {
+  published: '',
+  approved: '',
+  accepted: '',
+  described: '',
+  decorative: '',
+  active: 'badge-primary',
+  unread: 'badge-primary',
+  connected: 'badge-success',
+  scheduled: 'badge-info',
+  draft: 'badge-warning',
+  pending: 'badge-warning',
+  missing: 'badge-warning',
+  unreachable: 'badge-warning',
+  failed: 'badge-error',
+  rejected: 'badge-error',
+  spam: 'badge-error',
+  hidden: 'badge-ghost',
+  trashed: 'badge-ghost',
+  disconnected: 'badge-ghost'
+} %}
+
+{% macro status(name, label) -%}
+<span class="badge badge-sm{{ STATUSES | modifier(name) }}">{{ label }}</span>
+{%- endmacro %}

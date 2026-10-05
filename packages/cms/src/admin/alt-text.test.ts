@@ -4,6 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import type { Cms, GeekityConfig } from '../index.ts';
+import { flashes } from './__testing__/flash.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 
@@ -120,10 +121,13 @@ describe('alt text in the media library (TASK-141)', () => {
     assert.match(screen, /name="decorative"[^>]*checked/);
 
     const { html } = await publish(agent, `A rule:\n\n![](${PHOTO_URL})`);
-    const flashes = [...html.matchAll(/<p class="admin-flash[^"]*"[^>]*>([\s\S]*?)<\/p>/g)].map(
-      ([, text]) => text,
+    assert.doesNotMatch(
+      flashes(html)
+        .map(({ message }) => message)
+        .join('\n'),
+      /alt text/i,
+      'nothing to warn about',
     );
-    assert.doesNotMatch(flashes.join('\n'), /alt text/i, 'nothing to warn about');
 
     const page = await (await cms.app.request('/2026/03/with-a-picture/')).text();
     assert.match(page, new RegExp(`<img src="${PHOTO_URL}" alt="">`));
@@ -150,10 +154,11 @@ describe('publishing an image with no alt text (TASK-141 AC #4)', () => {
 
     assert.equal(response.status, 303);
     assert.equal(cms.store.getBySlug('with-a-picture')?.draft, false, 'it was published');
-    assert.match(html, /admin-flash-warning/);
-    assert.match(html, /photo\.png/);
-    assert.match(html, /chart\.svg/);
-    assert.doesNotMatch(html, /admin-flash-warning[^<]*ok\.png/, 'a described image is fine');
+    const warnings = flashes(html).filter(({ kind }) => kind === 'warning');
+    assert.equal(warnings.length, 1, 'one warning');
+    assert.match(warnings[0]?.message ?? '', /photo\.png/);
+    assert.match(warnings[0]?.message ?? '', /chart\.svg/);
+    assert.doesNotMatch(warnings[0]?.message ?? '', /ok\.png/, 'a described image is fine');
   });
 
   it('says nothing when every image is described', async () => {
@@ -161,7 +166,10 @@ describe('publishing an image with no alt text (TASK-141 AC #4)', () => {
 
     const { html } = await publish(agent, `![A dog asleep](${PHOTO_URL})`);
 
-    assert.doesNotMatch(html, /admin-flash-warning/);
+    assert.deepEqual(
+      flashes(html).filter(({ kind }) => kind === 'warning'),
+      [],
+    );
   });
 
   it('says nothing about a draft', async () => {
@@ -176,7 +184,10 @@ describe('publishing an image with no alt text (TASK-141 AC #4)', () => {
     });
     const html = await (await agent.get(response.headers.get('location') ?? '')).text();
 
-    assert.doesNotMatch(html, /admin-flash-warning/);
+    assert.deepEqual(
+      flashes(html).filter(({ kind }) => kind === 'warning'),
+      [],
+    );
   });
 
   it('refuses to publish when the site requires alt text, naming the image', async () => {

@@ -1,31 +1,36 @@
 {# What every settings page is: a heading, one form that saves the fields that
-   page carries, and whatever panels sit under it. A page fills in the two
+   page carries, and whatever panels sit under it. A page fills in the three
    blocks, and names in `settingsProblems` each field a save can refuse, so
    the summary at the top links to it; nothing about the chrome is written six
    times. #}
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/button.njk" import button %}
 
 {% block title %}{{ settingsLabel }} settings{% endblock %}
 
 {% block content %}
-  <h1>{{ settingsLabel }}</h1>
+  <h1 class="mb-6 text-2xl font-bold">{{ settingsLabel }}</h1>
 
   {% if hasProblems %}
-    {% call field.summary('Nothing was saved. Fix the fields marked below and try again.') %}
-      {% block settingsProblems %}{% endblock %}
-    {% endcall %}
+    <div class="mb-6 max-w-2xl">
+      {% call field.summary('Nothing was saved. Fix the fields marked below and try again.') %}
+        {% block settingsProblems %}{% endblock %}
+      {% endcall %}
+    </div>
   {% endif %}
 
-  <form class="admin-settings" method="post" action="{{ settingsUrl }}">
+  <form class="flex max-w-2xl flex-col gap-2" method="post" action="{{ settingsUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
 
     {% block settingsFields %}{% endblock %}
 
-    <p class="admin-settings-buttons">
-      <button type="submit">Save settings</button>
-    </p>
+    <div class="mt-4">
+      {{ button('Save settings', type='submit', color='primary') }}
+    </div>
   </form>
 
-  {% block settingsPanels %}{% endblock %}
+  <div class="mt-10 flex max-w-2xl flex-col gap-6">
+    {% block settingsPanels %}{% endblock %}
+  </div>
 {% endblock %}

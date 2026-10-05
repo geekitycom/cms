@@ -17,7 +17,7 @@
      button appears. */
   if (!navigator.clipboard) return;
 
-  var buttons = document.querySelectorAll('.admin-copy-button');
+  var buttons = document.querySelectorAll('button[data-copy]');
   if (!buttons.length) return;
 
   Array.prototype.forEach.call(buttons, function (button) {
