@@ -155,12 +155,12 @@ describe('the list screens', async () => {
         { label: 'Scheduled', modifiers: 'badge-info' },
         { label: 'Hidden', modifiers: 'badge-ghost' },
         { label: 'Draft', modifiers: 'badge-warning' },
-        ...Array.from({ length: 22 }, () => ({ label: 'Published', modifiers: '' })),
+        ...Array.from({ length: 22 }, () => ({ label: 'Published', modifiers: 'badge-outline' })),
       ],
       postTrash: [{ label: 'Trash', modifiers: 'badge-ghost' }],
       pages: [
         { label: 'Draft', modifiers: 'badge-warning' },
-        { label: 'Published', modifiers: '' },
+        { label: 'Published', modifiers: 'badge-outline' },
       ],
       activity: [{ label: 'Refused', modifiers: 'badge-error' }],
       activityEntry: [{ label: 'Refused', modifiers: 'badge-error' }],
@@ -174,13 +174,75 @@ describe('the list screens', async () => {
         { label: '1 failed', modifiers: 'badge-error' },
       ],
       syndication: [
-        { label: 'Offered', modifiers: '' },
+        { label: 'Offered', modifiers: 'badge-outline' },
         { label: 'Ignored', modifiers: 'badge-error' },
       ],
     };
     for (const [screen, wanted] of Object.entries(expected)) {
       assert.deepEqual(badges(served[screen as ListScreen]), wanted, screen);
     }
+  });
+});
+
+function stackedRows(html: string): {
+  headings: string[];
+  rows: { title: string; toggle: string; afterActions: boolean; labels: string[] }[];
+} {
+  const page = screenOf(html);
+  const headings = [
+    ...(/<thead>([\s\S]*?)<\/thead>/.exec(page)?.[1] ?? '').matchAll(/<th\b[^>]*>([^<]*)<\/th>/g),
+  ].map(([, label]) => (label ?? '').trim());
+  const body = /<tbody>([\s\S]*?)<\/tbody>/.exec(page)?.[1] ?? '';
+  const rows = [...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].map(([, row]) => {
+    const [first = '', ...rest] = [...(row ?? '').matchAll(/<td\b([^>]*)>([\s\S]*?)<\/td>/g)];
+    const cell = first[2] ?? '';
+    const summary = cell.search(/<summary\b/);
+    return {
+      title: text(/<a\b[^>]*>([^<]*)<\/a>/.exec(cell)?.[1] ?? ''),
+      toggle: text(/<summary\b[^>]*>([\s\S]*?)<\/summary>/.exec(cell)?.[1] ?? ''),
+      afterActions:
+        summary > cell.search(/value="(?:trash|restore)"/) &&
+        !/<(?:a|button)\b/.test(cell.slice(summary)),
+      labels: rest.map(
+        ([, attributes]) => /\sdata-label="([^"]*)"/.exec(attributes ?? '')?.[1] ?? '',
+      ),
+    };
+  });
+  return { headings, rows };
+}
+
+describe('rows that stack on a narrow screen (TASK-277)', async () => {
+  const served = await listScreens(box);
+
+  for (const screen of ['posts', 'postTrash', 'pages'] as const) {
+    it(`${screen}: each row ends its first cell with a toggle named for the row, after its actions (AC #4)`, () => {
+      const { rows } = stackedRows(served[screen]);
+      assert.ok(rows.length > 0, 'the rows were read');
+      for (const { title, toggle, afterActions } of rows) {
+        assert.equal(toggle, `Details of ${title}`);
+        assert.ok(
+          afterActions,
+          `${title}: the toggle follows the row actions and nothing focusable follows it`,
+        );
+      }
+    });
+
+    it(`${screen}: every other cell is labelled with its column's heading (AC #2)`, () => {
+      const { headings, rows } = stackedRows(served[screen]);
+      for (const { title, labels } of rows) assert.deepEqual(labels, headings.slice(1), title);
+    });
+  }
+
+  it('labels the posts columns and the pages ones as their headings say', () => {
+    assert.deepEqual(stackedRows(served.posts).headings, [
+      'Title',
+      'Author',
+      'Tags',
+      'Categories',
+      'Date',
+      'Status',
+    ]);
+    assert.deepEqual(stackedRows(served.pages).headings, ['Title', 'Author', 'Updated', 'Status']);
   });
 });
 

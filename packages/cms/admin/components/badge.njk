@@ -1,5 +1,6 @@
 {# A badge: `badge(label, …)` emits
-   `<span class="badge badge-sm">label</span>`. The label is escaped.
+   `<span class="badge badge-outline badge-sm">label</span>`, outlined when it
+   is given no colour and no style. The label is escaped.
 
    Modifiers, each a name from a closed set that maps to one DaisyUI class:
 
@@ -27,15 +28,15 @@
 {% set SIZES = { xs: 'badge-xs', sm: 'badge-sm', md: 'badge-md', lg: 'badge-lg', xl: 'badge-xl' } %}
 
 {% macro badge(label, color=none, style=none, size='sm') -%}
-<span class="badge{{ COLORS | modifier(color) }}{{ STYLES | modifier(style) }}{{ SIZES | modifier(size) }}">{{ label }}</span>
+<span class="badge{% if not color and not style %} badge-outline{% endif %}{{ COLORS | modifier(color) }}{{ STYLES | modifier(style) }}{{ SIZES | modifier(size) }}">{{ label }}</span>
 {%- endmacro %}
 
 {% set STATUSES = {
-  published: '',
-  approved: '',
-  accepted: '',
-  described: '',
-  decorative: '',
+  published: 'badge-outline',
+  approved: 'badge-outline',
+  accepted: 'badge-outline',
+  described: 'badge-outline',
+  decorative: 'badge-outline',
   active: 'badge-primary',
   unread: 'badge-primary',
   connected: 'badge-success',
