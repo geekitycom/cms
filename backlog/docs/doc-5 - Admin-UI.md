@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 03:39'
+updated_date: '2026-10-05 04:06'
 ---
 # Admin UI
 
@@ -154,11 +154,12 @@ macros; it does not spell out component markup of its own.
   reading the folder, so a new template is held to them without being listed.
 - **A row's state is one map.** `status(name, label)` in `badge.njk` is the only
   place a state gets a colour: `published`, `approved`, `accepted`, `described`
-  and `decorative` are plain; `active` is `primary`; `scheduled` is `info`;
-  `draft`, `pending` and `missing` are `warning`; `failed`, `rejected` and
-  `spam` are `error`; `hidden` and `trashed` are `ghost`. The label is the word
-  the screen prints, so a state is never told by colour alone, and a name
-  outside the map is a render error.
+  and `decorative` are plain; `active` and `unread` are `primary`; `connected`
+  is `success`; `scheduled` is `info`; `draft`, `pending`, `missing` and
+  `unreachable` are `warning`; `failed`, `rejected` and `spam` are `error`;
+  `hidden`, `trashed` and `disconnected` are `ghost`. The label is the word the
+  screen prints, so a state is never told by colour alone, and a name outside
+  the map is a render error.
 - **A list screen is a table, tabs and pagination.** Posts, Pages, Tags,
   Categories, Users, Connected apps, App activity and its entry, Media,
   Followers and Syndication draw their rows through `table`, their filters
@@ -169,6 +170,29 @@ macros; it does not spell out component markup of its own.
   then View; Add new above the table is the one primary button. Syndication's
   entries are forms, so its table lists them, offered or ignored, and a card
   per entry edits it.
+- **A record that is not a row is a card.** Comments and Messages draw one
+  card per comment or message: the author line (name, site or address, and the
+  state as a `status` badge), the where line (when, on or from what, the
+  address hash), the body, and one line of small ghost buttons, each its own
+  form. A comment's Reply is a `collapse`, folded until it is opened, holding
+  the reply form. An unread message carries an Unread badge and a bold name, so
+  it is not told by colour alone. Their filters are `tabs` and their page links
+  `pagination`, as on the list screens.
+- **A panel is a card.** Each theme is a card, the one in use marked with an
+  Active badge and every other offering Activate; each menu is a card with its
+  items form, and a menu nothing renders has its Delete in the card's actions;
+  Add a menu is a card of its own. On the settings pages the form stays one
+  column and each panel under it is one card: Archive redirects (a `table`),
+  Spam checking and Mail credentials (each opening with a `status` badge for
+  the key or the credential), WordPress paths (a `table`). Tools, Personal
+  data and the user screens draw each of their forms as a card. A destructive
+  button (Delete, Remove key, Remove credentials, Erase it) is `error`, at the
+  card's foot.
+- **A screen shown to nobody in particular is one card.** The IndieAuth consent
+  and refused screens and the admin's error page extend the bare layout and
+  draw one card in its centred column, the page's `<h1>` as the card's title.
+  The error page is rendered outside the admin's `render`, so it never reads
+  the session and always follows the system's light or dark.
 - **The dropdown has no inline style.** DaisyUI's reference anchors a popover
   to its button with `anchor-name` and `position-anchor` style attributes. The
   admin's Content Security Policy refuses style attributes, so the popover is

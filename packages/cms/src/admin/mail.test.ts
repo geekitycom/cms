@@ -412,9 +412,9 @@ describe('which credential boxes the panel draws (AC #1, #2, #3, #4, #6)', () =>
    * assertion proves nothing.
    */
   function panel(screen: string): string {
-    const start = screen.indexOf('admin-mail-panel');
+    const start = screen.indexOf('>Mail credentials</h2>');
     assert.notEqual(start, -1, 'the Mail credentials panel was gone');
-    return screen.slice(start, screen.indexOf('</section>', start));
+    return screen.slice(start, screen.indexOf('</main>', start));
   }
 
   it('offers the API key and no SMTP box when Brevo is the saved provider', async () => {

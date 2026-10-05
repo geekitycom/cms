@@ -1,0 +1,118 @@
+{# /admin/comments: the moderation queue, opening on Pending.
+
+   One card per comment: who wrote it, where and when, what it says, and a row
+   of buttons, each a form of its own so the screen works with JavaScript
+   switched off. Reply is a collapse holding its own form, folded until it is
+   opened. #}
+{% extends "layouts/shell.njk" %}
+{% import "components/fields.njk" as field %}
+{% from "components/badge.njk" import badge, status as statusBadge %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card %}
+{% from "components/collapse.njk" import collapse %}
+{% from "components/pagination.njk" import pagination %}
+{% from "components/tabs.njk" import tabs as tabsNav %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% macro rowFields(row, fields, status, csrfToken) %}
+  <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+  <input type="hidden" name="{{ fields.id }}" value="{{ row.id }}" />
+  <input type="hidden" name="{{ fields.status }}" value="{{ status }}" />
+{% endmacro %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
+
+  <div class="mb-6">{{ tabsNav(tabs, 'Comment status') }}</div>
+
+  {% if rows.length == 0 %}
+    <p class="mb-6">Nothing here.</p>
+  {% else %}
+    <ul class="mb-6 flex max-w-3xl flex-col gap-4">
+      {% for row in rows %}
+        <li>
+          {% call card() %}
+            <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span class="font-semibold">{{ row.author }}</span>
+              {% if row.url %}
+                <a class="link break-all" href="{{ row.url }}" rel="nofollow ugc noopener noreferrer">{{ row.url }}</a>
+              {% endif %}
+              {% if row.email %}
+                <span class="break-all">{{ row.email }}</span>
+              {% endif %}
+              {{ statusBadge(row.status, row.status | capitalize) }}
+              {% if row.source != 'comment' %}
+                {{ badge(row.source | capitalize, style='outline') }}
+              {% endif %}
+            </p>
+
+            <p class="text-sm">
+              <time>{{ row.submitted }}</time>
+              on
+              {% if row.editUrl %}
+                <a class="link" href="{{ row.editUrl }}">{{ row.post }}</a>
+              {% else %}
+                {{ row.post }}
+              {% endif %}
+              {% if row.postUrl %}
+                &middot; <a class="link" href="{{ row.postUrl }}#comment-{{ row.id }}">View</a>
+              {% endif %}
+              {% if row.inReplyTo %}
+                &middot; a reply to another comment
+              {% endif %}
+              {% if row.address %}
+                &middot; <code title="A salted hash of the address it came from">{{ row.address }}</code>
+              {% endif %}
+              {% if row.removed %}
+                &middot; {{ row.removed }}
+              {% endif %}
+            </p>
+
+            <div class="space-y-2 break-words">{{ row.html | safe }}</div>
+
+            <div class="flex flex-wrap gap-1">
+              {% if row.status != 'approved' %}
+                <form method="post" action="{{ moderateUrl }}">
+                  {{ rowFields(row, fields, status, csrfToken) }}
+                  {{ button('Approve', type='submit', style='ghost', size='xs', name=fields.action, value='approve') }}
+                </form>
+              {% endif %}
+              {% if row.status != 'spam' %}
+                <form method="post" action="{{ moderateUrl }}">
+                  {{ rowFields(row, fields, status, csrfToken) }}
+                  {{ button('Spam', type='submit', style='ghost', size='xs', name=fields.action, value='spam') }}
+                </form>
+              {% endif %}
+              <form method="post" action="{{ moderateUrl }}">
+                {{ rowFields(row, fields, status, csrfToken) }}
+                {{ button('Delete', type='submit', color='error', style='ghost', size='xs', name=fields.action, value='delete') }}
+              </form>
+            </div>
+
+            {% call collapse('Reply') %}
+              <form method="post" action="{{ replyUrl }}">
+                {{ rowFields(row, fields, status, csrfToken) }}
+                {% set replyLabel %}Reply to {{ row.author }}{% endset %}
+                {{ field.textarea('reply-' + loop.index, fields.body, replyLabel, rows='4', required=true,
+                     hint='Markdown, rendered the same way a visitor’s comment is. It is posted approved, under this one.') }}
+                <div class="mt-2">{{ button('Post reply', type='submit', color='primary') }}</div>
+              </form>
+            {% endcall %}
+          {% endcall %}
+        </li>
+      {% endfor %}
+    </ul>
+
+    <div class="mb-6">
+      {{ pagination(page, pages=pages, previousUrl=previousUrl, nextUrl=nextUrl) }}
+    </div>
+  {% endif %}
+
+  <p class="max-w-prose text-sm">
+    Comments live as one JSON file per post under <code>content/_data/comments/</code>, so they
+    are in git beside the posts and an Eleventy build of the same directory shows them. Everything
+    here rewrites that file; the database is only an index of it. Spam is kept rather than deleted,
+    so a mistake can be undone — and so a spam checker can be told when it was wrong.
+  </p>
+{% endblock %}

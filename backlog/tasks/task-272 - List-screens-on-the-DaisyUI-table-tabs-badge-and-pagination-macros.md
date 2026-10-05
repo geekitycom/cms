@@ -1,11 +1,11 @@
 ---
 id: TASK-272
 title: 'List screens on the DaisyUI table, tabs, badge and pagination macros'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-04 11:12'
-updated_date: '2026-10-05 03:12'
+updated_date: '2026-10-05 04:09'
 labels:
   - admin
   - daisyui
@@ -33,7 +33,7 @@ decision-30: every screen that is a table of rows is redrawn through the macros:
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 Each listed screen renders its rows through the table macro inside a horizontally scrolling wrapper, opens with its caption, and its test file passes
-- [ ] #2 Filters (all / published / drafts / trash, pending / approved / spam, inbox / spam) are DaisyUI tabs with the current one marked, and pagination is the pagination macro
+- [x] #2 Filters (all / published / drafts / trash, pending / approved / spam, inbox / spam) are DaisyUI tabs with the current one marked, and pagination is the pagination macro
 - [x] #3 Every status a row can show is a badge in a semantic colour and never by colour alone: the word is still printed
 - [x] #4 The taxonomy rename field, the media copy controls and the alt-text field work as before (their tests pass), and the screens carry no legacy admin-* class
 <!-- AC:END -->
@@ -69,6 +69,10 @@ DaisyUI MCP (workflowId m30-admin-lists) quality inspector: two remaining findin
 Run with GEEKITY_ADMIN=daisyui for the whole file, dashboard.test.ts and assets.test.ts each fail one in-process test that expects the old admin (counts as <dt>, admin-nav in the sheet); those files are built for the default env and were not touched here.
 
 AC #2 left unchecked: it names the pending / approved / spam and inbox / spam filters, which are the Comments and Messages screens. Those screens are not in this task's list and are converted by TASK-274, so there is no proof for them here. For every screen this task converts, the filters are tabs with the current one marked and the page links are the pagination macro (list-screens.test.ts, CDP). The status map already holds pending, approved and spam for TASK-274. Check AC #2 once TASK-274 lands, or move that clause there.
+
+AC #2 checked after TASK-274 converted Comments and Messages. Proof: src/admin/remaining-screens.test.ts, 'draws the pending / approved / spam filters as tabs, the current one marked (TASK-272 AC #2)', 'pages through comments with the pagination macro (TASK-272 AC #2)' and 'draws the inbox / spam filters as tabs and pages with the pagination macro (TASK-272 AC #2)', passing with and without GEEKITY_ADMIN=daisyui; and headless Chrome (TASK-274 notes): Pending, Inbox and Spam tabs marked tab-active and aria-current=page at 1280 and 390, light and dark, with the comments and messages pagination groups rendered. The filters on every screen this task converted were already proven by list-screens.test.ts.
+
+Precision on the Chrome half of that proof: the CDP run read the tab-active class on Pending, Inbox and Spam (aria-current=page is held by remaining-screens.test.ts), and the pagination group (Newer disabled, Page 1 of 2, Older) was seen on the Messages screenshot at 1280 light; the comments pagination is held by the test.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

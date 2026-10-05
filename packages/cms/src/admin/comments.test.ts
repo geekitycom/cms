@@ -227,7 +227,10 @@ describe('the comments screen', () => {
     const html = await (await agent.get('/admin')).text();
 
     assert.match(html, /Comments waiting/);
-    assert.match(html, /<dd><a href="\/admin\/comments\?status=pending">2<\/a><\/dd>/);
+    assert.match(
+      html,
+      /href="\/admin\/comments\?status=pending"[^>]*>(?:\s*<div class="stat-title">Comments waiting<\/div>\s*<div class="stat-value[^"]*">)?2</,
+    );
   });
 });
 

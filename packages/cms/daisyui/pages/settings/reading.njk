@@ -1,0 +1,164 @@
+{# /admin/settings/reading: what a visitor is shown, and who is told when it
+   changes. The site menu was here until TASK-108; it is on /admin/navigation,
+   with every other menu the site holds. #}
+{% extends "layouts/settings-page.njk" %}
+{% import "components/fields.njk" as field %}
+
+{% block settingsProblems %}
+  {{ field.problem('settings-homepage', problems.homepage) }}
+  {{ field.problem('settings-posts-page', problems.postsPage) }}
+  {{ field.problem('settings-posts-per-page', problems.postsPerPage) }}
+  {{ field.problem('settings-notify-server', problems.notifyServer) }}
+  {{ field.problem('settings-feed-update-period', problems.feedUpdatePeriod) }}
+  {{ field.problem('settings-feed-update-frequency', problems.feedUpdateFrequency) }}
+  {{ field.problem('settings-ai-crawlers', problems.aiCrawlers) }}
+  {{ field.problem('settings-content-signal-search', problems.contentSignalSearch) }}
+  {{ field.problem('settings-content-signal-ai-input', problems.contentSignalAiInput) }}
+  {{ field.problem('settings-content-signal-ai-train', problems.contentSignalAiTrain) }}
+  {{ field.problem('settings-robots-rules', problems.robotsRules) }}
+{% endblock %}
+
+{% block settingsFields %}
+  {# WordPress's "Your homepage displays": the empty option is Your latest
+     posts, so the choice and the page it needs are one control rather than a
+     radio and a select that can disagree with each other. #}
+  {% set homepageGone %}
+    {% if homepageMissing %}
+      <p>
+        The homepage was <code>{{ form.homepage }}</code>, which is no longer published,
+        so the site is showing its latest posts. Publish that page again to have it back,
+        or pick another.
+      </p>
+    {% endif %}
+  {% endset %}
+  {% set homepageHint %}
+    Your latest posts is the archive at <code>/</code>. A page instead is served
+    there, and its own URL redirects to <code>/</code> so there is one front page.
+  {% endset %}
+  {% call field.select('settings-homepage', fields.homepage, 'Your homepage displays',
+       error=problems.homepage, errorHtml=homepageGone, hint=homepageHint, autofocus=true) %}
+    <option value="">Your latest posts</option>
+    {% for page in pageChoices %}
+      <option value="{{ page.slug }}"{% if page.slug == form.homepage %} selected{% endif %}>{{ page.title }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% set postsPageGone %}
+    {% if postsPageMissing %}
+      <p>
+        The posts page was <code>{{ form.postsPage }}</code>, which is no longer published,
+        so the listing has no page of its own.
+      </p>
+    {% endif %}
+  {% endset %}
+  {% set postsPageHint %}
+    Where the posts go once the homepage is a page: this page's URL carries the
+    listing, with its own title and words above it. It needs a homepage first.
+    The feeds stay at <code>/feed/</code> either way.
+  {% endset %}
+  {% call field.select('settings-posts-page', fields.postsPage, 'Posts page',
+       error=problems.postsPage, errorHtml=postsPageGone, hint=postsPageHint) %}
+    <option value="">&mdash; None &mdash;</option>
+    {% for page in pageChoices %}
+      <option value="{{ page.slug }}"{% if page.slug == form.postsPage %} selected{% endif %}>{{ page.title }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {{ field.text('settings-posts-per-page', fields.postsPerPage, 'Posts per page', form.postsPerPage,
+       error=problems.postsPerPage, inputmode='numeric', required=true,
+       hint='How many posts a listing page holds, on the home page and on every archive.') }}
+
+  {% set notifyHint %}
+    An rssCloud and WebSub server, told whenever a feed changes so subscribers
+    hear at once instead of waiting for their next poll. Every feed advertises
+    it. Leave it empty for none.
+  {% endset %}
+  {{ field.text('settings-notify-server', fields.notifyServer, 'Notify server', form.notifyServer,
+       error=problems.notifyServer, hint=notifyHint, inputmode='url') }}
+
+  {# TASK-152. The Syndication module's polling hint, which only RSS has an
+     element for. #}
+  {% set periodHint %}
+    How often RSS readers should check the feeds. Readers that see no new post
+    for much longer than this may check less often, so pick a pace the site keeps.
+  {% endset %}
+  {% call field.select('settings-feed-update-period', fields.feedUpdatePeriod, 'Feed update period',
+       error=problems.feedUpdatePeriod, hint=periodHint) %}
+    {% for option in [
+         ['hourly', 'Hourly'],
+         ['daily', 'Daily'],
+         ['weekly', 'Weekly'],
+         ['monthly', 'Monthly'],
+         ['yearly', 'Yearly']] %}
+      <option value="{{ option[0] }}"{% if option[0] == form.feedUpdatePeriod %} selected{% endif %}>{{ option[1] }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {{ field.text('settings-feed-update-frequency', fields.feedUpdateFrequency, 'Checks per period',
+       form.feedUpdateFrequency, error=problems.feedUpdateFrequency, inputmode='numeric', required=true,
+       hint='How many times in each period. Daily and 2 means twice a day.') }}
+
+  {# TASK-148. What /robots.txt tells crawlers beyond keeping them out of the
+     admin, which it does whatever is set here. #}
+  <h2 class="mt-6 text-lg font-semibold">Crawlers</h2>
+
+  {% set aiHint %}
+    Training crawlers gather pages to train AI models. Retrieval crawlers fetch a
+    page when somebody asks an assistant about it, so blocking them also stops the
+    site being cited. Each choice writes its own groups into
+    <a href="/robots.txt"><code>/robots.txt</code></a>.
+  {% endset %}
+  {% call field.select('settings-ai-crawlers', fields.aiCrawlers, 'AI crawlers',
+       error=problems.aiCrawlers, hint=aiHint) %}
+    {% for option in [
+         ['allow', 'Allow all'],
+         ['block-training', 'Block training crawlers'],
+         ['block-all', 'Block all AI crawlers']] %}
+      <option value="{{ option[0] }}"{% if option[0] == form.aiCrawlers %} selected{% endif %}>{{ option[1] }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% for signal in [
+       ['contentSignalSearch', 'settings-content-signal-search', 'Content signal: search',
+        'Whether pages may be indexed and shown as search results.'],
+       ['contentSignalAiInput', 'settings-content-signal-ai-input', 'Content signal: AI input',
+        'Whether pages may be fed to an AI model to answer a question.'],
+       ['contentSignalAiTrain', 'settings-content-signal-ai-train', 'Content signal: AI training',
+        'Whether pages may be used to train or fine-tune an AI model.']] %}
+    {% call field.select(signal[1], fields[signal[0]], signal[2],
+         error=problems[signal[0]], hint=signal[3]) %}
+      {% for option in [['', 'Not said'], ['yes', 'Yes'], ['no', 'No']] %}
+        <option value="{{ option[0] }}"{% if option[0] == form[signal[0]] %} selected{% endif %}>{{ option[1] }}</option>
+      {% endfor %}
+    {% endcall %}
+  {% endfor %}
+
+  {% set rulesHint %}
+    More <code>robots.txt</code> groups, written as they would be in the file: one or
+    more <code>User-agent</code> lines, then <code>Allow</code>, <code>Disallow</code>,
+    <code>Crawl-delay</code> or <code>Content-Signal</code> lines. Every group still
+    keeps crawlers out of <code>/admin/</code>, and the sitemap is always named.
+  {% endset %}
+  {{ field.textarea('settings-robots-rules', fields.robotsRules, 'More robots.txt rules',
+       form.robotsRules, error=problems.robotsRules, hint=rulesHint,
+       rows='5', spellcheck='false') }}
+
+  {# TASK-149. The index for language models, beside the file for crawlers. #}
+  {% set llmsHint %}
+    <a href="/llms.txt"><code>/llms.txt</code></a> lists the site's pages and recent
+    posts, each linked to its Markdown, for AI tools to read. The home page points
+    to it. To write it yourself, put your own file at <code>content/llms.txt</code>.
+  {% endset %}
+  {{ field.checkbox('settings-llms-txt', fields.llmsTxt, 'Serve /llms.txt',
+       checked=form.llmsTxt, hint=llmsHint) }}
+
+  {# TASK-151. Telling the search engines, beside the files they read. #}
+  {% set indexNowHint %}
+    Tells Bing, Yandex, Naver, Seznam and the other IndexNow search engines about
+    every post or page you publish, change or delete, so they recrawl it within
+    minutes. Turning it on creates a key the site serves at
+    <code>/{key}.txt</code>. Nothing is sent while the site's URL is local.
+  {% endset %}
+  {{ field.checkbox('settings-index-now', fields.indexNow, 'Submit changes to IndexNow',
+       checked=form.indexNow, hint=indexNowHint) }}
+{% endblock %}

@@ -1,0 +1,96 @@
+{# /admin/tools: what the derived index holds, and the button that reads every
+   file back into it without stopping the site (TASK-95).
+
+   The counts are the point of the screen as much as the button is: an index
+   that disagrees with the files is not something the site complains about, so
+   the only way to notice is to be shown what it holds. #}
+{% extends "layouts/shell.njk" %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/card.njk" import card, cardActions %}
+{% from "components/table.njk" import table %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
+
+  <div class="flex max-w-2xl flex-col gap-6">
+    <p class="max-w-prose">
+      Everything in <code>data/geekity.db</code> is a reading of the files under
+      <code>{{ contentDir }}</code>, so it can always be read again. Rebuild it after
+      editing content outside the admin &mdash; over ssh, or with a
+      <code>git pull</code> while the site was down &mdash; or when what is listed here
+      disagrees with what is on disk.
+    </p>
+
+    {% call card(title='What the index holds') %}
+      {% call table('What the index holds') %}
+        <thead>
+          <tr>
+            <th scope="col">Kind</th>
+            <th scope="col">Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Documents</th>
+            <td>{{ indexed.documents }}</td>
+          </tr>
+          <tr>
+            <th scope="row">Followers</th>
+            <td>{{ indexed.followers }}</td>
+          </tr>
+          <tr>
+            <th scope="row">Inbox activities</th>
+            <td>{{ indexed.activities }}</td>
+          </tr>
+          <tr>
+            <th scope="row">Comments</th>
+            <td>{{ indexed.comments }}</td>
+          </tr>
+        </tbody>
+      {% endcall %}
+
+      {% if not confirm %}
+        <form method="post" action="{{ rebuildUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          {% call cardActions() %}
+            {{ button('Rebuild the index', type='submit', color='primary') }}
+          {% endcall %}
+        </form>
+      {% endif %}
+    {% endcall %}
+
+    {% if confirm %}
+      {# Offered rather than done, the way a merge is on the taxonomy screens.
+         The window in the middle is the whole reason: for as long as the scan
+         runs the site answers 404 for documents whose files are perfectly fine,
+         and that is not a thing to discover afterwards. #}
+      {% call card(title='Rebuild the index now?', style='border') %}
+        <p>
+          The index is emptied and every file read again. Until the scan finishes, this
+          site answers <strong>404</strong> for its posts and pages &mdash; under a second
+          on a small site, longer on a large one &mdash; and it is serving the whole time.
+          Nothing is deleted and nothing is sent: you stay signed in, the delivery log and
+          the relays are kept, and no follower, feed or linked page is told about a post
+          the scan re-indexes.
+        </p>
+        <form method="post" action="{{ rebuildUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          <input type="hidden" name="{{ fields.confirm }}" value="1" />
+          {% call cardActions() %}
+            {{ buttonLink('Cancel', toolsUrl, style='ghost') }}
+            {{ button('Rebuild it', type='submit', color='warning') }}
+          {% endcall %}
+        </form>
+      {% endcall %}
+    {% endif %}
+
+    <p class="max-w-prose text-sm">
+      This runs on the site as it is: nothing is deleted, no connection is swapped and
+      nobody is signed out. <code>geekity rebuild</code> at the command line is the other
+      door, and it is for the one case this screen cannot be: a database this version
+      refuses to open, where there is no site running to press a button in.
+    </p>
+  </div>
+{% endblock %}

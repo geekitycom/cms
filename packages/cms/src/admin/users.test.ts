@@ -306,9 +306,13 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
 
     const { html } = await editScreen(agent, ada);
 
-    assert.match(html, /<h2>Account<\/h2>/);
-    assert.match(html, /<h2>Profile<\/h2>/);
-    assert.match(html, /<h2>Email ada about<\/h2>/, 'the notices are headed with whose they are');
+    assert.match(html, /<h2\b[^>]*>Account<\/h2>/);
+    assert.match(html, /<h2\b[^>]*>Profile<\/h2>/);
+    assert.match(
+      html,
+      /<h2\b[^>]*>Email ada about<\/h2>/,
+      'the notices are headed with whose they are',
+    );
 
     // The username is shown, not offered as a box: it is the author URL, the
     // login and the actor, and nothing here may change it.
@@ -343,7 +347,7 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     const [notice] = NOTIFICATION_EVENTS;
     assert.ok(notice !== undefined);
 
-    assert.match(html, /<h2>Email ada about<\/h2>/, 'the panel still says what it is for');
+    assert.match(html, /<h2\b[^>]*>Email ada about<\/h2>/, 'the panel still says what it is for');
     assert.doesNotMatch(html, /name="event"/, 'a switch is offered with nowhere to write to');
     assert.match(html, /Nothing, while the box above is empty/, 'and nothing says why');
 
@@ -361,7 +365,7 @@ describe('the fields on the edit user screen (TASK-97 AC #2)', () => {
     // what goes out of a site that cannot put anything out at all.
     const { html } = await withEmail(agent, ada, 'ada@example.com');
 
-    assert.match(html, /<h2>Email ada about<\/h2>/, 'the panel still says what it is for');
+    assert.match(html, /<h2\b[^>]*>Email ada about<\/h2>/, 'the panel still says what it is for');
     assert.doesNotMatch(html, /name="event"/, 'a switch is offered with nothing to send with');
     assert.match(html, /no mail provider/, 'and nothing says which piece is missing');
     assert.match(html, /href="\/admin\/settings\/email"/, 'or where to go and fix it');
@@ -1016,7 +1020,7 @@ describe('changing your own password', () => {
     ).id;
 
     const mine = await editScreen(agent, ada);
-    assert.match(mine.html, /<h2>Change your password<\/h2>/, 'on your own page');
+    assert.match(mine.html, /<h2\b[^>]*>Change your password<\/h2>/, 'on your own page');
     assert.match(mine.html, /id="current-password"/);
 
     const hers = await editScreen(agent, grace);
@@ -1165,7 +1169,7 @@ describe('deleting a user', () => {
 
     // The only user: there is no button, and the page says what is in the way.
     const alone = await editScreen(agent, ada);
-    assert.match(alone.html, /<h2>Delete<\/h2>/);
+    assert.match(alone.html, /<h2\b[^>]*>Delete<\/h2>/);
     assert.match(alone.html, /only user/, 'the refusal is on the page');
     assert.doesNotMatch(alone.html, /<button type="submit"[^>]*>Delete ada<\/button>/);
 

@@ -1,0 +1,142 @@
+{# /admin/navigation: every menu this site holds, and what renders it.
+
+   Two lists, and a menu is in exactly one of them. First the areas the active
+   theme declares, in the theme's own order and under the theme's own labels,
+   each a card with a box to type links into: an area the site has never
+   filled in is an empty box rather than a missing one. Then every other menu
+   the site stores, under a heading that says this theme renders them nowhere,
+   each with a Delete, which is the only way a menu is removed. Each save, add
+   and delete is a form of its own, so a refused one loses nothing typed into
+   another. #}
+{% extends "layouts/shell.njk" %}
+{% import "components/fields.njk" as field %}
+{% from "components/badge.njk" import badge %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{# One menu: its card, the box its items are typed into, and the button that
+   saves it. `kept` adds the Delete form, on a menu nothing renders. #}
+{% macro box(menu, fields, url, deleteUrl, csrfToken, kept=false) %}
+  <li>
+    {% call card(title=menu.label) %}
+      <p class="flex flex-wrap items-center gap-2">
+        <code>menus.{{ menu.name }}</code>
+        {% if menu.stored %}
+          {{ badge(menu.count + (' item' if menu.count == 1 else ' items'), style='outline') }}
+        {% else %}
+          {{ badge('empty — nothing has been typed here yet', style='ghost') }}
+        {% endif %}
+      </p>
+
+      <form method="post" action="{{ url }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ fields.menu }}" value="{{ menu.name }}" />
+        {% set itemsHint %}
+          One item per line, written <code>Label | URL</code> &mdash; for example
+          <code>About | /about/</code> or
+          <code>Mastodon | https://example.social/@me</code>. They are the whole of
+          this menu, in this order: nothing else puts a link in it. A page serving
+          as the front page goes in as <code>Home | /</code>, where a reader lands.
+          End a line with the
+          <code>rel</code> values the link carries, a word each &mdash;
+          <code>Mastodon | https://example.social/@me | me</code>,
+          <code>A source | https://example.com/thing | nofollow noopener</code>.
+          <code>me</code> marks <strong>a profile that is you</strong>, which is
+          how Mastodon and the rest of the IndieWeb verify that the site and the
+          profile it links are the same person; the rest are whatever HTML link
+          types you want on it.
+        {% endset %}
+        {{ field.textarea('menu-' + menu.name, fields.items, 'Items', menu.items,
+             error=menu.problem, hint=itemsHint, rows='5', spellcheck='false') }}
+        <div class="mt-2">{{ button('Save menu', type='submit', color='primary') }}</div>
+      </form>
+
+      {% if kept %}
+        <form method="post" action="{{ deleteUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          <input type="hidden" name="{{ fields.menu }}" value="{{ menu.name }}" />
+          {% call cardActions() %}
+            {{ button('Delete this menu', type='submit', color='error', style='ghost') }}
+          {% endcall %}
+        </form>
+      {% endif %}
+    {% endcall %}
+  </li>
+{% endmacro %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
+
+  {% if hasProblems %}
+    <div class="mb-6 max-w-2xl">
+      {% call field.summary('Nothing was saved. Fix the box marked below and try again.') %}
+        {% for menu in areas.concat(others) %}
+          {{ field.problem('menu-' + menu.name, menu.problem) }}
+        {% endfor %}
+        {{ field.problem('menu-name', nameProblem) }}
+      {% endcall %}
+    </div>
+  {% endif %}
+
+  <h2 class="mb-3 text-lg font-semibold">Where {{ themeName }} puts a menu</h2>
+
+  {% if areas.length %}
+    <p class="mb-4 max-w-prose text-sm">
+      These are the areas the active theme declares in its <code>theme.json</code>, in the order it
+      declares them. A theme renders a menu by asking for it by name, and an area with nothing in it
+      renders nothing at all.
+    </p>
+
+    <ul class="mb-10 grid max-w-2xl grid-cols-1 gap-6">
+      {% for menu in areas %}
+        {{ box(menu, fields, navigationUrl, deleteUrl, csrfToken) }}
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="mb-10 max-w-prose text-sm">
+      {{ themeName }} declares no areas, so it asks for no menu by name. A theme declares them as an
+      <code>areas</code> list in its <code>theme.json</code>, each entry a <code>name</code> &mdash;
+      the name the template loops over as <code>menus.&lt;name&gt;</code> &mdash; and a
+      <code>label</code> to head the box here. A menu added below is still stored, ready for the
+      theme that asks for it.
+    </p>
+  {% endif %}
+
+  {% if others.length %}
+    <h2 class="mb-3 text-lg font-semibold">Kept, rendered nowhere</h2>
+
+    <p class="mb-4 max-w-prose text-sm">
+      This site stores these menus and {{ themeName }} renders none of them: no template loops over
+      those names, so nothing on the public site shows them. They are kept, because that is how the
+      menu a theme will use gets written before the site switches to it. Delete is the only way one
+      is removed.
+    </p>
+
+    <ul class="mb-10 grid max-w-2xl grid-cols-1 gap-6">
+      {% for menu in others %}
+        {{ box(menu, fields, navigationUrl, deleteUrl, csrfToken, kept=true) }}
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <div class="max-w-2xl">
+    {% call card(title='Add a menu') %}
+      <form method="post" action="{{ addUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        {% set nameHint %}
+          The name a theme asks for the menu by: lower-case letters, digits and
+          underscores, starting with a letter. It is written after the dot &mdash;
+          <code>{% raw %}{% for item in menus.footer %}{% endraw %}</code> &mdash; which is why a dash
+          is not allowed in one. A name this theme declares puts the menu in its place above; any other
+          name is a menu kept and rendered nowhere, which is how you fill one in before switching to the
+          theme that will use it.
+        {% endset %}
+        {{ field.text('menu-name', fields.name, 'Name', newName,
+             error=nameProblem, hint=nameHint, spellcheck='false', required=true) }}
+        <div class="mt-2">{{ button('Add menu', type='submit', color='primary') }}</div>
+      </form>
+    {% endcall %}
+  </div>
+{% endblock %}

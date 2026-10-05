@@ -61,7 +61,7 @@ describe('GEEKITY_ADMIN', () => {
     );
     const served = JSON.parse(stdout) as {
       login: string;
-      unconverted: string;
+      themes: string;
       stylesheet: { status: number; body: string };
       editor: { status: number; body: string };
       slug: { status: number; body: string };
@@ -72,7 +72,7 @@ describe('GEEKITY_ADMIN', () => {
 
     for (const [screen, html] of [
       ['the login screen', served.login],
-      ['the unconverted Themes screen', served.unconverted],
+      ['the Themes screen', served.themes],
     ] as const) {
       it(`draws ${screen} in daisyui/layouts/base.njk, which links the compiled sheet alone`, () => {
         const sheets = [...html.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*>/g)].map(
@@ -82,9 +82,17 @@ describe('GEEKITY_ADMIN', () => {
       });
     }
 
-    it('still draws an unconverted screen from admin/ inside the DaisyUI shell', () => {
-      assert.match(served.unconverted, /<div class="drawer lg:drawer-open">/);
-      assert.match(served.unconverted, /<ul class="admin-themes">/);
+    it('draws a screen from daisyui/ inside the DaisyUI shell, with no class of the old admin', () => {
+      assert.match(served.themes, /<div class="drawer lg:drawer-open">/);
+      const page = served.themes.replace(/<geekity-admin-bar\b[\s\S]*<\/geekity-admin-bar>/, '');
+      assert.match(page, /<div class="card bg-base-100 shadow-sm/);
+      const tokens = [...page.matchAll(/\bclass="([^"]*)"/g)].flatMap(([, value]) =>
+        (value ?? '').split(/\s+/),
+      );
+      assert.deepEqual(
+        tokens.filter((token) => token.startsWith('admin-')),
+        [],
+      );
     });
 
     it('serves the compiled DaisyUI sheet as /admin/_static/admin.css', () => {

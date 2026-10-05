@@ -118,9 +118,11 @@ function syndicationRefused(key: string): Record<string, unknown> {
  * has nothing to type, only boxes to untick: a request it cannot answer is a
  * page of its own (`pages/indieauth/refused.njk`), never this form again. The
  * conflict screen draws its two versions in read-only boxes and posts only
- * hidden fields; a refused save there is the editor or the conflict again.
+ * hidden fields; a refused save there is the editor or the conflict again. An
+ * empty reply on the comments screen comes back as a flash over the list.
  */
 const NEVER_REFUSED: ReadonlySet<string> = new Set([
+  'pages/comments/all.njk',
   'pages/indieauth/consent.njk',
   'pages/documents/conflict.njk',
 ]);

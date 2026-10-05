@@ -1,0 +1,283 @@
+{# /admin/users/<id>: everything about one person, a panel at a time.
+
+   The table behind it says who there is; this says what they are. Every box
+   here carries a label the eye can read, because these fields used to sit in
+   a row of that table where a placeholder was the only thing telling them
+   apart — and a placeholder disappears the moment somebody types.
+
+   Four forms rather than one, for the reason there were four before: an email
+   address is private to the site and a profile is the public face, a notice
+   switch is a button and how often it arrives is a select, and a password is
+   about whoever is signed in. Each saves what its own heading is about and
+   lands back here, so a Save always shows its own result. #}
+{% extends "layouts/shell.njk" %}
+{% import "components/fields.njk" as field %}
+{% from "components/badge.njk" import badge, status %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
+
+{% block title %}Edit {{ account.username }}{% endblock %}
+
+{% block content %}
+  <h1 class="mb-2 flex flex-wrap items-center gap-2 text-2xl font-bold">Edit {{ account.username }}{% if account.you %} {{ badge('(you)', style='outline', size='md') }}{% endif %}</h1>
+
+  <p class="mb-6 text-sm"><a class="link" href="{{ usersUrl }}">Back to all users</a></p>
+
+  <div class="flex max-w-2xl flex-col gap-6">
+
+  {% call card(title='Account') %}
+  <form method="post" action="{{ userEmailUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+
+    <p>
+      Signs in as <strong>{{ account.username }}</strong>, and writes at
+      <a class="link break-all" href="{{ account.archiveUrl }}">{{ account.archiveUrl }}</a>.
+    </p>
+    <p class="text-sm">
+      A username is not editable: it is the login, the author URL above, and
+      the actor a follower holds. Somebody who needs a different one is a new
+      account.
+    </p>
+    {# The id they were published under somewhere else (TASK-69). Read-only on
+       purpose: it is what the fediverse already holds, and changing it would
+       orphan every follow. #}
+    {% if account.storedActorId %}
+      <p class="text-sm">
+        Also <code>{{ account.storedActorId }}</code> — what the fediverse knows
+        this user by. Set by the import or by hand in
+        <code>data/users.json</code>, never here.
+      </p>
+    {% endif %}
+
+    {% set emailHint %}
+      {% if mailConfigured %}
+        Optional, and never shown on the public site. It is what a forgotten password is recovered through and where the notices below go. Empty it to stop the site writing to this person at all.
+      {% else %}
+        Optional, and this site sends no mail yet, so nothing will be sent to one. Choose a provider on <a class="link" href="{{ adminUrl }}/settings/email">Settings &rsaquo; Email</a> to turn password recovery on.
+      {% endif %}
+    {% endset %}
+    {{ field.text('user-email', fields.email, 'Email address', account.email,
+         type='email', autocomplete='email', hint=emailHint) }}
+
+    <div class="mt-2">{{ button('Save email address', type='submit', color='primary') }}</div>
+  </form>
+  {% endcall %}
+
+  {# The public face of this person (TASK-67). Anybody's, not only your own:
+     there is one role, so an admin who has just added a colleague can put a
+     name and a line about them on their archive without waiting for them to
+     sign in. After decision-14 these same fields are what their ActivityPub
+     actor carries, which is why they live beside the account rather than in
+     the site settings — and why saving them tells their followers. #}
+  {% call card(title='Profile') %}
+  <form method="post" action="{{ userProfileUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+    <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+
+    <p class="text-sm">
+      A profile is public. Nothing in it is required — a user with no profile
+      still has an archive under their username — and a box left empty is a
+      field they do not have.
+    </p>
+
+    {% if profileProblems.links %}
+      {% call field.summary('Nothing was saved. Fix the Links box below and save again; every other box here still holds what you typed.') %}
+        {{ field.problem('profile-links', profileProblems.links) }}
+      {% endcall %}
+    {% endif %}
+
+    {{ field.text('profile-display-name', fields.displayName, 'Display name',
+         account.profile.displayName,
+         hint='Printed instead of the login: it heads the archive and is the byline under their posts.') }}
+
+    {{ field.textarea('profile-bio', fields.bio, 'Bio', account.profile.bio, rows='4',
+         hint='A line or two about them, shown on the archive under the name.') }}
+
+    {% set avatarHint %}A path such as <code>/uploads/2026/09/me.jpg</code>, or a full URL.{% endset %}
+    {{ field.text('profile-avatar', fields.avatar, 'Avatar', account.profile.avatar,
+         hint=avatarHint) }}
+
+    {{ field.text('profile-job-title', fields.jobTitle, 'Job title', account.profile.jobTitle,
+         hint='What they do, printed beside the name on the archive.') }}
+
+    {{ field.text('profile-location', fields.location, 'Location', account.profile.location,
+         hint='Where they are, as they write it.') }}
+
+    {# What the box takes — the same line a menu item is written on, down to
+       the rel values it may end in (TASK-114) — and the one thing about it
+       nothing on the screen used to say (TASK-112): these links are published
+       with rel="me", which is what a person deciding what to put here needs to
+       know. #}
+    {% set linksHint %}
+      One per line, either <code>Label | https://example.com</code> or a bare
+      URL that labels itself. A URL is a path like <code>/about/</code> or a
+      full <code>http://</code> or <code>https://</code> one, with no spaces in
+      it. End a line with the
+      <code>rel</code> values the link carries, a word each &mdash;
+      <code>Mastodon | https://example.social/@me | me</code>,
+      <code>Their post | https://example.com/post | me nofollow author</code>.
+      It is the same line the menu boxes on
+      <a class="link" href="{{ adminUrl }}/navigation">Navigation</a> take.
+      Every link here is published with <code>rel="me"</code> whether or not
+      you type it: it is how Mastodon verifies a profile field that points back
+      at this site, and how IndieAuth knows these are yours. Nothing else in
+      Geekity needs it.
+    {% endset %}
+    {{ field.textarea('profile-links', fields.links, 'Links', account.profile.links, rows='4',
+         hint=linksHint, error=profileProblems.links) }}
+
+    <div class="mt-2">{{ button('Save profile', type='submit', color='primary') }}</div>
+  </form>
+  {% endcall %}
+
+  {# Only once there is both somewhere to write to and something to write
+     with. These switches decide what is sent to the address above, so without
+     an address, or without a mail provider on Settings > Email, every one of
+     them could be on and the site would still send this person nothing. The
+     lines below say which is missing where the panel would have been, rather
+     than letting it vanish without explanation. #}
+  {% if account.email and mailConfigured %}
+  {% call card(title='Email ' + account.username + ' about') %}
+
+    <p class="text-sm">
+      What this site writes to {{ account.username }} at <code>{{ account.email }}</code>.
+    </p>
+
+    {# One form per switch, not one form with a checkbox each: a browser sends
+       no field for an unticked box, so a single form could not tell "turned
+       this off" from "left it alone". Adding a notice is one entry in the
+       registry and no change here. #}
+    {% for notice in account.notifications %}
+      <div class="flex flex-col gap-2 border-t border-base-300 pt-4">
+        <h3 class="font-semibold">{{ notice.label }}</h3>
+        <p class="text-sm">{{ notice.description }}</p>
+
+        <form class="flex flex-wrap items-center gap-2" method="post" action="{{ userNotificationsUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+          <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
+          <input type="hidden" name="{{ fields.on }}" value="{% if notice.on %}{% else %}1{% endif %}" />
+          {% if notice.on %}
+            {{ status('active', 'On') }}
+            {{ button('Turn off', type='submit', style='outline', size='xs') }}
+          {% else %}
+            {{ status('hidden', 'Off') }}
+            {{ button('Turn on', type='submit', style='outline', size='xs') }}
+          {% endif %}
+        </form>
+
+        {# And, for a notice the registry says can be batched, how often it
+           should arrive. A second form because a select needs a Save beside
+           it and the switch above is a button; the registry decides which
+           notices get one. #}
+        {% if notice.batched %}
+          <form class="flex flex-wrap items-end gap-2" method="post" action="{{ userNotificationModeUrl }}">
+            <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+            <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+            <input type="hidden" name="{{ fields.event }}" value="{{ notice.name }}" />
+            {% call field.select('notice-mode-' + notice.name, fields.mode, 'How often') %}
+              {% for choice in notice.modes %}
+                <option value="{{ choice.value }}"{% if choice.chosen %} selected{% endif %}>{{ choice.label }}</option>
+              {% endfor %}
+            {% endcall %}
+            <div class="pb-1">{{ button('Save', type='submit') }}</div>
+          </form>
+          <p class="text-sm">
+            On an hourly or a daily digest nothing is sent as they arrive;
+            instead one message a window lists everything still waiting, and
+            no message goes at all when nothing is.
+          </p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% endcall %}
+  {% else %}
+  {% call card(title='Email ' + account.username + ' about') %}
+
+    {% if not mailConfigured %}
+      <p class="text-sm">
+        Nothing, while this site has no mail provider: there is nothing to send
+        with. Choose one on <a class="link" href="{{ adminUrl }}/settings/email">Settings
+        &rsaquo; Email</a> and what to send comes back here.
+      </p>
+    {% else %}
+      <p class="text-sm">
+        Nothing, while the box above is empty: there is nowhere to write to.
+        Give {% if account.you %}yourself{% else %}this account{% endif %} an
+        address and what to send comes back here.
+      </p>
+    {% endif %}
+  {% endcall %}
+  {% endif %}
+
+  {# Only on your own page: it asks for the current password, so it is about
+     whoever is signed in and means nothing on somebody else's screen.
+     Resetting a colleague's password from under them is deliberately not
+     offered — a fresh account is what that is for. #}
+  {# Only on your own page, as the screen it links to only ever lists your
+     own connections (TASK-162). #}
+  {% if account.you %}
+    {% call card(title='Connected apps') %}
+      <p class="text-sm">
+        Apps you signed in to with your site's address can act as you.
+        <a class="link" href="{{ connectedAppsUrl }}">Review or revoke them</a>.
+      </p>
+    {% endcall %}
+  {% endif %}
+
+  {% if account.you %}
+    {% include "components/theme-choice.njk" %}
+  {% endif %}
+
+  {% if account.you %}
+    {% call card(title='Change your password') %}
+    <form id="change-password" method="post" action="{{ changePasswordUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+      {% if passwordProblems.currentPassword or passwordProblems.newPassword %}
+        {% call field.summary('Your password was not changed. Fix the fields marked below and try again.') %}
+          {{ field.problem('current-password', passwordProblems.currentPassword) }}
+          {{ field.problem('new-password', passwordProblems.newPassword) }}
+        {% endcall %}
+      {% endif %}
+
+      {{ field.password('current-password', fields.currentPassword, 'Current password',
+           error=passwordProblems.currentPassword, autocomplete='current-password',
+           required=true) }}
+
+      {{ field.password('new-password', fields.newPassword, 'New password',
+           error=passwordProblems.newPassword, autocomplete='new-password', required=true) }}
+
+      {{ field.password('new-password-confirmation', fields.newPasswordConfirmation,
+           'New password again', autocomplete='new-password', required=true) }}
+
+      <p class="text-sm">Every other browser signed in as you is signed out. This one stays.</p>
+
+      <div class="mt-2">{{ button('Change password', type='submit', color='primary') }}</div>
+    </form>
+    {% endcall %}
+  {% endif %}
+
+  {% call card(title='Delete') %}
+
+    {# Either the button or the reason there is none, never both: the screen
+       does not offer an action it is about to refuse. #}
+    {% if deleteRefusal %}
+      <p class="text-sm">{{ deleteRefusal }}</p>
+    {% else %}
+      <p class="text-sm">
+        Deleting {{ account.username }} signs out every browser they are in and
+        cannot be undone. What they have written stays where it is.
+      </p>
+      <form method="post" action="{{ deleteUserUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ fields.userId }}" value="{{ account.id }}" />
+        {% call cardActions() %}
+          {{ button('Delete ' + account.username, type='submit', color='error') }}
+        {% endcall %}
+      </form>
+    {% endif %}
+  {% endcall %}
+  </div>
+{% endblock %}

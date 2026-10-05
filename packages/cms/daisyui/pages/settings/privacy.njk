@@ -1,0 +1,37 @@
+{% extends "layouts/settings-page.njk" %}
+{% import "components/fields.njk" as field %}
+
+{% block settingsProblems %}
+  {{ field.problem('settings-location-sharing', problems.locationSharing) }}
+{% endblock %}
+
+{% block settingsFields %}
+  <h2 class="mt-2 text-lg font-semibold">Location</h2>
+
+  {% set locationHint %}
+    A Micropub app such as Quill can send where a post was written, and the
+    editor has fields for it. The site keeps it in <code>data/locations.json</code>,
+    never in the post's file, so it stays out of <code>content/</code> and its git
+    history whatever is chosen here. Exact coordinates can say where you live or
+    are right now. Changing this changes every post at once, and nothing is
+    rewritten.
+  {% endset %}
+  {% call field.select('settings-location-sharing', fields.locationSharing, 'Location on posts',
+       error=problems.locationSharing, hint=locationHint, autofocus=true) %}
+    {% for option in [
+         ['none', 'Keep it, publish nothing'],
+         ['place', 'Publish the place only: its name, locality, region and country'],
+         ['exact', 'Publish the exact coordinates too']] %}
+      <option value="{{ option[0] }}"{% if option[0] == form.locationSharing %} selected{% endif %}>{{ option[1] }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  <h2 class="mt-6 text-lg font-semibold">Uploads</h2>
+
+  <p class="max-w-prose text-sm">
+    Location and camera metadata is always removed from pictures and videos as
+    they are uploaded, whatever is chosen above. Files uploaded before this
+    version keep theirs until <code>geekity strip-metadata</code> is run over
+    <code>content/uploads/</code>; the package README describes the command.
+  </p>
+{% endblock %}

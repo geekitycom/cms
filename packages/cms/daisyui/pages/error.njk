@@ -1,0 +1,15 @@
+{# The page an admin request that threw answers with. It extends the bare
+   layout rather than the shell because the shell reads the session, the menu
+   and the site, and any of those may be what failed. It is rendered outside
+   the admin's render, so it carries no user's theme and follows the system. #}
+{% extends "layouts/base.njk" %}
+{% from "components/card.njk" import card %}
+
+{% block title %}Something went wrong{% endblock %}
+
+{% block content %}
+  {% call card() %}
+    <h1 class="card-title text-2xl">Something went wrong</h1>
+    <p>This screen could not be shown because of a problem on the server. The error has been logged. Try again in a moment, or go back to the <a class="link" href="{{ adminUrl }}">dashboard</a>.</p>
+  {% endcall %}
+{% endblock %}

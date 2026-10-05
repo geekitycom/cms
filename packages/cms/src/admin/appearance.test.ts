@@ -98,9 +98,9 @@ async function screen(agent: Browser): Promise<string> {
   return response.text();
 }
 
-/** The theme cards on the screen, in the order they are drawn. */
+/** The theme cards on the screen, in the order they are drawn, in either admin. */
 function cards(html: string): string[] {
-  return html.split('<li class="admin-theme').slice(1);
+  return html.split(/<li class="admin-theme|<li>\s*<div class="card /).slice(1);
 }
 
 /** The display name on one card. */
@@ -246,7 +246,7 @@ describe('a folder that is not a theme', () => {
 
     assert.deepEqual(cards(html).map(cardName), ['Default', 'Midnight'], 'not one of the themes');
     for (const id of ['bare', 'halfway']) {
-      const broken = /<li class="admin-broken-theme">([\s\S]*?)<\/li>/g;
+      const broken = /<li\b[^>]*>([\s\S]*?)<\/li>/g;
       const listed = [...html.matchAll(broken)].map((match) => match[1] ?? '');
       const entry = listed.find((one) => one.includes(id));
       assert.ok(entry !== undefined, `${id} is listed as unreadable`);

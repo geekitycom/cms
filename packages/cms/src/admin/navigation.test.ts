@@ -105,7 +105,7 @@ function boxItems(html: string, name: string): string | undefined {
 
 /** The headings on the screen, in the order it draws them. */
 function headings(html: string): string[] {
-  return [...html.matchAll(/<h[23]>([^<]*)<\/h[23]>/g)].map((match) => match[1] ?? '');
+  return [...html.matchAll(/<h[23]\b[^>]*>([^<]*)<\/h[23]>/g)].map((match) => match[1] ?? '');
 }
 
 describe('the areas the active theme declares (AC #2)', () => {
@@ -167,7 +167,7 @@ describe('a menu the active theme renders nowhere (AC #3)', () => {
 
     const html = await screen(agent);
 
-    assert.match(html, /<h2>Kept, rendered nowhere<\/h2>/);
+    assert.match(html, /<h2\b[^>]*>Kept, rendered nowhere<\/h2>/);
     assert.match(html, /Midnight renders none of them/, 'it says so in so many words');
     assert.equal(
       boxItems(html, 'sidebar'),
@@ -176,12 +176,12 @@ describe('a menu the active theme renders nowhere (AC #3)', () => {
     );
     assert.match(
       html,
-      new RegExp(`<form class="admin-menu-delete"[\\s\\S]*?value="sidebar"`),
+      new RegExp(`<form\\b[^>]*action="${DELETE_MENU_PATH}"[\\s\\S]*?value="sidebar"`),
       'with a Delete of its own',
     );
     assert.doesNotMatch(
       html.slice(0, html.indexOf('Kept, rendered nowhere')),
-      /admin-menu-delete/,
+      new RegExp(`action="${DELETE_MENU_PATH}"`),
       'and no Delete on the areas the theme does render',
     );
 
@@ -235,7 +235,7 @@ describe('adding a menu by name (AC #4)', () => {
 
     const afterWaiting = await screen(agent);
     assert.match(afterWaiting, /This theme renders nothing under that name/);
-    assert.match(afterWaiting, /<h2>Kept, rendered nowhere<\/h2>/);
+    assert.match(afterWaiting, /<h2\b[^>]*>Kept, rendered nowhere<\/h2>/);
     assert.equal(boxItems(afterWaiting, 'footer'), '', 'with a box of its own to fill in');
 
     // A name it does declare: the box moves up into place.

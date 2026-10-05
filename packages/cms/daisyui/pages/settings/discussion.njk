@@ -1,0 +1,160 @@
+{# /admin/settings/discussion: comments, webmentions, and what checks them. #}
+{% extends "layouts/settings-page.njk" %}
+{% import "components/fields.njk" as field %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
+
+{# What a retention field says about the period as it stands: kept forever at
+   0, removed after so many days otherwise. Nothing for a value the form is
+   about to refuse, which has its own error line. #}
+{% macro retention(days) %}
+  {%- if days == '0' -%}
+    <strong>Kept forever.</strong>
+  {%- elif days | int > 0 -%}
+    <strong>Removed after {{ days }} day{% if days != '1' %}s{% endif %}.</strong>
+  {%- endif -%}
+{% endmacro %}
+
+{% block settingsProblems %}
+  {{ field.problem('settings-comments-close', problems.commentsCloseAfterDays) }}
+  {{ field.problem('settings-comment-email-retention', problems.commentEmailRetentionDays) }}
+  {{ field.problem('settings-address-hash-retention', problems.addressHashRetentionDays) }}
+  {{ field.problem('settings-contact-message-retention', problems.contactMessageRetentionDays) }}
+{% endblock %}
+
+{% block settingsFields %}
+  <h2 class="mt-2 text-lg font-semibold">Comments</h2>
+
+  {% set commentsHint %}
+    Clear this and no post shows a comment form and every submission is
+    refused. Fediverse replies keep arriving and keep being shown either way:
+    a remote server sends those, and nothing here can stop it.
+  {% endset %}
+  {{ field.checkbox('settings-comments', fields.comments, 'Take comments on this site',
+       checked=form.comments, hint=commentsHint) }}
+
+  {% set closeHint %}
+    Days after a post's date that it stops taking comments; <code>0</code>
+    never closes one. A post overrides this for itself with
+    <code>comments: true</code> or <code>comments: false</code>, which the
+    editor offers as a field. Pages are closed unless they say otherwise.
+  {% endset %}
+  {{ field.text('settings-comments-close', fields.commentsCloseAfterDays, 'Close comments after',
+       form.commentsCloseAfterDays, type='number', min='0', step='1',
+       error=problems.commentsCloseAfterDays, hint=closeHint) }}
+
+  <h2 class="mt-6 text-lg font-semibold">Webmentions</h2>
+
+  {% set sendHint %}
+    When a post is published or edited, every external page it links to is
+    asked whether it takes webmentions and told about the post if it does.
+    The Resend button on the federation screen sends them again.
+  {% endset %}
+  {{ field.checkbox('settings-webmentions-send', fields.webmentionsSend,
+       'Tell the pages a post links to', checked=form.webmentionsSend, hint=sendHint) }}
+
+  {% set receiveHint %}
+    Every post advertises an endpoint, and a page that links to one and says
+    so lands in the comment queue like a comment. Clear this and the endpoint
+    is gone from the pages and answers nothing; what has already arrived
+    stays where it is.
+  {% endset %}
+  {{ field.checkbox('settings-webmentions-receive', fields.webmentionsReceive,
+       'Accept webmentions sent here', checked=form.webmentionsReceive, hint=receiveHint) }}
+
+  <h2 class="mt-6 text-lg font-semibold">Keeping personal data</h2>
+
+  <p class="max-w-prose text-sm">
+    How long the site keeps what commenters and people writing through the
+    contact form hand it, in days from when it arrived; <code>0</code> keeps
+    it forever. A site that has never set these keeps everything, so upgrading
+    removes nothing. The recommended periods are 180 days for emails, 30 for
+    address hashes and 365 for contact messages, which is what a new site
+    starts with. A sweep removes whatever has outlived its period every few
+    hours. Tools &rsaquo; Personal data erases one person's data on request.
+  </p>
+
+  {% set emailHint %}
+    {{ retention(form.commentEmailRetentionDays) }}
+    Past this a comment loses its author's email. The comment, its place in
+    the thread and its moderation status stay; the author is no longer told
+    about replies, and their next comment waits for a moderator. Recommended:
+    <code>180</code>.
+  {% endset %}
+  {{ field.text('settings-comment-email-retention', fields.commentEmailRetentionDays,
+       'Keep commenter emails for', form.commentEmailRetentionDays, type='number', min='0',
+       step='1', error=problems.commentEmailRetentionDays, hint=emailHint) }}
+
+  {% set hashHint %}
+    {{ retention(form.addressHashRetentionDays) }}
+    The salted hash of the address a comment, webmention or contact message
+    came from, which shows a moderator that two came from one place.
+    Recommended: <code>30</code>.
+  {% endset %}
+  {{ field.text('settings-address-hash-retention', fields.addressHashRetentionDays,
+       'Keep address hashes for', form.addressHashRetentionDays, type='number', min='0',
+       step='1', error=problems.addressHashRetentionDays, hint=hashHint) }}
+
+  {% set contactHint %}
+    {{ retention(form.contactMessageRetentionDays) }}
+    Past this a contact message is deleted from the Messages screen and from
+    <code>data/contact/</code>. Recommended: <code>365</code>.
+  {% endset %}
+  {{ field.text('settings-contact-message-retention', fields.contactMessageRetentionDays,
+       'Keep contact messages for', form.contactMessageRetentionDays, type='number', min='0',
+       step='1', error=problems.contactMessageRetentionDays, hint=contactHint) }}
+{% endblock %}
+
+{% block settingsPanels %}
+  {# Akismet is its own pair of forms for the reason the avatar is: the key is
+     a credential in data/akismet.json rather than a setting in site.json, and
+     a key Akismet will not take must not lose an edit to the fields above. #}
+  {% call card(title='Spam checking') %}
+    <p>
+      {% if akismetState == 'valid' %}
+        {{ status('connected', 'Connected') }} Key {{ akismetKeyHint }}, checked {{ akismetCheckedAt }}.
+      {% elif akismetState == 'invalid' %}
+        {{ status('rejected', 'Not recognised') }} Akismet does not recognise this key: key {{ akismetKeyHint }}, checked {{ akismetCheckedAt }}.
+      {% elif akismetState == 'unchecked' %}
+        {{ status('unreachable', 'Not checked') }} Akismet could not be reached to check key {{ akismetKeyHint }}.
+      {% else %}
+        {{ status('disconnected', 'Not connected') }} This site has no key.
+      {% endif %}
+    </p>
+    <p class="text-sm">{{ akismetHint }}</p>
+
+    <form method="post" action="{{ akismetUrl }}">
+      <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+      {% if akismetPresent %}
+        {% set akismetPlaceholder = 'Replace the stored key' %}
+      {% else %}
+        {% set akismetPlaceholder = 'Paste your key' %}
+      {% endif %}
+      {{ field.password('settings-akismet-key', akismetFields.key, 'Akismet API key',
+           autocomplete='off', spellcheck='false', placeholder=akismetPlaceholder) }}
+      <div class="mt-2">
+        {{ button('Replace key' if akismetPresent else 'Save key', type='submit', color='primary') }}
+      </div>
+    </form>
+
+    <p class="text-sm">
+      A key from <a class="link" href="https://akismet.com/">akismet.com</a> turns on spam
+      checking for native comments and incoming webmentions. It is checked with
+      Akismet when it is saved and kept in <code>data/akismet.json</code>, never
+      in <code>site.json</code> and never on the public site. Marking something
+      spam or not spam on the Comments screen tells Akismet, which is the only
+      way it learns. Fediverse replies are never sent to it.
+    </p>
+
+    {% if akismetPresent %}
+      <form method="post" action="{{ akismetUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ akismetFields.action }}" value="{{ akismetRemove }}" />
+        {% call cardActions() %}
+          {{ button('Remove key', type='submit', color='error', style='ghost') }}
+        {% endcall %}
+      </form>
+    {% endif %}
+  {% endcall %}
+{% endblock %}

@@ -1,0 +1,19 @@
+{# A screen a later task builds. It exists so the navigation goes somewhere
+   and the guard covers it from the start.
+
+   It sits at the top of `pages/` rather than inside one of the section
+   folders because it is not any one section's screen: it stands in for
+   whichever section has nothing built yet, and the route heads it. #}
+{% extends "layouts/shell.njk" %}
+{% from "components/card.njk" import card %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}{% if slug %}: {{ slug }}{% endif %}</h1>
+  <div class="max-w-2xl">
+    {% call card() %}
+      <p>This screen is not built yet.</p>
+    {% endcall %}
+  </div>
+{% endblock %}

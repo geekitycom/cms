@@ -1,0 +1,96 @@
+{# /admin/settings: what the site is called, where it lives, and its picture. #}
+{% extends "layouts/settings-page.njk" %}
+{% import "components/fields.njk" as field %}
+
+{% block settingsProblems %}
+  {{ field.problem('settings-title', problems.title) }}
+  {{ field.problem('settings-base-url', problems.baseUrl) }}
+  {{ field.problem('settings-timezone', problems.timezone) }}
+  {{ field.problem('settings-language', problems.language) }}
+  {{ field.problem('settings-locale', problems.locale) }}
+  {{ field.problem('settings-icon', problems.icon) }}
+  {{ field.problem('settings-license', problems.license) }}
+  {{ field.problem('settings-license-url', problems.licenseUrl) }}
+  {{ field.problem('settings-license-name', problems.licenseName) }}
+{% endblock %}
+
+{% block settingsFields %}
+  {{ field.text('settings-title', fields.title, 'Title', form.title,
+       error=problems.title, required=true, autofocus=true) }}
+
+  {{ field.text('settings-tagline', fields.tagline, 'Tagline', form.tagline,
+       hint='One line, shown under the title and used as the feed subtitle.') }}
+
+  {% set authorHint %}A user makes this their blog: the homepage shows their bio and links, claims their author archive and profiles with <code>rel="me"</code>, and is their IndieAuth sign-in URL. The feeds and the footer credit them by name. Several authors credits the site title instead.{% endset %}
+  {% call field.select('settings-author', fields.author, 'Site author', hint=authorHint) %}
+    <option value=""{% if not form.author %} selected{% endif %}>Several authors</option>
+    {% for choice in authorChoices %}
+      <option value="{{ choice.username }}"{% if choice.username == form.author %} selected{% endif %}>{{ choice.name }}</option>
+    {% endfor %}
+  {% endcall %}
+
+  {% set baseUrlHint %}In effect: <code>{{ baseUrlInEffect }}</code>. {{ baseUrlNote }}{% endset %}
+  {{ field.text('settings-base-url', fields.baseUrl, 'Base URL', form.baseUrl,
+       error=problems.baseUrl, hint=baseUrlHint, inputmode='url',
+       readonly=baseUrlOverridden, disabled=baseUrlOverridden) }}
+
+  {% set timezoneHint %}An IANA name, such as <code>Europe/London</code> or <code>UTC</code>.{% endset %}
+  {{ field.text('settings-timezone', fields.timezone, 'Time zone', form.timezone,
+       error=problems.timezone, hint=timezoneHint, required=true) }}
+
+  {% set languageHint %}A BCP 47 tag, such as <code>en</code> or <code>en-GB</code>. It is the page's <code>lang</code> and the feeds' language.{% endset %}
+  {{ field.text('settings-language', fields.language, 'Language', form.language,
+       error=problems.language, hint=languageHint, required=true) }}
+
+  {% set localeHint %}How the public site writes dates and counts, such as <code>en-US</code> for <code>September 2, 2026</code>. Leave it empty to follow the language.{% endset %}
+  {{ field.text('settings-locale', fields.locale, 'Locale', form.locale,
+       error=problems.locale, hint=localeHint) }}
+
+  {% set iconHint %}A square image at least 512 pixels wide, uploaded on <a href="{{ adminUrl }}/media">Media</a>: a path such as <code>/uploads/2026/10/icon.png</code>. It is the favicon, the home screen icon, <code>/favicon.ico</code> and the web app manifest's icon. Anything not square is cropped to its middle.{% endset %}
+  {{ field.text('settings-icon', fields.icon, 'Site icon', form.icon,
+       error=problems.icon, hint=iconHint) }}
+
+  <div class="flex items-center gap-4">
+    {% if iconPreview %}
+      <div class="avatar shrink-0">
+        <div class="w-24 rounded-box">
+          <img class="object-cover" src="{{ iconPreview }}" alt="The current site icon" width="96" height="96" />
+        </div>
+      </div>
+    {% else %}
+      <div class="avatar avatar-placeholder shrink-0" aria-hidden="true">
+        <div class="w-24 rounded-box bg-base-300"></div>
+      </div>
+    {% endif %}
+    <p class="text-sm">
+      {% if iconUnderived and not imageOptimization %}
+        Image optimization is off, so no icons are derived and the site links none.
+      {% elif iconUnderived %}
+        The site cannot derive icons from <code>{{ iconInEffect }}</code>, so it links none.
+      {% elif iconPreview and iconFromAvatar %}
+        The current icon, from the <code>avatar</code> in <code>site.json</code>. Saving this page writes it as the icon; clearing the field leaves the avatar in use.
+      {% elif iconPreview %}
+        The current icon, as a browser tab and a home screen show it.
+      {% else %}
+        The site has no icon yet, so browsers show their own.
+      {% endif %}
+    </p>
+  </div>
+
+  {% set licenseHint %}What readers may do with your posts. The footer links it, and the structured data and the feeds declare it. A post can name its own with <code>license</code> in its front matter.{% endset %}
+  {% call field.select('settings-license', fields.license, 'License', error=problems.license, hint=licenseHint) %}
+    <option value=""{% if not form.license %} selected{% endif %}>No license (all rights reserved)</option>
+    {% for choice in licenseChoices %}
+      <option value="{{ choice.key }}"{% if choice.key == form.license %} selected{% endif %}>{{ choice.name }}</option>
+    {% endfor %}
+    <option value="custom"{% if form.license == 'custom' %} selected{% endif %}>Custom license</option>
+  {% endcall %}
+
+  {{ field.text('settings-license-url', fields.licenseUrl, 'Custom license URL', form.licenseUrl,
+       error=problems.licenseUrl, inputmode='url', hint='Where its terms are. Only read for a custom license.') }}
+
+  {{ field.text('settings-license-name', fields.licenseName, 'Custom license name', form.licenseName,
+       error=problems.licenseName, hint='What the footer calls it. Only read for a custom license.') }}
+{% endblock %}
+
+{% block settingsPanels %}{% endblock %}

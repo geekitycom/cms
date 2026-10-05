@@ -214,7 +214,7 @@ describe('an exception in the admin', () => {
     assert.match(body, /<link rel="stylesheet" href="\/admin\/_static\/admin\.css"/);
     assert.match(body, /<meta name="robots" content="noindex, nofollow"/);
     assert.match(body, /Something went wrong/);
-    assert.match(body, /<a href="\/admin">/);
+    assert.match(body, /<a\b[^>]*href="\/admin">/);
     assert.doesNotMatch(body, /class="server-error"/, "not the theme's page");
     assert.ok(!body.includes('/var/lib'), 'no internal path');
     assert.ok(
