@@ -130,7 +130,18 @@ describe('stats and stat', () => {
         'stats, stat',
         `{% call stats(direction='responsive') %}{{ stat('Published posts', 12, desc='Since 2020') }}{{ stat('Drafts', 0) }}{% endcall %}`,
       ),
-      '<div class="stats shadow stats-vertical lg:stats-horizontal"><div class="stat"><div class="stat-title">Published posts</div><div class="stat-value">12</div><div class="stat-desc">Since 2020</div></div><div class="stat"><div class="stat-title">Drafts</div><div class="stat-value">0</div></div></div>',
+      '<div class="stats bg-base-100 shadow stats-vertical lg:stats-horizontal"><div class="stat"><div class="stat-title">Published posts</div><div class="stat-value">12</div><div class="stat-desc">Since 2020</div></div><div class="stat"><div class="stat-title">Drafts</div><div class="stat-value">0</div></div></div>',
+    );
+  });
+
+  it('is one link, named by its title and value, when it leads somewhere', () => {
+    assert.equal(
+      render(
+        'stat',
+        'stat',
+        `{{ stat('Comments waiting', 3, href='/admin/comments?status=pending') }}`,
+      ),
+      '<a class="stat hover:bg-base-200" href="/admin/comments?status=pending"><div class="stat-title">Comments waiting</div><div class="stat-value text-primary">3</div></a>',
     );
   });
 });

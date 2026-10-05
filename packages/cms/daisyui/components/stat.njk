@@ -1,9 +1,14 @@
 {# Stats, numbers set out in a row.
 
-   `{% call stats(…) %}…{% endcall %}` emits `<div class="stats shadow">`
-   around its body, and `stat(title, value, desc='')` inside it emits one
+   `{% call stats(…) %}…{% endcall %}` emits
+   `<div class="stats bg-base-100 shadow">` around its body, and
+   `stat(title, value, desc='', href='')` inside it emits one
    `<div class="stat">` holding a `stat-title`, a `stat-value` and, when it is
    given one, a `stat-desc`. Title, value and description are escaped.
+
+   Given an `href`, the stat is an `<a class="stat">` instead, so the whole
+   stat is the link and its name is the title and the value together; the
+   value is drawn in the primary colour to say it leads somewhere.
 
    `direction` is horizontal, vertical, or responsive (a column on a phone, a
    row from `lg` up); left out, the stats lie in a row. Any other value is a
@@ -16,15 +21,15 @@
 } %}
 
 {% macro stats(direction=none) -%}
-<div class="stats shadow{{ DIRECTIONS | modifier(direction) }}">{{ caller() }}</div>
+<div class="stats bg-base-100 shadow{{ DIRECTIONS | modifier(direction) }}">{{ caller() }}</div>
 {%- endmacro %}
 
-{% macro stat(title, value, desc='') -%}
-<div class="stat">
+{% macro stat(title, value, desc='', href='') -%}
+{% if href %}<a class="stat hover:bg-base-200" href="{{ href }}">{% else %}<div class="stat">{% endif %}
   <div class="stat-title">{{ title }}</div>
-  <div class="stat-value">{{ value }}</div>
+  <div class="stat-value{% if href %} text-primary{% endif %}">{{ value }}</div>
   {% if desc %}
   <div class="stat-desc">{{ desc }}</div>
   {% endif %}
-</div>
+{% if href %}</a>{% else %}</div>{% endif %}
 {%- endmacro %}

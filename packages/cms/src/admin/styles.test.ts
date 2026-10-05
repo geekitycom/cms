@@ -3,7 +3,6 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 
-import { adminFile } from './__testing__/admin-files.ts';
 import { DAISYUI_ADMIN_DIR } from './templates.ts';
 
 /**
@@ -251,110 +250,5 @@ describe('the DaisyUI admin templates', () => {
       ),
       [],
     );
-  });
-});
-
-const stylesheet = await readFile(adminFile('static/admin.css'), 'utf8');
-
-/**
- * Every rule of the stylesheet, as its selector and its declarations.
- *
- * Not a CSS parser: the sheet nests nothing but `@media`, so matching the
- * innermost `selector { declarations }` pairs finds every rule there is, and an
- * `@media` line never matches one because its own block holds braces. The
- * selector is whatever follows the last brace before it, with comments dropped
- * and whitespace collapsed.
- */
-function adminRules(): { selector: string; declarations: string }[] {
-  return [...stylesheet.replaceAll(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
-    (rule) => ({
-      selector: (rule[1] ?? '')
-        .replace(/^[\s\S]*\}/, '')
-        .trim()
-        .replace(/\s+/g, ' '),
-      declarations: rule[2] ?? '',
-    }),
-  );
-}
-
-/**
- * What `property` settles at for `selector`, or `undefined` when no rule
- * written for exactly that selector says. The last one written wins, which is
- * how this sheet is read.
- */
-function declaration(selector: string, property: string): string | undefined {
-  return adminRules()
-    .filter((rule) => rule.selector === selector)
-    .reverse()
-    .map((rule) => new RegExp(`(?:^|;)\\s*${property}\\s*:([^;]*)`).exec(rule.declarations)?.[1])
-    .find((value) => value !== undefined)
-    ?.trim();
-}
-
-describe('the At a glance counts (TASK-115)', () => {
-  it('draws every number at the top of its cell, whatever its label’s length', () => {
-    // A cell places its two children in named rows rather than packing them
-    // from its bottom edge, so a label that wraps grows the row under the
-    // number instead of pushing the number up. `column-reverse` did the
-    // packing, and left the number's height to its label's.
-    assert.equal(declaration('.admin-counts div', 'display'), 'grid');
-    assert.equal(declaration('.admin-counts dd', 'grid-row'), '1');
-    assert.equal(declaration('.admin-counts dt', 'grid-row'), '2');
-    assert.equal(
-      declaration('.admin-counts div', 'flex-direction'),
-      undefined,
-      'nothing is left packing a cell from its bottom edge',
-    );
-
-    // And a cell is as tall as its own content rather than as the tallest of
-    // them, so the tallest cell cannot stretch the others' rows.
-    assert.equal(declaration('.admin-counts', 'align-items'), 'start');
-  });
-
-  it('wraps to a second line rather than squeezing a label or overflowing', () => {
-    // A flex line that wraps moves a cell that does not fit onto the next line
-    // instead of shrinking it, which is what was breaking 'Published posts'
-    // and 'Comments waiting' across two lines in a panel with room for them.
-    assert.equal(declaration('.admin-counts', 'flex-wrap'), 'wrap');
-  });
-
-  it('leaves a panel in the grid to the grid, and spaces the ones that stack', () => {
-    // The dashboard's two panels are siblings in `.admin-panels`, whose `gap`
-    // is already the space between them; an unscoped adjacent-sibling margin
-    // also matched there and pushed Recent posts down inside its own cell.
-    // The Followers screen stacks its panels in normal flow and still needs it.
-    const stacking = adminRules().filter(
-      (rule) =>
-        /\.admin-panel \+ \.admin-panel/.test(rule.selector) &&
-        /margin-top/.test(rule.declarations),
-    );
-
-    assert.equal(stacking.length, 1, 'one rule spaces stacked panels');
-    assert.match(
-      stacking[0]?.selector ?? '',
-      /:not\(\.admin-panels\) >/,
-      'and it does not reach a panel the dashboard grid is laying out',
-    );
-
-    // The grid spaces its cells in both directions, so a wrapped row is spaced
-    // too, which is what the margin would otherwise have been covering.
-    assert.equal(declaration('.admin-panels', 'gap'), '1rem');
-    assert.equal(declaration('.admin-panels', 'align-items'), 'start');
-  });
-
-  it('stays a dl whose every cell is a dt then its dd', async () => {
-    const home = await readFile(adminFile('pages/dashboard/home.njk'), 'utf8');
-    const list = /<dl class="admin-counts">([\s\S]*?)<\/dl>/.exec(home)?.[1];
-    assert.ok(list !== undefined, 'At a glance is a definition list');
-
-    const cells = [...list.matchAll(/<div>([\s\S]*?)<\/div>/g)].map(([, cell]) => cell ?? '');
-    assert.ok(cells.length > 0, 'the panel was read and has cells');
-
-    for (const cell of cells)
-      assert.deepEqual(
-        [...cell.matchAll(/<(dt|dd)[\s>]/g)].map(([, tag]) => tag),
-        ['dt', 'dd'],
-        'a cell is its label and then its number',
-      );
   });
 });

@@ -60,7 +60,7 @@ describe('GEEKITY_ADMIN', () => {
     );
     const served = JSON.parse(stdout) as {
       login: string;
-      dashboard: string;
+      unconverted: string;
       stylesheet: { status: number; body: string };
       editor: { status: number; body: string };
     };
@@ -69,7 +69,7 @@ describe('GEEKITY_ADMIN', () => {
 
     for (const [screen, html] of [
       ['the login screen', served.login],
-      ['the unconverted dashboard', served.dashboard],
+      ['the unconverted Followers screen', served.unconverted],
     ] as const) {
       it(`draws ${screen} in daisyui/layouts/base.njk, which links the compiled sheet alone`, () => {
         const sheets = [...html.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*>/g)].map(
@@ -80,8 +80,8 @@ describe('GEEKITY_ADMIN', () => {
     }
 
     it('still draws an unconverted screen from admin/ inside the DaisyUI shell', () => {
-      assert.match(served.dashboard, /<div class="drawer lg:drawer-open">/);
-      assert.match(served.dashboard, /<div class="admin-panels">/);
+      assert.match(served.unconverted, /<div class="drawer lg:drawer-open">/);
+      assert.match(served.unconverted, /<section class="admin-panel admin-actor">/);
     });
 
     it('serves the compiled DaisyUI sheet as /admin/_static/admin.css', () => {

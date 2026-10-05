@@ -1,3 +1,4 @@
+import { FEDERATION_PATH } from '../federation.ts';
 import { sandbox, signedIn } from './harness.ts';
 
 /**
@@ -9,7 +10,7 @@ const box = sandbox();
 try {
   const cms = await box.site();
   const agent = await signedIn(cms);
-  const dashboard = await (await agent.get('/admin')).text();
+  const unconverted = await (await agent.get(FEDERATION_PATH)).text();
   const login = await (await cms.app.request('/admin/login')).text();
   const stylesheet = await cms.app.request('/admin/_static/admin.css');
   const editor = await cms.app.request('/admin/_static/editor.js');
@@ -17,7 +18,7 @@ try {
   process.stdout.write(
     JSON.stringify({
       login,
-      dashboard,
+      unconverted,
       stylesheet: { status: stylesheet.status, body: await stylesheet.text() },
       editor: { status: editor.status, body: await editor.text() },
     }),

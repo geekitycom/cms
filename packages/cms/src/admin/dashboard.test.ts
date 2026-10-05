@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
+import { execFile as execFileCallback } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+import { promisify } from 'node:util';
 
 import { flashes } from './__testing__/flash.ts';
 import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import { findUser, setUserProfile } from './accounts.ts';
 import type { Browser } from './__testing__/harness.ts';
+
+const execFile = promisify(execFileCallback);
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -254,78 +258,166 @@ describe('the account menu (TASK-126)', () => {
   });
 });
 
-describe('the dashboard', () => {
-  it('counts what the index holds', async () => {
-    const contentDir = await seeded([
-      { file: 'posts/2026-01-01-one.md', title: 'One', date: '2026-01-01', permalink: '/one/' },
-      { file: 'posts/2026-01-02-two.md', title: 'Two', date: '2026-01-02', permalink: '/two/' },
-      {
-        file: 'posts/2026-01-03-three.md',
-        title: 'Three',
-        date: '2026-01-03',
-        permalink: '/three/',
-        draft: true,
-      },
-      { file: 'pages/about.md', title: 'About', permalink: '/about/' },
-    ]);
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
+/** One count under At a glance: its label, its number, and where it leads. */
+interface Count {
+  label: string;
+  value: string;
+  href: string | undefined;
+}
 
-    const html = await (await agent.get('/admin')).text();
+/** The old admin's counts: a definition list, each number its label's dd. */
+function definitionCounts(html: string): Count[] {
+  return [...html.matchAll(/<dt>([^<]*)<\/dt>\s*<dd>(?:<a href="([^"]*)">)?([^<]*)/g)].map(
+    ([, label, href, value]) => ({ label: label ?? '', value: value ?? '', href }),
+  );
+}
 
-    assert.deepEqual(cms.store.counts(), {
-      total: 4,
-      posts: 2,
-      pages: 1,
-      drafts: 1,
-      scheduled: 0,
-      trashed: 0,
+/** The DaisyUI admin's counts: a stat each, the whole stat a link when it leads somewhere. */
+function statCounts(html: string): Count[] {
+  return [
+    ...html.matchAll(
+      /<(?:div|a) class="stat\b[^"]*"(?: href="([^"]*)")?>\s*<div class="stat-title">([^<]*)<\/div>\s*<div class="stat-value\b[^"]*">([^<]*)<\/div>/g,
+    ),
+  ].map(([, href, label, value]) => ({ label: label ?? '', value: value ?? '', href }));
+}
+
+/** The rows of the screen's tables as text, one string a row, the head first. */
+function rowTexts(html: string): string[] {
+  const screen = html.slice(html.indexOf('<main'));
+  return [...screen.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].map(([, row]) =>
+    (row ?? '')
+      .replaceAll(/<[^>]*>/g, ' ')
+      .replaceAll(/\s+/g, ' ')
+      .trim(),
+  );
+}
+
+/** Every class token outside the admin bar, whose shadow root keeps classes of its own. */
+function classesOutsideTheBar(html: string): string[] {
+  const page = html.replace(/<geekity-admin-bar\b[\s\S]*<\/geekity-admin-bar>/, '');
+  return [...page.matchAll(/\bclass="([^"]*)"/g)].flatMap(([, value]) =>
+    (value ?? '').split(/\s+/).filter(Boolean),
+  );
+}
+
+const COUNTED: Seed[] = [
+  { file: 'posts/2026-01-01-one.md', title: 'One', date: '2026-01-01', permalink: '/one/' },
+  { file: 'posts/2026-01-02-two.md', title: 'Two', date: '2026-01-02', permalink: '/two/' },
+  { file: 'posts/2026-01-03-three.md', title: 'Three', date: '2026-01-03', permalink: '/three/' },
+  {
+    file: 'posts/2026-01-04-four.md',
+    title: 'Four',
+    date: '2026-01-04',
+    permalink: '/four/',
+    draft: true,
+  },
+  { file: 'pages/about.md', title: 'About', permalink: '/about/' },
+  { file: 'pages/now.md', title: 'Now', permalink: '/now/' },
+];
+
+const RECENT: Seed[] = Array.from({ length: 7 }, (_, index) => {
+  const day = String(index + 1).padStart(2, '0');
+  return {
+    file: `posts/2026-02-${day}-post-${String(index + 1)}.md`,
+    title: `Post ${String(index + 1)}`,
+    date: `2026-02-${day}`,
+    permalink: `/2026/02/post-${String(index + 1)}/`,
+    draft: index === 6,
+  };
+});
+
+/** The dashboard a signed-in user is served over `contentDir`, in this process. */
+async function dashboardOver(contentDir: string): Promise<string> {
+  const agent = await signedIn(await box.site({ contentDir }));
+  return await (await agent.get('/admin')).text();
+}
+
+/** The dashboards over `contentDirs`, served by a child process with `GEEKITY_ADMIN=daisyui`. */
+async function daisyuiDashboards(contentDirs: string[]): Promise<string[]> {
+  const { stdout } = await execFile(
+    process.execPath,
+    [
+      '--import',
+      import.meta.resolve('tsx'),
+      path.join(import.meta.dirname, '__testing__', 'dashboard-probe.ts'),
+      ...contentDirs,
+    ],
+    { env: { ...process.env, GEEKITY_ADMIN: 'daisyui' }, maxBuffer: 64 * 1024 * 1024 },
+  );
+  return JSON.parse(stdout) as string[];
+}
+
+describe('the dashboard', async () => {
+  const contentDirs = [await seeded(COUNTED), await seeded(RECENT), await seeded([])];
+  const daisyui = await daisyuiDashboards(contentDirs);
+  const admins = [
+    {
+      name: 'the old admin',
+      counts: definitionCounts,
+      dashboards: await Promise.all(contentDirs.map(dashboardOver)),
+    },
+    { name: 'the DaisyUI admin', counts: statCounts, dashboards: daisyui },
+  ];
+
+  for (const { name, counts, dashboards } of admins) {
+    const [counted = '', recent = '', empty = ''] = dashboards;
+
+    describe(`in ${name}`, () => {
+      it('counts what the index holds, each number under its label', () => {
+        assert.deepEqual(counts(counted), [
+          { label: 'Published posts', value: '3', href: undefined },
+          { label: 'Drafts', value: '1', href: undefined },
+          { label: 'Pages', value: '2', href: undefined },
+          { label: 'Followers', value: '0', href: '/admin/federation' },
+          { label: 'Comments waiting', value: '0', href: '/admin/comments?status=pending' },
+          { label: 'Messages unread', value: '0', href: '/admin/messages' },
+        ]);
+      });
+
+      it('lists the five most recent posts, newest first, with their date and status', () => {
+        const screen = recent.slice(recent.indexOf('<main'));
+        const listed = [
+          ...screen.matchAll(/<a\b[^>]*\bhref="\/admin\/posts\/([^"]+)"[^>]*>([^<]+)<\/a>/g),
+        ];
+
+        assert.deepEqual(
+          listed.map((match) => match[1]),
+          ['post-7', 'post-6', 'post-5', 'post-4', 'post-3'],
+          'each linking to its editor',
+        );
+        assert.deepEqual(rowTexts(recent), [
+          'Title Date Status',
+          'Post 7 2026-02-07 Draft',
+          'Post 6 2026-02-06 Published',
+          'Post 5 2026-02-05 Published',
+          'Post 4 2026-02-04 Published',
+          'Post 3 2026-02-03 Published',
+        ]);
+      });
+
+      it('says so when there is nothing written yet', () => {
+        assert.match(empty, /Nothing written yet/);
+        assert.deepEqual(rowTexts(empty), [], 'and draws no empty table');
+      });
     });
-    assert.match(html, /Published posts<\/dt>\s*<dd>2<\/dd>/);
-    assert.match(html, /Drafts<\/dt>\s*<dd>1<\/dd>/);
-    assert.match(html, /Pages<\/dt>\s*<dd>1<\/dd>/);
+  }
+
+  it('draws Recent posts in the DaisyUI admin as a card around its table', () => {
+    const [, recent = '', empty = ''] = daisyui;
+    const card =
+      /<div class="card bg-base-100 shadow-sm">\s*<div class="card-body">\s*<h2 class="card-title">Recent posts<\/h2>([\s\S]*?)<\/div>\s*<\/div>\s*<\/main>/;
+
+    assert.match(card.exec(recent)?.[1] ?? '', /<table class="table table-sm">/);
+    assert.match(card.exec(empty)?.[1] ?? '', /Nothing written yet/);
   });
 
-  it('lists the five most recent posts, newest first, with their status', async () => {
-    const contentDir = await seeded(
-      Array.from({ length: 7 }, (_, index) => {
-        const day = String(index + 1).padStart(2, '0');
-        return {
-          file: `posts/2026-02-${day}-post-${String(index + 1)}.md`,
-          title: `Post ${String(index + 1)}`,
-          date: `2026-02-${day}`,
-          permalink: `/2026/02/post-${String(index + 1)}/`,
-          draft: index === 6,
-        };
-      }),
-    );
-    const cms = await box.site({ contentDir });
-    const agent = await signedIn(cms);
-
-    const html = await (await agent.get('/admin')).text();
-    // The screen's own list, not the bar's + New, which is a posts link too.
-    const screen = html.slice(html.indexOf('<main'));
-    const listed = [...screen.matchAll(/<a href="\/admin\/posts\/([^"]+)">([^<]+)<\/a>/g)];
-
-    assert.deepEqual(
-      listed.map((match) => match[2]),
-      ['Post 7', 'Post 6', 'Post 5', 'Post 4', 'Post 3'],
-      'the five newest, newest first',
-    );
-    assert.deepEqual(
-      listed.map((match) => match[1]),
-      ['post-7', 'post-6', 'post-5', 'post-4', 'post-3'],
-      'each linking to its editor',
-    );
-    assert.match(html, /2026-02-07/, 'and carrying its date');
-    assert.match(html, /admin-status-draft">Draft</, 'and saying which one is a draft');
-  });
-
-  it('says so when there is nothing written yet', async () => {
-    const cms = await box.site();
-    const agent = await signedIn(cms);
-
-    assert.match(await (await agent.get('/admin')).text(), /Nothing written yet/);
+  it('carries no class of the old admin in the DaisyUI admin', () => {
+    for (const html of daisyui) {
+      assert.deepEqual(
+        classesOutsideTheBar(html).filter((token) => token.startsWith('admin-')),
+        [],
+      );
+    }
   });
 });
 

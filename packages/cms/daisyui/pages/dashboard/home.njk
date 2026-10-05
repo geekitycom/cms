@@ -1,0 +1,63 @@
+{% extends "layouts/shell.njk" %}
+{% from "components/stat.njk" import stats, stat %}
+{% from "components/card.njk" import card %}
+{% from "components/table.njk" import table %}
+{% from "components/badge.njk" import badge %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">Dashboard</h1>
+
+  {% set glance = [
+    { label: 'Published posts', value: counts.posts },
+    { label: 'Drafts', value: counts.drafts },
+    { label: 'Pages', value: counts.pages },
+    { label: 'Followers', value: followers, href: federationUrl },
+    { label: 'Comments waiting', value: pendingComments, href: commentsUrl + '?status=pending' },
+    { label: 'Messages unread', value: unreadMessages, href: messagesUrl }
+  ] %}
+
+  {# One stats box a count, in a grid that wraps by the width the column
+     has rather than the window's, so a count moves to the next row instead
+     of the row scrolling. Two, three or six to a row divide the six evenly. #}
+  <section class="@container mb-8">
+    <h2 class="mb-3 text-lg font-semibold">At a glance</h2>
+    <div class="grid grid-cols-2 gap-4 @2xl:grid-cols-3 @5xl:grid-cols-6">
+      {% for count in glance %}
+        {% call stats() %}{{ stat(count.label, count.value, href=count.href) }}{% endcall %}
+      {% endfor %}
+    </div>
+  </section>
+
+  {% call card(title='Recent posts') %}
+    {% if recent.length %}
+      {% call table('Recent posts') %}
+        <thead>
+          <tr>
+            <th scope="col">Title</th>
+            <th scope="col">Date</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for post in recent %}
+            <tr>
+              <td><a class="link link-hover" href="{{ post.editUrl }}">{{ post.title }}</a></td>
+              <td class="whitespace-nowrap">{{ post.date | date('html') }}</td>
+              <td>
+                {% if post.draft %}
+                  {{ badge('Draft', color='warning') }}
+                {% else %}
+                  {{ badge('Published') }}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      {% endcall %}
+    {% else %}
+      <p>Nothing written yet.</p>
+    {% endif %}
+  {% endcall %}
+{% endblock %}
