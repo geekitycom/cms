@@ -7,7 +7,7 @@
 {% from "components/badge.njk" import status %}
 {% from "components/button.njk" import button, buttonLink %}
 {% from "components/pagination.njk" import pagination %}
-{% from "components/table.njk" import table %}
+{% from "components/table.njk" import table, row, heading, cell, rowToggle %}
 {% from "components/tabs.njk" import tabs %}
 
 {% block title %}{{ kind.plural }}{% endblock %}
@@ -27,24 +27,24 @@
       <thead>
         <tr>
           <th scope="col">Title</th>
-          <th scope="col">Author</th>
+          {{ heading('Author') }}
           {% if kind.tagged %}
-            <th scope="col">Tags</th>
+            {{ heading('Tags') }}
           {% endif %}
           {% if kind.categorised %}
-            <th scope="col">Categories</th>
+            {{ heading('Categories') }}
           {% endif %}
           {% if kind.dated %}
-            <th scope="col">Date</th>
+            {{ heading('Date') }}
           {% else %}
-            <th scope="col">Updated</th>
+            {{ heading('Updated') }}
           {% endif %}
-          <th scope="col">Status</th>
+          {{ heading('Status') }}
         </tr>
       </thead>
       <tbody>
         {% for document in documents %}
-          <tr class="group *:align-top">
+          {% call row() %}
             <td>
               <a class="link link-hover font-medium" href="{{ document.editUrl }}">{{ document.title }}</a>{% if document.role %} &mdash; {{ document.role }}{% endif %}
               <div class="-ms-2 mt-1 flex items-center gap-1 whitespace-nowrap transition-opacity lg:[@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
@@ -62,20 +62,21 @@
                   {{ buttonLink('View', document.viewUrl, style='ghost', size='xs') }}
                 {% endif %}
               </div>
+              {{ rowToggle(document.title) }}
             </td>
-            <td class="whitespace-nowrap">{{ document.author }}</td>
+            {% call cell('Author', nowrap=true) %}{{ document.author }}{% endcall %}
             {% if kind.tagged %}
-              <td>{{ document.tags }}</td>
+              {% call cell('Tags') %}{{ document.tags }}{% endcall %}
             {% endif %}
             {% if kind.categorised %}
-              <td>{{ document.categories }}</td>
+              {% call cell('Categories') %}{{ document.categories }}{% endcall %}
             {% endif %}
             {% if kind.dated %}
-              <td class="whitespace-nowrap">{{ document.date | date('html') }}</td>
+              {% call cell('Date', nowrap=true) %}{{ document.date | date('html') }}{% endcall %}
             {% else %}
-              <td class="whitespace-nowrap">{{ document.updated | date('html') }}</td>
+              {% call cell('Updated', nowrap=true) %}{{ document.updated | date('html') }}{% endcall %}
             {% endif %}
-            <td>
+            {% call cell('Status') %}
               {% if document.trashed %}
                 {{ status('trashed', 'Trash') }}
               {% elif document.draft %}
@@ -87,8 +88,8 @@
               {% else %}
                 {{ status('published', 'Published') }}
               {% endif %}
-            </td>
-          </tr>
+            {% endcall %}
+          {% endcall %}
         {% endfor %}
       </tbody>
     {% endcall %}

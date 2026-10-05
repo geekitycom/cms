@@ -133,11 +133,11 @@ describe('the pages listing', () => {
     assert.match(html, /<a\b[^>]*href="\/admin\/pages\/about">About this site<\/a>/);
     assert.match(html, /<a\b[^>]*href="\/admin\/pages\/colophon">Still writing it<\/a>/);
     assert.match(html, />ada</, 'the author column');
-    assert.match(html, /<th scope="col">Updated<\/th>/, 'the updated column');
+    assert.match(html, /<th scope="col"[^>]*>Updated<\/th>/, 'the updated column');
     assert.match(html, /2026-01-02/, 'and the date in it');
     assert.ok(statuses(html).includes('Draft'), 'and which of them is a draft');
-    assert.ok(!/<th scope="col">Tags<\/th>/.test(html), 'a page carries no tags');
-    assert.ok(!/<th scope="col">Date<\/th>/.test(html), 'and no publish date');
+    assert.ok(!/<th scope="col"[^>]*>Tags<\/th>/.test(html), 'a page carries no tags');
+    assert.ok(!/<th scope="col"[^>]*>Date<\/th>/.test(html), 'and no publish date');
   });
 
   it('draws Edit, the bin action and View under the title, with no Actions column (TASK-276 AC #2, #3)', async () => {

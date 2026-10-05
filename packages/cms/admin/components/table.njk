@@ -24,7 +24,22 @@
      pinCols  true keeps the `th` cells of each row in view
      inCard   true leaves off the surface, for a table already in a card's body
 
-   A size outside its set is a render error. #}
+   A size outside its set is a render error.
+
+   Rows that stack below lg instead of scrolling the table sideways. Each
+   row is a `{% call row() %}`. Its first cell is written out and ends with
+   `rowToggle(name)`; every other cell is
+   `{% call cell(label, nowrap) %}value{% endcall %}`, and every heading
+   after the first is `heading(label)`, with the same label:
+
+     <tr class="group …">
+       <td>title, row actions <details><summary>Details of name</summary></details></td>
+       <td data-label="Author" class="…">ada</td>
+     </tr>
+
+   From lg up the row is a table row and the toggle is not drawn. Below lg
+   the row shows its first cell with the toggle at its end, and opening the
+   toggle shows each other cell under it as a line of label then value. #}
 
 {% set SIZES = { xs: 'table-xs', sm: 'table-sm', md: 'table-md', lg: 'table-lg', xl: 'table-xl' } %}
 
@@ -35,4 +50,25 @@
     {{ caller() }}
   </table>
 </div>
+{%- endmacro %}
+
+{% macro row() -%}
+<tr class="group *:align-top max-lg:relative max-lg:block max-lg:pe-10 max-lg:not-last:border-b max-lg:border-base-content/5 max-lg:*:border-b-0">{{ caller() }}</tr>
+{%- endmacro %}
+
+{% macro heading(label) -%}
+<th scope="col" class="max-lg:hidden">{{ label }}</th>
+{%- endmacro %}
+
+{% macro cell(label, nowrap=false) -%}
+<td data-label="{{ label }}" class="{% if nowrap %}whitespace-nowrap {% endif %}max-lg:hidden max-lg:gap-2 max-lg:py-1 max-lg:group-has-open:flex max-lg:before:w-24 max-lg:before:shrink-0 max-lg:before:font-semibold max-lg:before:text-base-content/60 max-lg:before:content-[attr(data-label)]">{{ caller() }}</td>
+{%- endmacro %}
+
+{% macro rowToggle(name) -%}
+<details class="absolute end-1 top-1 lg:hidden">
+  <summary class="btn btn-ghost btn-xs btn-square">
+    <span class="sr-only">Details of {{ name }}</span>
+    <span aria-hidden="true" class="-mt-1 size-2 rotate-45 border-e-2 border-b-2 transition-transform group-has-open:mt-1 group-has-open:rotate-225"></span>
+  </summary>
+</details>
 {%- endmacro %}

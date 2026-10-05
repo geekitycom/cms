@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 09:59'
+updated_date: '2026-10-05 10:38'
 ---
 # Admin UI
 
@@ -117,7 +117,7 @@ macros; it does not spell out component markup of its own.
 | `card.njk` | `card`, `cardActions` | a `card` on base-100 with an optional `card-title`; the `card-actions` row |
 | `stat.njk` | `stats`, `stat` | `stats` around its body; one `stat` with title, value and description |
 | `badge.njk` | `badge`, `status` | `<span class="badge">`; `status` is the badge for the state a row is in, coloured from one map |
-| `table.njk` | `table` | a `table` with a screen-reader caption, wrapped to scroll sideways, the wrapper's width contained so a wide table never widens the card or the page around it; the wrapper is the table's base-100 surface (a card's rounding and shadow), and `inCard` leaves the surface off for a table already inside a card |
+| `table.njk` | `table`, `row`, `heading`, `cell`, `rowToggle` | a `table` with a screen-reader caption, wrapped to scroll sideways, the wrapper's width contained so a wide table never widens the card or the page around it; the wrapper is the table's base-100 surface (a card's rounding and shadow), and `inCard` leaves the surface off for a table already inside a card. `row`, `heading`, `cell` and `rowToggle` draw a row that stacks below `lg` instead of scrolling |
 | `copy.njk` | `copyField` | a readonly box joined to a Copy button, the button `hidden` until `static/copy.js` finds the clipboard |
 | `tabs.njk` | `tabs` | a labelled `<nav class="tabs">` of links, the current one marked |
 | `pagination.njk` | `pagination` | newer, the page you are on and older, joined as one `join` group |
@@ -204,6 +204,25 @@ What the screens make of the library:
   Tailwind's `group-hover` needs, so wherever they are hidden a hover can bring
   them back. The row's cells align to the top, so the date and status sit on
   the title's line.
+- **Posts and Pages stack a row below `lg`.** Below `lg` a row shows only its
+  first cell, the title and its actions, with an arrow at its right edge, so
+  the table does not scroll sideways on a phone. Opening the arrow lists the
+  row's other cells under the title, one line each, the column's heading as
+  the key and the cell as the value, the status badge included. Rows open and
+  close on their own. The arrow is a `<details>` whose `<summary>` is named
+  "Details of" and the row's title: it needs no script, Tab reaches it after
+  the row's actions, and Chrome exposes it as a disclosure, expanded or
+  collapsed. From `lg` up the arrow is not drawn and the table is drawn as it
+  always was. A list screen adopts it with the macros in `table.njk`: each
+  body row is `{% call row() %}`, its first cell is written out and ends with
+  `rowToggle(name)`, each other cell is `{% call cell(label) %}`, and each
+  heading after the first is `heading(label)` with the same label, which the
+  cell carries as `data-label` and draws as its key. Below `lg` the table
+  keeps its semantics: Chrome's accessibility tree still holds a table of rows
+  and cells, the hidden headings and the closed rows' cells are out of it, and
+  an open cell's name starts with its key ("Date 2026-12-01"), since the
+  column header that would say so is hidden. The other list screens still
+  scroll sideways inside their surface.
 - **A record that is not a row is a card.** Comments and Messages draw one
   card per comment or message: the author line (name, site or address, and the
   state as a `status` badge), the where line (when, on or from what, the
