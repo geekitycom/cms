@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-04 11:12'
-updated_date: '2026-10-05 06:33'
+updated_date: '2026-10-05 06:41'
 labels:
   - admin
   - daisyui
@@ -73,6 +73,8 @@ Unit 5 (screenshots, AC #5): /private/tmp/claude-501/-Users-andrewshell-code-gee
 Open at handback: the deslop review (report-only) and the comment-sicko pass over the whole branch diff were launched but had not reported when this agent handed back. The comment-sicko agent edits comments in the working tree directly, so comment-only unstaged changes may appear after this note. The task stays In Progress until both passes are reviewed and the gates rerun.
 
 Both passes ran over the whole branch diff against main after the flip. Comment review (comment-sicko): 63 edits in 42 files accepted, all inside the branch diff; its four MUST KILL findings landed as code in ce206df (adminSecurityHeaders reuses a nonce already minted for the request, with a test registering it twice; the bar template emits the offset stylesheet on both sides and OFFSET_STYLE plus the admin.css :root:has rule are gone; one HOST_STYLE for the public host's style attribute and the shadow root's :host rule; the skip link sits under the bar by the bar-height token instead of z-[100000]). Deslop: duplicated test readers shared in src/admin/__testing__/markup.ts, the look table's empty entries and the classic-era helpers dropped, findAsset's roots back to main's type, in ef36d97. Gates green after each: pnpm build, pnpm test (4580 + 30), pnpm typecheck, pnpm lint, pnpm format:check.
+
+Screenshot pass rerun at the PR head d947723 after the review commits ce206df and ef36d97 changed the bar's offset stylesheet, its :host rule and the skip link: 212 views, same 53 screens, cupcake and dracula at 390 and 1280. The only flagged entries are the four publicAdminBar views, which load the site theme rather than the admin stylesheet by design (stylesheet 0, the theme's comment form controls carry no DaisyUI class, overflow -15 is narrower than the window, not wider). Durable copy with report.json and the rerunnable shots.mts: /Users/andrewshell/.claude/projects/-Users-andrewshell-code-geekity-cms/artifacts/m30-screenshots/ (the scratchpad copies under /private/tmp are ephemeral).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
