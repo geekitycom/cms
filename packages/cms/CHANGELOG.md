@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.22.0](https://github.com/geekitycom/cms/compare/v0.21.0...v0.22.0) (2026-10-05)
+
+
+### Features
+
+* **cms:** add the DaisyUI admin's component macros and class checks ([881c9c5](https://github.com/geekitycom/cms/commit/881c9c5542716e2f53daa6f4fa7720a668c1e56c))
+* **cms:** draw list tables on a card and put the row actions under the title ([a11366b](https://github.com/geekitycom/cms/commit/a11366bd245fedf049762433d77bcb030dcfc4e5))
+* **cms:** draw the admin bar from one shadow-rooted template, light or dark ([537de26](https://github.com/geekitycom/cms/commit/537de26656b36534a0559d894116c67a583f793c))
+* **cms:** draw the admin shell, flash and account screens with DaisyUI ([ec5389b](https://github.com/geekitycom/cms/commit/ec5389b818edec3a9ba864811037d3ae53064efb))
+* **cms:** draw the admin's form fields with DaisyUI ([230d2ca](https://github.com/geekitycom/cms/commit/230d2ca7a2bf617d9e12d27f63c74054c909ee7a))
+* **cms:** draw the admin's list screens on the DaisyUI table, tabs and badges ([5f92a4f](https://github.com/geekitycom/cms/commit/5f92a4f3b452a2ff914315b706c404cb67660b42))
+* **cms:** draw the dashboard's counts as DaisyUI stats and recent posts as a card ([6812498](https://github.com/geekitycom/cms/commit/6812498a79c3c3b11600cb9f0cffb67386f53d62))
+* **cms:** draw the editor and the conflict screen with DaisyUI ([aae0373](https://github.com/geekitycom/cms/commit/aae03730e578e21850d0a023a7a7cce78613a480))
+* **cms:** draw the remaining admin screens with DaisyUI ([712e145](https://github.com/geekitycom/cms/commit/712e14509cfc09f1950dcbbb5cb208977e0d4206))
+* **cms:** flip the admin to DaisyUI ([65057cc](https://github.com/geekitycom/cms/commit/65057cc57e3da44ae5315573d05e3f7d1fdc03d8))
+* **cms:** let each user pick the admin's theme or follow the system ([0784667](https://github.com/geekitycom/cms/commit/0784667ae5cfc8097831b0659cb5ae8e0c9ccab0))
+* **cms:** name an untitled photo post by its first photo's alt text ([d9d8e6c](https://github.com/geekitycom/cms/commit/d9d8e6c1b5cfc6cd48df3257c4dd94a4321e035d))
+* **cms:** stack list rows below lg with a toggle that opens the other columns ([fd609a0](https://github.com/geekitycom/cms/commit/fd609a0d282b94d2f1e882929fcd08e2a58ff5c2))
+
+
+### Bug Fixes
+
+* **cms:** mint one CSP nonce for the dashboard ([027f687](https://github.com/geekitycom/cms/commit/027f687d42f6762cecb3f9457a4258a46d0871f5))
+* **cms:** outline a plain badge so Published reads on a card ([a485e3f](https://github.com/geekitycom/cms/commit/a485e3f102a55943c09ddc65fd24a5991ac562ae))
+
 ## [0.21.0](https://github.com/geekitycom/cms/compare/v0.20.0...v0.21.0) (2026-10-04)
 
 
