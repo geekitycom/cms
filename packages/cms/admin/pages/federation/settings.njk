@@ -45,7 +45,7 @@
      actor, nothing asks any more and the switch can go off. #}
   {% call card(title='WordPress paths') %}
     {% if wordpressRoutes.length %}
-      {% call table('WordPress paths') %}
+      {% call table('WordPress paths', inCard=true) %}
         <thead>
           <tr><th scope="col">Path</th><th scope="col">For</th><th scope="col">Last asked for</th></tr>
         </thead>

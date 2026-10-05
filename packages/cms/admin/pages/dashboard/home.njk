@@ -29,7 +29,7 @@
 
   {% call card(title='Recent posts') %}
     {% if recent.length %}
-      {% call table('Recent posts') %}
+      {% call table('Recent posts', inCard=true) %}
         <thead>
           <tr>
             <th scope="col">Title</th>

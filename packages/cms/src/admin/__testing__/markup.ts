@@ -55,3 +55,21 @@ export function pagination(html: string): string {
     /<nav aria-label="Pages">\s*<div class="join">([\s\S]*?)<\/div>\s*<\/nav>/.exec(html)?.[1] ?? ''
   );
 }
+
+export function titleCell(html: string, title: string): string {
+  return (
+    [...html.matchAll(/<tr\b[^>]*>\s*<td\b[^>]*>([\s\S]*?)<\/td>/g)]
+      .map(([, cell]) => cell ?? '')
+      .find((cell) => cell.includes(`>${title}</a>`)) ?? ''
+  );
+}
+
+export function assertInOrder(html: string, marks: (string | RegExp)[]): void {
+  let from = 0;
+  for (const mark of marks) {
+    const rest = html.slice(from);
+    const at = typeof mark === 'string' ? rest.indexOf(mark) : rest.search(mark);
+    assert.ok(at > -1, `${String(mark)} follows what came before it in: ${html}`);
+    from += at + 1;
+  }
+}

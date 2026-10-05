@@ -45,7 +45,7 @@
         </dl>
 
         {% if actor.followers.length %}
-          {% call table('Followers of ' + actor.handle) %}
+          {% call table('Followers of ' + actor.handle, inCard=true) %}
             <thead>
               <tr>
                 <th scope="col">Follower</th>
