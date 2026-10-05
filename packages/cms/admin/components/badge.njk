@@ -1,7 +1,6 @@
 {# A badge: `badge(label, …)` emits
    `<span class="badge badge-outline badge-sm">label</span>`, outlined when it
-   is given no colour and no style, so it still reads on a base-100 card. The
-   label is escaped.
+   is given no colour and no style. The label is escaped.
 
    Modifiers, each a name from a closed set that maps to one DaisyUI class:
 
@@ -12,8 +11,8 @@
    A value outside its set is a render error.
 
    `status(name, label)` is the badge for the state a row is in, coloured by
-   `STATUSES` below, outlined where the state needs nothing of anybody; the
-   label is escaped. A name outside that set is a render error. #}
+   `STATUSES` below; the label is escaped. A name outside that set is a
+   render error. #}
 
 {% set COLORS = {
   neutral: 'badge-neutral',
