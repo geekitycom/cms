@@ -14,8 +14,6 @@
 {% block content %}
   <h1 class="mb-6 text-2xl font-bold">This {{ kind.singular }} changed while you were editing it</h1>
 
-  {# A status rather than an alert: it is the news this page exists to give,
-     and nothing on it is waiting to be put right. #}
   <div class="mb-6">
     {% call alert(color='error', style='soft', polite=true) %}
       <span>

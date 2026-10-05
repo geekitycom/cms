@@ -11,11 +11,6 @@ import { ADMIN_SECTIONS } from './menu.ts';
 import { PACKAGED_ADMIN_DIR } from './templates.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 
-/**
- * Each user draws the admin in a built-in DaisyUI theme of their own choosing,
- * or follows the system (decision-30, TASK-267).
- */
-
 const box = sandbox();
 after(() => box.cleanup());
 

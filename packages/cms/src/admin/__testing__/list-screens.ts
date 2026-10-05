@@ -8,11 +8,6 @@ import { signIn } from './harness.ts';
 import type { Browser, Sandbox } from './harness.ts';
 import { writeUsers } from './users.ts';
 
-/**
- * One site holding a row in every state each list screen can show, and those
- * screens as a signed-in admin is served them, for `list-screens.test.ts`.
- */
-
 const NOW = new Date('2026-10-02T12:00:00.000Z');
 
 /** The list screens, by the name the test calls each one. */

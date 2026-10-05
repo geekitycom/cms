@@ -10,14 +10,10 @@
 
    A value outside its set is a render error.
 
-   `labelledby` names the id of the heading inside the body, so the alert is
-   read out under that name. `focus` makes it take focus when the page loads
-   (`tabindex="-1"` and `autofocus`, with no script), which a refused form's
-   summary needs; only one element on a page should ask for it.
-
+   `labelledby` names the id of the heading inside the body. `focus` adds
+   `tabindex="-1"` and `autofocus`; only one element on a page may ask for it.
    `polite` makes it `role="status"`, read out when the reader is next idle
-   rather than at once: news, such as a flash, and not a problem that stops
-   the page, which a refused form's summary is. #}
+   rather than at once. #}
 
 {% set COLORS = { info: 'alert-info', success: 'alert-success', warning: 'alert-warning', error: 'alert-error' } %}
 {% set STYLES = { outline: 'alert-outline', dash: 'alert-dash', soft: 'alert-soft' } %}

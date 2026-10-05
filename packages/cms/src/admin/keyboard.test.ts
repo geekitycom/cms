@@ -205,22 +205,18 @@ describe('the admin bar, in its light palette and its dark one', async () => {
     }
   }
 
-  it('leaves the skip link first on a screen, ahead of the bar, and draws it over the fixed bar', () => {
+  it('leaves the skip link first on a screen, ahead of the bar, and shows it just under the bar', () => {
     const html = environment.render('pages/dashboard/home.njk', {});
     const skip = firstFocusable(html) ?? '';
     assert.match(skip, /^<a class="[^"]*" href="#main">$/, 'the first stop is the skip link');
     assert.ok(html.indexOf(skip) < html.indexOf('<geekity-admin-bar'), 'it comes before the bar');
 
     const classes = /class="([^"]*)"/.exec(skip)?.[1]?.split(/\s+/) ?? [];
-    const above = Number(
-      /^z-\[(\d+)\]$/.exec(classes.find((name) => name.startsWith('z-')) ?? '')?.[1],
-    );
-    const bar = Number(/:host\s*\{[^}]*z-index:\s*(\d+)/.exec(css)?.[1]);
+    assert.ok(classes.includes('fixed'), `it is fixed to the window: ${skip}`);
     assert.ok(
-      classes.includes('fixed') && classes.includes('top-0'),
-      `it is pinned to the top: ${skip}`,
+      classes.includes('top-(--geekity-admin-bar-height)'),
+      `it is offset by the height the bar sets: ${skip}`,
     );
-    assert.ok(above > bar, `its z-index, ${String(above)}, is above the bar's, ${String(bar)}`);
     assert.ok(classes.includes('focus:translate-y-0'), 'and it comes into view when it has focus');
   });
 });

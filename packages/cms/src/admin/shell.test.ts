@@ -9,12 +9,6 @@ import { MAIL_TEST_FIELDS, MAIL_TEST_PATH } from './settings-email.ts';
 import type { FlashMessage } from './store.ts';
 import { createAdminTemplateEnvironment } from './templates.ts';
 
-/**
- * The admin's chrome (decision-30, TASK-270): the shell every signed-in screen
- * is drawn inside, the settings pages' layout, the flash and the four account
- * screens.
- */
-
 const environment = createAdminTemplateEnvironment({ noCache: true });
 
 const CHROME = {

@@ -6,12 +6,6 @@ import { citedCard, fieldsOf } from './__testing__/editor-form.ts';
 import { editorScreens } from './__testing__/editor-screens.ts';
 import { sandbox } from './__testing__/harness.ts';
 
-/**
- * The editor and the conflict screen (decision-30, TASK-273): the writing
- * column and the side column, the groups as collapses, the buttons by what
- * they do, the cited card, and the two versions side by side.
- */
-
 const box = sandbox();
 after(() => box.cleanup());
 

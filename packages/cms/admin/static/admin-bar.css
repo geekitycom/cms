@@ -2,30 +2,9 @@
  * The admin bar's stylesheet (decision-30), inlined into the bar's shadow root
  * on admin screens and on the public site alike.
  *
- * No DaisyUI theme reaches inside a shadow root, so the bar is plain CSS in a
- * palette of its own, light and dark, and keyboard.test.ts holds its text and
- * focus ring to WCAG contrast in both. Self-contained, because on the public
- * site the host sits under whatever theme the site wears: nothing here leans
- * on another stylesheet, and sizes are in pixels since a `rem` is the page's.
+ * Nothing here may lean on another stylesheet, and sizes are in pixels: a
+ * `rem` is the host page's.
  */
-
-/* Pinned to the top of the window, out of the page's flow. The public site
-   also writes these declarations on the host as a style attribute, which
-   outranks a theme's rules for the element; the admin's CSP refuses a style
-   attribute, and there this rule alone places it. */
-
-:host {
-  all: initial;
-  display: block;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 99999;
-}
-
-/* Every colour is light-dark(light, dark). With no data-scheme on the host the
-   system's preference picks; the server sets one from the user's admin theme. */
 
 .admin-bar {
   color-scheme: light dark;

@@ -7,22 +7,25 @@ const box = sandbox();
 after(() => box.cleanup());
 
 /**
- * Every inline `<style>` in an admin page but the one the admin bar may carry
- * (decision-30): inside the bar's shadow root, with the nonce the response's
- * policy names.
+ * Every inline `<style>` in an admin page but the two the admin bar carries
+ * (decision-30), each with the nonce the response's policy names: its offset
+ * stylesheet right before the host, and the first one in its shadow root.
  */
 function strayStyles(html: string, csp: string): string[] {
   const nonce = /'nonce-([^']+)'/.exec(csp)?.[1];
-  const bar = /<geekity-admin-bar\b[\s\S]*?<\/geekity-admin-bar>/.exec(html)?.[0] ?? '';
+  const bar =
+    /<style id="geekity-admin-bar-offset"[^>]*>[^<]*<\/style><geekity-admin-bar\b[\s\S]*?<\/geekity-admin-bar>/.exec(
+      html,
+    )?.[0] ?? '';
   const tags = (text: string): string[] =>
     [...text.matchAll(/<style\b[^>]*>/g)].map(([tag]) => tag);
-  const [own, ...more] = tags(bar);
+  const allowed = [
+    `<style id="geekity-admin-bar-offset" nonce="${nonce ?? ''}">`,
+    `<style nonce="${nonce ?? ''}">`,
+  ];
   return [
     ...tags(html.replace(bar, '')),
-    ...(own === undefined || (nonce !== undefined && own === `<style nonce="${nonce}">`)
-      ? []
-      : [own]),
-    ...more,
+    ...tags(bar).filter((tag, index) => nonce === undefined || tag !== allowed[index]),
   ];
 }
 
@@ -77,7 +80,7 @@ describe('the admin stylesheet', () => {
     }
   });
 
-  it('is linked from every admin page, whose only inline stylesheet is the nonced one in the admin bar', async () => {
+  it("is linked from every admin page, whose only inline stylesheets are the admin bar's two nonced ones", async () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
@@ -93,12 +96,23 @@ describe('the admin stylesheet', () => {
   });
 
   it("would refuse an inline stylesheet outside the bar, or one in it without the response's nonce", () => {
-    const bar = (style: string): string =>
-      `<geekity-admin-bar><template shadowrootmode="open">${style}</template></geekity-admin-bar>`;
+    const bar = (offset: string, inner: string): string =>
+      `${offset}</style><geekity-admin-bar><template shadowrootmode="open">${inner}</template></geekity-admin-bar>`;
+    const offset = '<style id="geekity-admin-bar-offset" nonce="abc">';
     const csp = "style-src 'self' 'nonce-abc'";
-    assert.deepEqual(strayStyles(bar('<style nonce="abc">'), csp), []);
-    assert.deepEqual(strayStyles(bar('<style>'), csp), ['<style>']);
-    assert.deepEqual(strayStyles(bar('<style nonce="xyz">'), csp), ['<style nonce="xyz">']);
-    assert.deepEqual(strayStyles(`<style nonce="abc">${bar('')}`, csp), ['<style nonce="abc">']);
+    assert.deepEqual(strayStyles(bar(offset, '<style nonce="abc">'), csp), []);
+    assert.deepEqual(strayStyles(bar(offset, '<style>'), csp), ['<style>']);
+    assert.deepEqual(strayStyles(bar(offset, '<style nonce="xyz">'), csp), ['<style nonce="xyz">']);
+    assert.deepEqual(
+      strayStyles(bar('<style id="geekity-admin-bar-offset">', '<style nonce="abc">'), csp),
+      ['<style id="geekity-admin-bar-offset">'],
+    );
+    assert.deepEqual(
+      strayStyles(bar(offset, '<style nonce="abc"></style><style nonce="abc">'), csp),
+      ['<style nonce="abc">'],
+    );
+    assert.deepEqual(strayStyles(`<style nonce="abc">${bar(offset, '<style nonce="abc">')}`, csp), [
+      '<style nonce="abc">',
+    ]);
   });
 });

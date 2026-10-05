@@ -18,11 +18,9 @@
         as the `validator-hint` that a refused control turns red,
      4. the hint, where the field needs explaining, as a `label`.
 
-   The `fieldset` is a class on a `<div>`, as DaisyUI's own validator example
-   puts it on a `<label>` and a `<form>`: a `<fieldset>` element is a group
-   that a screen reader names by its legend, and one box has no group to name.
-   The label is a `<label>` carrying `fieldset-legend` rather than a
-   `<legend>`, because a legend names a group and not the control in it.
+   DaisyUI's `fieldset` and `fieldset-legend` are classes on a `<div>` and a
+   `<label>` here, not a `<fieldset>` and `<legend>`, which name a group
+   rather than one control.
 
    Error before hint, because that is the order every screen already used: the
    sentence about what went wrong belongs next to the box it is about, and the
@@ -48,14 +46,13 @@
 {% from "components/alert.njk" import alert %}
 
 {# The field error, then the hint: the two paragraphs every macro below ends
-   with. The error is a `validator-hint`, which DaisyUI shows only after a
-   control marked `aria-invalid` with the `validator` class, so it has to stay
+   with. The error is a `validator-hint`, which DaisyUI shows through a
+   sibling combinator after a `.validator[aria-invalid]`, so it has to stay
    that control's later sibling. `errorHtml` is the rare second thing a field
    has to say — the Reading page's "that page is no longer published" —
-   already written as its own paragraph, and drawn here in the error colour
-   whether or not the form was refused. The hint is a `label` laid out as a
-   block, since an inline flex row would split a sentence around its `<code>`,
-   and wrapped, since DaisyUI's label does not wrap. #}
+   already written as its own paragraph, and drawn in the error colour whether
+   or not the form was refused. The hint is a `label` made `block` and
+   `whitespace-normal`: DaisyUI's is `inline-flex` and `nowrap`. #}
 {% macro _below(id, hint, error, errorHtml, hintId='') %}
 {% if error %}
   <p class="validator-hint" id="{{ id }}-error">{{ error }}</p>
@@ -79,11 +76,7 @@
 {# A box somebody types into: text, email, number, or whatever `type` says.
 
    `value` is always written, even empty, so the control's state is on the page
-   rather than implied by its absence. A read-only box is drawn on the darker
-   base, as DaisyUI draws a disabled one, and with a dashed edge, since a dark
-   theme's two bases are close, so it does not look like a box that takes
-   typing; its text stays at full strength, since it is there to be read and
-   copied. #}
+   rather than implied by its absence. #}
 {% macro text(
   id,
   name,
@@ -138,7 +131,7 @@
 </div>
 {%- endmacro %}
 
-{# A box of several lines, read-only drawn as the text box draws it. #}
+{# A box of several lines. #}
 {% macro textarea(
   id,
   name,
@@ -190,11 +183,8 @@
 </div>
 {%- endmacro %}
 
-{# A switch: the tick inside its label with the sentence beside it, as
-   DaisyUI draws a checkbox, so the whole line toggles it. The sentence is in
-   the text colour rather than a label's muted one, because it is what the
-   tick means rather than a note about it, and it wraps. A refused box puts
-   the `validator` on the label, whose later sibling the error is. #}
+{# A switch: the tick inside its label. A refused box puts `validator` on
+   the label, since the `validator-hint` must be its later sibling. #}
 {% macro checkbox(
   id,
   name,

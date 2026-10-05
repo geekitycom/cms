@@ -6,14 +6,6 @@ import { remainingScreens } from './__testing__/remaining-screens.ts';
 import type { RemainingScreen } from './__testing__/remaining-screens.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
 
-/**
- * The admin's remaining screens (decision-30, TASK-274): comments and
- * messages, themes, menus, the settings panels, the tools, the IndieAuth
- * consent and refused screens, the error page, the placeholder and the user
- * forms, each drawn from cards, tables, tabs and badges, and each saying what
- * it has to say.
- */
-
 const box = sandbox();
 after(() => box.cleanup());
 

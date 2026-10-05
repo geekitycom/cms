@@ -8,8 +8,6 @@
 
 {% block title %}Federation{% endblock %}
 
-{# An avatar, or a blank placeholder in its place. Decoration: the name is
-   printed beside it. #}
 {% set AVATAR_SIZES = { large: 'w-24', small: 'w-8' } %}
 {% macro avatar(url, size) %}
   {% if url %}

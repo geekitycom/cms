@@ -12,13 +12,6 @@ import { csrfField, signIn } from './harness.ts';
 import type { Browser, Sandbox } from './harness.ts';
 import { writeUsers } from './users.ts';
 
-/**
- * One site holding something in every state the admin's remaining screens can
- * draw (TASK-274): comments, messages, themes, menus, the settings pages and
- * their panels, the tools, the IndieAuth consent and refused screens, the
- * admin's error page and the user forms, for `remaining-screens.test.ts`.
- */
-
 const NOW = new Date('2026-10-02T12:00:00.000Z');
 
 /** An app's sign-in request, sent back to `redirectUri`. */

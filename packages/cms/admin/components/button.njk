@@ -1,8 +1,7 @@
 {# A button, and a link drawn as one.
 
    `button(label, …)` emits `<button type="button" class="btn btn-sm">`, and
-   `buttonLink(label, href, …)` emits `<a class="btn btn-sm" href>`, with no
-   `role="button"`: ARIA gives that role to an `<a>` that goes nowhere.
+   `buttonLink(label, href, …)` emits `<a class="btn btn-sm" href>`.
 
    Each takes the same modifiers:
 
@@ -15,8 +14,7 @@
    A value outside its set is a render error.
    `button` also takes `type` (button, unless it submits), `id`, `name`,
    `value`, `formaction`, `formtarget`, `formnovalidate`, `popovertarget`,
-   `disabled` and `hidden`, for a button a script reveals once it can do its
-   job. The label is escaped. #}
+   `disabled` and `hidden`. The label is escaped. #}
 
 {% set COLORS = {
   neutral: 'btn-neutral',

@@ -9,11 +9,8 @@
 
    A value outside its set is a render error.
 
-   `status(name, label)` is the badge for the state a row is in, and the one
-   place a state is given its colour: plain where it needs nothing of
-   anybody, and in a colour where it needs attention or is gone. The label is
-   the word the screen prints for it, escaped and always printed, so the
-   state is never told by colour alone. A name outside the set below is a
+   `status(name, label)` is the badge for the state a row is in, coloured by
+   `STATUSES` below; the label is escaped. A name outside that set is a
    render error. #}
 
 {% set COLORS = {

@@ -14,10 +14,6 @@ import { THEMES_PATH } from './appearance.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { PACKAGED_ADMIN_DIR } from './templates.ts';
 
-/**
- * The admin is DaisyUI on Tailwind, compiled at build time (decision-30).
- */
-
 const execFile = promisify(execFileCallback);
 
 const COMPILED = path.join(PACKAGED_ADMIN_DIR, 'static', 'admin.css');
@@ -137,12 +133,11 @@ describe('the authored rules in the stylesheet source', async () => {
     body: body ?? '',
   }));
 
-  it('are the bar’s offset and the CodeMirror surface, nothing else', () => {
+  it('are the CodeMirror surface, nothing else', () => {
     const selectors = rules.flatMap((rule) => rule.selectors);
     assert.deepEqual(
       selectors.filter(
         (selector) =>
-          !selector.startsWith(':root:has(> body > geekity-admin-bar)') &&
           !/^#editor-surface \.cm-[\w-]+(?:\.cm-[\w-]+)?(?: \.cm-[\w-]+)?$/.test(selector),
       ),
       [],

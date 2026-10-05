@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
+import { Hono } from 'hono';
+
+import type { GeekityEnv } from '../env.ts';
 import { countUsers, listUsers } from './accounts.ts';
+import { adminSecurityHeaders } from './headers.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
 import {
   browser,
@@ -386,6 +390,25 @@ describe('security headers', () => {
       second.headers.get('content-security-policy') ?? '',
     )?.[1];
     assert.notEqual(other, inPolicy, 'a nonce is used once');
+  });
+
+  it('names the same nonce in the page and the policy when the admin headers are registered twice', async () => {
+    const cms = await site();
+    const app = new Hono<GeekityEnv>();
+    app.use('*', async (c, next) => {
+      c.set('config', cms.config);
+      await next();
+    });
+    app.use('/admin/*', adminSecurityHeaders);
+    app.use('/admin', adminSecurityHeaders);
+    app.get('/admin', (c) => c.html(`<style nonce="${c.var.cspNonce ?? ''}"></style>`));
+
+    const response = await app.request('/admin');
+    const inPolicy = /'nonce-([^']+)'/.exec(
+      response.headers.get('content-security-policy') ?? '',
+    )?.[1];
+    assert.ok(inPolicy !== undefined, 'the policy carries a nonce');
+    assert.equal(await response.text(), `<style nonce="${inPolicy}"></style>`);
   });
 
   it('leaves no inline script in the admin for the policy to have to allow', async () => {

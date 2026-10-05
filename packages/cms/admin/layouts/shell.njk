@@ -1,12 +1,6 @@
 {# The signed-in admin: the bar across the top, the sections down the left,
    the screen itself beside them. Every screen behind the login extends this
-   and fills in `content`, starting with its own <h1>.
-
-   The menu is a DaisyUI drawer: always open from `lg` up, and below that a
-   panel the Menu button slides in over the screen. The checkbox only shows
-   or hides the panel. Which section is open, and which screen is current,
-   the server already wrote into the list, so no script decides anything.
-   The panel sits under the fixed bar by the bar's own height. #}
+   and fills in `content`, starting with its own <h1>. #}
 {% extends "layouts/base.njk" %}
 {% from "components/menu.njk" import menu %}
 
@@ -24,11 +18,11 @@
 
 {% block main %}
   <div class="drawer lg:drawer-open">
-    {# Off, so a browser going back to this page does not bring the panel
-       back open over it. #}
+    {# `autocomplete="off"`: a browser going back restores a checkbox's state
+       otherwise. #}
     <input id="admin-menu" type="checkbox" class="drawer-toggle" autocomplete="off" />
-    {# Ahead of the screen, so a keyboard meets the menu first. DaisyUI
-       places the two by grid column, not order. #}
+    {# Before the screen, so a keyboard meets the menu first; DaisyUI's
+       drawer places both by grid column. #}
     <div class="drawer-side lg:top-(--geekity-admin-bar-height) lg:h-[calc(100dvh-var(--geekity-admin-bar-height))]">
       <label for="admin-menu" class="drawer-overlay" aria-hidden="true"></label>
       <nav aria-label="Sections" class="min-h-full w-64 bg-base-100 pt-(--geekity-admin-bar-height) lg:pt-0">

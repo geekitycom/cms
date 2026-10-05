@@ -9,13 +9,10 @@ import { FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 import { adminContentSecurityPolicy } from './headers.ts';
 import { PACKAGED_ADMIN_DIR } from './templates.ts';
 
-/**
- * The admin bar (decision-30, TASK-268): one template in one declarative
- * shadow root, drawn on an admin screen and on a public page alike, in a light
- * or a dark palette chosen by the signed-in user's theme.
- */
-
 const STATIC = path.join(PACKAGED_ADMIN_DIR, 'static');
+
+const HOST_RULE =
+  ':host { all: initial; display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 99999; }';
 
 interface Drawn {
   admin: string;
@@ -111,7 +108,11 @@ describe('the admin bar', async () => {
         root,
         `the host opens straight into its shadow root and stylesheet: ${bar.slice(0, 300)}`,
       );
-      assert.equal(root[1]?.trim(), stylesheet, 'the stylesheet is static/admin-bar.css, whole');
+      assert.equal(
+        root[1]?.trim(),
+        `${HOST_RULE}\n${stylesheet}`,
+        'the stylesheet is the :host rule, then static/admin-bar.css whole',
+      );
       assert.match(bar, /<nav class="admin-bar" aria-label="Admin bar">/);
     });
   }
@@ -125,12 +126,16 @@ describe('the admin bar', async () => {
     assert.doesNotMatch(compiled, /var\(--admin-/, 'no token of the bar is read from admin.css');
   });
 
-  it('pushes the admin page down by the height the bar script measures (AC #1)', () => {
-    const offset = /([^{}]*:has\([^{}]*geekity-admin-bar[^{}]*)\{([^{}]*)\}/.exec(
-      compiled.replace(/\s+/g, ' '),
-    );
-    assert.ok(offset, 'admin.css has a rule for a page that carries the bar, and only for one');
-    assert.match(offset[2] ?? '', /margin-top:\s*var\(--geekity-admin-bar-height\)/);
+  it('pushes the page down by the height the bar script measures, from one stylesheet on both sides (AC #1)', () => {
+    const offset = (html: string): string | undefined =>
+      /<style id="geekity-admin-bar-offset"[^>]*>([^<]*)<\/style><geekity-admin-bar\b/.exec(
+        html,
+      )?.[1];
+    const admin = offset(system.admin);
+    assert.ok(admin !== undefined, 'the offset stylesheet sits right before the admin bar');
+    assert.equal(offset(system.public), admin, 'the public page carries the same one');
+    assert.match(admin, /html \{ margin-top: var\(--geekity-admin-bar-height\) !important; \}/);
+    assert.doesNotMatch(compiled, /--geekity-admin-bar-height:/, 'admin.css sets no height');
     assert.match(
       script,
       /setProperty\('--geekity-admin-bar-height'/,
@@ -188,17 +193,19 @@ describe('the admin bar', async () => {
       const styles = [...drawn.admin.matchAll(/<style\b[^>]*>/g)].map(([tag]) => tag);
       assert.deepEqual(
         styles,
-        [`<style nonce="${nonce}">`],
-        "the bar's is the one inline stylesheet",
+        [`<style id="geekity-admin-bar-offset" nonce="${nonce}">`, `<style nonce="${nonce}">`],
+        "the bar's offset and shadow-root stylesheets are the only inline ones",
       );
     }
   });
 
   it('places the admin bar by its :host rule, with no style attribute the CSP would refuse (AC #4)', () => {
     assert.doesNotMatch(barIn(system.admin), /\sstyle="/);
-    assert.match(
-      stylesheet.replace(/\s+/g, ' '),
-      /:host \{ all: initial; display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 99999; \}/,
+    assert.ok(
+      barIn(system.admin).includes(
+        `<template shadowrootmode="open"><style nonce="${nonceOf(system.csp)}">${HOST_RULE}\n`,
+      ),
+      'the shadow root opens with the :host rule',
     );
   });
 

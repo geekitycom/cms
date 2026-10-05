@@ -1,13 +1,7 @@
 {# The editor behind /admin/posts/{slug} and /admin/pages/{slug}, and behind
    .../new. One template for both kinds: `kind` decides whether there is a date
    and the taxonomy fields, and the handler decides which buttons the form
-   carries.
-
-   Two columns from `xl`: the writing on the left, everything about it on the
-   right, with the buttons at the top of the right where they are in view.
-   Below `xl` the right column follows the left. Every group is a collapse
-   the server opens when it holds something, or the box a save was refused
-   for. #}
+   carries. #}
 {% extends "layouts/shell.njk" %}
 
 {% block title %}{{ heading }}{% endblock %}
@@ -18,8 +12,6 @@
 {% from "components/card.njk" import card, cardActions %}
 {% from "components/collapse.njk" import collapse %}
 
-{# The one action that puts the document in front of readers is the primary
-   one; throwing it away is drawn as the danger it is. #}
 {% set ACTION_COLORS = { 'publish': 'primary', 'update': 'primary', 'trash': 'error' } %}
 {% set ACTION_STYLES = { 'trash': 'ghost' } %}
 
@@ -27,8 +19,7 @@
 {% set cited = citedPreviews[property] %}
 {% if cited %}
 {% call card(size='sm', style='border') %}
-  {# The checkbox comes first so the X, the picture and the note after it can
-     each follow its state with no script. #}
+  {# First: Tailwind's `peer-*` variants reach later siblings only. #}
   <input class="peer sr-only" type="checkbox" id="editor-preview-{{ property }}" name="preview" value="hide"{% if form.previewHidden %} checked{% endif %}>
   <label class="btn btn-circle btn-xs absolute end-2 top-2 peer-checked:btn-neutral peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-base-content" for="editor-preview-{{ property }}"><span aria-hidden="true">×</span><span class="sr-only">Remove the preview of {{ cited.name }}</span></label>
   <img class="h-auto max-h-32 w-full rounded-box object-cover peer-checked:opacity-40" src="{{ cited.picture.src }}" alt="" width="{{ cited.picture.width }}" height="{{ cited.picture.height }}" loading="lazy">
@@ -149,8 +140,6 @@
 
           {{ field.text('editor-enclosure-duration', enclosureFields.duration, 'Duration', value=form.enclosure.duration, inputmode='numeric', autocomplete='off', error=(error if errorField == 'editor-enclosure-duration' else ''), hint='Seconds, or 30:34, or 1:02:03. Leave it empty if you do not know.', hintId='editor-enclosure-duration-hint') }}
 
-          {# The transcript and its type share one hint, written under the
-             type, so both name it. #}
           {{ field.text('editor-enclosure-transcript', enclosureFields.transcriptUrl, 'Transcript or captions', value=form.enclosure.transcriptUrl, list='editor-transcript-uploads', autocomplete='off', error=(error if errorField == 'editor-enclosure-transcript' else ''), hintId='editor-enclosure-transcript-hint') }}
           <datalist id="editor-transcript-uploads">
             {% for url in enclosureChoices.transcripts %}

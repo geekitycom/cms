@@ -1,7 +1,6 @@
 {# The page an admin request that threw answers with. It extends the bare
    layout rather than the shell because the shell reads the session, the menu
-   and the site, and any of those may be what failed. It is rendered outside
-   the admin's render, so it carries no user's theme and follows the system. #}
+   and the site, and any of those may be what failed. #}
 {% extends "layouts/base.njk" %}
 {% from "components/card.njk" import card %}
 

@@ -5,12 +5,6 @@ import { sandbox } from './__testing__/harness.ts';
 import { listScreens } from './__testing__/list-screens.ts';
 import type { ListScreen } from './__testing__/list-screens.ts';
 
-/**
- * The screens that are tables of rows (decision-30, TASK-272): each table is the table macro's, filters are tabs, page links are
- * the pagination macro, and every state a row is in is a badge that prints its
- * word.
- */
-
 const box = sandbox();
 after(() => box.cleanup());
 

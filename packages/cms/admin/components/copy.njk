@@ -8,12 +8,8 @@
        <button type="button" class="btn btn-sm join-item" data-copy="id" hidden>Copy</button>
      </div>
 
-   The box selects and copies like any other text, so the value can be taken
-   with no script at all. The button is `hidden` until `static/copy.js` finds
-   the clipboard API and reveals it: a button that did nothing without
-   JavaScript would be worse than none. The label is read by a screen reader
-   and not drawn, for a table cell whose column already says what it is.
-   Label and value are escaped. #}
+   The button stays `hidden` until `static/copy.js` reveals it. Label and
+   value are escaped. #}
 
 {% macro copyField(id, label, value) -%}
 <label class="sr-only" for="{{ id }}">{{ label }}</label>

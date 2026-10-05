@@ -1,34 +1,33 @@
-{# The admin bar (decision-30): one template, drawn on every signed-in admin
-   screen and across the top of every public page a signed-in user reads.
-
-   It keeps to a declarative shadow root: no selector of a site theme or of
-   the admin's DaisyUI theme reaches the markup inside, and the stylesheet
-   inside, static/admin-bar.css, reaches nothing outside. That stylesheet is
-   inlined so the bar is never drawn unstyled.
-
-   What each place passes it:
-   - `siteHref` and `barLinks`, chosen by each place for itself: the admin's
-     title leads to the dashboard, the public site's home (TASK-257).
+{# The admin bar (decision-30), on every signed-in admin screen and every
+   public page a signed-in user reads. The context it takes:
+   - `siteHref` and `barLinks`: the admin's title leads to the dashboard, the
+     public site's home (TASK-257).
    - `me`, `logoutUrl` and `csrfToken`, for the account menu that ends it.
-   - `barScheme`, `adminColorScheme` of the user's admin theme: `light` or
-     `dark` is put on the host as data-scheme and pins the palette, and `auto`
-     puts nothing there, so the bar follows prefers-color-scheme.
-   - `cspNonce`, on the admin only. Its CSP refuses an unnonced <style> and
-     any style attribute, so there the stylesheet carries the nonce and the
-     host is placed by the stylesheet's :host rule alone. The public site has
-     no content policy, and its host also carries that placement as a style
-     attribute, which outranks a theme's rules for the element: only an
-     `!important` rule can move it, which is also how a theme that insists
-     hides it.
+   - `barScheme`, `adminColorScheme` of the user's admin theme; `auto` puts no
+     data-scheme on the host.
+   - `cspNonce`, on the admin only.
    - `assetPrefix`, where static/admin-bar.js is served from.
 
    WordPress's "Howdy," menu, greeting the way this site's owner does. A
    popover rather than a script: the browser opens and closes it, shuts it on
    Escape or a click elsewhere, and tells a screen reader whether it is
-   expanded. #}
-<geekity-admin-bar
+   expanded.
+
+   The offset stylesheet makes room for the fixed bar, and the bar's script
+   replaces the height with the one it measures. The margin is on <html>, as
+   under WordPress's bar, so a theme's own padding is left alone; `!important`
+   outlasts a reset such as `html, body { margin: 0 }`, and `:where()` lets a
+   theme with a sticky header of its own keep its scroll padding. #}
+{% set HOST_STYLE = "all: initial; display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 99999" -%}
+<style id="geekity-admin-bar-offset"{% if cspNonce %} nonce="{{ cspNonce }}"{% endif %}>
+:root { --geekity-admin-bar-height: 40px; }
+@media (max-width: 600px) { :root { --geekity-admin-bar-height: 80px; } }
+html { margin-top: var(--geekity-admin-bar-height) !important; }
+:where(html) { scroll-padding-top: var(--geekity-admin-bar-height); }
+</style><geekity-admin-bar
   {%- if barScheme == 'light' or barScheme == 'dark' %} data-scheme="{{ barScheme }}"{% endif %}
-  {%- if not cspNonce %} style="all: initial; display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 99999"{% endif %}><template shadowrootmode="open"><style{% if cspNonce %} nonce="{{ cspNonce }}"{% endif %}>{% include "static/admin-bar.css" %}</style>
+  {%- if not cspNonce %} style="{{ HOST_STYLE }}"{% endif %}><template shadowrootmode="open"><style{% if cspNonce %} nonce="{{ cspNonce }}"{% endif %}>:host { {{ HOST_STYLE }}; }
+{% include "static/admin-bar.css" %}</style>
 <nav class="admin-bar" aria-label="Admin bar">
   <a class="admin-bar-site" href="{{ siteHref }}">{{ site.title }}</a>
   {% for link in barLinks %}

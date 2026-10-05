@@ -1,7 +1,6 @@
 {# Messages queued by the request that redirected here, one alert each in the
    colour of its kind. They were cleared as they were read, so this is the only
-   page that shows them. Each is a status rather than an alert: it is news, and
-   a refused form's summary has to stay the one alert on its page. #}
+   page that shows them. #}
 {% from "components/alert.njk" import alert %}
 {% set KINDS = { notice: 'success', warning: 'warning', error: 'error' } %}
 {% if flash and flash.length %}

@@ -125,11 +125,7 @@ export const USER_NOTIFICATIONS_PATH = `${USERS_PATH}/notifications`;
  */
 export const USER_NOTIFICATION_MODE_PATH = `${USER_NOTIFICATIONS_PATH}/mode`;
 
-/**
- * Where the Theme panel posts. It sets the theme of whoever is signed in and
- * names nobody else: the admin's look is a personal preference, not a setting
- * one admin makes for another.
- */
+/** Where the Theme panel posts; it sets the signed-in user's own theme and names nobody. */
 export const USER_THEME_PATH = `${USERS_PATH}/theme`;
 
 /** The fields the forms on these screens submit. */
@@ -767,7 +763,6 @@ function screen(
   };
 }
 
-/** The Theme panel's options: Follow the system, then every built-in theme, `user`'s marked. */
 function themeChoices(user: User): { value: string; label: string; chosen: boolean }[] {
   return [
     { value: '', label: 'Follow the system', chosen: user.adminTheme === undefined },

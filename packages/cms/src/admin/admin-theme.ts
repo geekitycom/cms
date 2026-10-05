@@ -1,24 +1,10 @@
-/**
- * The admin's theme, which each user picks for themselves (decision-30).
- *
- * The choice is one of DaisyUI's built-in themes or nothing, and nothing means
- * follow the system: the stylesheet's light and dark defaults then answer to
- * `prefers-color-scheme`. A name outside {@link ADMIN_THEMES} is never a
- * choice; {@link adminTheme} reads it as nothing.
- */
-
 /** Whether a theme is drawn light or dark. */
 export type ColorScheme = 'light' | 'dark';
 
 /** A theme choice reduced to what a surface outside the theme can follow. */
 export type AdminColorScheme = ColorScheme | 'auto';
 
-/**
- * Every built-in DaisyUI theme, in DaisyUI's own order, with the name the
- * select shows and whether the theme is light or dark. A test holds the names
- * to DaisyUI's list and each scheme to the `color-scheme` the compiled sheet
- * gives the theme, so a DaisyUI upgrade that adds or redraws one fails there.
- */
+/** Every built-in DaisyUI theme, in DaisyUI's order, with its label and whether it is light or dark. */
 export const ADMIN_THEMES = {
   light: { label: 'Light', scheme: 'light' },
   dark: { label: 'Dark', scheme: 'dark' },

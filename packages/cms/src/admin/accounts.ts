@@ -905,8 +905,6 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
     // know: a stored `weekly` from a later version is read as the default
     // rather than as a window nothing here could wait for.
     ...(modes === undefined ? {} : { notificationModes: modes }),
-    // And a theme this version does not know, from a newer DaisyUI or a typo,
-    // is read as following the system rather than as a name no sheet draws.
     ...(theme === undefined ? {} : { adminTheme: theme }),
     // Dropped field by field on the same rule, and for the sharper reason that
     // a profile is prose somebody may well have typed straight into the file:

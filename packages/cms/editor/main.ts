@@ -29,9 +29,8 @@ const BODY_ID = 'editor-body';
 const FALLBACK_ID = 'editor-preview-fallback';
 /** This script's own tag, which carries the page's Content-Security-Policy nonce. */
 const SCRIPT_ID = 'editor-script';
-/** The box CodeMirror is mounted in, which the DaisyUI admin's `.cm-*` rules hang off. */
+/** The box CodeMirror is mounted in; admin/src/admin.css hangs its `.cm-*` rules off this id. */
 const SURFACE_ID = 'editor-surface';
-/** The box the preview frame is shown in. */
 const PREVIEW_ID = 'editor-preview';
 
 enhance();
@@ -110,7 +109,6 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   previewPanel.id = PREVIEW_ID;
   previewPanel.hidden = true;
   let preview = previewFrame();
-  // Nothing to show until the first render, which replaces it.
   preview.hidden = true;
   previewPanel.append(preview);
   surface.insertAdjacentElement('afterend', previewPanel);
@@ -123,12 +121,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   // many.
   document.getElementById(FALLBACK_ID)?.setAttribute('hidden', 'hidden');
 
-  /**
-   * The Write and Preview tabs, and what switching between them does. A
-   * tablist in the ARIA sense: each tab names the panel it shows, only the
-   * current one is in the tab order, and the arrow keys, Home and End move
-   * between them.
-   */
+  /** The Write and Preview tabs, and what switching between them does. */
   function tabStrip(): { element: HTMLElement } {
     const element = document.createElement('div');
     element.className = LOOK.tabs;
@@ -335,16 +328,11 @@ function tab(label: string, panel: HTMLElement): HTMLButtonElement {
   return button;
 }
 
-/** Add space-separated class names, if there are any. */
 function addClasses(element: HTMLElement, names: string): void {
   element.classList.add(...names.split(' ').filter(Boolean));
 }
 
-/**
- * What the admin adds to CodeMirror: the Markdown it highlights is marked with
- * `.cm-md-*` classes rather than coloured, so the stylesheet draws it in the
- * theme's own colours (decision-30).
- */
+/** Marks highlighted Markdown with the `.cm-md-*` classes admin/src/admin.css colours. */
 function themeExtensions(): ReturnType<typeof syntaxHighlighting>[] {
   const highlighting = syntaxHighlighting(
     HighlightStyle.define([

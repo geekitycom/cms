@@ -125,13 +125,6 @@ const CLASSED_THEME: Record<string, string> = {
   'layouts/base.njk': BARE_BASE.replace('<html lang="en">', `<html lang="en" class='dark'>`),
 };
 
-/** The bare theme with no <head> tags, which HTML allows. */
-const HEADLESS_THEME: Record<string, string> = {
-  ...BARE_THEME,
-  'layouts/base.njk':
-    '<!doctype html>\n<html lang="en"><title>{{ site.title }}</title>\n<body>{% block content %}{% endblock %}</body></html>\n',
-};
-
 /**
  * The bare theme with speculation rules of its own, one of them written the
  * way a hand-written page might spell it.
@@ -147,7 +140,7 @@ const SPECULATIVE_THEME: Record<string, string> = {
 };
 
 interface SiteOptions {
-  theme?: 'bare' | 'broken' | 'classed' | 'headless' | 'speculative' | undefined;
+  theme?: 'bare' | 'broken' | 'classed' | 'speculative' | undefined;
   homepage?: string | undefined;
 }
 
@@ -160,7 +153,6 @@ async function site(options: SiteOptions = {}): Promise<Cms> {
   await writeTree(path.join(themesDir, 'bare'), BARE_THEME);
   await writeTree(path.join(themesDir, 'broken'), BROKEN_THEME);
   await writeTree(path.join(themesDir, 'classed'), CLASSED_THEME);
-  await writeTree(path.join(themesDir, 'headless'), HEADLESS_THEME);
   await writeTree(path.join(themesDir, 'speculative'), SPECULATIVE_THEME);
   await writeTree(contentDir, {
     ...CONTENT,
@@ -247,8 +239,8 @@ describe('the admin bar for a signed-in user', () => {
       assert.ok(bar !== undefined, `${kind} (${url}) carries the bar`);
       assert.match(
         html,
-        /<body[^>]*>\s*<geekity-admin-bar/,
-        `${kind}: the bar is the first thing in <body>`,
+        /<body[^>]*>\s*<style id="geekity-admin-bar-offset">[^<]*<\/style><geekity-admin-bar/,
+        `${kind}: the bar, behind its offset stylesheet, is the first thing in <body>`,
       );
       assert.match(bar, /aria-label="Admin bar"/, `${kind}: the bar is labelled`);
       assert.match(bar, /Hoopla! Ada Lovelace/, `${kind}: the account menu greets her`);
@@ -373,10 +365,13 @@ describe('the admin bar for a signed-in user', () => {
     const agent = await signedInTo(cms);
     const html = await (await agent.get(POST_URL)).text();
 
-    const head = /<head>[\s\S]*<\/head>/.exec(html)?.[0] ?? '';
-    const style = offsetStyleIn(head);
-    assert.ok(style !== undefined, 'the offset stylesheet is in <head>');
-    assert.match(html, /<style id="geekity-admin-bar-offset">[\s\S]*?<\/style>\s*<\/head>/);
+    const style = offsetStyleIn(html);
+    assert.ok(style !== undefined, 'the page carries the offset stylesheet');
+    assert.match(
+      html,
+      /<body class="bare"><style id="geekity-admin-bar-offset">[\s\S]*?<\/style><geekity-admin-bar /,
+      'straight after <body>, right before the bar',
+    );
     assert.match(style, /:root \{ --geekity-admin-bar-height: 40px; \}/, 'one line by default');
     assert.match(
       style,
@@ -413,18 +408,6 @@ describe('the admin bar for a signed-in user', () => {
       `<html lang="en" class='dark'>`,
       "an anonymous reader gets the theme's tag untouched",
     );
-  });
-
-  it('puts the offset stylesheet before the bar on a page with no </head>', async () => {
-    const cms = await site({ theme: 'headless' });
-    const agent = await signedInTo(cms);
-    const html = await (await agent.get(POST_URL)).text();
-
-    assert.match(
-      html,
-      /<body><style id="geekity-admin-bar-offset">[\s\S]*?<\/style><geekity-admin-bar /,
-    );
-    assert.match(html, /<html class="geekity-admin-bar" lang="en">/);
   });
 
   it('goes on the 500 too, which stays unstored', async () => {

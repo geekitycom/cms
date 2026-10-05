@@ -1,10 +1,5 @@
 import assert from 'node:assert/strict';
 
-/**
- * The editor's form read out of a served page, so a test about what the editor
- * posts does not depend on how it is drawn.
- */
-
 /** Every control the form would post, as a browser builds the form data. */
 export function fieldsOf(html: string): [string, string][] {
   const form =

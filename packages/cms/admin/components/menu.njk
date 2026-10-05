@@ -17,9 +17,8 @@
    only while it is `open`. Labels are escaped. No `<nav>` is emitted; the
    screen wraps the menu in one where it is a landmark.
 
-   `{RING}` is the focus ring: every link is outlined in the theme's text
-   colour while it has keyboard focus, because DaisyUI's menu swaps the
-   outline for a faint tint and gives the current item none at all.
+   `{RING}` is the focus-ring classes on every link: DaisyUI's menu sets
+   `outline-style: none` on `:focus-visible` and skips `.menu-active`.
 
    Modifiers:
 

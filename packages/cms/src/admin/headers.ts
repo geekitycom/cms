@@ -54,7 +54,7 @@ export const baselineSecurityHeaders: MiddlewareHandler<GeekityEnv> = async (c, 
  * a handler that replaced the response cannot lose the headers.
  */
 export const adminSecurityHeaders: MiddlewareHandler<GeekityEnv> = async (c, next) => {
-  const nonce = createNonce();
+  const nonce = c.var.cspNonce ?? createNonce();
   c.set('cspNonce', nonce);
 
   await next();

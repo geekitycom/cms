@@ -175,9 +175,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // "every admin response" means every one of them rather than every one a
   // handler happened to reach. It also mints the CSP nonce the editor's script
   // tag carries, which is why it has to run before any template is rendered.
-  // Registered once, under `/admin/*`, which matches `/admin` itself as well:
-  // a second registration would hand the page a second nonce after the policy
-  // had named the first, and the browser would refuse what carries it.
   app.use(`${ADMIN_PREFIX}/*`, adminSecurityHeaders);
 
   // Registered before the guard, so the login page can load its stylesheet
@@ -454,10 +451,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   }
 }
 
-/**
- * The screens shown to nobody in particular, which follow the system's light
- * or dark even when somebody signed in opens one (decision-30).
- */
+/** Drawn without the signed-in user's theme (decision-30). */
 const ACCOUNT_TEMPLATES: ReadonlySet<string> = new Set([
   ADMIN_TEMPLATES.login,
   ADMIN_TEMPLATES.setup,

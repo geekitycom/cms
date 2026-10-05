@@ -35,10 +35,10 @@ let environment: Environment | undefined;
  * it was before the bar existed. For a signed-in one the account is put on the
  * context for the handlers, and whatever HTML they answer with, a document, a
  * listing, a search, the 404 or the 500, gets the bar straight after its
- * `<body>` tag, the stylesheet that makes room for it in `<head>`, the
- * `geekity-admin-bar` class on `<html>`, and the headers of a page drawn for
- * one reader: private, no-store, and no validator. Anything that is not HTML, the JSON, the
- * Markdown, the feeds, ActivityPub, is left exactly as it was.
+ * `<body>` tag, the `geekity-admin-bar` class on `<html>`, and the headers of
+ * a page drawn for one reader: private, no-store, and no validator. Anything
+ * that is not HTML, the JSON, the Markdown, the feeds, ActivityPub, is left
+ * exactly as it was.
  *
  * Not inside `/admin`, which has a bar of its own and a CSP that would refuse
  * this one's inline stylesheet. Not on a response marked `frameable` either:
@@ -146,43 +146,14 @@ function withoutSpeculationRules(html: string): string {
 const ROOT_CLASS = 'geekity-admin-bar';
 
 /**
- * The room the bar takes at the top of the page, set from outside its shadow
- * root because the bar is fixed and takes none by itself.
- *
- * `--geekity-admin-bar-height` is the bar's height, for a theme's own sticky
- * or fixed header to sit under it. The script in the bar replaces it with the
- * height it measures; until then, or without script, it is one 40px line, and
- * two on a screen narrow enough for the bar to wrap.
- *
- * The page moves down by a margin on `<html>`, as it does under WordPress's
- * bar: a theme's padding on `<html>` or `<body>` is left alone, `!important`
- * outlasts a reset such as `html, body { margin: 0 }`, and the root's
- * background still fills the canvas behind the bar. `scroll-padding-top` is
- * under `:where()` so that a theme that sets its own, for a sticky header of
- * its own, keeps it.
- */
-const OFFSET_STYLE = `<style id="geekity-admin-bar-offset">
-:root { --geekity-admin-bar-height: 40px; }
-@media (max-width: 600px) { :root { --geekity-admin-bar-height: 80px; } }
-html { margin-top: var(--geekity-admin-bar-height) !important; }
-:where(html) { scroll-padding-top: var(--geekity-admin-bar-height); }
-</style>`;
-
-/**
- * `html` with `bar` straight after its opening `<body>` tag, the offset
- * stylesheet before `</head>`, and the root class on `<html>`; unchanged when
- * it has no `<body>` tag to put the bar after.
+ * `html` with `bar` straight after its opening `<body>` tag and the root class
+ * on `<html>`; unchanged when it has no `<body>` tag to put the bar after.
  */
 function withAdminBar(html: string, bar: string): string {
   const body = /<body\b[^>]*>/i.exec(html);
   if (body === null) return html;
   const afterBody = body.index + body[0].length;
-  const head = /<\/head\s*>/i.exec(html.slice(0, body.index));
-  const withBar =
-    head === null
-      ? `${html.slice(0, afterBody)}${OFFSET_STYLE}${bar}${html.slice(afterBody)}`
-      : `${html.slice(0, head.index)}${OFFSET_STYLE}${html.slice(head.index, afterBody)}${bar}${html.slice(afterBody)}`;
-  return withRootClass(withBar);
+  return withRootClass(`${html.slice(0, afterBody)}${bar}${html.slice(afterBody)}`);
 }
 
 /** `html` with ROOT_CLASS added to its `<html>` tag's classes. */
