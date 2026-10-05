@@ -79,8 +79,9 @@ describe('GEEKITY_ADMIN', () => {
       });
     }
 
-    it('still draws an unconverted screen from admin/ inside that layout', () => {
-      assert.match(served.dashboard, /<div class="admin-shell">/);
+    it('still draws an unconverted screen from admin/ inside the DaisyUI shell', () => {
+      assert.match(served.dashboard, /<div class="drawer lg:drawer-open">/);
+      assert.match(served.dashboard, /<div class="admin-panels">/);
     });
 
     it('serves the compiled DaisyUI sheet as /admin/_static/admin.css', () => {

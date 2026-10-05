@@ -93,6 +93,13 @@ describe('alert', () => {
       '<div role="alert" aria-labelledby="problems" tabindex="-1" autofocus class="alert alert-error"><h2 id="problems">Nothing was saved.</h2></div>',
     );
   });
+
+  it('is a polite status instead of an interruption when asked', () => {
+    assert.equal(
+      render('alert', 'alert', `{% call alert(color='success', polite=true) %}Saved.{% endcall %}`),
+      '<div role="status" class="alert alert-success">Saved.</div>',
+    );
+  });
 });
 
 describe('card', () => {
@@ -207,6 +214,9 @@ describe('pagination', () => {
 });
 
 describe('menu', () => {
+  const RING =
+    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-base-content';
+
   it('lists the sections, opening the children of the open one', () => {
     assert.equal(
       render('menu', 'menu', `{{ menu(navigation) }}`, {
@@ -228,7 +238,7 @@ describe('menu', () => {
           },
         ],
       }),
-      '<ul class="menu w-full"><li><a href="/admin/posts">Posts</a><ul><li><a class="menu-active" href="/admin/posts" aria-current="page">All posts</a></li><li><a href="/admin/posts/new">Add new</a></li></ul></li><li><a href="/admin/pages">Pages</a></li></ul>',
+      `<ul class="menu w-full"><li><a class="${RING}" href="/admin/posts">Posts</a><ul><li><a class="${RING} menu-active" href="/admin/posts" aria-current="page">All posts</a></li><li><a class="${RING}" href="/admin/posts/new">Add new</a></li></ul></li><li><a class="${RING}" href="/admin/pages">Pages</a></li></ul>`,
     );
   });
 
@@ -239,7 +249,7 @@ describe('menu', () => {
         'menu',
         `{{ menu([{ label: 'Home', url: '/', current: true }], direction='horizontal', size='sm') }}`,
       ),
-      '<ul class="menu menu-horizontal menu-sm"><li><a class="menu-active" href="/" aria-current="page">Home</a></li></ul>',
+      `<ul class="menu menu-horizontal menu-sm"><li><a class="${RING} menu-active" href="/" aria-current="page">Home</a></li></ul>`,
     );
   });
 });

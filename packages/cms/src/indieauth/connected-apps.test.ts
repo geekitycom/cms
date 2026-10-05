@@ -7,6 +7,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { flashes } from '../admin/__testing__/flash.ts';
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { createUser } from '../admin/accounts.ts';
@@ -110,7 +111,10 @@ describe('the connected apps screen', () => {
     const html = await screen(agent);
     assert.match(html, /<caption[^>]*>Connected apps<\/caption>/);
     assert.match(html, /<button type="submit">Revoke Quill<\/button>/);
-    assert.match(html, /<a href="\/admin\/users\/apps" aria-current="page">Connected apps<\/a>/);
+    assert.match(
+      html,
+      /<a\b[^>]*href="\/admin\/users\/apps" aria-current="page">Connected apps<\/a>/,
+    );
   });
 
   it('is linked from your own user screen', async () => {
@@ -152,7 +156,9 @@ describe('revoking a connection', () => {
       [other.token.id],
     );
     const html = await screen(agent);
-    assert.match(html, /role="status">Quill can no longer act as you\.<\/p>/);
+    assert.deepEqual(flashes(html), [
+      { kind: 'notice', message: 'Quill can no longer act as you.' },
+    ]);
     assert.ok(!html.includes('Revoke Quill'));
   });
 
@@ -208,7 +214,10 @@ describe('the list of apps allowed without PKCE (TASK-225)', () => {
     assert.deepEqual(listed(cms), [IA_WRITER]);
 
     const html = await screen(agent);
-    assert.match(html, /role="status">https:\/\/ia\.net\/writer may now sign in without PKCE\./);
+    assert.match(
+      flashes(html)[0]?.message ?? '',
+      /^https:\/\/ia\.net\/writer may now sign in without PKCE\./,
+    );
     assert.match(html, /<button type="submit">Remove https:\/\/ia\.net\/writer<\/button>/);
   });
 

@@ -4,9 +4,9 @@
 
      <ul class="menu w-full">
        <li>
-         <a href="…">Posts</a>
+         <a class="{RING}" href="…">Posts</a>
          <ul>
-           <li><a class="menu-active" href="…" aria-current="page">All posts</a></li>
+           <li><a class="{RING} menu-active" href="…" aria-current="page">All posts</a></li>
          </ul>
        </li>
      </ul>
@@ -16,6 +16,10 @@
    with `menu-active` and `aria-current`, and an item's `children` are listed
    only while it is `open`. Labels are escaped. No `<nav>` is emitted; the
    screen wraps the menu in one where it is a landmark.
+
+   `{RING}` is the focus ring: every link is outlined in the theme's text
+   colour while it has keyboard focus, because DaisyUI's menu swaps the
+   outline for a faint tint and gives the current item none at all.
 
    Modifiers:
 
@@ -35,7 +39,7 @@
 {% macro _items(items) -%}
 {% for item in items %}
 <li>
-  <a{% if item.current %} class="menu-active"{% endif %} href="{{ item.url }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a>
+  <a class="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-base-content{% if item.current %} menu-active{% endif %}" href="{{ item.url }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a>
   {% if item.open and item.children.length %}
   <ul>{{ _items(item.children) }}</ul>
   {% endif %}

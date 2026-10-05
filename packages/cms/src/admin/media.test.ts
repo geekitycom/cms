@@ -153,7 +153,7 @@ describe('the media screen', () => {
 
     // Its own section, with Library the child it lands on (TASK-72).
     const { html } = await screen(agent);
-    assert.match(html, /<a href="\/admin\/media" aria-current="page">Library<\/a>/);
+    assert.match(html, /<a\b[^>]*href="\/admin\/media" aria-current="page">Library<\/a>/);
   });
 
   it('offers the URL and the Markdown in copyable fields (AC #2)', async () => {

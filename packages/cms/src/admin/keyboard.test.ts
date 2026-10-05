@@ -5,10 +5,12 @@ import { after, describe, it } from 'node:test';
 
 import { adminFile, adminTemplates } from './__testing__/admin-files.ts';
 import { browser, sandbox, signedIn } from './__testing__/harness.ts';
+import { adminMenu } from './menu.ts';
 import {
   adminDirectories,
   createAdminTemplateEnvironment,
   DAISYUI_ADMIN_DIR,
+  PACKAGED_ADMIN_DIR,
 } from './templates.ts';
 
 /**
@@ -22,6 +24,17 @@ import {
 
 const environment = createAdminTemplateEnvironment({ noCache: true });
 
+const daisyui = createAdminTemplateEnvironment({
+  noCache: true,
+  roots: adminDirectories({ GEEKITY_ADMIN: 'daisyui' }),
+});
+
+/** The skip link's opening tag, as the base layout the admin serves writes it. */
+const SKIP_LINK =
+  /<a class="[^"]*" href="#main">/.exec(
+    await readFile(adminFile('layouts/base.njk'), 'utf8'),
+  )?.[0] ?? 'no skip link in layouts/base.njk';
+
 /** The opening tag of the first element a Tab press can land on. */
 function firstFocusable(html: string): string | undefined {
   const focusable =
@@ -30,12 +43,8 @@ function firstFocusable(html: string): string | undefined {
 }
 
 function assertSkipsToMain(html: string, screen: string): void {
-  assert.equal(
-    firstFocusable(html),
-    '<a class="admin-skip-link" href="#main">',
-    `${screen} starts with the skip link`,
-  );
-  assert.match(html, /<a class="admin-skip-link" href="#main">Skip to main content<\/a>/);
+  assert.equal(firstFocusable(html), SKIP_LINK, `${screen} starts with the skip link`);
+  assert.ok(html.includes(`${SKIP_LINK}Skip to main content</a>`), `${screen} says where it goes`);
   assert.equal(html.match(/\sid="main"/g)?.length, 1, `${screen} has one #main`);
   assert.match(html, /<main\b[^>]*\sid="main"/, `${screen}'s #main is its <main>`);
 }
@@ -93,9 +102,9 @@ describe('every admin table', async () => {
   }
 });
 
-/** The custom properties a stylesheet declares, by name. */
+/** The custom properties one of the old admin's stylesheets declares, by name. */
 async function tokens(stylesheet: string): Promise<Map<string, string>> {
-  const css = await readFile(adminFile(`static/${stylesheet}`), 'utf8');
+  const css = await readFile(path.join(PACKAGED_ADMIN_DIR, 'static', stylesheet), 'utf8');
   return new Map(
     [...css.matchAll(/(--admin-[a-z-]+):\s*(#[0-9a-f]{3}(?:[0-9a-f]{3})?)\s*;/gi)].map(
       ([, name, value]) => [name ?? '', value ?? ''],
@@ -118,7 +127,7 @@ function contrast(one: string, other: string): number {
   return ((light ?? 0) + 0.05) / ((dark ?? 0) + 0.05);
 }
 
-describe('the focus ring', () => {
+describe("the old admin's focus ring", () => {
   /** Each ring colour, and every background it is drawn against. */
   const SURFACES: Readonly<Record<string, readonly string[]>> = {
     '--admin-focus': ['--admin-field', '--admin-surface', '--admin-unread'],
@@ -149,6 +158,32 @@ describe('the focus ring', () => {
       });
     }
   }
+});
+
+describe("the DaisyUI shell's focus ring", () => {
+  it('outlines every link in the section menu, the current one too, in the theme text colour', () => {
+    const html = daisyui.renderString('{% extends "layouts/shell.njk" %}', {
+      navigation: adminMenu({ section: 'posts', child: 'tags' }),
+    });
+    const nav = /<nav\b[^>]*\baria-label="Sections"[^>]*>[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
+    const links = [...nav.matchAll(/<a\b[^>]*>/g)].map(([tag]) => tag);
+    assert.ok(
+      links.some((tag) => tag.includes('aria-current')),
+      'the current screen is among them',
+    );
+
+    for (const tag of links) {
+      const classes = /class="([^"]*)"/.exec(tag)?.[1]?.split(/\s+/) ?? [];
+      for (const ring of [
+        'focus-visible:outline-solid',
+        'focus-visible:outline-2',
+        'focus-visible:outline-offset-2',
+        'focus-visible:outline-base-content',
+      ]) {
+        assert.ok(classes.includes(ring), `${tag} carries ${ring}`);
+      }
+    }
+  });
 });
 
 describe('the DaisyUI admin bar, in its light palette and its dark one', async () => {
@@ -198,10 +233,6 @@ describe('the DaisyUI admin bar, in its light palette and its dark one', async (
   }
 
   it('leaves the skip link first on a screen, ahead of the bar, and draws it over the fixed bar', () => {
-    const daisyui = createAdminTemplateEnvironment({
-      noCache: true,
-      roots: adminDirectories({ GEEKITY_ADMIN: 'daisyui' }),
-    });
     const html = daisyui.render('pages/dashboard/home.njk', {});
     const skip = firstFocusable(html) ?? '';
     assert.match(skip, /^<a class="[^"]*" href="#main">$/, 'the first stop is the skip link');

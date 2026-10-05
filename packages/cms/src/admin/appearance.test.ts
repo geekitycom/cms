@@ -142,12 +142,12 @@ describe('the Appearance section', () => {
 
     assert.match(
       html,
-      /<li class="admin-nav-section admin-nav-open">\s*<a class="admin-nav-heading" href="\/admin\/appearance\/themes">Appearance<\/a>/,
+      /<a\b[^>]*href="\/admin\/appearance\/themes"[^>]*>Appearance<\/a>\s*<ul\b/,
       'the Appearance section is the open one',
     );
     assert.match(
       html,
-      /<a href="\/admin\/appearance\/themes" aria-current="page">Themes<\/a>/,
+      /<a\b[^>]*href="\/admin\/appearance\/themes" aria-current="page">Themes<\/a>/,
       'and Themes is the child being looked at',
     );
   });

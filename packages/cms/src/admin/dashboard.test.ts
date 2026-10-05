@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { flashes } from './__testing__/flash.ts';
 import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import { findUser, setUserProfile } from './accounts.ts';
 import type { Browser } from './__testing__/harness.ts';
@@ -90,7 +91,7 @@ describe('the admin shell', () => {
 
     assert.match(
       html,
-      /<a href="\/admin" aria-current="page">Home<\/a>/,
+      /<a\b[^>]*href="\/admin" aria-current="page">Home<\/a>/,
       'the dashboard is open on its own first child',
     );
   });
@@ -112,8 +113,8 @@ describe('the admin shell', () => {
 
     const html = await (await cms.app.request('/admin/login')).text();
 
-    assert.match(html, /<h1>Log in<\/h1>/);
-    assert.ok(!/admin-nav/.test(html), 'nowhere to navigate until you are in');
+    assert.match(html, /<h1\b[^>]*>Log in<\/h1>/);
+    assert.ok(!/aria-label="Sections"/.test(html), 'nowhere to navigate until you are in');
   });
 });
 
@@ -338,8 +339,11 @@ describe('flash messages', () => {
     assert.ok(editor !== null);
 
     const first = await (await agent.get(editor)).text();
+    assert.deepEqual(
+      flashes(first).map(({ kind }) => kind),
+      ['notice'],
+    );
     assert.match(first, /Draft saved: Kept for one page/);
-    assert.match(first, /class="admin-flash/);
 
     const second = await (await agent.get(editor)).text();
     assert.ok(!/Draft saved/.test(second), 'a flash is shown once and then gone');
@@ -354,6 +358,6 @@ describe('flash messages', () => {
     const html = await (await stranger.get('/admin')).text();
 
     assert.match(html, /Mine alone/, 'the stranger sees the draft in the listing');
-    assert.ok(!/admin-flash/.test(html), 'but not the message queued for someone else');
+    assert.deepEqual(flashes(html), [], 'but not the message queued for someone else');
   });
 });

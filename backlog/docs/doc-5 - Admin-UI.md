@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 01:39'
+updated_date: '2026-10-05 02:05'
 ---
 # Admin UI
 
@@ -51,6 +51,17 @@ toggles: it is a list of links, the open section a real nested `<ul>` inside its
 section's `<li>`. On a narrow screen the column moves above the page and wraps
 instead of becoming a sliver.
 
+In the DaisyUI admin (decision-30) the menu is the `menu` macro inside a DaisyUI
+drawer, `daisyui/layouts/shell.njk`. From `lg` up the drawer is open and the
+menu is a column beside the screen, held under the fixed admin bar. Below that
+the column is a panel the Menu button slides in over the screen. The button is
+the label of a checkbox, so the browser shows and hides the panel and no script
+runs; which section is open and which screen is current, the server has already
+written into the list. The menu comes before the screen in the page, so a
+keyboard meets it first, and each of its links is outlined in the theme's text
+colour while it has focus, since DaisyUI's own menu swaps the outline for a
+faint tint.
+
 ## Screens
 
 | Route | Purpose |
@@ -90,7 +101,8 @@ macros; it does not spell out component markup of its own.
 | File | Macros | Emits |
 | --- | --- | --- |
 | `button.njk` | `button`, `buttonLink` | `<button class="btn">`, and `<a class="btn">` for a link drawn as a button |
-| `alert.njk` | `alert` | `<div role="alert" class="alert">` around its body, named by a heading in it (`labelledby`) and taking focus on load (`focus`) where asked |
+| `alert.njk` | `alert` | `<div role="alert" class="alert">` around its body, named by a heading in it (`labelledby`) and taking focus on load (`focus`) where asked, or `role="status"` for news rather than a problem (`polite`) |
+| `flash.njk` | (included) | one `polite` alert per flash message: a notice in `success`, a warning in `warning`, an error in `error`, so a refused form's summary stays the page's one `role="alert"` |
 | `fields.njk` | `text`, `password`, `textarea`, `select`, `checkbox`, `summary`, `problem` | one `fieldset` per field: the label as its `fieldset-legend`, bound by `for` and `id`; the `input`, `textarea`, `select` or `checkbox`; the error as the `validator-hint` a refused control shows; the hint as a `label`. `summary` is an error `alert` |
 | `card.njk` | `card`, `cardActions` | a `card` on base-100 with an optional `card-title`; the `card-actions` row |
 | `stat.njk` | `stats`, `stat` | `stats` around its body; one `stat` with title, value and description |

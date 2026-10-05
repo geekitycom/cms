@@ -559,7 +559,7 @@ describe('the login throttle', () => {
 describe('the admin menu', () => {
   /** Just the navigation out of a rendered screen. */
   function nav(html: string): string {
-    const start = html.indexOf('<nav class="admin-nav"');
+    const start = html.search(/<nav\b[^>]*\baria-label="Sections"/);
     const end = html.indexOf('</nav>', start);
     assert.ok(start !== -1 && end !== -1, 'the screen rendered the admin navigation');
     return html.slice(start, end);

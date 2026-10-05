@@ -114,11 +114,10 @@ describe('the admin bar with GEEKITY_ADMIN=daisyui', async () => {
   });
 
   it('pushes the admin page down by the height the bar script measures (AC #1)', () => {
-    const offset = /([^{}]*geekity-admin-bar[^{}]*)\{([^{}]*)\}/.exec(
+    const offset = /([^{}]*:has\([^{}]*geekity-admin-bar[^{}]*)\{([^{}]*)\}/.exec(
       compiled.replace(/\s+/g, ' '),
     );
-    assert.ok(offset, 'admin.css has a rule for a page that carries the bar');
-    assert.match(offset[1] ?? '', /:has\(/, 'and it applies only where the bar is drawn');
+    assert.ok(offset, 'admin.css has a rule for a page that carries the bar, and only for one');
     assert.match(offset[2] ?? '', /margin-top:\s*var\(--geekity-admin-bar-height\)/);
     assert.match(
       script,

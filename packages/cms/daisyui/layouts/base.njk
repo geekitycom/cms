@@ -19,7 +19,7 @@
     <a class="fixed top-0 left-0 z-[100000] -translate-y-full bg-base-100 p-3 font-semibold focus:translate-y-0" href="#main">Skip to main content</a>
     {% block chrome %}{% endblock %}
     {% block main %}
-      <main id="main" class="mx-auto max-w-md p-6">
+      <main id="main" class="mx-auto flex min-h-screen max-w-md flex-col justify-center p-6">
         {% include "components/flash.njk" %}
         {% block content %}{% endblock %}
       </main>

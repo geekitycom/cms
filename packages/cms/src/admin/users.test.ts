@@ -211,7 +211,7 @@ describe('the edit user screen (TASK-97 AC #1, #7)', () => {
 
     const { html } = await editScreen(agent, ada);
     assert.match(html, /<title>Edit ada/, 'the edit page has a title of its own');
-    assert.match(html, /class="admin-nav"/, 'and renders inside the admin chrome');
+    assert.match(html, /<nav\b[^>]*aria-label="Sections"/, 'and renders inside the admin chrome');
     assert.match(
       html,
       /href="\/admin\/users"[^>]*aria-current="page"/,

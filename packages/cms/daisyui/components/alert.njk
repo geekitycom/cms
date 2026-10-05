@@ -13,7 +13,11 @@
    `labelledby` names the id of the heading inside the body, so the alert is
    read out under that name. `focus` makes it take focus when the page loads
    (`tabindex="-1"` and `autofocus`, with no script), which a refused form's
-   summary needs; only one element on a page should ask for it. #}
+   summary needs; only one element on a page should ask for it.
+
+   `polite` makes it `role="status"`, read out when the reader is next idle
+   rather than at once: news, such as a flash, and not a problem that stops
+   the page, which a refused form's summary is. #}
 
 {% set COLORS = { info: 'alert-info', success: 'alert-success', warning: 'alert-warning', error: 'alert-error' } %}
 {% set STYLES = { outline: 'alert-outline', dash: 'alert-dash', soft: 'alert-soft' } %}
@@ -23,6 +27,6 @@
   responsive: 'alert-vertical sm:alert-horizontal'
 } %}
 
-{% macro alert(color=none, style=none, direction=none, labelledby='', focus=false) -%}
-<div role="alert"{% if labelledby %} aria-labelledby="{{ labelledby }}"{% endif %}{% if focus %} tabindex="-1" autofocus{% endif %} class="alert{{ COLORS | modifier(color) }}{{ STYLES | modifier(style) }}{{ DIRECTIONS | modifier(direction) }}">{{ caller() }}</div>
+{% macro alert(color=none, style=none, direction=none, labelledby='', focus=false, polite=false) -%}
+<div role="{{ 'status' if polite else 'alert' }}"{% if labelledby %} aria-labelledby="{{ labelledby }}"{% endif %}{% if focus %} tabindex="-1" autofocus{% endif %} class="alert{{ COLORS | modifier(color) }}{{ STYLES | modifier(style) }}{{ DIRECTIONS | modifier(direction) }}">{{ caller() }}</div>
 {%- endmacro %}
