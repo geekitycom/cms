@@ -128,10 +128,6 @@
     }{% endset %}
 {% set _ = nodes.push(profilePage) %}
 {% elif isEntry and event %}
-{#- An event post is the Event itself (TASK-200), the shape Google reads for
-    an event's rich result: a place to go to, or an address to join at, and
-    who is putting it on. The CMS has no cancelled or moved event, so it is
-    always scheduled. -#}
 {% if event.location.kind == "virtual" %}
 {% set eventLocation = { "@type": "VirtualLocation", "url": event.location.url } %}
 {% set attendance = "https://schema.org/OnlineEventAttendanceMode" %}

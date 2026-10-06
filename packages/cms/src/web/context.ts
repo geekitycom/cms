@@ -395,8 +395,6 @@ export function documentContext(
     ...optional('inReplyTo', replyTarget(document)),
     rsvp: rsvpContext(document),
     event: eventContext(document),
-    // An event's `location` is under `event`; this key is the author's own,
-    // which the renderer adds only when it is shared (decision-29).
     location: undefined,
     citations: citationsOf(document.extra),
     read: readContext(document),

@@ -2652,9 +2652,6 @@ const MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // What an RSVP a webmention brought says (TASK-198), as its comment file
-    // carries it. Nothing backfills it: the rebuild on the next boot does, and
-    // a comment that is no RSVP leaves it `NULL`.
     version: 22,
     sql: `ALTER TABLE comments ADD COLUMN rsvp TEXT;`,
   },

@@ -505,8 +505,6 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   const { search } = new URL(c.req.url);
   if (formerly !== undefined) return c.redirect(`${formerly}${search}`, 301);
 
-  // A deleted document's URL says so, for as long as its file is in the trash
-  // and nothing live has taken the URL over (TASK-195).
   const deleted = [pathname, ...(extension?.paths ?? [])].some(
     (candidate) => goneDocumentAt(store, candidate) !== undefined,
   );
@@ -1796,7 +1794,6 @@ export function commentsFeedHref(document: Document | undefined): string {
   return commentsFeedPath(document === undefined ? undefined : encodePath(document.permalink));
 }
 
-/** The theme's 410 page. */
 function gone(c: Context<GeekityEnv>): Response {
   return c.html(c.var.renderer.renderGone(requestPath(c)), 410);
 }

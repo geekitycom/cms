@@ -190,7 +190,6 @@ export async function fetchReplyContext(
   return (await describePage(target, read.page, post, known, limits)) ?? refuse('nothing to show');
 }
 
-/** A cited page read as HTML, its `h-entry` and `h-event` only when it was read in full. */
 interface HtmlPage {
   /** Where it was read from, after any redirects. */
   readonly url: string;
@@ -228,7 +227,6 @@ async function readPage(url: string, limits: Limits): Promise<PageRead> {
   return { ok: true, page: { url: fetched.url, root, entry, event } };
 }
 
-/** The ActivityPub object a page with no `h-entry` names, when there is a way to read it. */
 async function fediversePostOf(
   page: HtmlPage,
   lookupPost: FediverseLookup | undefined,
@@ -238,7 +236,6 @@ async function fediversePostOf(
   return await fetchFediversePost(activityLink(page.root, page.url), lookupPost, limits);
 }
 
-/** Describe an HTML page from its sources, asking its oEmbed endpoint when it has no `h-entry`. */
 async function describePage(
   target: string,
   page: HtmlPage,
@@ -261,13 +258,6 @@ async function describePage(
   ]);
 }
 
-/**
- * The original a silo copy is of (original-post-discovery, TASK-197): a page
- * on another host that the copy names, by its `h-entry`'s `u-url` or `u-uid`,
- * its `rel=canonical` or its ActivityPub object's `url`, and that lists the
- * copy back as its `u-syndication` or `rel=syndication`. Without that claim
- * back, any page could pass itself off as a copy of somebody else's post.
- */
 async function originalOf(
   target: string,
   page: HtmlPage,
@@ -294,7 +284,6 @@ async function originalOf(
   return undefined;
 }
 
-/** The copies a page lists of itself: its `h-entry`'s `u-syndication` and its `rel=syndication` links. */
 function syndicationOf(page: HtmlPage): string[] {
   const listed = [...(page.entry?.syndication ?? [])];
   for (const element of elementsIn(page.root)) {
@@ -331,11 +320,6 @@ function described(
   };
 }
 
-/**
- * What one source says about a cited page, each field only when it says so.
- * `name` is `null` when the source is a post with words and no title of its
- * own, a note, which no later source may name.
- */
 interface Source {
   readonly name?: string | null;
   readonly text?: string;
@@ -349,11 +333,6 @@ interface Source {
   readonly picture?: PictureSource;
 }
 
-/**
- * The sources folded in order, each filling only what the ones before it left
- * empty. An author is one person: a later source adds to it, its page, handle
- * or avatar, only when it names the same person.
- */
 function merge(sources: readonly (Source | undefined)[]): Source {
   let merged: Source = {};
   for (const source of sources) {
@@ -420,11 +399,6 @@ function contextOf(
 
 const FLOATING_START = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?))?$/;
 
-/**
- * An event's start as {@link ReplyContext.start} keeps it. A date, or a date
- * and time, with no zone is a wall clock where the event is, so it is kept as
- * written; one with a zone is an instant.
- */
 function eventStart(value: string | undefined): string | undefined {
   const written = (value ?? '').trim();
   if (!/^\d{4}-\d{2}-\d{2}/.test(written)) return undefined;
@@ -471,7 +445,6 @@ function eventSource(event: CitedEvent): Source {
 }
 
 function fediverseSource(post: FediversePost): Source {
-  // A paragraph or a line break is a space between words, not nothing.
   const text = textOf(parseHtml((post.html ?? '').replace(/<\/p>|<br\s*\/?>/gi, '$& ')));
   const { photo, ...author } = post.author ?? { name: '' };
   const image = webUrl(post.image ?? '');
@@ -497,10 +470,6 @@ function oembedSource(oembed: Oembed | undefined): Source | undefined {
   };
 }
 
-/**
- * Article-like schema.org types a page's JSON-LD describes itself as: any
- * `…Article`, and the posting types blogs and social sites use.
- */
 const POSTING_TYPE = /(Article|^BlogPosting|^SocialMediaPosting|^DiscussionForumPosting)$/;
 
 function jsonLdSource(root: HtmlElement, base: string): Source | undefined {
@@ -530,7 +499,6 @@ function jsonLdSource(root: HtmlElement, base: string): Source | undefined {
   };
 }
 
-/** A schema.org `Event` or one of its kinds, such as `MusicEvent`. */
 const EVENT_TYPE = /Event$/;
 
 function jsonLdEventSource(root: HtmlElement): Source | undefined {
@@ -557,7 +525,6 @@ function jsonLdEventSource(root: HtmlElement): Source | undefined {
   };
 }
 
-/** Every object in the page's JSON-LD scripts, `@graph` members included. */
 function jsonLdNodes(root: HtmlElement): Record<string, unknown>[] {
   const nodes: Record<string, unknown>[] = [];
   for (const element of elementsIn(root)) {
@@ -576,7 +543,6 @@ function jsonLdNodes(root: HtmlElement): Record<string, unknown>[] {
   return nodes;
 }
 
-/** A schema.org image: a URL, an `ImageObject`, or a list of either. */
 function imageUrl(value: unknown): string | undefined {
   const image = [value].flat()[0];
   if (typeof image === 'string') return plainText(image);
@@ -597,12 +563,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/**
- * What a page's own metadata says: its Open Graph, Twitter and article tags,
- * its `<title>` and description. A title that is only a site suffix is none.
- * `article:author` is a name, or the author's page when it is a URL, which
- * `twitter:creator` then names.
- */
 function pageSource(root: HtmlElement, base: string): Source {
   const name =
     pageTitle(metaOf(root, 'og:title')) ||
@@ -644,7 +604,6 @@ function pagePicture(root: HtmlElement, base: string): PictureSource | undefined
   return { url, kind: 'thumbnail', ...(video ? { video: true } : {}) };
 }
 
-/** The ActivityPub object a page names as its alternate, or `undefined`. */
 function activityLink(root: HtmlElement, base: string): string | undefined {
   for (const element of elementsIn(root)) {
     if (element.name !== 'link' || !hasRel(element, 'alternate')) continue;

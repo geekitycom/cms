@@ -263,8 +263,6 @@
           {{ citedCard('in-reply-to') }}
           <p class="label block whitespace-normal text-xs">The address of the post this one answers. Leave it empty for a post that answers nobody.</p>
 
-          {#- The mf2 `rsvp` (TASK-198): with In reply to naming an event, it
-              makes the post an RSVP to it. -#}
           {% call field.select('editor-rsvp', 'rsvp', 'RSVP', error=(error if errorField == 'editor-rsvp' else '')) %}
             <option value=""{% if form.rsvp == "" %} selected{% endif %}>Not an RSVP</option>
             {% for choice in rsvpChoices %}
@@ -292,8 +290,6 @@
           {% endif %}
         {% endcall %}
 
-        {#- An event (TASK-200): a Starts makes the post one, and its Title is
-            the event's name. Wall-clock time in the site's zone, as Date is. -#}
         {% call collapse('Event', open.event, fields=true) %}
           {% set eventTimeHint %}Wall-clock time in {{ dateZone }}. Stored as UTC.{% endset %}
           {{ field.text('editor-event-start', eventFields.start, 'Starts', value=form.event.start, placeholder='2026-10-10 09:00', autocomplete='off', error=(error if errorField == 'editor-event-start' else ''), hint=eventTimeHint, hintId='editor-event-time-hint') }}

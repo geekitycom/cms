@@ -18,27 +18,15 @@ import { WEBMENTION_PATH } from './routes.ts';
 
 remoteHostsDoNotExist();
 
-/**
- * Original-post-discovery (TASK-197): a reply to a silo copy of a post answers
- * the IndieWeb original the copy links to, and a response to one of this
- * site's own copies lands on the post it is a copy of. Every host below is
- * make-believe; nothing leaves the process.
- */
-
 const BASE_URL = 'https://blog.example';
 
-/** A silo's copy of somebody's post, whose h-entry names the original as its `u-url`. */
 const SILO = 'https://silo.example/@them/1001';
-/** The original, which lists the copy as its `u-syndication`. */
 const ORIGINAL = 'https://them.example/2026/10/beans/';
 const ORIGINAL_ENDPOINT = 'https://them.example/webmention';
 
-/** A copy whose original never claims it back. */
 const CLAIMING = 'https://silo.example/@liar/7';
 
-/** This site's own copy of its post, on a silo. */
 const OWN_COPY = 'https://silo.example/@me/42';
-/** A copy a syndication target answered with, kept in the copies file. */
 const TARGET_COPY = 'https://news.example/en/blog.example/2026/09/hello-world';
 
 const publicLookup: HostLookup = () => Promise.resolve(['203.0.113.9']);

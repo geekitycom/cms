@@ -123,7 +123,6 @@ export function createReplyContextService(
     if (context !== undefined) options.onStored?.(target, previous);
   }
 
-  /** The context with its picture and its author's photo copied in, each when it can be. */
   async function withImages(context: ReplyContext, images: Images): Promise<ReplyContext> {
     const { picture: source, authorPhoto } = images;
     const picture =
@@ -272,7 +271,6 @@ export function createReplyContextService(
   };
 }
 
-/** What a fetch found to copy into the site. */
 interface Images {
   readonly picture?: PictureSource | undefined;
   readonly authorPhoto?: string | undefined;

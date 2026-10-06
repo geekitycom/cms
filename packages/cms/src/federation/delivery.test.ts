@@ -69,7 +69,6 @@ const PLAIN_PAGE = `${REMOTE_ORIGIN}/blog/a-page/`;
 
 const SLOW_PAGE = `${REMOTE_ORIGIN}/blog/slow-page/`;
 
-/** A fediverse account a post mentions by handle (TASK-194), found through WebFinger. */
 const ERIN_ACTOR = `${REMOTE_ORIGIN}/users/erin`;
 const ERIN_INBOX = `${REMOTE_ORIGIN}/users/erin/inbox`;
 const ERIN_PROFILE = `${REMOTE_ORIGIN}/@erin`;

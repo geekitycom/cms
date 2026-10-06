@@ -645,11 +645,6 @@ function citedAuthor(author: Actor | undefined): DeliveryTarget[] {
   ];
 }
 
-/**
- * Everyone a post's object is sent to besides the followers: the author it
- * replies to and each account it mentions by handle (TASK-194), one target per
- * inbox so an instance they share is posted to once.
- */
 function objectTargets(
   document: Document,
   replyTo: CitedObject | undefined,

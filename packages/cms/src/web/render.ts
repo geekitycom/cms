@@ -690,8 +690,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // `conversation` is what the fediverse said back. It is on the context
     // only when there is something in it, so a theme can ask `{% if
     // conversation %}` and a post nobody has answered renders no empty
-    // section (TASK-49). A page that does not take comments has none however
-    // much was approved against it (TASK-196).
+    // section (TASK-49).
     const said = answerable(document, commentPolicyOf(siteData.read()), config.now())
       ? options.conversation?.(document)
       : undefined;
@@ -709,7 +708,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // only when the site takes them, so a theme asks `{% if webmention %}`
     // and a site that has turned them off advertises nothing.
     const webmention = webmentionEndpointFor(siteData.read());
-    // And the pingback endpoint (TASK-203), only where a pingback could land.
     const pingback = pingbackEndpointFor(siteData.read(), document, config.now());
     // The posts either side of this one, as the two links a theme draws under
     // an entry (TASK-79). Each is on the context only when there is one, so a
@@ -1029,12 +1027,6 @@ function replyContextFor(context: Omit<ReplyContext, 'picture'>): Record<string,
   return { ...dated, ...eventStartFor(context.start) };
 }
 
-/**
- * An event's start as a theme prints it: `start` stays as stored, for the
- * `datetime` attribute, and `startDate` is the instant to format. A start
- * with no zone is a wall clock where the event is, so it is read as UTC and
- * `startZone` says to show it in UTC, which no site's zone can move.
- */
 function eventStartFor(start: string | undefined): Record<string, unknown> {
   if (start === undefined) return {};
   const floating = !/(?:Z|[+-]\d{2}:?\d{2})$/.test(start);

@@ -62,8 +62,7 @@ const NAMED: readonly Property[] = ['name', ...ANY_TYPE];
  * name it shows, the properties it offers, and those Post Type Discovery
  * needs to call a post that type. Another type's own property is not offered,
  * since it would make the post that type instead. A record, so a new
- * {@link PostType} cannot go unoffered. An event is the exception: it is an
- * h-event, and this endpoint creates h-entry posts only.
+ * {@link PostType} cannot go unoffered.
  */
 const POST_TYPES: Readonly<
   Record<

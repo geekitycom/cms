@@ -3,11 +3,6 @@ import path from 'node:path';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { isWebUrl } from './enclosure.ts';
 
-/**
- * The fediverse accounts a post can mention by `@user@host` (TASK-194): what
- * WebFinger said each handle is, kept so a page is drawn without asking.
- */
-
 /** One handle as it resolved. */
 export interface ResolvedHandle {
   /** The page a reader is sent to: the actor's `url`, else its id. */

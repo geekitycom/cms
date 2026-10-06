@@ -12,13 +12,6 @@ import { writeUsers } from '../admin/__testing__/users.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../webmention/public-address.ts';
 
-/**
- * Who wrote what a reply answers, as the default theme shows them (TASK-199):
- * their name, their photo copied into the site, and for a fediverse post their
- * handle, its words, its picture and its date, read from the ActivityPub
- * object. Every remote page and object here is one captured from the real web.
- */
-
 const box = sandbox();
 
 function fixture(name: string): string {
@@ -73,7 +66,6 @@ function answer(request: Request): Response {
         headers: { 'content-type': ACTIVITY },
       });
     case MASTODON_ACTOR:
-      // mastodon.social is in authorized fetch mode: an unsigned GET of an actor is a 401.
       return signed
         ? new Response(fixture('mastodon-actor.json'), { headers: { 'content-type': ACTIVITY } })
         : new Response('{"error":"Request not signed"}', { status: 401 });

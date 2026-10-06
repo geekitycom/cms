@@ -32,7 +32,6 @@ export function hiddenReason(document: Document, now: Date = new Date()): Hidden
   return withheldReason(document, now);
 }
 
-/** Why a document is not served, setting the trash aside. */
 function withheldReason(document: Document, now: Date): HiddenReason | undefined {
   if (document.draft) return { kind: 'draft' };
   const at = scheduledFor(document, now);

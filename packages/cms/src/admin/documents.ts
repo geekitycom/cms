@@ -1210,8 +1210,6 @@ function resolveExtra(
     const rsvp = rsvpValue(form.rsvp);
     if (rsvp === undefined) delete extra[RSVP_FRONT_MATTER_KEY];
     else extra[RSVP_FRONT_MATTER_KEY] = rsvp;
-    // A post that was no event and still is keeps whatever `start`, `end` or
-    // `location` somebody wrote into it by hand.
     const event = resolveEvent(form.event, timezone);
     const wasEvent = document !== undefined && eventOf(document.extra) !== undefined;
     if ('event' in event && (event.event !== undefined || wasEvent)) {
@@ -1626,7 +1624,6 @@ function refusedMove(reason: string): MoveOutcome {
   return { outcome: 'refused', reason };
 }
 
-/** `_trash/` plus the path, numbered past any file the trash already holds there. */
 async function freeTrashPath(contentDir: string, relative: string): Promise<string> {
   const { dir, name, ext } = path.posix.parse(`${TRASH_DIRECTORY}/${relative}`);
   for (let suffix = 1; ; suffix += 1) {
@@ -2074,7 +2071,6 @@ function citedPreviews(
   };
 }
 
-/** The document an editor URL from {@link documentEditorPath} names. */
 function findEdited(
   store: ContentStore,
   kind: DocumentKind,

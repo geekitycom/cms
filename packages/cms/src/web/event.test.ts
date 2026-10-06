@@ -1,9 +1,3 @@
-/**
- * An event's page (TASK-200 AC #1, AC #5): an h-event with its name, start,
- * end and place, and a schema.org Event in the JSON-LD that names the
- * author's Person as its organizer. Asserted over HTTP against the default
- * theme, because the markup is the behaviour.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

@@ -1,9 +1,3 @@
-/**
- * An RSVP's page (TASK-198 AC #1): a `p-rsvp` the h-entry carries, and the
- * event it answers cited as a `u-in-reply-to h-cite` with its name, its start
- * and its place. Asserted over HTTP against the default theme, because the
- * markup is the behaviour.
- */
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -77,8 +71,6 @@ describe('an RSVP in the default theme', () => {
   before(async () => {
     contentDir = await box.dir('geekity-rsvp-content-');
     const files: Record<string, string> = {
-      // West of UTC, so a start written with no zone would move a day back if
-      // it were read as UTC and shown in the site's zone.
       '_data/site.json': JSON.stringify({ title: 'A Site', timezone: 'America/Chicago' }),
       'posts/2026-09-10-camp.md': rsvp('camp', CAMP, 'yes', 'See you there.'),
       'posts/2026-09-10-club.md': rsvp('club', CLUB, 'interested'),

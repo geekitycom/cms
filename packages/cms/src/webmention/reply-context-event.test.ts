@@ -4,11 +4,6 @@ import { after, afterEach, describe, it } from 'node:test';
 import type { HostLookup } from './public-address.ts';
 import { fetchReplyContext } from './reply-context.ts';
 
-/**
- * What an RSVP shows of the event it answers (TASK-198): its name, when it
- * starts and where, read from the event page's `h-event` or its JSON-LD.
- */
-
 const EVENT = 'https://events.example/2026/10/indieweb-camp';
 
 const lookup: HostLookup = () => Promise.resolve(['203.0.113.9']);

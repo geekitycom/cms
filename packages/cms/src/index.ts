@@ -1707,9 +1707,6 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const copies = syndicationCopies(resolved.contentDir);
   const locations = postLocations(resolved.dataDir);
 
-  // What the cited-post reader and the handle learner read the fediverse
-  // through. It is called only once the site is running, so it can name
-  // services built further down.
   const federationContext = () =>
     federation.createContext(new URL(resolved.baseUrl), {
       admin,
@@ -1864,8 +1861,6 @@ export function createCms(config: GeekityConfig = {}): Cms {
     ),
   });
 
-  // The fediverse handles a save names, resolved before its file is written
-  // so the post links and mentions them from its first parse (TASK-194).
   const learnHandles = handleLearner(federationContext);
 
   const delivery = createDeliveryService({

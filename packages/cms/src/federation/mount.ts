@@ -301,8 +301,6 @@ async function activityStreamsDocument(
 
   const stored = storedObjectAt(c);
   if (wantsObject) {
-    // A trashed post is a Tombstone at its id if it was ever public, and
-    // nothing at all if it never was (TASK-195).
     const trashed = stored ?? goneDocumentAt(c.var.store, requestPath(c));
     if (trashed?.type === 'post' && isTrashedPath(trashed.path)) {
       return isGone(trashed, c.var.store.now())
@@ -358,11 +356,6 @@ async function article(
   });
 }
 
-/**
- * A deleted post as a peer that fetches its id is answered: 410 Gone, with the
- * `Tombstone` its `Delete` carried, so a server that missed the `Delete` still
- * learns the object went rather than that the URL was mistyped.
- */
 async function tombstone(
   c: Context<GeekityEnv>,
   federation: SiteFederation,

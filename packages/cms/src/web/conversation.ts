@@ -167,13 +167,8 @@ export interface RsvpGroup {
   readonly people: Interaction[];
 }
 
-/** The order an event's answers are shown in: who is coming first. */
 const RSVP_GROUP_ORDER: readonly RsvpValue[] = ['yes', 'maybe', 'interested', 'no'];
 
-/**
- * The fediverse's answers to an event (decision-32). There is no activity
- * for `interested`.
- */
 const RSVP_ACTIVITIES: Readonly<Record<string, RsvpValue | undefined>> = {
   Accept: 'yes',
   TentativeAccept: 'maybe',
@@ -355,7 +350,6 @@ function postConversation(context: ConversationContext, document: Document): Con
     // A repost joins the boosts, because a reader looking at the page is being
     // told the same thing by both; a mention is its own group, because it is
     // neither an answer nor a reaction.
-    // On an event an RSVP is an answer to it rather than a comment on it.
     const group =
       isEvent && comment.rsvp !== undefined
         ? answers
@@ -400,10 +394,6 @@ function postConversation(context: ConversationContext, document: Document): Con
   };
 }
 
-/**
- * An event's answers in their groups, each person once with the last thing
- * they said: somebody who accepted and then rejected is not going.
- */
 function rsvpGroups(answers: readonly Interaction[]): RsvpGroup[] {
   const latest = new Map<string, Interaction>();
   for (const answer of [...answers].sort(byPublished)) {

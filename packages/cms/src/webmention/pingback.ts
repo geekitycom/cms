@@ -20,10 +20,6 @@ import { webmentionEndpointFor } from './routes.ts';
  * It is an XML-RPC call, and the spec has the receiver answer once it knows,
  * so the source is fetched inside the request rather than after it, and the
  * answer is one of the fault codes the spec defines.
- *
- * The XML is read by a deliberately small reader rather than a parser. A
- * `pingback.ping` is two strings, and anything that declares a document type
- * is refused outright, so no entity, external or otherwise, is ever resolved.
  */
 
 /** Where a pingback is sent. */
@@ -163,7 +159,6 @@ function answerFor(outcome: WebmentionOutcome): string | Fault {
   }
 }
 
-/** A `methodCall` as its method name and its string parameters. */
 type MethodCall = { readonly method: string; readonly params: readonly string[] };
 
 const CALL =
@@ -178,8 +173,6 @@ function readMethodCall(xml: string): MethodCall | Fault {
     .replace(/^\s*<\?xml[^?]*\?>/, '')
     .replaceAll(/<!--[^]*?-->/g, '')
     .trim();
-  // A document type is where entities are declared, so refusing every one is
-  // what keeps an external entity from ever being fetched.
   if (body.includes('<!') || body.includes('<?')) return refused;
 
   const call = CALL.exec(body);
@@ -209,7 +202,6 @@ const PREDEFINED: Record<string, string> = {
   apos: "'",
 };
 
-/** XML character data with its references resolved, or `undefined` if one is unknown. */
 function decodeText(text: string): string | undefined {
   let unknown = false;
   const decoded = text.replaceAll(/&([^;&]*);|&/g, (whole, name: string | undefined) => {
@@ -227,7 +219,6 @@ function reference(name: string): string | undefined {
   return point > 0 && point <= 0x10ffff ? String.fromCodePoint(point) : undefined;
 }
 
-/** The request body as text, or `undefined` once it is longer than `max` bytes. */
 async function readBounded(request: Request, max: number): Promise<string | undefined> {
   if (Number(request.headers.get('content-length') ?? 0) > max) return undefined;
   if (request.body === null) return '';

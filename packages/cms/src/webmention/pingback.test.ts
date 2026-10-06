@@ -13,13 +13,6 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { PINGBACK_MAX_BYTES, PINGBACK_PATH } from './pingback.ts';
 import { WEBMENTION_PATH } from './routes.ts';
 
-/**
- * Pingbacks as a WordPress site sends them: an XML-RPC `pingback.ping` posted
- * to the endpoint a post advertises, answered there and then with a string or
- * one of the fault codes the Pingback 1.0 spec defines, and filed exactly as
- * the same link sent as a webmention would be.
- */
-
 const BASE_URL = 'https://blog.example';
 const ENDPOINT = `${BASE_URL}${PINGBACK_PATH}`;
 const POST_URL = `${BASE_URL}/2026/09/hello-world/`;
@@ -137,7 +130,6 @@ async function site(
   return instance;
 }
 
-/** A call in the exact envelope WordPress's IXR client writes. */
 function call(method: string, ...params: string[]): string {
   const values = params
     .map((param) => `<param><value><string>${param}</string></value></param>\n`)
@@ -157,7 +149,6 @@ async function ping(cms: Cms, source: string, target = POST_URL): Promise<Respon
   return await post(cms, call('pingback.ping', source, target));
 }
 
-/** The fault code an XML-RPC response carries, or `undefined` for a success. */
 async function faultOf(response: Response): Promise<number | undefined> {
   assert.equal(response.status, 200, 'XML-RPC answers every call with a 200');
   assert.match(response.headers.get('content-type') ?? '', /^text\/xml/);

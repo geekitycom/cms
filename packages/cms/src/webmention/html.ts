@@ -68,8 +68,7 @@ const VOID_ELEMENTS: ReadonlySet<string> = new Set([
  * A `<` inside one of them is a character in a program or a stylesheet, so
  * everything up to the closing tag is skipped rather than parsed. Their text
  * is dropped as well: an author name taken out of a script is not an author
- * name. A JSON-LD script is kept as an element with its contents as
- * {@link HtmlElement.data}, out of the text, since it describes the page.
+ * name.
  */
 const RAW_TEXT: ReadonlySet<string> = new Set(['script', 'style']);
 

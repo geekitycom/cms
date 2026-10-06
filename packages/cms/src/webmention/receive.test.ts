@@ -40,7 +40,6 @@ permalink: /2026/09/hello-world/
 Words.
 `;
 
-/** A page that takes comments, which a webmention can answer as it answers a post. */
 const PAGE = `---
 title: About
 permalink: /about/
@@ -51,7 +50,6 @@ Who this is.
 `;
 const PAGE_URL = `${BASE_URL}/about/`;
 
-/** An event, which groups the RSVPs it is sent (TASK-200). */
 const EVENT = `---
 title: IndieWeb Camp
 date: '2026-09-19T09:00:00Z'

@@ -1,12 +1,3 @@
-/**
- * The conversation under a page (TASK-196).
- *
- * A page takes part only while it takes comments, which it does when its front
- * matter says `comments: true` and the site has not switched comments off. One
- * that does is drawn exactly as a post is: the same reactions, the same thread,
- * the same form. One that does not shows nothing, whatever has been approved
- * against it.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -20,7 +11,6 @@ after(() => box.cleanup());
 
 const BASE_URL = 'https://blog.example';
 
-/** The ids are hex because they stand in for the UUIDs a comment file holds. */
 const REPLY = 'a';
 const LIKE = 'b';
 const REPOST = 'c';
@@ -70,7 +60,6 @@ function entry(values: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-/** A reply, a like, a repost and a mention, all approved, under `permalink`. */
 function answered(permalink: string, prefix: string): string {
   const webmention = (which: string, kind: string, name: string) =>
     entry({
@@ -132,7 +121,6 @@ async function body(cms: Cms, pathname: string): Promise<string> {
   return response.text();
 }
 
-/** From the reactions to the start of the comment form: the conversation. */
 function conversation(html: string): string {
   const start = html.indexOf('<div class="reactions-section">');
   if (start < 0) return '';

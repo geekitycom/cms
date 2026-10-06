@@ -31,8 +31,6 @@
 
 {% block content %}
 {% set entryUrl = page.url or url %}
-{#- An event is an h-event rather than an h-entry (TASK-200): the same
-    article, typed by what it announces. -#}
 <article class="blog-post {{ "h-event" if postType == "event" else "h-entry" }}"{{ language.attr(lang) }}>
   {#- A post with no name of its own (a note, or a reply without a title) is
       its words, so it opens on them in sight. Its page still needs one h1 to

@@ -120,7 +120,6 @@ export function checkWebmentionRequest(
 
   const site = webUrl(options.baseUrl);
   if (site === undefined || to.origin !== site.origin) {
-    // A response to a copy of a post on a silo belongs to the post itself.
     const original = options.syndicatedAt?.(to.href);
     if (original !== undefined) {
       return { ok: true, source: from.href, target: to.href, document: original };

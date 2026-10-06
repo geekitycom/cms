@@ -273,10 +273,6 @@ describe('the post object', () => {
       }),
     });
 
-    // A draft and a URL naming nothing have no public page at all, so they
-    // 404 exactly as they do for a browser, and a trashed post is the
-    // Tombstone it left (TASK-195). A page exists but federates nothing, so it
-    // falls through to the negotiator and earns the 406 doc-3 specifies.
     for (const permalink of ['/2026/09/secret/', '/2026/09/never-written/']) {
       const response = await get(instance, permalink, ACTIVITY_STREAMS);
       assert.equal(response.status, 404, `${permalink} is not an object`);

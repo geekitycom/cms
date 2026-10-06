@@ -338,8 +338,6 @@ export function postObject(
   const summary = feedExcerpt(document);
   const event = eventOf(document.extra);
   if (postObjectType(document) === 'Event' && event !== undefined) {
-    // Mastodon shows an Event as its name, its summary and its link, as it
-    // does an Article (decision-32).
     return new Event({
       ...common,
       name: document.title === '' ? null : document.title,
@@ -371,10 +369,6 @@ function inLanguage(text: string, language: string): (string | LanguageString)[]
   return [text, new LanguageString(text, language)];
 }
 
-/**
- * Where an event is, as a `Place`: named by its words, or by the address to
- * join it at, which is its `url` too.
- */
 function eventPlace(event: PostEvent): Place | undefined {
   const where = event.location;
   if (where === undefined) return undefined;

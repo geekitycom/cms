@@ -1,9 +1,3 @@
-/**
- * The fediverse answering an event (TASK-200 AC #3): an `Accept`,
- * `TentativeAccept` or `Reject` of the event's object, delivered to the inbox
- * and signed as a peer signs one, shows on the event's page in the group it
- * answers. The remote host is routed through memory; nothing leaves the test.
- */
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

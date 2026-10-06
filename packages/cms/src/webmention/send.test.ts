@@ -59,10 +59,6 @@ const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const sent: Sent[] = [];
 
-/**
- * The site the friendly endpoint fetches a source back from when it verifies,
- * as a receiver does, and the status each fetch got.
- */
 let verifyingAgainst: Cms | undefined;
 const verified: { source: string; status: number }[] = [];
 

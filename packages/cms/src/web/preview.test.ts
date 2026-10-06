@@ -177,7 +177,6 @@ describe('a hidden post at its permalink, anonymous', () => {
           `${variant.label}: ${kind} answers as the unknown URL does`,
         );
       }
-      // A deleted post says it was deleted instead (TASK-195), and no more.
       const trashed = await request(cms, TRASHED, variant);
       assert.equal(trashed.status, 410, `${variant.label}: the trashed post is gone`);
       assert.doesNotMatch(await trashed.text(), /lanterns, /, `${variant.label}: trashed body`);

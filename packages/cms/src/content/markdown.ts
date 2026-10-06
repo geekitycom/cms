@@ -10,10 +10,6 @@ import { slugify } from './slug.ts';
  * plus footnotes and heading anchors. Code blocks get a language class and no
  * highlighting and a `tabindex` on the `<pre>`, so a theme can pick its own
  * highlighter on the client and a wide block scrolls by keyboard.
- *
- * A bare URL links only when it names its scheme (TASK-194): fuzzy matching
- * would link `file.md`, and a protocol-relative or `mailto:` match is not the
- * page a webmention could be sent to.
  */
 const markdown: MarkdownItInstance = new MarkdownIt({ html: true, linkify: true })
   .use(footnote)
@@ -133,12 +129,6 @@ type HandleEnv = {
 const HANDLE =
   /^@([a-z0-9_][a-z0-9_.-]*)@((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9])/i;
 
-/**
- * `@user@host` as the h-card link the site's mention markup is (TASK-194),
- * when the directory knows the handle. A handle inside a word, a link or code
- * is not one: `me@alice@host` is an address and a link already says where it
- * goes.
- */
 function fediverseHandles(md: MarkdownItInstance): void {
   md.inline.ruler.before('linkify', 'geekity_fediverse_handle', (state, silent) => {
     if (state.src.charCodeAt(state.pos) !== 0x40 || state.linkLevel > 0) return false;

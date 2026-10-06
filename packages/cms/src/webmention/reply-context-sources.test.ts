@@ -6,12 +6,6 @@ import type { HostLookup } from './public-address.ts';
 import { fetchReplyContext } from './reply-context.ts';
 import type { FediverseLookup, FediversePost } from './reply-context.ts';
 
-/**
- * The sources a cited page is described from, each tried on a page captured
- * from the real web (TASK-199): an h-entry blog, a Mastodon status, a news
- * article with JSON-LD and a page with nothing but Open Graph.
- */
-
 function fixture(name: string): string {
   return readFileSync(
     new URL(`../../test/fixtures/reply-context/${name}`, import.meta.url),

@@ -11,7 +11,6 @@ const packageDir = join(here, '..', '..');
 const work = await mkdtemp(join(tmpdir(), 'offline-'));
 after(() => rm(work, { recursive: true, force: true }));
 
-/** Run a test file the way `pnpm test` does, and report how it ended. */
 async function runTest(name: string, source: string): Promise<{ code: number; output: string }> {
   const file = join(work, name);
   await writeFile(file, source);

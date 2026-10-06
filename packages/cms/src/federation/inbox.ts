@@ -287,12 +287,6 @@ export async function handleReject(context: SiteInboxContext, reject: Reject): P
   if (!answersPost(context, reject)) rejectRelay(context.data.admin, reject);
 }
 
-/**
- * Whether an `Accept` or a `Reject` (a `TentativeAccept` reaches the `Accept`
- * handler) answers one of the site's posts: somebody saying whether they are
- * coming to an event (TASK-200), which the conversation reads from the log.
- * Such an answer is never a relay's, however its sender's host matches one.
- */
 function answersPost(context: SiteInboxContext, activity: Accept | Reject): boolean {
   const { config, store } = context.data;
   return (
