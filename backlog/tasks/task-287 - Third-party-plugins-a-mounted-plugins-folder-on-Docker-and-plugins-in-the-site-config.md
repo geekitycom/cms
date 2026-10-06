@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:09'
-updated_date: '2026-10-06 13:21'
+updated_date: '2026-10-06 13:24'
 labels:
   - plugins
   - deploy
@@ -43,7 +43,8 @@ M31 (decision-33). The Docker image contains core alone, so a Docker site needs 
 - [ ] #6 The Dockerfile creates /site/plugins and sets GEEKITY_PLUGINS_DIR; deploy/compose.yaml has a writable plugins volume beside themes
 - [ ] #7 The README has a plugin section for operators (plugin add, remove, Reload) and for authors (the package shape, requires and services, settings and secrets, the host API version and peer range, the bundle, and a warning that a plugin runs with the site's access to data/)
 - [ ] #8 A folder install whose manifest peer ranges are not met by core or by an installed plugin package is unavailable on the Plugins screen, naming the package and the range it needs
-- [ ] #9 plugin add plans before it writes: it walks requires transitively, picks one version per plugin name (the newest that satisfies every range seen), and installs the whole set or nothing
-- [ ] #10 plugin add never upgrades or downgrades an installed plugin to satisfy a new one; an installed plugin outside a required range, or two ranges no single version meets, stops the add before anything is written and names the plugins and ranges in conflict
-- [ ] #11 There is no backtracking: when the newest in-range version of a dependency brings a range that cannot be met, plugin add reports the conflict instead of trying older versions
+- [ ] #9 plugin add never upgrades or downgrades an installed plugin to satisfy a new one; an installed plugin outside a required range, or two ranges no single version meets, stops the add before anything is written and names the plugins and ranges in conflict
+- [ ] #10 There is no backtracking: when the newest in-range version of a dependency brings a range that cannot be met, plugin add reports the conflict instead of trying older versions
+- [ ] #11 plugin add plans before it downloads: it reads each plugin package version metadata from the registry (peerDependencies and the geekity field of package.json, which the registry keeps per version), walks requires transitively from that metadata alone, picks one version per plugin name (the newest that satisfies every range seen), then downloads and installs the whole set or nothing
+- [ ] #12 A plugin package declares its runtime name, host API range and required plugins in a geekity field of package.json, with required plugins as peerDependencies; the bundle build writes plugin.json from it and fails when the plugin object requires differs from package.json
 <!-- AC:END -->
