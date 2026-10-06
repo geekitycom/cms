@@ -52,6 +52,8 @@ import { categoryHref, tagHref } from '../web/taxonomy.ts';
 import { actorId } from './actor.ts';
 import type { CitedObject } from './citations.ts';
 import type { FederationContextData } from './federation.ts';
+import { mentionedAccounts } from './handles.ts';
+import type { MentionedAccount } from './handles.ts';
 import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } from './paths.ts';
 
 /**
@@ -109,28 +111,45 @@ function addressing(
   document: Document,
   followers: URL,
   replyTo: CitedObject | undefined,
+  mentioned: readonly MentionedAccount[],
 ): { tos: URL[]; ccs: URL[] } {
-  const mentioned = replyTo?.author?.id;
-  const also = mentioned == null ? [] : [mentioned];
+  const ids = new Set<string>();
+  const author = replyTo?.author?.id;
+  if (author != null) ids.add(author.href);
+  for (const { account } of mentioned) ids.add(account.actor);
+  const also = [...ids].map((id) => new URL(id));
   return visibilityOf(document) === 'unlisted'
     ? { tos: [followers], ccs: [PUBLIC_COLLECTION, ...also] }
     : { tos: [PUBLIC_COLLECTION], ccs: [followers, ...also] };
 }
 
 /**
- * The `Mention` of the author a reply answers, which is what makes Mastodon
- * notify them, or nothing for a reply to no fediverse status.
+ * A `Mention` of the author a reply answers and of each account the post names
+ * by handle (TASK-194), which is what makes Mastodon notify them.
  */
-function replyMention(replyTo: CitedObject | undefined): Mention[] {
+function mentions(
+  replyTo: CitedObject | undefined,
+  mentioned: readonly MentionedAccount[],
+): Mention[] {
+  const found: Mention[] = [];
+  const named = new Set<string>();
   const author = replyTo?.author;
-  if (author?.id == null) return [];
-  const username = author.preferredUsername?.toString();
-  return [
-    new Mention({
-      href: author.id,
-      name: username === undefined ? null : `@${username}@${author.id.host}`,
-    }),
-  ];
+  if (author?.id != null) {
+    const username = author.preferredUsername?.toString();
+    named.add(author.id.href);
+    found.push(
+      new Mention({
+        href: author.id,
+        name: username === undefined ? null : `@${username}@${author.id.host}`,
+      }),
+    );
+  }
+  for (const { handle, account } of mentioned) {
+    if (named.has(account.actor)) continue;
+    named.add(account.actor);
+    found.push(new Mention({ href: new URL(account.actor), name: `@${handle}` }));
+  }
+  return found;
 }
 
 /** The media type an `Article`'s `source` is labelled with. */
@@ -260,6 +279,7 @@ export function postObject(
     documentLanguage(document) ?? canonicalLocale(settings.language) ?? DEFAULT_LOCALE;
 
   const inReplyTo = replyTarget(document);
+  const mentioned = mentionedAccounts(document.body, context.data.config.contentDir);
   const common = {
     id: articleObjectId(context, document),
     // On either type, so an activitypub.type override never breaks a thread.
@@ -269,7 +289,7 @@ export function postObject(
     published: toInstant(document.date) ?? null,
     updated: toInstant(document.updated) ?? null,
     attribution: actor,
-    ...addressing(document, followers, replyTo),
+    ...addressing(document, followers, replyTo, mentioned),
     // FEP-044f: a post with no policy is one Mastodon lets nobody quote. Every
     // post that federates names Public, so anybody may quote it, and
     // the inbox approves each QuoteRequest on the same rule (TASK-125).
@@ -289,7 +309,7 @@ export function postObject(
     // hashtag has no reason to care which of the two a term came from, and
     // each one points at the archive the site serves for it.
     tags: [
-      ...replyMention(replyTo),
+      ...mentions(replyTo, mentioned),
       ...document.tags.map((tag) => hashtag(tag, tagHref(tag, 0, bases), baseUrl)),
       ...document.categories.map((category) =>
         hashtag(category, categoryHref(category, 0, bases), baseUrl),
@@ -497,7 +517,12 @@ export function postCreateActivity(
     actor,
     object,
     published: toInstant(document.date) ?? null,
-    ...addressing(document, followers, replyTo),
+    ...addressing(
+      document,
+      followers,
+      replyTo,
+      mentionedAccounts(document.body, context.data.config.contentDir),
+    ),
   });
 }
 
@@ -529,7 +554,12 @@ export function postUpdateActivity(
     actor,
     object,
     published: toInstant(document.updated ?? document.date) ?? null,
-    ...addressing(document, followers, replyTo),
+    ...addressing(
+      document,
+      followers,
+      replyTo,
+      mentionedAccounts(document.body, context.data.config.contentDir),
+    ),
   });
 }
 

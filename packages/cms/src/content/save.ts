@@ -3,6 +3,7 @@ import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { Document, DocumentContent, DocumentType } from './document.ts';
+import { handleDirectory } from './handles.ts';
 import { parseDocument } from './parser.ts';
 import { defaultPermalink } from './slug.ts';
 import type { ContentStore } from './store.ts';
@@ -110,7 +111,10 @@ export async function saveDocument(options: SaveDocumentOptions): Promise<Docume
 
   // Parsed before it is written, so a document that cannot be read back is
   // refused rather than left on disk for the watcher to complain about.
-  const document = parseDocument(source, { path: relative });
+  const document = parseDocument(source, {
+    path: relative,
+    handles: handleDirectory(options.contentDir),
+  });
 
   await mkdir(path.dirname(file), { recursive: true });
 

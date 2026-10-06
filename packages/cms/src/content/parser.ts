@@ -4,6 +4,7 @@ import matter from 'gray-matter';
 
 import { KNOWN_FRONT_MATTER_KEYS } from './document.ts';
 import type { ActivityPubMetadata, Document, DocumentContent, DocumentType } from './document.ts';
+import type { HandleDirectory } from './handles.ts';
 import { renderMarkdown } from './markdown.ts';
 import { defaultPermalink, slugify } from './slug.ts';
 import { normalizeBody, serializeDocument } from './writer.ts';
@@ -16,6 +17,8 @@ export interface ParseDocumentOptions {
   path: string;
   /** Overrides the type the path implies. Needed for files under `_trash/`. */
   type?: DocumentType | undefined;
+  /** The resolved fediverse handles, so a mention renders as a link (TASK-194). */
+  handles?: HandleDirectory | undefined;
 }
 
 /**
@@ -78,7 +81,7 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
     type,
     path,
     slug: slugForPermalink(permalink) ?? fallbackSlug(title, path),
-    html: renderMarkdown(body),
+    html: renderMarkdown(body, options.handles),
     hash: hashDocument(content),
   };
 }

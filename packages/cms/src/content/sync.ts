@@ -6,6 +6,7 @@ import { watch as watchPaths } from 'chokidar';
 import type { FSWatcher } from 'chokidar';
 
 import type { Document, DocumentType } from './document.ts';
+import { handleDirectory } from './handles.ts';
 import { parseDocument } from './parser.ts';
 import { replyTarget } from './post-type.ts';
 import { DuplicatePermalinkError, TRASH_DIRECTORY } from './store.ts';
@@ -182,6 +183,7 @@ export interface ContentSync {
  */
 export function createContentSync(options: CreateContentSyncOptions): ContentSync {
   const { store, contentDir } = options;
+  const handles = handleDirectory(contentDir);
   const logger = options.logger ?? console;
   const events = createEmitter(logger);
 
@@ -239,7 +241,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
 
     let document: Document;
     try {
-      document = parseDocument(source, { path: relativePath });
+      document = parseDocument(source, { path: relativePath, handles });
     } catch (error) {
       logger.warn(`Skipping ${relativePath}: ${messageOf(error)}`);
       throw new SkippedFile();

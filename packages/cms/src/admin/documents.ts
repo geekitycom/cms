@@ -14,6 +14,8 @@ import {
 } from '../content/citation.ts';
 import type { CitationProperty, CitedPageReader } from '../content/citation.ts';
 import type { Document, DocumentContent, DocumentType } from '../content/document.ts';
+import type { HandleLearner } from '../federation/handles.ts';
+import { handleDirectory } from '../content/handles.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
 import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
@@ -471,6 +473,7 @@ async function saveFromForm(
       writer: currentUsername(c),
       citedContext: (target) => c.var.replyContexts.describe(target),
       storedContext: (target) => c.var.replyContexts.read(target),
+      learnHandles: c.var.learnHandles,
     },
     { kind, document, form, draft },
   );
@@ -505,6 +508,7 @@ export interface DocumentSite {
   readonly writer: string | undefined;
   readonly citedContext: (target: string) => Promise<ReplyContext | undefined>;
   readonly storedContext: (target: string) => ReplyContext | undefined;
+  readonly learnHandles: HandleLearner;
 }
 
 /** What {@link writeDocument} is asked to write. */
@@ -764,6 +768,8 @@ export async function writeDocument(
   // claiming one permalink, and the index refuses that.
   const renamedFrom = document !== undefined && document.path !== target ? document : undefined;
   if (renamedFrom !== undefined) store.remove(renamedFrom.path);
+
+  await site.learnHandles(content.body);
 
   let saved: Document;
   try {
@@ -1509,7 +1515,11 @@ export async function moveDocumentFile(
     return undefined;
   }
 
-  const moved = parseDocument(source, { path: target, type: document.type });
+  const moved = parseDocument(source, {
+    path: target,
+    type: document.type,
+    handles: handleDirectory(contentDir),
+  });
   store.remove(document.path);
   store.upsert(moved);
 

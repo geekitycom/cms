@@ -50,6 +50,7 @@ import {
   rebuildFederationIndexes,
   signedProfileLoader,
 } from './federation/index.ts';
+import { handleLearner } from './federation/handles.ts';
 import type {
   ActorProfileService,
   DeliveryService,
@@ -1845,6 +1846,18 @@ export function createCms(config: GeekityConfig = {}): Cms {
     ),
   });
 
+  // The fediverse handles a save names, resolved before its file is written
+  // so the post links and mentions them from its first parse (TASK-194).
+  const learnHandles = handleLearner(() =>
+    federation.createContext(new URL(resolved.baseUrl), {
+      admin,
+      store,
+      config: resolved,
+      actorProfiles,
+      cited: (url) => replyContexts.read(url),
+    }),
+  );
+
   const delivery = createDeliveryService({
     federation,
     admin,
@@ -1982,6 +1995,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('relays', relays);
     c.set('webmentions', webmentions);
     c.set('replyContexts', replyContexts);
+    c.set('learnHandles', learnHandles);
     c.set('mail', mail);
     c.set('notifications', notifications);
     c.set('redirects', redirects);

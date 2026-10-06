@@ -3,6 +3,7 @@ import type { Context, Hono } from 'hono';
 import { CITATION_PROPERTIES } from '../content/citation.ts';
 import { READ_OF_FRONT_MATTER_KEY, READ_STATUS_FRONT_MATTER_KEY } from '../content/read.ts';
 import type { Document, DocumentType } from '../content/document.ts';
+import { handleDirectory } from '../content/handles.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { defaultPermalink, slugify } from '../content/slug.ts';
 import { calendarDayIn, toUtcInstant } from '../content/time.ts';
@@ -106,7 +107,7 @@ function previewDocument(
       ...previewRead(body),
     },
     body: markdown,
-    html: renderMarkdown(markdown),
+    html: renderMarkdown(markdown, handleDirectory(c.var.config.contentDir)),
     // A preview is not a version of anything, so it has no hash to be
     // mistaken for one.
     hash: '',

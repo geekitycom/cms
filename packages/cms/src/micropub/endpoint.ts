@@ -377,6 +377,7 @@ const ACTIONS: {
         writer: bearer.user.username,
         citedContext: (target) => replyContexts.describe(target),
         storedContext: (target) => replyContexts.read(target),
+        learnHandles: c.var.learnHandles,
       },
       {
         kind: POST_KIND,
@@ -421,6 +422,7 @@ const ACTIONS: {
         writer: bearer.user.username,
         citedContext: (target) => replyContexts.describe(target),
         storedContext: (target) => replyContexts.read(target),
+        learnHandles: c.var.learnHandles,
       },
       { kind: POST_KIND, document, ...updated, form: withoutClientReadSummary(updated.form) },
     );

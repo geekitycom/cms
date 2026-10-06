@@ -269,6 +269,22 @@ describe('sending webmentions when a post is published', () => {
   });
 });
 
+describe('sending webmentions to a bare URL (TASK-194 AC #5)', () => {
+  it('tells a page the post names by its URL alone, as it tells a link', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+
+    const response = await publish(agent, `Worth reading: ${FRIENDLY}`);
+    assert.equal(response.status, 303, 'the post was published');
+    await cms.webmentions.settled();
+
+    assert.deepEqual(
+      sent.map((one) => [one.endpoint, one.target]),
+      [[FRIENDLY_ENDPOINT, FRIENDLY]],
+    );
+  });
+});
+
 describe('sending a webmention for a reply', () => {
   it('tells the post it replies to, though the body links nowhere', async () => {
     const cms = await site();
